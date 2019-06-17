@@ -1,0 +1,12 @@
+{
+  "name": "whiteboard",
+  "version": "0.0.0",
+  "description": "Whiteboard ecosystem",
+  "repository": "https://github.com/kamiazya/whiteboard.git",
+  "author": "kamiazta <yuki@kamiazya.tech>",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*"
+  ],
+  "private": true
+}
