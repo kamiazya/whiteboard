@@ -2,5 +2,11 @@
   "name": "@wb/core",
   "version": "0.0.0",
   "description": "Core for Whiteboard ecosystem.",
-  "license": "MIT"
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^3.5.2"
+  }
 }
