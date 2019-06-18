@@ -8,5 +8,15 @@
   "workspaces": [
     "packages/*"
   ],
-  "private": true
+  "private": true,
+  "scripts": {
+    "lint": "tslint --config tslint.json \"**/src/**/*.ts\" -e \"**/node_modules/**/*.ts\"",
+    "format": "yarn lint --fix"
+  },
+  "devDependencies": {
+    "prettier": "1.18.2",
+    "tslint": "^5.17.0",
+    "tslint-config-prettier": "^1.18.0",
+    "tslint-plugin-prettier": "^2.0.1"
+  }
 }
