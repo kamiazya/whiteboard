@@ -10,6 +10,7 @@
   ],
   "private": true,
   "scripts": {
+    "test": "yarn workspaces run test",
     "build": "yarn workspaces run build",
     "lint": "tslint --config tslint.json \"**/src/**/*.ts\" -e \"**/node_modules/**/*.ts\"",
     "format": "yarn lint --fix"
