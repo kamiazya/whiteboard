@@ -4,9 +4,14 @@
   "description": "Core for Whiteboard ecosystem.",
   "license": "MIT",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "jest --config jest.json",
+    "coverage": "yarn test --coverage"
   },
   "devDependencies": {
+    "@types/jest": "^24.0.15",
+    "jest": "^24.8.0",
+    "ts-jest": "^24.0.2",
     "typescript": "^3.5.2"
   }
 }
