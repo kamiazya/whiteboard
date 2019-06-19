@@ -8,6 +8,7 @@
   ],
   "rules": {
     "prettier": true,
-    "import-spacing": true
+    "import-spacing": true,
+    "array-type": false
   }
 }
