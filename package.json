@@ -12,6 +12,7 @@
   "scripts": {
     "test": "yarn workspaces run test",
     "build": "yarn workspaces run build",
+    "build:w": "yarn all-workspaces --parallel run build --watch",
     "lint": "tslint --config tslint.json \"**/src/**/*.ts\" -e \"**/node_modules/**/*.ts\"",
     "format": "yarn lint --fix"
   },
@@ -21,7 +22,8 @@
     "prettier": "1.18.2",
     "tslint": "^5.17.0",
     "tslint-config-prettier": "^1.18.0",
-    "tslint-plugin-prettier": "^2.0.1"
+    "tslint-plugin-prettier": "^2.0.1",
+    "yarn-all-workspaces": "^1.0.0"
   },
   "husky": {
     "hooks": {

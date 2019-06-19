@@ -2,5 +2,9 @@
   "editor.formatOnSave": false,
   "editor.formatOnPaste": false,
   "editor.formatOnType": false,
-  "tslint.autoFixOnSave": true
+  "tslint.autoFixOnSave": true,
+  "tslint.exclude": [
+    "**/lib/**",
+    "**/node_modules/**"
+  ]
 }

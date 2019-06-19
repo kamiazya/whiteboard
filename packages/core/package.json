@@ -3,10 +3,14 @@
   "version": "0.0.0",
   "description": "Core for Whiteboard ecosystem.",
   "license": "MIT",
+  "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
     "test": "jest --config jest.json",
     "coverage": "yarn test --coverage"
+  },
+  "dependencies": {
+    "tsyringe": "^3.2.0"
   },
   "devDependencies": {
     "@types/jest": "^24.0.15",
