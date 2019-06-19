@@ -16,9 +16,26 @@
     "format": "yarn lint --fix"
   },
   "devDependencies": {
+    "husky": "^2.4.1",
+    "lint-staged": "^8.2.1",
     "prettier": "1.18.2",
     "tslint": "^5.17.0",
     "tslint-config-prettier": "^1.18.0",
     "tslint-plugin-prettier": "^2.0.1"
+  },
+  "husky": {
+    "hooks": {
+      "pre-commit": "lint-staged"
+    }
+  },
+  "lint-staged": {
+    "*.{json}": [
+      "prettier --write",
+      "git add"
+    ],
+    "*.{ts}": [
+      "tslint --config tslint.json",
+      "git add"
+    ]
   }
 }
