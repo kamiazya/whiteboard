@@ -1,7 +1,7 @@
-import { injectable } from 'tsyringe';
+import { Injectable } from 'injection-js';
 
 /**
  * A reference to an application.
  */
-@injectable()
+@Injectable()
 export class ApplicationRef {}
