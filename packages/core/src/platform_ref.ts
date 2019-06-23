@@ -1,44 +1,34 @@
-import {
-  DependencyContainer,
-  injectable,
-  InjectionToken,
-  isClassProvider,
-  isFactoryProvider,
-  isValueProvider,
-} from 'tsyringe';
-import { StaticProvider, Type } from './util';
+import { Injectable, InjectionToken, Injector, Provider, ReflectiveInjector, Type } from 'injection-js';
+import { resolveReflectiveProviders } from 'injection-js/reflective_provider';
 
-const PLATFORM_INJECTION_TOKEN: InjectionToken = 'Platform';
-const CONTAINER_INJECTION_TOKEN: InjectionToken = 'Container';
+/**
+ * A function that will be executed when a platform is initialized.
+ */
+const PLATFORM_INITIALIZER = new InjectionToken<Array<() => Promise<void>>>('Platform Initializer');
+const PLATFORM_INJECTION_TOKEN = new InjectionToken('Platform');
 
 /**
  * A reference to an platform.
  */
-@injectable()
+@Injectable()
 export class PlatformRef {
-  constructor(private readonly container: DependencyContainer) {}
+  constructor(private injector: Injector) {}
   public bootstrap<APP>(applicationType: Type<APP>) {
-    this.container.register('application', {
-      useClass: applicationType,
-    });
+    //
   }
 }
 
-export function createPlatform(name: string, container: DependencyContainer, providers: StaticProvider[]): PlatformRef {
-  container
-    .register(PLATFORM_INJECTION_TOKEN, { useValue: name })
-    .register(CONTAINER_INJECTION_TOKEN, { useValue: container });
+export async function createPlatform(name: string, providers: Provider[]): Promise<PlatformRef> {
+  const platformProviders: Provider[] = [
+    {
+      provide: PLATFORM_INJECTION_TOKEN,
+      useValue: name,
+    },
+  ];
 
-  providers.forEach(provider => {
-    if (isClassProvider(provider)) {
-      container.register(provider.provide, provider);
-    } else if (isValueProvider(provider)) {
-      container.register(provider.provide, provider);
-    } else if (isValueProvider(provider)) {
-      container.register(provider.provide, provider);
-    } else if (isFactoryProvider(provider)) {
-      container.register(provider.provide, provider);
-    }
-  });
-  return container.resolve(PlatformRef);
+  const resolvedReflectiveProviders = resolveReflectiveProviders(platformProviders.concat(providers));
+  const injector: Injector = ReflectiveInjector.fromResolvedProviders(resolvedReflectiveProviders);
+  const platformInitializers = injector.get(PLATFORM_INITIALIZER, []);
+  platformInitializers.forEach(async platformInitializer => await platformInitializer());
+  return injector.get(PlatformRef);
 }

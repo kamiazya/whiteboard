@@ -1,17 +1,17 @@
-import { createPlatform, PlatformRef, StaticProvider } from '@wb/core';
-import { container, InjectionToken } from 'tsyringe';
+import { createPlatform, PlatformRef } from '@wb/core';
+import { InjectionToken, Provider } from 'injection-js';
 
 const PLATFORM_NAME = 'node';
 
-const PROCESS_INJECTION_TOKEN: InjectionToken<NodeJS.Process> = 'process';
+const PROCESS_INJECTION_TOKEN = new InjectionToken<NodeJS.Process>('process');
 
-const PLATFORM_NODE_STATIC_PROVIDER: StaticProvider[] = [
+const PLATFORM_NODE_STATIC_PROVIDER: Provider[] = [
   {
     provide: PROCESS_INJECTION_TOKEN,
     useValue: process,
   },
 ];
 
-export function bootstrapPlatformNode(): PlatformRef {
-  return createPlatform(PLATFORM_NAME, container.createChildContainer(), PLATFORM_NODE_STATIC_PROVIDER);
+export function bootstrapPlatformNode(): Promise<PlatformRef> {
+  return createPlatform(PLATFORM_NAME, PLATFORM_NODE_STATIC_PROVIDER);
 }

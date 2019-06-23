@@ -10,7 +10,7 @@
     "coverage": "yarn test --coverage"
   },
   "dependencies": {
-    "tsyringe": "^3.2.0"
+    "injection-js": "^2.2.1"
   },
   "devDependencies": {
     "@types/jest": "^24.0.15",
