@@ -6,6 +6,7 @@ export const PLATFORM_INJECTION_TOKEN = new InjectionToken<string>('Platform');
  */
 @Injectable()
 export class PlatformRef {
+  constructor(public injector: Injector) {}
   public bootstrap<APP>(applicationType: Type<APP>) {
     //
   }
