@@ -12,6 +12,6 @@
     }
   },
   "testMatch": [
-    "**/specs/*.spec.ts"
+    "**/*.spec.ts"
   ]
 }
