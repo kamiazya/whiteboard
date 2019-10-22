@@ -364,10 +364,10 @@
   dependencies:
     "@types/jest-diff" "*"
 
-"@types/node@^12.0.8":
-  version "12.0.8"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.0.8.tgz#551466be11b2adc3f3d47156758f610bd9f6b1d8"
-  integrity sha512-b8bbUOTwzIY3V5vDTY1fIJ+ePKDUBqt2hC2woVGotdQQhG/2Sh62HOKHrT7ab+VerXAcPyAiTEipPu/FsreUtg==
+"@types/node@^12.11.3":
+  version "12.11.3"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-12.11.3.tgz#582052915e50820b7416115386e606c27d5e399f"
+  integrity sha512-BPYM8PITgHTK8I2PV8E0vPp6g1g9HXeVSs2Ic9ilMImT19LilL0l7pYnupFnmoXyVsLqvVnO0uo8dcMG89ntBA==
 
 "@types/normalize-package-data@^2.4.0":
   version "2.4.0"
