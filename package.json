@@ -20,7 +20,7 @@
     "husky": "^2.4.1",
     "lint-staged": "^8.2.1",
     "prettier": "1.18.2",
-    "tslint": "^5.17.0",
+    "tslint": "^5.20.1",
     "tslint-config-prettier": "^1.18.0",
     "tslint-plugin-prettier": "^2.0.1",
     "yarn-all-workspaces": "^1.0.0"
