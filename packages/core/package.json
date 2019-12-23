@@ -17,6 +17,6 @@
     "jest": "^24.9.0",
     "reflect-metadata": "^0.1.13",
     "ts-jest": "^24.0.2",
-    "typescript": "^3.7.3"
+    "typescript": "^3.7.4"
   }
 }
