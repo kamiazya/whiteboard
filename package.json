@@ -17,7 +17,7 @@
     "format": "yarn lint --fix"
   },
   "devDependencies": {
-    "husky": "^3.1.0",
+    "husky": "^5.0.9",
     "lint-staged": "^8.2.1",
     "prettier": "1.19.1",
     "tslint": "^5.20.1",
