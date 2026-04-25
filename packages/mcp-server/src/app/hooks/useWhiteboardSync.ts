@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { exportToBlob, CaptureUpdateAction, restoreElements } from '@excalidraw/excalidraw'
 import { commitAfterUpload } from '../lib/commit-pipeline.js'
@@ -88,11 +88,6 @@ export function useWhiteboardSync(
   const wsRef = useRef<WebSocket | null>(null)
   const docRef = useRef<LoroDoc | null>(null)
   const undoManagerRef = useRef<UndoManager | null>(null)
-  const onSceneChangeFnRef = useRef<
-    ((elements: ExcalidrawElement[], files: BinaryFiles) => void) & { cancel: () => void } | null
-  >(null)
-  // Track canvas changes in render so the debounced onSceneChange callback can be recreated immediately.
-  const prevCanvasKeyRef = useRef<string | null>(null)
   const [apiReady, setApiReady] = useState(false)
 
   // Keep onVersionCreated in a ref so websocket effects do not reconnect just because the callback changed.
@@ -193,8 +188,6 @@ export function useWhiteboardSync(
   }
 
   // Reset document-scoped state when switching canvases.
-  // Do not cancel onSceneChangeFnRef here; the render-time prevCanvasKeyRef guard already does that
-  // synchronously, and canceling in an effect can accidentally cancel the newly created debounce.
   useEffect(() => {
     docRef.current = null
     undoManagerRef.current = null
@@ -415,13 +408,14 @@ export function useWhiteboardSync(
   }, [apiReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Record Excalidraw changes into Loro and upload any new files.
-  // Keep the debounced callback in a ref and recreate it immediately when the canvas key changes.
-  // A render-time guard prevents the old closure from keeping stale sessionId/slug values.
+  // Memoize the debounced callback by canvas key so swapping canvases swaps
+  // the closure (which captures sessionId / slug) without mutating refs in
+  // render. React is allowed to discard a useMemo result; the worst case is a
+  // fresh 300ms window for the new closure, never a write into the wrong doc,
+  // because the closure still uses the same sessionId / slug.
   const canvasKey = `${sessionId}/${slug}`
-  if (!onSceneChangeFnRef.current || prevCanvasKeyRef.current !== canvasKey) {
-    onSceneChangeFnRef.current?.cancel()
-    prevCanvasKeyRef.current = canvasKey
-    onSceneChangeFnRef.current = debounce((elements: ExcalidrawElement[], files: BinaryFiles) => {
+  const onSceneChange = useMemo(() => {
+    return debounce((elements: ExcalidrawElement[], files: BinaryFiles) => {
       // Capture doc at invocation time.
       // Looking at docRef.current after async upload work could write canvas A's elements into canvas B's doc.
       const doc = docRef.current
@@ -437,15 +431,26 @@ export function useWhiteboardSync(
         newEntries,
         doc, // pass the invocation-time captured reference
         elements,
-        sessionId, // always current because the closure is recreated when canvasKey changes
-        slug, // same as above
+        sessionId,
+        slug,
         (fileId) => uploadedFileIdsRef.current.add(fileId),
       ).catch((err: unknown) => {
         console.error('[whiteboard] file upload failed, commit skipped:', err)
       })
-    }, 300) as ((elements: ExcalidrawElement[], files: BinaryFiles) => void) & { cancel: () => void }
-  }
-  const onSceneChange = onSceneChangeFnRef.current
+    }, 300)
+    // canvasKey already encodes sessionId/slug; listing them keeps the deps
+    // exhaustive for ESLint and matches the closure's captured values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasKey])
+
+  // Cancel the previous debounce whenever the memoized callback changes
+  // (canvas key switch) and on unmount, so a pending 300ms timer cannot leak
+  // into a new canvas's doc or fire against a torn-down hook.
+  useEffect(() => {
+    return () => {
+      onSceneChange.cancel()
+    }
+  }, [onSceneChange])
 
   // Wire LoroUndoManager into Excalidraw's keyboard shortcuts and undo/redo buttons.
   // This avoids Excalidraw's built-in undo rolling back remote collaboration edits.
