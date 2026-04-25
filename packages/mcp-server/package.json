@@ -73,6 +73,7 @@
     "smoke:checkpoint": "node scripts/mcp-e2e-checkpoint.mjs",
     "smoke:e2e": "node scripts/mcp-e2e-checkpoint.mjs",
     "smoke:packaged": "node scripts/mcp-e2e-checkpoint.mjs --entry=dist/server/mcp/index.js",
+    "smoke:bin": "node scripts/mcp-bin-symlink-smoke.mjs",
     "smoke:codex-config": "node scripts/mcp-codex-config-smoke.mjs",
     "smoke:template": "tsx scripts/mcp-template-smoke.mjs",
     "smoke:claude": "node scripts/mcp-claude-cli-smoke.mjs",

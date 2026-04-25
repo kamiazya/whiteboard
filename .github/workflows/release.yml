@@ -111,6 +111,10 @@ jobs:
         working-directory: .
         run: pnpm smoke:packaged
 
+      - name: Bin symlink smoke (npx / claude mcp / codex install path)
+        working-directory: .
+        run: pnpm smoke:bin
+
       - name: Codex config smoke
         working-directory: .
         run: pnpm smoke:codex-config

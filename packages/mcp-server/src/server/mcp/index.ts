@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -1688,8 +1689,22 @@ async function main() {
   await server.connect(transport)
 }
 
-const isEntryPoint = process.argv[1] === fileURLToPath(import.meta.url)
-if (isEntryPoint) {
+// `process.argv[1]` may be a symlink (e.g. when invoked via npx, which routes through
+// node_modules/.bin/whiteboard-mcp -> ../@kamiazya/whiteboard-mcp/dist/server/mcp/index.js).
+// `fileURLToPath(import.meta.url)` resolves to the real file, so a direct `===` check
+// silently returns false through symlinks and main() never runs. Compare realpaths to
+// support both direct `node entry.js` and bin/npx invocation.
+function isInvokedAsEntryPoint(): boolean {
+  const argv1 = process.argv[1]
+  if (!argv1) return false
+  try {
+    return realpathSync(argv1) === realpathSync(fileURLToPath(import.meta.url))
+  } catch {
+    return false
+  }
+}
+
+if (isInvokedAsEntryPoint()) {
   main().catch((err) => {
     process.stderr.write(`MCP server error: ${err}\n`)
     process.exit(1)

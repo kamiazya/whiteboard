@@ -57,5 +57,11 @@ jobs:
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
 
+      - name: Bin symlink smoke (npx / claude mcp / codex install path)
+        run: pnpm smoke:bin
+
+      - name: Template smoke
+        run: pnpm smoke:template
+
       - name: Codex config smoke
         run: pnpm smoke:codex-config

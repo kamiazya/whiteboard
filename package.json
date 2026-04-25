@@ -27,6 +27,7 @@
     "smoke": "pnpm --filter @kamiazya/whiteboard-mcp smoke",
     "smoke:e2e": "pnpm --filter @kamiazya/whiteboard-mcp smoke:e2e",
     "smoke:packaged": "pnpm --filter @kamiazya/whiteboard-mcp smoke:packaged",
+    "smoke:bin": "pnpm --filter @kamiazya/whiteboard-mcp smoke:bin",
     "smoke:codex-config": "pnpm --filter @kamiazya/whiteboard-mcp smoke:codex-config",
     "smoke:template": "pnpm --filter @kamiazya/whiteboard-mcp smoke:template",
     "smoke:claude": "pnpm --filter @kamiazya/whiteboard-mcp smoke:claude",
