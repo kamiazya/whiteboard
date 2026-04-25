@@ -52,7 +52,7 @@ describe('publish contract', () => {
     // Node 24 ships with npm 11.x; relying on the bundled npm avoids the
     // `npm i -g npm@latest` self-upgrade bug.
     expect(releaseWorkflow).toContain('id-token: write')
-    expect(releaseWorkflow).toMatch(/node-version:\s*2[4-9]/)
+    expect(releaseWorkflow).toContain('node-version-file: .node-version')
     // Should not fall back to long-lived NPM_TOKEN or GitHub Packages auth.
     expect(releaseWorkflow).not.toContain('Publish to GitHub Packages')
     expect(releaseWorkflow).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')

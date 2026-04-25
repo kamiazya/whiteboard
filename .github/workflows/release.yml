@@ -70,9 +70,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Node 24 ships with npm 11.x which already meets Trusted Publishing's >= 11.5.1 requirement.
-          # Avoids the `npm i -g npm@latest` self-upgrade bug (MODULE_NOT_FOUND: promise-retry).
-          node-version: 24
+          # Pinned via .node-version. Node 24 ships with npm 11.x which already meets Trusted
+          # Publishing's >= 11.5.1 requirement and avoids the `npm i -g npm@latest` self-upgrade bug.
+          node-version-file: .node-version
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
