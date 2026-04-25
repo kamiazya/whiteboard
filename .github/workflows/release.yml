@@ -1,0 +1,135 @@
+# Automated release workflow built around Conventional Commits (monorepo-aware).
+#
+# Layout:
+#   - Root `@kamiazya/whiteboard-plugin` = Claude Code Plugin (private, not published to npm)
+#     release-please keeps versions in sync between plugin.json and package.json
+#   - `packages/mcp-server` = `@kamiazya/whiteboard-mcp` (published to npm)
+#     referenced from plugin.json through `npx -y @kamiazya/whiteboard-mcp@latest`
+#
+# Flow:
+#   1. Push Conventional Commits such as feat:, fix:, or chore: to main
+#   2. release-please opens a PR like "chore(main): release <pkg> X.Y.Z" for each package
+#   3. A maintainer reviews and merges it
+#   4. After merge, `publish-mcp` runs when the target package reports release_created=true
+#
+# “Please release” means “merge the Release PR created by release-please.”
+
+name: release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      mcp_release_created: ${{ steps.release.outputs['packages/mcp-server--release_created'] }}
+      mcp_tag_name: ${{ steps.release.outputs['packages/mcp-server--tag_name'] }}
+      root_release_created: ${{ steps.release.outputs['--release_created'] }}
+      root_tag_name: ${{ steps.release.outputs['--tag_name'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-mcp:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # npm provenance (OIDC) for signed publish on npm v9.5+
+    defaults:
+      run:
+        working-directory: packages/mcp-server
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.mcp_tag_name }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm (Trusted Publishing requires >= 11.5.1)
+        run: npm install -g npm@latest
+
+      - name: Install dependencies (workspace root)
+        working-directory: .
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        working-directory: .
+        run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
+
+      - name: Audit (publish gate)
+        working-directory: .
+        run: pnpm audit --prod --audit-level=high
+
+      - name: Unit tests
+        working-directory: .
+        run: pnpm test
+
+      - name: Typecheck
+        working-directory: .
+        run: pnpm typecheck
+
+      - name: Stdio E2E smoke (no quota required)
+        working-directory: .
+        env:
+          WHITEBOARD_DEV: '1'
+        run: pnpm smoke:e2e
+
+      - name: Build
+        run: pnpm build
+
+      - name: Packaged stdio smoke
+        working-directory: .
+        run: pnpm smoke:packaged
+
+      - name: Codex config smoke
+        working-directory: .
+        run: pnpm smoke:codex-config
+
+      - name: Template smoke
+        working-directory: .
+        run: pnpm smoke:template
+
+      - name: Verify pack contents (README / LICENSE / no test / no .map only)
+        # Sanity-check the tarball contents before publish. Fail immediately if required files are missing or forbidden files are included.
+        run: |
+          set -eu
+          OUT=$(npm pack --dry-run --json)
+          echo "$OUT" | node -e '
+            let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{
+              const j=JSON.parse(d)[0];
+              const files = j.files.map(f=>f.path);
+              const must = ["README.md", "LICENSE", "package.json", "dist/server/mcp/index.js"];
+              const forbidden = [/\.test\.(js|d\.ts)$/, /\/_artifacts\//, /\.tsbuildinfo$/, /\.DS_Store$/];
+              const missing = must.filter(p => !files.includes(p));
+              const bad = files.filter(p => forbidden.some(rx => rx.test(p)));
+              if (missing.length) { console.error("Missing required files:", missing); process.exit(1); }
+              if (bad.length)     { console.error("Forbidden files in tarball:", bad); process.exit(1); }
+              console.log(`Pack OK: ${files.length} files, ${(j.size/1024/1024).toFixed(1)} MB`);
+            });
+          '
+
+      - name: Publish to npm
+        # Assumes OIDC Trusted Publisher is configured (no NPM_TOKEN required).
+        # Setup steps are documented in tmp/notes/2026-04-25-releasing-checklist.md
+        run: npm publish --access public --provenance

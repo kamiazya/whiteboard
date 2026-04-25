@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
+  "name": "io.github.kamiazya/whiteboard",
+  "description": "Collaborative Excalidraw whiteboard MCP server. Lets AI agents (Claude Code / Codex) and humans co-author diagrams on a shared canvas: create canvases, add annotations / arrows / box-with-label / frames / templates, fetch from official Excalidraw libraries, save & restore checkpoints, and export PNG / .excalidraw JSON. Browser canvas is served by a local daemon on 127.0.0.1.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/kamiazya/whiteboard",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "websiteUrl": "https://github.com/kamiazya/whiteboard#readme",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@kamiazya/whiteboard-mcp",
+      "version": "0.0.0",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}

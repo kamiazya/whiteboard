@@ -1,0 +1,65 @@
+# Dependabot config: weekly checks for npm and GitHub Actions.
+# Full spec: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+version: 2
+
+updates:
+  # Manage the root workspace and packages/mcp-server together through pnpm
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels:
+      - dependencies
+    groups:
+      # Group similar minor/patch updates into one PR to reduce review cost
+      types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - minor
+          - patch
+      excalidraw:
+        patterns:
+          - "@excalidraw/*"
+        update-types:
+          - minor
+          - patch
+      mcp:
+        patterns:
+          - "@modelcontextprotocol/*"
+        update-types:
+          - minor
+          - patch
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+        update-types:
+          - minor
+          - patch
+      vite-and-vitest:
+        patterns:
+          - "vite"
+          - "vite-*"
+          - "vitest"
+          - "@vitest/*"
+          - "@vitejs/*"
+        update-types:
+          - minor
+          - patch
+    # Major bumps stay in separate PRs and require human review
+    # Security updates always arrive as independent PRs regardless of groups (Dependabot behavior)
+
+  # Monthly updates are sufficient for GitHub Actions versions such as actions/* used in release.yml
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
