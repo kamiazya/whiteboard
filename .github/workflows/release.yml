@@ -75,7 +75,7 @@ jobs:
 
       - name: Install Playwright Chromium
         working-directory: .
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
 
       - name: Audit (publish gate)
         working-directory: .
