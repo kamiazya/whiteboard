@@ -64,7 +64,7 @@ jobs:
         with:
           ref: ${{ inputs.force_publish_tag != '' && inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 9
 
