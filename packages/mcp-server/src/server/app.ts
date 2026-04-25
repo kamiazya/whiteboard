@@ -193,6 +193,7 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
 
   app.all('/mcp', async (c) => {
     const startedAt = Date.now()
+    const debug = shouldLogMcpHttpDebug()
     let parsedBody: unknown = undefined
     if (
       c.req.method.toUpperCase() === 'POST' &&
@@ -204,30 +205,79 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
         parsedBody = undefined
       }
     }
-    if (shouldLogMcpHttpDebug()) {
+    if (debug) {
       const initializeDebug = extractInitializeDebugPayload(parsedBody)
       if (initializeDebug) {
         console.info('[mcp-http:init]', initializeDebug)
       }
     }
+    // The MCP SDK throws 'Already connected' if a single Server is connected to
+    // more than one transport, so build a fresh per-request server. The heavy
+    // workspace-id file IO is memoized inside createExcalidrawMcpServer to keep
+    // concurrent /mcp requests cheap and race-free.
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse: true,
     })
-    const server = await createExcalidrawMcpServer()
-    await server.connect(transport)
-    const response = await transport.handleRequest(c.req.raw, { parsedBody })
-    if (shouldLogMcpHttpDebug()) {
-      const body = isJsonObject(parsedBody) ? parsedBody : {}
-      console.info('[mcp-http]', {
-        httpMethod: c.req.method.toUpperCase(),
-        path: c.req.path,
-        jsonrpcMethod: body.method ?? null,
-        requestId: body.id ?? null,
-        status: response.status,
-        durationMs: Date.now() - startedAt,
-      })
+    let response: Response | undefined
+    try {
+      const constructStartedAt = debug ? Date.now() : 0
+      const server = await createExcalidrawMcpServer()
+      if (debug) {
+        console.info('[mcp-http:construct]', {
+          durationMs: Date.now() - constructStartedAt,
+        })
+      }
+      await server.connect(transport)
+      response = await transport.handleRequest(c.req.raw, { parsedBody })
+      if (debug) {
+        const body = isJsonObject(parsedBody) ? parsedBody : {}
+        console.info('[mcp-http]', {
+          httpMethod: c.req.method.toUpperCase(),
+          path: c.req.path,
+          jsonrpcMethod: body.method ?? null,
+          requestId: body.id ?? null,
+          status: response.status,
+          durationMs: Date.now() - startedAt,
+        })
+      }
+      return response
+    } finally {
+      // Skip transport.close() when the response is an SSE stream
+      // (Content-Type: text/event-stream). For SSE the response body is a still
+      // open ReadableStream and closing the transport here would cancel it
+      // before the client receives any events. JSON-mode responses, by
+      // contrast, are fully buffered before handleRequest resolves so close()
+      // is safe and useful for cleanup.
+      const isSseResponse = response?.headers
+        .get('content-type')
+        ?.toLowerCase()
+        .includes('text/event-stream')
+      if (isSseResponse) {
+        if (debug) {
+          console.info('[mcp-http:destruct-skipped]', {
+            reason: 'sse-stream-active',
+          })
+        }
+      } else {
+        const destructStartedAt = debug ? Date.now() : 0
+        try {
+          await transport.close()
+        } catch (error) {
+          // Closing failures from a finished request should not leak into the
+          // response path. Log only when MCP_HTTP_DEBUG=1 for visibility.
+          if (debug) {
+            console.info('[mcp-http:destruct-error]', {
+              message: errorMessage(error),
+            })
+          }
+        }
+        if (debug) {
+          console.info('[mcp-http:destruct]', {
+            durationMs: Date.now() - destructStartedAt,
+          })
+        }
+      }
     }
-    return response
   })
 
   app.route(
