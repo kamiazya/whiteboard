@@ -17,6 +17,7 @@
     "test:browser": "vitest run --project mcp-browser",
     "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
     "test:watch": "vitest --project mcp-node --project mcp-jsdom",
+    "check:pr-title": "pnpm --filter @kamiazya/whiteboard-mcp check:pr-title",
     "typecheck": "pnpm -r typecheck",
     "dev": "pnpm --filter @kamiazya/whiteboard-mcp dev",
     "mcp": "pnpm --filter @kamiazya/whiteboard-mcp mcp",

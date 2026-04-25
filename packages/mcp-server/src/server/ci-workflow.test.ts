@@ -24,6 +24,7 @@ describe('pre-merge CI workflow', () => {
   it('runs the publish-relevant quality gates before merge', () => {
     const workflow = readFileSync(workflowPath, 'utf-8')
 
+    expect(workflow).toContain('pnpm check:pr-title -- "${{ github.event.pull_request.title }}"')
     expect(workflow).toContain('pnpm install --frozen-lockfile')
     expect(workflow).toContain('pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium')
     expect(workflow).toContain('pnpm intent:validate')

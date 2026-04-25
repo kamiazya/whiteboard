@@ -82,6 +82,7 @@
     "test:browser": "vitest run --project mcp-browser",
     "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
     "test:watch": "vitest --project mcp-node --project mcp-jsdom",
+    "check:pr-title": "node scripts/check-pr-title.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "smoke": "node scripts/mcp-smoke.mjs",
     "smoke:checkpoint": "node scripts/mcp-e2e-checkpoint.mjs",
