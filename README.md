@@ -87,13 +87,21 @@ Use junctions if your shell has permission to create them:
 
 ```powershell
 $pkg = (Resolve-Path .\node_modules\@kamiazya\whiteboard-mcp).Path
-New-Item -ItemType Directory -Force $HOME\.claude\skills, $HOME\.codex\skills | Out-Null
-cmd /c mklink /J "$HOME\.claude\skills\whiteboard"             "$pkg\skills\whiteboard"
-cmd /c mklink /J "$HOME\.claude\skills\whiteboard-coauthoring" "$pkg\skills\whiteboard-coauthoring"
-cmd /c mklink /J "$HOME\.claude\skills\whiteboard-audit"       "$pkg\skills\whiteboard-audit"
-cmd /c mklink /J "$HOME\.codex\skills\whiteboard"              "$pkg\skills\whiteboard"
-cmd /c mklink /J "$HOME\.codex\skills\whiteboard-coauthoring"  "$pkg\skills\whiteboard-coauthoring"
-cmd /c mklink /J "$HOME\.codex\skills\whiteboard-audit"        "$pkg\skills\whiteboard-audit"
+$skillRoots = @(
+    (Join-Path $HOME ".claude\skills"),
+    (Join-Path $HOME ".codex\skills")
+)
+$skills = "whiteboard", "whiteboard-coauthoring", "whiteboard-audit"
+
+$skillRoots | ForEach-Object { New-Item -ItemType Directory -Force $_ | Out-Null }
+
+foreach ($root in $skillRoots) {
+    foreach ($skill in $skills) {
+        $linkPath = Join-Path $root $skill
+        $targetPath = Join-Path $pkg "skills\$skill"
+        cmd /c mklink /J "$linkPath" "$targetPath"
+    }
+}
 ```
 
 If junction creation is restricted, copy the skill directories instead of linking them.
