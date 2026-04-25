@@ -50,7 +50,7 @@ describe('publish contract', () => {
     expect(releaseWorkflow).toContain('npm publish --access public --provenance')
     // OIDC trusted publisher requires id-token: write permission and bumps npm to >= 11.5.1.
     expect(releaseWorkflow).toContain('id-token: write')
-    expect(releaseWorkflow).toMatch(/npm install -g(?: --force)? npm@latest/)
+    expect(releaseWorkflow).toContain('npm install -g --force npm@latest')
     // Should not fall back to long-lived NPM_TOKEN or GitHub Packages auth.
     expect(releaseWorkflow).not.toContain('Publish to GitHub Packages')
     expect(releaseWorkflow).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')
