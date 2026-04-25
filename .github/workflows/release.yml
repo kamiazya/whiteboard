@@ -39,7 +39,9 @@ jobs:
         with:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # Use a PAT (RELEASE_PLEASE_TOKEN) so PRs opened by release-please trigger ci.yml.
+          # GITHUB_TOKEN-driven actions cannot trigger workflows on other workflows.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
   publish-mcp:
     needs: release-please
