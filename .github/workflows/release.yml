@@ -70,9 +70,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          # Pinned via .node-version. Node 24 ships with npm 11.x which already meets Trusted
-          # Publishing's >= 11.5.1 requirement and avoids the `npm i -g npm@latest` self-upgrade bug.
-          node-version-file: .node-version
+          # Pinned inline (not via .node-version) because publish-mcp checks out an old tag whose
+          # source tree may predate .node-version. Node 24 ships with npm 11.x which already meets
+          # Trusted Publishing's >= 11.5.1 requirement and avoids the `npm i -g npm@latest` bug.
+          # Keep this in sync with .node-version manually.
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
 
