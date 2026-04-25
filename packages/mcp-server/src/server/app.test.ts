@@ -34,6 +34,7 @@ vi.mock('../daemon/ensure-daemon.js', () => ({
 const { createApp } = await import('./app.js')
 const { createLocalTokenMcpHttpAuthStrategy } = await import('./security/mcp-auth.js')
 const { clearCache } = await import('./store/doc-cache.js')
+const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 function createRuntimeOptions(
@@ -68,6 +69,7 @@ describe('createApp daemon mutation auth', () => {
     await mkdir(join(tempDir, 'data'), { recursive: true })
     process.env.WHITEBOARD_DEBUG = '1'
     clearCache()
+    clearWorkspaceIdCache()
     await writeFile(
       join(tempDir, 'dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>Whiteboard</title></head><body><div id="root"></div></body></html>',
@@ -88,6 +90,7 @@ describe('createApp daemon mutation auth', () => {
     }
     await rm(tempDir, { recursive: true, force: true })
     clearCache()
+    clearWorkspaceIdCache()
   })
 
   it('read-only routes stay public while mutation routes require bearer auth', async () => {
@@ -644,7 +647,56 @@ describe('createApp daemon mutation auth', () => {
         durationMs: expect.any(Number),
       }),
     )
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[mcp-http:construct]',
+      expect.objectContaining({ durationMs: expect.any(Number) }),
+    )
+    expect(infoSpy).toHaveBeenCalledWith(
+      '[mcp-http:destruct]',
+      expect.objectContaining({ durationMs: expect.any(Number) }),
+    )
     infoSpy.mockRestore()
+  })
+
+  it('handles concurrent /mcp initialize requests without racing the workspace marker file', async () => {
+    const app = createApp(createRuntimeOptions())
+    const dataDir = join(tempDir, 'data')
+
+    const sendInitialize = async (id: number): Promise<Response> =>
+      app.request('http://127.0.0.1/mcp', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id,
+          method: 'initialize',
+          params: {
+            protocolVersion: LATEST_PROTOCOL_VERSION,
+            capabilities: {},
+            clientInfo: { name: `load-${id}`, version: '1.0.0' },
+          },
+        }),
+      })
+
+    const concurrency = 32
+    const responses = await Promise.all(
+      Array.from({ length: concurrency }, (_, i) => sendInitialize(i)),
+    )
+    expect(responses).toHaveLength(concurrency)
+    for (const res of responses) {
+      expect(res.status).toBe(200)
+      const body = (await res.json()) as { result?: { protocolVersion?: string } }
+      expect(body.result?.protocolVersion).toBeDefined()
+    }
+
+    const { readFile: readFileFs } = await import('node:fs/promises')
+    const current = (await readFileFs(join(dataDir, '.current-workspace'), 'utf-8')).trim()
+    const latest = (await readFileFs(join(dataDir, '.latest-session'), 'utf-8')).trim()
+    expect(current).toMatch(/^[A-Za-z0-9_-]{21}$/)
+    expect(latest).toBe(current)
   })
 
   it('protects newly added mutating /api routes by default', async () => {
