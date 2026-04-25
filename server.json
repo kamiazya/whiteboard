@@ -7,14 +7,14 @@
     "url": "https://github.com/kamiazya/whiteboard",
     "source": "github"
   },
-  "version": "0.0.0",
+  "version": "0.0.3",
   "websiteUrl": "https://github.com/kamiazya/whiteboard#readme",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@kamiazya/whiteboard-mcp",
-      "version": "0.0.0",
+      "version": "0.0.3",
       "transport": {
         "type": "stdio"
       }

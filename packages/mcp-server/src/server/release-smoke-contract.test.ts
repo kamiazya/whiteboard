@@ -26,6 +26,12 @@ describe('release smoke contract', () => {
     expect(rootPackage.scripts['smoke:packaged']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:packaged',
     )
+    expect(mcpPackage.scripts['smoke:tarball']).toBe(
+      'node scripts/mcp-packed-tarball-smoke.mjs',
+    )
+    expect(rootPackage.scripts['smoke:tarball']).toBe(
+      'pnpm --filter @kamiazya/whiteboard-mcp smoke:tarball',
+    )
     expect(mcpPackage.scripts['smoke:codex-config']).toBe(
       'node scripts/mcp-codex-config-smoke.mjs',
     )
@@ -37,13 +43,16 @@ describe('release smoke contract', () => {
   it('runs the packaged and Codex config smokes after build and before npm publish', () => {
     const buildIndex = releaseWorkflow.indexOf('- name: Build')
     const packagedSmokeIndex = releaseWorkflow.indexOf('- name: Packaged stdio smoke')
+    const tarballSmokeIndex = releaseWorkflow.indexOf('- name: Packed tarball smoke')
     const codexSmokeIndex = releaseWorkflow.indexOf('- name: Codex config smoke')
     const publishIndex = releaseWorkflow.indexOf('- name: Publish to npm')
 
     expect(packagedSmokeIndex).toBeGreaterThan(buildIndex)
-    expect(codexSmokeIndex).toBeGreaterThan(packagedSmokeIndex)
+    expect(tarballSmokeIndex).toBeGreaterThan(packagedSmokeIndex)
+    expect(codexSmokeIndex).toBeGreaterThan(tarballSmokeIndex)
     expect(publishIndex).toBeGreaterThan(codexSmokeIndex)
     expect(releaseWorkflow).toContain('run: pnpm smoke:packaged')
+    expect(releaseWorkflow).toContain('run: pnpm smoke:tarball')
     expect(releaseWorkflow).toContain('run: pnpm smoke:codex-config')
   })
 })

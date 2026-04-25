@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -51,6 +50,17 @@ import {
 } from './tools/frame-embed.js'
 import { resolveWorkspaceId, saveCurrentWorkspaceId } from './session-resolver.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
+import { isDirectEntryPoint } from '../entrypoint.js'
+import {
+  buildDrawDiagramPrompt,
+  formatInstalledLibrariesResource,
+  formatRecentCanvasesResource,
+  getStandaloneHelpText,
+  WHITEBOARD_DRAW_PROMPT,
+  WHITEBOARD_HELP_URI,
+  WHITEBOARD_INSTALLED_LIBRARIES_URI,
+  WHITEBOARD_RECENT_CANVASES_URI,
+} from './standalone-help.js'
 
 const canvasCreateOutputSchema = z.object({
   id: z.string(),
@@ -539,6 +549,52 @@ export async function createExcalidrawMcpServer() {
     version: PACKAGE_VERSION,
   })
 
+  server.registerResource(
+    'whiteboard-help',
+    WHITEBOARD_HELP_URI,
+    {
+      title: 'Whiteboard MCP quickstart',
+      description: 'Standalone help for raw MCP clients that do not load Claude/Codex skills.',
+      mimeType: 'text/markdown',
+    },
+    async () => ({
+      contents: [
+        {
+          uri: WHITEBOARD_HELP_URI,
+          mimeType: 'text/markdown',
+          text: getStandaloneHelpText(),
+        },
+      ],
+    }),
+  )
+
+  server.registerPrompt(
+    WHITEBOARD_DRAW_PROMPT,
+    {
+      title: 'Draw Diagram',
+      description: 'Generate a starter prompt for drawing a new diagram with the whiteboard tools.',
+      argsSchema: {
+        goal: z.string().describe('What the diagram should explain or align on.'),
+        diagramType: z
+          .string()
+          .optional()
+          .describe('Optional diagram type hint such as architecture, sequence, review, or comparison.'),
+      },
+    },
+    async ({ goal, diagramType }) => ({
+      description: 'Starter instructions for creating a new whiteboard diagram.',
+      messages: [
+        {
+          role: 'user',
+          content: {
+            type: 'text',
+            text: buildDrawDiagramPrompt(goal, diagramType),
+          },
+        },
+      ],
+    }),
+  )
+
   // Tool registration.
   const canvasTool = createCanvasTool()
   const listTool = listCanvasTool()
@@ -590,6 +646,50 @@ export async function createExcalidrawMcpServer() {
     await client.touch()
     return run(client)
   }
+
+  server.registerResource(
+    'whiteboard-installed-libraries',
+    WHITEBOARD_INSTALLED_LIBRARIES_URI,
+    {
+      title: 'Installed libraries',
+      description: 'Dynamic summary of library URLs installed in the current workspace.',
+      mimeType: 'text/markdown',
+    },
+    async () => {
+      const libraries = await withDaemon((client) => libListInstalled.execute({}, client))
+      return {
+        contents: [
+          {
+            uri: WHITEBOARD_INSTALLED_LIBRARIES_URI,
+            mimeType: 'text/markdown',
+            text: formatInstalledLibrariesResource(libraries.installedUrls),
+          },
+        ],
+      }
+    },
+  )
+
+  server.registerResource(
+    'whiteboard-recent-canvases',
+    WHITEBOARD_RECENT_CANVASES_URI,
+    {
+      title: 'Recent canvases',
+      description: 'Dynamic summary of recently updated canvases across known workspaces.',
+      mimeType: 'text/markdown',
+    },
+    async () => {
+      const canvases = await withDaemon((client) => listTool.execute({}, client))
+      return {
+        contents: [
+          {
+            uri: WHITEBOARD_RECENT_CANVASES_URI,
+            mimeType: 'text/markdown',
+            text: formatRecentCanvasesResource(canvases.workspaces),
+          },
+        ],
+      }
+    },
+  )
 
   registerToolWithAnnotations(server,
     canvasTool.name,
@@ -1682,13 +1782,13 @@ export async function createExcalidrawMcpServer() {
   return server
 }
 
-async function main() {
+export async function main() {
   const server = await createExcalidrawMcpServer()
   const transport = new StdioServerTransport()
   await server.connect(transport)
 }
 
-const isEntryPoint = process.argv[1] === fileURLToPath(import.meta.url)
+const isEntryPoint = isDirectEntryPoint(import.meta.url)
 if (isEntryPoint) {
   main().catch((err) => {
     process.stderr.write(`MCP server error: ${err}\n`)

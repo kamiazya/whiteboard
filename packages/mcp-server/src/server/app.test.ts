@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { Hono } from 'hono'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 
 let tempDir: string
@@ -33,6 +34,7 @@ vi.mock('../daemon/ensure-daemon.js', () => ({
 const { createApp } = await import('./app.js')
 const { createLocalTokenMcpHttpAuthStrategy } = await import('./security/mcp-auth.js')
 const { clearCache } = await import('./store/doc-cache.js')
+const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 function createRuntimeOptions(
   token?: string,
@@ -57,12 +59,14 @@ function createRuntimeOptions(
 
 describe('createApp daemon mutation auth', () => {
   const originalMcpHttpDebug = process.env.MCP_HTTP_DEBUG
+  const originalWhiteboardDebug = process.env.WHITEBOARD_DEBUG
   const originalFetch = globalThis.fetch
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-app-test-'))
     await mkdir(join(tempDir, 'dist'), { recursive: true })
     await mkdir(join(tempDir, 'data'), { recursive: true })
+    process.env.WHITEBOARD_DEBUG = '1'
     clearCache()
     await writeFile(
       join(tempDir, 'dist', 'index.html'),
@@ -76,6 +80,11 @@ describe('createApp daemon mutation auth', () => {
       delete process.env.MCP_HTTP_DEBUG
     } else {
       process.env.MCP_HTTP_DEBUG = originalMcpHttpDebug
+    }
+    if (originalWhiteboardDebug === undefined) {
+      delete process.env.WHITEBOARD_DEBUG
+    } else {
+      process.env.WHITEBOARD_DEBUG = originalWhiteboardDebug
     }
     await rm(tempDir, { recursive: true, force: true })
     clearCache()
@@ -123,6 +132,32 @@ describe('createApp daemon mutation auth', () => {
     const html = await res.text()
     expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
     expect(html).toContain('"daemonToken":"secret"')
+  })
+
+  it('adds baseline security headers to HTML responses', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const res = await app.request('/canvas/session1/demo')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Security-Policy')).toBe("frame-ancestors 'none'")
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY')
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer')
+    expect(res.headers.get('Cross-Origin-Resource-Policy')).toBe('same-origin')
+  })
+
+  it('adds the same baseline security headers to API responses', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const res = await app.request('/api/sessions')
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('Content-Security-Policy')).toBe("frame-ancestors 'none'")
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY')
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer')
+    expect(res.headers.get('Cross-Origin-Resource-Policy')).toBe('same-origin')
   })
 
   it('rejects /mcp requests without bearer auth when a daemon token is configured', async () => {
@@ -227,6 +262,113 @@ describe('createApp daemon mutation auth', () => {
     })
   })
 
+  it('returns package-synced server metadata and tool capabilities on initialize', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const res = await app.request('http://127.0.0.1/mcp', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer secret',
+        Origin: 'http://127.0.0.1:6274',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'init-test', version: '1.0.0' },
+        },
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        serverInfo: {
+          name: 'whiteboard',
+          version: PACKAGE_VERSION,
+        },
+        capabilities: {
+          tools: {
+            listChanged: true,
+          },
+        },
+      },
+    })
+  })
+
+  it('echoes a supported client protocol version during initialize', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const res = await app.request('http://127.0.0.1/mcp', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer secret',
+        Origin: 'http://127.0.0.1:6274',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'init-protocol-test', version: '1.0.0' },
+        },
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        protocolVersion: '2025-03-26',
+      },
+    })
+  })
+
+  it('falls back to the sdk latest protocol version when the client asks for an unsupported version', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+
+    const res = await app.request('http://127.0.0.1/mcp', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer secret',
+        Origin: 'http://127.0.0.1:6274',
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '1999-01-01',
+          capabilities: {},
+          clientInfo: { name: 'init-protocol-fallback-test', version: '1.0.0' },
+        },
+      }),
+    })
+
+    expect(res.status).toBe(200)
+    await expect(res.json()).resolves.toMatchObject({
+      jsonrpc: '2.0',
+      id: 1,
+      result: {
+        protocolVersion: LATEST_PROTOCOL_VERSION,
+      },
+    })
+  })
+
   it('exposes an MCP Streamable HTTP endpoint for tool discovery', async () => {
     const app = createApp(createRuntimeOptions('secret'))
     const snapshot = new LoroDoc().export({ mode: 'snapshot' })
@@ -309,6 +451,158 @@ describe('createApp daemon mutation auth', () => {
         text: JSON.stringify(annotateBatchResult.structuredContent),
       },
     ])
+    await transport.close()
+  })
+
+  it('exposes standalone help through MCP resources and prompts', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    const client = new Client({ name: 'app-help-client', version: '1.0.0' })
+    const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
+      fetch: (input, init) => {
+        const headers = new Headers(init?.headers)
+        headers.set('Authorization', 'Bearer secret')
+        headers.set('Origin', 'http://127.0.0.1:6274')
+        return app.request(input instanceof URL ? input.toString() : String(input), {
+          ...init,
+          headers,
+        })
+      },
+    })
+
+    await client.connect(transport)
+    const resources = await client.listResources()
+    const prompts = await client.listPrompts()
+    const helpResource = resources.resources.find(
+      (resource) => resource.uri === 'whiteboard://help/getting-started',
+    )
+    const drawPrompt = prompts.prompts.find((prompt) => prompt.name === 'whiteboard.draw_diagram')
+
+    expect(helpResource).toMatchObject({
+      name: 'whiteboard-help',
+      mimeType: 'text/markdown',
+    })
+    expect(drawPrompt).toMatchObject({
+      name: 'whiteboard.draw_diagram',
+    })
+
+    const help = await client.readResource({ uri: 'whiteboard://help/getting-started' })
+    const prompt = await client.getPrompt({
+      name: 'whiteboard.draw_diagram',
+      arguments: { goal: 'Summarize the payment flow' },
+    })
+
+    expect(help.contents).toEqual([
+      expect.objectContaining({
+        uri: 'whiteboard://help/getting-started',
+        mimeType: 'text/markdown',
+        text: expect.stringContaining('Start with `canvas_create`'),
+      }),
+    ])
+    expect(prompt.messages).toEqual([
+      expect.objectContaining({
+        role: 'user',
+        content: expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('Summarize the payment flow'),
+        }),
+      }),
+    ])
+
+    await transport.close()
+  })
+
+  it('exposes dynamic installed-library and recent-canvas resources', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      const url = input.toString()
+      if (url === 'http://daemon.test/api/runtime/touch') {
+        return new Response(null, { status: 204 })
+      }
+      if (/^http:\/\/daemon\.test\/api\/workspaces\/[^/]+\/libraries$/.test(url)) {
+        return new Response(
+          JSON.stringify({
+            urls: ['https://libraries.example.com/architecture.excalidrawlib'],
+          }),
+          { status: 200 },
+        )
+      }
+      if (url === 'http://daemon.test/api/workspaces') {
+        return new Response(
+          JSON.stringify({
+            workspaces: [
+              {
+                workspaceId: 'M7lgM0WguBnkfP_1iOFtY',
+                sessionId: 'M7lgM0WguBnkfP_1iOFtY',
+                daemonAlive: true,
+              },
+            ],
+          }),
+          { status: 200 },
+        )
+      }
+      if (/^http:\/\/daemon\.test\/api\/workspaces\/[^/]+\/canvases$/.test(url)) {
+        return new Response(
+          JSON.stringify({
+            canvases: [
+              { slug: 'payments-flow', updatedAt: '2026-04-25T10:30:00.000Z' },
+              { slug: 'system-overview', updatedAt: '2026-04-24T08:15:00.000Z' },
+            ],
+          }),
+          { status: 200 },
+        )
+      }
+      throw new Error(`Unexpected daemon fetch: ${url} ${init?.method ?? 'GET'}`)
+    }) as typeof globalThis.fetch
+    const client = new Client({ name: 'app-dynamic-resource-client', version: '1.0.0' })
+    const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
+      fetch: (input, init) => {
+        const headers = new Headers(init?.headers)
+        headers.set('Authorization', 'Bearer secret')
+        headers.set('Origin', 'http://127.0.0.1:6274')
+        return app.request(input instanceof URL ? input.toString() : String(input), {
+          ...init,
+          headers,
+        })
+      },
+    })
+
+    await client.connect(transport)
+    const resources = await client.listResources()
+
+    expect(resources.resources).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          uri: 'whiteboard://state/libraries/installed',
+          name: 'whiteboard-installed-libraries',
+        }),
+        expect.objectContaining({
+          uri: 'whiteboard://state/canvases/recent',
+          name: 'whiteboard-recent-canvases',
+        }),
+      ]),
+    )
+
+    const installedLibraries = await client.readResource({
+      uri: 'whiteboard://state/libraries/installed',
+    })
+    const recentCanvases = await client.readResource({
+      uri: 'whiteboard://state/canvases/recent',
+    })
+
+    expect(installedLibraries.contents).toEqual([
+      expect.objectContaining({
+        uri: 'whiteboard://state/libraries/installed',
+        text: expect.stringContaining('https://libraries.example.com/architecture.excalidrawlib'),
+      }),
+    ])
+    expect(recentCanvases.contents).toEqual([
+      expect.objectContaining({
+        uri: 'whiteboard://state/canvases/recent',
+        text: expect.stringContaining('/payments-flow'),
+      }),
+    ])
+    expect(recentCanvases.contents[0]?.text).toContain('system-overview')
+
     await transport.close()
   })
 

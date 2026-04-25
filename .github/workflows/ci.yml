@@ -51,11 +51,17 @@ jobs:
           WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
 
+      - name: Template smoke
+        run: pnpm smoke:template
+
       - name: Build
         run: pnpm build
 
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
+
+      - name: Packed tarball smoke
+        run: pnpm smoke:tarball
 
       - name: Codex config smoke
         run: pnpm smoke:codex-config

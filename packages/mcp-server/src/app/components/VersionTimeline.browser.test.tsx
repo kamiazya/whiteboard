@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { page } from 'vitest/browser'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import '../index.css'
 import VersionTimeline from './VersionTimeline.js'
 
@@ -94,5 +95,31 @@ describe('VersionTimeline browser mode', () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
 
     expect(viewport!.scrollTop).toBeGreaterThan(before)
+  })
+
+  it('keeps each history row keyboard-focusable and opens the restore dialog', async () => {
+    render(
+      <div
+        style={{
+          width: '340px',
+          height: '480px',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        }}
+      >
+        <VersionTimeline sessionId="sess_1" slug="canvas-a" />
+      </div>,
+    )
+
+    const firstVersion = await screen.findByRole('button', { name: /^Version 1\b/ })
+    expect(firstVersion).toHaveAttribute('type', 'button')
+
+    firstVersion.focus()
+    expect(firstVersion).toHaveFocus()
+    firstVersion.click()
+
+    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
+    await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
   })
 })

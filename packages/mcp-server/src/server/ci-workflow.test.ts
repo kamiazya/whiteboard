@@ -32,6 +32,8 @@ describe('pre-merge CI workflow', () => {
     expect(workflow).toContain('pnpm smoke:e2e')
     expect(workflow).toContain('pnpm build')
     expect(workflow).toContain('pnpm smoke:packaged')
+    expect(workflow).toContain('pnpm smoke:tarball')
     expect(workflow).toContain('pnpm smoke:codex-config')
+    expect(workflow).toContain('pnpm smoke:template')
   })
 })
