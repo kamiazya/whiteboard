@@ -1557,7 +1557,7 @@ export async function createExcalidrawMcpServer() {
       description: checkpointSave.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form to snapshot.'),
-        id: z.string().regex(/^[a-zA-Z0-9._-]+$/).optional().describe(
+        id: z.string().regex(/^[a-zA-Z0-9._-]+$/, { message: 'Invalid checkpoint id' }).optional().describe(
           'Optional checkpoint id. When omitted, a fresh nanoid is generated. Must match /^[a-zA-Z0-9._-]+$/ (no path traversal).',
         ),
       },
