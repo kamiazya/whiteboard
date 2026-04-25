@@ -48,9 +48,11 @@ describe('publish contract', () => {
     expect(releaseWorkflow).toContain('registry-url: https://registry.npmjs.org')
     expect(releaseWorkflow).toContain('pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium')
     expect(releaseWorkflow).toContain('npm publish --access public --provenance')
-    // OIDC trusted publisher requires id-token: write permission and bumps npm to >= 11.5.1.
+    // OIDC trusted publisher requires id-token: write permission and npm >= 11.5.1.
+    // Node 24 ships with npm 11.x; relying on the bundled npm avoids the
+    // `npm i -g npm@latest` self-upgrade bug.
     expect(releaseWorkflow).toContain('id-token: write')
-    expect(releaseWorkflow).toContain('npm install -g --force npm@latest')
+    expect(releaseWorkflow).toContain('node-version-file: .node-version')
     // Should not fall back to long-lived NPM_TOKEN or GitHub Packages auth.
     expect(releaseWorkflow).not.toContain('Publish to GitHub Packages')
     expect(releaseWorkflow).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')
