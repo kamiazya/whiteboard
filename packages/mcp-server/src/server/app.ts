@@ -218,16 +218,17 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse: true,
     })
-    const constructStartedAt = debug ? Date.now() : 0
-    const server = await createExcalidrawMcpServer()
-    if (debug) {
-      console.info('[mcp-http:construct]', {
-        durationMs: Date.now() - constructStartedAt,
-      })
-    }
+    let response: Response | undefined
     try {
+      const constructStartedAt = debug ? Date.now() : 0
+      const server = await createExcalidrawMcpServer()
+      if (debug) {
+        console.info('[mcp-http:construct]', {
+          durationMs: Date.now() - constructStartedAt,
+        })
+      }
       await server.connect(transport)
-      const response = await transport.handleRequest(c.req.raw, { parsedBody })
+      response = await transport.handleRequest(c.req.raw, { parsedBody })
       if (debug) {
         const body = isJsonObject(parsedBody) ? parsedBody : {}
         console.info('[mcp-http]', {
@@ -241,22 +242,40 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
       }
       return response
     } finally {
-      const destructStartedAt = debug ? Date.now() : 0
-      try {
-        await transport.close()
-      } catch (error) {
-        // Closing failures from a finished request should not leak into the
-        // response path. Log only when MCP_HTTP_DEBUG=1 for visibility.
+      // Skip transport.close() when the response is an SSE stream
+      // (Content-Type: text/event-stream). For SSE the response body is a still
+      // open ReadableStream and closing the transport here would cancel it
+      // before the client receives any events. JSON-mode responses, by
+      // contrast, are fully buffered before handleRequest resolves so close()
+      // is safe and useful for cleanup.
+      const isSseResponse = response?.headers
+        .get('content-type')
+        ?.toLowerCase()
+        .includes('text/event-stream')
+      if (isSseResponse) {
         if (debug) {
-          console.info('[mcp-http:destruct-error]', {
-            message: errorMessage(error),
+          console.info('[mcp-http:destruct-skipped]', {
+            reason: 'sse-stream-active',
           })
         }
-      }
-      if (debug) {
-        console.info('[mcp-http:destruct]', {
-          durationMs: Date.now() - destructStartedAt,
-        })
+      } else {
+        const destructStartedAt = debug ? Date.now() : 0
+        try {
+          await transport.close()
+        } catch (error) {
+          // Closing failures from a finished request should not leak into the
+          // response path. Log only when MCP_HTTP_DEBUG=1 for visibility.
+          if (debug) {
+            console.info('[mcp-http:destruct-error]', {
+              message: errorMessage(error),
+            })
+          }
+        }
+        if (debug) {
+          console.info('[mcp-http:destruct]', {
+            durationMs: Date.now() - destructStartedAt,
+          })
+        }
       }
     }
   })

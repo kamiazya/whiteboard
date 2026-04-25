@@ -658,6 +658,30 @@ describe('createApp daemon mutation auth', () => {
     infoSpy.mockRestore()
   })
 
+  it('keeps the SSE stream returned by GET /mcp open instead of closing it in the finally block', async () => {
+    const app = createApp(createRuntimeOptions())
+    const res = await app.request('http://127.0.0.1/mcp', {
+      method: 'GET',
+      headers: { Accept: 'text/event-stream' },
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/event-stream')
+    expect(res.body).not.toBeNull()
+
+    // If transport.close() ran in the finally block, the underlying SSE
+    // ReadableStream would be canceled and reader.read() would resolve
+    // synchronously with done:true. A still-open stream pends past a short
+    // timeout instead.
+    const reader = res.body!.getReader()
+    const readPromise = reader.read()
+    const winner = await Promise.race([
+      readPromise.then(() => 'closed' as const),
+      new Promise<'open'>((resolve) => setTimeout(() => resolve('open'), 50)),
+    ])
+    expect(winner).toBe('open')
+    await reader.cancel()
+  })
+
   it('handles concurrent /mcp initialize requests without racing the workspace marker file', async () => {
     const app = createApp(createRuntimeOptions())
     const dataDir = join(tempDir, 'data')
