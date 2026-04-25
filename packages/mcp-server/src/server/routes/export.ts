@@ -1,19 +1,11 @@
 import { Hono } from 'hono'
-import { join, dirname, isAbsolute } from 'node:path'
-import { writeFile, mkdir, stat } from 'node:fs/promises'
+import { join, dirname } from 'node:path'
+import { writeFile, mkdir } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
 import { DATA_DIR } from '../config.js'
+import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { sendExportRequest, getClientCount } from './ws.js'
 import { validationErrorBody, validateSessionId, validateSlug } from '../validators.js'
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
-}
 
 // requestId -> { resolve, reject }
 const pendingExports = new Map<
@@ -70,23 +62,14 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     // caller does not waste a browser round-trip on a write that will fail.
     let outputPath: string | undefined
     if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
-      if (!isAbsolute(body.outputPath)) {
-        return c.json(
-          {
-            error: 'invalid_output_path',
-            message: `outputPath must be an absolute path (received: ${body.outputPath})`,
-          },
-          400,
-        )
-      }
-      if (body.overwrite !== true && (await fileExists(body.outputPath))) {
-        return c.json(
-          {
-            error: 'output_exists',
-            message: `outputPath already exists. Pass overwrite=true to replace it: ${body.outputPath}`,
-          },
-          409,
-        )
+      try {
+        await validateOutputPath(body.outputPath, body.overwrite === true)
+      } catch (err) {
+        if (err instanceof OutputPathError) {
+          const status = err.code === 'output_exists' ? 409 : 400
+          return c.json({ error: err.code, message: err.message }, status)
+        }
+        throw err
       }
       outputPath = body.outputPath
     }

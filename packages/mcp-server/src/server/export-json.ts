@@ -1,25 +1,19 @@
-import { mkdir, stat, writeFile } from 'node:fs/promises'
-import { dirname, isAbsolute, join } from 'node:path'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import type { LoroDoc } from 'loro-crdt'
 import { DATA_DIR } from './config.js'
+import { validateOutputPath } from './output-path.js'
 import {
   resolveParentedElements,
   type ParentedElement,
 } from '../shared/resolve-parented-elements.js'
 
+// Re-exported so existing route imports (`import { ..., OutputPathError } from
+// './export-json.js'`) keep compiling without churn.
+export { OutputPathError } from './output-path.js'
+export type { OutputPathErrorCode } from './output-path.js'
+
 const STRIP_CUSTOM_FIELDS = ['templateInstanceId'] as const
-
-export type OutputPathErrorCode = 'invalid_output_path' | 'output_exists'
-
-export class OutputPathError extends Error {
-  readonly name = 'OutputPathError'
-  constructor(
-    readonly code: OutputPathErrorCode,
-    message: string,
-  ) {
-    super(message)
-  }
-}
 
 function stripTemplateInstanceId(
   elements: Array<Record<string, unknown>>,
@@ -45,15 +39,6 @@ function normalizeExportElements(
   )
 }
 
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await stat(path)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function resolveOutputPath(args: {
   sessionId: string
   slug: string
@@ -62,18 +47,7 @@ async function resolveOutputPath(args: {
   overwrite?: boolean
 }): Promise<string> {
   if (args.outputPath !== undefined) {
-    if (!isAbsolute(args.outputPath)) {
-      throw new OutputPathError(
-        'invalid_output_path',
-        `outputPath must be an absolute path (received: ${args.outputPath})`,
-      )
-    }
-    if (!args.overwrite && (await fileExists(args.outputPath))) {
-      throw new OutputPathError(
-        'output_exists',
-        `outputPath already exists. Pass overwrite=true to replace it: ${args.outputPath}`,
-      )
-    }
+    await validateOutputPath(args.outputPath, args.overwrite === true)
     return args.outputPath
   }
 
