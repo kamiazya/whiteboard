@@ -47,6 +47,8 @@ jobs:
         run: pnpm test
 
       - name: Stdio E2E smoke
+        env:
+          WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
 
       - name: Build

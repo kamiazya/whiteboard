@@ -91,6 +91,8 @@ jobs:
 
       - name: Stdio E2E smoke (no quota required)
         working-directory: .
+        env:
+          WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
 
       - name: Build
