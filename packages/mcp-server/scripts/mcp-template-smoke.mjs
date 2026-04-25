@@ -36,7 +36,22 @@ globalThis.fetch = async (url, init) => {
     posted.push(init?.body instanceof Uint8Array ? init.body.byteLength : String(init?.body ?? '').length)
     return new Response(null, { status: 200 })
   }
+  if (u.endsWith('/palette')) {
+    return new Response(JSON.stringify({ palette: {} }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
   throw new Error(`unexpected fetch ${u}`)
+}
+
+// Fake DaemonClient that delegates to the mocked globalThis.fetch above.
+// Tools now expect a DaemonClient (with .request) instead of a bare port.
+const fakeClient = {
+  port: 3099,
+  baseUrl: 'http://127.0.0.1:3099',
+  request: (path, init) => globalThis.fetch(`http://127.0.0.1:3099${path}`, init),
+  touch: async () => {},
 }
 
 function expect(label, cond, detail = '') {
@@ -81,7 +96,7 @@ try {
   posted.length = 0
   const r1 = await insertTemplateTool().execute(
     { canvasId: 'sid/diagram', templateId: 'client-api-db', target: { x: 10, y: 20 } },
-    3099,
+    fakeClient,
   )
   expect('insert returns templateId', r1.templateId === 'client-api-db')
   expect('insert source=builtin', r1.source === 'builtin')
@@ -99,7 +114,7 @@ try {
       target: { x: 0, y: 0 },
       variables: { client: 'Web', db: 'Postgres' },
     },
-    3099,
+    fakeClient,
   )
   expect('override client', r2.variables.client === 'Web')
   expect('override db', r2.variables.db === 'Postgres')
@@ -140,7 +155,7 @@ try {
   posted.length = 0
   const r3 = await insertTemplateTool().execute(
     { canvasId: 'sid/diagram', templatePath: customPath, target: { x: 5, y: 5 } },
-    3099,
+    fakeClient,
   )
   expect('file template source=file', r3.source === 'file')
   expect('file template id', r3.templateId === 'custom-smoke')
@@ -151,7 +166,7 @@ try {
     () =>
       insertTemplateTool().execute(
         { canvasId: 'sid/diagram', templateId: 'does-not-exist', target: { x: 0, y: 0 } },
-        3099,
+        fakeClient,
       ),
     /Unknown templateId/,
   )
@@ -167,7 +182,7 @@ try {
           templatePath: customPath,
           target: { x: 0, y: 0 },
         },
-        3099,
+        fakeClient,
       ),
     /Specify either/,
   )
@@ -178,7 +193,7 @@ try {
     () =>
       insertTemplateTool().execute(
         { canvasId: 'sid/diagram', target: { x: 0, y: 0 } },
-        3099,
+        fakeClient,
       ),
     /required/,
   )
@@ -202,7 +217,7 @@ try {
     () =>
       insertTemplateTool().execute(
         { canvasId: 'sid/diagram', templatePath: missingVarPath, target: { x: 0, y: 0 } },
-        3099,
+        fakeClient,
       ),
     /Missing required template variables/,
   )
@@ -217,7 +232,7 @@ try {
           templatePath: join(tmpDir, 'no-such-file.json'),
           target: { x: 0, y: 0 },
         },
-        3099,
+        fakeClient,
       ),
     /ENOENT|no such/i,
   )
@@ -233,7 +248,7 @@ try {
           target: { x: 0, y: 0 },
           scale: -1,
         },
-        3099,
+        fakeClient,
       ),
     /scale must be a positive number/,
   )
