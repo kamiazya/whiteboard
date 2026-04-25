@@ -3,6 +3,7 @@ import { join, dirname } from 'node:path'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
 import { DATA_DIR } from '../config.js'
+import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { sendExportRequest, getClientCount } from './ws.js'
 import { validationErrorBody, validateSessionId, validateSlug } from '../validators.js'
 
@@ -45,14 +46,33 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
       scale?: number
       minFontPx?: number
       frameId?: string
+      outputPath?: string
+      overwrite?: boolean
     }
     const body = await c.req.json<ExportBody>().catch(() => ({}) as ExportBody)
-    const options: ExportBody = {}
+    const options: Pick<ExportBody, 'padding' | 'scale' | 'minFontPx' | 'frameId'> = {}
     if (body.padding !== undefined) options.padding = body.padding
     if (body.scale !== undefined) options.scale = body.scale
     if (body.minFontPx !== undefined) options.minFontPx = body.minFontPx
     if (body.frameId !== undefined) options.frameId = body.frameId
     const hasOptions = Object.keys(options).length > 0
+
+    // Validate outputPath up front, before contacting the browser. Reject
+    // relative paths and pre-existing files (unless overwrite=true) so the
+    // caller does not waste a browser round-trip on a write that will fail.
+    let outputPath: string | undefined
+    if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
+      try {
+        await validateOutputPath(body.outputPath, body.overwrite === true)
+      } catch (err) {
+        if (err instanceof OutputPathError) {
+          const status = err.code === 'output_exists' ? 409 : 400
+          return c.json({ error: err.code, message: err.message }, status)
+        }
+        throw err
+      }
+      outputPath = body.outputPath
+    }
 
     // Fast-fail with 503 if no WS client is connected.
     // Do not wait for the timeout because that would not fix a missing client; report
@@ -87,14 +107,19 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
       })
 
       const buffer = Buffer.from(base64Data.replace(/^data:image\/\w+;base64,/, ''), 'base64')
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      // .excalidraw.png is a PNG with embedded scene JSON. Normal image viewers treat
-      // it as a PNG, and dropping it into Excalidraw restores the scene for editing.
-      const fileName = `${slug}-${timestamp}.excalidraw.png`
-      const exportsDir = join(DATA_DIR, sessionId, 'exports')
-      const filePath = join(exportsDir, fileName)
-      // If slug contains "/" (nested canvas paths), create parent directories all the
-      // way to the final file path so writes do not fail with ENOENT.
+      let filePath: string
+      if (outputPath !== undefined) {
+        filePath = outputPath
+      } else {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        // .excalidraw.png is a PNG with embedded scene JSON. Normal image viewers treat
+        // it as a PNG, and dropping it into Excalidraw restores the scene for editing.
+        const fileName = `${slug}-${timestamp}.excalidraw.png`
+        const exportsDir = join(DATA_DIR, sessionId, 'exports')
+        filePath = join(exportsDir, fileName)
+      }
+      // If slug contains "/" (nested canvas paths) or outputPath points into a
+      // non-existent directory, create the parents recursively to avoid ENOENT.
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, buffer)
 

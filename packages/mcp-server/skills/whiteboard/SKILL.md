@@ -207,6 +207,8 @@ Options:
 - `scale`: export DPI multiplier, default 1
 - `minFontPx`: boosts font size only in the export clone
 - `frameId`: exports only the frame plus its child elements
+- `outputPath`: absolute path to write the PNG to. When omitted, write to the workspace exports dir
+- `overwrite`: replace an existing file at `outputPath`. Default false; without it an existing file rejects with `output_exists`
 
 Inspect the exported PNG visually:
 

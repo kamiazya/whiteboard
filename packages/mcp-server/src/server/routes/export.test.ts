@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
@@ -295,5 +295,95 @@ describe('POST /api/canvas/:sessionId/:slug/export - error handling', () => {
     })
     expect(badSlug.status).toBe(400)
     expect(mockSendExportRequest).not.toHaveBeenCalled()
+  })
+
+  it('writes the PNG to an explicit absolute outputPath when provided', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
+      queueMicrotask(() => {
+        resolveExportRequest(
+          requestId,
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        )
+      })
+    })
+    const app = makeApp()
+    const outputPath = join(tempDir, 'subdir', 'custom.excalidraw.png')
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { filePath: string }
+    expect(body.filePath).toBe(outputPath)
+    const bytes = await readFile(outputPath)
+    // PNG signature
+    expect(bytes[0]).toBe(0x89)
+  })
+
+  it('rejects a relative PNG outputPath with 400 invalid_output_path', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath: 'relative/out.png' }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
+    expect(mockSendExportRequest).not.toHaveBeenCalled()
+  })
+
+  it('refuses to overwrite an existing PNG by default and returns 409', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
+      queueMicrotask(() => {
+        resolveExportRequest(
+          requestId,
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        )
+      })
+    })
+    const app = makeApp()
+    const outputPath = join(tempDir, 'pre-existing.png')
+    await writeFile(outputPath, 'OLD')
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath }),
+    })
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ error: 'output_exists' })
+    // Still the old contents.
+    await expect(readFile(outputPath, 'utf-8')).resolves.toBe('OLD')
+  })
+
+  it('overwrites an existing PNG when overwrite=true', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
+      queueMicrotask(() => {
+        resolveExportRequest(
+          requestId,
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        )
+      })
+    })
+    const app = makeApp()
+    const outputPath = join(tempDir, 'replace.png')
+    await writeFile(outputPath, 'OLD')
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath, overwrite: true }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { filePath: string }
+    expect(body.filePath).toBe(outputPath)
+    const bytes = await readFile(outputPath)
+    expect(bytes[0]).toBe(0x89)
   })
 })

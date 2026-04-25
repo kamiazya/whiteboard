@@ -64,4 +64,66 @@ describe('canvas_export_json', () => {
       elementCount: 1,
     })
   })
+
+  it('forwards outputPath and overwrite to the daemon route', async () => {
+    const tool = canvasExportJsonTool()
+    let captured: unknown
+    globalThis.fetch = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+      captured = init?.body !== undefined ? JSON.parse(init.body as string) : undefined
+      return new Response(
+        JSON.stringify({ filePath: '/abs/out.excalidraw', elementCount: 0 }),
+        { status: 200 },
+      )
+    }) as typeof globalThis.fetch
+
+    await tool.execute(
+      { canvasId: 'sid/canvas-a', outputPath: '/abs/out.excalidraw', overwrite: true },
+      client,
+    )
+    expect(captured).toEqual({
+      includeCustomFields: false,
+      outputPath: '/abs/out.excalidraw',
+      overwrite: true,
+    })
+  })
+
+  it('surfaces invalid_output_path errors from the daemon route as a clear message', async () => {
+    const tool = canvasExportJsonTool()
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          error: 'invalid_output_path',
+          message: 'outputPath must be an absolute path (received: relative.json)',
+        }),
+        { status: 400 },
+      )
+    }) as typeof globalThis.fetch
+
+    await expect(
+      tool.execute(
+        { canvasId: 'sid/canvas-a', outputPath: 'relative.json' },
+        client,
+      ),
+    ).rejects.toThrow(/absolute path/)
+  })
+
+  it('surfaces output_exists errors when overwrite is omitted', async () => {
+    const tool = canvasExportJsonTool()
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          error: 'output_exists',
+          message: 'outputPath already exists. Pass overwrite=true to replace it: /abs/out.json',
+        }),
+        { status: 409 },
+      )
+    }) as typeof globalThis.fetch
+
+    await expect(
+      tool.execute(
+        { canvasId: 'sid/canvas-a', outputPath: '/abs/out.json' },
+        client,
+      ),
+    ).rejects.toThrow(/already exists/)
+  })
 })

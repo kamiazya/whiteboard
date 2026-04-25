@@ -2,10 +2,16 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { LoroDoc } from 'loro-crdt'
 import { DATA_DIR } from './config.js'
+import { validateOutputPath } from './output-path.js'
 import {
   resolveParentedElements,
   type ParentedElement,
 } from '../shared/resolve-parented-elements.js'
+
+// Re-exported so existing route imports (`import { ..., OutputPathError } from
+// './export-json.js'`) keep compiling without churn.
+export { OutputPathError } from './output-path.js'
+export type { OutputPathErrorCode } from './output-path.js'
 
 const STRIP_CUSTOM_FIELDS = ['templateInstanceId'] as const
 
@@ -33,12 +39,32 @@ function normalizeExportElements(
   )
 }
 
+async function resolveOutputPath(args: {
+  sessionId: string
+  slug: string
+  dataDir?: string
+  outputPath?: string
+  overwrite?: boolean
+}): Promise<string> {
+  if (args.outputPath !== undefined) {
+    await validateOutputPath(args.outputPath, args.overwrite === true)
+    return args.outputPath
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const fileName = `${args.slug}-${timestamp}.excalidraw`
+  const exportsDir = join(args.dataDir ?? DATA_DIR, args.sessionId, 'exports')
+  return join(exportsDir, fileName)
+}
+
 export async function exportCanvasJsonDoc(args: {
   sessionId: string
   slug: string
   doc: LoroDoc
   includeCustomFields?: boolean
   dataDir?: string
+  outputPath?: string
+  overwrite?: boolean
 }): Promise<{ filePath: string; elementCount: number }> {
   const rawElements = args.doc.getMovableList('elements').toJSON() as Array<
     Record<string, unknown>
@@ -56,10 +82,7 @@ export async function exportCanvasJsonDoc(args: {
     files: {},
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const fileName = `${args.slug}-${timestamp}.excalidraw`
-  const exportsDir = join(args.dataDir ?? DATA_DIR, args.sessionId, 'exports')
-  const filePath = join(exportsDir, fileName)
+  const filePath = await resolveOutputPath(args)
   await mkdir(dirname(filePath), { recursive: true })
   await writeFile(filePath, JSON.stringify(payload, null, 2))
 
