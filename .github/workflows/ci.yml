@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Audit (high+ vulnerabilities, prod deps only)
+        # Gate on CVEs that affect published artifacts so they are caught at PR time.
+        run: pnpm audit --prod --audit-level=high
+
+      - name: Validate skills
+        run: pnpm intent:validate
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Stdio E2E smoke
+        run: pnpm smoke:e2e
+
+      - name: Build
+        run: pnpm build
+
+      - name: Packaged stdio smoke
+        run: pnpm smoke:packaged
+
+      - name: Codex config smoke
+        run: pnpm smoke:codex-config

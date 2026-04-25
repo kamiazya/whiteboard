@@ -1,0 +1,52 @@
+{
+  "name": "@kamiazya/whiteboard-plugin",
+  "version": "0.0.0",
+  "description": "Claude Code and Codex plugin wrapper surfaces for the whiteboard MCP server and shared skills.",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kamiazya/whiteboard.git"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "vitest run",
+    "test:all": "vitest run",
+    "test:node": "vitest run --project mcp-node --project mcp-jsdom",
+    "test:browser": "vitest run --project mcp-browser",
+    "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
+    "test:watch": "vitest --project mcp-node --project mcp-jsdom",
+    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm --filter @kamiazya/whiteboard-mcp dev",
+    "mcp": "pnpm --filter @kamiazya/whiteboard-mcp mcp",
+    "mcp:http": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http",
+    "mcp:http:dev": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev",
+    "mcp:inspect": "pnpm --filter @kamiazya/whiteboard-mcp mcp:inspect",
+    "mcp:inspect:stdio": "pnpm --filter @kamiazya/whiteboard-mcp mcp:inspect:stdio",
+    "mcp:debug:http": "pnpm --filter @kamiazya/whiteboard-mcp mcp:debug:http",
+    "smoke": "pnpm --filter @kamiazya/whiteboard-mcp smoke",
+    "smoke:e2e": "pnpm --filter @kamiazya/whiteboard-mcp smoke:e2e",
+    "smoke:packaged": "pnpm --filter @kamiazya/whiteboard-mcp smoke:packaged",
+    "smoke:codex-config": "pnpm --filter @kamiazya/whiteboard-mcp smoke:codex-config",
+    "smoke:template": "pnpm --filter @kamiazya/whiteboard-mcp smoke:template",
+    "smoke:claude": "pnpm --filter @kamiazya/whiteboard-mcp smoke:claude",
+    "smoke:codex": "pnpm --filter @kamiazya/whiteboard-mcp smoke:codex",
+    "smoke:all": "pnpm --filter @kamiazya/whiteboard-mcp smoke:all",
+    "intent:validate": "npx @tanstack/intent@latest validate",
+    "intent:list": "npx @tanstack/intent@latest list",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "@tanstack/intent": "^0.0.29",
+    "vitest": "^4.1.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "lodash-es@<4.18.0": "^4.18.0",
+      "nanoid@<3.3.8": "^3.3.8",
+      "nanoid@>=4.0.0 <5.0.9": "^5.0.9"
+    }
+  }
+}
