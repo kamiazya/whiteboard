@@ -1,0 +1,16 @@
+# Repo-level Codex config.
+# Codex merges config layers in this order, with later layers winning:
+#   system < user (~/.codex/config.toml) < cwd < tree (./.codex/config.toml) < repo (<git-root>/.codex/config.toml) < runtime
+# As a result, `mcp_servers.whiteboard` in this file overrides the user's server with the same name,
+# so opening this repo in Codex starts the local checkout dev server (`mcp-dev-launch.mjs`) immediately.
+#
+# Trust gating: the cwd / tree / repo layers stay disabled unless either
+#   [projects."<absolute_path>"] trust_level = "trusted"
+# is present in the user's ~/.codex/config.toml, or the user approves the trust prompt in the Codex TUI.
+# Right after cloning the repo it is untrusted, so one approval is required first.
+# Official spec: https://github.com/openai/codex/blob/main/docs/config.md
+
+[mcp_servers.whiteboard]
+command = "node"
+args = ["./packages/mcp-server/scripts/mcp-dev-launch.mjs"]
+env = { WHITEBOARD_DEV = "1" }

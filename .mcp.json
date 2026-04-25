@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "whiteboard": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@kamiazya/whiteboard-mcp@latest"
+      ]
+    }
+  }
+}

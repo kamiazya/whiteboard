@@ -1,0 +1,21 @@
+{
+  "name": "whiteboard",
+  "version": "0.0.0",
+  "description": "Collaborative Excalidraw whiteboard for Codex. Bundles shared skills and points Codex at the packaged whiteboard MCP server.",
+  "repository": "https://github.com/kamiazya/whiteboard",
+  "license": "MIT",
+  "skills": "./packages/mcp-server/skills",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Whiteboard",
+    "shortDescription": "Draw and refine diagrams on a shared Excalidraw canvas.",
+    "longDescription": "Use the Whiteboard plugin to create, annotate, inspect, and export collaborative diagrams through the shared whiteboard MCP server.",
+    "developerName": "kamiazya",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/kamiazya/whiteboard"
+  }
+}
