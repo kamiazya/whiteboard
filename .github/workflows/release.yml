@@ -111,6 +111,10 @@ jobs:
         working-directory: .
         run: pnpm smoke:packaged
 
+      - name: Packed tarball smoke
+        working-directory: .
+        run: pnpm smoke:tarball
+
       - name: Codex config smoke
         working-directory: .
         run: pnpm smoke:codex-config

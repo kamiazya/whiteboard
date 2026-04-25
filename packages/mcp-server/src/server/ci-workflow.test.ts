@@ -24,6 +24,7 @@ describe('pre-merge CI workflow', () => {
   it('runs the publish-relevant quality gates before merge', () => {
     const workflow = readFileSync(workflowPath, 'utf-8')
 
+    expect(workflow).toContain('pnpm check:pr-title -- "${{ github.event.pull_request.title }}"')
     expect(workflow).toContain('pnpm install --frozen-lockfile')
     expect(workflow).toContain('pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium')
     expect(workflow).toContain('pnpm intent:validate')
@@ -32,6 +33,8 @@ describe('pre-merge CI workflow', () => {
     expect(workflow).toContain('pnpm smoke:e2e')
     expect(workflow).toContain('pnpm build')
     expect(workflow).toContain('pnpm smoke:packaged')
+    expect(workflow).toContain('pnpm smoke:tarball')
     expect(workflow).toContain('pnpm smoke:codex-config')
+    expect(workflow).toContain('pnpm smoke:template')
   })
 })

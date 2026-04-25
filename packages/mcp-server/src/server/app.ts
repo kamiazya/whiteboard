@@ -59,6 +59,15 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function setBaselineSecurityHeaders(headers: Headers): void {
+  headers.set('Content-Security-Policy', "frame-ancestors 'none'")
+  headers.set('X-Frame-Options', 'DENY')
+  headers.set('X-Content-Type-Options', 'nosniff')
+  headers.set('Referrer-Policy', 'no-referrer')
+  headers.set('Cross-Origin-Opener-Policy', 'same-origin')
+  headers.set('Cross-Origin-Resource-Policy', 'same-origin')
+}
+
 function extractInitializeDebugPayload(parsedBody: unknown) {
   if (!isJsonObject(parsedBody) || parsedBody.method !== 'initialize') {
     return null
@@ -134,6 +143,11 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
   app.use('*', async (_c, next) => {
     runtimeOptions.touch()
     await next()
+  })
+
+  app.use('*', async (c, next) => {
+    await next()
+    setBaselineSecurityHeaders(c.res.headers)
   })
 
   app.use('/api/*', createDaemonMutationAuthMiddleware(runtimeOptions.token))

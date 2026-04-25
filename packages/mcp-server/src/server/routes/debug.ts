@@ -51,10 +51,17 @@ async function summarizeCanvas(
 
 export interface CreateDebugRouterOptions {
   token?: string
+  enabled?: boolean
 }
 
 export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
   const app = new Hono()
+  const enabled = options.enabled ?? process.env.WHITEBOARD_DEBUG === '1'
+
+  if (!enabled) {
+    app.all('/api/debug', (c) => c.notFound())
+    return app
+  }
 
   app.use('/api/debug', async (c, next) => {
     if (!isAuthorized(c.req.header('authorization'), options.token)) {
