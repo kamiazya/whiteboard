@@ -70,7 +70,8 @@ jobs:
           registry-url: https://registry.npmjs.org
 
       - name: Upgrade npm (Trusted Publishing requires >= 11.5.1)
-        run: npm install -g npm@latest
+        # --force avoids ERR_MODULE_NOT_FOUND from mixing the new npm cli with the old node_modules layout.
+        run: npm install -g --force npm@latest
 
       - name: Install dependencies (workspace root)
         working-directory: .
