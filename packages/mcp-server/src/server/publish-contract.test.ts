@@ -46,7 +46,7 @@ describe('publish contract', () => {
   it('publishes to npm via OIDC trusted publisher (no NPM_TOKEN, with provenance)', () => {
     expect(releaseWorkflow).toContain('Publish to npm')
     expect(releaseWorkflow).toContain('registry-url: https://registry.npmjs.org')
-    expect(releaseWorkflow).toContain('pnpm exec playwright install --with-deps chromium')
+    expect(releaseWorkflow).toContain('pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium')
     expect(releaseWorkflow).toContain('npm publish --access public --provenance')
     // OIDC trusted publisher requires id-token: write permission and bumps npm to >= 11.5.1.
     expect(releaseWorkflow).toContain('id-token: write')

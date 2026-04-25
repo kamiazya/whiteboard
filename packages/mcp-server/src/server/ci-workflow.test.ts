@@ -25,7 +25,7 @@ describe('pre-merge CI workflow', () => {
     const workflow = readFileSync(workflowPath, 'utf-8')
 
     expect(workflow).toContain('pnpm install --frozen-lockfile')
-    expect(workflow).toContain('pnpm exec playwright install --with-deps chromium')
+    expect(workflow).toContain('pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium')
     expect(workflow).toContain('pnpm intent:validate')
     expect(workflow).toContain('pnpm typecheck')
     expect(workflow).toContain('pnpm test')
