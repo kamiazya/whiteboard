@@ -6,7 +6,14 @@ An Excalidraw-based collaborative diagramming MCP tool for Claude Code and Codex
 
 ## Install
 
-### Use via `npx` (recommended)
+Choose one install track:
+
+- **Server-only**: start the MCP server quickly with `npx`
+- **Full install with shared skills**: install the npm package locally, then link the bundled skills into Claude Code or Codex
+
+The only public release artifact today is the npm package `@kamiazya/whiteboard-mcp`. The committed `.claude-plugin/`, `.codex-plugin/`, and `.mcp.json` files are repo-local wrappers and examples, not separately published release artifacts.
+
+### Server-only install (`npx`)
 
 ```json
 "whiteboard": {
@@ -16,7 +23,14 @@ An Excalidraw-based collaborative diagramming MCP tool for Claude Code and Codex
 }
 ```
 
-### Install with npm
+The `npx` path starts the MCP server only. It does not install `/whiteboard` skills.
+
+Server-only smoke check:
+
+- Confirm `canvas_create({slug: "smoke"})` succeeds
+- Confirm it creates `~/.whiteboard/{workspaceId}/`
+
+### Full install with shared skills
 
 ```bash
 mkdir -p ~/tools/whiteboard && cd ~/tools/whiteboard
@@ -24,13 +38,15 @@ npm init -y
 npm i @kamiazya/whiteboard-mcp
 ```
 
+If you prefer a pinned package instead of `@latest`, replace the version in the `npx` examples below and keep the shared skills in a local npm install:
+
 **Claude Code**: add this to `mcpServers` in `~/.claude.json`:
 
 ```json
 "whiteboard": {
   "type": "stdio",
-  "command": "node",
-  "args": ["/Users/<user>/tools/whiteboard/node_modules/@kamiazya/whiteboard-mcp/dist/server/mcp/index.js"],
+  "command": "npx",
+  "args": ["-y", "@kamiazya/whiteboard-mcp@latest"],
   "description": "Collaborative Excalidraw-based diagramming",
   "env": {}
 }
@@ -40,11 +56,19 @@ npm i @kamiazya/whiteboard-mcp
 
 ```toml
 [mcp_servers.whiteboard]
-command = "node"
-args = ["/Users/<user>/tools/whiteboard/node_modules/@kamiazya/whiteboard-mcp/dist/server/mcp/index.js"]
+command = "npx"
+args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 ```
 
-### Symlink the skills
+### Link the shared skills
+
+The canonical shared-skill path is:
+
+```text
+node_modules/@kamiazya/whiteboard-mcp/skills
+```
+
+#### Mac / Linux
 
 ```bash
 PKG=$(pwd)/node_modules/@kamiazya/whiteboard-mcp
@@ -56,6 +80,31 @@ ln -s "$PKG/skills/whiteboard"                  ~/.codex/skills/whiteboard
 ln -s "$PKG/skills/whiteboard-coauthoring"      ~/.codex/skills/whiteboard-coauthoring
 ln -s "$PKG/skills/whiteboard-audit"            ~/.codex/skills/whiteboard-audit
 ```
+
+#### Windows (junction or copy)
+
+Use junctions if your shell has permission to create them:
+
+```powershell
+$pkg = (Resolve-Path .\node_modules\@kamiazya\whiteboard-mcp).Path
+$skillRoots = @(
+    (Join-Path $HOME ".claude\skills"),
+    (Join-Path $HOME ".codex\skills")
+)
+$skills = "whiteboard", "whiteboard-coauthoring", "whiteboard-audit"
+
+$skillRoots | ForEach-Object { New-Item -ItemType Directory -Force $_ | Out-Null }
+
+foreach ($root in $skillRoots) {
+    foreach ($skill in $skills) {
+        $linkPath = Join-Path $root $skill
+        $targetPath = Join-Path $pkg "skills\$skill"
+        cmd /c mklink /J "$linkPath" "$targetPath"
+    }
+}
+```
+
+If junction creation is restricted, copy the skill directories instead of linking them.
 
 Even when you use the Codex plugin or Claude Code plugin, the bundled `skills/` inside `@kamiazya/whiteboard-mcp` remain the source of truth for shared skills.
 
@@ -231,6 +280,12 @@ If `WHITEBOARD_DATA_DIR` is unset, the app uses `~/.whiteboard`.
 ---
 
 ## Architecture And Internals
+
+See also:
+
+- [docs/architecture.md](docs/architecture.md)
+- [docs/security-model.md](docs/security-model.md)
+- [docs/wire-protocol.md](docs/wire-protocol.md)
 
 > An architecture diagram (`docs/architecture.png` / `docs/architecture.excalidraw`) is planned and will be drawn using the tool itself. For now, the structure is described in text.
 

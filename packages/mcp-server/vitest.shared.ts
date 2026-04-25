@@ -9,6 +9,15 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   root: __dirname,
   plugins: [react(), tailwindcss()],
+  test: {
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html', 'lcov'],
+      reportsDirectory: './tmp/coverage',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: ['**/*.test.*', 'src/app/components/ui/**', 'dist/**'],
+    },
+  },
   optimizeDeps: {
     include: [
       'react',

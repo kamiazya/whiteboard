@@ -43,6 +43,9 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 
 Releases are automated by [release-please](https://github.com/googleapis/release-please) — merge the auto-generated `chore(main): release X.Y.Z` PR to publish.
 
+Keep published MCP wrapper configs on `@latest` unless you also update release-please sync rules. If you pin `@kamiazya/whiteboard-mcp@x.y.z` inside `.mcp.json` or plugin manifests, add the pinned fields to `release-please-config.json` `extra-files` at the same time.
+When upgrading `@modelcontextprotocol/sdk`, re-check the supported MCP protocol matrix in `docs/mcp-debugging.md` and the initialize negotiation tests.
+
 ## Lint
 
 [Biome](https://biomejs.dev/) is already configured (`biome.json`). Please try to keep new and modified files passing before you commit:

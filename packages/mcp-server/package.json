@@ -23,6 +23,15 @@
     "tanstack-intent"
   ],
   "type": "module",
+  "main": "./dist/server/mcp/index.js",
+  "types": "./dist/server/mcp/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/server/mcp/index.d.ts",
+      "import": "./dist/server/mcp/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "whiteboard-mcp": "dist/server/mcp/index.js"
   },
@@ -32,6 +41,10 @@
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
+  ],
+  "sideEffects": [
+    "./dist/server/mcp/index.js",
+    "./dist/app/**/*.css"
   ],
   "engines": {
     "node": ">=22"
@@ -64,15 +77,18 @@
     "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
     "test": "vitest run",
     "test:all": "vitest run",
+    "test:coverage": "vitest run --coverage --project mcp-node --project mcp-jsdom",
     "test:node": "vitest run --project mcp-node --project mcp-jsdom",
     "test:browser": "vitest run --project mcp-browser",
     "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
     "test:watch": "vitest --project mcp-node --project mcp-jsdom",
+    "check:pr-title": "node scripts/check-pr-title.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
     "smoke": "node scripts/mcp-smoke.mjs",
     "smoke:checkpoint": "node scripts/mcp-e2e-checkpoint.mjs",
     "smoke:e2e": "node scripts/mcp-e2e-checkpoint.mjs",
     "smoke:packaged": "node scripts/mcp-e2e-checkpoint.mjs --entry=dist/server/mcp/index.js",
+    "smoke:tarball": "node scripts/mcp-packed-tarball-smoke.mjs",
     "smoke:codex-config": "node scripts/mcp-codex-config-smoke.mjs",
     "smoke:template": "tsx scripts/mcp-template-smoke.mjs",
     "smoke:claude": "node scripts/mcp-claude-cli-smoke.mjs",
@@ -109,6 +125,7 @@
     "@types/react-dom": "^19",
     "@types/ws": "^8",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "@vitest/browser-playwright": "^4.1.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { fileURLToPath } from 'node:url'
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { startHttpServer } from './http-server.js'
 import { DATA_DIR } from './config.js'
@@ -7,6 +6,7 @@ import {
   createLocalTokenMcpHttpAuthStrategy,
   resolveMcpProtectedResourceMetadataFromEnv,
 } from './security/mcp-auth.js'
+import { isDirectEntryPoint } from './entrypoint.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
@@ -63,7 +63,7 @@ async function main() {
   process.stdout.write('READY\n')
 }
 
-const isEntryPoint = process.argv[1] === fileURLToPath(import.meta.url)
+const isEntryPoint = isDirectEntryPoint(import.meta.url)
 if (isEntryPoint) {
   main().catch((err) => {
     process.stderr.write(`HTTP server error: ${err}\n`)

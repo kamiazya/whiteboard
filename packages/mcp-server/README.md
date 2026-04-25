@@ -29,6 +29,12 @@ Example MCP config:
 
 Shared skills are published in the package under `skills/`.
 
+## What is in this package
+
+- `dist/` contains the runnable MCP server and browser app assets.
+- `skills/` contains the shared skill bundles that Claude Code and Codex wrappers reference as their source of truth.
+- The repo-level plugin manifests are not shipped as separate release artifacts. Public distribution currently happens through this npm package.
+
 ## Development
 
 For repo-local development, use the workspace root commands:

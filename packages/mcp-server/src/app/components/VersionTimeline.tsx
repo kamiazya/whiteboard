@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { History } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
+import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   AlertDialog,
@@ -201,8 +201,9 @@ export default function VersionTimeline({
                       strokeOpacity={0.6}
                     />
                   </svg>
-                  <Card
-                    className="py-2 cursor-pointer hover:bg-accent transition-colors overflow-hidden flex-1 min-w-0"
+                  <button
+                    type="button"
+                    className="bg-card text-card-foreground flex flex-1 min-w-0 cursor-pointer flex-col gap-6 overflow-hidden rounded-xl border py-2 text-left shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     onClick={() => setPendingRestore(v)}
                   >
                     {v.hasThumbnail && (
@@ -241,7 +242,7 @@ export default function VersionTimeline({
                         </span>
                       )}
                     </CardContent>
-                  </Card>
+                  </button>
                 </div>
               )
             })

@@ -38,12 +38,20 @@ function makeDocWithElements(visible: number, tombstones: number): LoroDoc {
 }
 
 describe('GET /api/debug', () => {
+  const originalDebugEnv = process.env.WHITEBOARD_DEBUG
+
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-debug-test-'))
     clearCache()
+    process.env.WHITEBOARD_DEBUG = '1'
   })
 
   afterEach(async () => {
+    if (originalDebugEnv === undefined) {
+      delete process.env.WHITEBOARD_DEBUG
+    } else {
+      process.env.WHITEBOARD_DEBUG = originalDebugEnv
+    }
     await rm(tempDir, { recursive: true, force: true })
     clearCache()
   })
@@ -146,6 +154,7 @@ describe('GET /api/debug', () => {
   })
 
   it('requires bearer auth when a daemon token is configured', async () => {
+    process.env.WHITEBOARD_DEBUG = '1'
     const app = createDebugRouter({ token: 'secret' })
 
     const unauthenticated = await app.request('/api/debug')
@@ -159,8 +168,20 @@ describe('GET /api/debug', () => {
   })
 
   it('remains public when no daemon token is configured', async () => {
+    process.env.WHITEBOARD_DEBUG = '1'
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
     expect(res.status).toBe(200)
+  })
+
+  it('returns 404 unless WHITEBOARD_DEBUG=1 is enabled', async () => {
+    delete process.env.WHITEBOARD_DEBUG
+    const app = createDebugRouter({ token: 'secret' })
+
+    const res = await app.request('/api/debug', {
+      headers: { Authorization: 'Bearer secret' },
+    })
+
+    expect(res.status).toBe(404)
   })
 })

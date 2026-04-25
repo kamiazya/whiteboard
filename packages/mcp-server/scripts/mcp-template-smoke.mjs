@@ -29,18 +29,18 @@ function makeEmptySnapshot() {
 const posted = []
 globalThis.fetch = async (url, init) => {
   const u = url.toString()
+  if (u.endsWith('/palette')) {
+    return new Response(JSON.stringify({ palette: {} }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
   if (u.endsWith('/snapshot')) {
     return new Response(makeEmptySnapshot(), { status: 200 })
   }
   if (u.endsWith('/update')) {
     posted.push(init?.body instanceof Uint8Array ? init.body.byteLength : String(init?.body ?? '').length)
     return new Response(null, { status: 200 })
-  }
-  if (u.endsWith('/palette')) {
-    return new Response(JSON.stringify({ palette: {} }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    })
   }
   throw new Error(`unexpected fetch ${u}`)
 }

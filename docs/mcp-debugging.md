@@ -2,10 +2,29 @@
 
 This repo uses the official MCP Inspector as the default debugging tool for MCP work.
 
+`AGENTS.md` is the short agent-facing workflow summary. This document is the human-facing debugging reference with the concrete MCP commands, protocol expectations, and verification steps.
+
 References:
 
 - MCP Inspector: `https://modelcontextprotocol.io/docs/tools/inspector`
 - MCP Debugging Guide: `https://modelcontextprotocol.io/docs/tools/debugging`
+
+## Protocol Support
+
+This repo currently relies on the installed `@modelcontextprotocol/sdk` negotiation behavior rather than overriding protocol negotiation inside the app.
+
+- If the client asks for a supported protocol version, the server echoes that version in `initialize`.
+- If the client asks for an unsupported version, the server falls back to the SDK latest protocol version.
+
+Current SDK-supported versions in this repo:
+
+- `2025-11-25` (SDK latest fallback)
+- `2025-06-18`
+- `2025-03-26`
+- `2024-11-05`
+- `2024-10-07`
+
+When upgrading `@modelcontextprotocol/sdk`, re-check this matrix and the related initialize tests before shipping.
 
 ## Recommended Flow
 
@@ -35,6 +54,33 @@ What each does:
 - `pnpm mcp:inspect`: starts the official MCP Inspector UI
 - `pnpm mcp:inspect:stdio`: starts Inspector against the raw stdio MCP entrypoint
 - `pnpm mcp:debug:http`: runs `mcp:http:dev` and Inspector together for quick iteration
+
+## First-Pass HTTP Debug Loop
+
+1. Start the daemon:
+
+```bash
+pnpm mcp:http:dev
+```
+
+2. In another terminal, open Inspector:
+
+```bash
+pnpm mcp:inspect
+```
+
+3. Point Inspector at:
+
+```text
+http://127.0.0.1:3099/mcp
+```
+
+4. Run these calls in order:
+   - `initialize`
+   - `tools/list`
+   - the failing `tools/call`
+
+5. Only compare against Codex or Claude Code after Inspector reproduces or disproves the problem.
 
 ## When To Use HTTP vs STDIO
 
@@ -73,6 +119,7 @@ Log format:
 ### 2. Capability negotiation
 
 - Inspect the `initialize` exchange
+- Confirm which `protocolVersion` the client asked for and which version the server returned
 - Confirm the client actually advertises the capabilities your server expects
 - Treat capability mismatch as a first-class cause of `-32602` and related integration failures
 
@@ -90,4 +137,3 @@ Log format:
 ### 5. Regression
 
 - After manual verification, preserve the scenario in `mcp-node`, `mcp-browser`, or E2E as appropriate
-

@@ -139,6 +139,14 @@ pnpm --filter @kamiazya/whiteboard-mcp typecheck
 pnpm build
 ```
 
+## PR Title Rule
+
+- Treat the pull request title as the future squash-merge commit message.
+- Use a Conventional Commit title for normal PRs, for example `fix: ...`, `feat(scope): ...`, or `chore: ...`.
+- Do not use tool prefixes such as `[codex] ...` in PR titles; CI rejects them.
+- This matters because release-please reads the merged commit history to decide version bumps and changelog entries.
+- Release Please PRs are also valid under the same rule, for example `chore(main): release vX.Y.Z` and `chore(main): release mcp-server vX.Y.Z`.
+
 ## Avoid
 
 - Do not implement first and add tests later.
