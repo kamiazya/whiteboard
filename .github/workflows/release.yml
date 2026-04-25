@@ -20,6 +20,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      force_publish_tag:
+        description: 'Tag to (re-)publish to npm, e.g. mcp-server-v0.0.2. Leave blank to skip publish-mcp.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -46,7 +51,7 @@ jobs:
 
   publish-mcp:
     needs: release-please
-    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || inputs.force_publish_tag != '' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.mcp_tag_name }}
+          ref: ${{ inputs.force_publish_tag != '' && inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -65,13 +70,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 24 ships with npm 11.x which already meets Trusted Publishing's >= 11.5.1 requirement.
+          # Avoids the `npm i -g npm@latest` self-upgrade bug (MODULE_NOT_FOUND: promise-retry).
+          node-version: 24
           cache: pnpm
           registry-url: https://registry.npmjs.org
-
-      - name: Upgrade npm (Trusted Publishing requires >= 11.5.1)
-        # --force avoids ERR_MODULE_NOT_FOUND from mixing the new npm cli with the old node_modules layout.
-        run: npm install -g --force npm@latest
 
       - name: Install dependencies (workspace root)
         working-directory: .
