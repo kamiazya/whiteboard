@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.4](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.3...mcp-server-v0.0.4) (2026-04-25)
+
+
+### Bug Fixes
+
+* harden MCP release and dev workflows ([#22](https://github.com/kamiazya/whiteboard/issues/22)) ([acfbcdb](https://github.com/kamiazya/whiteboard/commit/acfbcdb7568d24482482ffbec6ed68eeb65473b4))
+* **release-please:** use linked-versions and put server.json at root ([#26](https://github.com/kamiazya/whiteboard/issues/26)) ([14756d4](https://github.com/kamiazya/whiteboard/commit/14756d47129b69738db1836ba6e8a1310f3edd64))
+
 ## [0.0.3](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.2...mcp-server-v0.0.3) (2026-04-25)
 
 
