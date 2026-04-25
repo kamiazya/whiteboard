@@ -220,7 +220,9 @@ export default function CanvasPage() {
         <Excalidraw
           key={`${sessionId}/${slug}`}
           excalidrawAPI={handleApiReady}
-          libraryReturnUrl={typeof window !== 'undefined' ? window.location.origin + window.location.pathname : undefined}
+          {...(typeof window !== 'undefined'
+            ? { libraryReturnUrl: window.location.origin + window.location.pathname }
+            : {})}
           onChange={(elements: readonly ExcalidrawElement[], _appState: AppState, files: BinaryFiles) =>
             onSceneChange?.([...elements], files)
           }

@@ -17,6 +17,9 @@ export async function uploadFiles(
   await Promise.all(
     newEntries.map(async ([fileId, fd]) => {
       const [, base64] = fd.dataURL.split(',')
+      if (base64 === undefined) {
+        throw new Error(`dataURL for ${fileId} is missing a base64 payload`)
+      }
       const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
       const res = await apiFetch(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/file/${fileId}`, {
         method: 'PUT',

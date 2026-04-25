@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server'
 import type { Socket } from 'node:net'
 import { WebSocketServer } from 'ws'
 import { IdleTimer } from '../daemon/idle-timer.js'
+import { definedProps } from './defined-props.js'
 import { createApp } from './app.js'
 import { handleWsUpgrade, getConnectionStats, setRuntimeTouchFn } from './routes/ws.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
@@ -101,11 +102,13 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   }
 
   const app = createApp({
-    token: options.token,
-    mcpAuth: options.mcpAuth,
     touch,
     getStatus: getRuntimeStatus,
     shutdown: close,
+    ...definedProps({
+      token: options.token,
+      mcpAuth: options.mcpAuth,
+    }),
   })
 
   setRuntimeTouchFn(touch)

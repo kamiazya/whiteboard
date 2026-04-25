@@ -5,6 +5,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DATA_DIR, DIST_APP_DIR } from './config.js'
+import { definedProps } from './defined-props.js'
 import { createCanvasRouter } from './routes/canvas.js'
 import { createFilesRouter } from './routes/files.js'
 import { createExportRouter, resolveExportRequest } from './routes/export.js'
@@ -124,9 +125,7 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
   const app = new Hono()
   const mcpAuth =
     runtimeOptions.mcpAuth ??
-    createLocalTokenMcpHttpAuthStrategy({
-      token: runtimeOptions.token,
-    })
+    createLocalTokenMcpHttpAuthStrategy(definedProps({ token: runtimeOptions.token }))
 
   // On startup, quarantine legacy version metadata that is missing frontiers by moving it
   // to `.legacy-bak`. Leaving it in place causes FileVersionStore.list to throw
@@ -300,7 +299,7 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
   app.route('/', createFilesRouter())
   app.route('/', createExportRouter())
   app.route('/', createViewportRouter())
-  app.route('/', createDebugRouter({ token: runtimeOptions.token }))
+  app.route('/', createDebugRouter(definedProps({ token: runtimeOptions.token })))
   app.route('/', createStatusRouter())
   app.route('/', createLibrariesRouter())
   app.route('/', createPaletteRouter())
@@ -574,9 +573,11 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
             newElementIds,
             changedElementIds,
             conflictElementIds,
-            preMergeVersionId,
-            switchedHead,
-            deletedSource,
+            ...definedProps({
+              preMergeVersionId,
+              switchedHead,
+              deletedSource,
+            }),
           }
         },
       }),

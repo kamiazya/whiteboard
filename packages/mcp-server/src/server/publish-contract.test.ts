@@ -30,6 +30,7 @@ describe('publish contract', () => {
   const architectureDoc = readFileSync(resolve(repoRoot, 'docs/architecture.md'), 'utf-8')
   const securityModelDoc = readFileSync(resolve(repoRoot, 'docs/security-model.md'), 'utf-8')
   const wireProtocolDoc = readFileSync(resolve(repoRoot, 'docs/wire-protocol.md'), 'utf-8')
+  const tsconfigApp = readJson(resolve(repoRoot, 'packages/mcp-server/tsconfig.json'))
   const tsconfigServer = readJson(resolve(repoRoot, 'packages/mcp-server/tsconfig.server.json'))
   const vitestShared = readFileSync(resolve(repoRoot, 'packages/mcp-server/vitest.shared.ts'), 'utf-8')
   const rootReleaseConfig = readJson(resolve(repoRoot, 'release-please-config.json'))
@@ -73,6 +74,8 @@ describe('publish contract', () => {
     expect(mcpPackage.scripts['test:coverage']).toBe(
       'vitest run --coverage --project mcp-node --project mcp-jsdom',
     )
+    expect(mcpPackage.dependencies.zod).toMatch(/^~4\.\d+\.\d+$/)
+    expect(mcpPackage.dependencies['@modelcontextprotocol/sdk']).toMatch(/^~1\.\d+\.\d+$/)
   })
 
   it('declares sideEffects explicitly for bundlers', () => {
@@ -100,6 +103,22 @@ describe('publish contract', () => {
 
   it('emits declaration files for the published module entrypoint', () => {
     expect(tsconfigServer.compilerOptions.declaration).toBe(true)
+    expect(mcpPackage.bin).toEqual({
+      'whiteboard-mcp': 'dist/server/mcp/index.js',
+    })
+    expect(mcpPackage.types).toBe('./dist/server/mcp/index.d.ts')
+  })
+
+  it('pins strict TypeScript options in both app and server configs', () => {
+    expect(tsconfigApp.compilerOptions.strict).toBe(true)
+    expect(tsconfigApp.compilerOptions.noUncheckedIndexedAccess).toBe(true)
+    expect(tsconfigApp.compilerOptions.exactOptionalPropertyTypes).toBe(true)
+    expect(tsconfigApp.compilerOptions.noFallthroughCasesInSwitch).toBe(true)
+
+    expect(tsconfigServer.compilerOptions.strict).toBe(true)
+    expect(tsconfigServer.compilerOptions.noUncheckedIndexedAccess).toBe(true)
+    expect(tsconfigServer.compilerOptions.exactOptionalPropertyTypes).toBe(true)
+    expect(tsconfigServer.compilerOptions.noFallthroughCasesInSwitch).toBe(true)
   })
 
   it('documents npm install via the published CLI surface instead of deep dist paths', () => {

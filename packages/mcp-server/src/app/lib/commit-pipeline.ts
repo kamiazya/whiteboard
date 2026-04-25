@@ -23,8 +23,11 @@ function valuesEqual(left: unknown, right: unknown): boolean {
     const rightEntries = Object.entries(right).sort(([a], [b]) => a.localeCompare(b))
     if (leftEntries.length !== rightEntries.length) return false
     for (let i = 0; i < leftEntries.length; i++) {
-      const [leftKey, leftValue] = leftEntries[i]
-      const [rightKey, rightValue] = rightEntries[i]
+      const leftEntry = leftEntries[i]
+      const rightEntry = rightEntries[i]
+      if (!leftEntry || !rightEntry) return false
+      const [leftKey, leftValue] = leftEntry
+      const [rightKey, rightValue] = rightEntry
       if (leftKey !== rightKey || !valuesEqual(leftValue, rightValue)) {
         return false
       }
@@ -67,11 +70,12 @@ export function recordLocalOps(doc: LoroDoc, nextElements: ExcalidrawElement[]) 
   }
 
   // Update changed elements field-by-field with set/delete operations.
+  const nextElementsById = new Map(nextElements.map((element) => [element.id, element]))
   for (let i = 0; i < list.length; i++) {
     const item = list.get(i)
     if (!(item instanceof LoroMap)) continue
     const id = item.get('id') as string
-    const next = nextElements.find((e) => e.id === id)
+    const next = nextElementsById.get(id)
     if (!next) continue
 
     for (const [k, v] of Object.entries(next)) {

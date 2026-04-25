@@ -775,7 +775,7 @@ export default function WorkspaceTopBar({
             <VersionTimeline
               sessionId={sessionId}
               slug={slug}
-              onRestored={onRestored}
+              {...(onRestored ? { onRestored } : {})}
             />
           </div>
         </div>

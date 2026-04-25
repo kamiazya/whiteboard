@@ -25,7 +25,8 @@ function parseIpv4(hostname: string): number[] | null {
 }
 
 function isPrivateOrLocalIpv4(octets: number[]): boolean {
-  const [a, b] = octets
+  const a = octets[0]!
+  const b = octets[1]!
   return (
     a === 0 ||
     a === 10 ||

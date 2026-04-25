@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
 
+import { definedProps } from '../defined-props.js'
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
 
 function normalizeMethod(method: string): string {
@@ -54,7 +55,7 @@ function mcpHttpError(status: number, message: string, headers?: Headers): Respo
       error: { code: -32000, message },
       id: null,
     },
-    { status, headers },
+    { status, ...definedProps({ headers }) },
   )
 }
 
@@ -119,8 +120,8 @@ export function createMcpHttpAuthMiddleware(strategy: McpHttpAuthStrategy): Midd
   return async (c, next) => {
     const decision = strategy.authorize({
       method: c.req.method,
-      authorizationHeader: c.req.header('authorization'),
       requestUrl: c.req.url,
+      ...definedProps({ authorizationHeader: c.req.header('authorization') }),
     })
     if (!decision.ok) {
       return mcpHttpError(decision.status, decision.message, decision.headers)

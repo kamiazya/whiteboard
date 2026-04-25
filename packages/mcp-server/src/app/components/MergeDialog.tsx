@@ -95,7 +95,7 @@ interface CompareCardProps {
   kind: 'target' | 'source'
   branch: BranchMeta | null
   count: number | undefined
-  delta?: number
+  delta?: number | undefined
   thumbUrl: string | null
   loading: boolean
 }

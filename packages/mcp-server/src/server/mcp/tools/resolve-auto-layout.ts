@@ -119,8 +119,11 @@ function computeSingleBlock(input: AutoLayoutInput): AutoLayoutResult {
   }
   // Cycle-only graphs still need a starting point.
   if (queue.length === 0 && input.nodes.length > 0) {
-    rank.set(input.nodes[0].id, 0)
-    queue.push(input.nodes[0].id)
+    const firstNode = input.nodes[0]
+    if (firstNode) {
+      rank.set(firstNode.id, 0)
+      queue.push(firstNode.id)
+    }
   }
 
   // Cap rank growth at nodeCount - 1 so cycles terminate.
@@ -248,12 +251,12 @@ function layoutWithGroups(
       (e) => bucketNodeIds.has(e.source) && bucketNodeIds.has(e.target),
     )
     // Remove group config and lay this bucket out as a single block.
+    const { groups: _groups, ...configWithoutGroups } = input.config ?? {}
     const subInput: AutoLayoutInput = {
       nodes: bucket.nodes,
       edges: bucketEdges,
       config: {
-        ...input.config,
-        groups: undefined,
+        ...configWithoutGroups,
         origin: {
           x: direction === 'TB' ? origin.x + crossOffset : origin.x,
           y: direction === 'LR' ? origin.y + crossOffset : origin.y,

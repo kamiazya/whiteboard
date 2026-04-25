@@ -7,6 +7,7 @@ import {
   type LayoutEdge,
   type LayoutNode,
 } from './resolve-auto-layout.js'
+import { definedProps } from '../../defined-props.js'
 import { snapArrowEndpoints } from './snap-arrow.js'
 import { resolveArrowLabelPosition } from './resolve-arrow-label-position.js'
 import { resolveArrowRoute } from './resolve-arrow-route.js'
@@ -295,8 +296,11 @@ export function canvasAutoLayoutTool() {
       for (const arrow of arrows) {
         const pts = arrow.points ?? []
         if (pts.length < 2) continue
-        const [sdx, sdy] = pts[0]
-        const [edx, edy] = pts[pts.length - 1]
+        const startPoint = pts[0]
+        const endPoint = pts[pts.length - 1]
+        if (!startPoint || !endPoint) continue
+        const [sdx, sdy] = startPoint
+        const [edx, edy] = endPoint
         const startAbs = { x: arrow.x + sdx, y: arrow.y + sdy }
         const endAbs = { x: arrow.x + edx, y: arrow.y + edy }
         const source = rectangles.find((r) => pointOnRectEdge(startAbs, r))
@@ -317,8 +321,7 @@ export function canvasAutoLayoutTool() {
           layerGap: args.layerGap ?? 80,
           nodeGap: args.nodeGap ?? 40,
           origin: args.origin ?? { x: 40, y: 40 },
-          pins: args.pins,
-          groups: args.groups,
+          ...definedProps({ pins: args.pins, groups: args.groups }),
           groupGap: args.groupGap ?? 80,
         },
       })
@@ -344,6 +347,7 @@ export function canvasAutoLayoutTool() {
         const rectIdx = indexById.get(rect.id)
         if (rectIdx === undefined) continue
         const rectMap = containerByIndex[rectIdx]
+        if (!rectMap) continue
         rectMap.set('x', newPos.x)
         rectMap.set('y', newPos.y)
         movedCount++
@@ -353,6 +357,7 @@ export function canvasAutoLayoutTool() {
             const textIdx = indexById.get(el.id)
             if (textIdx === undefined) continue
             const textMap = containerByIndex[textIdx]
+            if (!textMap) continue
             textMap.set('x', el.x + dx)
             textMap.set('y', el.y + dy)
           }
@@ -379,13 +384,18 @@ export function canvasAutoLayoutTool() {
         const arrowIdx = indexById.get(edge.id)
         if (arrowIdx === undefined) continue
         const arrowMap = containerByIndex[arrowIdx]
+        if (!arrowMap) continue
         const oldArrow = elements[arrowIdx]
+        if (!oldArrow) continue
         const oldPts = oldArrow.points ?? []
         if (oldPts.length < 2) continue
-        const oldStart = { x: oldArrow.x + oldPts[0][0], y: oldArrow.y + oldPts[0][1] }
+        const oldStartPoint = oldPts[0]
+        const oldEndPoint = oldPts[oldPts.length - 1]
+        if (!oldStartPoint || !oldEndPoint) continue
+        const oldStart = { x: oldArrow.x + oldStartPoint[0], y: oldArrow.y + oldStartPoint[1] }
         const oldEnd = {
-          x: oldArrow.x + oldPts[oldPts.length - 1][0],
-          y: oldArrow.y + oldPts[oldPts.length - 1][1],
+          x: oldArrow.x + oldEndPoint[0],
+          y: oldArrow.y + oldEndPoint[1],
         }
         const oldMidX = (oldStart.x + oldEnd.x) / 2
         const oldMidY = (oldStart.y + oldEnd.y) / 2
@@ -432,6 +442,7 @@ export function canvasAutoLayoutTool() {
           }),
         })
         const labelMap = containerByIndex[labelIdx]
+        if (!labelMap) continue
         labelMap.set('x', labelPos.target.x)
         labelMap.set('y', labelPos.target.y)
         usedLabelIds.add(label.id)

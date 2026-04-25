@@ -4,8 +4,8 @@ import { buildMiniGraph, type MiniGraphInput } from './mini-graph.js'
 const branch = (name: string, color: string, baseBranch?: string, baseVersionId?: string) => ({
   name,
   color,
-  baseBranch,
-  baseVersionId,
+  ...(baseBranch ? { baseBranch } : {}),
+  ...(baseVersionId ? { baseVersionId } : {}),
 })
 
 const version = (id: string, branchName: string, createdAt: string) => ({
@@ -28,9 +28,9 @@ describe('buildMiniGraph', () => {
     const rows = buildMiniGraph(input)
     expect(rows).toHaveLength(3)
     expect(rows.map((r) => r.dotColor)).toEqual(['#1971c2', '#1971c2', '#1971c2'])
-    expect(rows[0].connectorBefore).toBe(false)
-    expect(rows[1].connectorBefore).toBe(true)
-    expect(rows[2].connectorBefore).toBe(true)
+    expect(rows[0]!.connectorBefore).toBe(false)
+    expect(rows[1]!.connectorBefore).toBe(true)
+    expect(rows[2]!.connectorBefore).toBe(true)
   })
 
   it('marks versions outside the active HEAD branch as inactive rings', () => {
@@ -43,9 +43,9 @@ describe('buildMiniGraph', () => {
       ],
     }
     const rows = buildMiniGraph(input)
-    expect(rows[0].dotColor).toBe('#9333ea')
-    expect(rows[0].active).toBe(true)
-    expect(rows[1].active).toBe(false)
+    expect(rows[0]!.dotColor).toBe('#9333ea')
+    expect(rows[0]!.active).toBe(true)
+    expect(rows[1]!.active).toBe(false)
   })
 
   it('adds a branchOut label to the row referenced by baseVersionId', () => {
@@ -70,9 +70,9 @@ describe('buildMiniGraph', () => {
       versions: [version('x', 'deleted-branch', '2026-04-23T01:00:00Z')],
     }
     const rows = buildMiniGraph(input)
-    expect(rows[0].dotColor).toMatch(/^#[a-f0-9]{3,6}$/i)
+    expect(rows[0]!.dotColor).toMatch(/^#[a-f0-9]{3,6}$/i)
     // The fallback color is a neutral outside the branch palette.
-    expect(rows[0].dotColor).not.toBe('#1971c2')
+    expect(rows[0]!.dotColor).not.toBe('#1971c2')
   })
 
   it('preserves the input order of versions', () => {

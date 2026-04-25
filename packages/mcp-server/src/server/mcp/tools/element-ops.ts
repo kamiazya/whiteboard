@@ -1,4 +1,5 @@
 import type { LoroDoc, LoroMap } from 'loro-crdt'
+import { definedProps } from '../../defined-props.js'
 import { snapArrowEndpoints, type Rect } from './snap-arrow.js'
 
 // Scan the Excalidraw element list (doc.getMovableList('elements')) and return the
@@ -207,12 +208,12 @@ export function applyMove(
     const points = (arrowMap.get('points') as [number, number][] | undefined) ?? []
     if (points.length < 2) continue
     const currentStart = {
-      x: ((arrowMap.get('x') as number) ?? 0) + points[0][0],
-      y: ((arrowMap.get('y') as number) ?? 0) + points[0][1],
+      x: ((arrowMap.get('x') as number) ?? 0) + points[0]![0],
+      y: ((arrowMap.get('y') as number) ?? 0) + points[0]![1],
     }
     const currentEnd = {
-      x: ((arrowMap.get('x') as number) ?? 0) + points[points.length - 1][0],
-      y: ((arrowMap.get('y') as number) ?? 0) + points[points.length - 1][1],
+      x: ((arrowMap.get('x') as number) ?? 0) + points[points.length - 1]![0],
+      y: ((arrowMap.get('y') as number) ?? 0) + points[points.length - 1]![1],
     }
     const startBox = startBoxId ? rectFromMap(requireElementMap(doc, startBoxId)) : undefined
     const endBox = endBoxId ? rectFromMap(requireElementMap(doc, endBoxId)) : undefined
@@ -223,8 +224,7 @@ export function applyMove(
       end: endBox
         ? { x: endBox.x + endBox.width / 2, y: endBox.y + endBox.height / 2 }
         : currentEnd,
-      startBox,
-      endBox,
+      ...definedProps({ startBox, endBox }),
     })
     arrowMap.set('x', snapped.start.x)
     arrowMap.set('y', snapped.start.y)
@@ -281,7 +281,9 @@ export function applyReorder(
     // Move to the front in current order, targeting 0, 1, 2, ... in sequence.
     // Elements placed earlier occupy 0..i-1, so re-search before each move.
     for (let i = 0; i < orderedIds.length; i++) {
-      const idx = findIdxById(orderedIds[i])
+      const targetId = orderedIds[i]
+      if (!targetId) continue
+      const idx = findIdxById(targetId)
       if (idx !== -1 && idx !== i) list.move(idx, i)
     }
   }

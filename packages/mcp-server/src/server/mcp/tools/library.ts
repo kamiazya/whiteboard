@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
 import { LoroMap } from 'loro-crdt'
 import type { DaemonClient } from '../daemon-client.js'
+import { definedProps } from '../../defined-props.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
 import { resolveLibraryItem, type LibraryElement } from './resolve-library-item.js'
@@ -172,6 +173,9 @@ function prepareBatchInsert(
       throw new Error(`itemIndex ${spec.itemIndex} out of range [0, ${libraryItems.length})`)
     }
     const item = libraryItems[spec.itemIndex]
+    if (!item) {
+      throw new Error(`itemIndex ${spec.itemIndex} out of range [0, ${libraryItems.length})`)
+    }
     const assignedGroups = [
       ...(batchGroupAs ? [batchGroupAs] : []),
       ...(spec.groupAs ? [spec.groupAs] : []),
@@ -373,10 +377,12 @@ export function libraryInsertItemTool() {
       const result = await insertLibraryBatch(
         {
           canvasId: args.canvasId,
-          libraryUrl: args.libraryUrl,
-          libraryPath: args.libraryPath,
-          userLibraryName: args.userLibraryName,
-          items: [{ itemIndex: args.itemIndex, target: args.target, scale: args.scale }],
+          ...definedProps({
+            libraryUrl: args.libraryUrl,
+            libraryPath: args.libraryPath,
+            userLibraryName: args.userLibraryName,
+          }),
+          items: [{ itemIndex: args.itemIndex, target: args.target, ...definedProps({ scale: args.scale }) }],
         },
         client,
       )

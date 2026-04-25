@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DATA_DIR } from '../config.js'
+import { definedProps } from '../defined-props.js'
 import { validateSessionId, validateSlug } from '../validators.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
@@ -78,8 +79,10 @@ function parseSessionNames(path: string, raw: string): SessionNames {
   }
 
   return {
-    workspace:
-      typeof data.workspace === 'string' && data.workspace.length > 0 ? data.workspace : undefined,
+    ...definedProps({
+      workspace:
+        typeof data.workspace === 'string' && data.workspace.length > 0 ? data.workspace : undefined,
+    }),
     canvases: { ...((data.canvases as Record<string, string> | undefined) ?? {}) },
     pinned: [...((data.pinned as string[] | undefined) ?? [])],
   }
@@ -111,12 +114,11 @@ async function saveSessionNames(sessionId: string, names: SessionNames): Promise
 export async function setWorkspaceName(sessionId: string, name: string): Promise<SessionNames> {
   const current = await loadSessionNames(sessionId)
   const trimmed = name.trim()
-  const next: SessionNames = {
-    ...current,
-    workspace: trimmed.length > 0 ? trimmed : undefined,
-  }
-  // Remove the property entirely when it becomes undefined.
-  if (next.workspace === undefined) delete next.workspace
+  const { workspace: _currentWorkspace, ...rest } = current
+  const next: SessionNames =
+    trimmed.length > 0
+      ? { ...rest, workspace: trimmed }
+      : rest
   await saveSessionNames(sessionId, next)
   return next
 }

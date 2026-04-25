@@ -63,7 +63,7 @@ describe('commitAfterUpload', () => {
 
     const elems = doc.getMovableList('elements').toJSON() as { id: string }[]
     expect(elems).toHaveLength(1)
-    expect(elems[0].id).toBe('e1')
+    expect(elems[0]!.id).toBe('e1')
   })
 
   it('commits after a successful upload when new files are present', async () => {
@@ -91,6 +91,27 @@ describe('commitAfterUpload', () => {
 
     expect(commitSpy).not.toHaveBeenCalled()
     expect(doc.getMovableList('elements').toJSON() as unknown[]).toHaveLength(1)
+  })
+
+  it('does not depend on Array.find during reconciliation', async () => {
+    class NoFindArray<T> extends Array<T> {
+      override find(): T | undefined {
+        throw new Error('recordLocalOps should use indexed lookup instead of Array.find')
+      }
+    }
+
+    const doc = new LoroDoc()
+    await commitAfterUpload([], doc, [makeElement('e1')], 'session1', 'canvas-a', vi.fn())
+
+    const nextElements = new NoFindArray<ExcalidrawElement>()
+    nextElements.push({ ...makeElement('e1'), width: 200 })
+
+    await expect(
+      commitAfterUpload([], doc, nextElements, 'session1', 'canvas-a', vi.fn()),
+    ).resolves.toBeUndefined()
+
+    const elems = doc.getMovableList('elements').toJSON() as Array<{ id: string; width: number }>
+    expect(elems).toEqual([{ ...makeElement('e1'), width: 200 }])
   })
 
   // Stale-closure protection.

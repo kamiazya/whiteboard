@@ -66,10 +66,9 @@ export function authorizeWsUpgrade(
   const offeredBaseProtocol = protocols.includes(WHITEBOARD_WS_PROTOCOL)
 
   if (!token) {
-    return {
-      accept: true,
-      protocol: offeredBaseProtocol ? WHITEBOARD_WS_PROTOCOL : undefined,
-    }
+    return offeredBaseProtocol
+      ? { accept: true, protocol: WHITEBOARD_WS_PROTOCOL }
+      : { accept: true }
   }
 
   const offeredToken = protocols.find((protocol) =>

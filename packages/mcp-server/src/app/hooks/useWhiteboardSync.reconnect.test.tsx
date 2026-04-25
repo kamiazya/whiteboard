@@ -86,7 +86,7 @@ describe('useWhiteboardSync WS reconnect', () => {
     renderHook(() => useWhiteboardSync('s', 'c'))
     expect(FakeWebSocket.instances).toHaveLength(1)
     act(() => {
-      FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
+      FakeWebSocket.instances[0]!.onclose?.(new Event('close') as CloseEvent)
     })
     expect(FakeWebSocket.instances).toHaveLength(1)
     await act(async () => {
@@ -100,14 +100,14 @@ describe('useWhiteboardSync WS reconnect', () => {
     expect(FakeWebSocket.instances).toHaveLength(1)
 
     // First close -> 500ms reconnect.
-    act(() => FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent))
+    act(() => FakeWebSocket.instances[0]!.onclose?.(new Event('close') as CloseEvent))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500)
     })
     expect(FakeWebSocket.instances).toHaveLength(2)
 
     // Second close without opening -> backoff grows to 1000ms.
-    act(() => FakeWebSocket.instances[1].onclose?.(new Event('close') as CloseEvent))
+    act(() => FakeWebSocket.instances[1]!.onclose?.(new Event('close') as CloseEvent))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500)
     })
@@ -118,8 +118,8 @@ describe('useWhiteboardSync WS reconnect', () => {
     expect(FakeWebSocket.instances).toHaveLength(3)
 
     // onopen resets attempts, so the next close goes back to 500ms.
-    act(() => FakeWebSocket.instances[2].onopen?.(new Event('open')))
-    act(() => FakeWebSocket.instances[2].onclose?.(new Event('close') as CloseEvent))
+    act(() => FakeWebSocket.instances[2]!.onopen?.(new Event('open')))
+    act(() => FakeWebSocket.instances[2]!.onclose?.(new Event('close') as CloseEvent))
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500)
     })
@@ -128,7 +128,7 @@ describe('useWhiteboardSync WS reconnect', () => {
 
   it('cancels the reconnect timer on unmount', async () => {
     const { unmount } = renderHook(() => useWhiteboardSync('s', 'c'))
-    act(() => FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent))
+    act(() => FakeWebSocket.instances[0]!.onclose?.(new Event('close') as CloseEvent))
     unmount()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000)

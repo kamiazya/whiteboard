@@ -60,7 +60,8 @@ describe('MergeToast', () => {
 
   it('hides the Undo button when preMergeVersionId is missing', () => {
     render(<MergeToast sessionId="s1" slug="c1" />)
-    act(() => dispatchMergeCommitted({ ...baseDetail, preMergeVersionId: undefined }))
+    const { preMergeVersionId: _ignored, ...detailWithoutUndo } = baseDetail
+    act(() => dispatchMergeCommitted(detailWithoutUndo))
     expect(screen.queryByTestId('merge-toast-undo')).toBeNull()
   })
 

@@ -30,7 +30,8 @@ export function reconcileElementsOnDoc(doc: LoroDoc, past: LoroDoc): void {
   const currentEntries = list.toJSON() as Array<Record<string, unknown>>
   for (let i = 0; i < currentEntries.length; i++) {
     const el = currentEntries[i]
-    const id = el?.id
+    if (!el) continue
+    const id = el.id
     if (typeof id === 'string') currentById.set(id, { idx: i, snap: el })
   }
 

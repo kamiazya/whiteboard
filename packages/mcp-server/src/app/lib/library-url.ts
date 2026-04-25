@@ -30,5 +30,7 @@ export function getInstalledLibraryUrls(urls: string[]): string[] {
 export function getHashLibraryUrl(hash: string): string | null {
   const match = hash.match(/#addLibrary=([^&]+)/)
   if (!match) return null
-  return getImportableLibraryUrl(decodeURIComponent(match[1]))
+  const encoded = match[1]
+  if (!encoded) return null
+  return getImportableLibraryUrl(decodeURIComponent(encoded))
 }

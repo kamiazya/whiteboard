@@ -64,11 +64,13 @@ function segmentIntersectsRect(a: Point, b: Point, rect: Rect): boolean {
   const p = [-dx, dx, -dy, dy]
   const q = [a.x - rect.x, rect.x + rect.width - a.x, a.y - rect.y, rect.y + rect.height - a.y]
   for (let i = 0; i < 4; i++) {
-    if (p[i] === 0) {
-      if (q[i] < 0) return false
+    const pValue = p[i]!
+    const qValue = q[i]!
+    if (pValue === 0) {
+      if (qValue < 0) return false
     } else {
-      const t = q[i] / p[i]
-      if (p[i] < 0) {
+      const t = qValue / pValue
+      if (pValue < 0) {
         if (t > t1) return false
         if (t > t0) t0 = t
       } else {
@@ -85,6 +87,7 @@ function routeClear(absPoints: Point[], obstacles: Rect[]): boolean {
   for (let i = 0; i < absPoints.length - 1; i++) {
     const a = absPoints[i]
     const b = absPoints[i + 1]
+    if (!a || !b) continue
     const axisAligned = a.x === b.x || a.y === b.y
     for (const obs of obstacles) {
       if (axisAligned) {

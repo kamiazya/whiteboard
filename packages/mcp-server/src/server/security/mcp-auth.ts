@@ -1,4 +1,5 @@
 import { isAuthorized } from '../routes/auth.js'
+import { definedProps } from '../defined-props.js'
 import { requiresMcpHttpAuth } from './mcp-http.js'
 
 export interface McpProtectedResourceMetadataConfig {
@@ -49,8 +50,10 @@ export function resolveMcpProtectedResourceMetadataFromEnv(
 
   return {
     authorizationServers,
-    resource: env.WHITEBOARD_MCP_RESOURCE?.trim() || undefined,
-    scopesSupported: normalizeCsv(env.WHITEBOARD_MCP_SCOPES_SUPPORTED),
+    ...definedProps({
+      resource: env.WHITEBOARD_MCP_RESOURCE?.trim() || undefined,
+      scopesSupported: normalizeCsv(env.WHITEBOARD_MCP_SCOPES_SUPPORTED),
+    }),
   }
 }
 
@@ -123,7 +126,7 @@ export function createNoAuthMcpHttpAuthStrategy(
   metadata?: McpProtectedResourceMetadataConfig,
 ): McpHttpAuthStrategy {
   return {
-    protectedResourceMetadata: metadata,
+    ...definedProps({ protectedResourceMetadata: metadata }),
     authorize() {
       return { ok: true }
     },
@@ -135,7 +138,7 @@ export function createLocalTokenMcpHttpAuthStrategy(options: {
   protectedResourceMetadata?: McpProtectedResourceMetadataConfig
 }): McpHttpAuthStrategy {
   return {
-    protectedResourceMetadata: options.protectedResourceMetadata,
+    ...definedProps({ protectedResourceMetadata: options.protectedResourceMetadata }),
     authorize(context) {
       if (!options.token || !requiresMcpHttpAuth(context.method)) {
         return { ok: true }

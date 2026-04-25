@@ -24,6 +24,7 @@ import {
   validateSessionId,
   validateUserLibraryName,
 } from '../validators.js'
+import { definedProps } from '../defined-props.js'
 import { registerWorkspaceAlias } from './workspace-alias.js'
 
 function countLibraryItems(payload: unknown): number {
@@ -240,11 +241,15 @@ export function createLibrariesRouter() {
     }
     try {
       return c.json(
-        await setUserLibraryMetadata(name, body.revision, {
-          aliases: body.aliases,
-          notes: body.notes,
-          scales: body.scales,
-        }),
+        await setUserLibraryMetadata(
+          name,
+          body.revision,
+          definedProps({
+            aliases: body.aliases,
+            notes: body.notes,
+            scales: body.scales,
+          }),
+        ),
       )
     } catch (err) {
       const conflict = handleConflict(err)
@@ -302,11 +307,15 @@ export function createLibrariesRouter() {
     }
     try {
       return c.json(
-        await deleteUserLibraryMetadata(name, body.revision, {
-          aliasKeys: body.aliasKeys,
-          noteKeys: body.noteKeys,
-          scaleKeys: body.scaleKeys,
-        }),
+        await deleteUserLibraryMetadata(
+          name,
+          body.revision,
+          definedProps({
+            aliasKeys: body.aliasKeys,
+            noteKeys: body.noteKeys,
+            scaleKeys: body.scaleKeys,
+          }),
+        ),
       )
     } catch (err) {
       const conflict = handleConflict(err)

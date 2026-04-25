@@ -5,6 +5,7 @@
 
 import { estimateTextWidth } from './estimate-text-width.js'
 import { wrapTextToWidth } from './wrap-text-to-width.js'
+import { definedProps } from '../../defined-props.js'
 
 // Inner padding for Excalidraw bound text (5px on each side).
 const BOUND_TEXT_PADDING = 5
@@ -146,11 +147,13 @@ export function decomposeBoxWithLabel(
     target: input.target,
     width: input.width,
     height: effectiveHeight,
-    color: input.color,
-    backgroundColor: input.backgroundColor,
-    fillStyle: input.fillStyle,
-    strokeWidth: input.strokeWidth,
-    templateInstanceId: input.templateInstanceId,
+    ...definedProps({
+      color: input.color,
+      backgroundColor: input.backgroundColor,
+      fillStyle: input.fillStyle,
+      strokeWidth: input.strokeWidth,
+      templateInstanceId: input.templateInstanceId,
+    }),
   }
 
   // Evaluate overflow against effectiveHeight, so autoFit can clear it.
@@ -172,16 +175,16 @@ export function decomposeBoxWithLabel(
       text: lines.join('\n'),
       width: input.width,
       height: effectiveHeight,
-      color: input.color,
-      ...(input.templateInstanceId !== undefined
-        ? { templateInstanceId: input.templateInstanceId }
-        : {}),
-      ...(input.fontFamily !== undefined ? { fontFamily: input.fontFamily } : {}),
+      ...definedProps({
+        color: input.color,
+        templateInstanceId: input.templateInstanceId,
+        fontFamily: input.fontFamily,
+      }),
     }
     return [rect, text, { overflow, requiredWidth, requiredHeight, autoExpandedBy, actualHeight }]
   }
 
-  const titleSpec = titleLines.length === 0
+  const titleSpec: TextSpec | undefined = titleLines.length === 0
     ? undefined
     : {
         type: 'text' as const,
@@ -192,11 +195,11 @@ export function decomposeBoxWithLabel(
         text: titleLines.join('\n'),
         width: input.width,
         height: titleHeight,
-        color: input.color,
-        ...(input.templateInstanceId !== undefined
-          ? { templateInstanceId: input.templateInstanceId }
-          : {}),
-        ...(input.fontFamily !== undefined ? { fontFamily: input.fontFamily } : {}),
+        ...definedProps({
+          color: input.color,
+          templateInstanceId: input.templateInstanceId,
+          fontFamily: input.fontFamily,
+        }),
         fontSize: TITLE_FONT_SIZE,
       }
 
@@ -208,7 +211,7 @@ export function decomposeBoxWithLabel(
     const bodyZoneHeight = titleLines.length > 0
       ? Math.max(0, mainZoneHeight - titleHeight - titleToBodyGap)
       : mainZoneHeight
-    const text = lines.length === 0
+    const text: TextSpec | undefined = lines.length === 0
       ? undefined
       : {
           type: 'text' as const,
@@ -216,11 +219,11 @@ export function decomposeBoxWithLabel(
           text: lines.join('\n'),
           width: input.width,
           height: bodyZoneHeight,
-          color: input.color,
-          ...(input.templateInstanceId !== undefined
-            ? { templateInstanceId: input.templateInstanceId }
-            : {}),
-          ...(input.fontFamily !== undefined ? { fontFamily: input.fontFamily } : {}),
+          ...definedProps({
+            color: input.color,
+            templateInstanceId: input.templateInstanceId,
+            fontFamily: input.fontFamily,
+          }),
         }
     const subText: TextSpec = {
       type: 'text',
@@ -231,14 +234,16 @@ export function decomposeBoxWithLabel(
       text: subLines.join('\n'),
       width: input.width,
       height: subHeight,
-      color: input.color,
-      ...(input.templateInstanceId !== undefined
-        ? { templateInstanceId: input.templateInstanceId }
-        : {}),
-      ...(input.fontFamily !== undefined ? { fontFamily: input.fontFamily } : {}),
+      ...definedProps({
+        color: input.color,
+        templateInstanceId: input.templateInstanceId,
+        fontFamily: input.fontFamily,
+      }),
       fontSize: SUBTEXT_FONT_SIZE,
     }
-    return [rect, text, { overflow, requiredWidth, requiredHeight, autoExpandedBy, actualHeight }, subText, titleSpec]
+    return titleSpec
+      ? [rect, text, { overflow, requiredWidth, requiredHeight, autoExpandedBy, actualHeight }, subText, titleSpec]
+      : [rect, text, { overflow, requiredWidth, requiredHeight, autoExpandedBy, actualHeight }, subText]
   }
 
   // Default "top" mode: render an independent text element above the rect with
@@ -249,7 +254,7 @@ export function decomposeBoxWithLabel(
   const bodyHeightForTop = boundLegacyBody
     ? effectiveHeight
     : Math.max(0, effectiveHeight - paddingDelta - titleHeight - titleToBodyGap)
-  const text = lines.length === 0
+  const text: TextSpec | undefined = lines.length === 0
     ? undefined
       : {
         type: 'text' as const,
@@ -257,8 +262,10 @@ export function decomposeBoxWithLabel(
         text: lines.join('\n'),
         width: input.width,
         height: bodyHeightForTop,
-        color: input.color,
-        ...(input.fontFamily !== undefined ? { fontFamily: input.fontFamily } : {}),
+        ...definedProps({
+          color: input.color,
+          fontFamily: input.fontFamily,
+        }),
       }
   const subText: TextSpec = {
     type: 'text',
@@ -266,10 +273,14 @@ export function decomposeBoxWithLabel(
     text: subLines.join('\n'),
     width: input.width,
     height: subHeight,
-    color: input.color,
-    ...(input.fontFamily !== undefined ? { fontFamily: input.fontFamily } : {}),
+    ...definedProps({
+      color: input.color,
+      fontFamily: input.fontFamily,
+    }),
     fontSize: SUBTEXT_FONT_SIZE,
   }
 
-  return [rect, text, { overflow, requiredWidth, requiredHeight, autoExpandedBy, actualHeight }, subText, titleSpec]
+  return titleSpec
+    ? [rect, text, { overflow, requiredWidth, requiredHeight, autoExpandedBy, actualHeight }, subText, titleSpec]
+    : [rect, text, { overflow, requiredWidth, requiredHeight, autoExpandedBy, actualHeight }, subText]
 }

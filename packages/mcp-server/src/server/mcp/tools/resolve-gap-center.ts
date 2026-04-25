@@ -29,7 +29,11 @@ export function resolveGapCenter(
     // Horizontal adjacency: right edge of the left cell + gap/2.
     const leftCol = Math.min(a.col, b.col)
     const widths = resolveColWidths(layout)
-    const x = trackStart(layout.origin.x, widths, leftCol, layout.gap) + widths[leftCol] + layout.gap / 2
+    const leftWidth = widths[leftCol]
+    if (leftWidth === undefined) {
+      throw new Error(`col ${leftCol} out of range [0, ${layout.cols})`)
+    }
+    const x = trackStart(layout.origin.x, widths, leftCol, layout.gap) + leftWidth + layout.gap / 2
     const y = cellCenterY(layout, a.row)
     return { x, y }
   }
@@ -38,7 +42,11 @@ export function resolveGapCenter(
     // Vertical adjacency: bottom edge of the top cell + gap/2.
     const topRow = Math.min(a.row, b.row)
     const heights = resolveRowHeights(layout)
-    const y = trackStart(layout.origin.y, heights, topRow, layout.gap) + heights[topRow] + layout.gap / 2
+    const topHeight = heights[topRow]
+    if (topHeight === undefined) {
+      throw new Error(`row ${topRow} out of range [0, ${layout.rows})`)
+    }
+    const y = trackStart(layout.origin.y, heights, topRow, layout.gap) + topHeight + layout.gap / 2
     const x = cellCenterX(layout, a.col)
     return { x, y }
   }
@@ -88,17 +96,29 @@ function resolveRowHeights(layout: GridLayout): number[] {
 function trackStart(origin: number, sizes: number[], index: number, gap: number): number {
   let value = origin
   for (let i = 0; i < index; i++) {
-    value += sizes[i] + gap
+    const size = sizes[i]
+    if (size === undefined) {
+      throw new Error(`track ${i} out of range`)
+    }
+    value += size + gap
   }
   return value
 }
 
 function cellCenterX(layout: GridLayout, col: number): number {
   const widths = resolveColWidths(layout)
-  return trackStart(layout.origin.x, widths, col, layout.gap) + widths[col] / 2
+  const width = widths[col]
+  if (width === undefined) {
+    throw new Error(`col ${col} out of range [0, ${layout.cols})`)
+  }
+  return trackStart(layout.origin.x, widths, col, layout.gap) + width / 2
 }
 
 function cellCenterY(layout: GridLayout, row: number): number {
   const heights = resolveRowHeights(layout)
-  return trackStart(layout.origin.y, heights, row, layout.gap) + heights[row] / 2
+  const height = heights[row]
+  if (height === undefined) {
+    throw new Error(`row ${row} out of range [0, ${layout.rows})`)
+  }
+  return trackStart(layout.origin.y, heights, row, layout.gap) + height / 2
 }

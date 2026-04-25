@@ -105,7 +105,7 @@
     "nanoid": "^5.1.9",
     "open": "^11.0.0",
     "ws": "^8",
-    "zod": "^4"
+    "zod": "~4.3.6"
   },
   "devDependencies": {
     "@excalidraw/excalidraw": "^0.18.1",

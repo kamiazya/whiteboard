@@ -10,6 +10,7 @@
 // appendAnnotationToDoc.
 
 import type { RectSpec, TextSpec } from './box-with-label.js'
+import { definedProps } from '../../defined-props.js'
 
 // Match title font size and gap to box_with_label subText.
 const TITLE_FONT_SIZE = 14
@@ -81,8 +82,10 @@ export function decomposeGroup(
     target: { x: minX - padding, y: minY - padding },
     width: maxRight - minX + padding * 2,
     height: maxBottom - minY + padding * 2,
-    color: input.color,
-    templateInstanceId: input.templateInstanceId,
+    ...definedProps({
+      color: input.color,
+      templateInstanceId: input.templateInstanceId,
+    }),
   }
 
   if (input.title === undefined) {
@@ -97,8 +100,10 @@ export function decomposeGroup(
     text: titleLines.join('\n'),
     width: rect.width,
     height: titleHeight,
-    color: input.color,
-    templateInstanceId: input.templateInstanceId,
+    ...definedProps({
+      color: input.color,
+      templateInstanceId: input.templateInstanceId,
+    }),
   }
 
   return [rect, title, { missingMemberIds }]

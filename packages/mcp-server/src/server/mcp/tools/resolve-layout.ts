@@ -64,7 +64,11 @@ function sumTracks(sizes: number[], start: number, span: number, gap: number): n
 function offsetForIndex(origin: number, sizes: number[], index: number, gap: number): number {
   let value = origin
   for (let i = 0; i < index; i++) {
-    value += sizes[i] + gap
+    const size = sizes[i]
+    if (size === undefined) {
+      throw new Error(`track ${i} out of range`)
+    }
+    value += size + gap
   }
   return value
 }

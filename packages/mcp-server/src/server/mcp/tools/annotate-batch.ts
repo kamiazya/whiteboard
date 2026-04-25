@@ -14,6 +14,7 @@ import { decomposeGroup } from './group.js'
 import { applyAssignToGroup } from './element-ops.js'
 import { apiGetPalette } from './palette.js'
 import { type GridLayout, resolveGridPlacement, resolveLayout } from './resolve-layout.js'
+import { definedProps } from '../../defined-props.js'
 
 // box_with_label does not auto-wrap, so insufficient width/height can cause
 // visible overflow. annotate_batch returns these diagnostics as warnings so the
@@ -304,9 +305,11 @@ export function annotateBatchTool() {
           item.type === 'group' || hasBoxBinding
             ? (item.target ?? { x: 0, y: 0 })
             : resolveLayout(args.layout, {
-                row: item.row,
-                col: item.col,
-                target: item.target,
+                ...definedProps({
+                  row: item.row,
+                  col: item.col,
+                  target: item.target,
+                }),
               })
         let width = item.width
         let height = item.height
@@ -321,8 +324,7 @@ export function annotateBatchTool() {
           const placement = resolveGridPlacement(args.layout, {
             row: item.row,
             col: item.col,
-            rowSpan: item.rowSpan,
-            colSpan: item.colSpan,
+            ...definedProps({ rowSpan: item.rowSpan, colSpan: item.colSpan }),
           })
           target = { x: placement.x, y: placement.y }
           if (width === undefined) width = placement.width
@@ -346,7 +348,7 @@ export function annotateBatchTool() {
           }
         }
         const { row: _r, col: _c, rowSpan: _rs, colSpan: _cs, name, startBoxName, endBoxName, ...rest } = item
-        bindings.push({ name, startBoxName, endBoxName })
+        bindings.push(definedProps({ name, startBoxName, endBoxName }))
         return { ...rest, target, width, height, sessionPalette } as AnnotationSpec
       })
       // Layer 2: collect box_with_label overflow diagnostics without touching the doc.
@@ -365,13 +367,15 @@ export function annotateBatchTool() {
           target: spec.target,
           width: spec.width,
           height: spec.height,
-          title: spec.title,
-          text: spec.text,
-          subText: spec.subText,
-          subTextPosition: spec.subTextPosition,
-          autoFit: spec.autoFit,
-          color: spec.color,
-          align: spec.align,
+          ...definedProps({
+            title: spec.title,
+            text: spec.text,
+            subText: spec.subText,
+            subTextPosition: spec.subTextPosition,
+            autoFit: spec.autoFit,
+            color: spec.color,
+            align: spec.align,
+          }),
         })
         // Promote both overflow and auto-expand to warnings.
         // autoExpandedBy reports how much autoFit stretched the box.
@@ -401,9 +405,11 @@ export function annotateBatchTool() {
         const [, , diag] = decomposeGroup({
           elements: elementsSnapshot,
           memberIds: spec.memberIds ?? [],
-          padding: spec.padding,
-          title: spec.title,
-          color: spec.color,
+          ...definedProps({
+            padding: spec.padding,
+            title: spec.title,
+            color: spec.color,
+          }),
         })
         if (diag.missingMemberIds.length > 0) {
           warnings.push({ index, missingMemberIds: diag.missingMemberIds })
@@ -477,7 +483,10 @@ export function annotateBatchTool() {
       const overlapPartners = new Map<number, number[]>()
       for (let a = 0; a < placements.length; a++) {
         for (let b = a + 1; b < placements.length; b++) {
-          const iou = computeIou(placements[a].rect, placements[b].rect)
+          const left = placements[a]
+          const right = placements[b]
+          if (!left || !right) continue
+          const iou = computeIou(left.rect, right.rect)
           if (iou > overlapThreshold) {
             overlaps.push({ a, b, iou })
             if (!overlapPartners.has(a)) overlapPartners.set(a, [])
@@ -492,7 +501,8 @@ export function annotateBatchTool() {
       const byName: Record<string, AnnotationResult> = {}
       for (let i = 0; i < annotations.length; i++) {
         const name = bindings[i]?.name
-        if (name) byName[name] = annotations[i]
+        const annotation = annotations[i]
+        if (name && annotation) byName[name] = annotation
       }
       if (args.dryRun !== true) {
         workingDoc.commit()

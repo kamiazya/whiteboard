@@ -16,6 +16,7 @@ import { resolveArrowLabelPosition } from './resolve-arrow-label-position.js'
 import { resolveArrowRoute } from './resolve-arrow-route.js'
 import { resolveTextPosition, type TextAlign } from './resolve-text-position.js'
 import { snapArrowEndpoints, type Rect } from './snap-arrow.js'
+import { definedProps } from '../../defined-props.js'
 
 // box_with_label and group are composite types accepted only by the public
 // annotate API. Internally they are decomposed into primitive elements.
@@ -144,14 +145,17 @@ function appendSingleAnnotation(
 ): { elementId: string; snappedStart: { x: number; y: number }; snappedEnd?: { x: number; y: number } } {
   const elements = doc.getMovableList('elements').toJSON() as ExcalidrawElement[]
   const resolved = resolveAnnotationPosition(
-    { coords: spec.coords, imageId: spec.imageId, target: spec.target },
+    { target: spec.target, ...definedProps({ coords: spec.coords, imageId: spec.imageId }) },
     elements,
   )
   const { x: anchorX, y: anchorY } = resolved
   // Only text resolves anchor semantics. Other types keep target as top-left.
   const textAnchor =
     spec.type === 'text'
-      ? resolveTextPosition({ target: { x: anchorX, y: anchorY }, width: spec.width, align: spec.align })
+      ? resolveTextPosition({
+          target: { x: anchorX, y: anchorY },
+          ...definedProps({ width: spec.width, align: spec.align }),
+        })
       : null
   const actualX = textAnchor?.x ?? anchorX
   const actualY = textAnchor?.y ?? anchorY
@@ -161,7 +165,7 @@ function appendSingleAnnotation(
     : DEFAULT_COLORS[spec.type]
   const absoluteEndTarget = spec.endTarget
     ? resolveAnnotationPosition(
-        { coords: spec.coords, imageId: spec.imageId, target: spec.endTarget },
+        { target: spec.endTarget, ...definedProps({ coords: spec.coords, imageId: spec.imageId }) },
         elements,
       )
     : undefined
@@ -195,8 +199,7 @@ function appendSingleAnnotation(
       const snapped = snapArrowEndpoints({
         start: snappedStart,
         end: snappedEnd,
-        startBox,
-        endBox,
+        ...definedProps({ startBox, endBox }),
       })
       snappedStart = snapped.start
       snappedEnd = snapped.end
@@ -248,21 +251,23 @@ function appendSingleAnnotation(
     now: Date.now(),
     seed: Math.floor(Math.random() * 1000000),
     versionNonce: Math.floor(Math.random() * 1000000),
-    text: textValue,
-    width: spec.width,
-    height: spec.height,
-    textAlign: textAnchor?.textAlign,
-    endTarget: snappedEnd,
-    points: routedPoints,
-    backgroundColor: spec.backgroundColor
-      ? resolvePaletteColor(spec.backgroundColor, spec.sessionPalette ?? {}).color
-      : undefined,
-    fillStyle: spec.fillStyle,
-    strokeWidth: spec.strokeWidth,
-    templateInstanceId: spec.templateInstanceId,
-    isArrowLabel: spec.isArrowLabel,
-    fontFamily: spec.fontFamily,
-    fontSize: spec.fontSize,
+    ...definedProps({
+      text: textValue,
+      width: spec.width,
+      height: spec.height,
+      textAlign: textAnchor?.textAlign,
+      endTarget: snappedEnd,
+      points: routedPoints,
+      backgroundColor: spec.backgroundColor
+        ? resolvePaletteColor(spec.backgroundColor, spec.sessionPalette ?? {}).color
+        : undefined,
+      fillStyle: spec.fillStyle,
+      strokeWidth: spec.strokeWidth,
+      templateInstanceId: spec.templateInstanceId,
+      isArrowLabel: spec.isArrowLabel,
+      fontFamily: spec.fontFamily,
+      fontSize: spec.fontSize,
+    }),
     preserveLineBreaks: Array.isArray(spec.text),
   })
   const list = doc.getMovableList('elements')
@@ -295,7 +300,7 @@ function appendSingleAnnotation(
     pushBoundArrow(startBindingElementId)
     pushBoundArrow(endBindingElementId)
   }
-  return { elementId, snappedStart, snappedEnd }
+  return { elementId, snappedStart, ...definedProps({ snappedEnd }) }
 }
 
 // Structured result for appended annotations so callers can reference internal
@@ -342,22 +347,24 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
     const [rectSpec, titleSpec] = decomposeGroup({
       elements,
       memberIds: spec.memberIds ?? [],
-      padding: spec.padding,
-      title: spec.title,
-      color: spec.color,
-      templateInstanceId: spec.templateInstanceId,
+      ...definedProps({
+        padding: spec.padding,
+        title: spec.title,
+        color: spec.color,
+        templateInstanceId: spec.templateInstanceId,
+      }),
     })
     if (!rectSpec) return { type: 'group' }
     const { elementId: rectId } = appendSingleAnnotation(doc, {
       ...rectSpec,
       coords: 'absolute',
-      sessionPalette: spec.sessionPalette,
+      ...definedProps({ sessionPalette: spec.sessionPalette }),
     })
     if (!titleSpec) return { type: 'group', rectId }
     const { elementId: titleId } = appendSingleAnnotation(doc, {
       ...titleSpec,
       coords: 'absolute',
-      sessionPalette: spec.sessionPalette,
+      ...definedProps({ sessionPalette: spec.sessionPalette }),
     })
     return { type: 'group', rectId, titleId }
   }
@@ -387,8 +394,7 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
         start: snappedStart,
         end: snappedEnd,
         text: spec.label,
-        offset: spec.labelOffset,
-        side: spec.labelSide,
+        ...definedProps({ offset: spec.labelOffset, side: spec.labelSide }),
         obstacles,
       })
       const { elementId: labelId } = appendSingleAnnotation(doc, {
@@ -398,11 +404,13 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
         text: labelPos.text,
         width: labelPos.width,
         height: labelPos.height,
-        color: spec.color,
         // Mark midpoint label text so later arrow routing ignores it as an obstacle.
         isArrowLabel: true,
-        fontFamily: spec.fontFamily,
-        sessionPalette: spec.sessionPalette,
+        ...definedProps({
+          color: spec.color,
+          fontFamily: spec.fontFamily,
+          sessionPalette: spec.sessionPalette,
+        }),
       })
       return { type: 'arrow', arrowId: elementId, labelId }
     }
@@ -426,51 +434,53 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   // Resolve relative/absolute coordinates first; decomposeBoxWithLabel expects absolute input.
   const elements = doc.getMovableList('elements').toJSON() as ExcalidrawElement[]
   const absoluteTarget = resolveAnnotationPosition(
-    { coords: spec.coords, imageId: spec.imageId, target: spec.target },
+    { target: spec.target, ...definedProps({ coords: spec.coords, imageId: spec.imageId }) },
     elements,
   )
   const [rectSpec, textSpec, , subTextSpec, titleSpec] = decomposeBoxWithLabel({
     target: absoluteTarget,
     width: spec.width,
     height: spec.height,
-    title: spec.title,
-    text: spec.text,
-    subText: spec.subText,
-    subTextPosition: spec.subTextPosition,
-    autoFit: spec.autoFit,
-    color: spec.color,
-    backgroundColor: spec.backgroundColor,
-    fillStyle: spec.fillStyle,
-    strokeWidth: spec.strokeWidth,
-    templateInstanceId: spec.templateInstanceId,
-    fontFamily: spec.fontFamily,
-    align: spec.align,
+    ...definedProps({
+      title: spec.title,
+      text: spec.text,
+      subText: spec.subText,
+      subTextPosition: spec.subTextPosition,
+      autoFit: spec.autoFit,
+      color: spec.color,
+      backgroundColor: spec.backgroundColor,
+      fillStyle: spec.fillStyle,
+      strokeWidth: spec.strokeWidth,
+      templateInstanceId: spec.templateInstanceId,
+      fontFamily: spec.fontFamily,
+      align: spec.align,
+    }),
   })
   // Append all decomposed specs as absolute coordinates.
   const { elementId: rectId } = appendSingleAnnotation(doc, {
     ...rectSpec,
     coords: 'absolute',
-    sessionPalette: spec.sessionPalette,
+    ...definedProps({ sessionPalette: spec.sessionPalette }),
   })
   const titleId = titleSpec
     ? appendSingleAnnotation(doc, {
         ...titleSpec,
         coords: 'absolute',
-        sessionPalette: spec.sessionPalette,
+        ...definedProps({ sessionPalette: spec.sessionPalette }),
       }).elementId
     : undefined
   const textId = textSpec
     ? appendSingleAnnotation(doc, {
         ...textSpec,
         coords: 'absolute',
-        sessionPalette: spec.sessionPalette,
+        ...definedProps({ sessionPalette: spec.sessionPalette }),
       }).elementId
     : undefined
   const subTextId = subTextSpec
     ? appendSingleAnnotation(doc, {
         ...subTextSpec,
         coords: 'absolute',
-        sessionPalette: spec.sessionPalette,
+        ...definedProps({ sessionPalette: spec.sessionPalette }),
       }).elementId
     : undefined
   // inside-bottom splits the rectangle into main/sub zones. Skip containerId
@@ -740,12 +750,14 @@ export function annotateTool() {
           target: args.target ?? { x: 0, y: 0 },
           width: args.width,
           height: args.height,
-          title: args.title,
-          text: args.text,
-          subText: args.subText,
-          subTextPosition: args.subTextPosition,
-          autoFit: args.autoFit,
-          color: args.color,
+          ...definedProps({
+            title: args.title,
+            text: args.text,
+            subText: args.subText,
+            subTextPosition: args.subTextPosition,
+            autoFit: args.autoFit,
+            color: args.color,
+          }),
         })
         if (diag.overflow) warnings.push(diag)
       }

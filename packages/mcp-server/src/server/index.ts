@@ -2,6 +2,7 @@
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
 import { startHttpServer } from './http-server.js'
 import { DATA_DIR } from './config.js'
+import { definedProps } from './defined-props.js'
 import {
   createLocalTokenMcpHttpAuthStrategy,
   resolveMcpProtectedResourceMetadataFromEnv,
@@ -28,21 +29,25 @@ async function main() {
   const daemonMode = hasFlag('daemon')
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
   const mcpAuth = createLocalTokenMcpHttpAuthStrategy({
-    token,
-    protectedResourceMetadata: resolveMcpProtectedResourceMetadataFromEnv(process.env),
+    ...definedProps({
+      token,
+      protectedResourceMetadata: resolveMcpProtectedResourceMetadataFromEnv(process.env),
+    }),
   })
 
   const running = await startHttpServer({
     port,
     host,
-    token,
     mcpAuth,
     idleTimeoutMs,
-    onClose: daemonMode
-      ? async () => {
-          await deleteDaemonRecord(DATA_DIR)
-        }
-      : undefined,
+    ...definedProps({
+      token,
+      onClose: daemonMode
+        ? async () => {
+            await deleteDaemonRecord(DATA_DIR)
+          }
+        : undefined,
+    }),
   })
 
   if (daemonMode && token) {

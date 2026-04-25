@@ -1,12 +1,14 @@
 import { readFile } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
 import type { DaemonClient } from '../daemon-client.js'
+import { definedProps } from '../../defined-props.js'
 import { annotateBatchTool, type BatchAnnotationItem } from './annotate-batch.js'
 import type { GridLayout } from './resolve-layout.js'
 import {
   BUILTIN_TEMPLATES,
   getBuiltinTemplate,
   type WhiteboardTemplate,
+  type WhiteboardTemplateAnnotation,
   whiteboardTemplateSchema,
 } from './template-library.js'
 
@@ -76,34 +78,82 @@ function scalePoint(point: { x: number; y: number }, scale: number, origin: { x:
 }
 
 function instantiateAnnotation(
-  annotation: BatchAnnotationItem,
+  annotation: WhiteboardTemplateAnnotation,
   scale: number,
   origin: { x: number; y: number },
   variables: TemplateVariables,
   templateInstanceId: string,
 ): BatchAnnotationItem {
+  const {
+    type,
+    imageId,
+    coords,
+    target,
+    row,
+    col,
+    text,
+    title,
+    subText,
+    subTextPosition,
+    autoFit,
+    color,
+    backgroundColor,
+    fillStyle,
+    strokeWidth,
+    width,
+    height,
+    align,
+    endTarget,
+    startBoxId,
+    endBoxId,
+    label,
+    labelOffset,
+    labelSide,
+    memberIds,
+    padding,
+    name,
+    startBoxName,
+    endBoxName,
+  } = annotation
   return {
-    ...annotation,
     // Attach the same templateInstanceId to every instantiated annotation so they can be targeted together later.
+    type,
     templateInstanceId,
-    text: interpolateText(annotation.text, variables),
-    subText: interpolateText(annotation.subText, variables),
-    title: interpolateText(annotation.title, variables),
-    label: annotation.label ? interpolateString(annotation.label, variables) : undefined,
-    name: annotation.name ? interpolateString(annotation.name, variables) : undefined,
-    startBoxName: annotation.startBoxName
-      ? interpolateString(annotation.startBoxName, variables)
-      : undefined,
-    endBoxName: annotation.endBoxName
-      ? interpolateString(annotation.endBoxName, variables)
-      : undefined,
-    target: annotation.target ? scalePoint(annotation.target, scale, origin) : undefined,
-    endTarget: annotation.endTarget ? scalePoint(annotation.endTarget, scale, origin) : undefined,
-    width: annotation.width !== undefined ? annotation.width * scale : undefined,
-    height: annotation.height !== undefined ? annotation.height * scale : undefined,
-    padding: annotation.padding !== undefined ? annotation.padding * scale : undefined,
-    labelOffset:
-      annotation.labelOffset !== undefined ? annotation.labelOffset * scale : undefined,
+    ...definedProps({
+      imageId,
+      coords,
+      target: target ? scalePoint(target, scale, origin) : undefined,
+      row,
+      col,
+      text: interpolateText(text, variables),
+      subText: interpolateText(subText, variables),
+      title: interpolateText(title, variables),
+      subTextPosition,
+      autoFit,
+      color,
+      backgroundColor,
+      fillStyle,
+      strokeWidth,
+      width: width !== undefined ? width * scale : undefined,
+      height: height !== undefined ? height * scale : undefined,
+      align,
+      endTarget: endTarget ? scalePoint(endTarget, scale, origin) : undefined,
+      startBoxId,
+      endBoxId,
+      label: label ? interpolateString(label, variables) : undefined,
+      labelOffset:
+        labelOffset !== undefined ? labelOffset * scale : undefined,
+      labelSide,
+      memberIds,
+      padding: padding !== undefined ? padding * scale : undefined,
+      name: name ? interpolateString(name, variables) : undefined,
+      startBoxName: startBoxName
+        ? interpolateString(startBoxName, variables)
+        : undefined,
+      endBoxName: endBoxName
+        ? interpolateString(endBoxName, variables)
+        : undefined,
+    }),
   }
 }
 
@@ -154,7 +204,7 @@ export function instantiateTemplate(args: InstantiateTemplateArgs): {
     ? { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
     : { x: args.origin.x, y: args.origin.y, width: 0, height: 0 }
 
-  return { layout, annotations, variables, bounds, templateInstanceId }
+  return { annotations, variables, bounds, templateInstanceId, ...definedProps({ layout }) }
 }
 
 async function loadTemplateFromPath(templatePath: string): Promise<WhiteboardTemplate> {
@@ -260,22 +310,20 @@ export function insertTemplateTool() {
       },
       client: DaemonClient,
     ) => {
-      const { template, source } = await resolveTemplateSource({
-        templateId: args.templateId,
-        templatePath: args.templatePath,
-      })
+      const { template, source } = await resolveTemplateSource(
+        definedProps({ templateId: args.templateId, templatePath: args.templatePath }),
+      )
       const instantiated = instantiateTemplate({
         template,
         origin: args.target,
-        scale: args.scale,
-        variables: args.variables,
+        ...definedProps({ scale: args.scale, variables: args.variables }),
       })
       const batchTool = annotateBatchTool()
       const result = await batchTool.execute(
         {
           canvasId: args.canvasId,
-          layout: instantiated.layout,
           annotations: instantiated.annotations,
+          ...definedProps({ layout: instantiated.layout }),
         },
         client,
       )

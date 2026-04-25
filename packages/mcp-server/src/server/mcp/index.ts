@@ -51,6 +51,7 @@ import {
 import { ensureWorkspaceId } from './session-resolver.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
+import { definedProps } from '../defined-props.js'
 import {
   buildDrawDiagramPrompt,
   formatInstalledLibrariesResource,
@@ -711,7 +712,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ slug, issueNumber, overwrite }) => {
       const result = await withDaemon((client) =>
-        canvasTool.execute({ slug, issueNumber, overwrite }, sessionId, client),
+        canvasTool.execute({ slug, ...definedProps({ issueNumber, overwrite }) }, sessionId, client),
       )
       return structuredJsonResult(result)
     },
@@ -732,7 +733,9 @@ export async function createExcalidrawMcpServer() {
       outputSchema: canvasListOutputSchema,
     },
     async ({ activeOnly, slugContains }) => {
-      const result = await withDaemon((client) => listTool.execute({ activeOnly, slugContains }, client))
+      const result = await withDaemon((client) =>
+        listTool.execute(definedProps({ activeOnly, slugContains }), client),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -759,7 +762,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ id, fullscreen, waitForClient, waitTimeoutMs }) => {
       const result = await withDaemon((client) =>
-        openTool.execute({ id, fullscreen, waitForClient, waitTimeoutMs }, client),
+        openTool.execute({ id, ...definedProps({ fullscreen, waitForClient, waitTimeoutMs }) }, client),
       )
       return structuredJsonResult(result)
     },
@@ -782,7 +785,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ canvasId, imagePath, position }) => {
       const result = await withDaemon((client) =>
-        loadTool.execute({ canvasId, imagePath, position }, client),
+        loadTool.execute({ canvasId, imagePath, ...definedProps({ position }) }, client),
       )
       return structuredJsonResult(result)
     },
@@ -884,7 +887,37 @@ export async function createExcalidrawMcpServer() {
     async ({ canvasId, type, imageId, coords, target, text, title, subText, subTextPosition, autoFit, color, backgroundColor, fillStyle, strokeWidth, fontFamily, fontSize, width, height, align, endTarget, startBoxId, endBoxId, label, labelOffset, labelSide, memberIds, padding }) => {
       const result = await withDaemon((client) =>
         annotateToolDef.execute(
-          { canvasId, type, imageId, coords, target, text, title, subText, subTextPosition, autoFit, color, backgroundColor, fillStyle, strokeWidth, fontFamily, fontSize, width, height, align, endTarget, startBoxId, endBoxId, label, labelOffset, labelSide, memberIds, padding },
+          {
+            canvasId,
+            type,
+            target,
+            ...definedProps({
+              imageId,
+              coords,
+              text,
+              title,
+              subText,
+              subTextPosition,
+              autoFit,
+              color,
+              backgroundColor,
+              fillStyle,
+              strokeWidth,
+              fontFamily,
+              fontSize,
+              width,
+              height,
+              align,
+              endTarget,
+              startBoxId,
+              endBoxId,
+              label,
+              labelOffset,
+              labelSide,
+              memberIds,
+              padding,
+            }),
+          },
           client,
         ),
       )
@@ -999,7 +1032,68 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ canvasId, annotations, layout, dryRun, overlapThreshold, groupAs }) => {
       const result = await withDaemon((client) =>
-        annotateBatchToolDef.execute({ canvasId, annotations, layout, dryRun, overlapThreshold, groupAs }, client),
+        annotateBatchToolDef.execute(
+          {
+            canvasId,
+            annotations: annotations.map((annotation) => ({
+              type: annotation.type,
+              ...definedProps({
+                imageId: annotation.imageId,
+                coords: annotation.coords,
+                target: annotation.target,
+                row: annotation.row,
+                col: annotation.col,
+                rowSpan: annotation.rowSpan,
+                colSpan: annotation.colSpan,
+                text: annotation.text,
+                title: annotation.title,
+                subText: annotation.subText,
+                subTextPosition: annotation.subTextPosition,
+                autoFit: annotation.autoFit,
+                color: annotation.color,
+                backgroundColor: annotation.backgroundColor,
+                fillStyle: annotation.fillStyle,
+                strokeWidth: annotation.strokeWidth,
+                fontFamily: annotation.fontFamily,
+                fontSize: annotation.fontSize,
+                width: annotation.width,
+                height: annotation.height,
+                align: annotation.align,
+                endTarget: annotation.endTarget,
+                startBoxId: annotation.startBoxId,
+                endBoxId: annotation.endBoxId,
+                label: annotation.label,
+                labelOffset: annotation.labelOffset,
+                labelSide: annotation.labelSide,
+                memberIds: annotation.memberIds,
+                padding: annotation.padding,
+                name: annotation.name,
+                startBoxName: annotation.startBoxName,
+                endBoxName: annotation.endBoxName,
+              }),
+            })),
+            ...definedProps({
+              layout: layout
+                ? {
+                    cols: layout.cols,
+                    rows: layout.rows,
+                    gap: layout.gap,
+                    origin: layout.origin,
+                    ...definedProps({
+                      cellW: layout.cellW,
+                      cellH: layout.cellH,
+                      colWidths: layout.colWidths,
+                      rowHeights: layout.rowHeights,
+                    }),
+                  }
+                : undefined,
+              dryRun,
+              overlapThreshold,
+              groupAs,
+            }),
+          },
+          client,
+        ),
       )
       return structuredJsonResult(result)
     },
@@ -1073,7 +1167,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ canvasId, padding, scale, minFontPx }) => {
       const result = await withDaemon((client) =>
-        exportTool.execute({ canvasId, padding, scale, minFontPx }, client),
+        exportTool.execute({ canvasId, ...definedProps({ padding, scale, minFontPx }) }, client),
       )
       // Return filePath in the text block and attach the image payload as a
       // separate ImageContent block. If reading fails, omit the image block and
@@ -1115,8 +1209,13 @@ export async function createExcalidrawMcpServer() {
       },
       outputSchema: viewportSetOutputSchema,
     },
-    async (args) => {
-      const result = await withDaemon((client) => viewportTool.execute(args, client))
+    async ({ canvasId, mode, elementIds, padding, animate, scrollX, scrollY, zoom }) => {
+      const result = await withDaemon((client) =>
+        viewportTool.execute(
+          { canvasId, ...definedProps({ mode, elementIds, padding, animate, scrollX, scrollY, zoom }) },
+          client,
+        ),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -1135,7 +1234,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ canvasId, includeCustomFields }) => {
       const result = await withDaemon((client) =>
-        exportJsonTool.execute({ canvasId, includeCustomFields }, client),
+        exportJsonTool.execute({ canvasId, ...definedProps({ includeCustomFields }) }, client),
       )
       return structuredJsonResult(result)
     },
@@ -1178,8 +1277,24 @@ export async function createExcalidrawMcpServer() {
       },
       outputSchema: canvasAutoLayoutOutputSchema,
     },
-    async (args) => {
-      const result = await withDaemon((client) => autoLayoutTool.execute(args, client))
+    async ({ canvasId, direction, layerGap, nodeGap, origin, pins, groups, groupGap }) => {
+      const result = await withDaemon((client) =>
+        autoLayoutTool.execute(
+          {
+            canvasId,
+            ...definedProps({
+              direction,
+              layerGap,
+              nodeGap,
+              origin,
+              pins: pins?.map((pin) => ({ id: pin.id, ...definedProps({ rank: pin.rank, anchor: pin.anchor, column: pin.column }) })),
+              groups,
+              groupGap,
+            }),
+          },
+          client,
+        ),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -1197,7 +1312,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ libraryUrl, libraryPath, userLibraryName }) => {
       const result = await withDaemon((client) =>
-        libListTool.execute({ libraryUrl, libraryPath, userLibraryName }, client),
+        libListTool.execute(definedProps({ libraryUrl, libraryPath, userLibraryName }), client),
       )
       return structuredJsonResult(result)
     },
@@ -1231,7 +1346,12 @@ export async function createExcalidrawMcpServer() {
     async ({ canvasId, libraryUrl, libraryPath, userLibraryName, itemIndex, target, scale }) => {
       const result = await withDaemon((client) =>
         libInsertTool.execute(
-          { canvasId, libraryUrl, libraryPath, userLibraryName, itemIndex, target, scale },
+          {
+            canvasId,
+            itemIndex,
+            target,
+            ...definedProps({ libraryUrl, libraryPath, userLibraryName, scale }),
+          },
           client,
         ),
       )
@@ -1266,7 +1386,15 @@ export async function createExcalidrawMcpServer() {
     async ({ canvasId, libraryUrl, libraryPath, userLibraryName, groupAs, scale, items }) => {
       const result = await withDaemon((client) =>
         libInsertBatch.execute(
-          { canvasId, libraryUrl, libraryPath, userLibraryName, groupAs, scale, items },
+          {
+            canvasId,
+            items: items.map((item) => ({
+              itemIndex: item.itemIndex,
+              target: item.target,
+              ...definedProps({ groupAs: item.groupAs, scale: item.scale }),
+            })),
+            ...definedProps({ libraryUrl, libraryPath, userLibraryName, groupAs, scale }),
+          },
           client,
         ),
       )
@@ -1327,7 +1455,7 @@ export async function createExcalidrawMcpServer() {
       outputSchema: libraryCatalogListOutputSchema,
     },
     async ({ query, limit }) => {
-      const result = await libCatalog.execute({ query, limit })
+      const result = await libCatalog.execute(definedProps({ query, limit }))
       return structuredJsonResult(result)
     },
   )
@@ -1345,7 +1473,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ name, fromUrl, content }) => {
       const result = await withDaemon((client) =>
-        userLibSave.execute({ name, fromUrl, content }, client),
+        userLibSave.execute({ name, ...definedProps({ fromUrl, content }) }, client),
       )
       return structuredJsonResult(result)
     },
@@ -1405,7 +1533,10 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ name, revision, aliases, notes, scales }) => {
       const result = await withDaemon((client) =>
-        userLibMetadataSet.execute({ name, revision, aliases, notes, scales }, client),
+        userLibMetadataSet.execute(
+          { name, revision, ...definedProps({ aliases, notes, scales }) },
+          client,
+        ),
       )
       return structuredJsonResult(result)
     },
@@ -1427,7 +1558,7 @@ export async function createExcalidrawMcpServer() {
     async ({ name, revision, aliasKeys, noteKeys, scaleKeys }) => {
       const result = await withDaemon((client) =>
         userLibMetadataDelete.execute(
-          { name, revision, aliasKeys, noteKeys, scaleKeys },
+          { name, revision, ...definedProps({ aliasKeys, noteKeys, scaleKeys }) },
           client,
         ),
       )
@@ -1482,7 +1613,7 @@ export async function createExcalidrawMcpServer() {
     async ({ canvasId, templateId, templatePath, target, scale, variables }) => {
       const result = await withDaemon((client) =>
         insertTemplate.execute(
-          { canvasId, templateId, templatePath, target, scale, variables },
+          { canvasId, target, ...definedProps({ templateId, templatePath, scale, variables }) },
           client,
         ),
       )
@@ -1665,7 +1796,9 @@ export async function createExcalidrawMcpServer() {
       outputSchema: checkpointSaveOutputSchema,
     },
     async ({ canvasId, id }) => {
-      const result = await withDaemon((client) => checkpointSave.execute({ canvasId, id }, client))
+      const result = await withDaemon((client) =>
+        checkpointSave.execute({ canvasId, ...definedProps({ id }) }, client),
+      )
       return structuredJsonResult(result)
     },
   )
@@ -1689,7 +1822,11 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ checkpointId, targetSlug, overwrite }) => {
       const result = await withDaemon((client) =>
-        checkpointRestore.execute({ checkpointId, targetSlug, overwrite }, sessionId, client),
+        checkpointRestore.execute(
+          { checkpointId, targetSlug, ...definedProps({ overwrite }) },
+          sessionId,
+          client,
+        ),
       )
       return structuredJsonResult(result)
     },
@@ -1721,7 +1858,10 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ canvasId, x, y, width, height, name, memberIds, padding }) => {
       const result = await withDaemon((client) =>
-        frameCreate.execute({ canvasId, x, y, width, height, name, memberIds, padding }, client),
+        frameCreate.execute(
+          { canvasId, ...definedProps({ x, y, width, height, name, memberIds, padding }) },
+          client,
+        ),
       )
       return structuredJsonResult(result)
     },
@@ -1750,7 +1890,10 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ canvasId, frameId, add, remove, padding }) => {
       const result = await withDaemon((client) =>
-        frameUpdateMembers.execute({ canvasId, frameId, add, remove, padding }, client),
+        frameUpdateMembers.execute(
+          { canvasId, frameId, ...definedProps({ add, remove, padding }) },
+          client,
+        ),
       )
       return structuredJsonResult(result)
     },
@@ -1774,7 +1917,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ canvasId, url, x, y, width, height }) => {
       const result = await withDaemon((client) =>
-        embedCreate.execute({ canvasId, url, x, y, width, height }, client),
+        embedCreate.execute({ canvasId, url, ...definedProps({ x, y, width, height }) }, client),
       )
       return structuredJsonResult(result)
     },
