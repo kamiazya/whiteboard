@@ -25,7 +25,7 @@ import {
   setCanvasPinned,
 } from '../store/names-store.js'
 import { corruptStoredDataBody, isCorruptStoredDataError } from '../store/corrupt-stored-data.js'
-import { exportCanvasJsonDoc } from '../export-json.js'
+import { exportCanvasJsonDoc, OutputPathError } from '../export-json.js'
 import {
   validationErrorBody,
   validateSessionId,
@@ -630,23 +630,41 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     let includeCustomFields = false
+    let outputPath: string | undefined
+    let overwrite = false
     try {
       const body = (await c.req.json().catch(() => ({}))) as {
         includeCustomFields?: unknown
+        outputPath?: unknown
+        overwrite?: unknown
       }
       includeCustomFields = body.includeCustomFields === true
+      if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
+        outputPath = body.outputPath
+      }
+      overwrite = body.overwrite === true
     } catch {
       /* empty body -> defaults */
     }
     const doc = await getDoc(sessionId, slug)
-    return c.json(
-      await exportCanvasJsonDoc({
-        sessionId,
-        slug,
-        doc,
-        includeCustomFields,
-      }),
-    )
+    try {
+      return c.json(
+        await exportCanvasJsonDoc({
+          sessionId,
+          slug,
+          doc,
+          includeCustomFields,
+          outputPath,
+          overwrite,
+        }),
+      )
+    } catch (err) {
+      if (err instanceof OutputPathError) {
+        const status = err.code === 'output_exists' ? 409 : 400
+        return c.json({ error: err.code, message: err.message }, status)
+      }
+      throw err
+    }
   })
 
   // PUT /api/sessions/:sessionId/canvases/:slug/versions/:id/thumbnail
