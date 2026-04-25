@@ -130,7 +130,13 @@ describe('publish contract', () => {
   })
 
   it('keeps published wrappers on @latest so release-please does not need extra-files sync', () => {
-    expect(rootReleaseConfig.packages['packages/mcp-server']['extra-files']).toBeUndefined()
+    // mcp-server may sync MCP Registry metadata (server.json) but must not pull in
+    // any of the wrapper plugin manifests — those stay on @latest.
+    const mcpExtras = rootReleaseConfig.packages['packages/mcp-server']['extra-files'] ?? []
+    const wrapperPaths = ['.claude-plugin/plugin.json', '.codex-plugin/plugin.json', 'packages/mcp-server/.mcp.json']
+    for (const wp of wrapperPaths) {
+      expect(mcpExtras.some((e) => e.path?.endsWith(wp))).toBe(false)
+    }
     expect(publishedMcpConfig.mcpServers.whiteboard).toEqual({
       command: 'npx',
       args: ['-y', '@kamiazya/whiteboard-mcp@latest'],
