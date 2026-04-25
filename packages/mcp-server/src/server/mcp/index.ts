@@ -48,7 +48,7 @@ import {
   createFrameTool,
   updateFrameMembersTool,
 } from './tools/frame-embed.js'
-import { resolveWorkspaceId, saveCurrentWorkspaceId } from './session-resolver.js'
+import { ensureWorkspaceId } from './session-resolver.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
 import {
@@ -539,8 +539,9 @@ function registerToolWithAnnotations<I extends z.ZodRawShape>(
 }
 
 export async function createExcalidrawMcpServer() {
-  const sessionId = await resolveWorkspaceId(DATA_DIR)
-  await saveCurrentWorkspaceId(DATA_DIR, sessionId)
+  // ensureWorkspaceId memoizes the resolve+save sequence per DATA_DIR so the
+  // HTTP /mcp handler does not race concurrent requests on the marker file.
+  const sessionId = await ensureWorkspaceId(DATA_DIR)
 
   // Read `version` from package.json at runtime so release-please bumps propagate
   // without source edits.
