@@ -52,7 +52,7 @@ jobs:
       run:
         working-directory: packages/mcp-server
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ needs.release-please.outputs.mcp_tag_name }}
 
