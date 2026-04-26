@@ -5,47 +5,88 @@ import { z } from 'zod'
 import { DATA_DIR } from '../config.js'
 import { ensureDaemon } from '../../daemon/ensure-daemon.js'
 import { createDaemonClient } from './daemon-client.js'
-import { createCanvasTool, listCanvasTool, openCanvasTool } from './tools/canvas.js'
-import { loadImageTool } from './tools/load.js'
-import { annotateTool } from './tools/annotate.js'
-import { annotateBatchTool } from './tools/annotate-batch.js'
-import { exportPngTool } from './tools/export.js'
-import { viewportSetTool } from './tools/viewport.js'
-import { canvasExportJsonTool } from './tools/canvas-export-json.js'
-import { canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
-import { paletteDeleteTool, paletteGetTool, paletteSetTool } from './tools/palette.js'
 import {
-  libraryListItemsTool,
-  libraryInsertItemTool,
+  canvasCreateOutputSchema,
+  canvasListOutputSchema,
+  canvasOpenOutputSchema,
+  createCanvasTool,
+  listCanvasTool,
+  openCanvasTool,
+} from './tools/canvas.js'
+import { loadImageOutputSchema, loadImageTool } from './tools/load.js'
+import { annotateOutputSchema, annotateTool } from './tools/annotate.js'
+import { annotateBatchOutputSchema, annotateBatchTool } from './tools/annotate-batch.js'
+import { exportPngOutputSchema, exportPngTool } from './tools/export.js'
+import { viewportSetOutputSchema, viewportSetTool } from './tools/viewport.js'
+import { canvasExportJsonOutputSchema, canvasExportJsonTool } from './tools/canvas-export-json.js'
+import { canvasAutoLayoutOutputSchema, canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
+import {
+  paletteDeleteTool,
+  paletteGetTool,
+  paletteOutputSchema,
+  paletteSetTool,
+} from './tools/palette.js'
+import {
+  installedUrlsOutputSchema,
+  libInsertItemOutputSchema,
+  libraryInsertBatchOutputSchema,
   libraryInsertBatchTool,
+  libraryInsertItemTool,
+  libraryInstallOutputSchema,
   libraryInstallTool,
-  libraryUninstallTool,
   libraryListInstalledTool,
-  userLibrarySaveTool,
+  libraryListItemsOutputSchema,
+  libraryListItemsTool,
+  libraryUninstallTool,
+  userLibraryListOutputSchema,
   userLibraryListTool,
-  userLibraryRemoveTool,
-  userLibraryMetadataGetTool,
-  userLibraryMetadataSetTool,
   userLibraryMetadataDeleteTool,
+  userLibraryMetadataGetTool,
+  userLibraryMetadataManifestSchema,
+  userLibraryMetadataSetTool,
+  userLibraryRemoveOutputSchema,
+  userLibraryRemoveTool,
+  userLibrarySaveOutputSchema,
+  userLibrarySaveTool,
 } from './tools/library.js'
-import { libraryCatalogListTool } from './tools/library-catalog.js'
-import { canvasInspectTool } from './tools/canvas-inspect.js'
-import { insertTemplateTool, listTemplatesTool } from './tools/template.js'
+import { libraryCatalogListOutputSchema, libraryCatalogListTool } from './tools/library-catalog.js'
+import { canvasInspectOutputSchema, canvasInspectTool } from './tools/canvas-inspect.js'
 import {
+  insertTemplateTool,
+  listTemplatesTool,
+  templateInsertOutputSchema,
+  templateListOutputSchema,
+} from './tools/template.js'
+import {
+  assignGroupOutputSchema,
   assignToGroupTool,
   canvasClearTool,
+  clearedCountOutputSchema,
+  deletedElementsOutputSchema,
   deleteElementTool,
   deleteElementsTool,
   deleteGroupTool,
+  elementIdOutputSchema,
+  elementIdsOutputSchema,
+  listGroupsOutputSchema,
   listGroupsTool,
   moveElementsTool,
   reorderElementsTool,
+  reorderOutputSchema,
   updateElementTool,
 } from './tools/element-ops-tools.js'
-import { checkpointSaveTool, checkpointRestoreTool } from './tools/checkpoint.js'
 import {
+  checkpointRestoreOutputSchema,
+  checkpointRestoreTool,
+  checkpointSaveOutputSchema,
+  checkpointSaveTool,
+} from './tools/checkpoint.js'
+import {
+  createEmbedOutputSchema,
   createEmbedTool,
+  createFrameOutputSchema,
   createFrameTool,
+  updateFrameMembersOutputSchema,
   updateFrameMembersTool,
 } from './tools/frame-embed.js'
 import { ensureWorkspaceId } from './session-resolver.js'
@@ -61,331 +102,6 @@ import {
   WHITEBOARD_INSTALLED_LIBRARIES_URI,
   WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
-
-const canvasCreateOutputSchema = z.object({
-  id: z.string(),
-  url: z.string(),
-})
-
-const canvasListOutputSchema = z.object({
-  workspaces: z.array(
-    z.object({
-      workspaceId: z.string(),
-      daemonAlive: z.boolean(),
-      canvases: z.array(
-        z.object({
-          id: z.string(),
-          slug: z.string(),
-          url: z.string(),
-          updatedAt: z.string(),
-        }),
-      ),
-    }),
-  ),
-})
-
-const canvasOpenOutputSchema = z.object({
-  url: z.string(),
-  clientReady: z.boolean().optional(),
-  openFailed: z.string().optional(),
-})
-
-const exportPngOutputSchema = z.object({
-  filePath: z.string(),
-  imageBase64: z.string().optional(),
-})
-
-const canvasInspectOutputSchema = z.object({
-  elementCount: z.number(),
-  elements: z.array(
-    z.object({
-      id: z.string(),
-      type: z.string(),
-      x: z.number().optional(),
-      y: z.number().optional(),
-      width: z.number().optional(),
-      height: z.number().optional(),
-      angle: z.number().optional(),
-      fileId: z.string().optional(),
-      text: z.string().optional(),
-      strokeColor: z.string().optional(),
-      backgroundColor: z.string().optional(),
-      isDeleted: z.boolean().optional(),
-    }),
-  ),
-})
-
-const annotationResultSchema = z.object({
-  type: z.enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group']),
-  elementId: z.string().optional(),
-  arrowId: z.string().optional(),
-  labelId: z.string().optional(),
-  rectId: z.string().optional(),
-  textId: z.string().optional(),
-  subTextId: z.string().optional(),
-  titleId: z.string().optional(),
-})
-
-const annotateWarningSchema = z.object({
-  overflow: z.boolean().optional(),
-  requiredWidth: z.number().optional(),
-  requiredHeight: z.number().optional(),
-})
-
-const annotateOutputSchema = z.object({
-  elementId: z.string().optional(),
-  elementIds: z.array(z.string()).optional(),
-  annotation: annotationResultSchema,
-  warnings: z.array(annotateWarningSchema),
-})
-
-const annotateBatchWarningSchema = z.object({
-  index: z.number(),
-  overflow: z.boolean().optional(),
-  requiredWidth: z.number().optional(),
-  requiredHeight: z.number().optional(),
-  autoExpandedBy: z.number().optional(),
-  actualHeight: z.number().optional(),
-  missingMemberIds: z.array(z.string()).optional(),
-  unresolvedBindingName: z.array(z.string()).optional(),
-  message: z.string().optional(),
-})
-
-const annotateBatchOutputSchema = z.object({
-  elementIds: z.array(z.string()),
-  annotations: z.array(annotationResultSchema),
-  warnings: z.array(annotateBatchWarningSchema),
-  byName: z.record(z.string(), annotationResultSchema),
-  placements: z.array(
-    z.object({
-      annotationIndex: z.number(),
-      rect: z.object({
-        x: z.number(),
-        y: z.number(),
-        width: z.number(),
-        height: z.number(),
-      }),
-      elementId: z.string().optional(),
-    }),
-  ),
-  overlaps: z.array(
-    z.object({
-      a: z.number(),
-      b: z.number(),
-      iou: z.number(),
-    }),
-  ),
-})
-
-const genericOutputSchema = z.record(z.string(), z.unknown())
-
-const loadImageOutputSchema = z.object({ elementId: z.string() })
-
-const paletteOutputSchema = z.object({ palette: z.record(z.string(), z.unknown()) })
-
-const viewportSetOutputSchema = z.object({ ok: z.literal(true) })
-
-const canvasExportJsonOutputSchema = z.object({
-  filePath: z.string(),
-  elementCount: z.number(),
-})
-
-const canvasAutoLayoutOutputSchema = z.object({
-  nodeCount: z.number(),
-  edgeCount: z.number(),
-  movedCount: z.number(),
-})
-
-const elementIdOutputSchema = z.object({ elementId: z.string() })
-
-const elementIdsOutputSchema = z.object({ elementIds: z.array(z.string()) })
-
-const deletedElementsOutputSchema = z.object({
-  deletedElementIds: z.array(z.string()),
-  deletedCount: z.number(),
-})
-
-const assignGroupOutputSchema = z.object({
-  groupId: z.string(),
-  elementIds: z.array(z.string()),
-})
-
-const reorderOutputSchema = z.object({
-  elementIds: z.array(z.string()),
-  action: z.string(),
-})
-
-const clearedCountOutputSchema = z.object({ clearedCount: z.number() })
-
-const checkpointSaveOutputSchema = z.object({
-  checkpointId: z.string(),
-  elementCount: z.number(),
-})
-
-const checkpointRestoreOutputSchema = z.object({
-  canvasId: z.string(),
-  url: z.string(),
-  elementCount: z.number(),
-})
-
-const boundsSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
-})
-
-const createFrameOutputSchema = z.object({
-  elementId: z.string(),
-  bounds: boundsSchema,
-  // Element ids whose frameId was set to this new frame.
-  assignedMembers: z.array(z.string()),
-})
-
-const updateFrameMembersOutputSchema = z.object({
-  frameId: z.string(),
-  bounds: boundsSchema,
-  addedMembers: z.array(z.string()),
-  removedMembers: z.array(z.string()),
-})
-
-const createEmbedOutputSchema = z.object({
-  elementId: z.string(),
-  url: z.string(),
-})
-
-const libraryInstallOutputSchema = z.object({
-  libraryUrl: z.string(),
-  itemCount: z.number(),
-  installedUrls: z.array(z.string()),
-})
-
-const installedUrlsOutputSchema = z.object({
-  installedUrls: z.array(z.string()),
-})
-
-const libInsertItemOutputSchema = z.object({
-  source: z.string(),
-  itemIndex: z.number(),
-  insertedCount: z.number(),
-  elementIds: z.array(z.string()),
-})
-
-// Specialized outputSchema definitions for library / template / group results.
-// Tighten these shapes instead of using `z.record(z.unknown())` so structured
-// output stays predictable and runtime validation catches drift early.
-
-const libraryListItemsOutputSchema = z.object({
-  source: z.string(),
-  itemCount: z.number(),
-  items: z.array(
-    z.object({
-      index: z.number(),
-      name: z.string().optional(),
-      elementCount: z.number(),
-      bbox: boundsSchema,
-    }),
-  ),
-})
-
-const libraryInsertBatchOutputSchema = z.object({
-  source: z.string(),
-  insertedItemCount: z.number(),
-  insertedElementCount: z.number(),
-  items: z.array(
-    z.object({
-      itemIndex: z.number(),
-      insertedCount: z.number(),
-      elementIds: z.array(z.string()),
-    }),
-  ),
-})
-
-const libraryCatalogListOutputSchema = z.object({
-  totalCount: z.number(),
-  returnedCount: z.number(),
-  // Mirrors the upstream CatalogEntry shape from tools/library-catalog.ts:
-  // `id` may be omitted, and `authors` is an array of {name?, url?} objects.
-  items: z.array(
-    z.object({
-      id: z.string().optional(),
-      name: z.string(),
-      description: z.string().optional(),
-      authors: z
-        .array(z.object({ name: z.string().optional(), url: z.string().optional() }))
-        .optional(),
-      url: z.string(),
-      previewUrl: z.string().optional(),
-      created: z.string().optional(),
-      updated: z.string().optional(),
-    }),
-  ),
-})
-
-const userLibrarySaveOutputSchema = z.object({
-  name: z.string(),
-  itemCount: z.number(),
-})
-
-const userLibraryListOutputSchema = z.object({
-  libraries: z.array(
-    z.object({
-      name: z.string(),
-      path: z.string(),
-      itemCount: z.number(),
-    }),
-  ),
-})
-
-const userLibraryRemoveOutputSchema = z.object({
-  removed: z.string(),
-  remaining: z.array(z.string()),
-})
-
-const userLibraryMetadataManifestSchema = z.object({
-  version: z.literal(1),
-  revision: z.number(),
-  aliases: z.record(z.string(), z.number()),
-  notes: z.record(z.string(), z.string()),
-  scales: z.record(z.string(), z.number()),
-})
-
-const templateListOutputSchema = z.object({
-  templates: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      description: z.string().optional(),
-      tags: z.array(z.string()),
-      variables: z.array(
-        z.object({
-          name: z.string(),
-          description: z.string().optional(),
-          default: z.string().optional(),
-        }),
-      ),
-    }),
-  ),
-})
-
-// template_insert spreads annotate_batch output and adds extra fields, so define
-// it by extending annotateBatchOutputSchema.
-const templateInsertOutputSchema = annotateBatchOutputSchema.extend({
-  templateId: z.string(),
-  source: z.enum(['builtin', 'file']),
-  variables: z.record(z.string(), z.string()),
-  bounds: boundsSchema,
-  templateInstanceId: z.string(),
-})
-
-const listGroupsOutputSchema = z.object({
-  groups: z.array(
-    z.object({
-      groupId: z.string(),
-      memberIds: z.array(z.string()),
-    }),
-  ),
-})
 
 function structuredJsonResult<T extends object>(result: T) {
   const structuredContent = result as T & { [key: string]: unknown }

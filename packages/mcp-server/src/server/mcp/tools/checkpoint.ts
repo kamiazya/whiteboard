@@ -1,8 +1,20 @@
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { daemonUrl } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
 import { validateCheckpointId } from '../../store/checkpoint-store.js'
+
+export const checkpointSaveOutputSchema = z.object({
+  checkpointId: z.string(),
+  elementCount: z.number(),
+})
+
+export const checkpointRestoreOutputSchema = z.object({
+  canvasId: z.string(),
+  url: z.string(),
+  elementCount: z.number(),
+})
 
 export function checkpointSaveTool() {
   return {

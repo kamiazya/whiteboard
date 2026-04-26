@@ -1,6 +1,35 @@
 import open from 'open'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { daemonUrl } from '../daemon-client.js'
+
+export const canvasCreateOutputSchema = z.object({
+  id: z.string(),
+  url: z.string(),
+})
+
+export const canvasListOutputSchema = z.object({
+  workspaces: z.array(
+    z.object({
+      workspaceId: z.string(),
+      daemonAlive: z.boolean(),
+      canvases: z.array(
+        z.object({
+          id: z.string(),
+          slug: z.string(),
+          url: z.string(),
+          updatedAt: z.string(),
+        }),
+      ),
+    }),
+  ),
+})
+
+export const canvasOpenOutputSchema = z.object({
+  url: z.string(),
+  clientReady: z.boolean().optional(),
+  openFailed: z.string().optional(),
+})
 
 interface WorkspaceSummary {
   workspaceId: string

@@ -1,11 +1,84 @@
 import { readFile } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
 import { LoroMap } from 'loro-crdt'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
+import { validateExternalUrl } from '../../validators.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
 import { resolveLibraryItem, type LibraryElement } from './resolve-library-item.js'
-import { validateExternalUrl } from '../../validators.js'
+import { boundsSchema } from './shared-schemas.js'
+
+export const libraryInstallOutputSchema = z.object({
+  libraryUrl: z.string(),
+  itemCount: z.number(),
+  installedUrls: z.array(z.string()),
+})
+
+export const installedUrlsOutputSchema = z.object({
+  installedUrls: z.array(z.string()),
+})
+
+export const libInsertItemOutputSchema = z.object({
+  source: z.string(),
+  itemIndex: z.number(),
+  insertedCount: z.number(),
+  elementIds: z.array(z.string()),
+})
+
+export const libraryListItemsOutputSchema = z.object({
+  source: z.string(),
+  itemCount: z.number(),
+  items: z.array(
+    z.object({
+      index: z.number(),
+      name: z.string().optional(),
+      elementCount: z.number(),
+      bbox: boundsSchema,
+    }),
+  ),
+})
+
+export const libraryInsertBatchOutputSchema = z.object({
+  source: z.string(),
+  insertedItemCount: z.number(),
+  insertedElementCount: z.number(),
+  items: z.array(
+    z.object({
+      itemIndex: z.number(),
+      insertedCount: z.number(),
+      elementIds: z.array(z.string()),
+    }),
+  ),
+})
+
+export const userLibrarySaveOutputSchema = z.object({
+  name: z.string(),
+  itemCount: z.number(),
+})
+
+export const userLibraryListOutputSchema = z.object({
+  libraries: z.array(
+    z.object({
+      name: z.string(),
+      path: z.string(),
+      itemCount: z.number(),
+    }),
+  ),
+})
+
+export const userLibraryRemoveOutputSchema = z.object({
+  removed: z.string(),
+  remaining: z.array(z.string()),
+})
+
+export const userLibraryMetadataManifestSchema = z.object({
+  version: z.literal(1),
+  revision: z.number(),
+  aliases: z.record(z.string(), z.number()),
+  notes: z.record(z.string(), z.string()),
+  scales: z.record(z.string(), z.number()),
+})
 
 // MCP tools for working with libraries.excalidraw.com-compatible .excalidrawlib
 // payloads. Supports v1 and v2, listing item metadata and inserting cloned items
