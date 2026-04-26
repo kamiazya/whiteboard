@@ -59,11 +59,11 @@ In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The fi
 
 ## Workspaces
 
-Every canvas lives inside a workspace. The sidebar lets you switch between them instantly, and double-click to rename — no modal, no reload.
+Every canvas lives inside a workspace. The home page lists them with their canvases, and double-clicking the workspace name in the canvas header lets you rename it — no modal, no reload.
 
-| Before | After rename |
+| Before rename | After rename |
 |---|---|
-| ![Workspace switcher with three workspaces listed](docs/assets/workspace-list.png) | ![The same list with one workspace renamed](docs/assets/workspace-list-renamed.png) |
+| ![Untitled workspace card with two canvases listed](docs/assets/workspace-list.png) | ![Same card with the workspace renamed to "demo"](docs/assets/workspace-list-renamed.png) |
 
 ## Bundled skills
 
