@@ -535,7 +535,6 @@ describe('createApp daemon mutation auth', () => {
             workspaces: [
               {
                 workspaceId: 'M7lgM0WguBnkfP_1iOFtY',
-                workspaceId: 'M7lgM0WguBnkfP_1iOFtY',
                 daemonAlive: true,
               },
             ],

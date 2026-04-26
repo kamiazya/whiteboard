@@ -110,7 +110,7 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
     })
     expect(badSession.status).toBe(400)
     await expect(badSession.json()).resolves.toEqual({
-      error: 'invalid_session_id',
+      error: 'invalid_workspace_id',
       message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 
@@ -217,7 +217,7 @@ describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
     const badSession = await app.request('/api/workspaces/bad.sid/canvases/canvas-a/branches')
     expect(badSession.status).toBe(400)
     await expect(badSession.json()).resolves.toEqual({
-      error: 'invalid_session_id',
+      error: 'invalid_workspace_id',
       message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 

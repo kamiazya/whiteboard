@@ -81,11 +81,10 @@ describe('GET /api/workspaces', () => {
 
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string; workspaceId?: string; daemonAlive: boolean }>
+      workspaces: Array<{ workspaceId: string; daemonAlive: boolean }>
     }
     expect(json.workspaces).toEqual([
       expect.objectContaining({
-        workspaceId: 'workspace-a',
         workspaceId: 'workspace-a',
         daemonAlive: false,
       }),

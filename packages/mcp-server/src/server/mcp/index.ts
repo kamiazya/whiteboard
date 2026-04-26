@@ -1009,7 +1009,7 @@ export async function createExcalidrawMcpServer() {
       description: paletteSet.description,
       inputSchema: {
         workspaceId: z.string().describe(
-          'Session ID (the part before "/" in canvasId). Palette is shared across all canvases in the session.',
+          'Workspace ID (the part before "/" in canvasId). Palette is shared across all canvases in the workspace.',
         ),
         entries: z.record(z.string(), z.string()).describe(
           'Color key → hex map. Keys are dotted semantic identifiers (e.g. "plan.a.bg", "accent.target"). Values are hex (#RRGGBB). Existing keys are merged (not replaced wholesale). Use these keys instead of hex in annotate/annotate_batch color/backgroundColor for re-themability.',

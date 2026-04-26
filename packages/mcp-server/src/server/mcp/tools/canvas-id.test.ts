@@ -30,7 +30,7 @@ describe('parseCanvasId', () => {
       throw new Error('expected parseCanvasId to throw')
     } catch (error) {
       expect(validationErrorBody(error)).toEqual({
-        error: 'invalid_session_id',
+        error: 'invalid_workspace_id',
         message:
           'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
       })
