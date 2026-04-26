@@ -229,27 +229,13 @@ describe('libraries routes', () => {
     })
   })
 
-  it('returns structured 500 for corrupt stored data on GET /api/workspaces/:workspaceId/libraries', async () => {
-    const app = createLibrariesRouter()
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', '.libraries.json'), 'not-json')
-
-    const res = await app.request('/api/workspaces/session1/libraries')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('.libraries.json'),
-    })
-  })
-
-  it('also works as a canonical route on GET /api/workspaces/:workspaceId/libraries', async () => {
-    const app = createLibrariesRouter()
-    await mkdir(join(tempDir, 'workspace1'), { recursive: true })
-    await writeFile(
-      join(tempDir, 'workspace1', '.libraries.json'),
-      JSON.stringify({ urls: ['https://libraries.excalidraw.com/foo.excalidrawlib'] }),
+  it('returns the persisted urls on GET /api/workspaces/:workspaceId/libraries', async () => {
+    const { addInstalledLibrary } = await import('../store/library-store.js')
+    await addInstalledLibrary(
+      'workspace1',
+      'https://libraries.excalidraw.com/foo.excalidrawlib',
     )
+    const app = createLibrariesRouter()
 
     const res = await app.request('/api/workspaces/workspace1/libraries')
 

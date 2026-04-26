@@ -1,88 +1,86 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
 import { DATA_DIR } from '../config.js'
 import { validateWorkspaceId } from '../validators.js'
-import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
+import { getDb } from './db/index.js'
+import { prepareDataDir } from './db/prepare.js'
+import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 
-// Persist the list of installed .excalidrawlib URLs per session.
-// Location: {DATA_DIR}/{workspaceId}/.libraries.json
-// Format: { urls: string[] } - only the URLs. The client refetches the actual content.
-// Rationale:
-//   - URLs alone stay small (typically a few hundred bytes per file)
-//   - freshness of the library content stays delegated to upstream maintainers
-//   - the Excalidraw library panel primarily uses browser localStorage; the server copy
-//     acts as a backup and as a reference point for Claude-side flows
-
-const LIBRARIES_FILENAME = '.libraries.json'
+// Persist the list of installed .excalidrawlib URLs per workspace, backed by
+// the installed_libraries table. URLs are returned in installation order via
+// installedAt to keep the UI display order stable.
 
 export interface InstalledLibraries {
   urls: string[]
 }
 
-function pathFor(workspaceId: string): string {
+async function dbReady() {
+  await prepareDataDir(DATA_DIR)
+  return getDb(DATA_DIR)
+}
+
+export async function loadInstalledLibraries(
+  workspaceId: string,
+): Promise<InstalledLibraries> {
   validateWorkspaceId(workspaceId)
-  return join(DATA_DIR, workspaceId, LIBRARIES_FILENAME)
-}
-
-function parseInstalledLibraries(path: string, raw: string): InstalledLibraries {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw) as unknown
-  } catch {
-    throw corruptStoredData(path, 'expected valid JSON object with urls: string[]')
-  }
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw corruptStoredData(path, 'expected object with urls: string[]')
-  }
-
-  const urls = (parsed as { urls?: unknown }).urls
-  if (!Array.isArray(urls) || urls.some((url) => typeof url !== 'string')) {
-    throw corruptStoredData(path, 'expected urls: string[]')
-  }
-
-  return { urls: [...urls] }
-}
-
-export async function loadInstalledLibraries(workspaceId: string): Promise<InstalledLibraries> {
-  const path = pathFor(workspaceId)
-  try {
-    const raw = await readFile(path, 'utf-8')
-    return parseInstalledLibraries(path, raw)
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return { urls: [] }
-    }
-    if (error instanceof Error) {
-      throw error
-    }
-    return { urls: [] }
-  }
+  const db = await dbReady()
+  const rows = await db
+    .selectFrom('installed_libraries')
+    .select(['url'])
+    .where('workspaceId', '=', workspaceId)
+    .orderBy('installedAt', 'asc')
+    .execute()
+  return { urls: rows.map((r) => r.url) }
 }
 
 export async function saveInstalledLibraries(
   workspaceId: string,
   libs: InstalledLibraries,
 ): Promise<void> {
-  await mkdir(join(DATA_DIR, workspaceId), { recursive: true })
-  await writeFile(pathFor(workspaceId), JSON.stringify(libs, null, 2))
+  validateWorkspaceId(workspaceId)
+  const db = await dbReady()
+  await upsertWorkspaceRow(db, workspaceId)
+  await db.transaction().execute(async (trx) => {
+    await trx.deleteFrom('installed_libraries').where('workspaceId', '=', workspaceId).execute()
+    if (libs.urls.length === 0) return
+    const now = Date.now()
+    // Slot the timestamp by index so installedAt reflects the input order.
+    await trx
+      .insertInto('installed_libraries')
+      .values(
+        libs.urls.map((url, index) => ({
+          workspaceId,
+          url,
+          installedAt: now + index,
+        })),
+      )
+      .execute()
+  })
 }
 
-export async function addInstalledLibrary(workspaceId: string, url: string): Promise<InstalledLibraries> {
-  const current = await loadInstalledLibraries(workspaceId)
-  if (current.urls.includes(url)) return current // idempotent
-  const next: InstalledLibraries = { urls: [...current.urls, url] }
-  await saveInstalledLibraries(workspaceId, next)
-  return next
+export async function addInstalledLibrary(
+  workspaceId: string,
+  url: string,
+): Promise<InstalledLibraries> {
+  validateWorkspaceId(workspaceId)
+  const db = await dbReady()
+  await upsertWorkspaceRow(db, workspaceId)
+  await db
+    .insertInto('installed_libraries')
+    .values({ workspaceId, url, installedAt: Date.now() })
+    .onConflict((oc) => oc.columns(['workspaceId', 'url']).doNothing())
+    .execute()
+  return loadInstalledLibraries(workspaceId)
 }
 
 export async function removeInstalledLibrary(
   workspaceId: string,
   url: string,
 ): Promise<InstalledLibraries> {
-  const current = await loadInstalledLibraries(workspaceId)
-  if (!current.urls.includes(url)) return current
-  const next: InstalledLibraries = { urls: current.urls.filter((u) => u !== url) }
-  await saveInstalledLibraries(workspaceId, next)
-  return next
+  validateWorkspaceId(workspaceId)
+  const db = await dbReady()
+  await db
+    .deleteFrom('installed_libraries')
+    .where('workspaceId', '=', workspaceId)
+    .where('url', '=', url)
+    .execute()
+  return loadInstalledLibraries(workspaceId)
 }
