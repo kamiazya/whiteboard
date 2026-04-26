@@ -2,15 +2,15 @@ import { DATA_DIR } from '../config.js'
 import { validateBranchName, validateSlug, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertCanvasRow } from './db/upsert-workspace.js'
+import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
 
 // Canvas-scoped branch state. Backed by:
-//   branches table         -> one row per branch (workspaceId, slug, name)
-//   canvases.currentBranch -> HEAD pointer per (workspaceId, slug)
+//   branches table         -> one row per branch keyed on (canvasId, name)
+//   canvases.currentBranch -> HEAD pointer per canvas row
 //
-// loadCanvasBranches lazily synthesizes a default main branch when no rows
-// exist for the canvas, matching the legacy filesystem behavior so callers
-// never see a missing-state error.
+// All accessors take (workspaceId, slug) so the public API stays stable
+// across the slug → canvasId migration. Internally the slug is resolved to
+// the stable canvas id before any branches/canvases write.
 
 export interface BranchMeta {
   name: string
@@ -51,15 +51,17 @@ export async function loadCanvasBranches(
   const db = await dbReady()
   const canvasRow = await db
     .selectFrom('canvases')
-    .select(['currentBranch'])
+    .select(['id', 'currentBranch'])
     .where('workspaceId', '=', workspaceId)
     .where('slug', '=', slug)
     .executeTakeFirst()
+  if (!canvasRow) {
+    return { branches: [defaultMain()], head: 'main' }
+  }
   const branchRows = await db
     .selectFrom('branches')
     .select(['name', 'tipFrontiers', 'sourceBranchName', 'sourceVersionId', 'color', 'createdAt'])
-    .where('workspaceId', '=', workspaceId)
-    .where('slug', '=', slug)
+    .where('canvasId', '=', canvasRow.id)
     .orderBy('createdAt', 'asc')
     .orderBy('name', 'asc')
     .execute()
@@ -74,7 +76,7 @@ export async function loadCanvasBranches(
     ...(r.sourceBranchName !== null ? { baseBranch: r.sourceBranchName } : {}),
     ...(r.sourceVersionId !== null ? { baseVersionId: r.sourceVersionId } : {}),
   }))
-  const persistedHead = canvasRow?.currentBranch ?? 'main'
+  const persistedHead = canvasRow.currentBranch
   const head = branches.some((b) => b.name === persistedHead)
     ? persistedHead
     : branches.some((b) => b.name === 'main')
@@ -95,20 +97,15 @@ export async function saveCanvasBranches(
   }
   validateBranchName(state.head)
   const db = await dbReady()
-  await upsertCanvasRow(db, workspaceId, slug)
+  const canvasId = await upsertCanvasRow(db, workspaceId, slug)
   await db.transaction().execute(async (trx) => {
-    await trx
-      .deleteFrom('branches')
-      .where('workspaceId', '=', workspaceId)
-      .where('slug', '=', slug)
-      .execute()
+    await trx.deleteFrom('branches').where('canvasId', '=', canvasId).execute()
     if (state.branches.length > 0) {
       await trx
         .insertInto('branches')
         .values(
           state.branches.map((b) => ({
-            workspaceId,
-            slug,
+            canvasId,
             name: b.name,
             tipFrontiers: b.tipFrontiers,
             color: b.color ?? null,
@@ -122,8 +119,7 @@ export async function saveCanvasBranches(
     await trx
       .updateTable('canvases')
       .set({ currentBranch: state.head, updatedAt: Date.now() })
-      .where('workspaceId', '=', workspaceId)
-      .where('slug', '=', slug)
+      .where('id', '=', canvasId)
       .execute()
   })
 }
@@ -310,4 +306,40 @@ export async function updateBranchTip(
     ],
   }
   await saveCanvasBranches(workspaceId, slug, next)
+}
+
+// ── slug rename ──
+// Update only canvases.slug. Branches and versions FK on canvasId so they do
+// not need to move; the blob path also uses canvasId so the .loro stays put.
+// Returns the canvas id whose slug just changed.
+export async function renameCanvasSlug(
+  workspaceId: string,
+  oldSlug: string,
+  newSlug: string,
+): Promise<{ canvasId: string }> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(oldSlug)
+  validateSlug(newSlug)
+  const db = await dbReady()
+  if (oldSlug === newSlug) {
+    const id = await getCanvasIdBySlug(db, workspaceId, oldSlug)
+    if (!id) {
+      throw new Error(`Canvas "${workspaceId}/${oldSlug}" not found`)
+    }
+    return { canvasId: id }
+  }
+  const id = await getCanvasIdBySlug(db, workspaceId, oldSlug)
+  if (!id) {
+    throw new Error(`Canvas "${workspaceId}/${oldSlug}" not found`)
+  }
+  const taken = await getCanvasIdBySlug(db, workspaceId, newSlug)
+  if (taken) {
+    throw new Error(`Canvas "${workspaceId}/${newSlug}" already exists`)
+  }
+  await db
+    .updateTable('canvases')
+    .set({ slug: newSlug, updatedAt: Date.now() })
+    .where('id', '=', id)
+    .execute()
+  return { canvasId: id }
 }

@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, rename, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { nanoid } from 'nanoid'
 import type { Database } from './index.js'
 import { quarantine } from './quarantine.js'
 
@@ -97,6 +98,60 @@ async function moveBlob(src: string, dest: string): Promise<void> {
   await rename(src, dest)
 }
 
+async function ensureCanvasRow(
+  ctx: ImportContext,
+  workspaceId: string,
+  slug: string,
+  values: {
+    displayName: string | null
+    isPinned: 0 | 1
+    pinOrder: number | null
+    createdAt: number
+    updatedAt: number
+  },
+  slugToId: Map<string, string>,
+): Promise<string> {
+  // Insert if missing, then resolve the canvas id back. Using a manual
+  // existence check here avoids relying on RETURNING which libsql does not
+  // currently surface uniformly.
+  const existing = await ctx.db
+    .selectFrom('canvases')
+    .select(['id'])
+    .where('workspaceId', '=', workspaceId)
+    .where('slug', '=', slug)
+    .executeTakeFirst()
+  if (existing) {
+    slugToId.set(slug, existing.id)
+    return existing.id
+  }
+  const id = nanoid(12)
+  await ctx.db
+    .insertInto('canvases')
+    .values({
+      id,
+      workspaceId,
+      slug,
+      displayName: values.displayName,
+      isPinned: values.isPinned,
+      pinOrder: values.pinOrder,
+      currentBranch: 'main',
+      createdAt: values.createdAt,
+      updatedAt: values.updatedAt,
+    })
+    .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doNothing())
+    .execute()
+  // Re-read in case a concurrent insert won the race.
+  const row = await ctx.db
+    .selectFrom('canvases')
+    .select(['id'])
+    .where('workspaceId', '=', workspaceId)
+    .where('slug', '=', slug)
+    .executeTakeFirst()
+  const resolved = row?.id ?? id
+  slugToId.set(slug, resolved)
+  return resolved
+}
+
 async function importWorkspace(ctx: ImportContext, workspaceId: string): Promise<void> {
   const workspaceDir = join(ctx.dataDir, workspaceId)
   const createdAt = await workspaceCreatedAt(workspaceDir)
@@ -123,28 +178,28 @@ async function importWorkspace(ctx: ImportContext, workspaceId: string): Promise
   const canvasFiles = entries.filter((e) => e.isFile() && e.name.endsWith('.loro'))
   const pinnedSlugs = names?.pinned ?? []
   const blobWorkspaceRoot = join(ctx.blobsRoot, workspaceId)
+  const slugToCanvasId = new Map<string, string>()
 
   for (const entry of canvasFiles) {
     const slug = entry.name.replace(/\.loro$/, '')
     const isPinned = pinnedSlugs.includes(slug)
     const pinOrder = isPinned ? pinnedSlugs.indexOf(slug) : null
-    await ctx.db
-      .insertInto('canvases')
-      .values({
-        workspaceId,
-        slug,
+    const canvasId = await ensureCanvasRow(
+      ctx,
+      workspaceId,
+      slug,
+      {
         displayName: names?.canvases?.[slug] ?? null,
         isPinned: isPinned ? 1 : 0,
         pinOrder,
-        currentBranch: 'main',
         createdAt,
         updatedAt: now,
-      })
-      .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doNothing())
-      .execute()
+      },
+      slugToCanvasId,
+    )
 
     const src = join(workspaceDir, entry.name)
-    const dest = join(blobWorkspaceRoot, 'canvas', entry.name)
+    const dest = join(blobWorkspaceRoot, 'canvas', `${canvasId}.loro`)
     if (await pathExists(src)) {
       await mkdir(join(blobWorkspaceRoot, 'canvas'), { recursive: true })
       await rename(src, dest)
@@ -159,7 +214,31 @@ async function importWorkspace(ctx: ImportContext, workspaceId: string): Promise
     if (!entry.isDirectory()) continue
     if (entry.name.startsWith('.')) continue
     if (RESERVED_DIRS.has(entry.name)) continue
-    await importNestedCanvases(ctx, workspaceId, workspaceDir, entry.name, names, createdAt)
+    await importNestedCanvases(
+      ctx,
+      workspaceId,
+      workspaceDir,
+      entry.name,
+      names,
+      createdAt,
+      slugToCanvasId,
+    )
+  }
+
+  async function resolveCanvasId(slug: string): Promise<string | null> {
+    const cached = slugToCanvasId.get(slug)
+    if (cached) return cached
+    const row = await ctx.db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', workspaceId)
+      .where('slug', '=', slug)
+      .executeTakeFirst()
+    if (row) {
+      slugToCanvasId.set(slug, row.id)
+      return row.id
+    }
+    return null
   }
 
   // ── branches rows ─────────────────────────────────────────────
@@ -171,13 +250,14 @@ async function importWorkspace(ctx: ImportContext, workspaceId: string): Promise
       const slug = file.replace(/\.json$/, '')
       const branchesFile = await readJson<BranchesFile>(join(branchesDir, file))
       if (!branchesFile?.branches) continue
+      const canvasId = await resolveCanvasId(slug)
+      if (!canvasId) continue
       for (const b of branchesFile.branches) {
         if (!b.name || typeof b.tipFrontiers !== 'string') continue
         await ctx.db
           .insertInto('branches')
           .values({
-            workspaceId,
-            slug,
+            canvasId,
             name: b.name,
             tipFrontiers: b.tipFrontiers,
             color: b.color ?? null,
@@ -185,15 +265,14 @@ async function importWorkspace(ctx: ImportContext, workspaceId: string): Promise
             sourceVersionId: b.sourceVersionId ?? null,
             createdAt: parseIso(b.createdAt) ?? createdAt,
           })
-          .onConflict((oc) => oc.columns(['workspaceId', 'slug', 'name']).doNothing())
+          .onConflict((oc) => oc.columns(['canvasId', 'name']).doNothing())
           .execute()
       }
       if (branchesFile.head) {
         await ctx.db
           .updateTable('canvases')
           .set({ currentBranch: branchesFile.head })
-          .where('workspaceId', '=', workspaceId)
-          .where('slug', '=', slug)
+          .where('id', '=', canvasId)
           .execute()
       }
     }
@@ -216,17 +295,15 @@ async function importWorkspace(ctx: ImportContext, workspaceId: string): Promise
       if (!file.endsWith('.json')) continue
       const meta = await readJson<VersionMetaFile>(join(versionsDir, file))
       if (!meta?.id || !meta.frontiers) continue
-      // version metadata files are per-canvas; the slug is encoded in the name.
-      // Format observed: {versionId}.json — slug must be derived from inside.
-      // The legacy code stored slug as a sibling field; if missing, skip.
       const slug = (meta as { slug?: string }).slug
       if (typeof slug !== 'string' || slug.length === 0) continue
+      const canvasId = await resolveCanvasId(slug)
+      if (!canvasId) continue
       await ctx.db
         .insertInto('versions')
         .values({
           id: meta.id,
-          workspaceId,
-          slug,
+          canvasId,
           branchName: meta.branchName ?? 'main',
           auto: meta.auto ? 1 : 0,
           label: meta.label ?? null,
@@ -369,6 +446,7 @@ async function importNestedCanvases(
   topSegment: string,
   names: NamesFile | null,
   createdAt: number,
+  slugToCanvasId: Map<string, string>,
 ): Promise<void> {
   // Walk topSegment recursively, collect every .loro leaf, derive slug from
   // path relative to the workspace root, and insert + move the file.
@@ -390,22 +468,21 @@ async function importNestedCanvases(
       const isPinned = (names?.pinned ?? []).includes(slug)
       const pinOrder = isPinned ? (names?.pinned ?? []).indexOf(slug) : null
       const now = Date.now()
-      await ctx.db
-        .insertInto('canvases')
-        .values({
-          workspaceId,
-          slug,
+      const canvasId = await ensureCanvasRow(
+        ctx,
+        workspaceId,
+        slug,
+        {
           displayName: names?.canvases?.[slug] ?? null,
           isPinned: isPinned ? 1 : 0,
           pinOrder,
-          currentBranch: 'main',
           createdAt,
           updatedAt: now,
-        })
-        .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doNothing())
-        .execute()
+        },
+        slugToCanvasId,
+      )
       const src = join(workspaceDir, childRel)
-      const dst = join(ctx.blobsRoot, workspaceId, 'canvas', childRel)
+      const dst = join(ctx.blobsRoot, workspaceId, 'canvas', `${canvasId}.loro`)
       if (await pathExists(src)) {
         await moveBlob(src, dst)
       }

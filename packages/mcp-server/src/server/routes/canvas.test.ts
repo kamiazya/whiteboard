@@ -185,9 +185,17 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
-    const blobDir = join(tempDir, 'blobs', 'session1', 'canvas')
-    await mkdir(blobDir, { recursive: true })
-    await writeFile(join(blobDir, 'canvas-a.loro'), Buffer.from('not-a-loro-snapshot'))
+    const { getDb } = await import('../store/db/index.js')
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'canvas-a')
+      .executeTakeFirstOrThrow()
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
@@ -197,7 +205,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
       error: 'corrupt_stored_data',
-      message: expect.stringContaining('canvas-a.loro'),
+      message: expect.stringContaining(`${row.id}.loro`),
     })
   })
 

@@ -1,11 +1,10 @@
-import { LoroDoc, LoroMap } from 'loro-crdt'
-import type { Value } from 'loro-crdt'
+import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { readFile, writeFile, stat, mkdir, access } from 'node:fs/promises'
+import type { Value } from 'loro-crdt'
+import { LoroDoc, LoroMap } from 'loro-crdt'
+import { isPidAlive, loadDaemonRecord } from '../../daemon/daemon-registry.js'
 import { DATA_DIR } from '../config.js'
-import type { VersionStore } from './version-store.js'
-import { loadDaemonRecord, isPidAlive } from '../../daemon/daemon-registry.js'
-import { validateWorkspaceId, validateSlug } from '../validators.js'
+import { validateCanvasId, validateSlug, validateWorkspaceId } from '../validators.js'
 import {
   corruptStoredData,
   isCorruptStoredDataError,
@@ -13,7 +12,8 @@ import {
 } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertCanvasRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
+import type { VersionStore } from './version-store.js'
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
 export class ConflictError extends Error {
@@ -24,16 +24,17 @@ export class ConflictError extends Error {
 }
 
 // ── canvas blob path helpers ──
-// Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{slug}.loro.
-// Hierarchical slugs (e.g. "621/header") expand into nested directories
-// inside the canvas/ root, matching the legacy layout one level deeper so
-// the blob root stays clean.
+// Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{canvasId}.loro.
+// The canvasId is the stable nanoid PK from the canvases table, so renaming a
+// canvas slug does not move blobs around.
 function blobsRoot(): string {
   return join(DATA_DIR, 'blobs')
 }
 
-function canvasBlobPath(workspaceId: string, slug: string): string {
-  return join(blobsRoot(), workspaceId, 'canvas', `${slug}.loro`)
+function canvasBlobPath(workspaceId: string, canvasId: string): string {
+  validateWorkspaceId(workspaceId)
+  validateCanvasId(canvasId)
+  return join(blobsRoot(), workspaceId, 'canvas', `${canvasId}.loro`)
 }
 
 function errorMessage(error: unknown): string {
@@ -64,31 +65,22 @@ export async function saveCanvas(
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   const overwrite = options.overwrite ?? false
-  const path = canvasBlobPath(workspaceId, slug)
   const db = await dbReady()
-  if (!overwrite) {
-    const existing = await db
-      .selectFrom('canvases')
-      .select(['slug'])
-      .where('workspaceId', '=', workspaceId)
-      .where('slug', '=', slug)
-      .executeTakeFirst()
-    if (existing) {
-      throw new ConflictError(
-        `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
-      )
-    }
+  const existingCanvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+  if (existingCanvasId && !overwrite) {
+    throw new ConflictError(
+      `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
+    )
   }
+  const canvasId = existingCanvasId ?? (await upsertCanvasRow(db, workspaceId, slug))
+  const path = canvasBlobPath(workspaceId, canvasId)
   await mkdir(dirname(path), { recursive: true })
   const snapshot = doc.export({ mode: 'snapshot' })
   await writeFile(path, snapshot)
-  await upsertWorkspaceRow(db, workspaceId)
-  await upsertCanvasRow(db, workspaceId, slug)
   await db
     .updateTable('canvases')
     .set({ updatedAt: Date.now() })
-    .where('workspaceId', '=', workspaceId)
-    .where('slug', '=', slug)
+    .where('id', '=', canvasId)
     .execute()
   if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
     const key = `${workspaceId}/${slug}`
@@ -106,7 +98,10 @@ export async function saveCanvas(
 export async function loadCanvas(workspaceId: string, slug: string): Promise<LoroDoc> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = canvasBlobPath(workspaceId, slug)
+  const db = await dbReady()
+  const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+  if (!canvasId) return new LoroDoc()
+  const path = canvasBlobPath(workspaceId, canvasId)
   let doc: LoroDoc
   try {
     const bytes = await readFile(path)
@@ -130,7 +125,9 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
   if (migrated) {
     try {
       const bakPath = `${path}.pre-migrate-bak`
-      const bakExists = await access(bakPath).then(() => true).catch(() => false)
+      const bakExists = await access(bakPath)
+        .then(() => true)
+        .catch(() => false)
       if (!bakExists) {
         const origBytes = await readFile(path).catch(() => null)
         if (origBytes) await writeFile(bakPath, origBytes)
@@ -168,13 +165,8 @@ export async function canvasExists(workspaceId: string, slug: string): Promise<b
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   const db = await dbReady()
-  const row = await db
-    .selectFrom('canvases')
-    .select(['slug'])
-    .where('workspaceId', '=', workspaceId)
-    .where('slug', '=', slug)
-    .executeTakeFirst()
-  return !!row
+  const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+  return canvasId !== null
 }
 
 export interface CompactResult {
@@ -191,7 +183,12 @@ export async function compactCanvas(
 ): Promise<CompactResult> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = canvasBlobPath(workspaceId, slug)
+  const db = await dbReady()
+  const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+  if (!canvasId) {
+    return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
+  }
+  const path = canvasBlobPath(workspaceId, canvasId)
   let beforeBytes: number
   try {
     beforeBytes = (await stat(path)).size
@@ -219,9 +216,7 @@ export async function compactCanvas(
 // ── list workspaces from the workspaces table ──
 // daemonAlive still reflects the daemon record on disk; that is a runtime
 // signal, not workspace metadata, so it stays a separate fast probe.
-export async function listWorkspaces(): Promise<
-  { workspaceId: string; daemonAlive: boolean }[]
-> {
+export async function listWorkspaces(): Promise<{ workspaceId: string; daemonAlive: boolean }[]> {
   const db = await dbReady()
   const daemon = await loadDaemonRecord(DATA_DIR)
   const daemonAlive = daemon ? isPidAlive(daemon.pid) : false

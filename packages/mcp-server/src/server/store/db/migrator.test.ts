@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, mkdir, readFile, rm, writeFile, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -55,14 +55,8 @@ describe('runMigrations', () => {
       }),
     )
     await writeFile(join(wsDir, 'foo.loro'), 'fake-loro-bytes-for-test')
-    await writeFile(
-      join(wsDir, 'palette.json'),
-      JSON.stringify({ 'plan.bg': '#aabbcc' }),
-    )
-    await writeFile(
-      join(tempDir, '.current-workspace'),
-      workspaceId,
-    )
+    await writeFile(join(wsDir, 'palette.json'), JSON.stringify({ 'plan.bg': '#aabbcc' }))
+    await writeFile(join(tempDir, '.current-workspace'), workspaceId)
 
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
@@ -83,15 +77,14 @@ describe('runMigrations', () => {
     expect(canvasRow?.displayName).toBe('Foo Display')
     expect(canvasRow?.isPinned).toBe(1)
     expect(canvasRow?.pinOrder).toBe(0)
+    expect(canvasRow?.id).toMatch(/^[A-Za-z0-9_-]+$/)
 
     const palette = await db
       .selectFrom('palette')
       .selectAll()
       .where('workspaceId', '=', workspaceId)
       .execute()
-    expect(palette).toEqual([
-      expect.objectContaining({ key: 'plan.bg', value: '#aabbcc' }),
-    ])
+    expect(palette).toEqual([expect.objectContaining({ key: 'plan.bg', value: '#aabbcc' })])
 
     const runtime = await db
       .selectFrom('runtime')
@@ -100,9 +93,10 @@ describe('runMigrations', () => {
       .executeTakeFirst()
     expect(runtime?.value).toBe(workspaceId)
 
-    // Blob files moved out of the workspace dir into blobs/.
+    // Blob files moved out of the workspace dir into blobs/, keyed by the
+    // stable canvas id rather than the slug.
     const movedLoro = await readFile(
-      join(tempDir, 'blobs', workspaceId, 'canvas', 'foo.loro'),
+      join(tempDir, 'blobs', workspaceId, 'canvas', `${canvasRow!.id}.loro`),
       'utf-8',
     )
     expect(movedLoro).toBe('fake-loro-bytes-for-test')
@@ -133,9 +127,7 @@ describe('runMigrations', () => {
     // dirs whose name matches the 21-char nanoid pattern.
     await expect(stat(join(tempDir, 'logs'))).resolves.toBeDefined()
     await expect(stat(join(tempDir, 'tmp'))).resolves.toBeDefined()
-    await expect(
-      stat(join(tempDir, 'something-arbitrary')),
-    ).resolves.toBeDefined()
+    await expect(stat(join(tempDir, 'something-arbitrary'))).resolves.toBeDefined()
   })
 
   it('is idempotent across repeated runs (no duplicate workspace rows or quarantine entries)', async () => {

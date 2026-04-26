@@ -13,7 +13,10 @@ export interface WorkspacesTable {
 }
 
 export interface CanvasesTable {
+  // Stable nanoid that survives slug renames. PK so child tables can FK on it.
+  id: string
   workspaceId: string
+  // Mutable display path; UNIQUE within (workspaceId, slug).
   slug: string
   displayName: string | null
   isPinned: Bool
@@ -24,8 +27,7 @@ export interface CanvasesTable {
 }
 
 export interface BranchesTable {
-  workspaceId: string
-  slug: string
+  canvasId: string
   name: string
   tipFrontiers: string
   color: string | null
@@ -36,8 +38,7 @@ export interface BranchesTable {
 
 export interface VersionsTable {
   id: string
-  workspaceId: string
-  slug: string
+  canvasId: string
   branchName: string
   auto: Bool
   label: string | null

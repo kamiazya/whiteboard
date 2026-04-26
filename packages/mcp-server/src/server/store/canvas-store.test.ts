@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Swap DATA_DIR to a temp directory through vi.mock.
 let tempDir: string
@@ -17,7 +17,9 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so it runs after the mock is resolved.
-const { saveCanvas, loadCanvas, listCanvases, listWorkspaces, compactCanvas } = await import('./canvas-store.js')
+const { saveCanvas, loadCanvas, listCanvases, listWorkspaces, compactCanvas } = await import(
+  './canvas-store.js'
+)
 const { FileVersionStore } = await import('./version-store.js')
 
 describe('saveCanvas / loadCanvas', () => {
@@ -54,7 +56,11 @@ describe('saveCanvas / loadCanvas', () => {
     await saveCanvas('session1', 'canvas-with-elem', doc)
     const loaded = await loadCanvas('session1', 'canvas-with-elem')
 
-    const elements = loaded.getMovableList('elements').toJSON() as { id: string; type: string; x: number }[]
+    const elements = loaded.getMovableList('elements').toJSON() as {
+      id: string
+      type: string
+      x: number
+    }[]
     expect(elements).toHaveLength(1)
     expect(elements[0].id).toBe('elem-001')
     expect(elements[0].type).toBe('rectangle')
@@ -67,10 +73,17 @@ describe('saveCanvas / loadCanvas', () => {
   })
 
   it('throws on broken snapshots instead of returning an empty LoroDoc', async () => {
-    const { mkdir } = await import('node:fs/promises')
-    const blobDir = join(tempDir, 'blobs', 'session1', 'canvas')
-    await mkdir(blobDir, { recursive: true })
-    await writeFile(join(blobDir, 'broken.loro'), Buffer.from('not-a-loro-snapshot'))
+    const { getDb } = await import('./db/index.js')
+    await saveCanvas('session1', 'broken', new LoroDoc())
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'broken')
+      .executeTakeFirstOrThrow()
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     await expect(loadCanvas('session1', 'broken')).rejects.toThrow()
   })
@@ -120,7 +133,9 @@ describe('saveCanvas - overwrite handling', () => {
 
   it('defaults to the same behavior as overwrite: false', async () => {
     await saveCanvas('session1', 'existing', new LoroDoc())
-    await expect(saveCanvas('session1', 'existing', new LoroDoc())).rejects.toThrow(/already exists/)
+    await expect(saveCanvas('session1', 'existing', new LoroDoc())).rejects.toThrow(
+      /already exists/,
+    )
   })
 
   it('overwrites an existing file when overwrite: true', async () => {
@@ -256,7 +271,9 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
 
   it('accepts slash-separated nested slugs when each segment is kebab-case', async () => {
     await expect(saveCanvas('session1', '621/header', new LoroDoc())).resolves.toBeUndefined()
-    await expect(saveCanvas('session1', '621/header-v2/layout', new LoroDoc())).resolves.toBeUndefined()
+    await expect(
+      saveCanvas('session1', '621/header-v2/layout', new LoroDoc()),
+    ).resolves.toBeUndefined()
   })
 
   it('rejects leading, trailing, and consecutive slashes', async () => {
@@ -269,7 +286,9 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
     await expect(saveCanvas('session1', '../escape', new LoroDoc())).rejects.toThrow('Invalid slug')
     await expect(loadCanvas('session1', '../../etc/passwd')).rejects.toThrow('Invalid slug')
     // SAFE_SLUG_SEGMENT also rejects dots inside a segment such as `foo.bar/baz`.
-    await expect(saveCanvas('session1', 'foo/.hidden', new LoroDoc())).rejects.toThrow('Invalid slug')
+    await expect(saveCanvas('session1', 'foo/.hidden', new LoroDoc())).rejects.toThrow(
+      'Invalid slug',
+    )
   })
 
   it('rejects slugs that contain dots', async () => {
@@ -290,7 +309,9 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
   })
 
   it('rejects path-traversal workspaceIds', async () => {
-    await expect(saveCanvas('..', 'safe-slug', new LoroDoc())).rejects.toThrow('Invalid workspaceId')
+    await expect(saveCanvas('..', 'safe-slug', new LoroDoc())).rejects.toThrow(
+      'Invalid workspaceId',
+    )
     await expect(loadCanvas('../escape', 'safe-slug')).rejects.toThrow('Invalid workspaceId')
   })
 
@@ -366,9 +387,9 @@ describe('slug validation - self-describing error messages', () => {
   })
 
   it('includes the full slug in the error message for context', async () => {
-    await expect(
-      saveCanvas('session1', 'valid-top/.bad', new LoroDoc()),
-    ).rejects.toThrow(/"valid-top\/\.bad"/)
+    await expect(saveCanvas('session1', 'valid-top/.bad', new LoroDoc())).rejects.toThrow(
+      /"valid-top\/\.bad"/,
+    )
   })
 })
 
@@ -474,18 +495,24 @@ describe('compactCanvas', () => {
   // applies. Coverage of the corrupt-snapshot branch lives below.
 
   it('treats invalid snapshots as corruption instead of falling back to empty state', async () => {
-    const { mkdir } = await import('node:fs/promises')
+    const { getDb } = await import('./db/index.js')
     const doc = new LoroDoc()
     const store = new FileVersionStore()
     await saveCanvas('session1', 'broken', doc)
     await store.save('session1', 'broken', doc, { auto: true })
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', 'broken.loro')
-    await mkdir(join(tempDir, 'blobs', 'session1', 'canvas'), { recursive: true })
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'broken')
+      .executeTakeFirstOrThrow()
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     await expect(compactCanvas('session1', 'broken', store)).rejects.toMatchObject({
       name: 'CorruptStoredDataError',
-      message: expect.stringContaining('broken.loro'),
+      message: expect.stringContaining(`${row.id}.loro`),
     })
   })
 
