@@ -27,22 +27,36 @@ import {
   paletteSetTool,
 } from './tools/palette.js'
 import {
-  libraryListItemsTool,
-  libraryInsertItemTool,
+  installedUrlsOutputSchema,
+  libInsertItemOutputSchema,
+  libraryInsertBatchOutputSchema,
   libraryInsertBatchTool,
+  libraryInsertItemTool,
+  libraryInstallOutputSchema,
   libraryInstallTool,
-  libraryUninstallTool,
   libraryListInstalledTool,
-  userLibrarySaveTool,
+  libraryListItemsOutputSchema,
+  libraryListItemsTool,
+  libraryUninstallTool,
+  userLibraryListOutputSchema,
   userLibraryListTool,
-  userLibraryRemoveTool,
-  userLibraryMetadataGetTool,
-  userLibraryMetadataSetTool,
   userLibraryMetadataDeleteTool,
+  userLibraryMetadataGetTool,
+  userLibraryMetadataManifestSchema,
+  userLibraryMetadataSetTool,
+  userLibraryRemoveOutputSchema,
+  userLibraryRemoveTool,
+  userLibrarySaveOutputSchema,
+  userLibrarySaveTool,
 } from './tools/library.js'
-import { libraryCatalogListTool } from './tools/library-catalog.js'
+import { libraryCatalogListOutputSchema, libraryCatalogListTool } from './tools/library-catalog.js'
 import { canvasInspectOutputSchema, canvasInspectTool } from './tools/canvas-inspect.js'
-import { insertTemplateTool, listTemplatesTool } from './tools/template.js'
+import {
+  insertTemplateTool,
+  listTemplatesTool,
+  templateInsertOutputSchema,
+  templateListOutputSchema,
+} from './tools/template.js'
 import {
   assignGroupOutputSchema,
   assignToGroupTool,
@@ -88,139 +102,6 @@ import {
   WHITEBOARD_INSTALLED_LIBRARIES_URI,
   WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
-
-// Geometry primitive shared between several output shapes (library / template
-// listings, etc.). Schemas owned by individual tools live next to those tools.
-const boundsSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
-})
-
-const libraryInstallOutputSchema = z.object({
-  libraryUrl: z.string(),
-  itemCount: z.number(),
-  installedUrls: z.array(z.string()),
-})
-
-const installedUrlsOutputSchema = z.object({
-  installedUrls: z.array(z.string()),
-})
-
-const libInsertItemOutputSchema = z.object({
-  source: z.string(),
-  itemIndex: z.number(),
-  insertedCount: z.number(),
-  elementIds: z.array(z.string()),
-})
-
-// Specialized outputSchema definitions for library / template / group results.
-// Tighten these shapes instead of using `z.record(z.unknown())` so structured
-// output stays predictable and runtime validation catches drift early.
-
-const libraryListItemsOutputSchema = z.object({
-  source: z.string(),
-  itemCount: z.number(),
-  items: z.array(
-    z.object({
-      index: z.number(),
-      name: z.string().optional(),
-      elementCount: z.number(),
-      bbox: boundsSchema,
-    }),
-  ),
-})
-
-const libraryInsertBatchOutputSchema = z.object({
-  source: z.string(),
-  insertedItemCount: z.number(),
-  insertedElementCount: z.number(),
-  items: z.array(
-    z.object({
-      itemIndex: z.number(),
-      insertedCount: z.number(),
-      elementIds: z.array(z.string()),
-    }),
-  ),
-})
-
-const libraryCatalogListOutputSchema = z.object({
-  totalCount: z.number(),
-  returnedCount: z.number(),
-  // Mirrors the upstream CatalogEntry shape from tools/library-catalog.ts:
-  // `id` may be omitted, and `authors` is an array of {name?, url?} objects.
-  items: z.array(
-    z.object({
-      id: z.string().optional(),
-      name: z.string(),
-      description: z.string().optional(),
-      authors: z
-        .array(z.object({ name: z.string().optional(), url: z.string().optional() }))
-        .optional(),
-      url: z.string(),
-      previewUrl: z.string().optional(),
-      created: z.string().optional(),
-      updated: z.string().optional(),
-    }),
-  ),
-})
-
-const userLibrarySaveOutputSchema = z.object({
-  name: z.string(),
-  itemCount: z.number(),
-})
-
-const userLibraryListOutputSchema = z.object({
-  libraries: z.array(
-    z.object({
-      name: z.string(),
-      path: z.string(),
-      itemCount: z.number(),
-    }),
-  ),
-})
-
-const userLibraryRemoveOutputSchema = z.object({
-  removed: z.string(),
-  remaining: z.array(z.string()),
-})
-
-const userLibraryMetadataManifestSchema = z.object({
-  version: z.literal(1),
-  revision: z.number(),
-  aliases: z.record(z.string(), z.number()),
-  notes: z.record(z.string(), z.string()),
-  scales: z.record(z.string(), z.number()),
-})
-
-const templateListOutputSchema = z.object({
-  templates: z.array(
-    z.object({
-      id: z.string(),
-      title: z.string(),
-      description: z.string().optional(),
-      tags: z.array(z.string()),
-      variables: z.array(
-        z.object({
-          name: z.string(),
-          description: z.string().optional(),
-          default: z.string().optional(),
-        }),
-      ),
-    }),
-  ),
-})
-
-// template_insert spreads annotate_batch output and adds extra fields, so define
-// it by extending annotateBatchOutputSchema.
-const templateInsertOutputSchema = annotateBatchOutputSchema.extend({
-  templateId: z.string(),
-  source: z.enum(['builtin', 'file']),
-  variables: z.record(z.string(), z.string()),
-  bounds: boundsSchema,
-  templateInstanceId: z.string(),
-})
 
 function structuredJsonResult<T extends object>(result: T) {
   const structuredContent = result as T & { [key: string]: unknown }

@@ -1,7 +1,8 @@
 import { readFile } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
-import { annotateBatchTool, type BatchAnnotationItem } from './annotate-batch.js'
+import { annotateBatchOutputSchema, annotateBatchTool, type BatchAnnotationItem } from './annotate-batch.js'
 import type { GridLayout } from './resolve-layout.js'
 import {
   BUILTIN_TEMPLATES,
@@ -9,6 +10,41 @@ import {
   type WhiteboardTemplate,
   whiteboardTemplateSchema,
 } from './template-library.js'
+
+const templateBoundsSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+})
+
+export const templateListOutputSchema = z.object({
+  templates: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      description: z.string().optional(),
+      tags: z.array(z.string()),
+      variables: z.array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          default: z.string().optional(),
+        }),
+      ),
+    }),
+  ),
+})
+
+// template_insert spreads annotate_batch output and adds extra fields, so it
+// extends annotateBatchOutputSchema.
+export const templateInsertOutputSchema = annotateBatchOutputSchema.extend({
+  templateId: z.string(),
+  source: z.enum(['builtin', 'file']),
+  variables: z.record(z.string(), z.string()),
+  bounds: templateBoundsSchema,
+  templateInstanceId: z.string(),
+})
 
 type TemplateVariables = Record<string, string>
 
