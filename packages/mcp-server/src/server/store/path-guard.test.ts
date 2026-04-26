@@ -50,20 +50,9 @@ describe('store path guards', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('returns ValidationError for names-store session escape attempts', async () => {
-    const { setWorkspaceName } = await importWithRelaxedValidators<typeof import('./names-store.js')>(
-      './names-store.js',
-    )
-    const { validationErrorBody } = await import('../validators.js')
-
-    const error = await captureError(setWorkspaceName('..', 'Escape'))
-
-    expect(error).toMatchObject({ name: 'ValidationError', error: 'invalid_path' })
-    expect(validationErrorBody(error)).toEqual({
-      error: 'invalid_path',
-      message: expect.stringMatching(/outside/i),
-    })
-  })
+  // names-store no longer constructs filesystem paths from workspaceId; the
+  // path-traversal vector is fully covered by validateWorkspaceId, exercised
+  // independently in validators.test.ts.
 
   it('returns ValidationError for version-store file escape attempts', async () => {
     const { FileVersionStore } =

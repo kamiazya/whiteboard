@@ -1,10 +1,10 @@
 import type { Database } from './index.js'
 
-// Some store operations (palette_set, library install, …) target a workspace
-// that may not yet have a canvas. The workspaces table is FK'd from those
-// child tables, so insert a placeholder row if needed before writing the
-// child row. The row is harmless: it represents the workspace as currently
-// known to the daemon, with no displayName.
+// Upsert helpers for the FK targets that downstream stores write to. Each one
+// is a no-op when the row already exists; the displayName / pin fields are
+// left untouched so a name set elsewhere does not get clobbered by a follow-up
+// child write.
+
 export async function upsertWorkspaceRow(
   db: Database,
   workspaceId: string,
@@ -19,5 +19,28 @@ export async function upsertWorkspaceRow(
       updatedAt: now,
     })
     .onConflict((oc) => oc.column('id').doNothing())
+    .execute()
+}
+
+export async function upsertCanvasRow(
+  db: Database,
+  workspaceId: string,
+  slug: string,
+): Promise<void> {
+  const now = Date.now()
+  await upsertWorkspaceRow(db, workspaceId)
+  await db
+    .insertInto('canvases')
+    .values({
+      workspaceId,
+      slug,
+      displayName: null,
+      isPinned: 0,
+      pinOrder: null,
+      currentBranch: 'main',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doNothing())
     .execute()
 }

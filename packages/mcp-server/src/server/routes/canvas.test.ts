@@ -261,51 +261,9 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   })
 })
 
-describe('names API corruption handling', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
-    clearCache()
-  })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-    clearCache()
-  })
-
-  it('returns structured 500 for corrupt stored data on GET /api/workspaces/:workspaceId/names', async () => {
-    await writeFile(join(tempDir, 'session1', '.names.json'), 'not-json')
-
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/session1/names')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('.names.json'),
-    })
-  })
-
-  it('returns structured 500 for corrupt stored data on PUT /api/workspaces/:workspaceId/canvases/:slug/pin', async () => {
-    await writeFile(
-      join(tempDir, 'session1', '.names.json'),
-      JSON.stringify({ workspace: 'WS', canvases: {}, pinned: [1] }),
-    )
-
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/pin', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pinned: true }),
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('.names.json'),
-    })
-  })
-})
+// names-store now lives in the sqlite metadata DB; the corruption-on-disk
+// failure modes covered above no longer apply. DB-side error handling is
+// exercised through unit tests on names-store directly.
 
 describe('POST /api/canvas/:workspaceId/:slug/update', () => {
   beforeEach(async () => {
