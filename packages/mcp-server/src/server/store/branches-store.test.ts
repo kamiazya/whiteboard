@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Declare this first because vi.mock is hoisted.
 let tempDir: string
@@ -36,8 +36,8 @@ describe('branches-store', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  describe('loadCanvasBranches (lazy migration)', () => {
-    it('returns the default main branch state when no file exists', async () => {
+  describe('loadCanvasBranches (lazy default)', () => {
+    it('returns the default main branch state when no rows exist', async () => {
       const state = await loadCanvasBranches('sess-a', 'canvas-x')
       expect(state.head).toBe('main')
       expect(state.branches).toHaveLength(1)
@@ -55,37 +55,6 @@ describe('branches-store', () => {
       const b = await loadCanvasBranches('sess-a', 'canvas-x')
       expect(a).not.toBe(b)
       expect(a.branches).not.toBe(b.branches)
-    })
-
-    it('does not write the lazy default state to disk', async () => {
-      await loadCanvasBranches('sess-a', 'canvas-x')
-      // Confirm that no file was created.
-      await expect(
-        readFile(join(tempDir, 'sess-a', 'branches', 'canvas-x.json')),
-      ).rejects.toThrow(/ENOENT/)
-    })
-
-    it('treats broken branches JSON as corruption instead of falling back to main', async () => {
-      await mkdir(join(tempDir, 'sess-a', 'branches'), { recursive: true })
-      await writeFile(join(tempDir, 'sess-a', 'branches', 'canvas-x.json'), 'not-json')
-
-      await expect(loadCanvasBranches('sess-a', 'canvas-x')).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        code: 'corrupt_stored_data',
-      })
-    })
-
-    it('treats schema-mismatched branches JSON as corruption', async () => {
-      await mkdir(join(tempDir, 'sess-a', 'branches'), { recursive: true })
-      await writeFile(
-        join(tempDir, 'sess-a', 'branches', 'canvas-x.json'),
-        JSON.stringify({ head: 'main', branches: [{ name: 'main', tipFrontiers: [] }] }),
-      )
-
-      await expect(loadCanvasBranches('sess-a', 'canvas-x')).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        code: 'corrupt_stored_data',
-      })
     })
   })
 
@@ -193,9 +162,9 @@ describe('branches-store', () => {
 
     it('throws ConflictError for duplicate branch names', async () => {
       await createBranch('sess-a', 'canvas-x', { name: 'feature' })
-      await expect(
-        createBranch('sess-a', 'canvas-x', { name: 'feature' }),
-      ).rejects.toThrow(/already exists/i)
+      await expect(createBranch('sess-a', 'canvas-x', { name: 'feature' })).rejects.toThrow(
+        /already exists/i,
+      )
     })
 
     it('throws ConflictError when trying to create main again', async () => {
@@ -212,18 +181,6 @@ describe('branches-store', () => {
         /Invalid branch name/,
       )
     })
-
-    it('does not continue createBranch when the stored state is corrupt', async () => {
-      const path = join(tempDir, 'sess-a', 'branches', 'canvas-x.json')
-      await mkdir(join(tempDir, 'sess-a', 'branches'), { recursive: true })
-      await writeFile(path, 'not-json')
-
-      await expect(createBranch('sess-a', 'canvas-x', { name: 'feature' })).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        code: 'corrupt_stored_data',
-      })
-      await expect(readFile(path, 'utf-8')).resolves.toBe('not-json')
-    })
   })
 
   describe('deleteBranch', () => {
@@ -236,7 +193,9 @@ describe('branches-store', () => {
     })
 
     it('does not allow deleting main', async () => {
-      await expect(deleteBranch('sess-a', 'canvas-x', 'main')).rejects.toThrow(/cannot delete main/i)
+      await expect(deleteBranch('sess-a', 'canvas-x', 'main')).rejects.toThrow(
+        /cannot delete main/i,
+      )
     })
 
     it('does not allow deleting the current HEAD branch', async () => {
@@ -247,18 +206,6 @@ describe('branches-store', () => {
 
     it('throws NotFound for a missing branch', async () => {
       await expect(deleteBranch('sess-a', 'canvas-x', 'ghost')).rejects.toThrow(/not found/i)
-    })
-
-    it('does not continue deleteBranch when the stored state is corrupt', async () => {
-      const path = join(tempDir, 'sess-a', 'branches', 'canvas-x.json')
-      await mkdir(join(tempDir, 'sess-a', 'branches'), { recursive: true })
-      await writeFile(path, '{"head":"main","branches":"oops"}')
-
-      await expect(deleteBranch('sess-a', 'canvas-x', 'feature')).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        code: 'corrupt_stored_data',
-      })
-      await expect(readFile(path, 'utf-8')).resolves.toBe('{"head":"main","branches":"oops"}')
     })
   })
 
@@ -278,18 +225,6 @@ describe('branches-store', () => {
     it('is idempotent when setting head to the current branch', async () => {
       const r = await setHead('sess-a', 'canvas-x', 'main')
       expect(r).toEqual({ head: 'main', previousHead: 'main' })
-    })
-
-    it('does not continue setHead when the stored state is corrupt', async () => {
-      const path = join(tempDir, 'sess-a', 'branches', 'canvas-x.json')
-      await mkdir(join(tempDir, 'sess-a', 'branches'), { recursive: true })
-      await writeFile(path, '{"head":"ghost","branches":[]}')
-
-      await expect(setHead('sess-a', 'canvas-x', 'main')).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        code: 'corrupt_stored_data',
-      })
-      await expect(readFile(path, 'utf-8')).resolves.toBe('{"head":"ghost","branches":[]}')
     })
   })
 
@@ -321,18 +256,6 @@ describe('branches-store', () => {
       await updateBranchTip('sess-a', 'canvas-x', 'feature', '')
       const state = await loadCanvasBranches('sess-a', 'canvas-x')
       expect(state.branches.find((b) => b.name === 'feature')?.tipFrontiers).toBe('')
-    })
-
-    it('does not continue updateBranchTip when the stored state is corrupt', async () => {
-      const path = join(tempDir, 'sess-a', 'branches', 'canvas-x.json')
-      await mkdir(join(tempDir, 'sess-a', 'branches'), { recursive: true })
-      await writeFile(path, 'not-json')
-
-      await expect(updateBranchTip('sess-a', 'canvas-x', 'main', 'AA==')).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        code: 'corrupt_stored_data',
-      })
-      await expect(readFile(path, 'utf-8')).resolves.toBe('not-json')
     })
   })
 
@@ -381,9 +304,9 @@ describe('branches-store', () => {
     })
 
     it('does not allow renaming main', async () => {
-      await expect(
-        renameBranch('sess-a', 'canvas-x', 'main', 'mainline'),
-      ).rejects.toThrow(/cannot rename main/i)
+      await expect(renameBranch('sess-a', 'canvas-x', 'main', 'mainline')).rejects.toThrow(
+        /cannot rename main/i,
+      )
     })
 
     it('throws Conflict when the new name already exists', async () => {
@@ -395,19 +318,19 @@ describe('branches-store', () => {
     })
 
     it('throws NotFound when renaming a missing branch', async () => {
-      await expect(
-        renameBranch('sess-a', 'canvas-x', 'ghost', 'gh'),
-      ).rejects.toMatchObject({ name: 'BranchNotFoundError' })
+      await expect(renameBranch('sess-a', 'canvas-x', 'ghost', 'gh')).rejects.toMatchObject({
+        name: 'BranchNotFoundError',
+      })
     })
 
     it('throws ValidationError for invalid new names', async () => {
       await createBranch('sess-a', 'canvas-x', { name: 'feature' })
-      await expect(
-        renameBranch('sess-a', 'canvas-x', 'feature', ''),
-      ).rejects.toThrow(/invalid branch name/i)
-      await expect(
-        renameBranch('sess-a', 'canvas-x', 'feature', 'bad/name'),
-      ).rejects.toThrow(/"\/"|invalid branch name/i)
+      await expect(renameBranch('sess-a', 'canvas-x', 'feature', '')).rejects.toThrow(
+        /invalid branch name/i,
+      )
+      await expect(renameBranch('sess-a', 'canvas-x', 'feature', 'bad/name')).rejects.toThrow(
+        /"\/"|invalid branch name/i,
+      )
     })
 
     it('treats rename-to-self as a no-op', async () => {

@@ -1,12 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Hono } from 'hono'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
+import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -614,7 +614,8 @@ describe('createApp daemon mutation auth', () => {
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const client = new Client({ name: 'debug-client', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL('http://localhost/mcp'), {
-      fetch: (input, init) => app.request(input instanceof URL ? input.toString() : String(input), init),
+      fetch: (input, init) =>
+        app.request(input instanceof URL ? input.toString() : String(input), init),
     })
 
     await client.connect(transport)
@@ -750,27 +751,6 @@ describe('createApp daemon mutation auth', () => {
     })
     expect(authedPostRes.status).toBe(200)
     await expect(authedPostRes.json()).resolves.toEqual({ ok: true })
-  })
-
-  it('manual version save surfaces branch corruption from createApp.getHeadBranch as structured 500', async () => {
-    const app = createApp(createRuntimeOptions())
-    await mkdir(join(tempDir, 'data', 'session1', 'branches'), { recursive: true })
-    await writeFile(
-      join(tempDir, 'data', 'session1', 'branches', 'canvas-a.json'),
-      'not-json',
-    )
-
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('canvas-a.json'),
-    })
   })
 
   // The "PUT /head surfaces current canvas corruption" assertion relied on
@@ -918,7 +898,8 @@ describe('createApp daemon mutation auth', () => {
 
     expect(res.status).toBe(200)
     const mergeSaveCall = saveSpy.mock.calls.find(
-      (call) => call[0] === 'session1' &&
+      (call) =>
+        call[0] === 'session1' &&
         call[1] === 'canvas-a' &&
         (call[3] as { label?: string } | undefined)?.label === 'before merge: feature → main',
     )
@@ -932,6 +913,8 @@ describe('createApp daemon mutation auth', () => {
         displayName: 'merge',
       },
     })
-    expect((mergeSaveCall?.[3] as { operator?: { peerId?: string } } | undefined)?.operator?.peerId).toMatch(/\S+/)
+    expect(
+      (mergeSaveCall?.[3] as { operator?: { peerId?: string } } | undefined)?.operator?.peerId,
+    ).toMatch(/\S+/)
   })
 })

@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { userInfo } from 'node:os'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -18,9 +17,8 @@ vi.mock('../config.js', () => ({
 
 // Mock doc-cache so the cache is isolated in tests.
 vi.mock('../store/doc-cache.js', async () => {
-  const actual = await vi.importActual<typeof import('../store/doc-cache.js')>(
-    '../store/doc-cache.js',
-  )
+  const actual =
+    await vi.importActual<typeof import('../store/doc-cache.js')>('../store/doc-cache.js')
   return actual
 })
 
@@ -30,22 +28,6 @@ const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 
 // Dynamically import the Hono app.
 const { createCanvasRouter, createAutoVersionTrigger } = await import('./canvas.js')
-
-describe('GET /api/workspaces', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    clearCache()
-  })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-    clearCache()
-  })
-
-  // listWorkspaces no longer walks DATA_DIR, so the previous corruption-on-disk
-  // assertion no longer applies. The DB-backed equivalent is exercised through
-  // unit tests on canvas-store directly.
-})
 
 describe('GET /api/workspaces', () => {
   beforeEach(async () => {
@@ -306,7 +288,9 @@ describe('versions API', () => {
 
     const resList = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     expect(resList.status).toBe(200)
-    const body = (await resList.json()) as { versions: Array<{ auto: boolean; elementCount: number }> }
+    const body = (await resList.json()) as {
+      versions: Array<{ auto: boolean; elementCount: number }>
+    }
     expect(body.versions.length).toBeGreaterThanOrEqual(1)
     expect(body.versions[0].auto).toBe(true)
     expect(body.versions[0].elementCount).toBe(1)
@@ -343,7 +327,9 @@ describe('versions API', () => {
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
-      version: { operator?: { kind: string; peerId: string; displayName?: string; agentId?: string } }
+      version: {
+        operator?: { kind: string; peerId: string; displayName?: string; agentId?: string }
+      }
     }
     expect(body.version.operator).toEqual({
       kind: 'ai',
@@ -354,7 +340,9 @@ describe('versions API', () => {
 
     const listRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     const listBody = (await listRes.json()) as {
-      versions: Array<{ operator?: { kind: string; peerId: string; displayName?: string; agentId?: string } }>
+      versions: Array<{
+        operator?: { kind: string; peerId: string; displayName?: string; agentId?: string }
+      }>
     }
     expect(listBody.versions[0]?.operator).toEqual(body.version.operator)
   })
@@ -763,11 +751,14 @@ describe('versions API', () => {
     await store.save('cp-known-live-only', doc)
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/checkpoints/cp-known-live-only/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetSlug: 'restored-live-only' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/session1/checkpoints/cp-known-live-only/restore',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetSlug: 'restored-live-only' }),
+      },
+    )
 
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toMatchObject({
