@@ -201,7 +201,6 @@ export class FileVersionStore implements VersionStore {
         operatorDisplayName: operator?.displayName ?? null,
         operatorAgentId: operator?.agentId ?? null,
         operatorWorkspaceId: operator?.workspaceId ?? null,
-        sizeBytes: 0,
         elementCount,
         frontiers,
         hasThumbnail: 0,

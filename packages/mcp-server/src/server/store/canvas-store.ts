@@ -2,6 +2,7 @@ import { access, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
+import { nanoid } from 'nanoid'
 import { isPidAlive, loadDaemonRecord } from '../../daemon/daemon-registry.js'
 import { DATA_DIR } from '../config.js'
 import { validateCanvasId, validateSlug, validateWorkspaceId } from '../validators.js'
@@ -12,7 +13,7 @@ import {
 } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
+import { getCanvasIdBySlug, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import type { VersionStore } from './version-store.js'
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
@@ -72,16 +73,40 @@ export async function saveCanvas(
       `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
     )
   }
-  const canvasId = existingCanvasId ?? (await upsertCanvasRow(db, workspaceId, slug))
+  // Pre-allocate the canvasId for new canvases so the blob can be written
+  // before any metadata row commits. If the FS write fails (ENOSPC, EACCES,
+  // transient corruption) we leave no DB row behind, so a retry can succeed
+  // instead of hitting a phantom ConflictError on the orphan.
+  const canvasId = existingCanvasId ?? nanoid(12)
   const path = canvasBlobPath(workspaceId, canvasId)
   await mkdir(dirname(path), { recursive: true })
   const snapshot = doc.export({ mode: 'snapshot' })
   await writeFile(path, snapshot)
-  await db
-    .updateTable('canvases')
-    .set({ updatedAt: Date.now() })
-    .where('id', '=', canvasId)
-    .execute()
+  await upsertWorkspaceRow(db, workspaceId)
+  if (existingCanvasId) {
+    await db
+      .updateTable('canvases')
+      .set({ updatedAt: Date.now() })
+      .where('id', '=', canvasId)
+      .execute()
+  } else {
+    const now = Date.now()
+    await db
+      .insertInto('canvases')
+      .values({
+        id: canvasId,
+        workspaceId,
+        slug,
+        displayName: null,
+        isPinned: 0,
+        pinOrder: null,
+        currentBranch: 'main',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doUpdateSet({ updatedAt: now }))
+      .execute()
+  }
   if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
     const key = `${workspaceId}/${slug}`
     if (!warnedSnapshots.has(key)) {

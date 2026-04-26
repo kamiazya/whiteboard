@@ -1,11 +1,16 @@
 import type { Kysely, Migration } from 'kysely'
-import { sql } from 'kysely'
 
 // Initial schema. The canvas id is a stable nanoid so the slug remains a
 // renameable display path. branches and versions FK on canvasId so renaming
 // a slug does not cascade. SQLite cannot drop a primary key in place, so any
 // future table reshape will need a rebuild migration similar to git "rebase
 // -i": create a new table, copy rows, swap names. Plan for that up front.
+//
+// Foreign-key enforcement is a per-connection setting in SQLite, so it lives
+// in db/index.ts (executed on every Kysely connection) — running it inside a
+// migration only takes effect for that one transaction. Keeping the pragma
+// out of this file avoids the false sense of safety that bit the first cut
+// of this migration.
 
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
@@ -67,7 +72,6 @@ export const migration: Migration = {
       .addColumn('operatorDisplayName', 'text')
       .addColumn('operatorAgentId', 'text')
       .addColumn('operatorWorkspaceId', 'text')
-      .addColumn('sizeBytes', 'integer', (c) => c.notNull())
       .addColumn('elementCount', 'integer', (c) => c.notNull().defaultTo(0))
       .addColumn('frontiers', 'text', (c) => c.notNull())
       .addColumn('hasThumbnail', 'integer', (c) => c.notNull().defaultTo(0))
@@ -123,11 +127,6 @@ export const migration: Migration = {
       .addColumn('value', 'text')
       .addColumn('updatedAt', 'integer', (c) => c.notNull())
       .execute()
-
-    // SQLite does not enforce FK by default; the per-connection pragma in
-    // db/index.ts handles the runtime side. Touch sqlite_master here so a
-    // missing pragma is loud, not silent, at schema time.
-    await sql`PRAGMA foreign_keys = ON`.execute(db)
   },
 
   async down(db: Kysely<unknown>): Promise<void> {
