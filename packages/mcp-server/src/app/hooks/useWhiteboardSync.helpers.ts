@@ -1,17 +1,9 @@
 import type { BinaryFiles } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
+import { type ExportRequestMessage } from '../../shared/ws-messages.js'
 import { buildWhiteboardWsProtocols } from '../../shared/ws-protocol.js'
 
-export interface ExportRequestMessage {
-  type: 'export_request'
-  requestId: string
-  padding?: number
-  scale?: number
-  minFontPx?: number
-  // When set, export only elements inside the frame plus the frame itself.
-  // This keeps section-level PNG exports small on large canvases.
-  frameId?: string
-}
+export type { ExportRequestMessage }
 
 type ExportApi = {
   getSceneElements: () => readonly ExcalidrawElement[]

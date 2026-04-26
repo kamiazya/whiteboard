@@ -1,6 +1,7 @@
 import type { WebSocket, RawData } from 'ws'
 import type { IncomingMessage } from 'node:http'
 import type { LoroDoc } from 'loro-crdt'
+import type { ServerTextMessage } from '../../shared/ws-messages.js'
 import { getDoc } from '../store/doc-cache.js'
 import { saveCanvas } from '../store/canvas-store.js'
 import type { VersionEntry } from '../store/version-store.js'
@@ -9,6 +10,23 @@ import {
   parseWsClientTextMessage,
   parseWsTargetFromRequestUrl,
 } from './ws-validation.js'
+
+// Centralized broadcaster. Typing the argument as ServerTextMessage makes
+// every send site fail at compile time if the payload doesn't match the zod
+// schema in shared/ws-messages.ts.
+function broadcastTextMessage(
+  workspaceId: string,
+  slug: string,
+  message: ServerTextMessage,
+): void {
+  const key = `${workspaceId}/${slug}`
+  const clients = connections.get(key)
+  if (!clients) return
+  const raw = JSON.stringify(message)
+  for (const ws of clients) {
+    ws.send(raw)
+  }
+}
 
 // Connection registry: key = "workspaceId/slug", value = Set<WebSocket>
 const connections = new Map<string, Set<WebSocket>>()
@@ -64,13 +82,7 @@ export function sendVersionCreated(
   slug: string,
   version: VersionEntry,
 ): void {
-  const key = `${workspaceId}/${slug}`
-  const clients = connections.get(key)
-  if (!clients) return
-  const msg = JSON.stringify({ type: 'version_created', version })
-  for (const ws of clients) {
-    ws.send(msg)
-  }
+  broadcastTextMessage(workspaceId, slug, { type: 'version_created', version })
 }
 
 // Soft lock for restore: broadcast started/complete around reconcile.
@@ -82,29 +94,20 @@ export function sendRestoreEvent(
   phase: 'started' | 'complete',
   label?: string,
 ): void {
-  const key = `${workspaceId}/${slug}`
-  const clients = connections.get(key)
-  if (!clients) return
-  const msg = JSON.stringify({
-    type: `restore_${phase}`,
-    ...(label !== undefined ? { label } : {}),
-  })
-  for (const ws of clients) {
-    ws.send(msg)
+  if (phase === 'started') {
+    broadcastTextMessage(workspaceId, slug, {
+      type: 'restore_started',
+      ...(label !== undefined ? { label } : {}),
+    })
+  } else {
+    broadcastTextMessage(workspaceId, slug, { type: 'restore_complete' })
   }
 }
 
-// Notify all peers on the same key when HEAD changes.
-// broadcastLoroUpdate already carries the state update; this is only a UI overlay signal.
-// If WS keys become branch-aware later, only the key-construction logic needs to change.
+// Notify all peers on the same key when HEAD changes. broadcastLoroUpdate
+// already carries the state update; this is only a UI overlay signal.
 export function sendHeadChanged(workspaceId: string, slug: string, head: string): void {
-  const key = `${workspaceId}/${slug}`
-  const clients = connections.get(key)
-  if (!clients) return
-  const msg = JSON.stringify({ type: 'head_changed', head })
-  for (const ws of clients) {
-    ws.send(msg)
-  }
+  broadcastTextMessage(workspaceId, slug, { type: 'head_changed', head })
 }
 
 // Injected from viewport.ts: handles viewport_response messages.
@@ -121,10 +124,7 @@ export function sendExportRequest(
   requestId: string,
   options?: { padding?: number; scale?: number; minFontPx?: number; frameId?: string },
 ): void {
-  const key = `${workspaceId}/${slug}`
-  const clients = connections.get(key)
-  if (!clients) return
-  const msg = JSON.stringify({
+  broadcastTextMessage(workspaceId, slug, {
     type: 'export_request',
     requestId,
     ...(options?.padding !== undefined ? { padding: options.padding } : {}),
@@ -132,27 +132,34 @@ export function sendExportRequest(
     ...(options?.minFontPx !== undefined ? { minFontPx: options.minFontPx } : {}),
     ...(options?.frameId !== undefined ? { frameId: options.frameId } : {}),
   })
-  for (const ws of clients) {
-    ws.send(msg)
-  }
 }
 
 // Send viewport_request to every WS client connected to a canvas. Used by viewport.ts.
-// params may include mode / elementIds / padding / animate / scrollX / scrollY / zoom.
+// The caller may provide any subset of mode / elementIds / animate / scrollX / scrollY / zoom.
 // The browser-side useWhiteboardSync viewport_request handler applies them through excalidrawAPI.
 export function sendViewportRequest(
   workspaceId: string,
   slug: string,
   requestId: string,
-  params: Record<string, unknown>,
+  params: {
+    mode?: 'fit' | 'move'
+    elementIds?: string[]
+    animate?: boolean
+    scrollX?: number
+    scrollY?: number
+    zoom?: number
+  } = {},
 ): void {
-  const key = `${workspaceId}/${slug}`
-  const clients = connections.get(key)
-  if (!clients) return
-  const msg = JSON.stringify({ type: 'viewport_request', requestId, ...params })
-  for (const ws of clients) {
-    ws.send(msg)
-  }
+  broadcastTextMessage(workspaceId, slug, {
+    type: 'viewport_request',
+    requestId,
+    ...(params.mode !== undefined ? { mode: params.mode } : {}),
+    ...(params.elementIds !== undefined ? { elementIds: params.elementIds } : {}),
+    ...(params.animate !== undefined ? { animate: params.animate } : {}),
+    ...(params.scrollX !== undefined ? { scrollX: params.scrollX } : {}),
+    ...(params.scrollY !== undefined ? { scrollY: params.scrollY } : {}),
+    ...(params.zoom !== undefined ? { zoom: params.zoom } : {}),
+  })
 }
 
 // Return the number of WS clients connected to a canvas. Used for export.ts preflight checks.
