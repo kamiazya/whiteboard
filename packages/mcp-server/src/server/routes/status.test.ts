@@ -10,7 +10,7 @@ const { getClientCount } = await import('./ws.js')
 const { getReadyClientCount } = await import('./ws.js')
 const { createStatusRouter } = await import('./status.js')
 
-describe('GET /api/canvas/:sessionId/:slug/client-count', () => {
+describe('GET /api/canvas/:workspaceId/:slug/client-count', () => {
   it('returns count=0 when no clients are connected', async () => {
     ;(getClientCount as unknown as ReturnType<typeof vi.fn>).mockReturnValue(0)
     ;(getReadyClientCount as unknown as ReturnType<typeof vi.fn>).mockReturnValue(0)
@@ -34,7 +34,7 @@ describe('GET /api/canvas/:sessionId/:slug/client-count', () => {
     expect(body.readyCount).toBe(1)
   })
 
-  it('returns 400 for invalid sessionId / slug', async () => {
+  it('returns 400 for invalid workspaceId / slug', async () => {
     const app = new Hono()
     app.route('/', createStatusRouter())
 

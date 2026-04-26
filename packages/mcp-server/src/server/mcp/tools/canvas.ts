@@ -2,14 +2,8 @@ import open from 'open'
 import type { DaemonClient } from '../daemon-client.js'
 import { daemonUrl } from '../daemon-client.js'
 
-interface SessionSummary {
-  sessionId: string
-  daemonAlive: boolean
-}
-
 interface WorkspaceSummary {
   workspaceId: string
-  sessionId?: string
   daemonAlive: boolean
 }
 
@@ -37,11 +31,11 @@ export function createCanvasTool() {
     },
     execute: async (
       args: { slug: string; issueNumber?: number; overwrite?: boolean },
-      sessionId: string,
+      workspaceId: string,
       client: DaemonClient,
     ) => {
       const finalSlug = args.issueNumber ? `${args.issueNumber}-${args.slug}` : args.slug
-      const res = await client.request(`/api/workspaces/${sessionId}/canvases`, {
+      const res = await client.request(`/api/workspaces/${workspaceId}/canvases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: finalSlug, overwrite: args.overwrite ?? false }),
@@ -50,8 +44,8 @@ export function createCanvasTool() {
         const body = (await res.json().catch(() => null)) as { message?: string } | null
         throw new Error(body?.message ?? `Failed to create canvas: ${res.status}`)
       }
-      const url = daemonUrl(client, `/canvas/${sessionId}/${finalSlug}`)
-      return { id: `${sessionId}/${finalSlug}`, url }
+      const url = daemonUrl(client, `/canvas/${workspaceId}/${finalSlug}`)
+      return { id: `${workspaceId}/${finalSlug}`, url }
     },
   }
 }
@@ -92,7 +86,6 @@ export function listCanvasTool() {
       const result = await Promise.all(
         workspaces.map(async (workspace) => {
           const workspaceId = workspace.workspaceId
-          const sessionId = workspace.sessionId ?? workspaceId
           const canvasesRes = await client.request(`/api/workspaces/${workspaceId}/canvases`)
           if (!canvasesRes.ok) {
             throw new Error(`Failed to list canvases for workspace ${workspaceId}: ${canvasesRes.status}`)
@@ -101,7 +94,6 @@ export function listCanvasTool() {
           if (needle) canvases = canvases.filter((c) => c.slug.toLowerCase().includes(needle))
           return {
             workspaceId,
-            sessionId,
             daemonAlive: workspace.daemonAlive,
             canvases: canvases.map((c) => ({
               id: `${workspaceId}/${c.slug}`,
@@ -116,11 +108,6 @@ export function listCanvasTool() {
       const filtered = needle ? result.filter((s) => s.canvases.length > 0) : result
       return {
         workspaces: filtered,
-        sessions: filtered.map(({ workspaceId, sessionId, daemonAlive, canvases }) => ({
-          sessionId: sessionId ?? workspaceId,
-          daemonAlive,
-          canvases,
-        })),
       }
     },
   }
@@ -174,9 +161,9 @@ export function openCanvasTool() {
 
       // Poll /api/canvas/:sid/:slug/client-count every 100ms until count >= 1 or timeout.
       // Build the URL with encodeURIComponent(slug) so nested slugs like "621/header" work.
-      const [sessionId, ...slugParts] = args.id.split('/')
+      const [workspaceId, ...slugParts] = args.id.split('/')
       const slug = slugParts.join('/')
-      const statusPath = `/api/canvas/${sessionId}/${encodeURIComponent(slug)}/client-count`
+      const statusPath = `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/client-count`
       const deadline = Date.now() + (args.waitTimeoutMs ?? 5000)
       let clientReady = false
       while (Date.now() < deadline) {

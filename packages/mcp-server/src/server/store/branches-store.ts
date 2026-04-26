@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { DATA_DIR } from '../config.js'
 import {
   validateBranchName,
-  validateSessionId,
+  validateWorkspaceId,
   validateSlug,
 } from '../validators.js'
 import { CorruptStoredDataError, isMissingFileError } from './corrupt-stored-data.js'
@@ -13,7 +13,7 @@ import { CorruptStoredDataError, isMissingFileError } from './corrupt-stored-dat
 // - which branch is currently HEAD
 // See docs/version-branching-spec.md §3.1.
 //
-// Persistence: {DATA_DIR}/{sessionId}/branches/{slug}.json
+// Persistence: {DATA_DIR}/{workspaceId}/branches/{slug}.json
 // - hierarchical slugs (for example "621/header") expand into subdirectories
 // - when the file is missing, loadCanvasBranches lazily returns a default main branch without writing
 //
@@ -43,8 +43,8 @@ export interface CanvasBranches {
 // Default color for the main branch. Matches the UI blue.
 export const DEFAULT_MAIN_COLOR = '#1971c2'
 
-function branchesPath(sessionId: string, slug: string): string {
-  return join(DATA_DIR, sessionId, 'branches', `${slug}.json`)
+function branchesPath(workspaceId: string, slug: string): string {
+  return join(DATA_DIR, workspaceId, 'branches', `${slug}.json`)
 }
 
 function defaultMain(): BranchMeta {
@@ -84,12 +84,12 @@ function isValidBranchMeta(value: unknown): value is BranchMeta {
 // If the file exists but JSON parsing or schema validation fails, throw CorruptStoredDataError.
 // Keep "missing" (ENOENT) distinct from "corrupt".
 export async function loadCanvasBranches(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
 ): Promise<CanvasBranches> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = branchesPath(sessionId, slug)
+  const path = branchesPath(workspaceId, slug)
   let raw: string
   try {
     raw = await readFile(path, 'utf-8')
@@ -128,13 +128,13 @@ export async function loadCanvasBranches(
 
 // ── save (auto-creates parent directories) ──
 export async function saveCanvasBranches(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   state: CanvasBranches,
 ): Promise<void> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = branchesPath(sessionId, slug)
+  const path = branchesPath(workspaceId, slug)
   await mkdir(dirname(path), { recursive: true })
   await writeFile(path, JSON.stringify(state, null, 2))
 }
@@ -175,7 +175,7 @@ function nextColor(existing: BranchMeta[]): string {
 // initialTipFrontiers is resolved by the caller, typically with help from version-store.
 // Omit it to start with an empty string for uninitialized branches.
 export async function createBranch(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   opts: {
     name: string
@@ -185,13 +185,13 @@ export async function createBranch(
     color?: string
   },
 ): Promise<BranchMeta> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(opts.name)
 
-  const state = await loadCanvasBranches(sessionId, slug)
+  const state = await loadCanvasBranches(workspaceId, slug)
   if (state.branches.some((b) => b.name === opts.name)) {
-    throw new BranchConflictError(`Branch "${opts.name}" already exists on ${sessionId}/${slug}`)
+    throw new BranchConflictError(`Branch "${opts.name}" already exists on ${workspaceId}/${slug}`)
   }
   const branch: BranchMeta = {
     name: opts.name,
@@ -202,7 +202,7 @@ export async function createBranch(
     ...(opts.baseVersionId !== undefined ? { baseVersionId: opts.baseVersionId } : {}),
   }
   const next: CanvasBranches = { ...state, branches: [...state.branches, branch] }
-  await saveCanvasBranches(sessionId, slug, next)
+  await saveCanvasBranches(workspaceId, slug, next)
   return branch
 }
 
@@ -210,19 +210,19 @@ export async function createBranch(
 // main and the current HEAD cannot be deleted. This store returns 0 as the placeholder
 // unmergedCommits value; routes that need the real count must consult version-store.
 export async function deleteBranch(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   name: string,
 ): Promise<{ ok: true; unmergedCommits: number }> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(name)
   if (name === 'main') {
     throw new BranchConflictError('Cannot delete main branch')
   }
-  const state = await loadCanvasBranches(sessionId, slug)
+  const state = await loadCanvasBranches(workspaceId, slug)
   if (!state.branches.some((b) => b.name === name)) {
-    throw new BranchNotFoundError(`Branch "${name}" not found on ${sessionId}/${slug}`)
+    throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
   }
   if (state.head === name) {
     throw new BranchConflictError(
@@ -233,7 +233,7 @@ export async function deleteBranch(
     ...state,
     branches: state.branches.filter((b) => b.name !== name),
   }
-  await saveCanvasBranches(sessionId, slug, next)
+  await saveCanvasBranches(workspaceId, slug, next)
   return { ok: true, unmergedCommits: 0 }
 }
 
@@ -241,22 +241,22 @@ export async function deleteBranch(
 // Return NotFound for unknown branches. Idempotent: previousHead is the old head, head is the new head.
 // This store only persists metadata; route-level code performs any live LoroDoc checkout.
 export async function setHead(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   name: string,
 ): Promise<{ head: string; previousHead: string }> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(name)
-  const state = await loadCanvasBranches(sessionId, slug)
+  const state = await loadCanvasBranches(workspaceId, slug)
   if (!state.branches.some((b) => b.name === name)) {
-    throw new BranchNotFoundError(`Branch "${name}" not found on ${sessionId}/${slug}`)
+    throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
   }
   const previousHead = state.head
   if (previousHead === name) {
     return { head: name, previousHead }
   }
-  await saveCanvasBranches(sessionId, slug, { ...state, head: name })
+  await saveCanvasBranches(workspaceId, slug, { ...state, head: name })
   return { head: name, previousHead }
 }
 
@@ -265,22 +265,22 @@ export async function setHead(
 // If HEAD is renamed, update head too. Also rewrite baseBranch references that still point at the old name.
 // version-store branchName updates are handled separately in the route layer.
 export async function renameBranch(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   oldName: string,
   newName: string,
 ): Promise<BranchMeta> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(oldName)
   validateBranchName(newName)
   if (oldName === 'main') {
     throw new BranchConflictError('Cannot rename main branch')
   }
-  const state = await loadCanvasBranches(sessionId, slug)
+  const state = await loadCanvasBranches(workspaceId, slug)
   const current = state.branches.find((b) => b.name === oldName)
   if (!current) {
-    throw new BranchNotFoundError(`Branch "${oldName}" not found on ${sessionId}/${slug}`)
+    throw new BranchNotFoundError(`Branch "${oldName}" not found on ${workspaceId}/${slug}`)
   }
   if (oldName === newName) {
     // no-op
@@ -288,7 +288,7 @@ export async function renameBranch(
   }
   if (state.branches.some((b) => b.name === newName)) {
     throw new BranchConflictError(
-      `Branch "${newName}" already exists on ${sessionId}/${slug}`,
+      `Branch "${newName}" already exists on ${workspaceId}/${slug}`,
     )
   }
   const renamed: BranchMeta = { ...current, name: newName }
@@ -298,7 +298,7 @@ export async function renameBranch(
     return b
   })
   const nextHead = state.head === oldName ? newName : state.head
-  await saveCanvasBranches(sessionId, slug, { branches: nextBranches, head: nextHead })
+  await saveCanvasBranches(workspaceId, slug, { branches: nextBranches, head: nextHead })
   return renamed
 }
 
@@ -306,14 +306,14 @@ export async function renameBranch(
 // Getter used by route-layer merge flows to read target / source tipFrontiers.
 // Returns null for missing branches and preserves the empty string for uninitialized branches.
 export async function getBranchTipBase64(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   name: string,
 ): Promise<string | null> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(name)
-  const state = await loadCanvasBranches(sessionId, slug)
+  const state = await loadCanvasBranches(workspaceId, slug)
   const branch = state.branches.find((b) => b.name === name)
   return branch ? branch.tipFrontiers : null
 }
@@ -323,18 +323,18 @@ export async function getBranchTipBase64(
 // during branch switches and to refresh the new HEAD tip after checkout.
 // Throws NotFound for missing branches.
 export async function updateBranchTip(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   name: string,
   tipFrontiers: string,
 ): Promise<void> {
-  validateSessionId(sessionId)
+  validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(name)
-  const state = await loadCanvasBranches(sessionId, slug)
+  const state = await loadCanvasBranches(workspaceId, slug)
   const idx = state.branches.findIndex((b) => b.name === name)
   if (idx === -1) {
-    throw new BranchNotFoundError(`Branch "${name}" not found on ${sessionId}/${slug}`)
+    throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
   }
   const current = state.branches[idx]!
   if (current.tipFrontiers === tipFrontiers) return
@@ -346,5 +346,5 @@ export async function updateBranchTip(
       ...state.branches.slice(idx + 1),
     ],
   }
-  await saveCanvasBranches(sessionId, slug, next)
+  await saveCanvasBranches(workspaceId, slug, next)
 }

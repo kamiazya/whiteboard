@@ -1,7 +1,7 @@
 import { LoroDoc } from 'loro-crdt'
 import { loadCanvas, saveCanvas } from './canvas-store.js'
 
-// key: "sessionId/slug"
+// key: "workspaceId/slug"
 //
 // LRU eviction keeps LoroDoc memory from growing without bound during dogfooding
 // across many canvases or during long daemon uptime. One canvas can hold several MiB
@@ -27,27 +27,27 @@ function touch(key: string, doc: LoroDoc): void {
   }
 }
 
-export async function getDoc(sessionId: string, slug: string): Promise<LoroDoc> {
-  const key = `${sessionId}/${slug}`
+export async function getDoc(workspaceId: string, slug: string): Promise<LoroDoc> {
+  const key = `${workspaceId}/${slug}`
   const existing = cache.get(key)
   if (existing) {
     touch(key, existing)
     return existing
   }
-  const doc = await loadCanvas(sessionId, slug)
+  const doc = await loadCanvas(workspaceId, slug)
   touch(key, doc)
   return doc
 }
 
 export async function applyAndPersist(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   updater: (doc: LoroDoc) => void,
 ): Promise<Uint8Array> {
-  const doc = await getDoc(sessionId, slug)
+  const doc = await getDoc(workspaceId, slug)
   const prevVV = doc.version()
   updater(doc)
-  await saveCanvas(sessionId, slug, doc, { overwrite: true })
+  await saveCanvas(workspaceId, slug, doc, { overwrite: true })
   // Return the incremental update that was applied so it can be broadcast over WS.
   return doc.export({ mode: 'update', from: prevVV })
 }
@@ -61,16 +61,16 @@ export function clearCache(): void {
 // forcing the next getDoc call to reload it.
 // Callers already holding a live doc reference, such as WS handlers, do not get swapped
 // automatically. applyAndPersist is safe because it always calls getDoc first.
-export function evictDoc(sessionId: string, slug: string): void {
-  cache.delete(`${sessionId}/${slug}`)
+export function evictDoc(workspaceId: string, slug: string): void {
+  cache.delete(`${workspaceId}/${slug}`)
 }
 
-// /debug helper: list cached canvas keys ("sessionId/slug").
+// /debug helper: list cached canvas keys ("workspaceId/slug").
 export function getCacheKeys(): string[] {
   return Array.from(cache.keys())
 }
 
 // /debug helper: read a LoroDoc from cache without populating it.
-export function peekDoc(sessionId: string, slug: string): LoroDoc | undefined {
-  return cache.get(`${sessionId}/${slug}`)
+export function peekDoc(workspaceId: string, slug: string): LoroDoc | undefined {
+  return cache.get(`${workspaceId}/${slug}`)
 }

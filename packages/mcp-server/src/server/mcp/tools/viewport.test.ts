@@ -186,7 +186,7 @@ describe('viewportSetTool execute', () => {
     const tool = viewportSetTool()
 
     await expect(tool.execute({ canvasId: 'bad.sid/slug' }, client)).rejects.toThrow(
-      /Invalid sessionId "bad\.sid"/,
+      /Invalid workspaceId "bad\.sid"/,
     )
     await expect(tool.execute({ canvasId: 'sid/bad.slug' }, client)).rejects.toThrow(
       /Invalid slug "bad\.slug"/,

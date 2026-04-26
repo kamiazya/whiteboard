@@ -47,7 +47,7 @@ Response shape:
 {
   "sessions": [
     {
-      "sessionId": "...",
+      "workspaceId": "...",
       "hasActivePort": true,
       "canvases": [
         {

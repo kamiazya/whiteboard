@@ -22,19 +22,19 @@ type MockedExportOptions = {
   minFontPx?: number
   frameId?: string
 }
-const mockGetClientCount = vi.fn<(sessionId: string, slug: string) => number>()
+const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
 const mockSendExportRequest = vi.fn<
-  (sessionId: string, slug: string, requestId: string, options?: MockedExportOptions) => void
+  (workspaceId: string, slug: string, requestId: string, options?: MockedExportOptions) => void
 >()
 
 vi.mock('./ws.js', () => ({
-  getClientCount: (sessionId: string, slug: string) => mockGetClientCount(sessionId, slug),
+  getClientCount: (workspaceId: string, slug: string) => mockGetClientCount(workspaceId, slug),
   sendExportRequest: (
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     requestId: string,
     options?: MockedExportOptions,
-  ) => mockSendExportRequest(sessionId, slug, requestId, options),
+  ) => mockSendExportRequest(workspaceId, slug, requestId, options),
 }))
 
 const { createExportRouter, resolveExportRequest } = await import('./export.js')
@@ -45,7 +45,7 @@ function makeApp(options: { timeoutMs?: number } = {}) {
   return app
 }
 
-describe('POST /api/canvas/:sessionId/:slug/export - error handling', () => {
+describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-test-'))
     mockGetClientCount.mockReset()
@@ -281,7 +281,7 @@ describe('POST /api/canvas/:sessionId/:slug/export - error handling', () => {
     expect(body.filePath).toMatch(/exports\/architecture\/overview-.*\.png$/)
   })
 
-  it('returns 400 for invalid sessionId or slug without reaching WS', async () => {
+  it('returns 400 for invalid workspaceId or slug without reaching WS', async () => {
     mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
 

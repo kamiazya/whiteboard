@@ -97,11 +97,11 @@ If you cannot rely on a dedicated Claude Code subagent, hand [`references/librar
 
 ### Step 0.5: Set Up Semantic Colors Early
 
-If a comparison axis is already known **before drawing** - for example plans A/B/C, main path vs exception path, or stable color families - define workspace color keys first with `palette_set({ sessionId, entries })`, then start `annotate_batch`.
+If a comparison axis is already known **before drawing** - for example plans A/B/C, main path vs exception path, or stable color families - define workspace color keys first with `palette_set({ workspaceId, entries })`, then start `annotate_batch`.
 Hardcoded hex is easy to drift and hard for future readers or another AI to inherit correctly.
 
 ```js
-palette_set({ sessionId, entries: {
+palette_set({ workspaceId, entries: {
   "plan.a.bg": "#dbeafe", "plan.a.fg": "#1971c2",
   "plan.b.bg": "#f3e8ff", "plan.b.fg": "#9333ea",
   "plan.c.bg": "#d1fae5", "plan.c.fg": "#047857",

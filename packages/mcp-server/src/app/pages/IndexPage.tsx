@@ -9,7 +9,6 @@ import { apiFetch } from '../lib/api-client.js'
 
 interface RawWorkspace {
   workspaceId: string
-  sessionId?: string
   daemonAlive: boolean
   canvases: { slug: string; updatedAt: string }[]
 }
@@ -33,7 +32,7 @@ function formatRelative(iso: string): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
-function filterSessions(
+function filterWorkspaces(
   sessions: EnrichedWorkspace[],
   activeOnly: boolean,
   search: string,
@@ -57,7 +56,7 @@ function filterSessions(
 }
 
 export default function IndexPage() {
-  const [sessions, setSessions] = useState<EnrichedWorkspace[]>([])
+  const [sessions, setWorkspaces] = useState<EnrichedWorkspace[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeOnly, setActiveOnly] = useState(false)
@@ -68,7 +67,7 @@ export default function IndexPage() {
       try {
         const res = await apiFetch('/api/workspaces')
         const { workspaces: rawList } = (await res.json()) as {
-          workspaces: { workspaceId: string; sessionId?: string; daemonAlive: boolean }[]
+          workspaces: { workspaceId: string; daemonAlive: boolean }[]
         }
         const enriched = await Promise.all(
           rawList.map(async (raw): Promise<EnrichedWorkspace> => {
@@ -86,7 +85,7 @@ export default function IndexPage() {
             return { ...raw, canvases, names }
           }),
         )
-        setSessions(enriched)
+        setWorkspaces(enriched)
       } catch (err) {
         setError(String(err))
       } finally {
@@ -96,7 +95,7 @@ export default function IndexPage() {
   }, [])
 
   const visible = useMemo(
-    () => filterSessions(sessions, activeOnly, search),
+    () => filterWorkspaces(sessions, activeOnly, search),
     [sessions, activeOnly, search],
   )
 

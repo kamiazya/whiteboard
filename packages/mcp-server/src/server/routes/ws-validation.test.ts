@@ -5,16 +5,16 @@ import {
 } from './ws-validation.js'
 
 describe('parseWsTargetFromRequestUrl', () => {
-  it('accepts validated sessionId and encoded slug', () => {
+  it('accepts validated workspaceId and encoded slug', () => {
     expect(parseWsTargetFromRequestUrl('/ws/sess-1/nested%2Fslug', '127.0.0.1:3099')).toEqual({
-      sessionId: 'sess-1',
+      workspaceId: 'sess-1',
       slug: 'nested/slug',
     })
   })
 
   it('rejects invalid session ids before websocket upgrade', () => {
     expect(() => parseWsTargetFromRequestUrl('/ws/bad.sid/slug', '127.0.0.1:3099')).toThrow(
-      /Invalid sessionId/,
+      /Invalid workspaceId/,
     )
   })
 

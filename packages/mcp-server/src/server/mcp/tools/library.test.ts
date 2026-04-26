@@ -192,7 +192,7 @@ describe('session library tools', () => {
     let postedUpdate: Uint8Array | null = null
     apiGetSnapshotMock.mockResolvedValue(doc)
     apiPostLoroUpdateMock.mockImplementation(
-      async (_client: unknown, _sessionId: string, _slug: string, update: Uint8Array) => {
+      async (_client: unknown, _workspaceId: string, _slug: string, update: Uint8Array) => {
         postedUpdate = update
       },
     )
@@ -238,7 +238,7 @@ describe('session library tools', () => {
     await writeFile(libraryPath, JSON.stringify(INSERT_LIBRARY))
     apiGetSnapshotMock.mockResolvedValue(new LoroDoc())
     apiPostLoroUpdateMock.mockImplementation(
-      async (_client: unknown, _sessionId: string, _slug: string, update: Uint8Array) => {
+      async (_client: unknown, _workspaceId: string, _slug: string, update: Uint8Array) => {
         postedUpdate = update
       },
     )
@@ -268,7 +268,7 @@ describe('session library tools', () => {
     let postedUpdate: Uint8Array | null = null
     apiGetSnapshotMock.mockResolvedValue(new LoroDoc())
     apiPostLoroUpdateMock.mockImplementation(
-      async (_client: unknown, _sessionId: string, _slug: string, update: Uint8Array) => {
+      async (_client: unknown, _workspaceId: string, _slug: string, update: Uint8Array) => {
         postedUpdate = update
       },
     )
@@ -311,7 +311,7 @@ describe('session library tools', () => {
     let postedUpdate: Uint8Array | null = null
     apiGetSnapshotMock.mockResolvedValue(new LoroDoc())
     apiPostLoroUpdateMock.mockImplementation(
-      async (_client: unknown, _sessionId: string, _slug: string, update: Uint8Array) => {
+      async (_client: unknown, _workspaceId: string, _slug: string, update: Uint8Array) => {
         postedUpdate = update
       },
     )
@@ -377,7 +377,7 @@ describe('session library tools', () => {
     let postedUpdate: Uint8Array | null = null
     apiGetSnapshotMock.mockResolvedValue(doc)
     apiPostLoroUpdateMock.mockImplementation(
-      async (_client: unknown, _sessionId: string, _slug: string, update: Uint8Array) => {
+      async (_client: unknown, _workspaceId: string, _slug: string, update: Uint8Array) => {
         postedUpdate = update
       },
     )

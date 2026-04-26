@@ -116,17 +116,17 @@ function rejectPrivateOrLocalAddress(): never {
   throw new ValidationError('invalid_url', PRIVATE_ADDRESS_ERROR)
 }
 
-export function validateSessionId(sessionId: string): string {
-  if (sessionId === '') {
-    throw new ValidationError('invalid_session_id', 'Invalid sessionId: sessionId is empty')
+export function validateWorkspaceId(workspaceId: string): string {
+  if (workspaceId === '') {
+    throw new ValidationError('invalid_session_id', 'Invalid workspaceId: workspaceId is empty')
   }
-  if (!SAFE_SESSION_ID.test(sessionId)) {
+  if (!SAFE_SESSION_ID.test(workspaceId)) {
     throw new ValidationError(
       'invalid_session_id',
-      `Invalid sessionId "${sessionId}": only ASCII letters, digits, "_" and "-" are allowed`,
+      `Invalid workspaceId "${workspaceId}": only ASCII letters, digits, "_" and "-" are allowed`,
     )
   }
-  return sessionId
+  return workspaceId
 }
 
 export function validateSlug(slug: string): string {

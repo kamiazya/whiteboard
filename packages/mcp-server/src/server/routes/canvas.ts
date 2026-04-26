@@ -6,7 +6,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { reconcileElementsOnDoc } from '../../shared/reconcile-elements.js'
 import { getDoc, evictDoc } from '../store/doc-cache.js'
-import { listSessions, listCanvases, saveCanvas, compactCanvas, ConflictError, canvasExists } from '../store/canvas-store.js'
+import { listWorkspaces, listCanvases, saveCanvas, compactCanvas, ConflictError, canvasExists } from '../store/canvas-store.js'
 import {
   FileVersionStore,
   type VersionStore,
@@ -19,7 +19,7 @@ import {
   validateCheckpointId,
 } from '../store/checkpoint-store.js'
 import {
-  loadSessionNames,
+  loadWorkspaceNames,
   setWorkspaceName,
   setCanvasName,
   setCanvasPinned,
@@ -28,14 +28,13 @@ import { corruptStoredDataBody, isCorruptStoredDataError } from '../store/corrup
 import { exportCanvasJsonDoc, OutputPathError } from '../export-json.js'
 import {
   validationErrorBody,
-  validateSessionId,
+  validateWorkspaceId,
   validateSlug,
   validateVersionId,
 } from '../validators.js'
-import { registerWorkspaceAlias } from './workspace-alias.js'
 
 // WS broadcast function injected from ws.ts.
-type BroadcastFn = (sessionId: string, slug: string, update: Uint8Array, excludeWs?: WebSocket) => void
+type BroadcastFn = (workspaceId: string, slug: string, update: Uint8Array, excludeWs?: WebSocket) => void
 let broadcastLoroUpdate: BroadcastFn = () => {}
 
 export function setBroadcastFn(fn: BroadcastFn): void {
@@ -52,13 +51,13 @@ function parseOperatorBody(value: unknown): OperatorInfo | null {
   if (typeof value.peerId !== 'string' || value.peerId.trim().length === 0) return null
   if (value.displayName !== undefined && typeof value.displayName !== 'string') return null
   if (value.agentId !== undefined && typeof value.agentId !== 'string') return null
-  if (value.sessionId !== undefined && typeof value.sessionId !== 'string') return null
+  if (value.workspaceId !== undefined && typeof value.workspaceId !== 'string') return null
   return {
     kind: value.kind,
     peerId: value.peerId,
     ...(value.displayName !== undefined ? { displayName: value.displayName } : {}),
     ...(value.agentId !== undefined ? { agentId: value.agentId } : {}),
-    ...(value.sessionId !== undefined ? { sessionId: value.sessionId } : {}),
+    ...(value.workspaceId !== undefined ? { workspaceId: value.workspaceId } : {}),
   }
 }
 
@@ -81,17 +80,17 @@ export function createAutoVersionTrigger(
   intervalMs: number,
   // Resolve the current HEAD branch name at save time and write it into VersionMeta.branchName.
   // If omitted or null, keep the previous behavior and let VersionStore.save fall back to "main".
-  getHeadBranch?: (sessionId: string, slug: string) => Promise<string | null>,
-): (sessionId: string, slug: string, doc: LoroDoc) => Promise<VersionEntry | null> {
+  getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>,
+): (workspaceId: string, slug: string, doc: LoroDoc) => Promise<VersionEntry | null> {
   const lastAt = new Map<string, number>()
-  return async function triggerAutoVersion(sessionId, slug, doc) {
-    const key = `${sessionId}/${slug}`
+  return async function triggerAutoVersion(workspaceId, slug, doc) {
+    const key = `${workspaceId}/${slug}`
     const now = Date.now()
     if (now - (lastAt.get(key) ?? 0) < intervalMs) return null
     let branchName: string | null = null
     if (getHeadBranch) {
       try {
-        branchName = await getHeadBranch(sessionId, slug)
+        branchName = await getHeadBranch(workspaceId, slug)
       } catch (err) {
         if (isCorruptStoredDataError(err)) {
           throw err
@@ -111,7 +110,7 @@ export function createAutoVersionTrigger(
       if (typeof branchName === 'string' && branchName.length > 0) {
         opts.branchName = branchName
       }
-      const entry = await versionStore.save(sessionId, slug, doc, opts)
+      const entry = await versionStore.save(workspaceId, slug, doc, opts)
       lastAt.set(key, now)
       return entry
     } catch (err) {
@@ -129,7 +128,7 @@ export interface CanvasRouterOptions {
   autoVersionIntervalMs?: number
   // Resolve the HEAD branch name for manual and auto version saves.
   // If omitted, ignore branch metadata. Production wires this from app.ts.
-  getHeadBranch?: (sessionId: string, slug: string) => Promise<string | null>
+  getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>
 }
 
 export function createCanvasRouter(options: CanvasRouterOptions = {}) {
@@ -155,25 +154,13 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     setAutoVersionTrigger?.(triggerAutoVersion)
   })
 
-  // GET /api/sessions
-  app.get('/api/sessions', async (c) => {
-    try {
-      const sessions = await listSessions()
-      return c.json({ sessions })
-    } catch (err) {
-      const issue = handleCorruptStoredData(err)
-      if (issue) return c.json(issue.body, issue.status)
-      throw err
-    }
-  })
-
+  // GET /api/workspaces
   app.get('/api/workspaces', async (c) => {
     try {
-      const sessions = await listSessions()
+      const workspaces = await listWorkspaces()
       return c.json({
-        workspaces: sessions.map(({ sessionId, daemonAlive }) => ({
-          workspaceId: sessionId,
-          sessionId,
+        workspaces: workspaces.map(({ workspaceId, daemonAlive }) => ({
+          workspaceId,
           daemonAlive,
         })),
       })
@@ -184,18 +171,18 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // GET /api/sessions/:sessionId/canvases
-  registerWorkspaceAlias(app, 'get', '/api/sessions/:sessionId/canvases', async (c) => {
-    const { sessionId } = c.req.param()
+  // GET /api/workspaces/:workspaceId/canvases
+  app.get('/api/workspaces/:workspaceId/canvases', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
     try {
-      const canvases = await listCanvases(sessionId)
+      const canvases = await listCanvases(workspaceId)
       return c.json({ canvases })
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -204,13 +191,13 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // POST /api/sessions/:sessionId/canvases  body: { slug: string }
+  // POST /api/workspaces/:workspaceId/canvases  body: { slug: string }
   // Save a new empty LoroDoc under slug. Return 409 for conflicts and 400 for invalid slugs.
   // On success, return { slug } for client-side navigation.
-  registerWorkspaceAlias(app, 'post', '/api/sessions/:sessionId/canvases', async (c) => {
-    const { sessionId } = c.req.param()
+  app.post('/api/workspaces/:workspaceId/canvases', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
@@ -229,7 +216,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
     try {
       const doc = new LoroDocCtor()
-      await saveCanvas(sessionId, slug, doc, { overwrite: false })
+      await saveCanvas(workspaceId, slug, doc, { overwrite: false })
       return c.json({ slug })
     } catch (err) {
       if (err instanceof ConflictError) {
@@ -240,10 +227,10 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  registerWorkspaceAlias(app, 'post', '/api/sessions/:sessionId/checkpoints', async (c) => {
-    const { sessionId } = c.req.param()
+  app.post('/api/workspaces/:workspaceId/checkpoints', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
@@ -270,16 +257,16 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
 
     try {
-      if (!(await canvasExists(sessionId, sourceSlug))) {
+      if (!(await canvasExists(workspaceId, sourceSlug))) {
         return c.json(
           {
             error: 'not_found',
-            message: `Canvas "${sessionId}/${sourceSlug}" not found.`,
+            message: `Canvas "${workspaceId}/${sourceSlug}" not found.`,
           },
           404,
         )
       }
-      const doc = await getDoc(sessionId, sourceSlug)
+      const doc = await getDoc(workspaceId, sourceSlug)
       await checkpointStore.save(checkpointId, doc)
       return c.json({
         checkpointId,
@@ -296,18 +283,18 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
   // User-facing workspace / canvas names.
   // When unnamed, the UI falls back to session id / slug, so the API only returns stored values.
 
-  // GET /api/sessions/:sessionId/names
-  registerWorkspaceAlias(app, 'get', '/api/sessions/:sessionId/names', async (c) => {
-    const { sessionId } = c.req.param()
+  // GET /api/workspaces/:workspaceId/names
+  app.get('/api/workspaces/:workspaceId/names', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
     try {
-      const names = await loadSessionNames(sessionId)
+      const names = await loadWorkspaceNames(workspaceId)
       return c.json(names)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -316,11 +303,11 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // PUT /api/sessions/:sessionId/name  body: { name: string } (empty string deletes)
-  registerWorkspaceAlias(app, 'put', '/api/sessions/:sessionId/name', async (c) => {
-    const { sessionId } = c.req.param()
+  // PUT /api/workspaces/:workspaceId/name  body: { name: string } (empty string deletes)
+  app.put('/api/workspaces/:workspaceId/name', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
@@ -334,7 +321,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       return c.json({ error: 'invalid_body' }, 400)
     }
     try {
-      const updated = await setWorkspaceName(sessionId, name)
+      const updated = await setWorkspaceName(workspaceId, name)
       return c.json(updated)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -343,11 +330,11 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // PUT /api/sessions/:sessionId/canvases/:slug/name  body: { name: string } (empty string deletes)
-  registerWorkspaceAlias(app, 'put', '/api/sessions/:sessionId/canvases/:slug/name', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  // PUT /api/workspaces/:workspaceId/canvases/:slug/name  body: { name: string } (empty string deletes)
+  app.put('/api/workspaces/:workspaceId/canvases/:slug/name', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -362,7 +349,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       return c.json({ error: 'invalid_body' }, 400)
     }
     try {
-      const updated = await setCanvasName(sessionId, slug, name)
+      const updated = await setCanvasName(workspaceId, slug, name)
       return c.json(updated)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -371,12 +358,12 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // PUT /api/sessions/:sessionId/canvases/:slug/pin  body: { pinned: boolean }
-  // Idempotently set pin on/off and return the full updated SessionNames payload.
-  registerWorkspaceAlias(app, 'put', '/api/sessions/:sessionId/canvases/:slug/pin', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  // PUT /api/workspaces/:workspaceId/canvases/:slug/pin  body: { pinned: boolean }
+  // Idempotently set pin on/off and return the full updated WorkspaceNames payload.
+  app.put('/api/workspaces/:workspaceId/canvases/:slug/pin', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -394,7 +381,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       return c.json({ error: 'invalid_body' }, 400)
     }
     try {
-      const updated = await setCanvasPinned(sessionId, slug, pinned)
+      const updated = await setCanvasPinned(workspaceId, slug, pinned)
       return c.json(updated)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -403,29 +390,29 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // GET /api/canvas/:sessionId/:slug/snapshot
-  app.get('/api/canvas/:sessionId/:slug/snapshot', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  // GET /api/canvas/:workspaceId/:slug/snapshot
+  app.get('/api/canvas/:workspaceId/:slug/snapshot', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
-    const doc = await getDoc(sessionId, slug)
+    const doc = await getDoc(workspaceId, slug)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
     return c.body(snapshot, 200, {
       'Content-Type': 'application/octet-stream',
     })
   })
 
-  // POST /api/canvas/:sessionId/:slug/update
-  app.post('/api/canvas/:sessionId/:slug/update', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  // POST /api/canvas/:workspaceId/:slug/update
+  app.post('/api/canvas/:workspaceId/:slug/update', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -434,20 +421,20 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
     const bytes = new Uint8Array(await c.req.arrayBuffer())
 
-    const doc = await getDoc(sessionId, slug)
+    const doc = await getDoc(workspaceId, slug)
     doc.import(bytes)
-    await saveCanvas(sessionId, slug, doc, { overwrite: true })
+    await saveCanvas(workspaceId, slug, doc, { overwrite: true })
 
     // Broadcast to all WS clients because the originating WS context is unknown on HTTP requests.
-    broadcastLoroUpdate(sessionId, slug, bytes)
+    broadcastLoroUpdate(workspaceId, slug, bytes)
 
     // Trigger auto-versioning. The throttle is built in, so below-threshold calls return null.
     // Even if saving the version fails, keep this API at 200 because the update itself is the priority.
-    triggerAutoVersion(sessionId, slug, doc)
+    triggerAutoVersion(workspaceId, slug, doc)
       .then(async (entry) => {
         if (!entry) return
         const { sendVersionCreated } = await import('./ws.js')
-        sendVersionCreated(sessionId, slug, entry)
+        sendVersionCreated(workspaceId, slug, entry)
       })
       .catch((err: unknown) => {
         console.error('[canvas] auto-version trigger failed:', err)
@@ -456,12 +443,12 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     return c.json({ ok: true })
   })
 
-  // GET /api/sessions/:sessionId/canvases/:slug/versions
+  // GET /api/workspaces/:workspaceId/canvases/:slug/versions
   // List versions for one canvas in reverse chronological order.
-  registerWorkspaceAlias(app, 'get', '/api/sessions/:sessionId/canvases/:slug/versions', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  app.get('/api/workspaces/:workspaceId/canvases/:slug/versions', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -469,7 +456,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     try {
-      const versions = await versionStore.list(sessionId, slug)
+      const versions = await versionStore.list(workspaceId, slug)
       return c.json({ versions })
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -478,12 +465,12 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // POST /api/sessions/:sessionId/canvases/:slug/versions
+  // POST /api/workspaces/:workspaceId/canvases/:slug/versions
   // Save a manual version with body { label?: string; operator?: OperatorInfo }. auto is false.
-  registerWorkspaceAlias(app, 'post', '/api/sessions/:sessionId/canvases/:slug/versions', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  app.post('/api/workspaces/:workspaceId/canvases/:slug/versions', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -510,12 +497,12 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       /* Treat missing or non-JSON bodies as "no label". */
     }
     try {
-      const doc = await getDoc(sessionId, slug)
+      const doc = await getDoc(workspaceId, slug)
       // Include the current HEAD branch name in manual saves too.
       let branchName: string | undefined
       if (options.getHeadBranch) {
         try {
-          const head = await options.getHeadBranch(sessionId, slug)
+          const head = await options.getHeadBranch(workspaceId, slug)
           if (typeof head === 'string' && head.length > 0) branchName = head
         } catch (err) {
           if (isCorruptStoredDataError(err)) {
@@ -529,7 +516,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
         peerId: doc.peerIdStr,
         displayName: defaultHumanDisplayName(),
       }
-      const entry = await versionStore.save(sessionId, slug, doc, {
+      const entry = await versionStore.save(workspaceId, slug, doc, {
         auto: false,
         ...(label !== undefined ? { label } : {}),
         ...(branchName !== undefined ? { branchName } : {}),
@@ -543,14 +530,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // POST /api/sessions/:sessionId/canvases/:slug/compact
+  // POST /api/workspaces/:workspaceId/canvases/:slug/compact
   // GC the op-log before the oldest retained version frontiers using shallow-snapshot.
   // Side effects: replace the on-disk .loro file and evict doc-cache so the next getDoc reloads the shallow doc.
   // Avoid calling this frequently on highly active multi-peer canvases because concurrent applyAndPersist calls can race.
-  registerWorkspaceAlias(app, 'post', '/api/sessions/:sessionId/canvases/:slug/compact', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  app.post('/api/workspaces/:workspaceId/canvases/:slug/compact', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -558,8 +545,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     try {
-      const result = await compactCanvas(sessionId, slug, versionStore)
-      if (result.compacted) evictDoc(sessionId, slug)
+      const result = await compactCanvas(workspaceId, slug, versionStore)
+      if (result.compacted) evictDoc(workspaceId, slug)
       return c.json(result)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -568,10 +555,10 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  registerWorkspaceAlias(app, 'post', '/api/sessions/:sessionId/checkpoints/:checkpointId/restore', async (c) => {
-    const { sessionId, checkpointId } = c.req.param()
+  app.post('/api/workspaces/:workspaceId/checkpoints/:checkpointId/restore', async (c) => {
+    const { workspaceId, checkpointId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateCheckpointId(checkpointId)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -603,10 +590,10 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
           404,
         )
       }
-      await saveCanvas(sessionId, targetSlug, doc, { overwrite })
-      evictDoc(sessionId, targetSlug)
+      await saveCanvas(workspaceId, targetSlug, doc, { overwrite })
+      evictDoc(workspaceId, targetSlug)
       return c.json({
-        canvasId: `${sessionId}/${targetSlug}`,
+        canvasId: `${workspaceId}/${targetSlug}`,
         elementCount: countElements(doc),
       })
     } catch (err) {
@@ -619,10 +606,10 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  app.post('/api/canvas/:sessionId/:slug/export-json', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  app.post('/api/canvas/:workspaceId/:slug/export-json', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -646,11 +633,11 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     } catch {
       /* empty body -> defaults */
     }
-    const doc = await getDoc(sessionId, slug)
+    const doc = await getDoc(workspaceId, slug)
     try {
       return c.json(
         await exportCanvasJsonDoc({
-          sessionId,
+          workspaceId,
           slug,
           doc,
           includeCustomFields,
@@ -667,16 +654,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // PUT /api/sessions/:sessionId/canvases/:slug/versions/:id/thumbnail
+  // PUT /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
   // Body is PNG binary from the browser exportToBlob result. Validate the PNG signature minimally.
-  registerWorkspaceAlias(
-    app,
-    'put',
-    '/api/sessions/:sessionId/canvases/:slug/versions/:id/thumbnail',
+  app.put(
+    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
     async (c) => {
-    const { sessionId, slug, id } = c.req.param()
+    const { workspaceId, slug, id } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
       validateVersionId(id)
     } catch (err) {
@@ -696,7 +681,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       return c.json({ error: 'invalid_png' }, 400)
     }
     try {
-      await versionStore.saveThumbnail(sessionId, id, bytes)
+      await versionStore.saveThumbnail(workspaceId, id, bytes)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'save failed'
       return c.json({ error: 'save_failed', message: msg }, 400)
@@ -704,16 +689,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     return c.json({ ok: true })
   })
 
-  // GET /api/sessions/:sessionId/canvases/:slug/versions/:id/thumbnail
+  // GET /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
   // Return the PNG with cache headers, or 404 if it has not been saved.
-  registerWorkspaceAlias(
-    app,
-    'get',
-    '/api/sessions/:sessionId/canvases/:slug/versions/:id/thumbnail',
+  app.get(
+    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
     async (c) => {
-    const { sessionId, slug, id } = c.req.param()
+    const { workspaceId, slug, id } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
       validateVersionId(id)
     } catch (err) {
@@ -722,7 +705,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     try {
-      const bytes = await versionStore.loadThumbnail(sessionId, id)
+      const bytes = await versionStore.loadThumbnail(workspaceId, id)
       if (!bytes) return c.json({ error: 'not_found' }, 404)
       return c.body(bytes.buffer as ArrayBuffer, 200, {
         'Content-Type': 'image/png',
@@ -735,14 +718,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // GET /api/sessions/:sessionId/canvases/:slug/latest-thumbnail
+  // GET /api/workspaces/:workspaceId/canvases/:slug/latest-thumbnail
   // Return the newest version thumbnail for canvas-switcher previews.
   // "Newest" means the first hasThumbnail=true entry in version list order (createdAt desc).
   // Keep max-age short (5 min) so fresh auto-save thumbnails replace cached ones promptly.
-  registerWorkspaceAlias(app, 'get', '/api/sessions/:sessionId/canvases/:slug/latest-thumbnail', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  app.get('/api/workspaces/:workspaceId/canvases/:slug/latest-thumbnail', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -750,10 +733,10 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     try {
-      const versions = await versionStore.list(sessionId, slug)
+      const versions = await versionStore.list(workspaceId, slug)
       const latestWithThumb = versions.find((v) => v.hasThumbnail)
       if (!latestWithThumb) return c.json({ error: 'not_found' }, 404)
-      const bytes = await versionStore.loadThumbnail(sessionId, latestWithThumb.id)
+      const bytes = await versionStore.loadThumbnail(workspaceId, latestWithThumb.id)
       if (!bytes) return c.json({ error: 'not_found' }, 404)
       return c.body(bytes.buffer as ArrayBuffer, 200, {
         'Content-Type': 'image/png',
@@ -766,20 +749,18 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  // POST /api/sessions/:sessionId/canvases/:slug/versions/:id/restore
+  // POST /api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore
   // Loro-native restore reconciles current elements against the checked-out past state.
   // CRDTs cannot forget history, so restore commits new ops that represent the past state:
   //   only in past    -> insert into current, or un-tombstone and restore fields
   //   only in current -> set isDeleted=true (tombstone)
   //   in both         -> copy differing fields from past onto current
-  registerWorkspaceAlias(
-    app,
-    'post',
-    '/api/sessions/:sessionId/canvases/:slug/versions/:id/restore',
+  app.post(
+    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore',
     async (c) => {
-    const { sessionId, slug, id } = c.req.param()
+    const { workspaceId, slug, id } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
       validateVersionId(id)
     } catch (err) {
@@ -788,28 +769,28 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     try {
-      const doc = await getDoc(sessionId, slug)
-      const past = await versionStore.load(sessionId, id, doc)
+      const doc = await getDoc(workspaceId, slug)
+      const past = await versionStore.load(workspaceId, id, doc)
       if (!past) {
         return c.json({ error: 'not_found' }, 404)
       }
       let label: string | undefined
-      const all = await versionStore.list(sessionId, slug)
+      const all = await versionStore.list(workspaceId, slug)
       label = all.find((v) => v.id === id)?.label
       const { sendRestoreEvent } = await import('./ws.js')
-      sendRestoreEvent(sessionId, slug, 'started', label)
+      sendRestoreEvent(workspaceId, slug, 'started', label)
       try {
         const prevVV = doc.version()
         reconcileElementsOnDoc(doc, past)
         doc.commit()
-        await saveCanvas(sessionId, slug, doc, { overwrite: true })
+        await saveCanvas(workspaceId, slug, doc, { overwrite: true })
         const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
         if (update.byteLength > 0) {
-          broadcastLoroUpdate(sessionId, slug, update)
+          broadcastLoroUpdate(workspaceId, slug, update)
         }
       } finally {
         // Always send complete, even on error, or the client overlay can stay locked forever.
-        sendRestoreEvent(sessionId, slug, 'complete')
+        sendRestoreEvent(workspaceId, slug, 'complete')
       }
       return c.json({ ok: true })
     } catch (err) {

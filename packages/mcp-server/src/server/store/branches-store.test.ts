@@ -132,7 +132,7 @@ describe('branches-store', () => {
       expect(loaded).toEqual(state)
     })
 
-    it('rejects invalid sessionIds such as path traversal input', async () => {
+    it('rejects invalid workspaceIds such as path traversal input', async () => {
       const state = {
         head: 'main',
         branches: [
@@ -144,7 +144,7 @@ describe('branches-store', () => {
           },
         ],
       }
-      await expect(saveCanvasBranches('../evil', 'x', state)).rejects.toThrow(/Invalid sessionId/)
+      await expect(saveCanvasBranches('../evil', 'x', state)).rejects.toThrow(/Invalid workspaceId/)
     })
 
     it('rejects invalid slugs such as empty strings, "..", and "/foo"', async () => {

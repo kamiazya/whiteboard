@@ -3,7 +3,7 @@ import {
   validateCheckpointId,
   validateExternalUrl,
   validateFileId,
-  validateSessionId,
+  validateWorkspaceId,
   validateSlug,
   validateUserLibraryName,
   validateVersionId,
@@ -11,7 +11,7 @@ import {
 
 describe('shared validators', () => {
   it('accepts valid session ids, slugs, ids, and user library names', async () => {
-    expect(validateSessionId('sess_1-abc')).toBe('sess_1-abc')
+    expect(validateWorkspaceId('sess_1-abc')).toBe('sess_1-abc')
     expect(validateSlug('621/header-v2')).toBe('621/header-v2')
     expect(validateCheckpointId('cp_1')).toBe('cp_1')
     expect(validateVersionId('ver-1')).toBe('ver-1')
@@ -26,7 +26,7 @@ describe('shared validators', () => {
   })
 
   it('rejects invalid route/store identifiers', () => {
-    expect(() => validateSessionId('../escape')).toThrow(/Invalid sessionId/)
+    expect(() => validateWorkspaceId('../escape')).toThrow(/Invalid workspaceId/)
     expect(() => validateSlug('../escape')).toThrow(/Invalid slug/)
     expect(() => validateCheckpointId('bad/id')).toThrow(/Invalid checkpoint id/)
     expect(() => validateVersionId('bad.id')).toThrow(/Invalid version id/)

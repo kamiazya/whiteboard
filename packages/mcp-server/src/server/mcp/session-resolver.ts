@@ -58,6 +58,3 @@ export function ensureWorkspaceId(dataDir: string): Promise<string> {
 export function clearWorkspaceIdCache(): void {
   ensureCache.clear()
 }
-
-export const resolveSessionId = resolveWorkspaceId
-export const saveLatestSessionId = saveCurrentWorkspaceId

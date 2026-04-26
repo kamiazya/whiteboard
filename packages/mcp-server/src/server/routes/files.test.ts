@@ -16,7 +16,7 @@ vi.mock('../config.js', () => ({
 
 const { createFilesRouter } = await import('./files.js')
 
-describe('PUT /api/canvas/:sessionId/:slug/file/:fileId', () => {
+describe('PUT /api/canvas/:workspaceId/:slug/file/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
@@ -44,7 +44,7 @@ describe('PUT /api/canvas/:sessionId/:slug/file/:fileId', () => {
   })
 })
 
-describe('GET /api/canvas/:sessionId/:slug/file/:fileId', () => {
+describe('GET /api/canvas/:workspaceId/:slug/file/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(join(tempDir, 'session1', 'files'), { recursive: true })
@@ -133,7 +133,7 @@ describe('GET /api/canvas/:sessionId/:slug/file/:fileId', () => {
     expect(new Uint8Array(buf)[0]).toBe(0x01)
   })
 
-  it('returns 400 for invalid sessionId / fileId', async () => {
+  it('returns 400 for invalid workspaceId / fileId', async () => {
     const app = createFilesRouter()
 
     const badSession = await app.request('/api/canvas/bad.sid/canvas-a/file/file-001')

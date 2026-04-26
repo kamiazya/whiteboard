@@ -5,7 +5,7 @@ import { nanoid } from 'nanoid'
 import { DATA_DIR } from '../config.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { sendExportRequest, getClientCount } from './ws.js'
-import { validationErrorBody, validateSessionId, validateSlug } from '../validators.js'
+import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
 
 // requestId -> { resolve, reject }
 const pendingExports = new Map<
@@ -27,11 +27,11 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
   const timeoutMs = options.timeoutMs ?? 10_000
   const app = new Hono()
 
-  // POST /api/canvas/:sessionId/:slug/export
-  app.post('/api/canvas/:sessionId/:slug/export', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  // POST /api/canvas/:workspaceId/:slug/export
+  app.post('/api/canvas/:workspaceId/:slug/export', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -77,7 +77,7 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     // Fast-fail with 503 if no WS client is connected.
     // Do not wait for the timeout because that would not fix a missing client; report
     // the real cause immediately so the caller can open the canvas in a browser first.
-    if (getClientCount(sessionId, slug) === 0) {
+    if (getClientCount(workspaceId, slug) === 0) {
       return c.json(
         {
           error: 'no_client',
@@ -94,7 +94,7 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     try {
       const base64Data = await new Promise<string>((resolve, reject) => {
         pendingExports.set(requestId, { resolve, reject })
-        sendExportRequest(sessionId, slug, requestId, hasOptions ? options : undefined)
+        sendExportRequest(workspaceId, slug, requestId, hasOptions ? options : undefined)
 
         setTimeout(() => {
           if (pendingExports.has(requestId)) {
@@ -115,7 +115,7 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
         // .excalidraw.png is a PNG with embedded scene JSON. Normal image viewers treat
         // it as a PNG, and dropping it into Excalidraw restores the scene for editing.
         const fileName = `${slug}-${timestamp}.excalidraw.png`
-        const exportsDir = join(DATA_DIR, sessionId, 'exports')
+        const exportsDir = join(DATA_DIR, workspaceId, 'exports')
         filePath = join(exportsDir, fileName)
       }
       // If slug contains "/" (nested canvas paths) or outputPath points into a

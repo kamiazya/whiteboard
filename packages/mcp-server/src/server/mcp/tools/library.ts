@@ -201,7 +201,7 @@ async function insertLibraryBatch(
   insertedElementCount: number
   items: Array<{ itemIndex: number; insertedCount: number; elementIds: string[] }>
 }> {
-  const { sessionId, slug } = parseCanvasId(args.canvasId)
+  const { workspaceId, slug } = parseCanvasId(args.canvasId)
   const items = await loadLibrarySource(args, client)
   let metadata: UserLibraryMetadataManifest | undefined
   const needsMetadata =
@@ -214,13 +214,13 @@ async function insertLibraryBatch(
   const prepared = prepareBatchInsert(items, args.items, args.groupAs, (spec) =>
     requirePositiveScale(spec.scale ?? args.scale ?? metadata?.scales?.[String(spec.itemIndex)]),
   )
-  const doc = await apiGetSnapshot(client, sessionId, slug)
+  const doc = await apiGetSnapshot(client, workspaceId, slug)
   const prevVV = doc.version()
   appendElementsToDoc(doc, prepared.insertedElements)
   doc.commit()
   const update = doc.export({ mode: 'update', from: prevVV })
   if (update.byteLength > 0) {
-    await apiPostLoroUpdate(client, sessionId, slug, update)
+    await apiPostLoroUpdate(client, workspaceId, slug, update)
   }
   return {
     source: sourceLabel(args),
@@ -468,7 +468,7 @@ export function libraryInsertBatchTool() {
 // Three tools for persisting library URLs at the session level so the browser can
 // restore the library panel after reloads.
 
-export function libraryInstallTool(sessionId: string) {
+export function libraryInstallTool(workspaceId: string) {
   return {
     name: 'library_install',
     description:
@@ -486,7 +486,7 @@ export function libraryInstallTool(sessionId: string) {
     execute: async (args: { libraryUrl: string }, client: DaemonClient) => {
       // Verify the URL eagerly so broken sources fail here.
       const items = await fetchLibrary(args.libraryUrl)
-      const res = await client.request(`/api/workspaces/${sessionId}/libraries`, {
+      const res = await client.request(`/api/workspaces/${workspaceId}/libraries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: args.libraryUrl }),
@@ -504,7 +504,7 @@ export function libraryInstallTool(sessionId: string) {
   }
 }
 
-export function libraryUninstallTool(sessionId: string) {
+export function libraryUninstallTool(workspaceId: string) {
   return {
     name: 'library_uninstall',
     description: 'Remove a previously installed library URL from the session registry.',
@@ -516,7 +516,7 @@ export function libraryUninstallTool(sessionId: string) {
       required: ['libraryUrl'],
     },
     execute: async (args: { libraryUrl: string }, client: DaemonClient) => {
-      const res = await client.request(`/api/workspaces/${sessionId}/libraries`, {
+      const res = await client.request(`/api/workspaces/${workspaceId}/libraries`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: args.libraryUrl }),
@@ -530,7 +530,7 @@ export function libraryUninstallTool(sessionId: string) {
   }
 }
 
-export function libraryListInstalledTool(sessionId: string) {
+export function libraryListInstalledTool(workspaceId: string) {
   return {
     name: 'library_list_installed',
     description:
@@ -540,7 +540,7 @@ export function libraryListInstalledTool(sessionId: string) {
       properties: {},
     },
     execute: async (_args: object, client: DaemonClient) => {
-      const res = await client.request(`/api/workspaces/${sessionId}/libraries`)
+      const res = await client.request(`/api/workspaces/${workspaceId}/libraries`)
       if (!res.ok) {
         throw new Error(`Failed to list installed libraries: ${res.status}`)
       }

@@ -17,7 +17,7 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so it runs after the mock is resolved.
-const { saveCanvas, loadCanvas, listCanvases, listSessions, compactCanvas } = await import('./canvas-store.js')
+const { saveCanvas, loadCanvas, listCanvases, listWorkspaces, compactCanvas } = await import('./canvas-store.js')
 const { FileVersionStore } = await import('./version-store.js')
 
 describe('saveCanvas / loadCanvas', () => {
@@ -322,16 +322,16 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
     await expect(saveCanvas('session1', 'canvas-', new LoroDoc())).rejects.toThrow('Invalid slug')
   })
 
-  it('rejects path-traversal sessionIds', async () => {
-    await expect(saveCanvas('..', 'safe-slug', new LoroDoc())).rejects.toThrow('Invalid sessionId')
-    await expect(loadCanvas('../escape', 'safe-slug')).rejects.toThrow('Invalid sessionId')
+  it('rejects path-traversal workspaceIds', async () => {
+    await expect(saveCanvas('..', 'safe-slug', new LoroDoc())).rejects.toThrow('Invalid workspaceId')
+    await expect(loadCanvas('../escape', 'safe-slug')).rejects.toThrow('Invalid workspaceId')
   })
 
-  it('rejects sessionIds that contain slashes', async () => {
+  it('rejects workspaceIds that contain slashes', async () => {
     await expect(saveCanvas('nested/session', 'safe-slug', new LoroDoc())).rejects.toThrow(
-      'Invalid sessionId',
+      'Invalid workspaceId',
     )
-    await expect(listCanvases('nested/session')).rejects.toThrow('Invalid sessionId')
+    await expect(listCanvases('nested/session')).rejects.toThrow('Invalid workspaceId')
   })
 })
 
@@ -405,7 +405,7 @@ describe('slug validation - self-describing error messages', () => {
   })
 })
 
-describe('listSessions', () => {
+describe('listWorkspaces', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
   })
@@ -429,14 +429,14 @@ describe('listSessions', () => {
       }),
     )
 
-    const sessions = await listSessions()
-    const ids = sessions.map((s) => s.sessionId)
+    const sessions = await listWorkspaces()
+    const ids = sessions.map((s) => s.workspaceId)
 
     expect(ids).toContain('session-active')
     expect(ids).toContain('session-old')
 
-    const active = sessions.find((s) => s.sessionId === 'session-active')
-    const old = sessions.find((s) => s.sessionId === 'session-old')
+    const active = sessions.find((s) => s.workspaceId === 'session-active')
+    const old = sessions.find((s) => s.workspaceId === 'session-old')
 
     expect(active?.daemonAlive).toBe(true)
     expect(old?.daemonAlive).toBe(true)
@@ -456,8 +456,8 @@ describe('listSessions', () => {
       }),
     )
 
-    const sessions = await listSessions()
-    const stale = sessions.find((s) => s.sessionId === 'session-stale')
+    const sessions = await listWorkspaces()
+    const stale = sessions.find((s) => s.workspaceId === 'session-stale')
     expect(stale?.daemonAlive).toBe(false)
   })
 
@@ -465,8 +465,8 @@ describe('listSessions', () => {
     const { mkdir, writeFile } = await import('node:fs/promises')
     await mkdir(join(tempDir, 'session-legacy'), { recursive: true })
 
-    const sessions = await listSessions()
-    const legacy = sessions.find((s) => s.sessionId === 'session-legacy')
+    const sessions = await listWorkspaces()
+    const legacy = sessions.find((s) => s.workspaceId === 'session-legacy')
     expect(legacy?.daemonAlive).toBe(false)
   })
 
@@ -474,7 +474,7 @@ describe('listSessions', () => {
     // Point the config to a directory that does not exist.
     const origDir = tempDir
     tempDir = join(tmpdir(), 'nonexistent-whiteboard-test-dir')
-    const sessions = await listSessions()
+    const sessions = await listWorkspaces()
     expect(sessions).toHaveLength(0)
     tempDir = origDir
   })
@@ -486,7 +486,7 @@ describe('listSessions', () => {
     tempDir = filePath
 
     try {
-      await expect(listSessions()).rejects.toMatchObject({
+      await expect(listWorkspaces()).rejects.toMatchObject({
         name: 'CorruptStoredDataError',
         message: expect.stringContaining(filePath),
       })

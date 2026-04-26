@@ -11,40 +11,39 @@ import {
 import { corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
   validateBranchName,
-  validateSessionId,
+  validateWorkspaceId,
   validateSlug,
   validateVersionId,
   validationErrorBody,
 } from '../validators.js'
-import { registerWorkspaceAlias } from './workspace-alias.js'
 
 // Branches router, spec §4.
 // Resolve fromVersionId through DI (resolveFromVersionFrontiers) to avoid a circular dependency.
 // The caller (server/index.ts) passes a resolver that closes over FileVersionStore.
 
 export interface CreateBranchesRouterOptions {
-  // Return base64 frontiers for sessionId + versionId, or null if not found.
+  // Return base64 frontiers for workspaceId + versionId, or null if not found.
   // When omitted, create requests using fromVersionId always return 404.
-  resolveFromVersionFrontiers?: (sessionId: string, versionId: string) => Promise<string | null>
+  resolveFromVersionFrontiers?: (workspaceId: string, versionId: string) => Promise<string | null>
   // Hook for PUT /head to persist the current frontiers onto the previous branch before switching.
   // Skip the update if omitted or if it returns null, for example when the doc is not cached.
-  getCurrentFrontiers?: (sessionId: string, slug: string) => Promise<string | null>
+  getCurrentFrontiers?: (workspaceId: string, slug: string) => Promise<string | null>
   // Hook for PUT /head to reconcile and broadcast the doc to the new branch tipFrontiers.
   // Not called when tipFrontiersBase64 === "" because that branch is still uninitialized.
   checkoutTo?: (
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     tipFrontiersBase64: string,
   ) => Promise<void>
   // Notify all peers on the same key when a HEAD switch completes.
   // This is only a UI signal because checkoutTo already broadcasts the Loro update.
-  notifyHeadChanged?: (sessionId: string, slug: string, head: string) => void
+  notifyHeadChanged?: (workspaceId: string, slug: string, head: string) => void
   // Merge source into target.
   // dryRun=true returns preview + badges without persisting changes.
   // dryRun=false updates target tipFrontiers and, if target is HEAD, reconciles and broadcasts the live doc.
   // Deployments without this hook return 501 unsupported_merge.
   performMerge?: (
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     args: { source: string; into: string; dryRun: boolean },
   ) => Promise<{
@@ -69,7 +68,7 @@ export interface CreateBranchesRouterOptions {
   // Keep version-store branchName values in sync during PATCH /branches/:name rename.
   // If omitted, only branch metadata is renamed.
   renameInVersions?: (
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     oldName: string,
     newName: string,
@@ -77,7 +76,7 @@ export interface CreateBranchesRouterOptions {
   // Count function used by DELETE /branches/:name to return actual unmergedCommits.
   // If omitted, the route falls back to 0.
   countVersionsOnBranch?: (
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     branchName: string,
   ) => Promise<number>
@@ -125,11 +124,11 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   const branchConflict = (message: string) => ({ error: 'branch_conflict', message })
   const branchNotFound = (message: string) => ({ error: 'branch_not_found', message })
 
-  // ── GET /api/sessions/:sid/canvases/:slug/branches ──
-  registerWorkspaceAlias(app, 'get', '/api/sessions/:sid/canvases/:slug/branches', async (c) => {
+  // ── GET /api/workspaces/:sid/canvases/:slug/branches ──
+  app.get('/api/workspaces/:sid/canvases/:slug/branches', async (c) => {
     const { sid, slug } = c.req.param()
     try {
-      validateSessionId(sid)
+      validateWorkspaceId(sid)
       validateSlug(slug)
     } catch (err) {
       const v = handleValidation(err)
@@ -146,11 +145,11 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── POST /api/sessions/:sid/canvases/:slug/branches ──
-  registerWorkspaceAlias(app, 'post', '/api/sessions/:sid/canvases/:slug/branches', async (c) => {
+  // ── POST /api/workspaces/:sid/canvases/:slug/branches ──
+  app.post('/api/workspaces/:sid/canvases/:slug/branches', async (c) => {
     const { sid, slug } = c.req.param()
     try {
-      validateSessionId(sid)
+      validateWorkspaceId(sid)
       validateSlug(slug)
     } catch (err) {
       const v = handleValidation(err)
@@ -222,11 +221,11 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── DELETE /api/sessions/:sid/canvases/:slug/branches/:name ──
-  registerWorkspaceAlias(app, 'delete', '/api/sessions/:sid/canvases/:slug/branches/:name', async (c) => {
+  // ── DELETE /api/workspaces/:sid/canvases/:slug/branches/:name ──
+  app.delete('/api/workspaces/:sid/canvases/:slug/branches/:name', async (c) => {
     const { sid, slug, name } = c.req.param()
     try {
-      validateSessionId(sid)
+      validateWorkspaceId(sid)
       validateSlug(slug)
     } catch (err) {
       const v = handleValidation(err)
@@ -257,15 +256,15 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── PUT /api/sessions/:sid/canvases/:slug/head ──
+  // ── PUT /api/workspaces/:sid/canvases/:slug/head ──
   // Update branches.json on HEAD switch.
   // When getCurrentFrontiers / checkoutTo are provided, also:
   //   1) save the current doc.frontiers() onto the previous HEAD
   //   2) reconcile + broadcast when the new HEAD tipFrontiers is non-empty
-  registerWorkspaceAlias(app, 'put', '/api/sessions/:sid/canvases/:slug/head', async (c) => {
+  app.put('/api/workspaces/:sid/canvases/:slug/head', async (c) => {
     const { sid, slug } = c.req.param()
     try {
-      validateSessionId(sid)
+      validateWorkspaceId(sid)
       validateSlug(slug)
     } catch (err) {
       const v = handleValidation(err)
@@ -339,17 +338,15 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── POST /api/sessions/:sid/canvases/:slug/branches/:source/merge ──
+  // ── POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge ──
   // Spec §7. Merge source (URL param) into target (body). dryRun can return a preview without committing.
   // LWW edge-case detection lives in merge-engine.detectMergeBadges; document operations are delegated to performMerge.
-  registerWorkspaceAlias(
-    app,
-    'post',
-    '/api/sessions/:sid/canvases/:slug/branches/:source/merge',
+  app.post(
+    '/api/workspaces/:sid/canvases/:slug/branches/:source/merge',
     async (c) => {
     const { sid, slug, source } = c.req.param()
     try {
-      validateSessionId(sid)
+      validateWorkspaceId(sid)
       validateSlug(slug)
     } catch (err) {
       const v = handleValidation(err)
@@ -435,13 +432,13 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── GET /api/sessions/:sid/canvases/:slug/branches/:name/stats ──
+  // ── GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats ──
   // Pre-check endpoint for the delete confirmation dialog.
   // Returns actual unmergedCommits plus isHead.
-  registerWorkspaceAlias(app, 'get', '/api/sessions/:sid/canvases/:slug/branches/:name/stats', async (c) => {
+  app.get('/api/workspaces/:sid/canvases/:slug/branches/:name/stats', async (c) => {
     const { sid, slug, name } = c.req.param()
     try {
-      validateSessionId(sid)
+      validateWorkspaceId(sid)
       validateSlug(slug)
     } catch (err) {
       const v = handleValidation(err)
@@ -467,13 +464,13 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     }
   })
 
-  // ── PATCH /api/sessions/:sid/canvases/:slug/branches/:name ──
+  // ── PATCH /api/workspaces/:sid/canvases/:slug/branches/:name ──
   // Rename with body { name: newName }. main returns 409, conflicts return 409, missing returns 404.
   // version-store branchName updates are delegated to renameInVersions and default to 0 when omitted.
-  registerWorkspaceAlias(app, 'patch', '/api/sessions/:sid/canvases/:slug/branches/:name', async (c) => {
+  app.patch('/api/workspaces/:sid/canvases/:slug/branches/:name', async (c) => {
     const { sid, slug, name } = c.req.param()
     try {
-      validateSessionId(sid)
+      validateWorkspaceId(sid)
       validateSlug(slug)
     } catch (err) {
       const v = handleValidation(err)

@@ -130,11 +130,11 @@ export function createFrameTool() {
       required: ['canvasId'],
     },
     execute: async (args: CreateFrameArgs, client: DaemonClient): Promise<CreateFrameResult> => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const memberIds = (args.memberIds ?? []).slice(0, MAX_MEMBER_IDS)
       const padding = args.padding ?? 24
 
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
 
       const elementsJson = doc.getMovableList('elements').toJSON() as Array<{
@@ -183,7 +183,7 @@ export function createFrameTool() {
       }
 
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
 
       return { elementId: frameId, bounds, assignedMembers }
     },
@@ -231,8 +231,8 @@ export function createEmbedTool() {
       if (!/^https?:\/\//.test(args.url)) {
         throw new Error(`Invalid url "${args.url}": must start with http:// or https://`)
       }
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
 
       const elementId = nanoid(16)
@@ -247,7 +247,7 @@ export function createEmbedTool() {
       }))
 
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
 
       return { elementId, url: args.url }
     },
@@ -300,11 +300,11 @@ export function updateFrameMembersTool() {
       required: ['canvasId', 'frameId'],
     },
     execute: async (args: UpdateFrameMembersArgs, client: DaemonClient): Promise<UpdateFrameMembersResult> => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const padding = args.padding ?? 24
       const add = args.add ?? []
       const remove = args.remove ?? []
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
 
       const list = doc.getMovableList('elements')
@@ -391,7 +391,7 @@ export function updateFrameMembersTool() {
       doc.commit()
       await apiPostLoroUpdate(
         client,
-        sessionId,
+        workspaceId,
         slug,
         doc.export({ mode: 'update', from: prevVV }),
       )

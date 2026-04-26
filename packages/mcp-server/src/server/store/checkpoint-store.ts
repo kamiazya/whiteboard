@@ -10,7 +10,7 @@ import { assertPathWithinDir } from './path-guard.js'
 // excalidraw-mcp/checkpoint-store.ts.
 // Store checkpoints at DATA_DIR/.checkpoints/{id}.loro so they can be restored
 // across sessions, independent of the per-session directories.
-// listSessions already skips dot-prefixed directories, so `.checkpoints`
+// listWorkspaces already skips dot-prefixed directories, so `.checkpoints`
 // never appears in the session list.
 
 // 5 MiB limit, based on snapshot byteLength.

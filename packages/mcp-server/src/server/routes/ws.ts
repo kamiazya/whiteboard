@@ -10,7 +10,7 @@ import {
   parseWsTargetFromRequestUrl,
 } from './ws-validation.js'
 
-// Connection registry: key = "sessionId/slug", value = Set<WebSocket>
+// Connection registry: key = "workspaceId/slug", value = Set<WebSocket>
 const connections = new Map<string, Set<WebSocket>>()
 const readyConnections = new Map<string, Set<WebSocket>>()
 let runtimeTouch: () => void = () => {}
@@ -22,12 +22,12 @@ export function setRuntimeTouchFn(fn: () => void): void {
 // WS broadcast helper that can exclude the sender.
 // Exported so app.ts can wire it into the branches router checkoutTo flow.
 export function broadcastLoroUpdate(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   update: Uint8Array,
   excludeWs?: WebSocket,
 ): void {
-  const key = `${sessionId}/${slug}`
+  const key = `${workspaceId}/${slug}`
   const clients = connections.get(key)
   if (!clients) return
   for (const ws of clients) {
@@ -49,7 +49,7 @@ export function setResolveExportFn(fn: (requestId: string, data: string) => void
 // Injected from canvas.ts: auto-version trigger with built-in throttling.
 // Called after WS binary messages; creates a new version and pushes it to the browser when the interval has elapsed.
 type AutoVersionTrigger = (
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   doc: LoroDoc,
 ) => Promise<VersionEntry | null>
@@ -60,11 +60,11 @@ export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
 
 // Push version creation events to all WS clients on the canvas. The browser generates and uploads the thumbnail.
 export function sendVersionCreated(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   version: VersionEntry,
 ): void {
-  const key = `${sessionId}/${slug}`
+  const key = `${workspaceId}/${slug}`
   const clients = connections.get(key)
   if (!clients) return
   const msg = JSON.stringify({ type: 'version_created', version })
@@ -77,12 +77,12 @@ export function sendVersionCreated(
 // Clients block pointer events while started is active to reduce races with other peers.
 // This is not an absolute CRDT lock, just a best-effort UX for the typically short restore window (<1s).
 export function sendRestoreEvent(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   phase: 'started' | 'complete',
   label?: string,
 ): void {
-  const key = `${sessionId}/${slug}`
+  const key = `${workspaceId}/${slug}`
   const clients = connections.get(key)
   if (!clients) return
   const msg = JSON.stringify({
@@ -97,8 +97,8 @@ export function sendRestoreEvent(
 // Notify all peers on the same key when HEAD changes.
 // broadcastLoroUpdate already carries the state update; this is only a UI overlay signal.
 // If WS keys become branch-aware later, only the key-construction logic needs to change.
-export function sendHeadChanged(sessionId: string, slug: string, head: string): void {
-  const key = `${sessionId}/${slug}`
+export function sendHeadChanged(workspaceId: string, slug: string, head: string): void {
+  const key = `${workspaceId}/${slug}`
   const clients = connections.get(key)
   if (!clients) return
   const msg = JSON.stringify({ type: 'head_changed', head })
@@ -116,12 +116,12 @@ export function setResolveViewportFn(fn: (requestId: string) => void): void {
 
 // Send export_request to every WS client connected to a canvas. Used by export.ts.
 export function sendExportRequest(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   requestId: string,
   options?: { padding?: number; scale?: number; minFontPx?: number; frameId?: string },
 ): void {
-  const key = `${sessionId}/${slug}`
+  const key = `${workspaceId}/${slug}`
   const clients = connections.get(key)
   if (!clients) return
   const msg = JSON.stringify({
@@ -141,12 +141,12 @@ export function sendExportRequest(
 // params may include mode / elementIds / padding / animate / scrollX / scrollY / zoom.
 // The browser-side useWhiteboardSync viewport_request handler applies them through excalidrawAPI.
 export function sendViewportRequest(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   requestId: string,
   params: Record<string, unknown>,
 ): void {
-  const key = `${sessionId}/${slug}`
+  const key = `${workspaceId}/${slug}`
   const clients = connections.get(key)
   if (!clients) return
   const msg = JSON.stringify({ type: 'viewport_request', requestId, ...params })
@@ -156,12 +156,12 @@ export function sendViewportRequest(
 }
 
 // Return the number of WS clients connected to a canvas. Used for export.ts preflight checks.
-export function getClientCount(sessionId: string, slug: string): number {
-  return connections.get(`${sessionId}/${slug}`)?.size ?? 0
+export function getClientCount(workspaceId: string, slug: string): number {
+  return connections.get(`${workspaceId}/${slug}`)?.size ?? 0
 }
 
-export function getReadyClientCount(sessionId: string, slug: string): number {
-  return readyConnections.get(`${sessionId}/${slug}`)?.size ?? 0
+export function getReadyClientCount(workspaceId: string, slug: string): number {
+  return readyConnections.get(`${workspaceId}/${slug}`)?.size ?? 0
 }
 
 export function getConnectionStats(): { connectedClients: number; readyClients: number } {
@@ -171,22 +171,22 @@ export function getConnectionStats(): { connectedClients: number; readyClients: 
 }
 
 // WS upgrade handler, called from server/index.ts.
-// URL pattern: /ws/:sessionId/:slug
+// URL pattern: /ws/:workspaceId/:slug
 // slug arrives URL-encoded because hierarchical paths may include "/".
-// Example: /ws/abc/621%2Fheader -> sessionId="abc", slug="621/header"
+// Example: /ws/abc/621%2Fheader -> workspaceId="abc", slug="621/header"
 export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Promise<void> {
-  let sessionId = ''
+  let workspaceId = ''
   let slug = ''
   try {
     const target = parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
-    sessionId = target.sessionId
+    workspaceId = target.workspaceId
     slug = target.slug
   } catch {
     ws.close()
     return
   }
 
-  const key = `${sessionId}/${slug}`
+  const key = `${workspaceId}/${slug}`
 
   // Register the connection.
   if (!connections.has(key)) {
@@ -196,7 +196,7 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
   runtimeTouch()
 
   // On connect, send the latest snapshot as binary for the initial load.
-  const doc = await getDoc(sessionId, slug)
+  const doc = await getDoc(workspaceId, slug)
   ws.send(doc.export({ mode: 'snapshot' }))
 
   ws.on('message', async (data: RawData, isBinary: boolean) => {
@@ -228,17 +228,17 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
         ? new Uint8Array(data)
         : new Uint8Array(Buffer.concat(data as Buffer[]))
 
-    const currentDoc = await getDoc(sessionId, slug)
+    const currentDoc = await getDoc(workspaceId, slug)
     currentDoc.import(bytes)
-    await saveCanvas(sessionId, slug, currentDoc, { overwrite: true })
-    broadcastLoroUpdate(sessionId, slug, bytes, ws)
+    await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
+    broadcastLoroUpdate(workspaceId, slug, bytes, ws)
 
     // Trigger auto-versioning on the WS path as well, since browser edits primarily use it.
     // The trigger is throttled, so frequent edits stay safe.
     // On success, push version_created to all clients so the browser can generate and upload a thumbnail.
-    autoVersionTrigger(sessionId, slug, currentDoc)
+    autoVersionTrigger(workspaceId, slug, currentDoc)
       .then((entry) => {
-        if (entry) sendVersionCreated(sessionId, slug, entry)
+        if (entry) sendVersionCreated(workspaceId, slug, entry)
       })
       .catch((err: unknown) => {
         console.error('[ws] auto-version trigger failed:', err)

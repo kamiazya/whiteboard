@@ -71,21 +71,6 @@ const canvasListOutputSchema = z.object({
   workspaces: z.array(
     z.object({
       workspaceId: z.string(),
-      sessionId: z.string(),
-      daemonAlive: z.boolean(),
-      canvases: z.array(
-        z.object({
-          id: z.string(),
-          slug: z.string(),
-          url: z.string(),
-          updatedAt: z.string(),
-        }),
-      ),
-    }),
-  ),
-  sessions: z.array(
-    z.object({
-      sessionId: z.string(),
       daemonAlive: z.boolean(),
       canvases: z.array(
         z.object({
@@ -541,7 +526,7 @@ function registerToolWithAnnotations<I extends z.ZodRawShape>(
 export async function createExcalidrawMcpServer() {
   // ensureWorkspaceId memoizes the resolve+save sequence per DATA_DIR so the
   // HTTP /mcp handler does not race concurrent requests on the marker file.
-  const sessionId = await ensureWorkspaceId(DATA_DIR)
+  const workspaceId = await ensureWorkspaceId(DATA_DIR)
 
   // Read `version` from package.json at runtime so release-please bumps propagate
   // without source edits.
@@ -613,9 +598,9 @@ export async function createExcalidrawMcpServer() {
   const libListTool = libraryListItemsTool()
   const libInsertTool = libraryInsertItemTool()
   const libInsertBatch = libraryInsertBatchTool()
-  const libInstall = libraryInstallTool(sessionId)
-  const libUninstall = libraryUninstallTool(sessionId)
-  const libListInstalled = libraryListInstalledTool(sessionId)
+  const libInstall = libraryInstallTool(workspaceId)
+  const libUninstall = libraryUninstallTool(workspaceId)
+  const libListInstalled = libraryListInstalledTool(workspaceId)
   const libCatalog = libraryCatalogListTool()
   const userLibSave = userLibrarySaveTool()
   const userLibList = userLibraryListTool()
@@ -711,7 +696,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ slug, issueNumber, overwrite }) => {
       const result = await withDaemon((client) =>
-        canvasTool.execute({ slug, issueNumber, overwrite }, sessionId, client),
+        canvasTool.execute({ slug, issueNumber, overwrite }, workspaceId, client),
       )
       return structuredJsonResult(result)
     },
@@ -1009,11 +994,11 @@ export async function createExcalidrawMcpServer() {
     paletteGet.name,
     {
       description: paletteGet.description,
-      inputSchema: { sessionId: z.string() },
+      inputSchema: { workspaceId: z.string() },
       outputSchema: paletteOutputSchema,
     },
-    async ({ sessionId }) => {
-      const result = await withDaemon((client) => paletteGet.execute({ sessionId }, client))
+    async ({ workspaceId }) => {
+      const result = await withDaemon((client) => paletteGet.execute({ workspaceId }, client))
       return structuredJsonResult(result)
     },
   )
@@ -1023,7 +1008,7 @@ export async function createExcalidrawMcpServer() {
     {
       description: paletteSet.description,
       inputSchema: {
-        sessionId: z.string().describe(
+        workspaceId: z.string().describe(
           'Session ID (the part before "/" in canvasId). Palette is shared across all canvases in the session.',
         ),
         entries: z.record(z.string(), z.string()).describe(
@@ -1032,8 +1017,8 @@ export async function createExcalidrawMcpServer() {
       },
       outputSchema: paletteOutputSchema,
     },
-    async ({ sessionId, entries }) => {
-      const result = await withDaemon((client) => paletteSet.execute({ sessionId, entries }, client))
+    async ({ workspaceId, entries }) => {
+      const result = await withDaemon((client) => paletteSet.execute({ workspaceId, entries }, client))
       return structuredJsonResult(result)
     },
   )
@@ -1042,11 +1027,11 @@ export async function createExcalidrawMcpServer() {
     paletteDelete.name,
     {
       description: paletteDelete.description,
-      inputSchema: { sessionId: z.string(), keys: z.array(z.string()).min(1) },
+      inputSchema: { workspaceId: z.string(), keys: z.array(z.string()).min(1) },
       outputSchema: paletteOutputSchema,
     },
-    async ({ sessionId, keys }) => {
-      const result = await withDaemon((client) => paletteDelete.execute({ sessionId, keys }, client))
+    async ({ workspaceId, keys }) => {
+      const result = await withDaemon((client) => paletteDelete.execute({ workspaceId, keys }, client))
       return structuredJsonResult(result)
     },
   )
@@ -1689,7 +1674,7 @@ export async function createExcalidrawMcpServer() {
     },
     async ({ checkpointId, targetSlug, overwrite }) => {
       const result = await withDaemon((client) =>
-        checkpointRestore.execute({ checkpointId, targetSlug, overwrite }, sessionId, client),
+        checkpointRestore.execute({ checkpointId, targetSlug, overwrite }, workspaceId, client),
       )
       return structuredJsonResult(result)
     },

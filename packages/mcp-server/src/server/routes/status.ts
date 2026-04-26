@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
 import { getClientCount, getReadyClientCount } from './ws.js'
-import { validationErrorBody, validateSessionId, validateSlug } from '../validators.js'
+import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
 
 // Lightweight route for polling whether the browser connected after canvas_open.
 // It only reads the WS connection map through getClientCount, so it stays O(1).
 //
 // Usage:
-//   GET /api/canvas/:sessionId/:slug/client-count → { count: number }
+//   GET /api/canvas/:workspaceId/:slug/client-count → { count: number }
 //
 // When canvas_open uses waitForClient=true, poll this endpoint every 100 ms until
 // count >= 1 or timeout. That avoids the canvas_open -> export_png race where
@@ -15,10 +15,10 @@ import { validationErrorBody, validateSessionId, validateSlug } from '../validat
 export function createStatusRouter() {
   const app = new Hono()
 
-  app.get('/api/canvas/:sessionId/:slug/client-count', (c) => {
-    const { sessionId, slug } = c.req.param()
+  app.get('/api/canvas/:workspaceId/:slug/client-count', (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -26,8 +26,8 @@ export function createStatusRouter() {
       throw err
     }
     return c.json({
-      count: getClientCount(sessionId, slug),
-      readyCount: getReadyClientCount(sessionId, slug),
+      count: getClientCount(workspaceId, slug),
+      readyCount: getReadyClientCount(workspaceId, slug),
     })
   })
 

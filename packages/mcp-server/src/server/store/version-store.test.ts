@@ -70,7 +70,7 @@ describe('FileVersionStore (Loro native)', () => {
         peerId: 'peer-ai',
         displayName: 'Assistant',
         agentId: 'agent-1',
-        sessionId: 'session-1',
+        workspaceId: 'session-1',
       },
     })
 
@@ -79,7 +79,7 @@ describe('FileVersionStore (Loro native)', () => {
       peerId: 'peer-ai',
       displayName: 'Assistant',
       agentId: 'agent-1',
-      sessionId: 'session-1',
+      workspaceId: 'session-1',
     })
     const listed = await store.list('sess-1', 'canvas-a')
     expect(listed[0]?.operator).toEqual(entry.operator)

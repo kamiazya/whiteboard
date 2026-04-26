@@ -31,7 +31,7 @@ const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 // Dynamically import the Hono app.
 const { createCanvasRouter, createAutoVersionTrigger } = await import('./canvas.js')
 
-describe('GET /api/sessions', () => {
+describe('GET /api/workspaces', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
     clearCache()
@@ -50,7 +50,7 @@ describe('GET /api/sessions', () => {
 
     try {
       const app = createCanvasRouter()
-      const res = await app.request('/api/sessions')
+      const res = await app.request('/api/workspaces')
 
       expect(res.status).toBe(500)
       await expect(res.json()).resolves.toEqual({
@@ -75,25 +75,25 @@ describe('GET /api/workspaces', () => {
     clearCache()
   })
 
-  it('returns the canonical workspace list and includes sessionId as a compatibility alias', async () => {
+  it('returns the canonical workspace list and includes workspaceId as a compatibility alias', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces')
 
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string; sessionId?: string; daemonAlive: boolean }>
+      workspaces: Array<{ workspaceId: string; workspaceId?: string; daemonAlive: boolean }>
     }
     expect(json.workspaces).toEqual([
       expect.objectContaining({
         workspaceId: 'workspace-a',
-        sessionId: 'workspace-a',
+        workspaceId: 'workspace-a',
         daemonAlive: false,
       }),
     ])
   })
 })
 
-describe('GET /api/sessions/:sessionId/canvases', () => {
+describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
@@ -110,7 +110,7 @@ describe('GET /api/sessions/:sessionId/canvases', () => {
     await saveCanvas('session1', 'canvas-b', new LoroDoc())
 
     const app = createCanvasRouter()
-    const res = await app.request('/api/sessions/session1/canvases')
+    const res = await app.request('/api/workspaces/session1/canvases')
     expect(res.status).toBe(200)
     const json = (await res.json()) as { canvases: { slug: string }[] }
     const slugs = json.canvases.map((c) => c.slug)
@@ -118,9 +118,9 @@ describe('GET /api/sessions/:sessionId/canvases', () => {
     expect(slugs).toContain('canvas-b')
   })
 
-  it('returns 400 for an invalid sessionId', async () => {
+  it('returns 400 for an invalid workspaceId', async () => {
     const app = createCanvasRouter()
-    const res = await app.request('/api/sessions/bad.sid/canvases')
+    const res = await app.request('/api/workspaces/bad.sid/canvases')
     expect(res.status).toBe(400)
   })
 
@@ -129,7 +129,7 @@ describe('GET /api/sessions/:sessionId/canvases', () => {
     await writeFile(join(tempDir, 'session1'), 'not-a-directory')
 
     const app = createCanvasRouter()
-    const res = await app.request('/api/sessions/session1/canvases')
+    const res = await app.request('/api/workspaces/session1/canvases')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -163,7 +163,7 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
   })
 })
 
-describe('GET /api/canvas/:sessionId/:slug/snapshot', () => {
+describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
@@ -205,7 +205,7 @@ describe('GET /api/canvas/:sessionId/:slug/snapshot', () => {
   })
 })
 
-describe('POST /api/sessions/:sessionId/canvases/:slug/compact', () => {
+describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   function createVersionStoreMock() {
     return {
       save: vi.fn(),
@@ -234,7 +234,7 @@ describe('POST /api/sessions/:sessionId/canvases/:slug/compact', () => {
     await writeFile(join(tempDir, 'session1', 'canvas-a.loro'), Buffer.from('not-a-loro-snapshot'))
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/compact', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
       method: 'POST',
     })
 
@@ -250,7 +250,7 @@ describe('POST /api/sessions/:sessionId/canvases/:slug/compact', () => {
     await writeFile(join(tempDir, 'session1'), 'not-a-directory')
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/compact', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
       method: 'POST',
     })
 
@@ -274,11 +274,11 @@ describe('names API corruption handling', () => {
     clearCache()
   })
 
-  it('returns structured 500 for corrupt stored data on GET /api/sessions/:sessionId/names', async () => {
+  it('returns structured 500 for corrupt stored data on GET /api/workspaces/:workspaceId/names', async () => {
     await writeFile(join(tempDir, 'session1', '.names.json'), 'not-json')
 
     const app = createCanvasRouter()
-    const res = await app.request('/api/sessions/session1/names')
+    const res = await app.request('/api/workspaces/session1/names')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -287,14 +287,14 @@ describe('names API corruption handling', () => {
     })
   })
 
-  it('returns structured 500 for corrupt stored data on PUT /api/sessions/:sessionId/canvases/:slug/pin', async () => {
+  it('returns structured 500 for corrupt stored data on PUT /api/workspaces/:workspaceId/canvases/:slug/pin', async () => {
     await writeFile(
       join(tempDir, 'session1', '.names.json'),
       JSON.stringify({ workspace: 'WS', canvases: {}, pinned: [1] }),
     )
 
     const app = createCanvasRouter()
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/pin', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/pin', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ pinned: true }),
@@ -308,7 +308,7 @@ describe('names API corruption handling', () => {
   })
 })
 
-describe('POST /api/canvas/:sessionId/:slug/update', () => {
+describe('POST /api/canvas/:workspaceId/:slug/update', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
@@ -383,7 +383,7 @@ describe('versions API', () => {
     // Auto-version saving is best-effort and async, so wait briefly.
     await new Promise((r) => setTimeout(r, 50))
 
-    const resList = await app.request('/api/sessions/session1/canvases/canvas-a/versions')
+    const resList = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     expect(resList.status).toBe(200)
     const body = (await resList.json()) as { versions: Array<{ auto: boolean; elementCount: number }> }
     expect(body.versions.length).toBeGreaterThanOrEqual(1)
@@ -393,7 +393,7 @@ describe('versions API', () => {
 
   it('saves a manual version with a label through POST /versions', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'before refactor' }),
@@ -406,7 +406,7 @@ describe('versions API', () => {
 
   it('POST /versions persists an explicit operator', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -431,7 +431,7 @@ describe('versions API', () => {
       agentId: 'agent-1',
     })
 
-    const listRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions')
+    const listRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     const listBody = (await listRes.json()) as {
       versions: Array<{ operator?: { kind: string; peerId: string; displayName?: string; agentId?: string } }>
     }
@@ -440,7 +440,7 @@ describe('versions API', () => {
 
   it('POST /versions defaults operator to human when omitted', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'manual save' }),
@@ -474,7 +474,7 @@ describe('versions API', () => {
 
     await new Promise((r) => setTimeout(r, 50))
 
-    const resList = await app.request('/api/sessions/session1/canvases/canvas-a/versions')
+    const resList = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     const body = (await resList.json()) as {
       versions: Array<{ operator?: { kind: string; peerId: string; displayName?: string } }>
     }
@@ -503,7 +503,7 @@ describe('versions API', () => {
     })
 
     // Step 2: Save the current one-element state as v1.
-    const saveRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -528,7 +528,7 @@ describe('versions API', () => {
 
     // Step 4: Restore v1. keep-me should remain and added-* should become tombstones.
     const resRestore = await app.request(
-      `/api/sessions/session1/canvases/canvas-a/versions/${v1id}/restore`,
+      `/api/workspaces/session1/canvases/canvas-a/versions/${v1id}/restore`,
       { method: 'POST' },
     )
     expect(resRestore.status).toBe(200)
@@ -569,7 +569,7 @@ describe('versions API', () => {
       body: doc.export({ mode: 'update', from: vv0 }),
     })
 
-    const saveRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'before-link' }),
@@ -587,7 +587,7 @@ describe('versions API', () => {
     })
 
     const restoreRes = await app.request(
-      `/api/sessions/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
       { method: 'POST' },
     )
     expect(restoreRes.status).toBe(200)
@@ -606,7 +606,7 @@ describe('versions API', () => {
     await writeFile(join(tempDir, 'session1', 'versions', 'broken-list.json'), '{"slug":')
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/versions')
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -618,7 +618,7 @@ describe('versions API', () => {
   it('returns 404 when restoring a missing version id', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/versions/nonexistent/restore',
+      '/api/workspaces/session1/canvases/canvas-a/versions/nonexistent/restore',
       { method: 'POST' },
     )
     expect(res.status).toBe(404)
@@ -627,7 +627,7 @@ describe('versions API', () => {
   it('returns 400 for an invalid version id', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/versions/bad.id/restore',
+      '/api/workspaces/session1/canvases/canvas-a/versions/bad.id/restore',
       { method: 'POST' },
     )
     expect(res.status).toBe(400)
@@ -639,7 +639,7 @@ describe('versions API', () => {
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/versions/brokenrestore/restore',
+      '/api/workspaces/session1/canvases/canvas-a/versions/brokenrestore/restore',
       { method: 'POST' },
     )
 
@@ -653,7 +653,7 @@ describe('versions API', () => {
   // Thumbnail PUT/GET endpoint coverage.
   it('saves a PNG through PUT /versions/:id/thumbnail and fetches it through GET', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const saveRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -664,7 +664,7 @@ describe('versions API', () => {
     // Minimal bytes starting with the PNG signature.
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     const putRes = await app.request(
-      `/api/sessions/session1/canvases/canvas-a/versions/${id}/thumbnail`,
+      `/api/workspaces/session1/canvases/canvas-a/versions/${id}/thumbnail`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'image/png' },
@@ -674,7 +674,7 @@ describe('versions API', () => {
     expect(putRes.status).toBe(200)
 
     const getRes = await app.request(
-      `/api/sessions/session1/canvases/canvas-a/versions/${id}/thumbnail`,
+      `/api/workspaces/session1/canvases/canvas-a/versions/${id}/thumbnail`,
     )
     expect(getRes.status).toBe(200)
     expect(getRes.headers.get('content-type')).toBe('image/png')
@@ -684,7 +684,7 @@ describe('versions API', () => {
 
   it('rejects non-PNG magic bytes such as JPEG with 400 on PUT /thumbnail', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const saveRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -693,7 +693,7 @@ describe('versions API', () => {
     // JPEG signature (FF D8 FF)
     const notPng = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46])
     const res = await app.request(
-      `/api/sessions/session1/canvases/canvas-a/versions/${saveBody.version.id}/thumbnail`,
+      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/thumbnail`,
       { method: 'PUT', headers: { 'Content-Type': 'image/jpeg' }, body: notPng },
     )
     expect(res.status).toBe(400)
@@ -702,7 +702,7 @@ describe('versions API', () => {
   it('returns 404 for an unsaved thumbnail id on GET /thumbnail', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/versions/no-thumb/thumbnail',
+      '/api/workspaces/session1/canvases/canvas-a/versions/no-thumb/thumbnail',
     )
     expect(res.status).toBe(404)
   })
@@ -712,7 +712,7 @@ describe('versions API', () => {
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/versions/broken-thumb/thumbnail',
+      '/api/workspaces/session1/canvases/canvas-a/versions/broken-thumb/thumbnail',
     )
 
     expect(res.status).toBe(500)
@@ -724,7 +724,7 @@ describe('versions API', () => {
 
   it('returns hasThumbnail=true in the version list after saving a thumbnail', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const saveRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -732,39 +732,39 @@ describe('versions API', () => {
     const saveBody = (await saveRes.json()) as { version: { id: string } }
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     await app.request(
-      `/api/sessions/session1/canvases/canvas-a/versions/${saveBody.version.id}/thumbnail`,
+      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/thumbnail`,
       { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: png },
     )
-    const listRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions')
+    const listRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     const listBody = (await listRes.json()) as { versions: Array<{ hasThumbnail: boolean }> }
     expect(listBody.versions[0].hasThumbnail).toBe(true)
   })
 
   it('filters GET /versions by slug and returns newest first', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       body: JSON.stringify({ label: 'a1' }),
       headers: { 'Content-Type': 'application/json' },
     })
-    await app.request('/api/sessions/session1/canvases/canvas-b/versions', {
+    await app.request('/api/workspaces/session1/canvases/canvas-b/versions', {
       method: 'POST',
       body: JSON.stringify({ label: 'b1' }),
       headers: { 'Content-Type': 'application/json' },
     })
 
-    const resA = await app.request('/api/sessions/session1/canvases/canvas-a/versions')
+    const resA = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     const bodyA = (await resA.json()) as { versions: Array<{ label?: string }> }
     expect(bodyA.versions.map((v) => v.label)).toEqual(['a1'])
 
-    const resB = await app.request('/api/sessions/session1/canvases/canvas-b/versions')
+    const resB = await app.request('/api/workspaces/session1/canvases/canvas-b/versions')
     const bodyB = (await resB.json()) as { versions: Array<{ label?: string }> }
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
   })
 
   it('returns structured 500 for broken thumbnail reads on GET /latest-thumbnail', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const saveRes = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -774,7 +774,7 @@ describe('versions API', () => {
       recursive: true,
     })
 
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/latest-thumbnail')
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/latest-thumbnail')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -799,7 +799,7 @@ describe('versions API', () => {
     await store.save('cp-known', doc)
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/checkpoints/cp-known/restore', {
+    const res = await app.request('/api/workspaces/session1/checkpoints/cp-known/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetSlug: 'restored-canvas' }),
@@ -842,7 +842,7 @@ describe('versions API', () => {
     await store.save('cp-known-live-only', doc)
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/checkpoints/cp-known-live-only/restore', {
+    const res = await app.request('/api/workspaces/session1/checkpoints/cp-known-live-only/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetSlug: 'restored-live-only' }),
@@ -860,7 +860,7 @@ describe('versions API', () => {
     await writeFile(join(tempDir, '.checkpoints', 'cp-broken.loro'), new Uint8Array([1, 2, 3, 4]))
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/checkpoints/cp-broken/restore', {
+    const res = await app.request('/api/workspaces/session1/checkpoints/cp-broken/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetSlug: 'restored-canvas' }),
@@ -883,7 +883,7 @@ describe('versions API', () => {
     await saveCanvas('session1', 'canvas-a', doc)
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/checkpoints', {
+    const res = await app.request('/api/workspaces/session1/checkpoints', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sourceSlug: 'canvas-a', checkpointId: 'cp-save' }),
@@ -915,7 +915,7 @@ describe('versions API', () => {
     await saveCanvas('session1', 'canvas-live-count', doc)
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/checkpoints', {
+    const res = await app.request('/api/workspaces/session1/checkpoints', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sourceSlug: 'canvas-live-count', checkpointId: 'cp-save-live-count' }),
@@ -928,9 +928,9 @@ describe('versions API', () => {
     })
   })
 
-  it('returns 404 when POST /api/sessions/:sessionId/checkpoints targets a missing sourceSlug', async () => {
+  it('returns 404 when POST /api/workspaces/:workspaceId/checkpoints targets a missing sourceSlug', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/sessions/session1/checkpoints', {
+    const res = await app.request('/api/workspaces/session1/checkpoints', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sourceSlug: 'missing-canvas' }),
@@ -942,7 +942,7 @@ describe('versions API', () => {
     })
   })
 
-  it('POST /api/canvas/:sessionId/:slug/export-json writes an excalidraw export file', async () => {
+  it('POST /api/canvas/:workspaceId/:slug/export-json writes an excalidraw export file', async () => {
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
     const map = list.insertContainer(0, new LoroMap())
@@ -1047,7 +1047,7 @@ describe('versions API', () => {
 
   it('returns 400 for an invalid checkpointId', async () => {
     const app = createCanvasRouter()
-    const res = await app.request('/api/sessions/session1/checkpoints/bad.id/restore', {
+    const res = await app.request('/api/workspaces/session1/checkpoints/bad.id/restore', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ targetSlug: 'canvas-a' }),

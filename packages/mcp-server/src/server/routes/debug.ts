@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
-import { listSessions, listCanvases, loadCanvas } from '../store/canvas-store.js'
+import { listWorkspaces, listCanvases, loadCanvas } from '../store/canvas-store.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { isAuthorized } from './auth.js'
 
@@ -13,7 +13,7 @@ type CanvasInfo = {
 }
 
 type SessionInfo = {
-  sessionId: string
+  workspaceId: string
   daemonAlive: boolean
   canvases: CanvasInfo[]
 }
@@ -36,11 +36,11 @@ function countElements(doc: LoroDoc): {
 }
 
 async function summarizeCanvas(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
 ): Promise<CanvasInfo> {
-  const cached = peekDoc(sessionId, slug)
-  const doc = cached ?? (await loadCanvas(sessionId, slug))
+  const cached = peekDoc(workspaceId, slug)
+  const doc = cached ?? (await loadCanvas(workspaceId, slug))
   const counts = countElements(doc)
   return {
     slug,
@@ -71,14 +71,14 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
   })
 
   app.get('/api/debug', async (c) => {
-    const sessions = await listSessions()
+    const sessions = await listWorkspaces()
     const sessionInfos: SessionInfo[] = await Promise.all(
-      sessions.map(async ({ sessionId, daemonAlive }) => {
-        const canvases = await listCanvases(sessionId)
+      sessions.map(async ({ workspaceId, daemonAlive }) => {
+        const canvases = await listCanvases(workspaceId)
         const canvasInfos = await Promise.all(
-          canvases.map(({ slug }) => summarizeCanvas(sessionId, slug)),
+          canvases.map(({ slug }) => summarizeCanvas(workspaceId, slug)),
         )
-        return { sessionId, daemonAlive, canvases: canvasInfos }
+        return { workspaceId, daemonAlive, canvases: canvasInfos }
       }),
     )
 

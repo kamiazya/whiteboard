@@ -6,14 +6,14 @@ import {
 
 describe('requiresDaemonMutationAuth', () => {
   it('default-denies mutating /api requests outside the explicit allowlist', () => {
-    expect(requiresDaemonMutationAuth('POST', '/api/sessions/session-1/canvases')).toBe(true)
+    expect(requiresDaemonMutationAuth('POST', '/api/workspaces/session-1/canvases')).toBe(true)
     expect(requiresDaemonMutationAuth('PATCH', '/api/brand-new-mutation')).toBe(true)
     expect(requiresDaemonMutationAuth('DELETE', '/api/anything')).toBe(true)
   })
 
   it('keeps read-only requests public', () => {
-    expect(requiresDaemonMutationAuth('GET', '/api/sessions')).toBe(false)
-    expect(requiresDaemonMutationAuth('HEAD', '/api/sessions')).toBe(false)
+    expect(requiresDaemonMutationAuth('GET', '/api/workspaces')).toBe(false)
+    expect(requiresDaemonMutationAuth('HEAD', '/api/workspaces')).toBe(false)
   })
 
   it('allows only the explicit runtime exception routes to bypass the middleware', () => {

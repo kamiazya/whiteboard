@@ -1,11 +1,11 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DATA_DIR } from '../config.js'
-import { validateSessionId } from '../validators.js'
+import { validateWorkspaceId } from '../validators.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 
 // Persist the list of installed .excalidrawlib URLs per session.
-// Location: {DATA_DIR}/{sessionId}/.libraries.json
+// Location: {DATA_DIR}/{workspaceId}/.libraries.json
 // Format: { urls: string[] } - only the URLs. The client refetches the actual content.
 // Rationale:
 //   - URLs alone stay small (typically a few hundred bytes per file)
@@ -19,9 +19,9 @@ export interface InstalledLibraries {
   urls: string[]
 }
 
-function pathFor(sessionId: string): string {
-  validateSessionId(sessionId)
-  return join(DATA_DIR, sessionId, LIBRARIES_FILENAME)
+function pathFor(workspaceId: string): string {
+  validateWorkspaceId(workspaceId)
+  return join(DATA_DIR, workspaceId, LIBRARIES_FILENAME)
 }
 
 function parseInstalledLibraries(path: string, raw: string): InstalledLibraries {
@@ -44,8 +44,8 @@ function parseInstalledLibraries(path: string, raw: string): InstalledLibraries 
   return { urls: [...urls] }
 }
 
-export async function loadInstalledLibraries(sessionId: string): Promise<InstalledLibraries> {
-  const path = pathFor(sessionId)
+export async function loadInstalledLibraries(workspaceId: string): Promise<InstalledLibraries> {
+  const path = pathFor(workspaceId)
   try {
     const raw = await readFile(path, 'utf-8')
     return parseInstalledLibraries(path, raw)
@@ -61,28 +61,28 @@ export async function loadInstalledLibraries(sessionId: string): Promise<Install
 }
 
 export async function saveInstalledLibraries(
-  sessionId: string,
+  workspaceId: string,
   libs: InstalledLibraries,
 ): Promise<void> {
-  await mkdir(join(DATA_DIR, sessionId), { recursive: true })
-  await writeFile(pathFor(sessionId), JSON.stringify(libs, null, 2))
+  await mkdir(join(DATA_DIR, workspaceId), { recursive: true })
+  await writeFile(pathFor(workspaceId), JSON.stringify(libs, null, 2))
 }
 
-export async function addInstalledLibrary(sessionId: string, url: string): Promise<InstalledLibraries> {
-  const current = await loadInstalledLibraries(sessionId)
+export async function addInstalledLibrary(workspaceId: string, url: string): Promise<InstalledLibraries> {
+  const current = await loadInstalledLibraries(workspaceId)
   if (current.urls.includes(url)) return current // idempotent
   const next: InstalledLibraries = { urls: [...current.urls, url] }
-  await saveInstalledLibraries(sessionId, next)
+  await saveInstalledLibraries(workspaceId, next)
   return next
 }
 
 export async function removeInstalledLibrary(
-  sessionId: string,
+  workspaceId: string,
   url: string,
 ): Promise<InstalledLibraries> {
-  const current = await loadInstalledLibraries(sessionId)
+  const current = await loadInstalledLibraries(workspaceId)
   if (!current.urls.includes(url)) return current
   const next: InstalledLibraries = { urls: current.urls.filter((u) => u !== url) }
-  await saveInstalledLibraries(sessionId, next)
+  await saveInstalledLibraries(workspaceId, next)
   return next
 }

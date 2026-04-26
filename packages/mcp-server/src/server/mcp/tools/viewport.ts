@@ -61,7 +61,7 @@ export function viewportSetTool() {
       },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const mode = args.mode ?? 'fit'
       // Only send explicitly specified values so browser defaults still apply.
       const body: Record<string, unknown> = { mode }
@@ -72,7 +72,7 @@ export function viewportSetTool() {
       if (args.scrollY !== undefined) body.scrollY = args.scrollY
       if (args.zoom !== undefined) body.zoom = args.zoom
 
-      const res = await client.request(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/viewport`, {
+      const res = await client.request(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/viewport`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
