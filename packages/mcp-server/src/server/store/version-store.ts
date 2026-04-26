@@ -273,22 +273,26 @@ export class FileVersionStore implements VersionStore {
     if (bytes.byteLength > MAX_THUMBNAIL_BYTES) {
       throw new Error(`Thumbnail exceeds ${MAX_THUMBNAIL_BYTES} byte limit (${bytes.byteLength})`)
     }
+    // Verify the version belongs to this workspace BEFORE writing the PNG.
+    // Doing it the other way around would leave an orphan blob on disk for
+    // any id that doesn't match (wrong workspace, deleted version, hostile
+    // input) — the UPDATE would simply match zero rows and resolve while the
+    // file sat at blobs/{ws}/versions/{id}.png with no DB pointer.
+    const db = await dbReady()
+    const owningCanvas = await db
+      .selectFrom('versions')
+      .innerJoin('canvases', 'canvases.id', 'versions.canvasId')
+      .select(['versions.id'])
+      .where('canvases.workspaceId', '=', workspaceId)
+      .where('versions.id', '=', id)
+      .executeTakeFirst()
+    if (!owningCanvas) {
+      throw new Error(`version "${id}" not found in workspace "${workspaceId}"`)
+    }
     const path = thumbnailPath(workspaceId, id)
     await mkdir(dirname(path), { recursive: true })
     await writeFile(path, bytes)
-    const db = await dbReady()
-    // Scope the update to canvases owned by this workspace so a hostile id
-    // can't flip the flag on someone else's row.
-    const wsCanvasIds = db
-      .selectFrom('canvases')
-      .select('id')
-      .where('workspaceId', '=', workspaceId)
-    await db
-      .updateTable('versions')
-      .set({ hasThumbnail: 1 })
-      .where('id', '=', id)
-      .where('canvasId', 'in', wsCanvasIds)
-      .execute()
+    await db.updateTable('versions').set({ hasThumbnail: 1 }).where('id', '=', id).execute()
   }
 
   async loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null> {

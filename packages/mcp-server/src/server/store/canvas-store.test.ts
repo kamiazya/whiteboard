@@ -174,27 +174,24 @@ describe('saveCanvas - overwrite handling', () => {
     ).rejects.toMatchObject({ name: 'ConflictError' })
   })
 
-  it('does not leave an orphan canvases row behind when the blob write fails', async () => {
+  it('does not leave an orphan canvases row behind when the snapshot+commit step fails', async () => {
     // Older cuts of saveCanvas committed the canvases row before writing the
-    // .loro file, so a blob-write failure stranded the row and made every
-    // future saveCanvas hit ConflictError forever. Simulate that failure mode
-    // by pre-creating a directory at the blob path so writeFile rejects, then
-    // verify the next saveCanvas (against a writable path) still succeeds.
-    const fsmod = await import('node:fs/promises')
-    const blockingDir = join(tempDir, 'blobs', 'session1', 'canvas')
-    await fsmod.mkdir(blockingDir, { recursive: true })
-    // 0o500 = read/exec only — writeFile under here will EACCES on POSIX.
-    await fsmod.chmod(blockingDir, 0o500)
-    let writeFailed = false
-    try {
-      await saveCanvas('session1', 'orphan-prone', new LoroDoc())
-    } catch {
-      writeFailed = true
-    }
-    expect(writeFailed).toBe(true)
+    // .loro file, so any failure between that DB write and the blob commit
+    // stranded the row and made every future saveCanvas hit ConflictError
+    // forever. The exact failure point is incidental — what matters is that
+    // a partial save leaves no DB row behind. Spying on LoroDoc#export gives
+    // us a deterministic way to fail in the snapshot stage that works the
+    // same on root and non-root environments (chmod-based blocks would no-op
+    // for root in containers / sudo).
+    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
+      throw new Error('snapshot serialization failed')
+    })
 
-    // Restore permissions so the retry can write the file.
-    await fsmod.chmod(blockingDir, 0o700)
+    await expect(saveCanvas('session1', 'orphan-prone', new LoroDoc())).rejects.toThrow(
+      /snapshot serialization failed/,
+    )
+
+    exportSpy.mockRestore()
 
     await expect(saveCanvas('session1', 'orphan-prone', new LoroDoc())).resolves.toBeUndefined()
   })
