@@ -14,8 +14,8 @@ import {
   openCanvasTool,
 } from './tools/canvas.js'
 import { loadImageOutputSchema, loadImageTool } from './tools/load.js'
-import { annotateTool } from './tools/annotate.js'
-import { annotateBatchTool } from './tools/annotate-batch.js'
+import { annotateOutputSchema, annotateTool } from './tools/annotate.js'
+import { annotateBatchOutputSchema, annotateBatchTool } from './tools/annotate-batch.js'
 import { exportPngOutputSchema, exportPngTool } from './tools/export.js'
 import { viewportSetOutputSchema, viewportSetTool } from './tools/viewport.js'
 import { canvasExportJsonOutputSchema, canvasExportJsonTool } from './tools/canvas-export-json.js'
@@ -81,68 +81,6 @@ import {
   WHITEBOARD_INSTALLED_LIBRARIES_URI,
   WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
-
-const annotationResultSchema = z.object({
-  type: z.enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group']),
-  elementId: z.string().optional(),
-  arrowId: z.string().optional(),
-  labelId: z.string().optional(),
-  rectId: z.string().optional(),
-  textId: z.string().optional(),
-  subTextId: z.string().optional(),
-  titleId: z.string().optional(),
-})
-
-const annotateWarningSchema = z.object({
-  overflow: z.boolean().optional(),
-  requiredWidth: z.number().optional(),
-  requiredHeight: z.number().optional(),
-})
-
-const annotateOutputSchema = z.object({
-  elementId: z.string().optional(),
-  elementIds: z.array(z.string()).optional(),
-  annotation: annotationResultSchema,
-  warnings: z.array(annotateWarningSchema),
-})
-
-const annotateBatchWarningSchema = z.object({
-  index: z.number(),
-  overflow: z.boolean().optional(),
-  requiredWidth: z.number().optional(),
-  requiredHeight: z.number().optional(),
-  autoExpandedBy: z.number().optional(),
-  actualHeight: z.number().optional(),
-  missingMemberIds: z.array(z.string()).optional(),
-  unresolvedBindingName: z.array(z.string()).optional(),
-  message: z.string().optional(),
-})
-
-const annotateBatchOutputSchema = z.object({
-  elementIds: z.array(z.string()),
-  annotations: z.array(annotationResultSchema),
-  warnings: z.array(annotateBatchWarningSchema),
-  byName: z.record(z.string(), annotationResultSchema),
-  placements: z.array(
-    z.object({
-      annotationIndex: z.number(),
-      rect: z.object({
-        x: z.number(),
-        y: z.number(),
-        width: z.number(),
-        height: z.number(),
-      }),
-      elementId: z.string().optional(),
-    }),
-  ),
-  overlaps: z.array(
-    z.object({
-      a: z.number(),
-      b: z.number(),
-      iou: z.number(),
-    }),
-  ),
-})
 
 const genericOutputSchema = z.record(z.string(), z.unknown())
 

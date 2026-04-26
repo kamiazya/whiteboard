@@ -1,5 +1,6 @@
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import {
   type AnnotationFields,
@@ -13,6 +14,31 @@ import { resolvePaletteColor } from './color-palette.js'
 import { apiGetPalette } from './palette.js'
 import { resolveAnnotationPosition, type CoordsMode } from './resolve-annotation-position.js'
 import { resolveArrowLabelPosition } from './resolve-arrow-label-position.js'
+
+// Shared annotation result shape (also re-used by annotate-batch).
+export const annotationResultSchema = z.object({
+  type: z.enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group']),
+  elementId: z.string().optional(),
+  arrowId: z.string().optional(),
+  labelId: z.string().optional(),
+  rectId: z.string().optional(),
+  textId: z.string().optional(),
+  subTextId: z.string().optional(),
+  titleId: z.string().optional(),
+})
+
+export const annotateWarningSchema = z.object({
+  overflow: z.boolean().optional(),
+  requiredWidth: z.number().optional(),
+  requiredHeight: z.number().optional(),
+})
+
+export const annotateOutputSchema = z.object({
+  elementId: z.string().optional(),
+  elementIds: z.array(z.string()).optional(),
+  annotation: annotationResultSchema,
+  warnings: z.array(annotateWarningSchema),
+})
 import { resolveArrowRoute } from './resolve-arrow-route.js'
 import { resolveTextPosition, type TextAlign } from './resolve-text-position.js'
 import { snapArrowEndpoints, type Rect } from './snap-arrow.js'
