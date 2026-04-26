@@ -1,6 +1,55 @@
 # @kamiazya/whiteboard
 
-An Excalidraw-based collaborative diagramming MCP tool for Claude Code and Codex. Use it to align on specs, architecture, workflows, and visual explanations by drawing together on a shared real-time canvas.
+> A collaborative Excalidraw canvas for Claude Code and Codex. Draw with your AI agent to align on specs, architecture, workflows, and explanations — directly on a shared real-time whiteboard.
+
+[![npm version](https://img.shields.io/npm/v/@kamiazya/whiteboard-mcp.svg)](https://www.npmjs.com/package/@kamiazya/whiteboard-mcp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml/badge.svg)](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml)
+
+`@kamiazya/whiteboard-mcp` runs a live Excalidraw canvas in your browser and exposes MCP tools so Claude Code, Codex, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and round-trip with stock `.excalidraw` JSON.
+
+## Table of Contents
+
+- [Why Whiteboard](#why-whiteboard)
+- [Try It](#try-it)
+- [Install](#install)
+  - [Server-only install (`npx`)](#server-only-install-npx)
+  - [Full install with shared skills](#full-install-with-shared-skills)
+  - [Link the shared skills](#link-the-shared-skills)
+- [Bundled Skills](#bundled-skills)
+- [Main MCP Tools](#main-mcp-tools)
+- [Architecture & Internals](#architecture-and-internals)
+- [Developer Setup](#developer-setup)
+- [Environment Variables](#environment-variables)
+- [Verification Pattern](#verification-pattern)
+- [Limitations & Known Caveats](#limitations--known-caveats)
+- [Release / Publish](#release--publish)
+- [License](#license)
+
+---
+
+## Why Whiteboard
+
+- 🖊️ **Two-way drawing surface** — your agent places, moves, and groups elements while you keep editing in the same browser tab.
+- 🎯 **Real Excalidraw, not a screenshot** — JSON round-trip with `.excalidraw` files; open in [excalidraw.com](https://excalidraw.com) or the desktop app any time.
+- 🔒 **Local-first** — all canvases, snapshots, and exports stay under `~/.whiteboard/{workspaceId}/`. No cloud account required.
+- 📦 **Skills bundled in the package** — three opinionated `SKILL.md` packs (`whiteboard`, `whiteboard-coauthoring`, `whiteboard-audit`) so the agent already knows when and how to use the tool.
+- 🧷 **Checkpoint & restore** — branch a canvas before risky edits and roll back from snapshot.
+- 🖼️ **PNG + JSON export** — `export_png` returns the image straight back to the LLM as MCP `ImageContent`; `canvas_export_json` produces standard `.excalidraw` files for round-tripping.
+
+---
+
+## Try It
+
+After installing, ask your agent things like:
+
+- *"Use whiteboard to sketch the request flow for our auth service: client → API gateway → token service → DB."*
+- *"Create a comparison diagram on the whiteboard: monolith vs microservices, side by side."*
+- *"Open the existing `auth-flow` workspace and add a fallback path for when the token service is down."*
+- *"Insert the `service-fragment` template at (0, 0) with `service=API`, `store=Postgres`, then export PNG."*
+- *"Audit my whiteboard workspaces — find orphaned ones and tombstone-heavy canvases I can clean up."*
+
+The bundled `/whiteboard` skill triggers when text descriptions feel ambiguous; `/whiteboard-coauthoring` adds a structured back-and-forth loop for evolving diagrams together; `/whiteboard-audit` reports cleanup candidates across `~/.whiteboard/`.
 
 ---
 
@@ -107,6 +156,18 @@ foreach ($root in $skillRoots) {
 If junction creation is restricted, copy the skill directories instead of linking them.
 
 Even when you use the Codex plugin or Claude Code plugin, the bundled `skills/` inside `@kamiazya/whiteboard-mcp` remain the source of truth for shared skills.
+
+### Bundled Skills
+
+The npm package ships three Skills under `node_modules/@kamiazya/whiteboard-mcp/skills/`. After symlinking them into `~/.claude/skills/` and `~/.codex/skills/` (see above), the slash skills become available to the agent.
+
+| Skill | When to use |
+|---|---|
+| `whiteboard` | When screen layout, structure, flow, or comparison still feels too ambiguous in text alone — start drawing on the canvas together. |
+| `whiteboard-coauthoring` | A structured loop for evolving diagrams with the agent: gather context, structure frame by frame, run fresh-viewer tests on what you draw. |
+| `whiteboard-audit` | Audit existing workspaces — detect orphaned workspaces, tombstone-heavy canvases, and cache/disk mismatches; report cleanup candidates. |
+
+The `SKILL.md` of each pack is the source of truth. The repo-local `.claude/skills/` directory contains internal-only project skills (smoke selection, restart triage) that are not part of the published artifact.
 
 ### Restart and smoke check
 
@@ -296,7 +357,7 @@ See also:
 - **Browser tab**: React + Excalidraw. It emits local LoroDoc updates over WS and applies remote imports incrementally.
 - **Storage**: under `~/.whiteboard/{workspaceId}/`, storing Loro snapshots (`.loro`), exports (`.png`, `.excalidraw`), and checkpoints (`.checkpoints/{id}.loro`).
 
-**Main MCP tools:**
+### Main MCP Tools
 
 | Tool | Purpose |
 |---|---|
@@ -380,6 +441,20 @@ pnpm smoke:all      # smoke:e2e + smoke:claude
 ```
 
 The project-scoped skills `.claude/skills/whiteboard-mcp-smoke/SKILL.md` (restart triage) and `.claude/skills/whiteboard-smoke/SKILL.md` (smoke selection) already encode this workflow so a simple “verify behavior” request can trigger it without restarting manually.
+
+---
+
+## Limitations & Known Caveats
+
+Be aware of these constraints before adopting whiteboard:
+
+- **Browser tab required for live edits and PNG export** — `viewport_set` and the live drawing surface need a Chromium tab connected over WebSocket. `export_png` runs through Playwright-managed Chromium (or the system Chrome named by `WHITEBOARD_CHROME_PATH`).
+- **`stdio` is the published transport** — the public release artifact is `npx -y @kamiazya/whiteboard-mcp@latest` over `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development only.
+- **`npx` install does not install skills** — the `npx` path starts the MCP server only. To get `/whiteboard`, `/whiteboard-coauthoring`, and `/whiteboard-audit`, follow the [full install with shared skills](#full-install-with-shared-skills) and link them into `~/.claude/skills/` or `~/.codex/skills/`.
+- **No published Claude Code plugin marketplace yet** — the committed `.claude-plugin/plugin.json` and `.codex-plugin/plugin.json` are repo-local wrappers, not separately published release artifacts. `/plugin marketplace add` flows are not supported until a `marketplace.json` lands.
+- **Codex sandbox quirks** — inside the Codex sandbox, writing to `~/.whiteboard` may fail (the app falls back to a temp directory) and binding `127.0.0.1:<port>` may be denied with `EPERM`. Run in an environment that allows loopback listening or adjust the sandbox.
+- **Template format is whiteboard-specific** — `template_insert` does not load Excalidraw native libraries; it expands a lightweight `excalidraw-tool-template` JSON through `annotate_batch`. See [Template Fragment JSON Format](#template-fragment-json-format).
+- **Local checkout config caching** — `WHITEBOARD_ROOT` and `DIST_APP_DIR` resolve once at startup. Moving the source tree, changing the `dist/app` build location, or editing `config.ts` requires `/mcp reconnect` or a Claude Code / Codex restart.
 
 ---
 
