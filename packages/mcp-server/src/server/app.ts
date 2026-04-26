@@ -1,33 +1,36 @@
-import { Hono } from 'hono'
-import { bodyLimit } from 'hono/body-limit'
-import { serveStatic } from '@hono/node-server/serve-static'
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { DATA_DIR, DIST_APP_DIR } from './config.js'
-import { createCanvasRouter } from './routes/canvas.js'
-import { createFilesRouter } from './routes/files.js'
-import { createExportRouter, resolveExportRequest } from './routes/export.js'
-import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
-import { createDebugRouter } from './routes/debug.js'
-import { createStatusRouter } from './routes/status.js'
-import { createLibrariesRouter } from './routes/libraries.js'
-import { createRuntimeRouter, type RuntimeRouterOptions } from './routes/runtime.js'
-import { createBranchesRouter } from './routes/branches.js'
-import { createPaletteRouter } from './routes/palette.js'
+import { serveStatic } from '@hono/node-server/serve-static'
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
+import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
+import { detectMergeBadges } from '../shared/merge-engine.js'
+import { reconcileElementsOnDoc } from '../shared/reconcile-elements.js'
+import { DIST_APP_DIR } from './config.js'
+import { createExcalidrawMcpServer } from './mcp/index.js'
 import { createDaemonMutationAuthMiddleware } from './routes/auth.js'
+import { createBranchesRouter } from './routes/branches.js'
+import { createCanvasRouter } from './routes/canvas.js'
+import { createDebugRouter } from './routes/debug.js'
+import { createExportRouter, resolveExportRequest } from './routes/export.js'
+import { createFilesRouter } from './routes/files.js'
+import { createLibrariesRouter } from './routes/libraries.js'
+import { createPaletteRouter } from './routes/palette.js'
+import { createRuntimeRouter, type RuntimeRouterOptions } from './routes/runtime.js'
+import { createStatusRouter } from './routes/status.js'
+import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
 import {
   broadcastLoroUpdate,
   sendHeadChanged,
   setResolveExportFn,
   setResolveViewportFn,
 } from './routes/ws.js'
-import { FileVersionStore } from './store/version-store.js'
-import { getDoc, peekDoc } from './store/doc-cache.js'
-import { canvasExists, saveCanvas } from './store/canvas-store.js'
-import { reconcileElementsOnDoc } from '../shared/reconcile-elements.js'
-import { quarantineLegacyVersionMeta } from './store/legacy-quarantine.js'
-import { detectMergeBadges } from '../shared/merge-engine.js'
+import {
+  buildMcpProtectedResourceMetadata,
+  createLocalTokenMcpHttpAuthStrategy,
+} from './security/mcp-auth.js'
+import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import {
   BranchNotFoundError,
   deleteBranch,
@@ -35,17 +38,10 @@ import {
   setHead as setHeadPersist,
   updateBranchTip,
 } from './store/branches-store.js'
-import { LoroDoc, decodeFrontiers, encodeFrontiers } from 'loro-crdt'
+import { canvasExists, saveCanvas } from './store/canvas-store.js'
 import { corruptStoredData, isCorruptStoredDataError } from './store/corrupt-stored-data.js'
-import { createExcalidrawMcpServer } from './mcp/index.js'
-import {
-  createMcpHttpAuthMiddleware,
-  createMcpHttpOriginMiddleware,
-} from './security/mcp-http.js'
-import {
-  buildMcpProtectedResourceMetadata,
-  createLocalTokenMcpHttpAuthStrategy,
-} from './security/mcp-auth.js'
+import { getDoc, peekDoc } from './store/doc-cache.js'
+import { FileVersionStore } from './store/version-store.js'
 
 function errorMessage(error: unknown): string {
   return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
@@ -128,18 +124,6 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
       token: runtimeOptions.token,
     })
 
-  // On startup, quarantine legacy version metadata that is missing frontiers by moving it
-  // to `.legacy-bak`. Leaving it in place causes FileVersionStore.list to throw
-  // corrupt_stored_data and blocks BranchTabs / VersionTimeline rendering.
-  // Run this as fire-and-forget best effort so startup is not blocked.
-  void quarantineLegacyVersionMeta(DATA_DIR).then((r) => {
-    if (r.movedCount > 0) {
-      console.info(
-        `[legacy-quarantine] moved ${r.movedCount} legacy version meta to .legacy-bak across ${r.scannedSessions} session(s)`,
-      )
-    }
-  })
-
   app.use('*', async (_c, next) => {
     runtimeOptions.touch()
     await next()
@@ -194,7 +178,7 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
   app.all('/mcp', async (c) => {
     const startedAt = Date.now()
     const debug = shouldLogMcpHttpDebug()
-    let parsedBody: unknown = undefined
+    let parsedBody: unknown
     if (
       c.req.method.toUpperCase() === 'POST' &&
       c.req.header('content-type')?.toLowerCase().includes('application/json')

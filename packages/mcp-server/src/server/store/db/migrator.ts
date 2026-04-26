@@ -1,6 +1,6 @@
-import { Migrator, type MigrationProvider } from 'kysely'
-import { migrations } from './migrations/index.js'
+import { type MigrationProvider, Migrator } from 'kysely'
 import type { Database } from './index.js'
+import { migrations } from './migrations/index.js'
 
 // Static migration provider. Migrations are imported eagerly so the runtime
 // list is whatever ships with the bundle. This intentionally diverges from

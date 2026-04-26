@@ -1,4 +1,4 @@
-import type { ColumnType, Generated } from 'kysely'
+import type { ColumnType } from 'kysely'
 
 // Unix milliseconds.
 type Timestamp = ColumnType<number, number, number>
@@ -90,18 +90,6 @@ export interface RuntimeTable {
   updatedAt: Timestamp
 }
 
-// Tracks whether a generic quarantine bucket has been written for a (kind, scope, key)
-// triple. Reused across schema migrations to avoid quarantining the same legacy data
-// twice on repeated startups.
-export interface QuarantineLogTable {
-  id: Generated<number>
-  kind: string
-  scope: string
-  key: string
-  bucketPath: string
-  createdAt: Timestamp
-}
-
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
   canvases: CanvasesTable
@@ -112,5 +100,4 @@ export interface DatabaseSchema {
   user_libraries: UserLibrariesTable
   user_library_metadata: UserLibraryMetadataTable
   runtime: RuntimeTable
-  quarantine_log: QuarantineLogTable
 }
