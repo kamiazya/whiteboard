@@ -238,11 +238,7 @@ const boundsSchema = z.object({
 const createFrameOutputSchema = z.object({
   elementId: z.string(),
   bounds: boundsSchema,
-  // tools/frame-embed.ts returns the ids of elements that were enclosed by
-  // the new frame (their frameId now points at it). Declaring this as
-  // z.number() previously turned every successful create_frame call into an
-  // MCP "Output validation error" even though the frame committed cleanly,
-  // so clients on the error path could wrongly retry.
+  // Element ids whose frameId was set to this new frame.
   assignedMembers: z.array(z.string()),
 })
 
@@ -308,12 +304,8 @@ const libraryInsertBatchOutputSchema = z.object({
 const libraryCatalogListOutputSchema = z.object({
   totalCount: z.number(),
   returnedCount: z.number(),
-  // Mirror the upstream CatalogEntry shape from tools/library-catalog.ts: `id`
-  // is optional (some catalog entries omit it), and `authors` is an array of
-  // {name?, url?} objects, not strings. The previous shape said authors:
-  // string[] which silently mismatched the runtime — clients on strict
-  // structuredContent would have hit "Output validation error" the first time
-  // they queried the catalog.
+  // Mirrors the upstream CatalogEntry shape from tools/library-catalog.ts:
+  // `id` may be omitted, and `authors` is an array of {name?, url?} objects.
   items: z.array(
     z.object({
       id: z.string().optional(),
@@ -403,12 +395,10 @@ function structuredJsonResult<T extends object>(result: T) {
   }
 }
 
-// Used by registerToolWithAnnotations to bind the handler's return type to the
-// declared outputSchema. When outputSchema is given, the handler must hand
-// structuredContent whose shape matches z.infer<O>; if it drifts, the call
-// site stops compiling instead of shipping an MCP "Output validation error"
-// to clients (the create_frame `assignedMembers: number` vs `string[]` bug
-// was exactly this gap).
+// Binds a registered tool's handler return shape to its declared outputSchema.
+// When outputSchema is given, the handler must hand structuredContent whose
+// shape matches z.infer<O>; drift becomes a compile error instead of a
+// runtime "Output validation error" reaching MCP clients.
 type ToolHandlerReturn<O extends z.ZodTypeAny | undefined> = O extends z.ZodTypeAny
   ?
       | {
