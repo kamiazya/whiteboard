@@ -13,14 +13,19 @@ import {
   listCanvasTool,
   openCanvasTool,
 } from './tools/canvas.js'
-import { loadImageTool } from './tools/load.js'
+import { loadImageOutputSchema, loadImageTool } from './tools/load.js'
 import { annotateTool } from './tools/annotate.js'
 import { annotateBatchTool } from './tools/annotate-batch.js'
-import { exportPngTool } from './tools/export.js'
-import { viewportSetTool } from './tools/viewport.js'
-import { canvasExportJsonTool } from './tools/canvas-export-json.js'
-import { canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
-import { paletteDeleteTool, paletteGetTool, paletteSetTool } from './tools/palette.js'
+import { exportPngOutputSchema, exportPngTool } from './tools/export.js'
+import { viewportSetOutputSchema, viewportSetTool } from './tools/viewport.js'
+import { canvasExportJsonOutputSchema, canvasExportJsonTool } from './tools/canvas-export-json.js'
+import { canvasAutoLayoutOutputSchema, canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
+import {
+  paletteDeleteTool,
+  paletteGetTool,
+  paletteOutputSchema,
+  paletteSetTool,
+} from './tools/palette.js'
 import {
   libraryListItemsTool,
   libraryInsertItemTool,
@@ -36,7 +41,7 @@ import {
   userLibraryMetadataDeleteTool,
 } from './tools/library.js'
 import { libraryCatalogListTool } from './tools/library-catalog.js'
-import { canvasInspectTool } from './tools/canvas-inspect.js'
+import { canvasInspectOutputSchema, canvasInspectTool } from './tools/canvas-inspect.js'
 import { insertTemplateTool, listTemplatesTool } from './tools/template.js'
 import {
   assignToGroupTool,
@@ -49,7 +54,12 @@ import {
   reorderElementsTool,
   updateElementTool,
 } from './tools/element-ops-tools.js'
-import { checkpointSaveTool, checkpointRestoreTool } from './tools/checkpoint.js'
+import {
+  checkpointRestoreOutputSchema,
+  checkpointRestoreTool,
+  checkpointSaveOutputSchema,
+  checkpointSaveTool,
+} from './tools/checkpoint.js'
 import {
   createEmbedOutputSchema,
   createEmbedTool,
@@ -71,31 +81,6 @@ import {
   WHITEBOARD_INSTALLED_LIBRARIES_URI,
   WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
-
-const exportPngOutputSchema = z.object({
-  filePath: z.string(),
-  imageBase64: z.string().optional(),
-})
-
-const canvasInspectOutputSchema = z.object({
-  elementCount: z.number(),
-  elements: z.array(
-    z.object({
-      id: z.string(),
-      type: z.string(),
-      x: z.number().optional(),
-      y: z.number().optional(),
-      width: z.number().optional(),
-      height: z.number().optional(),
-      angle: z.number().optional(),
-      fileId: z.string().optional(),
-      text: z.string().optional(),
-      strokeColor: z.string().optional(),
-      backgroundColor: z.string().optional(),
-      isDeleted: z.boolean().optional(),
-    }),
-  ),
-})
 
 const annotationResultSchema = z.object({
   type: z.enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group']),
@@ -161,23 +146,6 @@ const annotateBatchOutputSchema = z.object({
 
 const genericOutputSchema = z.record(z.string(), z.unknown())
 
-const loadImageOutputSchema = z.object({ elementId: z.string() })
-
-const paletteOutputSchema = z.object({ palette: z.record(z.string(), z.unknown()) })
-
-const viewportSetOutputSchema = z.object({ ok: z.literal(true) })
-
-const canvasExportJsonOutputSchema = z.object({
-  filePath: z.string(),
-  elementCount: z.number(),
-})
-
-const canvasAutoLayoutOutputSchema = z.object({
-  nodeCount: z.number(),
-  edgeCount: z.number(),
-  movedCount: z.number(),
-})
-
 const elementIdOutputSchema = z.object({ elementId: z.string() })
 
 const elementIdsOutputSchema = z.object({ elementIds: z.array(z.string()) })
@@ -198,17 +166,6 @@ const reorderOutputSchema = z.object({
 })
 
 const clearedCountOutputSchema = z.object({ clearedCount: z.number() })
-
-const checkpointSaveOutputSchema = z.object({
-  checkpointId: z.string(),
-  elementCount: z.number(),
-})
-
-const checkpointRestoreOutputSchema = z.object({
-  canvasId: z.string(),
-  url: z.string(),
-  elementCount: z.number(),
-})
 
 // Geometry primitive shared between several output shapes (library / template
 // listings, etc.). Schemas owned by individual tools live next to those tools.

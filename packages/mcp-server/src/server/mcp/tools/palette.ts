@@ -1,4 +1,7 @@
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
+
+export const paletteOutputSchema = z.object({ palette: z.record(z.string(), z.unknown()) })
 
 async function readJson<T>(res: Response): Promise<T> {
   return (await res.json()) as T

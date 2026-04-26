@@ -1,6 +1,12 @@
 import { readFile } from 'node:fs/promises'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
+
+export const exportPngOutputSchema = z.object({
+  filePath: z.string(),
+  imageBase64: z.string().optional(),
+})
 
 // Browser cold starts can take 1-3s locally and 4-5s in CI or remote setups,
 // so export_png waits 5s instead of 3s to reduce flaky no_client failures.

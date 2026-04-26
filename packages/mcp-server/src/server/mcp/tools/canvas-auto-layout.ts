@@ -1,4 +1,5 @@
 import { LoroMap } from 'loro-crdt'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
@@ -10,6 +11,12 @@ import {
 import { snapArrowEndpoints } from './snap-arrow.js'
 import { resolveArrowLabelPosition } from './resolve-arrow-label-position.js'
 import { resolveArrowRoute } from './resolve-arrow-route.js'
+
+export const canvasAutoLayoutOutputSchema = z.object({
+  nodeCount: z.number(),
+  edgeCount: z.number(),
+  movedCount: z.number(),
+})
 
 // MCP tool that treats rectangles and arrows on the current canvas as a directed
 // graph, recomputes rectangle top-left positions with resolveAutoLayout, and
