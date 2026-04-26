@@ -67,7 +67,7 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
     <MemoryRouter initialEntries={['/canvas/sess_1/design/login-flow']}>
       <div className="h-[560px] w-[1100px] bg-background p-6">
         <WorkspaceTopBar
-          sessionId="sess_1"
+          workspaceId="sess_1"
           slug="design/login-flow"
           canvases={[
             { slug: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },

@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 // Implementation notes:
 //  useWhiteboardSync dispatches excalidraw:doc_changed whenever doc.subscribe observes a local or remote edit.
 //  When version_created arrives, it dispatches excalidraw:version_saved.
-//  This hook filters those events by sessionId/slug and tracks dirty vs clean counts.
+//  This hook filters those events by workspaceId/slug and tracks dirty vs clean counts.
 //  Passing the doc reference around would couple tests to Loro internals, so this stays event-based.
 
 export interface UseDirtyStateResult {
@@ -18,11 +18,11 @@ export interface UseDirtyStateResult {
 }
 
 export interface DirtyEventDetail {
-  sessionId: string
+  workspaceId: string
   slug: string
 }
 
-export function useDirtyState(sessionId: string, slug: string): UseDirtyStateResult {
+export function useDirtyState(workspaceId: string, slug: string): UseDirtyStateResult {
   const [isDirty, setIsDirty] = useState(false)
   const changeCountRef = useRef(0)
   const savedAtRef = useRef(0)
@@ -32,19 +32,19 @@ export function useDirtyState(sessionId: string, slug: string): UseDirtyStateRes
     changeCountRef.current = 0
     savedAtRef.current = 0
     setIsDirty(false)
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const onChanged = (event: Event) => {
       const detail = (event as CustomEvent<DirtyEventDetail>).detail
-      if (!detail || detail.sessionId !== sessionId || detail.slug !== slug) return
+      if (!detail || detail.workspaceId !== workspaceId || detail.slug !== slug) return
       changeCountRef.current += 1
       if (changeCountRef.current > savedAtRef.current) setIsDirty(true)
     }
     const onSaved = (event: Event) => {
       const detail = (event as CustomEvent<DirtyEventDetail>).detail
-      if (!detail || detail.sessionId !== sessionId || detail.slug !== slug) return
+      if (!detail || detail.workspaceId !== workspaceId || detail.slug !== slug) return
       savedAtRef.current = changeCountRef.current
       setIsDirty(false)
     }
@@ -54,7 +54,7 @@ export function useDirtyState(sessionId: string, slug: string): UseDirtyStateRes
       window.removeEventListener('excalidraw:doc_changed', onChanged)
       window.removeEventListener('excalidraw:version_saved', onSaved)
     }
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   const markSaved = useCallback(() => {
     savedAtRef.current = changeCountRef.current

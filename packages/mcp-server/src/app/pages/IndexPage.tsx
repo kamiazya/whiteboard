@@ -14,13 +14,13 @@ interface RawWorkspace {
   canvases: { slug: string; updatedAt: string }[]
 }
 
-interface SessionNames {
+interface WorkspaceNames {
   workspace?: string
   canvases: Record<string, string>
 }
 
 interface EnrichedWorkspace extends RawWorkspace {
-  names: SessionNames
+  names: WorkspaceNames
 }
 
 function formatRelative(iso: string): string {
@@ -80,8 +80,8 @@ export default function IndexPage() {
             const { canvases } = (await canvasesRes.json()) as {
               canvases: { slug: string; updatedAt: string }[]
             }
-            const names: SessionNames = namesRes.ok
-              ? ((await namesRes.json()) as SessionNames)
+            const names: WorkspaceNames = namesRes.ok
+              ? ((await namesRes.json()) as WorkspaceNames)
               : { canvases: {} }
             return { ...raw, canvases, names }
           }),

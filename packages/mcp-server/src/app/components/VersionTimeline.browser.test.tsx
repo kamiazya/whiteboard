@@ -73,7 +73,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline sessionId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
       </div>,
     )
 
@@ -108,7 +108,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline sessionId="sess_1" slug="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
       </div>,
     )
 

@@ -48,7 +48,7 @@ import { HeaderBranchChip } from './HeaderBranchChip.js'
 function renderChip() {
   return render(
     <TooltipProvider>
-      <HeaderBranchChip sessionId="s1" slug="c1" />
+      <HeaderBranchChip workspaceId="s1" slug="c1" />
     </TooltipProvider>,
   )
 }

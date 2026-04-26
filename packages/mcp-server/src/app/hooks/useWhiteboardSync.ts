@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { exportToBlob, CaptureUpdateAction, restoreElements } from '@excalidraw/excalidraw'
 import { commitAfterUpload } from '../lib/commit-pipeline.js'
@@ -80,7 +80,7 @@ export function applyHydratedSceneToApi(args: {
 }
 
 export function useWhiteboardSync(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   options: UseWhiteboardSyncOptions = {},
 ) {
@@ -88,11 +88,6 @@ export function useWhiteboardSync(
   const wsRef = useRef<WebSocket | null>(null)
   const docRef = useRef<LoroDoc | null>(null)
   const undoManagerRef = useRef<UndoManager | null>(null)
-  const onSceneChangeFnRef = useRef<
-    ((elements: ExcalidrawElement[], files: BinaryFiles) => void) & { cancel: () => void } | null
-  >(null)
-  // Track canvas changes in render so the debounced onSceneChange callback can be recreated immediately.
-  const prevCanvasKeyRef = useRef<string | null>(null)
   const [apiReady, setApiReady] = useState(false)
 
   // Keep onVersionCreated in a ref so websocket effects do not reconnect just because the callback changed.
@@ -166,7 +161,7 @@ export function useWhiteboardSync(
     // Fetch missing files in parallel. Individual failures are ignored.
     await Promise.allSettled(
       missingIds.map(async (fileId) => {
-        const res = await apiFetch(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/file/${fileId}`)
+        const res = await apiFetch(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`)
         if (!res.ok) return
         const blob = await res.blob()
         const dataURL = await blobToBase64(blob)
@@ -193,8 +188,6 @@ export function useWhiteboardSync(
   }
 
   // Reset document-scoped state when switching canvases.
-  // Do not cancel onSceneChangeFnRef here; the render-time prevCanvasKeyRef guard already does that
-  // synchronously, and canceling in an effect can accidentally cancel the newly created debounce.
   useEffect(() => {
     docRef.current = null
     undoManagerRef.current = null
@@ -202,7 +195,7 @@ export function useWhiteboardSync(
     uploadedFileIdsRef.current = new Set()
     pendingExportRequestsRef.current = []
     applyGenerationRef.current += 1 // never reset this back to 0
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   // WebSocket connection plus Loro initialization.
   // Reconnect with exponential backoff (500ms -> 8s) when ws.onclose fires.
@@ -217,7 +210,7 @@ export function useWhiteboardSync(
     const connect = () => {
       if (cancelled) return
       const ws = new WebSocket(
-        buildWhiteboardWsUrl(window.location.href, sessionId, slug),
+        buildWhiteboardWsUrl(window.location.href, workspaceId, slug),
         buildWhiteboardWsProtocols(daemonToken),
       )
       // Required: without this, binary frames arrive as Blob and the ArrayBuffer check fails.
@@ -269,7 +262,7 @@ export function useWhiteboardSync(
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(
                   new CustomEvent('excalidraw:doc_changed', {
-                    detail: { sessionId, slug },
+                    detail: { workspaceId, slug },
                   }),
                 )
               }
@@ -296,7 +289,7 @@ export function useWhiteboardSync(
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent('excalidraw:version_saved', {
-                detail: { sessionId, slug },
+                detail: { workspaceId, slug },
               }),
             )
           }
@@ -323,7 +316,7 @@ export function useWhiteboardSync(
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent('excalidraw:head_changed', {
-                detail: { sessionId, slug, head: msg.head },
+                detail: { workspaceId, slug, head: msg.head },
               }),
             )
           }
@@ -398,7 +391,7 @@ export function useWhiteboardSync(
       if (reconnectTimer) clearTimeout(reconnectTimer)
       wsRef.current?.close()
     }
-  }, [sessionId, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId, slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reapply the current document once the Excalidraw API becomes ready.
   useEffect(() => {
@@ -415,13 +408,14 @@ export function useWhiteboardSync(
   }, [apiReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Record Excalidraw changes into Loro and upload any new files.
-  // Keep the debounced callback in a ref and recreate it immediately when the canvas key changes.
-  // A render-time guard prevents the old closure from keeping stale sessionId/slug values.
-  const canvasKey = `${sessionId}/${slug}`
-  if (!onSceneChangeFnRef.current || prevCanvasKeyRef.current !== canvasKey) {
-    onSceneChangeFnRef.current?.cancel()
-    prevCanvasKeyRef.current = canvasKey
-    onSceneChangeFnRef.current = debounce((elements: ExcalidrawElement[], files: BinaryFiles) => {
+  // Memoize the debounced callback by canvas key so swapping canvases swaps
+  // the closure (which captures workspaceId / slug) without mutating refs in
+  // render. React is allowed to discard a useMemo result; the worst case is a
+  // fresh 300ms window for the new closure, never a write into the wrong doc,
+  // because the closure still uses the same workspaceId / slug.
+  const canvasKey = `${workspaceId}/${slug}`
+  const onSceneChange = useMemo(() => {
+    return debounce((elements: ExcalidrawElement[], files: BinaryFiles) => {
       // Capture doc at invocation time.
       // Looking at docRef.current after async upload work could write canvas A's elements into canvas B's doc.
       const doc = docRef.current
@@ -437,15 +431,25 @@ export function useWhiteboardSync(
         newEntries,
         doc, // pass the invocation-time captured reference
         elements,
-        sessionId, // always current because the closure is recreated when canvasKey changes
-        slug, // same as above
+        workspaceId,
+        slug,
         (fileId) => uploadedFileIdsRef.current.add(fileId),
       ).catch((err: unknown) => {
         console.error('[whiteboard] file upload failed, commit skipped:', err)
       })
-    }, 300) as ((elements: ExcalidrawElement[], files: BinaryFiles) => void) & { cancel: () => void }
-  }
-  const onSceneChange = onSceneChangeFnRef.current
+    }, 300)
+    // canvasKey already encodes workspaceId/slug, but listing both keeps the
+    // exhaustive-deps rule honest with the closure's captured values.
+  }, [canvasKey, workspaceId, slug])
+
+  // Cancel the previous debounce whenever the memoized callback changes
+  // (canvas key switch) and on unmount, so a pending 300ms timer cannot leak
+  // into a new canvas's doc or fire against a torn-down hook.
+  useEffect(() => {
+    return () => {
+      onSceneChange.cancel()
+    }
+  }, [onSceneChange])
 
   // Wire LoroUndoManager into Excalidraw's keyboard shortcuts and undo/redo buttons.
   // This avoids Excalidraw's built-in undo rolling back remote collaboration edits.

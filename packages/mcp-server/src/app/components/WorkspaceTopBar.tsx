@@ -46,9 +46,9 @@ interface CanvasInfo {
 // 56x36 thumbnail shown at the left edge of each dropdown item.
 // Fetch `/api/.../latest-thumbnail` and fall back to a placeholder on 404 or image load failure.
 // This stays as a tiny component because each item owns its own loading state.
-function CanvasThumb({ sessionId, slug }: { sessionId: string; slug: string }) {
+function CanvasThumb({ workspaceId, slug }: { workspaceId: string; slug: string }) {
   const [failed, setFailed] = useState(false)
-  const src = `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/latest-thumbnail`
+  const src = `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/latest-thumbnail`
   return (
     <div className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/40">
       {failed ? (
@@ -68,7 +68,7 @@ function CanvasThumb({ sessionId, slug }: { sessionId: string; slug: string }) {
   )
 }
 
-interface SessionNames {
+interface WorkspaceNames {
   workspace?: string
   canvases: Record<string, string>
   // Slugs pinned to the top of the canvas switcher. Array order is display order.
@@ -80,7 +80,7 @@ interface SessionNames {
 // Stop propagation on mouse down because Radix selection is driven from that event.
 function CanvasItem({
   canvas,
-  sessionId,
+  workspaceId,
   customName,
   leafLabel,
   active,
@@ -89,7 +89,7 @@ function CanvasItem({
   onTogglePin,
 }: {
   canvas: CanvasInfo
-  sessionId: string
+  workspaceId: string
   customName: string | undefined
   leafLabel: string
   active: boolean
@@ -105,7 +105,7 @@ function CanvasItem({
         active && 'bg-accent',
       )}
     >
-      <CanvasThumb sessionId={sessionId} slug={canvas.slug} />
+      <CanvasThumb workspaceId={workspaceId} slug={canvas.slug} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span
           className={cn(
@@ -144,7 +144,7 @@ function CanvasItem({
 }
 
 interface Props {
-  sessionId: string
+  workspaceId: string
   slug: string
   canvases: CanvasInfo[]
   onRestored?: () => void
@@ -159,7 +159,7 @@ interface Props {
 // - More complex lists appear on demand through buttons and popovers
 
 export default function WorkspaceTopBar({
-  sessionId,
+  workspaceId,
   slug,
   canvases,
   onRestored,
@@ -167,7 +167,7 @@ export default function WorkspaceTopBar({
   getThumbnailBlob,
 }: Props) {
   const navigate = useNavigate()
-  const [names, setNames] = useState<SessionNames>({ canvases: {}, pinned: [] })
+  const [names, setNames] = useState<WorkspaceNames>({ canvases: {}, pinned: [] })
   const [renamingWorkspace, setRenamingWorkspace] = useState(false)
   const [renamingCanvas, setRenamingCanvas] = useState(false)
   const [draft, setDraft] = useState('')
@@ -177,7 +177,7 @@ export default function WorkspaceTopBar({
 
   // Save state: dirty dot, Cmd/Ctrl+S, and beforeunload protection.
   // Dirty tracking comes from the doc_changed and version_saved events dispatched by useWhiteboardSync.
-  const { isDirty } = useDirtyState(sessionId, slug)
+  const { isDirty } = useDirtyState(workspaceId, slug)
   const [saving, setSaving] = useState(false)
   const isMac =
     typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
@@ -191,7 +191,7 @@ export default function WorkspaceTopBar({
       setSaving(true)
       try {
         const res = await apiFetch(
-          `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions`,
+          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -204,7 +204,7 @@ export default function WorkspaceTopBar({
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
             new CustomEvent('excalidraw:version_saved', {
-              detail: { sessionId, slug },
+              detail: { workspaceId, slug },
             }),
           )
         }
@@ -215,7 +215,7 @@ export default function WorkspaceTopBar({
             const blob = await getThumbnailBlob()
             if (blob) {
               await apiFetch(
-                `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
+                `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
                 {
                   method: 'PUT',
                   headers: { 'Content-Type': 'image/png' },
@@ -232,7 +232,7 @@ export default function WorkspaceTopBar({
         setSaving(false)
       }
     },
-    [sessionId, slug, saving, getThumbnailBlob],
+    [workspaceId, slug, saving, getThumbnailBlob],
   )
 
   // Cmd/Ctrl+S performs a quick save.
@@ -271,12 +271,12 @@ export default function WorkspaceTopBar({
   // Load display names.
   const fetchNames = useCallback(async () => {
     try {
-      const res = await apiFetch(`/api/workspaces/${sessionId}/names`)
-      if (res.ok) setNames((await res.json()) as SessionNames)
+      const res = await apiFetch(`/api/workspaces/${workspaceId}/names`)
+      if (res.ok) setNames((await res.json()) as WorkspaceNames)
     } catch {
       /* best-effort */
     }
-  }, [sessionId])
+  }, [workspaceId])
 
   useEffect(() => {
     fetchNames()
@@ -286,12 +286,12 @@ export default function WorkspaceTopBar({
   const commitWorkspaceName = async () => {
     const name = draft.trim()
     try {
-      const res = await apiFetch(`/api/workspaces/${sessionId}/name`, {
+      const res = await apiFetch(`/api/workspaces/${workspaceId}/name`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       })
-      if (res.ok) setNames((await res.json()) as SessionNames)
+      if (res.ok) setNames((await res.json()) as WorkspaceNames)
     } catch {
       /* ignore */
     } finally {
@@ -304,14 +304,14 @@ export default function WorkspaceTopBar({
     const name = draft.trim()
     try {
       const res = await apiFetch(
-        `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/name`,
+        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/name`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name }),
         },
       )
-      if (res.ok) setNames((await res.json()) as SessionNames)
+      if (res.ok) setNames((await res.json()) as WorkspaceNames)
     } catch {
       /* ignore */
     } finally {
@@ -332,19 +332,19 @@ export default function WorkspaceTopBar({
     async (targetSlug: string, pinned: boolean) => {
       try {
         const res = await apiFetch(
-          `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(targetSlug)}/pin`,
+          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(targetSlug)}/pin`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ pinned }),
           },
         )
-        if (res.ok) setNames((await res.json()) as SessionNames)
+        if (res.ok) setNames((await res.json()) as WorkspaceNames)
       } catch {
         /* Pin failures stay silent; the UX does not need explicit retry handling here. */
       }
     },
-    [sessionId],
+    [workspaceId],
   )
 
   // ---- canvas switcher data ----
@@ -400,7 +400,7 @@ export default function WorkspaceTopBar({
   const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? slug.slice(0, slashIndex) : null
   const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? slug.slice(slashIndex + 1) : null
   const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? slug : null)
-  const shortSession = sessionId.slice(0, 5) + '…' + sessionId.slice(-3)
+  const shortSession = workspaceId.slice(0, 5) + '…' + workspaceId.slice(-3)
 
   // Close the version history popover on outside clicks.
   useEffect(() => {
@@ -438,7 +438,7 @@ export default function WorkspaceTopBar({
     setNewCanvasBusy(true)
     setNewCanvasError(null)
     try {
-      const res = await apiFetch(`/api/workspaces/${sessionId}/canvases`, {
+      const res = await apiFetch(`/api/workspaces/${workspaceId}/canvases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: target }),
@@ -446,7 +446,7 @@ export default function WorkspaceTopBar({
       if (res.ok) {
         setNewCanvasOpen(false)
         setNewCanvasSlug('')
-        navigate(`/canvas/${sessionId}/${encodeURIComponent(target)}`)
+        navigate(`/canvas/${workspaceId}/${encodeURIComponent(target)}`)
         return
       }
       const body = (await res.json().catch(() => ({}))) as { message?: string }
@@ -460,7 +460,7 @@ export default function WorkspaceTopBar({
 
   const copyCanvasUrl = async () => {
     try {
-      const url = `${window.location.origin}/canvas/${sessionId}/${encodeURIComponent(slug)}`
+      const url = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
       await navigator.clipboard.writeText(url)
     } catch {
       /* ignore */
@@ -572,14 +572,14 @@ export default function WorkspaceTopBar({
                           <CanvasItem
                             key={c.slug}
                             canvas={c}
-                            sessionId={sessionId}
+                            workspaceId={workspaceId}
                             customName={names.canvases[c.slug]}
                             // Keep the full slug in the pinned section so the original group context stays visible.
                             leafLabel={names.canvases[c.slug] ?? c.slug}
                             active={c.slug === slug}
                             pinned={true}
                             onNavigate={() => {
-                              navigate(`/canvas/${sessionId}/${encodeURIComponent(c.slug)}`)
+                              navigate(`/canvas/${workspaceId}/${encodeURIComponent(c.slug)}`)
                               setCanvasSearch('')
                             }}
                             onTogglePin={togglePin}
@@ -604,13 +604,13 @@ export default function WorkspaceTopBar({
                             <CanvasItem
                               key={c.slug}
                               canvas={c}
-                              sessionId={sessionId}
+                              workspaceId={workspaceId}
                               customName={names.canvases[c.slug]}
                               leafLabel={names.canvases[c.slug] ?? leafSlug}
                               active={c.slug === slug}
                               pinned={false}
                               onNavigate={() => {
-                                navigate(`/canvas/${sessionId}/${encodeURIComponent(c.slug)}`)
+                                navigate(`/canvas/${workspaceId}/${encodeURIComponent(c.slug)}`)
                                 setCanvasSearch('')
                               }}
                               onTogglePin={togglePin}
@@ -682,7 +682,7 @@ export default function WorkspaceTopBar({
 
         {/* Branch chip with switch, create, rename, delete, and merge actions. */}
         <span className="mx-1 hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
-        <HeaderBranchChip sessionId={sessionId} slug={slug} />
+        <HeaderBranchChip workspaceId={workspaceId} slug={slug} />
 
         {/* Save-state dot. */}
         <HeaderSaveDot
@@ -773,7 +773,7 @@ export default function WorkspaceTopBar({
         >
           <div className="flex h-[480px] min-h-0 flex-col">
             <VersionTimeline
-              sessionId={sessionId}
+              workspaceId={workspaceId}
               slug={slug}
               onRestored={onRestored}
             />

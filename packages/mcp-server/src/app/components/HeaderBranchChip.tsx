@@ -45,13 +45,13 @@ import { MergeDialog } from './MergeDialog.js'
 // Other branches are managed through the dropdown and kebab menu.
 
 export interface HeaderBranchChipProps {
-  sessionId: string
+  workspaceId: string
   slug: string
   disabled?: boolean
 }
 
 export function HeaderBranchChip({
-  sessionId,
+  workspaceId,
   slug,
   disabled,
 }: HeaderBranchChipProps): JSX.Element {
@@ -63,7 +63,7 @@ export function HeaderBranchChip({
     renameBranch,
     setHead,
     merge: runMerge,
-  } = useBranches(sessionId, slug)
+  } = useBranches(workspaceId, slug)
 
   const head = state.head
   const activeBranch: BranchMeta | undefined = state.branches.find((b) => b.name === head)
@@ -419,7 +419,7 @@ export function HeaderBranchChip({
         target={mergeTarget}
         onClose={() => setMergeSource(null)}
         runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
-        sessionId={sessionId}
+        workspaceId={workspaceId}
         slug={slug}
       />
     </div>

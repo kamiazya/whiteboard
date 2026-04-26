@@ -10,7 +10,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<IndexPage />} />
         <Route
-          path="/canvas/:sessionId/*"
+          path="/canvas/:workspaceId/*"
           element={
             <ErrorBoundary>
               <CanvasPage />

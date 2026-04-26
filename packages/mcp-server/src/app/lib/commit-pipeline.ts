@@ -107,12 +107,12 @@ export async function commitAfterUpload(
   newEntries: [string, BinaryFileData][],
   doc: LoroDoc,
   elements: ExcalidrawElement[],
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   onFileSuccess: (fileId: string) => void,
 ): Promise<void> {
   if (newEntries.length > 0) {
-    await uploadFiles(newEntries, sessionId, slug, onFileSuccess)
+    await uploadFiles(newEntries, workspaceId, slug, onFileSuccess)
   }
   if (!recordLocalOps(doc, elements)) {
     return

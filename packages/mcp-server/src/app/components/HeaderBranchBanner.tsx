@@ -11,15 +11,15 @@ import { useBranches } from '../hooks/useBranches.js'
 // - Refresh whenever HEAD or branches change; failures stay silent and simply hide the banner
 
 export interface HeaderBranchBannerProps {
-  sessionId: string
+  workspaceId: string
   slug: string
 }
 
 export function HeaderBranchBanner({
-  sessionId,
+  workspaceId,
   slug,
 }: HeaderBranchBannerProps): JSX.Element | null {
-  const { state, getBranchStats, merge: runMerge } = useBranches(sessionId, slug)
+  const { state, getBranchStats, merge: runMerge } = useBranches(workspaceId, slug)
   const head = state.head
   const targetBranch: BranchMeta | undefined = state.branches.find((b) => b.name === 'main')
   const sourceBranch: BranchMeta | undefined = state.branches.find((b) => b.name === head)
@@ -49,15 +49,15 @@ export function HeaderBranchBanner({
       }
     }
     const onHeadChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ sessionId: string; slug: string }>).detail
+      const detail = (event as CustomEvent<{ workspaceId: string; slug: string }>).detail
       if (!detail) return
-      if (detail.sessionId !== sessionId || detail.slug !== slug) return
+      if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
       void refresh()
     }
     const onMergeCommitted = (event: Event) => {
-      const detail = (event as CustomEvent<{ sessionId: string; slug: string }>).detail
+      const detail = (event as CustomEvent<{ workspaceId: string; slug: string }>).detail
       if (!detail) return
-      if (detail.sessionId !== sessionId || detail.slug !== slug) return
+      if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
       void refresh()
     }
     window.addEventListener('excalidraw:head_changed', onHeadChanged)
@@ -67,7 +67,7 @@ export function HeaderBranchBanner({
       window.removeEventListener('excalidraw:head_changed', onHeadChanged)
       window.removeEventListener('excalidraw:merge_committed', onMergeCommitted)
     }
-  }, [head, getBranchStats, sessionId, slug])
+  }, [head, getBranchStats, workspaceId, slug])
 
   const visible = useMemo(
     () => head !== 'main' && unmergedCommits > 0 && !!targetBranch && !!sourceBranch,
@@ -106,7 +106,7 @@ export function HeaderBranchBanner({
         target={targetBranch ?? null}
         onClose={() => setMergeOpen(false)}
         runMerge={(src, args) => runMerge(src, args) as Promise<MergeResult>}
-        sessionId={sessionId}
+        workspaceId={workspaceId}
         slug={slug}
       />
     </>

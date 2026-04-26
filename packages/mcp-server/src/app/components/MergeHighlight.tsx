@@ -9,14 +9,14 @@ import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 // - Listen to excalidraw:merge_committed for the affected element IDs
 
 export interface MergeHighlightEventDetail {
-  sessionId: string
+  workspaceId: string
   slug: string
   newElementIds: string[]
   conflictElementIds: string[]
 }
 
 export interface MergeHighlightProps {
-  sessionId: string
+  workspaceId: string
   slug: string
   apiRef: React.MutableRefObject<ExcalidrawImperativeAPI | null>
 }
@@ -32,7 +32,7 @@ interface HighlightBox {
 }
 
 // Track viewport changes with requestAnimationFrame while highlights are visible.
-export function MergeHighlight({ sessionId, slug, apiRef }: MergeHighlightProps): JSX.Element | null {
+export function MergeHighlight({ workspaceId, slug, apiRef }: MergeHighlightProps): JSX.Element | null {
   const [boxes, setBoxes] = useState<HighlightBox[] | null>(null)
   const [scroll, setScroll] = useState({ x: 0, y: 0, zoom: 1 })
   const rafRef = useRef<number | null>(null)
@@ -43,7 +43,7 @@ export function MergeHighlight({ sessionId, slug, apiRef }: MergeHighlightProps)
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<MergeHighlightEventDetail>).detail
       if (!detail) return
-      if (detail.sessionId !== sessionId || detail.slug !== slug) return
+      if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
       const api = apiRef.current
       if (!api) return
       const scene = api.getSceneElements()
@@ -74,7 +74,7 @@ export function MergeHighlight({ sessionId, slug, apiRef }: MergeHighlightProps)
       window.removeEventListener('excalidraw:merge_committed', handler)
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current)
     }
-  }, [sessionId, slug, apiRef])
+  }, [workspaceId, slug, apiRef])
 
   // Poll scroll and zoom only while visible.
   // Excalidraw already emits appState through onChange, but adding a dedicated subscription just for this

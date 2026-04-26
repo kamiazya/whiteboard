@@ -7,7 +7,7 @@ function dispatchMergeCommitted(detail: MergeToastEventDetail): void {
 }
 
 const baseDetail: MergeToastEventDetail = {
-  sessionId: 's1',
+  workspaceId: 's1',
   slug: 'c1',
   sourceName: 'feature-a',
   targetName: 'main',
@@ -30,7 +30,7 @@ afterEach(() => {
 
 describe('MergeToast', () => {
   it('shows the toast when the event is received', () => {
-    render(<MergeToast sessionId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" slug="c1" />)
     expect(screen.queryByTestId('merge-toast')).toBeNull()
     act(() => dispatchMergeCommitted(baseDetail))
     expect(screen.getByTestId('merge-toast')).toBeTruthy()
@@ -39,13 +39,13 @@ describe('MergeToast', () => {
   })
 
   it('ignores events for a different session or slug', () => {
-    render(<MergeToast sessionId="s1" slug="c1" />)
-    act(() => dispatchMergeCommitted({ ...baseDetail, sessionId: 'other' }))
+    render(<MergeToast workspaceId="s1" slug="c1" />)
+    act(() => dispatchMergeCommitted({ ...baseDetail, workspaceId: 'other' }))
     expect(screen.queryByTestId('merge-toast')).toBeNull()
   })
 
   it('shows "No content changes" when there is no diff', () => {
-    render(<MergeToast sessionId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" slug="c1" />)
     act(() =>
       dispatchMergeCommitted({ ...baseDetail, newCount: 0, changedCount: 0, conflictCount: 0 }),
     )
@@ -53,20 +53,20 @@ describe('MergeToast', () => {
   })
 
   it('shows the Undo button when preMergeVersionId is present', () => {
-    render(<MergeToast sessionId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" slug="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
     expect(screen.getByTestId('merge-toast-undo')).toBeTruthy()
   })
 
   it('hides the Undo button when preMergeVersionId is missing', () => {
-    render(<MergeToast sessionId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" slug="c1" />)
     act(() => dispatchMergeCommitted({ ...baseDetail, preMergeVersionId: undefined }))
     expect(screen.queryByTestId('merge-toast-undo')).toBeNull()
   })
 
   it('posts restore and calls onRestored when Undo is clicked', async () => {
     const onRestored = vi.fn()
-    render(<MergeToast sessionId="s1" slug="c1" onRestored={onRestored} />)
+    render(<MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />)
     act(() => dispatchMergeCommitted(baseDetail))
     fireEvent.click(screen.getByTestId('merge-toast-undo'))
     await waitFor(() => {
@@ -78,7 +78,7 @@ describe('MergeToast', () => {
   })
 
   it('closes immediately when the close button is clicked', () => {
-    render(<MergeToast sessionId="s1" slug="c1" />)
+    render(<MergeToast workspaceId="s1" slug="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
     fireEvent.click(screen.getByTestId('merge-toast-close'))
     expect(screen.queryByTestId('merge-toast')).toBeNull()
