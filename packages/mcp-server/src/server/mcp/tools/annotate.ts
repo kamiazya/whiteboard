@@ -9,11 +9,14 @@ import {
 } from './annotation-fields.js'
 import { decomposeBoxWithLabel, type SubTextPosition } from './box-with-label.js'
 import { parseCanvasId } from './canvas-id.js'
-import { decomposeGroup } from './group.js'
 import { resolvePaletteColor } from './color-palette.js'
+import { decomposeGroup } from './group.js'
 import { apiGetPalette } from './palette.js'
 import { resolveAnnotationPosition, type CoordsMode } from './resolve-annotation-position.js'
 import { resolveArrowLabelPosition } from './resolve-arrow-label-position.js'
+import { resolveArrowRoute } from './resolve-arrow-route.js'
+import { resolveTextPosition, type TextAlign } from './resolve-text-position.js'
+import { snapArrowEndpoints, type Rect } from './snap-arrow.js'
 
 // Shared annotation result shape (also re-used by annotate-batch).
 export const annotationResultSchema = z.object({
@@ -39,9 +42,6 @@ export const annotateOutputSchema = z.object({
   annotation: annotationResultSchema,
   warnings: z.array(annotateWarningSchema),
 })
-import { resolveArrowRoute } from './resolve-arrow-route.js'
-import { resolveTextPosition, type TextAlign } from './resolve-text-position.js'
-import { snapArrowEndpoints, type Rect } from './snap-arrow.js'
 
 // box_with_label and group are composite types accepted only by the public
 // annotate API. Internally they are decomposed into primitive elements.

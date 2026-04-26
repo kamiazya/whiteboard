@@ -1,5 +1,6 @@
 import { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
+import type { DaemonClient } from '../daemon-client.js'
 import {
   annotationResultSchema,
   type AnnotationResult,
@@ -9,7 +10,13 @@ import {
   appendAnnotationToDoc,
   flattenAnnotationResult,
 } from './annotate.js'
-import type { DaemonClient } from '../daemon-client.js'
+import { decomposeBoxWithLabel } from './box-with-label.js'
+import { parseCanvasId } from './canvas-id.js'
+import { applyAssignToGroup } from './element-ops.js'
+import { decomposeGroup } from './group.js'
+import { apiGetPalette } from './palette.js'
+import { type GridLayout, resolveGridPlacement, resolveLayout } from './resolve-layout.js'
+import { boundsSchema } from './shared-schemas.js'
 
 export const annotateBatchWarningSchema = z.object({
   index: z.number(),
@@ -31,12 +38,7 @@ export const annotateBatchOutputSchema = z.object({
   placements: z.array(
     z.object({
       annotationIndex: z.number(),
-      rect: z.object({
-        x: z.number(),
-        y: z.number(),
-        width: z.number(),
-        height: z.number(),
-      }),
+      rect: boundsSchema,
       elementId: z.string().optional(),
     }),
   ),
@@ -48,12 +50,6 @@ export const annotateBatchOutputSchema = z.object({
     }),
   ),
 })
-import { decomposeBoxWithLabel } from './box-with-label.js'
-import { parseCanvasId } from './canvas-id.js'
-import { decomposeGroup } from './group.js'
-import { applyAssignToGroup } from './element-ops.js'
-import { apiGetPalette } from './palette.js'
-import { type GridLayout, resolveGridPlacement, resolveLayout } from './resolve-layout.js'
 
 // box_with_label does not auto-wrap, so insufficient width/height can cause
 // visible overflow. annotate_batch returns these diagnostics as warnings so the

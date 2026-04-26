@@ -2,16 +2,9 @@ import { LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
-import { parseCanvasId } from './canvas-id.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
-
-// Shared bounds shape used by both create_frame and update_frame_members.
-const boundsSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
-})
+import { parseCanvasId } from './canvas-id.js'
+import { boundsSchema } from './shared-schemas.js'
 
 export const createFrameOutputSchema = z.object({
   elementId: z.string(),

@@ -4,19 +4,13 @@ import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { annotateBatchOutputSchema, annotateBatchTool, type BatchAnnotationItem } from './annotate-batch.js'
 import type { GridLayout } from './resolve-layout.js'
+import { boundsSchema } from './shared-schemas.js'
 import {
   BUILTIN_TEMPLATES,
   getBuiltinTemplate,
   type WhiteboardTemplate,
   whiteboardTemplateSchema,
 } from './template-library.js'
-
-const templateBoundsSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
-})
 
 export const templateListOutputSchema = z.object({
   templates: z.array(
@@ -42,7 +36,7 @@ export const templateInsertOutputSchema = annotateBatchOutputSchema.extend({
   templateId: z.string(),
   source: z.enum(['builtin', 'file']),
   variables: z.record(z.string(), z.string()),
-  bounds: templateBoundsSchema,
+  bounds: boundsSchema,
   templateInstanceId: z.string(),
 })
 

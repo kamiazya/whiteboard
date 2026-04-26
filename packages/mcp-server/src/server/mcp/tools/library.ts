@@ -3,17 +3,11 @@ import { nanoid } from 'nanoid'
 import { LoroMap } from 'loro-crdt'
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
+import { validateExternalUrl } from '../../validators.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
 import { resolveLibraryItem, type LibraryElement } from './resolve-library-item.js'
-import { validateExternalUrl } from '../../validators.js'
-
-const libraryBoundsSchema = z.object({
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
-})
+import { boundsSchema } from './shared-schemas.js'
 
 export const libraryInstallOutputSchema = z.object({
   libraryUrl: z.string(),
@@ -40,7 +34,7 @@ export const libraryListItemsOutputSchema = z.object({
       index: z.number(),
       name: z.string().optional(),
       elementCount: z.number(),
-      bbox: libraryBoundsSchema,
+      bbox: boundsSchema,
     }),
   ),
 })
