@@ -16,22 +16,25 @@ vi.mock('../../config.js', () => ({
 
 const { getDb, closeDb, clearDbCache } = await import('./index.js')
 const { runMigrations } = await import('./migrator.js')
+const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
 
 describe('runMigrations', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-migrator-test-'))
     clearDbCache()
+    clearPrepareCache()
   })
 
   afterEach(async () => {
     await closeDb(tempDir).catch(() => {})
     clearDbCache()
+    clearPrepareCache()
     await rm(tempDir, { recursive: true, force: true })
   })
 
   it('creates the database file and applies every migration on a fresh data dir', async () => {
+    await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-    await runMigrations(db)
     // The libsql file backend should have created the .db file under DATA_DIR.
     await expect(stat(join(tempDir, 'whiteboard.db'))).resolves.toBeDefined()
     // Re-running is a no-op: kysely's __kysely_migration tracking table must
@@ -61,8 +64,8 @@ describe('runMigrations', () => {
       workspaceId,
     )
 
+    await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-    await runMigrations(db)
 
     const wsRow = await db
       .selectFrom('workspaces')
@@ -121,8 +124,8 @@ describe('runMigrations', () => {
     await mkdir(join(tempDir, 'tmp'), { recursive: true })
     await mkdir(join(tempDir, 'something-arbitrary'), { recursive: true })
 
+    await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-    await runMigrations(db)
 
     const all = await db.selectFrom('workspaces').selectAll().execute()
     expect(all).toEqual([])
@@ -140,8 +143,8 @@ describe('runMigrations', () => {
     await mkdir(join(tempDir, workspaceId), { recursive: true })
     await writeFile(join(tempDir, workspaceId, 'foo.loro'), 'x')
 
+    await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-    await runMigrations(db)
     await runMigrations(db)
 
     const workspaces = await db.selectFrom('workspaces').selectAll().execute()

@@ -1769,6 +1769,11 @@ export async function createExcalidrawMcpServer() {
 }
 
 export async function main() {
+  // The HTTP daemon runs prepareDataDir in src/server/index.ts; the stdio
+  // entrypoint reaches createExcalidrawMcpServer first, so call the same
+  // hook here to keep schema and v0 import bootstrapping symmetric.
+  const { prepareDataDir } = await import('../store/db/prepare.js')
+  await prepareDataDir(DATA_DIR)
   const server = await createExcalidrawMcpServer()
   const transport = new StdioServerTransport()
   await server.connect(transport)

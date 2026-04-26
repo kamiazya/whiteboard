@@ -32,6 +32,11 @@ async function main() {
     protectedResourceMetadata: resolveMcpProtectedResourceMetadataFromEnv(process.env),
   })
 
+  // Block startup until the schema is migrated and the v0 importer has run
+  // so route handlers never see a half-initialized data directory.
+  const { prepareDataDir } = await import('./store/db/prepare.js')
+  await prepareDataDir(DATA_DIR)
+
   const running = await startHttpServer({
     port,
     host,

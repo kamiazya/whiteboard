@@ -715,11 +715,14 @@ describe('createApp daemon mutation auth', () => {
       expect(body.result?.protocolVersion).toBeDefined()
     }
 
-    const { readFile: readFileFs } = await import('node:fs/promises')
-    const current = (await readFileFs(join(dataDir, '.current-workspace'), 'utf-8')).trim()
-    const latest = (await readFileFs(join(dataDir, '.latest-session'), 'utf-8')).trim()
-    expect(current).toMatch(/^[A-Za-z0-9_-]{21}$/)
-    expect(latest).toBe(current)
+    const { getDb } = await import('./store/db/index.js')
+    const db = await getDb(dataDir)
+    const runtimeRow = await db
+      .selectFrom('runtime')
+      .select(['value'])
+      .where('key', '=', 'currentWorkspaceId')
+      .executeTakeFirst()
+    expect(runtimeRow?.value).toMatch(/^[A-Za-z0-9_-]{21}$/)
   })
 
   it('protects newly added mutating /api routes by default', async () => {
