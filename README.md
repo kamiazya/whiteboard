@@ -6,6 +6,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml/badge.svg)](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml)
 
+<p align="center">
+  <img src="docs/assets/architecture.png" alt="How whiteboard works: agent and you both draw on the same Excalidraw canvas via the Whiteboard MCP server" width="780" />
+  <br />
+  <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.excalidraw">architecture.excalidraw</a> to open it in Excalidraw and remix.</i></sub>
+</p>
+
 `@kamiazya/whiteboard-mcp` runs a live Excalidraw canvas in your browser and exposes MCP tools so Claude Code, Codex, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and round-trip with stock `.excalidraw` JSON.
 
 ## Reach for whiteboard when…
@@ -47,8 +53,6 @@ Every canvas lives inside a workspace. The sidebar lets you switch between them 
 | Before | After rename |
 |---|---|
 | ![Workspace switcher with three workspaces listed](docs/assets/workspace-list.png) | ![The same list with one workspace renamed](docs/assets/workspace-list-renamed.png) |
-
-> A "drawn with whiteboard" hero diagram is on the way — see [open follow-ups](#open-follow-ups) below.
 
 ## Bundled skills
 
@@ -102,8 +106,7 @@ See [docs/configuration.md](docs/configuration.md#codex-sandbox-constraints) for
 
 Items intentionally not in this README yet — please file or upvote a tracking issue rather than adding noise inline:
 
-- A "drawn with whiteboard" hero diagram and a short demo GIF, both produced with `pnpm dev` running.
-- Cleaner in-canvas screenshots (the previous captures were debugging snapshots, removed for now).
+- A short animated demo GIF showing an agent prompt → tool calls → finished diagram.
 - A published Claude Code plugin marketplace so `/plugin marketplace add kamiazya/whiteboard` works.
 
 ## License
