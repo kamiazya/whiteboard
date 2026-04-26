@@ -5,7 +5,7 @@ export interface OperatorInfo {
   peerId: string
   displayName?: string
   agentId?: string
-  sessionId?: string
+  workspaceId?: string
 }
 
 export interface VersionCreatedPayload {
@@ -76,7 +76,7 @@ function isOperatorInfo(value: unknown): value is OperatorInfo {
   if (typeof value.peerId !== 'string' || value.peerId.length === 0) return false
   if (value.displayName !== undefined && typeof value.displayName !== 'string') return false
   if (value.agentId !== undefined && typeof value.agentId !== 'string') return false
-  if (value.sessionId !== undefined && typeof value.sessionId !== 'string') return false
+  if (value.workspaceId !== undefined && typeof value.workspaceId !== 'string') return false
   return true
 }
 

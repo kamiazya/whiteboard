@@ -80,7 +80,7 @@ export function applyHydratedSceneToApi(args: {
 }
 
 export function useWhiteboardSync(
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   options: UseWhiteboardSyncOptions = {},
 ) {
@@ -161,7 +161,7 @@ export function useWhiteboardSync(
     // Fetch missing files in parallel. Individual failures are ignored.
     await Promise.allSettled(
       missingIds.map(async (fileId) => {
-        const res = await apiFetch(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/file/${fileId}`)
+        const res = await apiFetch(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`)
         if (!res.ok) return
         const blob = await res.blob()
         const dataURL = await blobToBase64(blob)
@@ -195,7 +195,7 @@ export function useWhiteboardSync(
     uploadedFileIdsRef.current = new Set()
     pendingExportRequestsRef.current = []
     applyGenerationRef.current += 1 // never reset this back to 0
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   // WebSocket connection plus Loro initialization.
   // Reconnect with exponential backoff (500ms -> 8s) when ws.onclose fires.
@@ -210,7 +210,7 @@ export function useWhiteboardSync(
     const connect = () => {
       if (cancelled) return
       const ws = new WebSocket(
-        buildWhiteboardWsUrl(window.location.href, sessionId, slug),
+        buildWhiteboardWsUrl(window.location.href, workspaceId, slug),
         buildWhiteboardWsProtocols(daemonToken),
       )
       // Required: without this, binary frames arrive as Blob and the ArrayBuffer check fails.
@@ -262,7 +262,7 @@ export function useWhiteboardSync(
               if (typeof window !== 'undefined') {
                 window.dispatchEvent(
                   new CustomEvent('excalidraw:doc_changed', {
-                    detail: { sessionId, slug },
+                    detail: { workspaceId, slug },
                   }),
                 )
               }
@@ -289,7 +289,7 @@ export function useWhiteboardSync(
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent('excalidraw:version_saved', {
-                detail: { sessionId, slug },
+                detail: { workspaceId, slug },
               }),
             )
           }
@@ -316,7 +316,7 @@ export function useWhiteboardSync(
           if (typeof window !== 'undefined') {
             window.dispatchEvent(
               new CustomEvent('excalidraw:head_changed', {
-                detail: { sessionId, slug, head: msg.head },
+                detail: { workspaceId, slug, head: msg.head },
               }),
             )
           }
@@ -391,7 +391,7 @@ export function useWhiteboardSync(
       if (reconnectTimer) clearTimeout(reconnectTimer)
       wsRef.current?.close()
     }
-  }, [sessionId, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [workspaceId, slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reapply the current document once the Excalidraw API becomes ready.
   useEffect(() => {
@@ -409,11 +409,11 @@ export function useWhiteboardSync(
 
   // Record Excalidraw changes into Loro and upload any new files.
   // Memoize the debounced callback by canvas key so swapping canvases swaps
-  // the closure (which captures sessionId / slug) without mutating refs in
+  // the closure (which captures workspaceId / slug) without mutating refs in
   // render. React is allowed to discard a useMemo result; the worst case is a
   // fresh 300ms window for the new closure, never a write into the wrong doc,
-  // because the closure still uses the same sessionId / slug.
-  const canvasKey = `${sessionId}/${slug}`
+  // because the closure still uses the same workspaceId / slug.
+  const canvasKey = `${workspaceId}/${slug}`
   const onSceneChange = useMemo(() => {
     return debounce((elements: ExcalidrawElement[], files: BinaryFiles) => {
       // Capture doc at invocation time.
@@ -431,17 +431,16 @@ export function useWhiteboardSync(
         newEntries,
         doc, // pass the invocation-time captured reference
         elements,
-        sessionId,
+        workspaceId,
         slug,
         (fileId) => uploadedFileIdsRef.current.add(fileId),
       ).catch((err: unknown) => {
         console.error('[whiteboard] file upload failed, commit skipped:', err)
       })
     }, 300)
-    // canvasKey already encodes sessionId/slug; listing them keeps the deps
-    // exhaustive for ESLint and matches the closure's captured values.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasKey])
+    // canvasKey already encodes workspaceId/slug, but listing both keeps the
+    // exhaustive-deps rule honest with the closure's captured values.
+  }, [canvasKey, workspaceId, slug])
 
   // Cancel the previous debounce whenever the memoized callback changes
   // (canvas key switch) and on unmount, so a pending 300ms timer cannot leak

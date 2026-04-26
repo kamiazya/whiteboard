@@ -41,7 +41,7 @@ export interface MergeResult {
 
 // ── URL builder ──
 // Slugs can contain "/", so always encode them.
-export function buildBranchUrls(sessionId: string, slug: string): {
+export function buildBranchUrls(workspaceId: string, slug: string): {
   list: string
   head: string
   deleteBranch: (name: string) => string
@@ -49,7 +49,7 @@ export function buildBranchUrls(sessionId: string, slug: string): {
   merge: (source: string) => string
 } {
   const safeSlug = encodeURIComponent(slug)
-  const base = `/api/workspaces/${sessionId}/canvases/${safeSlug}`
+  const base = `/api/workspaces/${workspaceId}/canvases/${safeSlug}`
   return {
     list: `${base}/branches`,
     head: `${base}/head`,
@@ -103,8 +103,8 @@ async function requireOk(res: Response): Promise<Response> {
 }
 
 // Imperative API helpers independent from React.
-export function branchesApi(sessionId: string, slug: string) {
-  const urls = buildBranchUrls(sessionId, slug)
+export function branchesApi(workspaceId: string, slug: string) {
+  const urls = buildBranchUrls(workspaceId, slug)
   return {
     async list(): Promise<BranchesState> {
       const res = await requireOk(await apiFetch(urls.list))
@@ -189,16 +189,16 @@ export interface UseBranchesResult {
   merge: (source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResult>
 }
 
-export function useBranches(sessionId: string, slug: string): UseBranchesResult {
+export function useBranches(workspaceId: string, slug: string): UseBranchesResult {
   const [state, setState] = useState<BranchesState>({ branches: [], head: 'main' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<BranchApiError | Error | null>(null)
-  const apiRef = useRef(branchesApi(sessionId, slug))
+  const apiRef = useRef(branchesApi(workspaceId, slug))
 
   // Recreate the API wrapper whenever session or slug changes.
   useEffect(() => {
-    apiRef.current = branchesApi(sessionId, slug)
-  }, [sessionId, slug])
+    apiRef.current = branchesApi(workspaceId, slug)
+  }, [workspaceId, slug])
 
   const refetch = useCallback(async () => {
     setLoading(true)
@@ -215,22 +215,22 @@ export function useBranches(sessionId: string, slug: string): UseBranchesResult 
 
   useEffect(() => {
     void refetch()
-  }, [refetch, sessionId, slug])
+  }, [refetch, workspaceId, slug])
 
   // useWhiteboardSync emits a window event when HEAD changes.
   // Refetch only for the matching session/slug pair.
   useEffect(() => {
     if (typeof window === 'undefined') return
     const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ sessionId: string; slug: string; head: string }>)
+      const detail = (event as CustomEvent<{ workspaceId: string; slug: string; head: string }>)
         .detail
       if (!detail) return
-      if (detail.sessionId !== sessionId || detail.slug !== slug) return
+      if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
       void refetch()
     }
     window.addEventListener('excalidraw:head_changed', handler)
     return () => window.removeEventListener('excalidraw:head_changed', handler)
-  }, [refetch, sessionId, slug])
+  }, [refetch, workspaceId, slug])
 
   const createBranch = useCallback(
     async (args: { name: string; fromVersionId?: string; color?: string }) => {

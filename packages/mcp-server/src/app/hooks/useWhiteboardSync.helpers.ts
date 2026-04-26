@@ -42,12 +42,12 @@ export { buildWhiteboardWsProtocols }
 
 export function buildWhiteboardWsUrl(
   locationHref: string,
-  sessionId: string,
+  workspaceId: string,
   slug: string,
 ): string {
   const url = new URL(locationHref)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  url.pathname = `/ws/${sessionId}/${encodeURIComponent(slug)}`
+  url.pathname = `/ws/${workspaceId}/${encodeURIComponent(slug)}`
   url.search = ''
   url.hash = ''
   return url.toString()

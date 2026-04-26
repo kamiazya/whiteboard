@@ -20,8 +20,8 @@ import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 
 export default function CanvasPage() {
-  const params = useParams<{ sessionId: string; '*': string }>()
-  const sessionId = params.sessionId!
+  const params = useParams<{ workspaceId: string; '*': string }>()
+  const workspaceId = params.workspaceId!
   const slug = params['*'] ?? ''
 
   // Read ?fullscreen=1 once as the initial value.
@@ -32,7 +32,7 @@ export default function CanvasPage() {
 
   // apiRef is assigned in handleApiReady, so it is null immediately after mount.
   // onVersionCreated is read through a ref inside the hook, so recreating it on each render is fine.
-  const { onApiReady, onSceneChange, clearLocalUndo, restoreInProgress, restoreLabel } = useWhiteboardSync(sessionId, slug, {
+  const { onApiReady, onSceneChange, clearLocalUndo, restoreInProgress, restoreLabel } = useWhiteboardSync(workspaceId, slug, {
     onVersionCreated: async (v) => {
       // Only generate thumbnails for auto-save. Manual save already uploads one from the header flow.
       if (!v.auto) return
@@ -40,7 +40,7 @@ export default function CanvasPage() {
         const blob = await getThumbnailBlob()
         if (!blob) return
         await apiFetch(
-          `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`,
+          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`,
           { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: blob },
         )
       } catch (err) {
@@ -124,7 +124,7 @@ export default function CanvasPage() {
 
       // 1) Restore server-registered libraries without opening the library panel.
       try {
-        const res = await apiFetch(`/api/workspaces/${sessionId}/libraries`)
+        const res = await apiFetch(`/api/workspaces/${workspaceId}/libraries`)
         if (res.ok) {
           const { urls } = (await res.json()) as { urls: string[] }
           for (const url of getInstalledLibraryUrls(urls)) {
@@ -147,7 +147,7 @@ export default function CanvasPage() {
       if (ok) {
         // Persist the imported library on the workspace.
         try {
-          await apiFetch(`/api/workspaces/${sessionId}/libraries`, {
+          await apiFetch(`/api/workspaces/${workspaceId}/libraries`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: libUrl }),
@@ -161,11 +161,11 @@ export default function CanvasPage() {
     return () => {
       cancelled = true
     }
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   useEffect(() => {
     let cancelled = false
-    apiFetch(`/api/workspaces/${sessionId}/canvases`)
+    apiFetch(`/api/workspaces/${workspaceId}/canvases`)
       .then((res) => res.json() as Promise<{ canvases: { slug: string; updatedAt: string }[] }>)
       .then(({ canvases }) => {
         if (cancelled) return
@@ -177,7 +177,7 @@ export default function CanvasPage() {
     return () => {
       cancelled = true
     }
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   // Keyboard shortcut: press "f" to toggle fullscreen, or Escape to exit it.
   // Ignore the shortcut while editing text so typing "f" does not accidentally toggle the canvas.
@@ -205,7 +205,7 @@ export default function CanvasPage() {
       {!isFullscreen && (
         <>
           <WorkspaceTopBar
-            sessionId={sessionId}
+            workspaceId={workspaceId}
             slug={slug}
             canvases={canvases}
             onRestored={clearLocalUndo}
@@ -213,12 +213,12 @@ export default function CanvasPage() {
             getThumbnailBlob={getThumbnailBlob}
           />
           {/* Show the banner only when the current HEAD is not main and still has unmerged commits. */}
-          <HeaderBranchBanner sessionId={sessionId} slug={slug} />
+          <HeaderBranchBanner workspaceId={workspaceId} slug={slug} />
         </>
       )}
       <main className="relative flex-1">
         <Excalidraw
-          key={`${sessionId}/${slug}`}
+          key={`${workspaceId}/${slug}`}
           excalidrawAPI={handleApiReady}
           libraryReturnUrl={typeof window !== 'undefined' ? window.location.origin + window.location.pathname : undefined}
           onChange={(elements: readonly ExcalidrawElement[], _appState: AppState, files: BinaryFiles) =>
@@ -255,10 +255,10 @@ export default function CanvasPage() {
           </div>
         )}
         {/* Overlay that highlights new and conflicting elements for a short time after merge. */}
-        <MergeHighlight sessionId={sessionId} slug={slug} apiRef={apiRef} />
+        <MergeHighlight workspaceId={workspaceId} slug={slug} apiRef={apiRef} />
       </main>
       {/* Merge success toast with undo support, driven by excalidraw:merge_committed events. */}
-      <MergeToast sessionId={sessionId} slug={slug} onRestored={clearLocalUndo} />
+      <MergeToast workspaceId={workspaceId} slug={slug} onRestored={clearLocalUndo} />
     </div>
   )
 }

@@ -37,7 +37,7 @@ export interface MergeDialogProps {
   target: BranchMeta | null
   onClose: () => void
   runMerge: (source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResult>
-  sessionId?: string
+  workspaceId?: string
   slug?: string
 }
 
@@ -166,8 +166,8 @@ interface VersionThumbInfo {
   branchName?: string
 }
 
-function thumbUrlFor(sessionId: string, slug: string, versionId: string): string {
-  return `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions/${versionId}/thumbnail`
+function thumbUrlFor(workspaceId: string, slug: string, versionId: string): string {
+  return `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${versionId}/thumbnail`
 }
 
 export function MergeDialog({
@@ -176,7 +176,7 @@ export function MergeDialog({
   target,
   onClose,
   runMerge,
-  sessionId,
+  workspaceId,
   slug,
 }: MergeDialogProps): JSX.Element {
   const [loading, setLoading] = useState(false)
@@ -215,7 +215,7 @@ export function MergeDialog({
 
   // Thumbnail fallback.
   useEffect(() => {
-    if (!open || !source || !target || !sessionId || !slug) {
+    if (!open || !source || !target || !workspaceId || !slug) {
       setThumbs({ target: null, source: null })
       return
     }
@@ -224,7 +224,7 @@ export function MergeDialog({
     ;(async () => {
       try {
         const res = await apiFetch(
-          `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions`,
+          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
         )
         if (!res.ok) return
         const body = (await res.json()) as { versions: VersionThumbInfo[] }
@@ -238,8 +238,8 @@ export function MergeDialog({
         const tgt = latestFor(target.name)
         const src = latestFor(source.name)
         setThumbs({
-          target: tgt ? thumbUrlFor(sessionId, slug, tgt.id) : null,
-          source: src ? thumbUrlFor(sessionId, slug, src.id) : null,
+          target: tgt ? thumbUrlFor(workspaceId, slug, tgt.id) : null,
+          source: src ? thumbUrlFor(workspaceId, slug, src.id) : null,
         })
       } catch {
         /* Fall back to placeholders if thumbnail loading fails. */
@@ -250,7 +250,7 @@ export function MergeDialog({
     return () => {
       cancelled = true
     }
-  }, [open, source, target, sessionId, slug])
+  }, [open, source, target, workspaceId, slug])
 
   const handleMerge = async () => {
     if (!source || !target) return
@@ -260,11 +260,11 @@ export function MergeDialog({
       const res = await runMerge(source.name, { into: target.name, dryRun: false })
       setPreview(res)
       // Broadcast merge results for the toast and highlight layers when session/slug are available.
-      if (typeof window !== 'undefined' && sessionId && slug) {
+      if (typeof window !== 'undefined' && workspaceId && slug) {
         window.dispatchEvent(
           new CustomEvent('excalidraw:merge_committed', {
             detail: {
-              sessionId,
+              workspaceId,
               slug,
               sourceName: source.name,
               targetName: target.name,

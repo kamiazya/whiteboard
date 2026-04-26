@@ -99,7 +99,7 @@ afterEach(() => {
 
 describe('VersionTimeline', () => {
   it('filters cards and mini-graph rows to the active branch', async () => {
-    render(<VersionTimeline sessionId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
 
     // Only v-new and v-mid should render; v-feat is filtered out with the feature branch.
     await waitFor(() => {
@@ -118,7 +118,7 @@ describe('VersionTimeline', () => {
   })
 
   it('renders the branchOut label on the row matching baseVersionId', async () => {
-    render(<VersionTimeline sessionId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
     // "branched -> feature" should appear on the v-mid row.
     await waitFor(() => {
       expect(screen.getByText(/branched → feature/)).toBeTruthy()
@@ -126,7 +126,7 @@ describe('VersionTimeline', () => {
   })
 
   it('renders operator affordances and keeps the lane color on the branch color', async () => {
-    render(<VersionTimeline sessionId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
 
     await waitFor(() => {
       expect(screen.getByText('🤖 Assistant')).toBeTruthy()
@@ -170,7 +170,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline sessionId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText('⚙ System')).toBeTruthy()
     })
@@ -206,14 +206,14 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline sessionId="sess_1" slug="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/No versions on «feature» yet/i)).toBeTruthy()
     })
   })
 
   it('scroll container can shrink inside the fixed-height history popover', async () => {
-    const { container } = render(<VersionTimeline sessionId="sess_1" slug="canvas-a" />)
+    const { container } = render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
 
     await waitFor(() => {
       expect(screen.getByText('🤖 Assistant')).toBeTruthy()

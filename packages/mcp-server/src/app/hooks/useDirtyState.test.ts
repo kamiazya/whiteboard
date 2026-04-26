@@ -4,14 +4,14 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { useDirtyState } from './useDirtyState.js'
 
 // Thin CustomEvent helpers; jsdom can dispatch these directly.
-function dispatchDocChanged(sessionId: string, slug: string): void {
+function dispatchDocChanged(workspaceId: string, slug: string): void {
   window.dispatchEvent(
-    new CustomEvent('excalidraw:doc_changed', { detail: { sessionId, slug } }),
+    new CustomEvent('excalidraw:doc_changed', { detail: { workspaceId, slug } }),
   )
 }
-function dispatchVersionSaved(sessionId: string, slug: string): void {
+function dispatchVersionSaved(workspaceId: string, slug: string): void {
   window.dispatchEvent(
-    new CustomEvent('excalidraw:version_saved', { detail: { sessionId, slug } }),
+    new CustomEvent('excalidraw:version_saved', { detail: { workspaceId, slug } }),
   )
 }
 

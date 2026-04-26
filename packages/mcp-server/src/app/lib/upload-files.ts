@@ -10,7 +10,7 @@ import { apiFetch } from './api-client.js'
  */
 export async function uploadFiles(
   newEntries: [string, BinaryFileData][],
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   onSuccess: (fileId: string) => void,
 ): Promise<void> {
@@ -18,7 +18,7 @@ export async function uploadFiles(
     newEntries.map(async ([fileId, fd]) => {
       const [, base64] = fd.dataURL.split(',')
       const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
-      const res = await apiFetch(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/file/${fileId}`, {
+      const res = await apiFetch(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`, {
         method: 'PUT',
         headers: { 'Content-Type': fd.mimeType },
         body: binary,

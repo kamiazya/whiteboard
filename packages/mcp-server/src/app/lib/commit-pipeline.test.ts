@@ -126,10 +126,10 @@ describe('commitAfterUpload', () => {
     expect(doc.getMovableList('elements').toJSON() as unknown[]).toHaveLength(0)
   })
 
-  // Canvas isolation: commitAfterUpload must use the sessionId/slug it was given.
+  // Canvas isolation: commitAfterUpload must use the workspaceId/slug it was given.
   // This is a contract test for the hook regenerating its closure after a canvas switch.
 
-  it('uploads to the URL built from the passed sessionId and slug', async () => {
+  it('uploads to the URL built from the passed workspaceId and slug', async () => {
     vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }))
 
     const doc = new LoroDoc()

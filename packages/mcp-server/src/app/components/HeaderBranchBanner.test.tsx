@@ -51,7 +51,7 @@ afterEach(() => {
 describe('HeaderBranchBanner', () => {
   it('does not render the banner when HEAD is main', async () => {
     state.current.state.head = 'main'
-    render(<HeaderBranchBanner sessionId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
     // Wait for the initial fetch path.
     await act(async () => {
       await Promise.resolve()
@@ -60,7 +60,7 @@ describe('HeaderBranchBanner', () => {
   })
 
   it('renders the banner when HEAD is not main and unmergedCommits > 0', async () => {
-    render(<HeaderBranchBanner sessionId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
     await waitFor(() => {
       expect(screen.getByTestId('header-branch-banner')).toBeTruthy()
     })
@@ -71,7 +71,7 @@ describe('HeaderBranchBanner', () => {
 
   it('hides the banner when unmergedCommits is 0', async () => {
     state.current.getBranchStats = vi.fn().mockResolvedValue({ unmergedCommits: 0, isHead: true })
-    render(<HeaderBranchBanner sessionId="s1" slug="c1" />)
+    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
     await act(async () => {
       await Promise.resolve()
     })

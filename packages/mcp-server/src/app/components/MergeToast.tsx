@@ -12,7 +12,7 @@ import { apiFetch } from '../lib/api-client.js'
 // MergeDialog dispatches excalidraw:merge_committed, and CanvasPage mounts this so it stays local to the canvas view.
 
 export interface MergeToastEventDetail {
-  sessionId: string
+  workspaceId: string
   slug: string
   sourceName: string
   targetName: string
@@ -26,7 +26,7 @@ export interface MergeToastEventDetail {
 }
 
 export interface MergeToastProps {
-  sessionId: string
+  workspaceId: string
   slug: string
   // Called after a successful restore so CanvasPage can clear its local undo stack.
   onRestored?: () => void
@@ -37,7 +37,7 @@ interface ActiveToast {
   detail: MergeToastEventDetail
 }
 
-export function MergeToast({ sessionId, slug, onRestored }: MergeToastProps): JSX.Element | null {
+export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): JSX.Element | null {
   const [active, setActive] = useState<ActiveToast | null>(null)
   const [undoing, setUndoing] = useState(false)
   const hoverRef = useRef(false)
@@ -48,12 +48,12 @@ export function MergeToast({ sessionId, slug, onRestored }: MergeToastProps): JS
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<MergeToastEventDetail>).detail
       if (!detail) return
-      if (detail.sessionId !== sessionId || detail.slug !== slug) return
+      if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
       setActive({ key: Date.now(), detail })
     }
     window.addEventListener('excalidraw:merge_committed', handler)
     return () => window.removeEventListener('excalidraw:merge_committed', handler)
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   useEffect(() => {
     if (!active) return
@@ -90,7 +90,7 @@ export function MergeToast({ sessionId, slug, onRestored }: MergeToastProps): JS
     setUndoing(true)
     try {
       const res = await apiFetch(
-        `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions/${preMergeVersionId}/restore`,
+        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${preMergeVersionId}/restore`,
         { method: 'POST' },
       )
       if (res.ok) {

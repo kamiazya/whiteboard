@@ -21,7 +21,7 @@ interface OperatorInfo {
   peerId: string
   displayName?: string
   agentId?: string
-  sessionId?: string
+  workspaceId?: string
 }
 
 interface VersionEntry {
@@ -38,7 +38,7 @@ interface VersionEntry {
 }
 
 interface Props {
-  sessionId: string
+  workspaceId: string
   slug: string
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
@@ -70,7 +70,7 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 // Branch operations and save controls live in the header.
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
 export default function VersionTimeline({
-  sessionId,
+  workspaceId,
   slug,
   onRestored,
 }: Props) {
@@ -82,7 +82,7 @@ export default function VersionTimeline({
     setLoading(true)
     try {
       const res = await apiFetch(
-        `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions`,
+        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
       )
       if (res.ok) {
         const body = (await res.json()) as { versions: VersionEntry[] }
@@ -91,7 +91,7 @@ export default function VersionTimeline({
     } finally {
       setLoading(false)
     }
-  }, [sessionId, slug])
+  }, [workspaceId, slug])
 
   // Reload whenever the canvas changes.
   useEffect(() => {
@@ -111,17 +111,17 @@ export default function VersionTimeline({
     const v = pendingRestore
     setPendingRestore(null)
     await apiFetch(
-      `/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/restore`,
+      `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/restore`,
       { method: 'POST' },
     )
     onRestored?.()
     // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
-  }, [pendingRestore, sessionId, slug, onRestored, refresh])
+  }, [pendingRestore, workspaceId, slug, onRestored, refresh])
 
   // Keep branch state here for head filtering and the mini-graph.
   // Legacy versions without branchName are treated as main.
-  const { state: branchesState } = useBranches(sessionId, slug)
+  const { state: branchesState } = useBranches(workspaceId, slug)
   const head = branchesState.head
 
   const visibleVersions = versions.filter(
@@ -209,7 +209,7 @@ export default function VersionTimeline({
                     {v.hasThumbnail && (
                       <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
                         <img
-                          src={`/api/workspaces/${sessionId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`}
+                          src={`/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`}
                           alt=""
                           className="w-full h-20 object-contain"
                           loading="lazy"
