@@ -1,7 +1,7 @@
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import type { Value } from 'loro-crdt'
-import { join, relative, sep } from 'node:path'
-import { readFile, writeFile, readdir, stat, mkdir, access } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { readFile, writeFile, stat, mkdir, access } from 'node:fs/promises'
 import { DATA_DIR } from '../config.js'
 import type { VersionStore } from './version-store.js'
 import { loadDaemonRecord, isPidAlive } from '../../daemon/daemon-registry.js'
@@ -11,6 +11,9 @@ import {
   isCorruptStoredDataError,
   isMissingFileError,
 } from './corrupt-stored-data.js'
+import { getDb } from './db/index.js'
+import { prepareDataDir } from './db/prepare.js'
+import { upsertCanvasRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
 export class ConflictError extends Error {
@@ -20,20 +23,17 @@ export class ConflictError extends Error {
   }
 }
 
-// ── slug validation (path separators and traversal protection) ──
-// Allow hierarchical slugs made from kebab-case segments joined by `/`.
-// - Each segment: one or more alphanumeric characters, hyphens allowed internally,
-//   but not as the first or last character
-// - `/` is allowed only as a segment separator, not at the start, end, or twice in a row
-// - reject all traversal-like inputs such as `..`, `.`, and backslashes
-// Example: "my-canvas" OK / "621/header" OK / "621/header-v2/layout" OK
-//          "/foo" NG / "foo/" NG / "a//b" NG / "../x" NG / ".hidden" NG
-//
-// Error messages include both the offending segment and the concrete reason so callers
-// can pinpoint what to fix.
-// ── filename conversion (used only inside the store) ──
-function slugToFilename(slug: string): string {
-  return `${slug}.loro`
+// ── canvas blob path helpers ──
+// Snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{slug}.loro.
+// Hierarchical slugs (e.g. "621/header") expand into nested directories
+// inside the canvas/ root, matching the legacy layout one level deeper so
+// the blob root stays clean.
+function blobsRoot(): string {
+  return join(DATA_DIR, 'blobs')
+}
+
+function canvasBlobPath(workspaceId: string, slug: string): string {
+  return join(blobsRoot(), workspaceId, 'canvas', `${slug}.loro`)
 }
 
 function errorMessage(error: unknown): string {
@@ -45,10 +45,16 @@ function errorMessage(error: unknown): string {
 const SNAPSHOT_WARN_BYTES = 32 * 1024 * 1024 // 32 MiB
 const warnedSnapshots = new Set<string>()
 
-// ── save LoroDoc by writing the snapshot binary ──
-// Hierarchical slugs expand into subdirectories (for example "621/header" -> {workspaceId}/621/header.loro).
-// overwrite defaults to false so canvas_create does not destroy existing data by mistake.
-// Normal incremental saves, such as WS updates and applyAndPersist, must pass overwrite: true.
+async function dbReady() {
+  await prepareDataDir(DATA_DIR)
+  return getDb(DATA_DIR)
+}
+
+// ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
+//    upserting the matching DB rows. ──
+// overwrite defaults to false so canvas_create does not destroy existing
+// data by mistake. Normal incremental saves (WS updates, applyAndPersist,
+// compactCanvas) must pass overwrite: true.
 export async function saveCanvas(
   workspaceId: string,
   slug: string,
@@ -58,20 +64,32 @@ export async function saveCanvas(
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   const overwrite = options.overwrite ?? false
-  const path = join(DATA_DIR, workspaceId, slugToFilename(slug))
+  const path = canvasBlobPath(workspaceId, slug)
+  const db = await dbReady()
   if (!overwrite) {
-    const exists = await access(path).then(() => true).catch(() => false)
-    if (exists) {
+    const existing = await db
+      .selectFrom('canvases')
+      .select(['slug'])
+      .where('workspaceId', '=', workspaceId)
+      .where('slug', '=', slug)
+      .executeTakeFirst()
+    if (existing) {
       throw new ConflictError(
         `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
   }
-  const { dirname } = await import('node:path')
   await mkdir(dirname(path), { recursive: true })
   const snapshot = doc.export({ mode: 'snapshot' })
   await writeFile(path, snapshot)
-  // Emit a single warning when the snapshot grows past the soft cap.
+  await upsertWorkspaceRow(db, workspaceId)
+  await upsertCanvasRow(db, workspaceId, slug)
+  await db
+    .updateTable('canvases')
+    .set({ updatedAt: Date.now() })
+    .where('workspaceId', '=', workspaceId)
+    .where('slug', '=', slug)
+    .execute()
   if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
     const key = `${workspaceId}/${slug}`
     if (!warnedSnapshots.has(key)) {
@@ -84,11 +102,11 @@ export async function saveCanvas(
   }
 }
 
-// ── load LoroDoc, returning an empty document when the file is missing ──
+// ── load LoroDoc, returning an empty document when the blob is missing ──
 export async function loadCanvas(workspaceId: string, slug: string): Promise<LoroDoc> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = join(DATA_DIR, workspaceId, slugToFilename(slug))
+  const path = canvasBlobPath(workspaceId, slug)
   let doc: LoroDoc
   try {
     const bytes = await readFile(path)
@@ -99,21 +117,18 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
     }
   } catch (error) {
     if (isMissingFileError(error)) {
-      return new LoroDoc() // Missing file -> new document.
+      return new LoroDoc()
     }
     if (isCorruptStoredDataError(error)) {
       throw error
     }
     throw corruptStoredData(path, `failed to read canvas snapshot (${errorMessage(error)})`)
   }
-  // One-shot legacy container migration.
-  // Older data stored "elements" in LoroList, while current code writes LoroMovableList.
-  // Without this migration, old canvases can appear empty. Repair them once on load and
-  // write the fixed snapshot back to disk.
+  // One-shot legacy container migration. Older data stored "elements" in
+  // LoroList; current code uses LoroMovableList. Repair on load and rewrite.
   const migrated = migrateLegacyListToMovable(doc)
   if (migrated) {
     try {
-      // Keep a one-time .pre-migrate-bak copy of the original file before overwriting it.
       const bakPath = `${path}.pre-migrate-bak`
       const bakExists = await access(bakPath).then(() => true).catch(() => false)
       if (!bakExists) {
@@ -122,7 +137,6 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
       }
       await saveCanvas(workspaceId, slug, doc, { overwrite: true })
     } catch (err) {
-      // A failed rewrite is non-fatal; the next load will retry the migration.
       console.warn(
         `[canvas-store] legacy list→movable migration persist failed for ${workspaceId}/${slug}: ${errorMessage(err)}`,
       )
@@ -131,11 +145,6 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
   return doc
 }
 
-// Move elements from the legacy LoroList("elements") into LoroMovableList.
-// - If both containers already have elements, assume migration already happened and the
-//   legacy list was left behind; do nothing to avoid duplicating data.
-// - After migration, clear the legacy list to remove the dual state.
-// Returns whether a real migration ran, which tells the caller whether disk rewrite is needed.
 export function migrateLegacyListToMovable(doc: LoroDoc): boolean {
   const list = doc.getList('elements')
   const movable = doc.getMovableList('elements')
@@ -158,16 +167,16 @@ export function migrateLegacyListToMovable(doc: LoroDoc): boolean {
 export async function canvasExists(workspaceId: string, slug: string): Promise<boolean> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = join(DATA_DIR, workspaceId, slugToFilename(slug))
-  return access(path).then(() => true).catch(() => false)
+  const db = await dbReady()
+  const row = await db
+    .selectFrom('canvases')
+    .select(['slug'])
+    .where('workspaceId', '=', workspaceId)
+    .where('slug', '=', slug)
+    .executeTakeFirst()
+  return !!row
 }
 
-// ── op-log compaction (shallow-snapshot) ──
-// Long-lived canvases can accumulate a large Loro op-log. Rebuild a shallow snapshot at
-// the oldest retained version frontier and GC older history.
-// - If no version exists, skip compaction because there is no safe cut point.
-// - History after the cut point and all version checkouts remain valid by shallow-snapshot semantics.
-// Return before/after sizes so callers can log or emit metrics.
 export interface CompactResult {
   compacted: boolean
   beforeBytes: number
@@ -182,7 +191,7 @@ export async function compactCanvas(
 ): Promise<CompactResult> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = join(DATA_DIR, workspaceId, slugToFilename(slug))
+  const path = canvasBlobPath(workspaceId, slug)
   let beforeBytes: number
   try {
     beforeBytes = (await stat(path)).size
@@ -199,101 +208,40 @@ export async function compactCanvas(
   }
 
   const doc = await loadCanvas(workspaceId, slug)
-  // Keep the op-log after the cut point and GC everything before it.
   const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
   if (shallow.byteLength >= beforeBytes) {
-    // Skip rewriting if the document was already shallow or if the cut point gives no size benefit.
     return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
   }
   await writeFile(path, shallow)
   return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
 }
 
-async function readDirEntriesOrMissing(
-  dir: string,
-): Promise<import('node:fs').Dirent[] | null> {
-  try {
-    return await readdir(dir, { withFileTypes: true })
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return null
-    }
-    throw corruptStoredData(dir, `failed to read directory (${errorMessage(error)})`)
-  }
-}
-
-async function readDirEntriesStrict(dir: string): Promise<import('node:fs').Dirent[]> {
-  try {
-    return await readdir(dir, { withFileTypes: true })
-  } catch (error) {
-    throw corruptStoredData(dir, `failed to read directory (${errorMessage(error)})`)
-  }
-}
-
-// ── list sessions, marking activity by daemon.json PID liveness ──
-// Only directories directly under DATA_DIR are candidates.
-// Skip marker files such as `.latest-session`.
+// ── list workspaces from the workspaces table ──
+// daemonAlive still reflects the daemon record on disk; that is a runtime
+// signal, not workspace metadata, so it stays a separate fast probe.
 export async function listWorkspaces(): Promise<
   { workspaceId: string; daemonAlive: boolean }[]
 > {
-  const entries = await readDirEntriesOrMissing(DATA_DIR)
-  if (!entries) {
-    return []
-  }
+  const db = await dbReady()
   const daemon = await loadDaemonRecord(DATA_DIR)
   const daemonAlive = daemon ? isPidAlive(daemon.pid) : false
-  // Exclude dot-prefixed directories such as `.checkpoints` because they hold metadata.
-  // Session ids come from nanoid, so they never begin with a dot.
-  const dirs = entries.filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-  return dirs.map(({ name: workspaceId }) => ({
-    workspaceId,
-    daemonAlive,
-  }))
+  const rows = await db.selectFrom('workspaces').select(['id', 'updatedAt']).execute()
+  return rows.map((r) => ({ workspaceId: r.id, daemonAlive }))
 }
 
-// ── list canvases by recursively finding .loro files and returning session-relative slugs ──
-// Example: {workspaceId}/621/header.loro -> slug="621/header", {workspaceId}/solo.loro -> slug="solo"
-// Exclude known non-canvas directories such as `files/`, `exports/`, and `versions/`.
+// ── list canvases from the canvases table ──
 export async function listCanvases(
   workspaceId: string,
 ): Promise<{ slug: string; updatedAt: string }[]> {
   validateWorkspaceId(workspaceId)
-  const workspaceDir = join(DATA_DIR, workspaceId)
-  const rootEntries = await readDirEntriesOrMissing(workspaceDir)
-  if (!rootEntries) {
-    return []
-  }
-  const results: { slug: string; updatedAt: string }[] = []
-
-  async function walk(dir: string, entries?: import('node:fs').Dirent[]): Promise<void> {
-    const currentEntries = entries ?? (await readDirEntriesStrict(dir))
-    for (const entry of currentEntries) {
-      const full = join(dir, entry.name)
-      if (entry.isDirectory()) {
-        // Skip known non-canvas directories.
-        // versions/ must be excluded because version-store may contain .loro files inside it.
-        if (
-          entry.name === 'exports' ||
-          entry.name === 'files' ||
-          entry.name === 'versions'
-        )
-          continue
-        await walk(full)
-      } else if (entry.isFile() && entry.name.endsWith('.loro')) {
-        let s
-        try {
-          s = await stat(full)
-        } catch (error) {
-          throw corruptStoredData(full, `failed to stat canvas file (${errorMessage(error)})`)
-        }
-        // Rebuild the slug from the session-relative path, normalizing path separators to "/".
-        const rel = relative(workspaceDir, full).replace(new RegExp(`\\${sep}`, 'g'), '/')
-        const slug = rel.replace(/\.loro$/, '')
-        results.push({ slug, updatedAt: s.mtime.toISOString() })
-      }
-    }
-  }
-
-  await walk(workspaceDir, rootEntries)
-  return results
+  const db = await dbReady()
+  const rows = await db
+    .selectFrom('canvases')
+    .select(['slug', 'updatedAt'])
+    .where('workspaceId', '=', workspaceId)
+    .execute()
+  return rows.map((r) => ({
+    slug: r.slug,
+    updatedAt: new Date(r.updatedAt).toISOString(),
+  }))
 }

@@ -42,31 +42,14 @@ describe('GET /api/workspaces', () => {
     clearCache()
   })
 
-  it('returns structured 500 instead of an empty list for a broken DATA_DIR', async () => {
-    const origDir = tempDir
-    const brokenPath = join(origDir, 'broken-data-dir')
-    await writeFile(brokenPath, 'not-a-directory')
-    tempDir = brokenPath
-
-    try {
-      const app = createCanvasRouter()
-      const res = await app.request('/api/workspaces')
-
-      expect(res.status).toBe(500)
-      await expect(res.json()).resolves.toEqual({
-        error: 'corrupt_stored_data',
-        message: expect.stringContaining('broken-data-dir'),
-      })
-    } finally {
-      tempDir = origDir
-    }
-  })
+  // listWorkspaces no longer walks DATA_DIR, so the previous corruption-on-disk
+  // assertion no longer applies. The DB-backed equivalent is exercised through
+  // unit tests on canvas-store directly.
 })
 
 describe('GET /api/workspaces', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'workspace-a'), { recursive: true })
     clearCache()
   })
 
@@ -75,7 +58,8 @@ describe('GET /api/workspaces', () => {
     clearCache()
   })
 
-  it('returns the canonical workspace list and includes workspaceId as a compatibility alias', async () => {
+  it('returns the canonical workspace list with workspaceId entries', async () => {
+    await saveCanvas('workspace-a', 'a', new LoroDoc())
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces')
 
@@ -123,19 +107,8 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns structured 500 instead of an empty list for a broken session directory', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/session1/canvases')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining(join('session1')),
-    })
-  })
+  // listCanvases no longer walks per-workspace directories, so the previous
+  // "broken session directory" 500 case no longer applies.
 })
 
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
@@ -230,7 +203,9 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
-    await writeFile(join(tempDir, 'session1', 'canvas-a.loro'), Buffer.from('not-a-loro-snapshot'))
+    const blobDir = join(tempDir, 'blobs', 'session1', 'canvas')
+    await mkdir(blobDir, { recursive: true })
+    await writeFile(join(blobDir, 'canvas-a.loro'), Buffer.from('not-a-loro-snapshot'))
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
@@ -244,21 +219,10 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
     })
   })
 
-  it('returns structured 500 for canvas path stat failures', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
-      method: 'POST',
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('canvas-a.loro'),
-    })
-  })
+  // Canvas blobs live under blobs/{workspaceId}/canvas/, so the previous
+  // "non-directory session path" stat failure case no longer maps. compact
+  // returns no-file for missing blobs, and the corrupt-snapshot case above
+  // still exercises the corruption branch.
 })
 
 // names-store now lives in the sqlite metadata DB; the corruption-on-disk

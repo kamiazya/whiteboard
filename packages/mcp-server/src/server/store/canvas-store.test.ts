@@ -67,7 +67,10 @@ describe('saveCanvas / loadCanvas', () => {
   })
 
   it('throws on broken snapshots instead of returning an empty LoroDoc', async () => {
-    await writeFile(join(tempDir, 'session1', 'broken.loro'), Buffer.from('not-a-loro-snapshot'))
+    const { mkdir } = await import('node:fs/promises')
+    const blobDir = join(tempDir, 'blobs', 'session1', 'canvas')
+    await mkdir(blobDir, { recursive: true })
+    await writeFile(join(blobDir, 'broken.loro'), Buffer.from('not-a-loro-snapshot'))
 
     await expect(loadCanvas('session1', 'broken')).rejects.toThrow()
   })
@@ -229,46 +232,10 @@ describe('listCanvases', () => {
     expect(list.map((c) => c.slug)).toEqual(['real-canvas'])
   })
 
-  it('treats a broken non-directory session path as corruption', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    await expect(listCanvases('session1')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining(join('session1')),
-    })
-  })
-
-  it('treats stat failures during recursive walk as corruption', async () => {
-    await saveCanvas('session1', 'nested/canvas-a', new LoroDoc())
-    const brokenPath = join(tempDir, 'session1', 'nested', 'canvas-a.loro')
-    vi.resetModules()
-    vi.doMock('node:fs/promises', async () => {
-      const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
-      return {
-        ...actual,
-        stat: async (path: Parameters<typeof actual.stat>[0], options?: Parameters<typeof actual.stat>[1]) => {
-          if (String(path) === brokenPath) {
-            const error = new Error('stat failed') as NodeJS.ErrnoException
-            error.code = 'EIO'
-            throw error
-          }
-          return actual.stat(path, options)
-        },
-      }
-    })
-
-    try {
-      const { listCanvases: freshListCanvases } = await import('./canvas-store.js')
-      await expect(freshListCanvases('session1')).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining('canvas-a.loro'),
-      })
-    } finally {
-      vi.doUnmock('node:fs/promises')
-      vi.resetModules()
-    }
-  })
+  // listCanvases no longer walks the filesystem; the previous corruption
+  // tests against directory traversal failures and broken non-directory
+  // paths no longer apply now that the listing is a SELECT against the
+  // canvases table.
 })
 
 describe('saveCanvas / loadCanvas - slug validation', () => {
@@ -414,10 +381,10 @@ describe('listWorkspaces', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('lists session directories', async () => {
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session-active'), { recursive: true })
-    await mkdir(join(tempDir, 'session-old'), { recursive: true })
+  it('lists workspaces seeded via saveCanvas', async () => {
+    await saveCanvas('session-active', 'a', new LoroDoc())
+    await saveCanvas('session-old', 'a', new LoroDoc())
+    const { writeFile } = await import('node:fs/promises')
     await writeFile(
       join(tempDir, 'daemon.json'),
       JSON.stringify({
@@ -429,22 +396,18 @@ describe('listWorkspaces', () => {
       }),
     )
 
-    const sessions = await listWorkspaces()
-    const ids = sessions.map((s) => s.workspaceId)
-
+    const workspaces = await listWorkspaces()
+    const ids = workspaces.map((s) => s.workspaceId)
     expect(ids).toContain('session-active')
     expect(ids).toContain('session-old')
-
-    const active = sessions.find((s) => s.workspaceId === 'session-active')
-    const old = sessions.find((s) => s.workspaceId === 'session-old')
-
-    expect(active?.daemonAlive).toBe(true)
-    expect(old?.daemonAlive).toBe(true)
+    for (const ws of workspaces) {
+      expect(ws.daemonAlive).toBe(true)
+    }
   })
 
   it('treats stale daemon.json entries with dead PIDs as daemonAlive=false', async () => {
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session-stale'), { recursive: true })
+    await saveCanvas('session-stale', 'a', new LoroDoc())
+    const { writeFile } = await import('node:fs/promises')
     await writeFile(
       join(tempDir, 'daemon.json'),
       JSON.stringify({
@@ -456,44 +419,25 @@ describe('listWorkspaces', () => {
       }),
     )
 
-    const sessions = await listWorkspaces()
-    const stale = sessions.find((s) => s.workspaceId === 'session-stale')
+    const workspaces = await listWorkspaces()
+    const stale = workspaces.find((s) => s.workspaceId === 'session-stale')
     expect(stale?.daemonAlive).toBe(false)
   })
 
   it('treats daemonAlive as false when daemon.json is missing', async () => {
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session-legacy'), { recursive: true })
-
-    const sessions = await listWorkspaces()
-    const legacy = sessions.find((s) => s.workspaceId === 'session-legacy')
+    await saveCanvas('session-legacy', 'a', new LoroDoc())
+    const workspaces = await listWorkspaces()
+    const legacy = workspaces.find((s) => s.workspaceId === 'session-legacy')
     expect(legacy?.daemonAlive).toBe(false)
   })
 
-  it('returns an empty array when DATA_DIR does not exist', async () => {
-    // Point the config to a directory that does not exist.
-    const origDir = tempDir
-    tempDir = join(tmpdir(), 'nonexistent-whiteboard-test-dir')
-    const sessions = await listWorkspaces()
-    expect(sessions).toHaveLength(0)
-    tempDir = origDir
+  it('returns an empty array when no workspaces have been saved yet', async () => {
+    const workspaces = await listWorkspaces()
+    expect(workspaces).toHaveLength(0)
   })
 
-  it('treats a non-directory DATA_DIR as corruption', async () => {
-    const origDir = tempDir
-    const filePath = join(origDir, 'data-file')
-    await writeFile(filePath, 'not-a-directory')
-    tempDir = filePath
-
-    try {
-      await expect(listWorkspaces()).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining(filePath),
-      })
-    } finally {
-      tempDir = origDir
-    }
-  })
+  // listWorkspaces is now backed by the workspaces table, so the previous
+  // "non-directory DATA_DIR" corruption check no longer applies.
 })
 
 describe('compactCanvas', () => {
@@ -525,23 +469,19 @@ describe('compactCanvas', () => {
     expect(result).toEqual({ compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' })
   })
 
-  it('treats canvas path stat failures as corruption instead of no-file', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    const store = new FileVersionStore()
-    await expect(compactCanvas('session1', 'broken', store)).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('broken.loro'),
-    })
-  })
+  // canvas blobs no longer share their parent directory with the session
+  // dir, so the previous "non-directory parent" stat failure no longer
+  // applies. Coverage of the corrupt-snapshot branch lives below.
 
   it('treats invalid snapshots as corruption instead of falling back to empty state', async () => {
+    const { mkdir } = await import('node:fs/promises')
     const doc = new LoroDoc()
     const store = new FileVersionStore()
     await saveCanvas('session1', 'broken', doc)
     await store.save('session1', 'broken', doc, { auto: true })
-    await writeFile(join(tempDir, 'session1', 'broken.loro'), Buffer.from('not-a-loro-snapshot'))
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', 'broken.loro')
+    await mkdir(join(tempDir, 'blobs', 'session1', 'canvas'), { recursive: true })
+    await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     await expect(compactCanvas('session1', 'broken', store)).rejects.toMatchObject({
       name: 'CorruptStoredDataError',

@@ -102,7 +102,7 @@ describe('GET /api/debug', () => {
   })
 
   it('sets daemonAlive=true when the PID from daemon.json is alive', async () => {
-    await mkdir(join(tempDir, 'sess-alive'), { recursive: true })
+    await saveCanvas('sess-alive', 'a', makeDocWithElements(0, 0))
     await writeFile(
       join(tempDir, 'daemon.json'),
       JSON.stringify({
