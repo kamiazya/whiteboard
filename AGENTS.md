@@ -165,6 +165,24 @@ pnpm build
 - This matters because release-please reads the merged commit history to decide version bumps and changelog entries.
 - Release Please PRs are also valid under the same rule, for example `chore(main): release vX.Y.Z` and `chore(main): release mcp-server vX.Y.Z`.
 
+## PR Visual Evidence
+
+When the change has a user-visible effect (canvas rendering, UI surface, MCP tool result that depends on state), attach the verification screenshot to the PR body. Reviewers should be able to see the bug and the fix without having to clone and reproduce.
+
+Workflow:
+
+1. Capture screenshots while doing the manual verification step from the workflow above. Save them under `tmp/screenshots/` per the tmp-workspace rule.
+2. Upload the captured screenshots to GitHub via the `gh image` extension (`drogers0/gh-image`):
+   ```
+   gh extension install drogers0/gh-image  # one-time setup
+   gh image tmp/screenshots/before.png tmp/screenshots/after.png
+   ```
+   This prints `![file.png](https://github.com/user-attachments/...)` lines.
+3. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section. Show before/after when the change is a fix; show one annotated capture when adding a new affordance.
+4. Keep the actual screenshot file in `tmp/screenshots/` until the PR merges; remove it afterward to keep the dir lean (the GitHub upload is the durable copy).
+
+Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `mcp-browser` regressions.
+
 ## Avoid
 
 - Do not implement first and add tests later.
