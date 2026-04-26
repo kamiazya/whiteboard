@@ -182,6 +182,26 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(res).toBeNull()
   })
 
+  it('refuses saveThumbnail for an id that does not belong to the workspace, leaving no orphan PNG', async () => {
+    // Older code wrote the blob first and then ran a workspace-scoped UPDATE.
+    // A foreign / hostile / deleted version id matched zero rows but the PNG
+    // was still on disk forever. The fix is "scope check before write" — this
+    // test pins that order so a future refactor can't reintroduce the orphan.
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    const ownEntry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    // ownEntry.id only exists in sess-1; pretending it belongs to sess-2 is
+    // exactly the cross-workspace case we want to reject.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await expect(store.saveThumbnail('sess-2', ownEntry.id, png)).rejects.toThrow()
+    await expect(store.loadThumbnail('sess-2', ownEntry.id)).resolves.toBeNull()
+
+    // Sanity check: the legitimate workspace can still save / load.
+    await store.saveThumbnail('sess-1', ownEntry.id, png)
+    const loaded = await store.loadThumbnail('sess-1', ownEntry.id)
+    expect(loaded).not.toBeNull()
+  })
+
   it('does not swallow non-missing read failures in loadThumbnail', async () => {
     const dir = join(tempDir, 'blobs', 'sess-1', 'versions')
     await mkdir(join(dir, 'broken-thumb.png'), { recursive: true })
@@ -225,7 +245,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     appendElement(doc, 'e1')
     // Save the first auto and attach a thumbnail before any eviction can happen.
     const evictable = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
     await store.saveThumbnail('sess-1', evictable.id, png)
     expect(await store.loadThumbnail('sess-1', evictable.id)).not.toBeNull()
 
