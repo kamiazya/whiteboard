@@ -44,8 +44,11 @@ import {
 } from './tools/element-ops-tools.js'
 import { checkpointSaveTool, checkpointRestoreTool } from './tools/checkpoint.js'
 import {
+  createEmbedOutputSchema,
   createEmbedTool,
+  createFrameOutputSchema,
   createFrameTool,
+  updateFrameMembersOutputSchema,
   updateFrameMembersTool,
 } from './tools/frame-embed.js'
 import { ensureWorkspaceId } from './session-resolver.js'
@@ -228,30 +231,13 @@ const checkpointRestoreOutputSchema = z.object({
   elementCount: z.number(),
 })
 
+// Geometry primitive shared between several output shapes (library / template
+// listings, etc.). Schemas owned by individual tools live next to those tools.
 const boundsSchema = z.object({
   x: z.number(),
   y: z.number(),
   width: z.number(),
   height: z.number(),
-})
-
-const createFrameOutputSchema = z.object({
-  elementId: z.string(),
-  bounds: boundsSchema,
-  // Element ids whose frameId was set to this new frame.
-  assignedMembers: z.array(z.string()),
-})
-
-const updateFrameMembersOutputSchema = z.object({
-  frameId: z.string(),
-  bounds: boundsSchema,
-  addedMembers: z.array(z.string()),
-  removedMembers: z.array(z.string()),
-})
-
-const createEmbedOutputSchema = z.object({
-  elementId: z.string(),
-  url: z.string(),
 })
 
 const libraryInstallOutputSchema = z.object({
