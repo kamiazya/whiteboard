@@ -308,12 +308,20 @@ const libraryInsertBatchOutputSchema = z.object({
 const libraryCatalogListOutputSchema = z.object({
   totalCount: z.number(),
   returnedCount: z.number(),
+  // Mirror the upstream CatalogEntry shape from tools/library-catalog.ts: `id`
+  // is optional (some catalog entries omit it), and `authors` is an array of
+  // {name?, url?} objects, not strings. The previous shape said authors:
+  // string[] which silently mismatched the runtime — clients on strict
+  // structuredContent would have hit "Output validation error" the first time
+  // they queried the catalog.
   items: z.array(
     z.object({
-      id: z.string(),
+      id: z.string().optional(),
       name: z.string(),
       description: z.string().optional(),
-      authors: z.array(z.string()).optional(),
+      authors: z
+        .array(z.object({ name: z.string().optional(), url: z.string().optional() }))
+        .optional(),
       url: z.string(),
       previewUrl: z.string().optional(),
       created: z.string().optional(),
@@ -394,6 +402,30 @@ function structuredJsonResult<T extends object>(result: T) {
     content: [{ type: 'text' as const, text: JSON.stringify(structuredContent) }],
   }
 }
+
+// Used by registerToolWithAnnotations to bind the handler's return type to the
+// declared outputSchema. When outputSchema is given, the handler must hand
+// structuredContent whose shape matches z.infer<O>; if it drifts, the call
+// site stops compiling instead of shipping an MCP "Output validation error"
+// to clients (the create_frame `assignedMembers: number` vs `string[]` bug
+// was exactly this gap).
+type ToolHandlerReturn<O extends z.ZodTypeAny | undefined> = O extends z.ZodTypeAny
+  ?
+      | {
+          structuredContent: z.infer<O>
+          content: ReadonlyArray<{ type: 'text'; text: string } | Record<string, unknown>>
+          isError?: false
+        }
+      | {
+          isError: true
+          content: ReadonlyArray<{ type: 'text'; text: string } | Record<string, unknown>>
+        }
+  :
+      | {
+          content: ReadonlyArray<{ type: 'text'; text: string } | Record<string, unknown>>
+          structuredContent?: unknown
+          isError?: boolean
+        }
 
 // MCP tool annotations profile.
 // MCP spec: https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-annotations
@@ -483,20 +515,21 @@ const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: string 
 // It also converts handler throws into MCP `{ isError: true, content: [...] }`
 // responses. The MCP spec recommends tool errors use isError responses rather
 // than JSON-RPC errors so the LLM can react on the next call.
-function registerToolWithAnnotations<I extends z.ZodRawShape>(
+function registerToolWithAnnotations<
+  I extends z.ZodRawShape,
+  O extends z.ZodTypeAny | undefined = undefined,
+>(
   server: McpServer,
   name: string,
   config: {
     description?: string
     inputSchema?: I
-    // SDK 1.x accepts both ZodObject and ZodRawShape overloads here, so the
-    // wrapper keeps the type broad and lets registerTool validate at runtime.
-    outputSchema?: unknown
+    outputSchema?: O
   },
   handler: (
     args: { [K in keyof I]: z.infer<I[K]> },
     extra: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
-  ) => unknown,
+  ) => Promise<ToolHandlerReturn<O>> | ToolHandlerReturn<O>,
 ): unknown {
   const profile = TOOL_PROFILES[name]
   if (!profile) {
