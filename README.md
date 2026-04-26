@@ -6,10 +6,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml/badge.svg)](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml)
 
-<p align="center">
-  <img src="docs/assets/canvas-overview.png" alt="Whiteboard canvas with the sidebar open and an architecture diagram drawn on it" width="820" />
-</p>
-
 `@kamiazya/whiteboard-mcp` runs a live Excalidraw canvas in your browser and exposes MCP tools so Claude Code, Codex, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and round-trip with stock `.excalidraw` JSON.
 
 ## Reach for whiteboard when…
@@ -44,17 +40,15 @@ In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The fi
 
 > **Skills are an opt-in extra.** The commands above start the MCP server but do **not** install the bundled `/whiteboard`, `/whiteboard-coauthoring`, and `/whiteboard-audit` skills. To enable them, install the package locally and link `node_modules/@kamiazya/whiteboard-mcp/skills/` into `~/.claude/skills/` and `~/.codex/skills/`. See [docs/development.md](docs/development.md#bundled-skills-install) for the full link / junction recipes.
 
-## What it looks like
+## Workspaces
 
-| | |
-|---|---|
-| ![Workspace switcher](docs/assets/workspace-list.png) | ![Workspace renamed](docs/assets/workspace-list-renamed.png) |
-| **Workspace switcher** — every canvas is grouped under a workspace; switch instantly from the sidebar. | **Inline rename** — double-click to rename, no modal. |
+Every canvas lives inside a workspace. The sidebar lets you switch between them instantly, and double-click to rename — no modal, no reload.
 
-| | |
+| Before | After rename |
 |---|---|
-| ![Rename popover](docs/assets/workspace-rename-popover.png) | ![Canvas after switch](docs/assets/canvas-after-switch.png) |
-| **Rename popover** with validation. | **Canvas state is preserved** across workspace switches. |
+| ![Workspace switcher with three workspaces listed](docs/assets/workspace-list.png) | ![The same list with one workspace renamed](docs/assets/workspace-list-renamed.png) |
+
+> A "drawn with whiteboard" hero diagram is on the way — see [open follow-ups](#open-follow-ups) below.
 
 ## Bundled skills
 
@@ -103,6 +97,14 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 - `/plugin marketplace add` is not supported yet — there is no `marketplace.json`. Install via `claude mcp add` or `npx` for now.
 
 See [docs/configuration.md](docs/configuration.md#codex-sandbox-constraints) for sandbox quirks.
+
+## Open follow-ups
+
+Items intentionally not in this README yet — please file or upvote a tracking issue rather than adding noise inline:
+
+- A "drawn with whiteboard" hero diagram and a short demo GIF, both produced with `pnpm dev` running.
+- Cleaner in-canvas screenshots (the previous captures were debugging snapshots, removed for now).
+- A published Claude Code plugin marketplace so `/plugin marketplace add kamiazya/whiteboard` works.
 
 ## License
 
