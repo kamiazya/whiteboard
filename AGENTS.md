@@ -183,6 +183,25 @@ Workflow:
 
 Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `mcp-browser` regressions.
 
+## Source Comment Discipline
+
+Code lives a long time; comments live with the code. Only write comments that will still be useful five PRs from now.
+
+Keep:
+
+- The non-obvious **why** (a hidden constraint, an invariant, a workaround for a specific upstream bug, behavior that would surprise a reader).
+- A pointer to a durable spec, RFC, or vendor doc when behavior follows it.
+
+Drop:
+
+- References to the PR / issue / dogfood pass that introduced or surfaced the change ("Surfaced during PR #35 dogfood", "see tmp/issues/...md item #N", "the create_frame bug...").
+- Pointers to `tmp/notes/`, `tmp/issues/`, or `tmp/screenshots/` files. The `tmp/` directory is short-lived and the linked file may already be gone.
+- Personal narrative ("we found this when...") and TODO-style chronology.
+
+Process context belongs in the commit message, the PR body, and `git log`/`git blame`. The source file is for the long-term reader who has neither.
+
+If a comment looks valuable when written but you'd be embarrassed to read it three years from now, rewrite it as an enduring rationale or delete it.
+
 ## Avoid
 
 - Do not implement first and add tests later.
