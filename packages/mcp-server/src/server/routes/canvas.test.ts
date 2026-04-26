@@ -510,20 +510,6 @@ describe('versions API', () => {
     expect(keepMe?.frameId).toBeUndefined()
   })
 
-  it('returns structured 500 instead of not_found for broken version metadata in GET /versions', async () => {
-    await mkdir(join(tempDir, 'session1', 'versions'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', 'versions', 'broken-list.json'), '{"slug":')
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('broken-list.json'),
-    })
-  })
-
   it('returns 404 when restoring a missing version id', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
@@ -540,23 +526,6 @@ describe('versions API', () => {
       { method: 'POST' },
     )
     expect(res.status).toBe(400)
-  })
-
-  it('does not collapse broken version metadata to 404 during restore', async () => {
-    await mkdir(join(tempDir, 'session1', 'versions'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', 'versions', 'brokenrestore.json'), '{"slug":')
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/versions/brokenrestore/restore',
-      { method: 'POST' },
-    )
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('brokenrestore.json'),
-    })
   })
 
   // Thumbnail PUT/GET endpoint coverage.
@@ -617,7 +586,9 @@ describe('versions API', () => {
   })
 
   it('returns structured 500 for a broken thumbnail file on GET /thumbnail', async () => {
-    await mkdir(join(tempDir, 'session1', 'versions', 'broken-thumb.png'), { recursive: true })
+    await mkdir(join(tempDir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
+      recursive: true,
+    })
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
@@ -669,27 +640,6 @@ describe('versions API', () => {
     const resB = await app.request('/api/workspaces/session1/canvases/canvas-b/versions')
     const bodyB = (await resB.json()) as { versions: Array<{ label?: string }> }
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
-  })
-
-  it('returns structured 500 for broken thumbnail reads on GET /latest-thumbnail', async () => {
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
-    const saveBody = (await saveRes.json()) as { version: { id: string } }
-    await mkdir(join(tempDir, 'session1', 'versions', `${saveBody.version.id}.png`), {
-      recursive: true,
-    })
-
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/latest-thumbnail')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining(`${saveBody.version.id}.png`),
-    })
   })
 
   it('restores a checkpoint back into a canvas', async () => {

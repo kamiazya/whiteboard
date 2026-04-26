@@ -1,7 +1,7 @@
-import { mkdir, readFile, readdir, rename, stat } from 'node:fs/promises'
+import { mkdir, readdir, readFile, rename, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { quarantine } from './quarantine.js'
 import type { Database } from './index.js'
+import { quarantine } from './quarantine.js'
 
 // One-shot importer that converts the legacy filesystem layout (~/.whiteboard
 // pre-sqlite) into rows in the freshly-initialized DB plus content blobs in
@@ -48,6 +48,7 @@ interface VersionMetaFile {
     workspaceId?: string
   }
   sizeBytes?: number
+  elementCount?: number
   frontiers?: string
   hasThumbnail?: boolean
   createdAt?: string
@@ -96,10 +97,7 @@ async function moveBlob(src: string, dest: string): Promise<void> {
   await rename(src, dest)
 }
 
-async function importWorkspace(
-  ctx: ImportContext,
-  workspaceId: string,
-): Promise<void> {
+async function importWorkspace(ctx: ImportContext, workspaceId: string): Promise<void> {
   const workspaceDir = join(ctx.dataDir, workspaceId)
   const createdAt = await workspaceCreatedAt(workspaceDir)
   const now = Date.now()
@@ -238,6 +236,7 @@ async function importWorkspace(
           operatorAgentId: meta.operator?.agentId ?? null,
           operatorWorkspaceId: meta.operator?.workspaceId ?? null,
           sizeBytes: meta.sizeBytes ?? 0,
+          elementCount: typeof meta.elementCount === 'number' ? meta.elementCount : 0,
           frontiers: meta.frontiers,
           hasThumbnail: meta.hasThumbnail ? 1 : 0,
           createdAt: parseIso(meta.createdAt) ?? createdAt,
@@ -430,9 +429,7 @@ function parseIso(s: string | undefined): number | null {
 }
 
 async function importRuntimeMarkers(ctx: ImportContext): Promise<void> {
-  const current = await readFile(join(ctx.dataDir, '.current-workspace'), 'utf-8').catch(
-    () => null,
-  )
+  const current = await readFile(join(ctx.dataDir, '.current-workspace'), 'utf-8').catch(() => null)
   if (current && current.trim().length > 0) {
     const now = Date.now()
     await ctx.db

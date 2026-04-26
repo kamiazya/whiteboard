@@ -47,6 +47,7 @@ export interface VersionsTable {
   operatorAgentId: string | null
   operatorWorkspaceId: string | null
   sizeBytes: number
+  elementCount: number
   frontiers: string
   hasThumbnail: Bool
   createdAt: Timestamp
