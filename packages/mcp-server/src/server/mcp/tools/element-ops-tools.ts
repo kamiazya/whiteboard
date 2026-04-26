@@ -37,12 +37,12 @@ export function updateElementTool() {
       args: { canvasId: string; elementId: string; patch: Record<string, unknown> },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       applyUpdate(doc, args.elementId, args.patch)
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       return { elementId: args.elementId }
     },
   }
@@ -63,12 +63,12 @@ export function deleteElementTool() {
       required: ['canvasId', 'elementId'],
     },
     execute: async (args: { canvasId: string; elementId: string }, client: DaemonClient) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       applyDelete(doc, args.elementId)
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       return { elementId: args.elementId }
     },
   }
@@ -98,14 +98,14 @@ export function deleteElementsTool() {
       args: { canvasId: string; elementIds: string[] },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       const deleted = applyDeleteMany(doc, args.elementIds)
       doc.commit()
       await apiPostLoroUpdate(
         client,
-        sessionId,
+        workspaceId,
         slug,
         doc.export({ mode: 'update', from: prevVV }),
       )
@@ -129,12 +129,12 @@ export function canvasClearTool() {
       required: ['canvasId'],
     },
     execute: async (args: { canvasId: string }, client: DaemonClient) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       const clearedCount = applyClear(doc)
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       return { clearedCount }
     },
   }
@@ -164,12 +164,12 @@ export function moveElementsTool() {
       args: { canvasId: string; elementIds: string[]; dx: number; dy: number },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       applyMove(doc, args.elementIds, args.dx, args.dy)
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       return { elementIds: args.elementIds }
     },
   }
@@ -203,14 +203,14 @@ export function assignToGroupTool() {
       args: { canvasId: string; groupId: string; elementIds: string[] },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       applyAssignToGroup(doc, args.groupId, args.elementIds)
       doc.commit()
       await apiPostLoroUpdate(
         client,
-        sessionId,
+        workspaceId,
         slug,
         doc.export({ mode: 'update', from: prevVV }),
       )
@@ -237,14 +237,14 @@ export function deleteGroupTool() {
       args: { canvasId: string; groupId: string },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       const deleted = applyDeleteGroup(doc, args.groupId)
       doc.commit()
       await apiPostLoroUpdate(
         client,
-        sessionId,
+        workspaceId,
         slug,
         doc.export({ mode: 'update', from: prevVV }),
       )
@@ -267,8 +267,8 @@ export function listGroupsTool() {
       required: ['canvasId'],
     },
     execute: async (args: { canvasId: string }, client: DaemonClient) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       return { groups: listGroups(doc) }
     },
   }
@@ -303,12 +303,12 @@ export function reorderElementsTool() {
       args: { canvasId: string; elementIds: string[]; action: 'front' | 'back' },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       applyReorder(doc, args.elementIds, args.action)
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       return { elementIds: args.elementIds, action: args.action }
     },
   }

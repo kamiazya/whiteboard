@@ -19,7 +19,7 @@ async function importWithRelaxedValidators<T>(modulePath: string): Promise<T> {
     const actual = await importOriginal<typeof import('../validators.js')>()
     return {
       ...actual,
-      validateSessionId: (value: string) => value,
+      validateWorkspaceId: (value: string) => value,
       validateSlug: (value: string) => value,
       validateVersionId: (value: string) => value,
       validateCheckpointId: (value: string) => value,

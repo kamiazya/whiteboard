@@ -9,7 +9,6 @@ import { apiFetch } from '../lib/api-client.js'
 
 interface RawWorkspace {
   workspaceId: string
-  sessionId?: string
   daemonAlive: boolean
   canvases: { slug: string; updatedAt: string }[]
 }
@@ -33,13 +32,13 @@ function formatRelative(iso: string): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
-function filterSessions(
-  sessions: EnrichedWorkspace[],
+function filterWorkspaces(
+  workspaces: EnrichedWorkspace[],
   activeOnly: boolean,
   search: string,
 ): EnrichedWorkspace[] {
   const needle = search.trim().toLowerCase()
-  return sessions
+  return workspaces
     .filter((s) => (activeOnly ? s.daemonAlive : true))
     .map((s) => {
       if (!needle) return s
@@ -57,7 +56,7 @@ function filterSessions(
 }
 
 export default function IndexPage() {
-  const [sessions, setSessions] = useState<EnrichedWorkspace[]>([])
+  const [workspaces, setWorkspaces] = useState<EnrichedWorkspace[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeOnly, setActiveOnly] = useState(false)
@@ -68,7 +67,7 @@ export default function IndexPage() {
       try {
         const res = await apiFetch('/api/workspaces')
         const { workspaces: rawList } = (await res.json()) as {
-          workspaces: { workspaceId: string; sessionId?: string; daemonAlive: boolean }[]
+          workspaces: { workspaceId: string; daemonAlive: boolean }[]
         }
         const enriched = await Promise.all(
           rawList.map(async (raw): Promise<EnrichedWorkspace> => {
@@ -86,7 +85,7 @@ export default function IndexPage() {
             return { ...raw, canvases, names }
           }),
         )
-        setSessions(enriched)
+        setWorkspaces(enriched)
       } catch (err) {
         setError(String(err))
       } finally {
@@ -96,8 +95,8 @@ export default function IndexPage() {
   }, [])
 
   const visible = useMemo(
-    () => filterSessions(sessions, activeOnly, search),
-    [sessions, activeOnly, search],
+    () => filterWorkspaces(workspaces, activeOnly, search),
+    [workspaces, activeOnly, search],
   )
 
   if (loading) {
@@ -147,7 +146,7 @@ export default function IndexPage() {
           </label>
         </div>
 
-        {sessions.length === 0 ? (
+        {workspaces.length === 0 ? (
           <div className="rounded-lg border border-dashed p-12 text-center">
             <FileStack className="size-12 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">
@@ -163,8 +162,8 @@ export default function IndexPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            {visible.map((session) => (
-              <WorkspaceCard key={session.workspaceId} session={session} />
+            {visible.map((workspace) => (
+              <WorkspaceCard key={workspace.workspaceId} workspace={workspace} />
             ))}
           </div>
         )}
@@ -178,11 +177,11 @@ export default function IndexPage() {
 const INITIAL_CANVAS_LIMIT = 8
 
 interface CollapsibleCanvasListProps {
-  session: EnrichedWorkspace
+  workspace: EnrichedWorkspace
   canvases: { slug: string; updatedAt: string }[]
 }
 
-function CollapsibleCanvasList({ session, canvases }: CollapsibleCanvasListProps) {
+function CollapsibleCanvasList({ workspace, canvases }: CollapsibleCanvasListProps) {
   const [expanded, setExpanded] = useState(false)
   const shown =
     expanded || canvases.length <= INITIAL_CANVAS_LIMIT
@@ -192,12 +191,12 @@ function CollapsibleCanvasList({ session, canvases }: CollapsibleCanvasListProps
   return (
     <div className="flex flex-col gap-0.5">
       {shown.map((c) => {
-        const displayName = session.names.canvases[c.slug] ?? c.slug
-        const hasCustom = !!session.names.canvases[c.slug]
+        const displayName = workspace.names.canvases[c.slug] ?? c.slug
+        const hasCustom = !!workspace.names.canvases[c.slug]
         return (
           <Link
             key={c.slug}
-            to={`/canvas/${session.workspaceId}/${encodeURIComponent(c.slug)}`}
+            to={`/canvas/${workspace.workspaceId}/${encodeURIComponent(c.slug)}`}
             className="group flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
           >
             <div className="min-w-0">
@@ -228,15 +227,15 @@ function CollapsibleCanvasList({ session, canvases }: CollapsibleCanvasListProps
 }
 
 interface WorkspaceCardProps {
-  session: EnrichedWorkspace
+  workspace: EnrichedWorkspace
 }
 
-function WorkspaceCard({ session }: WorkspaceCardProps) {
-  const name = session.names.workspace ?? 'Untitled workspace'
-  const shortId = session.workspaceId.slice(0, 5) + '…' + session.workspaceId.slice(-3)
+function WorkspaceCard({ workspace }: WorkspaceCardProps) {
+  const name = workspace.names.workspace ?? 'Untitled workspace'
+  const shortId = workspace.workspaceId.slice(0, 5) + '…' + workspace.workspaceId.slice(-3)
   const canvases = useMemo(
-    () => [...session.canvases].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
-    [session.canvases],
+    () => [...workspace.canvases].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
+    [workspace.canvases],
   )
 
   return (
@@ -251,28 +250,28 @@ function WorkspaceCard({ session }: WorkspaceCardProps) {
                   {shortId}
                 </span>
               </TooltipTrigger>
-              <TooltipContent>{session.workspaceId}</TooltipContent>
+              <TooltipContent>{workspace.workspaceId}</TooltipContent>
             </Tooltip>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
               <span
                 className={
-                  session.daemonAlive
+                  workspace.daemonAlive
                     ? 'shrink-0 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-600'
                     : 'shrink-0 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground'
                 }
               >
-                {session.daemonAlive ? (
+                {workspace.daemonAlive ? (
                   <RadioTower className="size-3" />
                 ) : (
                   <Radio className="size-3" />
                 )}
-                {session.daemonAlive ? 'daemon live' : 'daemon offline'}
+                {workspace.daemonAlive ? 'daemon live' : 'daemon offline'}
               </span>
             </TooltipTrigger>
             <TooltipContent>
-              {session.daemonAlive
+              {workspace.daemonAlive
                 ? 'The local daemon for this workspace is currently running.'
                 : 'The local daemon for this workspace is offline. Saved canvases remain available.'}
             </TooltipContent>
@@ -284,7 +283,7 @@ function WorkspaceCard({ session }: WorkspaceCardProps) {
         ) : (
           // Let the card grow naturally instead of introducing nested scrolling here.
           // Collapse long lists and leave detailed browsing to the canvas page itself.
-          <CollapsibleCanvasList session={session} canvases={canvases} />
+          <CollapsibleCanvasList workspace={workspace} canvases={canvases} />
         )}
       </CardContent>
     </Card>

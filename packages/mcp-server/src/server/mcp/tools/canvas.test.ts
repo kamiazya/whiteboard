@@ -107,8 +107,8 @@ describe('canvas_list', () => {
         return new Response(
           JSON.stringify({
             workspaces: [
-              { workspaceId: 'active-session', sessionId: 'active-session', daemonAlive: true },
-              { workspaceId: 'stale-session', sessionId: 'stale-session', daemonAlive: false },
+              { workspaceId: 'active-session', daemonAlive: true },
+              { workspaceId: 'stale-session', daemonAlive: false },
             ],
           }),
           { status: 200 },
@@ -137,16 +137,11 @@ describe('canvas_list', () => {
     }) as typeof globalThis.fetch
 
     try {
-      const { workspaces, sessions } = await tool.execute({ slugContains: 'header' }, client)
+      const { workspaces } = await tool.execute({ slugContains: 'header' }, client)
       expect(workspaces).toHaveLength(1)
       expect(workspaces[0].workspaceId).toBe('active-session')
-      expect(workspaces[0].sessionId).toBe('active-session')
       expect(workspaces[0].daemonAlive).toBe(true)
       expect(workspaces[0].canvases.map((c) => c.slug)).toEqual(['621-Header'])
-      expect(sessions).toHaveLength(1)
-      expect(sessions[0].sessionId).toBe('active-session')
-      expect(sessions[0].daemonAlive).toBe(true)
-      expect(sessions[0].canvases.map((c) => c.slug)).toEqual(['621-Header'])
     } finally {
       globalThis.fetch = originalFetch
     }

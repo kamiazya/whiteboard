@@ -6,7 +6,7 @@ import {
 } from '../shared/external-url-policy.js'
 
 const SAFE_SLUG_SEGMENT = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
-const SAFE_SESSION_ID = /^[a-zA-Z0-9_-]+$/
+const SAFE_WORKSPACE_ID = /^[a-zA-Z0-9_-]+$/
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9_-]+$/
 const SAFE_USER_LIBRARY_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const SAFE_BRANCH_NAME = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
@@ -116,17 +116,17 @@ function rejectPrivateOrLocalAddress(): never {
   throw new ValidationError('invalid_url', PRIVATE_ADDRESS_ERROR)
 }
 
-export function validateSessionId(sessionId: string): string {
-  if (sessionId === '') {
-    throw new ValidationError('invalid_session_id', 'Invalid sessionId: sessionId is empty')
+export function validateWorkspaceId(workspaceId: string): string {
+  if (workspaceId === '') {
+    throw new ValidationError('invalid_workspace_id', 'Invalid workspaceId: workspaceId is empty')
   }
-  if (!SAFE_SESSION_ID.test(sessionId)) {
+  if (!SAFE_WORKSPACE_ID.test(workspaceId)) {
     throw new ValidationError(
-      'invalid_session_id',
-      `Invalid sessionId "${sessionId}": only ASCII letters, digits, "_" and "-" are allowed`,
+      'invalid_workspace_id',
+      `Invalid workspaceId "${workspaceId}": only ASCII letters, digits, "_" and "-" are allowed`,
     )
   }
-  return sessionId
+  return workspaceId
 }
 
 export function validateSlug(slug: string): string {

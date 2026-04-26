@@ -6,9 +6,9 @@ async function readJson<T>(res: Response): Promise<T> {
 
 export async function apiGetPalette(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
 ): Promise<Record<string, string>> {
-  const res = await client.request(`/api/workspaces/${sessionId}/palette`)
+  const res = await client.request(`/api/workspaces/${workspaceId}/palette`)
   if (!res.ok) throw new Error(`GET /palette failed: ${res.status}`)
   const body = await readJson<{ palette?: Record<string, string> }>(res)
   return body.palette ?? {}
@@ -16,10 +16,10 @@ export async function apiGetPalette(
 
 export async function apiSetPalette(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   entries: Record<string, string>,
 ): Promise<Record<string, string>> {
-  const res = await client.request(`/api/workspaces/${sessionId}/palette`, {
+  const res = await client.request(`/api/workspaces/${workspaceId}/palette`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ entries }),
@@ -31,10 +31,10 @@ export async function apiSetPalette(
 
 export async function apiDeletePalette(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   keys: string[],
 ): Promise<Record<string, string>> {
-  const res = await client.request(`/api/workspaces/${sessionId}/palette`, {
+  const res = await client.request(`/api/workspaces/${workspaceId}/palette`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ keys }),
@@ -51,12 +51,12 @@ export function paletteGetTool() {
     inputSchema: {
       type: 'object' as const,
       properties: {
-        sessionId: { type: 'string' },
+        workspaceId: { type: 'string' },
       },
-      required: ['sessionId'],
+      required: ['workspaceId'],
     },
-    execute: async (args: { sessionId: string }, client: DaemonClient) => {
-      return { palette: await apiGetPalette(client, args.sessionId) }
+    execute: async (args: { workspaceId: string }, client: DaemonClient) => {
+      return { palette: await apiGetPalette(client, args.workspaceId) }
     },
   }
 }
@@ -68,16 +68,16 @@ export function paletteSetTool() {
     inputSchema: {
       type: 'object' as const,
       properties: {
-        sessionId: { type: 'string' },
+        workspaceId: { type: 'string' },
         entries: { type: 'object', additionalProperties: { type: 'string' } },
       },
-      required: ['sessionId', 'entries'],
+      required: ['workspaceId', 'entries'],
     },
     execute: async (
-      args: { sessionId: string; entries: Record<string, string> },
+      args: { workspaceId: string; entries: Record<string, string> },
       client: DaemonClient,
     ) => {
-      return { palette: await apiSetPalette(client, args.sessionId, args.entries) }
+      return { palette: await apiSetPalette(client, args.workspaceId, args.entries) }
     },
   }
 }
@@ -89,13 +89,13 @@ export function paletteDeleteTool() {
     inputSchema: {
       type: 'object' as const,
       properties: {
-        sessionId: { type: 'string' },
+        workspaceId: { type: 'string' },
         keys: { type: 'array', items: { type: 'string' }, minItems: 1 },
       },
-      required: ['sessionId', 'keys'],
+      required: ['workspaceId', 'keys'],
     },
-    execute: async (args: { sessionId: string; keys: string[] }, client: DaemonClient) => {
-      return { palette: await apiDeletePalette(client, args.sessionId, args.keys) }
+    execute: async (args: { workspaceId: string; keys: string[] }, client: DaemonClient) => {
+      return { palette: await apiDeletePalette(client, args.workspaceId, args.keys) }
     },
   }
 }

@@ -40,7 +40,7 @@ function normalizeExportElements(
 }
 
 async function resolveOutputPath(args: {
-  sessionId: string
+  workspaceId: string
   slug: string
   dataDir?: string
   outputPath?: string
@@ -53,12 +53,12 @@ async function resolveOutputPath(args: {
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   const fileName = `${args.slug}-${timestamp}.excalidraw`
-  const exportsDir = join(args.dataDir ?? DATA_DIR, args.sessionId, 'exports')
+  const exportsDir = join(args.dataDir ?? DATA_DIR, args.workspaceId, 'exports')
   return join(exportsDir, fileName)
 }
 
 export async function exportCanvasJsonDoc(args: {
-  sessionId: string
+  workspaceId: string
   slug: string
   doc: LoroDoc
   includeCustomFields?: boolean

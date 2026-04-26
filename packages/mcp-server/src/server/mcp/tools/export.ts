@@ -36,11 +36,11 @@ function buildExportBody(args: ExportPngArgs): Record<string, number | string | 
 
 async function requestExport(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   body: Record<string, number | string | boolean>,
 ): Promise<Response> {
-  return client.request(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/export`, {
+  return client.request(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -53,11 +53,11 @@ async function readExportErrorBody(res: Response): Promise<ExportErrorBody | nul
 
 async function waitForClientReady(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   timeoutMs: number = EXPORT_PNG_WAIT_TIMEOUT_MS,
 ): Promise<boolean> {
-  const statusPath = `/api/canvas/${sessionId}/${encodeURIComponent(slug)}/client-count`
+  const statusPath = `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/client-count`
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -134,15 +134,15 @@ export function exportPngTool() {
       args: ExportPngArgs,
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const body = buildExportBody(args)
-      let res = await requestExport(client, sessionId, slug, body)
+      let res = await requestExport(client, workspaceId, slug, body)
       if (!res.ok) {
         let errBody = await readExportErrorBody(res)
         if (errBody?.error === 'no_client') {
-          const ready = await waitForClientReady(client, sessionId, slug)
+          const ready = await waitForClientReady(client, workspaceId, slug)
           if (ready) {
-            res = await requestExport(client, sessionId, slug, body)
+            res = await requestExport(client, workspaceId, slug, body)
             if (res.ok) {
               // Continue to success path below.
             } else {

@@ -6,7 +6,7 @@ import { nanoid } from 'nanoid'
 import { DATA_DIR } from '../config.js'
 import {
   validateBranchName,
-  validateSessionId,
+  validateWorkspaceId,
   validateSlug,
   validateVersionId,
 } from '../validators.js'
@@ -19,8 +19,8 @@ import { assertPathWithinDir } from './path-guard.js'
 // needs to persist the frontiers for that point in time.
 //
 // Storage:
-//   DATA_DIR/{sessionId}/versions/{versionId}.json   metadata + base64 frontiers
-//   DATA_DIR/{sessionId}/versions/{versionId}.png    optional thumbnail
+//   DATA_DIR/{workspaceId}/versions/{versionId}.json   metadata + base64 frontiers
+//   DATA_DIR/{workspaceId}/versions/{versionId}.png    optional thumbnail
 //   per-version .loro snapshots are obsolete; any old files are ignored
 //
 // Loading forks the live doc from a snapshot, checks out the saved frontiers, and returns
@@ -42,7 +42,7 @@ export interface OperatorInfo {
   peerId: string
   displayName?: string
   agentId?: string
-  sessionId?: string
+  workspaceId?: string
 }
 
 export interface VersionMeta {
@@ -67,36 +67,36 @@ export interface VersionEntry extends Omit<VersionMeta, 'frontiers'> {
 
 export interface VersionStore {
   save(
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     doc: LoroDoc,
     opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
   ): Promise<VersionEntry>
   // liveDoc is passed in so checkout can happen on a clone without affecting the live document.
   // Returns an independent past-state doc.
-  load(sessionId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null>
-  list(sessionId: string, slug: string): Promise<VersionEntry[]>
-  saveThumbnail(sessionId: string, id: string, bytes: Uint8Array): Promise<void>
-  loadThumbnail(sessionId: string, id: string): Promise<Uint8Array | null>
+  load(workspaceId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null>
+  list(workspaceId: string, slug: string): Promise<VersionEntry[]>
+  saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void>
+  loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null>
   // Return the frontiers referenced by the oldest retained version for this slug.
   // Return null when none exist, because compaction would otherwise risk losing all history.
-  earliestFrontiers(sessionId: string, slug: string): Promise<Frontiers | null>
+  earliestFrontiers(workspaceId: string, slug: string): Promise<Frontiers | null>
   // Public API used when creating branches from a version id.
   // Returns null only when the version is missing; corrupt metadata still throws.
-  getFrontiersBase64(sessionId: string, id: string): Promise<string | null>
+  getFrontiersBase64(workspaceId: string, id: string): Promise<string | null>
   // Rewrite branchName from oldName to newName for all versions of the given slug.
   // Returns the number of rewritten entries and does not touch other slugs.
   renameBranchInVersions(
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     oldName: string,
     newName: string,
   ): Promise<number>
 }
 
-function versionsDir(sessionId: string): string {
-  validateSessionId(sessionId)
-  const dir = join(DATA_DIR, sessionId, VERSIONS_DIRNAME)
+function versionsDir(workspaceId: string): string {
+  validateWorkspaceId(workspaceId)
+  const dir = join(DATA_DIR, workspaceId, VERSIONS_DIRNAME)
   return assertPathWithinDir(dir, DATA_DIR, 'session path')
 }
 
@@ -108,16 +108,16 @@ function base64ToBytes(b64: string): Uint8Array {
   return new Uint8Array(Buffer.from(b64, 'base64'))
 }
 
-function versionMetaPath(sessionId: string, id: string): string {
+function versionMetaPath(workspaceId: string, id: string): string {
   validateVersionId(id)
-  const dir = versionsDir(sessionId)
+  const dir = versionsDir(workspaceId)
   const metaPath = join(dir, `${id}.json`)
   return assertPathWithinDir(metaPath, dir, 'version path')
 }
 
-function versionThumbnailPath(sessionId: string, id: string): string {
+function versionThumbnailPath(workspaceId: string, id: string): string {
   validateVersionId(id)
-  const dir = versionsDir(sessionId)
+  const dir = versionsDir(workspaceId)
   const pngPath = join(dir, `${id}.png`)
   return assertPathWithinDir(pngPath, dir, 'version path')
 }
@@ -146,8 +146,8 @@ function parseOperatorInfo(path: string, value: unknown): OperatorInfo {
   if (value.agentId !== undefined && typeof value.agentId !== 'string') {
     throw corruptStoredData(path, 'expected operator.agentId: string when present')
   }
-  if (value.sessionId !== undefined && typeof value.sessionId !== 'string') {
-    throw corruptStoredData(path, 'expected operator.sessionId: string when present')
+  if (value.workspaceId !== undefined && typeof value.workspaceId !== 'string') {
+    throw corruptStoredData(path, 'expected operator.workspaceId: string when present')
   }
 
   return {
@@ -155,7 +155,7 @@ function parseOperatorInfo(path: string, value: unknown): OperatorInfo {
     peerId: value.peerId,
     ...(value.displayName !== undefined ? { displayName: value.displayName } : {}),
     ...(value.agentId !== undefined ? { agentId: value.agentId } : {}),
-    ...(value.sessionId !== undefined ? { sessionId: value.sessionId } : {}),
+    ...(value.workspaceId !== undefined ? { workspaceId: value.workspaceId } : {}),
   }
 }
 
@@ -252,8 +252,8 @@ function parseVersionMeta(path: string, raw: string): VersionMeta {
   }
 }
 
-async function readMeta(sessionId: string, id: string): Promise<VersionMeta | null> {
-  const metaPath = versionMetaPath(sessionId, id)
+async function readMeta(workspaceId: string, id: string): Promise<VersionMeta | null> {
+  const metaPath = versionMetaPath(workspaceId, id)
   try {
     const raw = await readFile(metaPath, 'utf-8')
     return parseVersionMeta(metaPath, raw)
@@ -270,7 +270,7 @@ async function readMeta(sessionId: string, id: string): Promise<VersionMeta | nu
 
 export class FileVersionStore implements VersionStore {
   async save(
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     doc: LoroDoc,
     opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
@@ -278,7 +278,7 @@ export class FileVersionStore implements VersionStore {
     const id = nanoid(12)
     validateVersionId(id)
 
-    const dir = versionsDir(sessionId)
+    const dir = versionsDir(workspaceId)
     await mkdir(dir, { recursive: true })
 
     const metaPath = join(dir, `${id}.json`)
@@ -307,14 +307,14 @@ export class FileVersionStore implements VersionStore {
     }
 
     await writeFile(metaPath, JSON.stringify(meta, null, 2))
-    await this.prune(sessionId, slug)
+    await this.prune(workspaceId, slug)
     return { id, hasThumbnail: false, ...stripFrontiers(meta) }
   }
 
-  async load(sessionId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null> {
-    const meta = await readMeta(sessionId, id)
+  async load(workspaceId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null> {
+    const meta = await readMeta(workspaceId, id)
     if (!meta) return null
-    const metaPath = versionMetaPath(sessionId, id)
+    const metaPath = versionMetaPath(workspaceId, id)
     // Fork the live doc through a snapshot so checkout does not affect the live attached document.
     const clone = LoroDoc.fromSnapshot(liveDoc.export({ mode: 'snapshot' }))
     try {
@@ -335,8 +335,8 @@ export class FileVersionStore implements VersionStore {
     return clone
   }
 
-  async list(sessionId: string, slug: string): Promise<VersionEntry[]> {
-    const dir = versionsDir(sessionId)
+  async list(workspaceId: string, slug: string): Promise<VersionEntry[]> {
+    const dir = versionsDir(workspaceId)
     let entries: string[]
     try {
       entries = await readdir(dir)
@@ -368,22 +368,22 @@ export class FileVersionStore implements VersionStore {
     return results
   }
 
-  async saveThumbnail(sessionId: string, id: string, bytes: Uint8Array): Promise<void> {
+  async saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void> {
     validateVersionId(id)
     if (bytes.byteLength > MAX_THUMBNAIL_BYTES) {
       throw new Error(
         `Thumbnail exceeds ${MAX_THUMBNAIL_BYTES} byte limit (${bytes.byteLength})`,
       )
     }
-    const dir = versionsDir(sessionId)
+    const dir = versionsDir(workspaceId)
     await mkdir(dir, { recursive: true })
     const pngPath = join(dir, `${id}.png`)
     assertPathWithinDir(pngPath, dir, 'version path')
     await writeFile(pngPath, bytes)
   }
 
-  async loadThumbnail(sessionId: string, id: string): Promise<Uint8Array | null> {
-    const pngPath = versionThumbnailPath(sessionId, id)
+  async loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null> {
+    const pngPath = versionThumbnailPath(workspaceId, id)
     try {
       const bytes = await readFile(pngPath)
       return new Uint8Array(bytes)
@@ -396,13 +396,13 @@ export class FileVersionStore implements VersionStore {
   }
 
   async renameBranchInVersions(
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     oldName: string,
     newName: string,
   ): Promise<number> {
     if (oldName === newName) return 0
-    const dir = versionsDir(sessionId)
+    const dir = versionsDir(workspaceId)
     let entries: string[]
     try {
       entries = await readdir(dir)
@@ -433,13 +433,13 @@ export class FileVersionStore implements VersionStore {
     return renamed
   }
 
-  async getFrontiersBase64(sessionId: string, id: string): Promise<string | null> {
-    const meta = await readMeta(sessionId, id)
+  async getFrontiersBase64(workspaceId: string, id: string): Promise<string | null> {
+    const meta = await readMeta(workspaceId, id)
     return meta?.frontiers ?? null
   }
 
-  async earliestFrontiers(sessionId: string, slug: string): Promise<Frontiers | null> {
-    const dir = versionsDir(sessionId)
+  async earliestFrontiers(workspaceId: string, slug: string): Promise<Frontiers | null> {
+    const dir = versionsDir(workspaceId)
     let entries: string[]
     try {
       entries = await readdir(dir)
@@ -476,10 +476,10 @@ export class FileVersionStore implements VersionStore {
     }
   }
 
-  private async prune(sessionId: string, slug: string): Promise<void> {
-    const dir = versionsDir(sessionId)
+  private async prune(workspaceId: string, slug: string): Promise<void> {
+    const dir = versionsDir(workspaceId)
     try {
-      const all = await this.list(sessionId, slug)
+      const all = await this.list(workspaceId, slug)
       const autos = all.filter((v) => v.auto)
       if (autos.length <= MAX_AUTO_PER_CANVAS) return
       const toRemove = autos.slice(MAX_AUTO_PER_CANVAS)

@@ -1,20 +1,20 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { DATA_DIR } from '../config.js'
-import { validateSessionId } from '../validators.js'
+import { validateWorkspaceId } from '../validators.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 
 const FILE_NAME = 'palette.json'
 
-function sessionDir(sessionId: string): string {
-  validateSessionId(sessionId)
-  const dir = join(DATA_DIR, sessionId)
+function workspaceDir(workspaceId: string): string {
+  validateWorkspaceId(workspaceId)
+  const dir = join(DATA_DIR, workspaceId)
   return assertPathWithinDir(dir, DATA_DIR, 'session path')
 }
 
-function palettePath(sessionId: string): string {
-  return assertPathWithinDir(join(sessionDir(sessionId), FILE_NAME), DATA_DIR, 'session path')
+function palettePath(workspaceId: string): string {
+  return assertPathWithinDir(join(workspaceDir(workspaceId), FILE_NAME), DATA_DIR, 'session path')
 }
 
 function parsePalette(path: string, raw: string): Record<string, string> {
@@ -34,14 +34,14 @@ function parsePalette(path: string, raw: string): Record<string, string> {
   return Object.fromEntries(entries) as Record<string, string>
 }
 
-async function savePalette(sessionId: string, palette: Record<string, string>): Promise<void> {
-  const dir = sessionDir(sessionId)
+async function savePalette(workspaceId: string, palette: Record<string, string>): Promise<void> {
+  const dir = workspaceDir(workspaceId)
   await mkdir(dir, { recursive: true })
-  await writeFile(palettePath(sessionId), JSON.stringify(palette, null, 2))
+  await writeFile(palettePath(workspaceId), JSON.stringify(palette, null, 2))
 }
 
-export async function loadPalette(sessionId: string): Promise<Record<string, string>> {
-  const path = palettePath(sessionId)
+export async function loadPalette(workspaceId: string): Promise<Record<string, string>> {
+  const path = palettePath(workspaceId)
   try {
     const raw = await readFile(path, 'utf-8')
     return parsePalette(path, raw)
@@ -52,22 +52,22 @@ export async function loadPalette(sessionId: string): Promise<Record<string, str
 }
 
 export async function mergePaletteEntries(
-  sessionId: string,
+  workspaceId: string,
   entries: Record<string, string>,
 ): Promise<Record<string, string>> {
-  const current = await loadPalette(sessionId)
+  const current = await loadPalette(workspaceId)
   const next = { ...current, ...entries }
-  await savePalette(sessionId, next)
+  await savePalette(workspaceId, next)
   return next
 }
 
 export async function deletePaletteEntries(
-  sessionId: string,
+  workspaceId: string,
   keys: string[],
 ): Promise<Record<string, string>> {
-  const current = await loadPalette(sessionId)
+  const current = await loadPalette(workspaceId)
   const next = { ...current }
   for (const key of keys) delete next[key]
-  await savePalette(sessionId, next)
+  await savePalette(workspaceId, next)
   return next
 }

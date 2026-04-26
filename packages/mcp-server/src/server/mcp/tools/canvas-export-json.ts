@@ -36,7 +36,7 @@ export function canvasExportJsonTool() {
       required: ['canvasId'],
     },
     execute: async (args: CanvasExportJsonArgs, client: DaemonClient) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const body: {
         includeCustomFields: boolean
         outputPath?: string
@@ -48,7 +48,7 @@ export function canvasExportJsonTool() {
       if (args.overwrite !== undefined) body.overwrite = args.overwrite
 
       const res = await client.request(
-        `/api/canvas/${sessionId}/${encodeURIComponent(slug)}/export-json`,
+        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/export-json`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

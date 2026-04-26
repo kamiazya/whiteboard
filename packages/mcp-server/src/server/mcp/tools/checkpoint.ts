@@ -25,10 +25,10 @@ export function checkpointSaveTool() {
       args: { canvasId: string; id?: string },
       client: DaemonClient,
     ): Promise<{ checkpointId: string; elementCount: number }> => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const checkpointId = args.id ?? nanoid(18)
       validateCheckpointId(checkpointId)
-      const res = await client.request(`/api/workspaces/${sessionId}/checkpoints`, {
+      const res = await client.request(`/api/workspaces/${workspaceId}/checkpoints`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,11 +72,11 @@ export function checkpointRestoreTool() {
     },
     execute: async (
       args: { checkpointId: string; targetSlug: string; overwrite?: boolean },
-      sessionId: string,
+      workspaceId: string,
       client: DaemonClient,
     ): Promise<{ canvasId: string; url: string; elementCount: number }> => {
       validateCheckpointId(args.checkpointId)
-      const res = await client.request(`/api/workspaces/${sessionId}/checkpoints/${args.checkpointId}/restore`, {
+      const res = await client.request(`/api/workspaces/${workspaceId}/checkpoints/${args.checkpointId}/restore`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -89,7 +89,7 @@ export function checkpointRestoreTool() {
         throw new Error(body?.message ?? `Checkpoint restore failed: ${res.status}`)
       }
       const body = (await res.json()) as { canvasId: string; elementCount: number }
-      const url = daemonUrl(client, `/canvas/${sessionId}/${args.targetSlug}`)
+      const url = daemonUrl(client, `/canvas/${workspaceId}/${args.targetSlug}`)
       return {
         canvasId: body.canvasId,
         url,

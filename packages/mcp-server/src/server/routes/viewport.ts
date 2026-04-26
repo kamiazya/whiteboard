@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import { sendViewportRequest, getClientCount } from './ws.js'
-import { validationErrorBody, validateSessionId, validateSlug } from '../validators.js'
+import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
 
 // requestId -> { resolve, reject }
 // viewport does not return payload data, only an ACK, so it reuses the export-style pending map.
@@ -24,11 +24,11 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
   const timeoutMs = options.timeoutMs ?? 5_000
   const app = new Hono()
 
-  // POST /api/canvas/:sessionId/:slug/viewport
-  app.post('/api/canvas/:sessionId/:slug/viewport', async (c) => {
-    const { sessionId, slug } = c.req.param()
+  // POST /api/canvas/:workspaceId/:slug/viewport
+  app.post('/api/canvas/:workspaceId/:slug/viewport', async (c) => {
+    const { workspaceId, slug } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
@@ -43,7 +43,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
       .catch(() => ({}) as Record<string, unknown>)
 
     // Fast-fail with 503 if no WS client is connected.
-    if (getClientCount(sessionId, slug) === 0) {
+    if (getClientCount(workspaceId, slug) === 0) {
       return c.json(
         {
           error: 'no_client',
@@ -60,7 +60,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
     try {
       await new Promise<void>((resolve, reject) => {
         pendingViewport.set(requestId, { resolve, reject })
-        sendViewportRequest(sessionId, slug, requestId, body)
+        sendViewportRequest(workspaceId, slug, requestId, body)
 
         setTimeout(() => {
           if (pendingViewport.has(requestId)) {

@@ -4,13 +4,13 @@ import { validationErrorBody } from '../../validators.js'
 
 describe('parseCanvasId', () => {
   it('case 242', () => {
-    expect(parseCanvasId('abc/canvas-a')).toEqual({ sessionId: 'abc', slug: 'canvas-a' })
+    expect(parseCanvasId('abc/canvas-a')).toEqual({ workspaceId: 'abc', slug: 'canvas-a' })
   })
 
   it('case 243', () => {
-    expect(parseCanvasId('abc/621/header')).toEqual({ sessionId: 'abc', slug: '621/header' })
+    expect(parseCanvasId('abc/621/header')).toEqual({ workspaceId: 'abc', slug: '621/header' })
     expect(parseCanvasId('abc/621/header-v2/layout')).toEqual({
-      sessionId: 'abc',
+      workspaceId: 'abc',
       slug: '621/header-v2/layout',
     })
   })
@@ -30,9 +30,9 @@ describe('parseCanvasId', () => {
       throw new Error('expected parseCanvasId to throw')
     } catch (error) {
       expect(validationErrorBody(error)).toEqual({
-        error: 'invalid_session_id',
+        error: 'invalid_workspace_id',
         message:
-          'Invalid sessionId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
+          'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
       })
     }
   })

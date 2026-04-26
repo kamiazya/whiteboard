@@ -7,7 +7,7 @@ import { corruptStoredData, corruptStoredDataBody, isMissingFileError } from '..
 import {
   validationErrorBody,
   validateFileId,
-  validateSessionId,
+  validateWorkspaceId,
   validateSlug,
 } from '../validators.js'
 
@@ -46,10 +46,10 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
 export function createFilesRouter() {
   const app = new Hono()
 
-  // PUT /api/canvas/:sessionId/:slug/file/:fileId
+  // PUT /api/canvas/:workspaceId/:slug/file/:fileId
   // Called by MCP load_image. fileId is already generated on the MCP side with nanoid().
   app.put(
-    '/api/canvas/:sessionId/:slug/file/:fileId',
+    '/api/canvas/:workspaceId/:slug/file/:fileId',
     bodyLimit({
       maxSize: MAX_FILE_UPLOAD_BYTES,
       onError: (c) =>
@@ -62,9 +62,9 @@ export function createFilesRouter() {
         ),
     }),
     async (c) => {
-      const { sessionId, slug, fileId } = c.req.param()
+      const { workspaceId, slug, fileId } = c.req.param()
       try {
-        validateSessionId(sessionId)
+        validateWorkspaceId(workspaceId)
         validateSlug(slug)
         validateFileId(fileId)
       } catch (err) {
@@ -83,7 +83,7 @@ export function createFilesRouter() {
           415,
         )
       }
-      const dir = join(DATA_DIR, sessionId, 'files')
+      const dir = join(DATA_DIR, workspaceId, 'files')
       await mkdir(dir, { recursive: true })
       const filePath = join(dir, `${fileId}${ext}`)
       await writeFile(filePath, new Uint8Array(await c.req.arrayBuffer()))
@@ -91,12 +91,12 @@ export function createFilesRouter() {
     },
   )
 
-  // GET /api/canvas/:sessionId/:slug/file/:fileId
+  // GET /api/canvas/:workspaceId/:slug/file/:fileId
   // Browser-facing route. Find a file under files/ whose stem matches fileId exactly.
-  app.get('/api/canvas/:sessionId/:slug/file/:fileId', async (c) => {
-    const { sessionId, slug, fileId } = c.req.param()
+  app.get('/api/canvas/:workspaceId/:slug/file/:fileId', async (c) => {
+    const { workspaceId, slug, fileId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
       validateSlug(slug)
       validateFileId(fileId)
     } catch (err) {
@@ -105,7 +105,7 @@ export function createFilesRouter() {
       throw err
     }
     try {
-      const dir = join(DATA_DIR, sessionId, 'files')
+      const dir = join(DATA_DIR, workspaceId, 'files')
       const files = await readStoredFileNames(dir)
       if (!files) {
         return c.notFound()

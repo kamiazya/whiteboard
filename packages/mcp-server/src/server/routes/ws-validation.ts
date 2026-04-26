@@ -1,6 +1,6 @@
 import {
   ValidationError,
-  validateSessionId,
+  validateWorkspaceId,
   validateSlug,
 } from '../validators.js'
 
@@ -26,24 +26,24 @@ function warnInvalidWsMessage(reason: string, value: unknown): void {
 export function parseWsTargetFromRequestUrl(
   rawUrl: string | undefined,
   host = 'localhost',
-): { sessionId: string; slug: string } {
+): { workspaceId: string; slug: string } {
   const url = new URL(rawUrl ?? '/', `http://${host}`)
   const parts = url.pathname.split('/')
   if (parts.length !== 4 || parts[1] !== 'ws') {
     throw new ValidationError(
       'invalid_ws_path',
-      `Invalid websocket path "${url.pathname}": expected /ws/:sessionId/:slug`,
+      `Invalid websocket path "${url.pathname}": expected /ws/:workspaceId/:slug`,
     )
   }
 
-  const sessionId = validateSessionId(parts[2] ?? '')
+  const workspaceId = validateWorkspaceId(parts[2] ?? '')
   let slug = ''
   try {
     slug = decodeURIComponent(parts[3] ?? '')
   } catch {
     throw new ValidationError('invalid_slug', `Invalid slug in websocket path "${url.pathname}"`)
   }
-  return { sessionId, slug: validateSlug(slug) }
+  return { workspaceId, slug: validateSlug(slug) }
 }
 
 export function parseWsClientTextMessage(text: string): WsClientTextMessage | null {

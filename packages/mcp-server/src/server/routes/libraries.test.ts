@@ -229,12 +229,12 @@ describe('libraries routes', () => {
     })
   })
 
-  it('returns structured 500 for corrupt stored data on GET /api/sessions/:sessionId/libraries', async () => {
+  it('returns structured 500 for corrupt stored data on GET /api/workspaces/:workspaceId/libraries', async () => {
     const app = createLibrariesRouter()
     await mkdir(join(tempDir, 'session1'), { recursive: true })
     await writeFile(join(tempDir, 'session1', '.libraries.json'), 'not-json')
 
-    const res = await app.request('/api/sessions/session1/libraries')
+    const res = await app.request('/api/workspaces/session1/libraries')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -339,13 +339,13 @@ describe('libraries routes', () => {
   it('rejects invalid session ids, user library names, and unsafe library urls with 400', async () => {
     const app = createLibrariesRouter()
 
-    const badSession = await app.request('/api/sessions/bad.sid/libraries')
+    const badSession = await app.request('/api/workspaces/bad.sid/libraries')
     expect(badSession.status).toBe(400)
 
     const badName = await app.request('/api/user-libraries/icons..bak')
     expect(badName.status).toBe(400)
 
-    const badUrl = await app.request('/api/sessions/session1/libraries', {
+    const badUrl = await app.request('/api/workspaces/session1/libraries', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url: 'http://localhost/lib.excalidrawlib' }),

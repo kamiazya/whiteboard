@@ -6,7 +6,7 @@ import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 
 // Store user-managed .excalidrawlib files across sessions.
 // Location: {DATA_DIR}/.user-libraries/{name}.excalidrawlib
-// Dot-prefixed directories under DATA_DIR are already excluded from canvas-store listSessions.
+// Dot-prefixed directories under DATA_DIR are already excluded from canvas-store listWorkspaces.
 
 export const USER_LIBRARY_DIRNAME = '.user-libraries'
 const EXT = '.excalidrawlib'

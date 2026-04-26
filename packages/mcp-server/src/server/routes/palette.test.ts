@@ -31,14 +31,14 @@ describe('palette router', () => {
   }
 
   it('returns an empty object for GET on an uninitialized palette', async () => {
-    const res = await createApp().request('/api/sessions/session1/palette')
+    const res = await createApp().request('/api/workspaces/session1/palette')
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({ palette: {} })
   })
 
   it('merges and returns data on PUT', async () => {
     const app = createApp()
-    const res = await app.request('/api/sessions/session1/palette', {
+    const res = await app.request('/api/workspaces/session1/palette', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entries: { 'accent.target': '#1971c2' } }),
@@ -51,12 +51,12 @@ describe('palette router', () => {
 
   it('deletes only the requested keys and returns the result on DELETE', async () => {
     const app = createApp()
-    await app.request('/api/sessions/session1/palette', {
+    await app.request('/api/workspaces/session1/palette', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entries: { 'plan.a': '#dbeafe', 'accent.target': '#1971c2' } }),
     })
-    const res = await app.request('/api/sessions/session1/palette', {
+    const res = await app.request('/api/workspaces/session1/palette', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keys: ['plan.a'] }),
@@ -69,7 +69,7 @@ describe('palette router', () => {
 
   it('also reads the palette through the canonical workspace route', async () => {
     const app = createApp()
-    await app.request('/api/sessions/session1/palette', {
+    await app.request('/api/workspaces/session1/palette', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entries: { 'accent.target': '#1971c2' } }),

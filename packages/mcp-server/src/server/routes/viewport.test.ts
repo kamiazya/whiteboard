@@ -16,10 +16,10 @@ vi.mock('../config.js', () => ({
 }))
 
 // Mock ws.ts so each test can control getClientCount and sendViewportRequest.
-const mockGetClientCount = vi.fn<(sessionId: string, slug: string) => number>()
+const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
 const mockSendViewportRequest = vi.fn<
   (
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     requestId: string,
     params: Record<string, unknown>,
@@ -27,13 +27,13 @@ const mockSendViewportRequest = vi.fn<
 >()
 
 vi.mock('./ws.js', () => ({
-  getClientCount: (sessionId: string, slug: string) => mockGetClientCount(sessionId, slug),
+  getClientCount: (workspaceId: string, slug: string) => mockGetClientCount(workspaceId, slug),
   sendViewportRequest: (
-    sessionId: string,
+    workspaceId: string,
     slug: string,
     requestId: string,
     params: Record<string, unknown>,
-  ) => mockSendViewportRequest(sessionId, slug, requestId, params),
+  ) => mockSendViewportRequest(workspaceId, slug, requestId, params),
 }))
 
 const { createViewportRouter, resolveViewportRequest } = await import('./viewport.js')
@@ -44,7 +44,7 @@ function makeApp(options: { timeoutMs?: number } = {}) {
   return app
 }
 
-describe('POST /api/canvas/:sessionId/:slug/viewport - error handling', () => {
+describe('POST /api/canvas/:workspaceId/:slug/viewport - error handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-viewport-test-'))
     mockGetClientCount.mockReset()
@@ -158,7 +158,7 @@ describe('POST /api/canvas/:sessionId/:slug/viewport - error handling', () => {
     expect(call[3]).toBeDefined()
   })
 
-  it('returns 400 for invalid sessionId or slug without reaching WS', async () => {
+  it('returns 400 for invalid workspaceId or slug without reaching WS', async () => {
     mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
 

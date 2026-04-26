@@ -14,7 +14,7 @@ vi.mock('../config.js', () => ({
   DIST_APP_DIR: '/tmp/dist/app',
 }))
 
-const { loadSessionNames, setWorkspaceName, setCanvasName, setCanvasPinned } = await import(
+const { loadWorkspaceNames, setWorkspaceName, setCanvasName, setCanvasPinned } = await import(
   './names-store.js'
 )
 
@@ -27,14 +27,14 @@ describe('names-store', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('returns empty SessionNames for an uninitialized session', async () => {
-    const names = await loadSessionNames('sess-1')
+  it('returns empty WorkspaceNames for an uninitialized session', async () => {
+    const names = await loadWorkspaceNames('sess-1')
     expect(names).toEqual({ canvases: {}, pinned: [] })
   })
 
-  it('setWorkspaceName persists the workspace name and loadSessionNames returns it', async () => {
+  it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
     await setWorkspaceName('sess-1', 'My Workspace')
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.workspace).toBe('My Workspace')
     expect(names.canvases).toEqual({})
   })
@@ -42,7 +42,7 @@ describe('names-store', () => {
   it('setCanvasName stores names per slug', async () => {
     await setCanvasName('sess-1', 'arch/overview', 'Architecture Overview')
     await setCanvasName('sess-1', 'notes/meeting', 'Team meeting notes')
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.canvases['arch/overview']).toBe('Architecture Overview')
     expect(names.canvases['notes/meeting']).toBe('Team meeting notes')
   })
@@ -50,7 +50,7 @@ describe('names-store', () => {
   it('setWorkspaceName deletes workspace on empty string input', async () => {
     await setWorkspaceName('sess-1', 'Keep it')
     await setWorkspaceName('sess-1', '')
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.workspace).toBeUndefined()
   })
 
@@ -58,28 +58,28 @@ describe('names-store', () => {
     await setCanvasName('sess-1', 'a', 'Alpha')
     await setCanvasName('sess-1', 'b', 'Beta')
     await setCanvasName('sess-1', 'a', '')
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.canvases).toEqual({ b: 'Beta' })
   })
 
   it('trims leading and trailing whitespace', async () => {
     await setCanvasName('sess-1', 'slug', '   spaced   ')
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.canvases.slug).toBe('spaced')
   })
 
   it('treats all-whitespace values as empty and deletes them', async () => {
     await setCanvasName('sess-1', 'slug', 'Initial')
     await setCanvasName('sess-1', 'slug', '   \t  \n ')
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.canvases.slug).toBeUndefined()
   })
 
-  it('returns a corruption error for invalid JSON instead of falling back to empty SessionNames', async () => {
+  it('returns a corruption error for invalid JSON instead of falling back to empty WorkspaceNames', async () => {
     await mkdir(join(tempDir, 'sess-1'), { recursive: true })
     await writeFile(join(tempDir, 'sess-1', '.names.json'), 'not-json{{{')
 
-    await expect(loadSessionNames('sess-1')).rejects.toMatchObject({
+    await expect(loadWorkspaceNames('sess-1')).rejects.toMatchObject({
       name: 'CorruptStoredDataError',
       code: 'corrupt_stored_data',
     })
@@ -90,7 +90,7 @@ describe('names-store', () => {
     await setWorkspaceName('sess-1', 'My WS')
     await setCanvasName('sess-1', 'c2', 'Canvas 2')
 
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.workspace).toBe('My WS')
     expect(names.canvases).toEqual({ c1: 'Canvas 1', c2: 'Canvas 2' })
   })
@@ -119,7 +119,7 @@ describe('names-store', () => {
     await setCanvasPinned('sess-1', 'c1', true)
     await setWorkspaceName('sess-1', 'WS')
     await setCanvasName('sess-1', 'c1', 'Canvas 1')
-    const names = await loadSessionNames('sess-1')
+    const names = await loadWorkspaceNames('sess-1')
     expect(names.pinned).toEqual(['c1'])
     expect(names.workspace).toBe('WS')
     expect(names.canvases).toEqual({ c1: 'Canvas 1' })
@@ -132,7 +132,7 @@ describe('names-store', () => {
       JSON.stringify({ workspace: 'WS', canvases: [], pinned: ['c1'] }),
     )
 
-    await expect(loadSessionNames('sess-2')).rejects.toMatchObject({
+    await expect(loadWorkspaceNames('sess-2')).rejects.toMatchObject({
       name: 'CorruptStoredDataError',
       code: 'corrupt_stored_data',
     })

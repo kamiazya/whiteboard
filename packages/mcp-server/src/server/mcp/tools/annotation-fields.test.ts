@@ -255,7 +255,7 @@ describe('buildAnnotationFields - width/height override', () => {
     const fields = buildAnnotationFields({
       ...BASE,
       type: 'text',
-      text: '~/.excalidraw/{sessionId}/',
+      text: '~/.excalidraw/{workspaceId}/',
       fontFamily: 8,
     })
     expect(fields.fontFamily).toBe(8)

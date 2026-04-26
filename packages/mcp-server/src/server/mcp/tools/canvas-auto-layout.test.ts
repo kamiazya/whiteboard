@@ -103,14 +103,14 @@ function installFetchMock(state: HarnessState) {
       parts[3] === 'checkpoints' &&
       parts.length === 4
     ) {
-      const sessionId = parts[2]
+      const workspaceId = parts[2]
       const body = JSON.parse(String(init?.body ?? '{}')) as { sourceSlug: string; checkpointId: string }
-      const sourceDoc = ensureCanvas(state, `${sessionId}/${body.sourceSlug}`)
+      const sourceDoc = ensureCanvas(state, `${workspaceId}/${body.sourceSlug}`)
       state.checkpoints.set(body.checkpointId, sourceDoc.export({ mode: 'snapshot' }))
       return new Response(
         JSON.stringify({
           checkpointId: body.checkpointId,
-          elementCount: countLiveElements(state, `${sessionId}/${body.sourceSlug}`),
+          elementCount: countLiveElements(state, `${workspaceId}/${body.sourceSlug}`),
         }),
         { status: 200 },
       )
@@ -123,7 +123,7 @@ function installFetchMock(state: HarnessState) {
       parts[5] === 'restore' &&
       method === 'POST'
     ) {
-      const sessionId = parts[2]
+      const workspaceId = parts[2]
       const checkpointId = parts[4]
       const snapshot = state.checkpoints.get(checkpointId)
       if (!snapshot) {
@@ -132,7 +132,7 @@ function installFetchMock(state: HarnessState) {
         })
       }
       const body = JSON.parse(String(init?.body ?? '{}')) as { targetSlug: string; overwrite?: boolean }
-      const targetCanvasId = `${sessionId}/${body.targetSlug}`
+      const targetCanvasId = `${workspaceId}/${body.targetSlug}`
       if (!body.overwrite && state.canvases.has(targetCanvasId)) {
         return new Response(JSON.stringify({ message: `Canvas "${targetCanvasId}" already exists` }), {
           status: 409,

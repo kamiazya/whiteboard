@@ -96,20 +96,20 @@ describe('createApp daemon mutation auth', () => {
   it('read-only routes stay public while mutation routes require bearer auth', async () => {
     const app = createApp(createRuntimeOptions('secret'))
 
-    const listRes = await app.request('/api/sessions')
+    const listRes = await app.request('/api/workspaces')
     expect(listRes.status).toBe(200)
 
     const debugRes = await app.request('/api/debug')
     expect(debugRes.status).toBe(401)
 
-    const createRes = await app.request('/api/sessions/session1/canvases', {
+    const createRes = await app.request('/api/workspaces/session1/canvases', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug: 'demo' }),
     })
     expect(createRes.status).toBe(401)
 
-    const authedCreateRes = await app.request('/api/sessions/session1/canvases', {
+    const authedCreateRes = await app.request('/api/workspaces/session1/canvases', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -153,7 +153,7 @@ describe('createApp daemon mutation auth', () => {
   it('adds the same baseline security headers to API responses', async () => {
     const app = createApp(createRuntimeOptions('secret'))
 
-    const res = await app.request('/api/sessions')
+    const res = await app.request('/api/workspaces')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Security-Policy')).toBe("frame-ancestors 'none'")
@@ -535,7 +535,6 @@ describe('createApp daemon mutation auth', () => {
             workspaces: [
               {
                 workspaceId: 'M7lgM0WguBnkfP_1iOFtY',
-                sessionId: 'M7lgM0WguBnkfP_1iOFtY',
                 daemonAlive: true,
               },
             ],
@@ -758,7 +757,7 @@ describe('createApp daemon mutation auth', () => {
       'not-json',
     )
 
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/versions', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -780,14 +779,14 @@ describe('createApp daemon mutation auth', () => {
       join(tempDir, 'data', 'session1', 'canvas-a.loro'),
       new Uint8Array([1, 2, 3, 4]),
     )
-    await app.request('/api/sessions/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const before = await loadCanvasBranches('session1', 'canvas-a')
 
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'feature' }),
@@ -807,7 +806,7 @@ describe('createApp daemon mutation auth', () => {
     const app = createApp(createRuntimeOptions())
 
     await saveCanvas('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
-    await app.request('/api/sessions/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
@@ -818,7 +817,7 @@ describe('createApp daemon mutation auth', () => {
     await saveCanvasBranches('session1', 'canvas-a', state)
     const before = await loadCanvasBranches('session1', 'canvas-a')
 
-    const res = await app.request('/api/sessions/session1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'feature' }),
@@ -838,7 +837,7 @@ describe('createApp daemon mutation auth', () => {
     const app = createApp(createRuntimeOptions())
 
     await saveCanvas('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
-    await app.request('/api/sessions/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
@@ -850,7 +849,7 @@ describe('createApp daemon mutation auth', () => {
     const before = await loadCanvasBranches('session1', 'canvas-a')
 
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -880,7 +879,7 @@ describe('createApp daemon mutation auth', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/sessions/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
@@ -892,7 +891,7 @@ describe('createApp daemon mutation auth', () => {
     const before = await loadCanvasBranches('session1', 'canvas-a')
 
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -922,14 +921,14 @@ describe('createApp daemon mutation auth', () => {
     const doc = new LoroDoc()
     await saveCanvas('session1', 'canvas-a', doc, { overwrite: true })
 
-    await app.request('/api/sessions/session1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/session1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
 
     const res = await app.request(
-      '/api/sessions/session1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/session1/canvases/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

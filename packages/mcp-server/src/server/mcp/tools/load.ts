@@ -22,11 +22,11 @@ function getMimeType(filePath: string): string {
 // Fetch the Loro snapshot from the server.
 async function apiGetSnapshot(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   slug: string,
 ): Promise<LoroDoc> {
   const res = await client.request(
-    `/api/canvas/${sessionId}/${encodeURIComponent(slug)}/snapshot`,
+    `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/snapshot`,
   )
   if (!res.ok) throw new Error(`GET /snapshot failed: ${res.status}`)
   const bytes = new Uint8Array(await res.arrayBuffer())
@@ -36,11 +36,11 @@ async function apiGetSnapshot(
 // Send a binary Loro update to the server.
 async function apiPostLoroUpdate(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   update: Uint8Array,
 ): Promise<void> {
-  const res = await client.request(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/update`, {
+  const res = await client.request(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/update`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: update,
@@ -69,7 +69,7 @@ export function loadImageTool() {
       args: { canvasId: string; imagePath: string; position?: string },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const position = args.position ?? 'center'
 
       // 1. Read the image file.
@@ -95,7 +95,7 @@ export function loadImageTool() {
       }
 
       // 5. Fetch the latest snapshot from the server.
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       // fromSnapshot generates a random peerId automatically; do not call setPeerId.
       const prevVV = doc.version()
 
@@ -140,7 +140,7 @@ export function loadImageTool() {
       // Do not run this in parallel: if the update arrives first, the browser can fetch /file/:fileId before the upload exists and hit 404.
       const mimeType = getMimeType(args.imagePath)
       const uploadRes = await client.request(
-        `/api/canvas/${sessionId}/${encodeURIComponent(slug)}/file/${fileId}`,
+        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': mimeType },
@@ -154,7 +154,7 @@ export function loadImageTool() {
 
       // 9. Export the incremental update and POST it to /update.
       const update = doc.export({ mode: 'update', from: prevVV })
-      await apiPostLoroUpdate(client, sessionId, slug, update)
+      await apiPostLoroUpdate(client, workspaceId, slug, update)
 
       return { elementId }
     },

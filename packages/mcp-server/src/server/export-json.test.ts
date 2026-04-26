@@ -34,7 +34,7 @@ describe('exportCanvasJsonDoc with outputPath', () => {
     const outputPath = join(tempDir, 'custom-export.excalidraw')
 
     const result = await exportCanvasJsonDoc({
-      sessionId: 'sid',
+      workspaceId: 'sid',
       slug: 'canvas-a',
       doc: buildDocWithRect(),
       dataDir: tempDir,
@@ -55,7 +55,7 @@ describe('exportCanvasJsonDoc with outputPath', () => {
     const outputPath = join(tempDir, 'nested', 'deep', 'out.excalidraw')
 
     const result = await exportCanvasJsonDoc({
-      sessionId: 'sid',
+      workspaceId: 'sid',
       slug: 'canvas-a',
       doc: buildDocWithRect(),
       dataDir: tempDir,
@@ -69,7 +69,7 @@ describe('exportCanvasJsonDoc with outputPath', () => {
   it('rejects a relative outputPath with a typed OutputPathError', async () => {
     await expect(
       exportCanvasJsonDoc({
-        sessionId: 'sid',
+        workspaceId: 'sid',
         slug: 'canvas-a',
         doc: buildDocWithRect(),
         dataDir: tempDir,
@@ -87,7 +87,7 @@ describe('exportCanvasJsonDoc with outputPath', () => {
 
     await expect(
       exportCanvasJsonDoc({
-        sessionId: 'sid',
+        workspaceId: 'sid',
         slug: 'canvas-a',
         doc: buildDocWithRect(),
         dataDir: tempDir,
@@ -108,7 +108,7 @@ describe('exportCanvasJsonDoc with outputPath', () => {
     await writeFile(outputPath, 'OLD CONTENTS')
 
     const result = await exportCanvasJsonDoc({
-      sessionId: 'sid',
+      workspaceId: 'sid',
       slug: 'canvas-a',
       doc: buildDocWithRect(),
       dataDir: tempDir,
@@ -123,7 +123,7 @@ describe('exportCanvasJsonDoc with outputPath', () => {
 
   it('still falls back to the default exports dir when outputPath is omitted', async () => {
     const result = await exportCanvasJsonDoc({
-      sessionId: 'sid-fallback',
+      workspaceId: 'sid-fallback',
       slug: 'canvas-a',
       doc: buildDocWithRect(),
       dataDir: tempDir,

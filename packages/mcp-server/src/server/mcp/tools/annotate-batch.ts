@@ -281,8 +281,8 @@ export function annotateBatchTool() {
       },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const sessionPalette = await apiGetPalette(client, sessionId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const sessionPalette = await apiGetPalette(client, workspaceId)
       const warnings: AnnotationWarning[] = []
       // Layer 1: resolve targets for items that need layout before touching the doc.
       // Fail fast before fetching a snapshot if layout resolution fails.
@@ -381,7 +381,7 @@ export function annotateBatchTool() {
         return []
       }))
 
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       const workingDoc = args.dryRun === true
         ? LoroDoc.fromSnapshot(doc.export({ mode: 'snapshot' }))
@@ -498,7 +498,7 @@ export function annotateBatchTool() {
         workingDoc.commit()
         await apiPostLoroUpdate(
           client,
-          sessionId,
+          workspaceId,
           slug,
           workingDoc.export({ mode: 'update', from: prevVV }),
         )

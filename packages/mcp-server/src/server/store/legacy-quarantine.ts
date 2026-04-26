@@ -45,16 +45,16 @@ export async function quarantineLegacyVersionMeta(dataDir: string): Promise<Quar
   }
   let movedCount = 0
   let scannedSessions = 0
-  let sessionEntries: string[] = []
+  let workspaceEntries: string[] = []
   try {
-    sessionEntries = await readdir(dataDir)
+    workspaceEntries = await readdir(dataDir)
   } catch {
     return { movedCount: 0, scannedSessions: 0 }
   }
 
-  for (const sessionId of sessionEntries) {
-    if (sessionId.startsWith('.')) continue // Skip dot-prefixed entries such as `.names.json`.
-    const versionsDir = join(dataDir, sessionId, 'versions')
+  for (const workspaceId of workspaceEntries) {
+    if (workspaceId.startsWith('.')) continue // Skip dot-prefixed entries such as `.names.json`.
+    const versionsDir = join(dataDir, workspaceId, 'versions')
     if (!(await isDir(versionsDir))) continue
     scannedSessions += 1
     let files: string[] = []

@@ -512,11 +512,11 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
 // Fetch a Loro snapshot from the server.
 export async function apiGetSnapshot(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   slug: string,
 ): Promise<LoroDoc> {
   const res = await client.request(
-    `/api/canvas/${sessionId}/${encodeURIComponent(slug)}/snapshot`,
+    `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/snapshot`,
   )
   if (!res.ok) throw new Error(`GET /snapshot failed: ${res.status}`)
   const bytes = new Uint8Array(await res.arrayBuffer())
@@ -526,11 +526,11 @@ export async function apiGetSnapshot(
 // Send a binary Loro update to the server.
 export async function apiPostLoroUpdate(
   client: DaemonClient,
-  sessionId: string,
+  workspaceId: string,
   slug: string,
   update: Uint8Array,
 ): Promise<void> {
-  const res = await client.request(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/update`, {
+  const res = await client.request(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/update`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: update,
@@ -725,8 +725,8 @@ export function annotateTool() {
       },
       client: DaemonClient,
     ) => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const sessionPalette = await apiGetPalette(client, sessionId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const sessionPalette = await apiGetPalette(client, workspaceId)
       // Return box_with_label overflow diagnostics in the same shape as
       // annotate_batch. This can be computed before fetching the snapshot.
       const warnings: { overflow: boolean; requiredWidth: number; requiredHeight: number }[] = []
@@ -751,7 +751,7 @@ export function annotateTool() {
       }
       // Known limitation: if another client moves/resizes the image between
       // snapshot fetch and update post, the annotation can drift.
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       // group ignores target, so default to the origin when it is omitted.
       const spec: AnnotationSpec = {
@@ -762,7 +762,7 @@ export function annotateTool() {
       const annotation = appendAnnotationToDoc(doc, spec)
       const elementIds = flattenAnnotationResult(annotation)
       doc.commit()
-      await apiPostLoroUpdate(client, sessionId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       // Preserve the legacy elementId/elementIds contract and add the structured
       // annotation result for callers that need internal composite ids.
       return elementIds.length === 1

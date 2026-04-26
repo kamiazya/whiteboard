@@ -272,8 +272,8 @@ export function canvasAutoLayoutTool() {
         updatePost: 0,
       }
       let phaseStart = nowMs()
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
-      const doc = await apiGetSnapshot(client, sessionId, slug)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
       timings.snapshotLoad = roundMs(nowMs() - phaseStart)
       phaseStart = nowMs()
       const prevVV = doc.version()
@@ -442,7 +442,7 @@ export function canvasAutoLayoutTool() {
       phaseStart = nowMs()
       const update = doc.export({ mode: 'update', from: prevVV })
       if (update.byteLength > 0) {
-        await apiPostLoroUpdate(client, sessionId, slug, update)
+        await apiPostLoroUpdate(client, workspaceId, slug, update)
       }
       timings.updatePost = roundMs(nowMs() - phaseStart)
 

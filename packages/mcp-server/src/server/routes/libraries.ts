@@ -21,10 +21,9 @@ import { corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
   validationErrorBody,
   validateExternalUrl,
-  validateSessionId,
+  validateWorkspaceId,
   validateUserLibraryName,
 } from '../validators.js'
-import { registerWorkspaceAlias } from './workspace-alias.js'
 
 function countLibraryItems(payload: unknown): number {
   if (typeof payload !== 'object' || payload === null) {
@@ -92,17 +91,17 @@ export function createLibrariesRouter() {
     return null
   }
 
-  registerWorkspaceAlias(app, 'get', '/api/sessions/:sessionId/libraries', async (c) => {
-    const { sessionId } = c.req.param()
+  app.get('/api/workspaces/:workspaceId/libraries', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
     try {
-      const libs = await loadInstalledLibraries(sessionId)
+      const libs = await loadInstalledLibraries(workspaceId)
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -111,10 +110,10 @@ export function createLibrariesRouter() {
     }
   })
 
-  registerWorkspaceAlias(app, 'post', '/api/sessions/:sessionId/libraries', async (c) => {
-    const { sessionId } = c.req.param()
+  app.post('/api/workspaces/:workspaceId/libraries', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
@@ -132,7 +131,7 @@ export function createLibrariesRouter() {
       throw err
     }
     try {
-      const libs = await addInstalledLibrary(sessionId, body.url)
+      const libs = await addInstalledLibrary(workspaceId, body.url)
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -141,10 +140,10 @@ export function createLibrariesRouter() {
     }
   })
 
-  registerWorkspaceAlias(app, 'delete', '/api/sessions/:sessionId/libraries', async (c) => {
-    const { sessionId } = c.req.param()
+  app.delete('/api/workspaces/:workspaceId/libraries', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
-      validateSessionId(sessionId)
+      validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
@@ -155,7 +154,7 @@ export function createLibrariesRouter() {
       return c.json({ error: 'url (string) is required' }, 400)
     }
     try {
-      const libs = await removeInstalledLibrary(sessionId, body.url)
+      const libs = await removeInstalledLibrary(workspaceId, body.url)
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)

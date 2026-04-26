@@ -51,7 +51,7 @@ function makeApp(
   return app
 }
 
-describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
+describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
   })
@@ -61,7 +61,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
 
   it('creates a new branch and returns 201 with the branch', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature-x', color: '#9333ea' }),
@@ -75,7 +75,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
   it('returns 409 for duplicate names', async () => {
     const app = makeApp()
     // main already exists through the lazy default state, so creating it returns 409.
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'main' }),
@@ -88,7 +88,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
 
   it('returns 400 for an invalid name', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'a/b' }),
@@ -103,18 +103,18 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
   it('returns structured 400 responses for invalid sid and slug', async () => {
     const app = makeApp()
 
-    const badSession = await app.request('/api/sessions/bad.sid/canvases/canvas-a/branches', {
+    const badSession = await app.request('/api/workspaces/bad.sid/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature-x' }),
     })
     expect(badSession.status).toBe(400)
     await expect(badSession.json()).resolves.toEqual({
-      error: 'invalid_session_id',
-      message: 'Invalid sessionId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
+      error: 'invalid_workspace_id',
+      message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 
-    const badSlug = await app.request('/api/sessions/s1/canvases/bad.slug/branches', {
+    const badSlug = await app.request('/api/workspaces/s1/canvases/bad.slug/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature-x' }),
@@ -132,7 +132,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
       .fn<(sid: string, id: string) => Promise<string | null>>()
       .mockResolvedValue('AAECAw==')
     const app = makeApp({ resolveFromVersionFrontiers: resolve })
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'from-v1', fromVersionId: 'v-abc' }),
@@ -150,7 +150,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
     const app = makeApp({
       resolveFromVersionFrontiers: vi.fn().mockResolvedValue(null),
     })
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'x', fromVersionId: 'ghost' }),
@@ -162,7 +162,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
     const app = makeApp({
       resolveFromVersionFrontiers: vi.fn().mockResolvedValue('AAECAw=='),
     })
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'from-v1', fromVersionId: 'bad.id' }),
@@ -177,7 +177,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
 
   it('returns unsupported_from_version when the deployment does not support fromVersionId', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'from-v1', fromVersionId: 'v-abc' }),
@@ -191,7 +191,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches', () => {
   })
 })
 
-describe('GET /api/sessions/:sid/canvases/:slug/branches', () => {
+describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
   })
@@ -201,7 +201,7 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches', () => {
 
   it('returns main as the only branch with head="main" in the initial lazy-default state', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches')
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
       branches: Array<{ name: string }>
@@ -214,14 +214,14 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches', () => {
   it('returns structured 400 responses for invalid sid and slug', async () => {
     const app = makeApp()
 
-    const badSession = await app.request('/api/sessions/bad.sid/canvases/canvas-a/branches')
+    const badSession = await app.request('/api/workspaces/bad.sid/canvases/canvas-a/branches')
     expect(badSession.status).toBe(400)
     await expect(badSession.json()).resolves.toEqual({
-      error: 'invalid_session_id',
-      message: 'Invalid sessionId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
+      error: 'invalid_workspace_id',
+      message: 'Invalid workspaceId "bad.sid": only ASCII letters, digits, "_" and "-" are allowed',
     })
 
-    const badSlug = await app.request('/api/sessions/s1/canvases/bad.slug/branches')
+    const badSlug = await app.request('/api/workspaces/s1/canvases/bad.slug/branches')
     expect(badSlug.status).toBe(400)
     await expect(badSlug.json()).resolves.toEqual({
       error: 'invalid_slug',
@@ -235,7 +235,7 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches', () => {
     await mkdir(join(tempDir, 's1', 'branches'), { recursive: true })
     await writeFile(join(tempDir, 's1', 'branches', 'canvas-a.json'), 'not-json')
 
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches')
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -245,7 +245,7 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches', () => {
   })
 })
 
-describe('GET /api/sessions/:sid/canvases/:slug/branches/:name/stats', () => {
+describe('GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
   })
@@ -258,13 +258,13 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches/:name/stats', () => {
       .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
       .mockResolvedValue(7)
     const app = makeApp({ countVersionsOnBranch })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature/stats',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature/stats',
     )
     expect(res.status).toBe(200)
     const body = (await res.json()) as { unmergedCommits: number; isHead: boolean }
@@ -277,18 +277,18 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches/:name/stats', () => {
     const app = makeApp({
       countVersionsOnBranch: vi.fn().mockResolvedValue(3),
     })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature/stats',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature/stats',
     )
     const body = (await res.json()) as { unmergedCommits: number; isHead: boolean }
     expect(body.isHead).toBe(true)
@@ -299,7 +299,7 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches/:name/stats', () => {
       countVersionsOnBranch: vi.fn().mockResolvedValue(0),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/ghost/stats',
+      '/api/workspaces/s1/canvases/canvas-a/branches/ghost/stats',
     )
     expect(res.status).toBe(404)
   })
@@ -310,14 +310,14 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches/:name/stats', () => {
         .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
         .mockRejectedValue(corruptStoredData('/tmp/versions', 'broken version metadata')),
     })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
 
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature/stats',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature/stats',
     )
 
     expect(res.status).toBe(500)
@@ -328,7 +328,7 @@ describe('GET /api/sessions/:sid/canvases/:slug/branches/:name/stats', () => {
   })
 })
 
-describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
+describe('DELETE /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
   })
@@ -338,12 +338,12 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
 
   it('deletes an existing non-HEAD branch with 200', async () => {
     const app = makeApp()
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/feature', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/feature', {
       method: 'DELETE',
     })
     expect(res.status).toBe(200)
@@ -357,12 +357,12 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
       .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
       .mockResolvedValue(3)
     const app = makeApp({ countVersionsOnBranch })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/feature', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/feature', {
       method: 'DELETE',
     })
     expect(res.status).toBe(200)
@@ -373,12 +373,12 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns unmergedCommits=0 when countVersionsOnBranch is not injected', async () => {
     const app = makeApp()
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/feature', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/feature', {
       method: 'DELETE',
     })
     const body = (await res.json()) as { unmergedCommits: number }
@@ -391,13 +391,13 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
         .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
         .mockRejectedValue(corruptStoredData('/tmp/versions', 'broken version metadata')),
     })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
 
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/feature', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/feature', {
       method: 'DELETE',
     })
 
@@ -407,14 +407,14 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
       message: expect.stringContaining('broken version metadata'),
     })
 
-    const branchesRes = await app.request('/api/sessions/s1/canvases/canvas-a/branches')
+    const branchesRes = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
     const body = (await branchesRes.json()) as { branches: Array<{ name: string }> }
     expect(body.branches.map((branch) => branch.name)).toContain('feature')
   })
 
   it('returns 409 when deleting main', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/main', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/main', {
       method: 'DELETE',
     })
     expect(res.status).toBe(409)
@@ -422,18 +422,18 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns 409 when deleting the HEAD branch', async () => {
     const app = makeApp()
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'feature' }),
     })
 
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/feature', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/feature', {
       method: 'DELETE',
     })
     expect(res.status).toBe(409)
@@ -445,7 +445,7 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns 404 for a missing branch', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/ghost', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/ghost', {
       method: 'DELETE',
     })
     expect(res.status).toBe(404)
@@ -453,7 +453,7 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns 400 for an invalid branch name', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/branches/bad.slug', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/bad.slug', {
       method: 'DELETE',
     })
     expect(res.status).toBe(400)
@@ -464,7 +464,7 @@ describe('DELETE /api/sessions/:sid/canvases/:slug/branches/:name', () => {
   })
 })
 
-describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
+describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
   })
@@ -474,12 +474,12 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
 
   it('switches to an existing branch and returns 200 with head and previousHead', async () => {
     const app = makeApp()
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'feature' }),
@@ -491,7 +491,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
 
   it('returns 404 for a missing branch', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'ghost' }),
@@ -501,7 +501,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
 
   it('returns 400 when the body is invalid and branch is missing', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -511,7 +511,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
 
   it('returns 400 for an invalid branch name', async () => {
     const app = makeApp()
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'bad.slug' }),
@@ -528,7 +528,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
     await mkdir(join(tempDir, 's1', 'branches'), { recursive: true })
     await writeFile(join(tempDir, 's1', 'branches', 'canvas-a.json'), '{"head":"ghost","branches":[]}')
 
-    const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ branch: 'main' }),
@@ -550,13 +550,13 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const checkoutTo = vi.fn<(sid: string, slug: string, tip: string) => Promise<void>>()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
-      await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+      await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'feature' }),
       })
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'feature' }),
@@ -565,7 +565,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       expect(getCurrentFrontiers).toHaveBeenCalledWith('s1', 'canvas-a')
 
       // Confirm that main.tipFrontiers was updated in the branches list.
-      const list = await app.request('/api/sessions/s1/canvases/canvas-a/branches')
+      const list = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
       const body = (await list.json()) as {
         branches: Array<{ name: string; tipFrontiers: string }>
       }
@@ -580,13 +580,13 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
       // feature is created without initialTipFrontiers, so tipFrontiers="".
-      await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+      await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'feature' }),
       })
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'feature' }),
@@ -604,7 +604,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
         .mockResolvedValue()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
-      await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+      await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'feature', fromVersionId: undefined }),
@@ -619,7 +619,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       feature.tipFrontiers = 'FEATURE_TIP=='
       await saveCanvasBranches('s1', 'canvas-a', state)
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'feature' }),
@@ -635,19 +635,19 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const checkoutTo = vi.fn()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
-      await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+      await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'feature' }),
       })
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'feature' }),
       })
       expect(res.status).toBe(200)
-      const list = await app.request('/api/sessions/s1/canvases/canvas-a/branches')
+      const list = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
       const body = (await list.json()) as {
         branches: Array<{ name: string; tipFrontiers: string }>
       }
@@ -662,7 +662,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const checkoutTo = vi.fn()
       const app = makeApp({ getCurrentFrontiers, checkoutTo })
 
-      await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+      await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'feature' }),
@@ -671,7 +671,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const { loadCanvasBranches } = await import('../store/branches-store.js')
       const before = await loadCanvasBranches('s1', 'canvas-a')
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'feature' }),
@@ -696,7 +696,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const notifyHeadChanged = vi.fn()
       const app = makeApp({ getCurrentFrontiers, checkoutTo, notifyHeadChanged })
 
-      await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+      await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'feature' }),
@@ -709,7 +709,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       await saveCanvasBranches('s1', 'canvas-a', state)
       const before = await loadCanvasBranches('s1', 'canvas-a')
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'feature' }),
@@ -733,7 +733,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const notifyHeadChanged = vi.fn()
       const app = makeApp({ getCurrentFrontiers, checkoutTo, notifyHeadChanged })
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'main' }),
@@ -748,13 +748,13 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
       const notifyHeadChanged = vi.fn<(sid: string, slug: string, head: string) => void>()
       const app = makeApp({ notifyHeadChanged })
 
-      await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+      await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: 'feature' }),
       })
 
-      const res = await app.request('/api/sessions/s1/canvases/canvas-a/head', {
+      const res = await app.request('/api/workspaces/s1/canvases/canvas-a/head', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ branch: 'feature' }),
@@ -765,7 +765,7 @@ describe('PUT /api/sessions/:sid/canvases/:slug/head', () => {
   })
 })
 
-describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
+describe('PATCH /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
   })
@@ -778,13 +778,13 @@ describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
       .fn<(sid: string, slug: string, oldName: string, newName: string) => Promise<number>>()
       .mockResolvedValue(3)
     const app = makeApp({ renameInVersions })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature',
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -804,7 +804,7 @@ describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
   it('returns 409 when renaming main', async () => {
     const app = makeApp({ renameInVersions: vi.fn().mockResolvedValue(0) })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/main',
+      '/api/workspaces/s1/canvases/canvas-a/branches/main',
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -817,7 +817,7 @@ describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
   it('returns 404 when renaming a missing branch', async () => {
     const app = makeApp({ renameInVersions: vi.fn().mockResolvedValue(0) })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/ghost',
+      '/api/workspaces/s1/canvases/canvas-a/branches/ghost',
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -829,13 +829,13 @@ describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns structured 400 when the new name is invalid', async () => {
     const app = makeApp({ renameInVersions: vi.fn().mockResolvedValue(0) })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature',
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -847,13 +847,13 @@ describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
 
   it('returns 400 when body.name is missing', async () => {
     const app = makeApp({ renameInVersions: vi.fn().mockResolvedValue(0) })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature',
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -869,14 +869,14 @@ describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
         .fn<(sid: string, slug: string, oldName: string, newName: string) => Promise<number>>()
         .mockRejectedValue(corruptStoredData('/tmp/versions', 'broken version metadata')),
     })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
 
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature',
       {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -890,14 +890,14 @@ describe('PATCH /api/sessions/:sid/canvases/:slug/branches/:name', () => {
       message: expect.stringContaining('broken version metadata'),
     })
 
-    const branchesRes = await app.request('/api/sessions/s1/canvases/canvas-a/branches')
+    const branchesRes = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
     const body = (await branchesRes.json()) as { branches: Array<{ name: string }> }
     expect(body.branches.map((branch) => branch.name)).toContain('feature')
     expect(body.branches.map((branch) => branch.name)).not.toContain('experimental')
   })
 })
 
-describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => {
+describe('POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
   })
@@ -924,13 +924,13 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => 
         committed: false,
       })
     const app = makeApp({ performMerge })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -960,13 +960,13 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => 
         committed: true,
       })
     const app = makeApp({ performMerge })
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -989,7 +989,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => 
   it('returns 400 when into is missing', async () => {
     const app = makeApp({ performMerge: vi.fn() })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1002,7 +1002,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => 
   it('returns 400 when source has an invalid name', async () => {
     const app = makeApp({ performMerge: vi.fn() })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/bad.slug/merge',
+      '/api/workspaces/s1/canvases/canvas-a/branches/bad.slug/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1015,7 +1015,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => 
   it('returns 400 when source == into', async () => {
     const app = makeApp({ performMerge: vi.fn() })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/main/merge',
+      '/api/workspaces/s1/canvases/canvas-a/branches/main/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1033,7 +1033,7 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => 
     )
     const app = makeApp({ performMerge })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/ghost/merge',
+      '/api/workspaces/s1/canvases/canvas-a/branches/ghost/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1045,13 +1045,13 @@ describe('POST /api/sessions/:sid/canvases/:slug/branches/:source/merge', () => 
 
   it('returns 501 unsupported_merge when performMerge is not injected', async () => {
     const app = makeApp()
-    await app.request('/api/sessions/s1/canvases/canvas-a/branches', {
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'feature' }),
     })
     const res = await app.request(
-      '/api/sessions/s1/canvases/canvas-a/branches/feature/merge',
+      '/api/workspaces/s1/canvases/canvas-a/branches/feature/merge',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

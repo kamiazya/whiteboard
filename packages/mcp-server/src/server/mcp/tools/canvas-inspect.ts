@@ -16,9 +16,9 @@ export function canvasInspectTool() {
       required: ['canvasId'],
     },
     execute: async (args: { canvasId: string }, client: DaemonClient): Promise<CanvasSummary> => {
-      const { sessionId, slug } = parseCanvasId(args.canvasId)
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const res = await client.request(
-        `/api/canvas/${sessionId}/${encodeURIComponent(slug)}/snapshot`,
+        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/snapshot`,
       )
       if (!res.ok) {
         throw new Error(`Failed to fetch snapshot: ${res.status} ${res.statusText}`)
