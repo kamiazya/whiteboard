@@ -567,3 +567,45 @@ describe('decomposeBoxWithLabel', () => {
     })
   })
 })
+
+describe('decomposeBoxWithLabel - fillStyle defaults', () => {
+  it('leaves fillStyle undefined when no backgroundColor is set so the rectangle keeps the Excalidraw hand-drawn default', () => {
+    const [rect] = decomposeBoxWithLabel({
+      target: { x: 0, y: 0 },
+      width: 200,
+      height: 80,
+      text: 'hello',
+    })
+    expect(rect.backgroundColor).toBeUndefined()
+    expect(rect.fillStyle).toBeUndefined()
+  })
+
+  it('defaults fillStyle to "solid" when backgroundColor is themed so light text on a colored bg stays legible', () => {
+    // Without this default the box renders with diagonal hachure lines on top
+    // of the colored bg; pairing with an inverted text color (white-on-blue,
+    // for example) makes the label nearly invisible. Surfaced during dogfood
+    // of PR #35 — see tmp/issues/2026-04-26-mcp-dogfood-findings.md item #7.
+    const [rect] = decomposeBoxWithLabel({
+      target: { x: 0, y: 0 },
+      width: 200,
+      height: 80,
+      title: 'Client',
+      text: 'Browser / Mobile',
+      backgroundColor: '#1e88e5',
+      color: '#ffffff',
+    })
+    expect(rect.fillStyle).toBe('solid')
+  })
+
+  it('preserves an explicit fillStyle even when backgroundColor is set', () => {
+    const [rect] = decomposeBoxWithLabel({
+      target: { x: 0, y: 0 },
+      width: 200,
+      height: 80,
+      text: 'hello',
+      backgroundColor: '#1e88e5',
+      fillStyle: 'cross-hatch',
+    })
+    expect(rect.fillStyle).toBe('cross-hatch')
+  })
+})

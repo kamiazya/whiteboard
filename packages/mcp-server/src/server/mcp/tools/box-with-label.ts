@@ -141,6 +141,13 @@ export function decomposeBoxWithLabel(
     ? Math.max(input.height, neededTotalHeight)
     : input.height
 
+  // Excalidraw's default fill is "hachure" (diagonal lines on a transparent
+  // base). That looks great on the empty-canvas aesthetic, but once a caller
+  // sets `backgroundColor` they almost always want the body to be readable —
+  // hachure leaves big white gaps that swallow light-on-color labels (the
+  // dogfood found this with `color: '#ffffff'` on a palette-tinted bg).
+  // Default to solid when a background is explicitly themed; preserve any
+  // explicit caller override.
   const rect: RectSpec = {
     type: 'rectangle',
     target: input.target,
@@ -148,7 +155,7 @@ export function decomposeBoxWithLabel(
     height: effectiveHeight,
     color: input.color,
     backgroundColor: input.backgroundColor,
-    fillStyle: input.fillStyle,
+    fillStyle: input.fillStyle ?? (input.backgroundColor ? 'solid' : undefined),
     strokeWidth: input.strokeWidth,
     templateInstanceId: input.templateInstanceId,
   }
