@@ -258,8 +258,8 @@ export async function listCanvases(
   workspaceId: string,
 ): Promise<{ slug: string; updatedAt: string }[]> {
   validateWorkspaceId(workspaceId)
-  const sessionDir = join(DATA_DIR, workspaceId)
-  const rootEntries = await readDirEntriesOrMissing(sessionDir)
+  const workspaceDir = join(DATA_DIR, workspaceId)
+  const rootEntries = await readDirEntriesOrMissing(workspaceDir)
   if (!rootEntries) {
     return []
   }
@@ -287,13 +287,13 @@ export async function listCanvases(
           throw corruptStoredData(full, `failed to stat canvas file (${errorMessage(error)})`)
         }
         // Rebuild the slug from the session-relative path, normalizing path separators to "/".
-        const rel = relative(sessionDir, full).replace(new RegExp(`\\${sep}`, 'g'), '/')
+        const rel = relative(workspaceDir, full).replace(new RegExp(`\\${sep}`, 'g'), '/')
         const slug = rel.replace(/\.loro$/, '')
         results.push({ slug, updatedAt: s.mtime.toISOString() })
       }
     }
   }
 
-  await walk(sessionDir, rootEntries)
+  await walk(workspaceDir, rootEntries)
   return results
 }

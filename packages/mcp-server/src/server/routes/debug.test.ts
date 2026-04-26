@@ -65,7 +65,7 @@ describe('GET /api/debug', () => {
     const res = await app.request('/api/debug')
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
-      sessions: Array<{
+      workspaces: Array<{
         workspaceId: string
         daemonAlive: boolean
         canvases: Array<{
@@ -79,7 +79,7 @@ describe('GET /api/debug', () => {
       cache: { size: number; keys: string[] }
     }
 
-    const session = json.sessions.find((s) => s.workspaceId === 'sess-a')
+    const session = json.workspaces.find((s) => s.workspaceId === 'sess-a')
     expect(session).toBeDefined()
     const c1 = session!.canvases.find((c) => c.slug === 'canvas-1')
     const c2 = session!.canvases.find((c) => c.slug === 'canvas-2')
@@ -117,9 +117,9 @@ describe('GET /api/debug', () => {
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
-      sessions: Array<{ workspaceId: string; daemonAlive: boolean }>
+      workspaces: Array<{ workspaceId: string; daemonAlive: boolean }>
     }
-    const session = json.sessions.find((s) => s.workspaceId === 'sess-alive')
+    const session = json.workspaces.find((s) => s.workspaceId === 'sess-alive')
     expect(session?.daemonAlive).toBe(true)
   })
 
@@ -134,23 +134,23 @@ describe('GET /api/debug', () => {
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
     const json = (await res.json()) as {
-      sessions: Array<{ workspaceId: string; canvases: Array<{ slug: string; cached: boolean }> }>
+      workspaces: Array<{ workspaceId: string; canvases: Array<{ slug: string; cached: boolean }> }>
       cache: { size: number; keys: string[] }
     }
 
     expect(json.cache.keys).toContain('sess-cache/touched')
     expect(json.cache.keys).not.toContain('sess-cache/untouched')
 
-    const session = json.sessions.find((s) => s.workspaceId === 'sess-cache')!
+    const session = json.workspaces.find((s) => s.workspaceId === 'sess-cache')!
     expect(session.canvases.find((c) => c.slug === 'touched')?.cached).toBe(true)
     expect(session.canvases.find((c) => c.slug === 'untouched')?.cached).toBe(false)
   })
 
-  it('returns sessions: [] when no sessions exist', async () => {
+  it('returns workspaces: [] when no sessions exist', async () => {
     const app = createDebugRouter()
     const res = await app.request('/api/debug')
-    const json = (await res.json()) as { sessions: unknown[] }
-    expect(json.sessions).toEqual([])
+    const json = (await res.json()) as { workspaces: unknown[] }
+    expect(json.workspaces).toEqual([])
   })
 
   it('requires bearer auth when a daemon token is configured', async () => {

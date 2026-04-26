@@ -7,14 +7,14 @@ import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 
 const FILE_NAME = 'palette.json'
 
-function sessionDir(workspaceId: string): string {
+function workspaceDir(workspaceId: string): string {
   validateWorkspaceId(workspaceId)
   const dir = join(DATA_DIR, workspaceId)
   return assertPathWithinDir(dir, DATA_DIR, 'session path')
 }
 
 function palettePath(workspaceId: string): string {
-  return assertPathWithinDir(join(sessionDir(workspaceId), FILE_NAME), DATA_DIR, 'session path')
+  return assertPathWithinDir(join(workspaceDir(workspaceId), FILE_NAME), DATA_DIR, 'session path')
 }
 
 function parsePalette(path: string, raw: string): Record<string, string> {
@@ -35,7 +35,7 @@ function parsePalette(path: string, raw: string): Record<string, string> {
 }
 
 async function savePalette(workspaceId: string, palette: Record<string, string>): Promise<void> {
-  const dir = sessionDir(workspaceId)
+  const dir = workspaceDir(workspaceId)
   await mkdir(dir, { recursive: true })
   await writeFile(palettePath(workspaceId), JSON.stringify(palette, null, 2))
 }

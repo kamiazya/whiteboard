@@ -27,14 +27,14 @@ export interface WorkspaceNames {
 
 const FILE_NAME = '.names.json'
 
-function sessionDir(workspaceId: string): string {
+function workspaceDir(workspaceId: string): string {
   validateWorkspaceId(workspaceId)
   const dir = join(DATA_DIR, workspaceId)
   return assertPathWithinDir(dir, DATA_DIR, 'session path')
 }
 
 function namesPath(workspaceId: string): string {
-  return assertPathWithinDir(join(sessionDir(workspaceId), FILE_NAME), DATA_DIR, 'session path')
+  return assertPathWithinDir(join(workspaceDir(workspaceId), FILE_NAME), DATA_DIR, 'session path')
 }
 
 function parseWorkspaceNames(path: string, raw: string): WorkspaceNames {
@@ -102,7 +102,7 @@ export async function loadWorkspaceNames(workspaceId: string): Promise<Workspace
 }
 
 async function saveWorkspaceNames(workspaceId: string, names: WorkspaceNames): Promise<void> {
-  const dir = sessionDir(workspaceId)
+  const dir = workspaceDir(workspaceId)
   await mkdir(dir, { recursive: true })
   await writeFile(namesPath(workspaceId), JSON.stringify(names, null, 2))
 }

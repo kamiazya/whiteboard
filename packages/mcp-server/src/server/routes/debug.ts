@@ -12,7 +12,7 @@ type CanvasInfo = {
   cached: boolean
 }
 
-type SessionInfo = {
+type WorkspaceInfo = {
   workspaceId: string
   daemonAlive: boolean
   canvases: CanvasInfo[]
@@ -71,9 +71,9 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
   })
 
   app.get('/api/debug', async (c) => {
-    const sessions = await listWorkspaces()
-    const sessionInfos: SessionInfo[] = await Promise.all(
-      sessions.map(async ({ workspaceId, daemonAlive }) => {
+    const workspaces = await listWorkspaces()
+    const workspaceInfos: WorkspaceInfo[] = await Promise.all(
+      workspaces.map(async ({ workspaceId, daemonAlive }) => {
         const canvases = await listCanvases(workspaceId)
         const canvasInfos = await Promise.all(
           canvases.map(({ slug }) => summarizeCanvas(workspaceId, slug)),
@@ -84,7 +84,7 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
 
     const keys = getCacheKeys()
     return c.json({
-      sessions: sessionInfos,
+      workspaces: workspaceInfos,
       cache: { size: keys.length, keys },
     })
   })

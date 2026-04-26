@@ -400,7 +400,7 @@ export default function WorkspaceTopBar({
   const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? slug.slice(0, slashIndex) : null
   const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? slug.slice(slashIndex + 1) : null
   const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? slug : null)
-  const shortSession = workspaceId.slice(0, 5) + '…' + workspaceId.slice(-3)
+  const shortWorkspaceId = workspaceId.slice(0, 5) + '…' + workspaceId.slice(-3)
 
   // Close the version history popover on outside clicks.
   useEffect(() => {
@@ -511,7 +511,7 @@ export default function WorkspaceTopBar({
                 {workspaceDisplay}
               </button>
             </TooltipTrigger>
-            <TooltipContent>Double-click to rename · {shortSession}</TooltipContent>
+            <TooltipContent>Double-click to rename · {shortWorkspaceId}</TooltipContent>
           </Tooltip>
         )}
 
