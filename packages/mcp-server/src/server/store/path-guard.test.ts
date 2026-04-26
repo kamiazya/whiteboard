@@ -1,8 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LoroDoc } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -50,28 +49,21 @@ describe('store path guards', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('returns ValidationError for names-store session escape attempts', async () => {
-    const { setWorkspaceName } = await importWithRelaxedValidators<typeof import('./names-store.js')>(
-      './names-store.js',
-    )
-    const { validationErrorBody } = await import('../validators.js')
+  // names-store no longer constructs filesystem paths from workspaceId; the
+  // path-traversal vector is fully covered by validateWorkspaceId, exercised
+  // independently in validators.test.ts.
 
-    const error = await captureError(setWorkspaceName('..', 'Escape'))
-
-    expect(error).toMatchObject({ name: 'ValidationError', error: 'invalid_path' })
-    expect(validationErrorBody(error)).toEqual({
-      error: 'invalid_path',
-      message: expect.stringMatching(/outside/i),
-    })
-  })
-
-  it('returns ValidationError for version-store file escape attempts', async () => {
+  it('returns ValidationError for version-store thumbnail escape attempts', async () => {
     const { FileVersionStore } =
       await importWithRelaxedValidators<typeof import('./version-store.js')>('./version-store.js')
     const { validationErrorBody } = await import('../validators.js')
     const store = new FileVersionStore()
 
-    const error = await captureError(store.load('sess-1', '../escape', new LoroDoc()))
+    // Version metadata now lives in the DB, but thumbnail blobs still hit the
+    // filesystem, so the path guard remains the second-line defense behind
+    // validateVersionId. Relaxing the validators forces the assertPathWithinDir
+    // guard to fire when the id would otherwise build a path outside blobs/.
+    const error = await captureError(store.loadThumbnail('sess-1', '../escape'))
 
     expect(error).toMatchObject({ name: 'ValidationError', error: 'invalid_path' })
     expect(validationErrorBody(error)).toEqual({
@@ -81,9 +73,10 @@ describe('store path guards', () => {
   })
 
   it('returns ValidationError for checkpoint-store file escape attempts', async () => {
-    const { FileCheckpointStore } = await importWithRelaxedValidators<
-      typeof import('./checkpoint-store.js')
-    >('./checkpoint-store.js')
+    const { FileCheckpointStore } =
+      await importWithRelaxedValidators<typeof import('./checkpoint-store.js')>(
+        './checkpoint-store.js',
+      )
     const { validationErrorBody } = await import('../validators.js')
     const store = new FileCheckpointStore()
 

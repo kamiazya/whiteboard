@@ -10,8 +10,7 @@ const SAFE_WORKSPACE_ID = /^[a-zA-Z0-9_-]+$/
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9_-]+$/
 const SAFE_USER_LIBRARY_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const SAFE_BRANCH_NAME = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
-const PRIVATE_ADDRESS_ERROR =
-  'Private or local addresses are not allowed in external URLs.'
+const PRIVATE_ADDRESS_ERROR = 'Private or local addresses are not allowed in external URLs.'
 
 const PRIVATE_ADDRESS_BLOCKLIST = new BlockList()
 PRIVATE_ADDRESS_BLOCKLIST.addSubnet('0.0.0.0', 8, 'ipv4')
@@ -78,11 +77,7 @@ function diagnoseSlugSegment(segment: string): string | null {
   return null
 }
 
-function validateSafeIdentifier(
-  value: string,
-  kind: string,
-  maxLength = 64,
-): string {
+function validateSafeIdentifier(value: string, kind: string, maxLength = 64): string {
   if (!SAFE_IDENTIFIER.test(value)) {
     throw new ValidationError(
       `invalid_${kind.replace(/\s+/g, '_')}`,
@@ -166,6 +161,10 @@ export function validateBranchName(name: string): string {
 
 export function validateCheckpointId(id: string): string {
   return validateSafeIdentifier(id, 'checkpoint id')
+}
+
+export function validateCanvasId(id: string): string {
+  return validateSafeIdentifier(id, 'canvas id')
 }
 
 export function validateVersionId(id: string): string {

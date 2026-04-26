@@ -1,9 +1,17 @@
-import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { DATA_DIR } from '../config.js'
 import { validateUserLibraryName } from '../validators.js'
-import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
-import { USER_LIBRARY_DIRNAME } from './user-library-store.js'
+import { corruptStoredData } from './corrupt-stored-data.js'
+import { getDb } from './db/index.js'
+import { prepareDataDir } from './db/prepare.js'
+
+// User library metadata. Backed by:
+//   user_library_metadata table -> name PK, manifestJson TEXT (JSON-encoded
+//                                  UserLibraryMetadataManifest)
+//
+// The manifest itself stays a structured object on the wire; on disk it is a
+// single JSON column so callers do not need to know the schema. Revision
+// conflicts are detected by reading the current row and comparing before
+// writing the next one.
 
 export const USER_LIBRARY_METADATA_FILENAME_SUFFIX = '.meta.json'
 
@@ -31,15 +39,6 @@ type MetadataDeletePatch = {
   scaleKeys?: string[]
 }
 
-function userLibraryDir(): string {
-  return join(DATA_DIR, USER_LIBRARY_DIRNAME)
-}
-
-function metadataPathFor(name: string): string {
-  validateUserLibraryName(name)
-  return join(userLibraryDir(), `${name}${USER_LIBRARY_METADATA_FILENAME_SUFFIX}`)
-}
-
 function emptyManifest(): UserLibraryMetadataManifest {
   return {
     version: 1,
@@ -50,99 +49,82 @@ function emptyManifest(): UserLibraryMetadataManifest {
   }
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
+async function dbReady() {
+  await prepareDataDir(DATA_DIR)
+  return getDb(DATA_DIR)
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+function manifestSource(name: string): string {
+  return `user_library_metadata/${name}`
+}
+
 function parseNumberMap(
-  path: string,
+  source: string,
   value: unknown,
   field: 'aliases' | 'scales',
   integerOnly: boolean,
 ): Record<string, number> {
   if (!isObjectRecord(value)) {
-    throw corruptStoredData(path, `expected ${field} to be an object`)
+    throw corruptStoredData(source, `expected ${field} to be an object`)
   }
   const out: Record<string, number> = {}
   for (const [key, raw] of Object.entries(value)) {
     if (typeof raw !== 'number' || Number.isNaN(raw) || !Number.isFinite(raw)) {
-      throw corruptStoredData(path, `expected ${field}.${key} to be a finite number`)
+      throw corruptStoredData(source, `expected ${field}.${key} to be a finite number`)
     }
     if (integerOnly && !Number.isInteger(raw)) {
-      throw corruptStoredData(path, `expected ${field}.${key} to be an integer`)
+      throw corruptStoredData(source, `expected ${field}.${key} to be an integer`)
     }
     out[key] = raw
   }
   return out
 }
 
-function parseStringMap(path: string, value: unknown, field: 'notes'): Record<string, string> {
+function parseStringMap(source: string, value: unknown, field: 'notes'): Record<string, string> {
   if (!isObjectRecord(value)) {
-    throw corruptStoredData(path, `expected ${field} to be an object`)
+    throw corruptStoredData(source, `expected ${field} to be an object`)
   }
   const out: Record<string, string> = {}
   for (const [key, raw] of Object.entries(value)) {
     if (typeof raw !== 'string') {
-      throw corruptStoredData(path, `expected ${field}.${key} to be a string`)
+      throw corruptStoredData(source, `expected ${field}.${key} to be a string`)
     }
     out[key] = raw
   }
   return out
 }
 
-function parseUserLibraryMetadata(
-  path: string,
-  raw: string,
-): UserLibraryMetadataManifest {
+function parseUserLibraryMetadata(name: string, raw: string): UserLibraryMetadataManifest {
+  const source = manifestSource(name)
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw corruptStoredData(path, 'expected valid user library metadata JSON')
+    throw corruptStoredData(source, 'expected valid user library metadata JSON')
   }
   if (!isObjectRecord(parsed)) {
-    throw corruptStoredData(path, 'expected metadata object payload')
+    throw corruptStoredData(source, 'expected metadata object payload')
   }
   if (parsed.version !== 1) {
-    throw corruptStoredData(path, `expected version 1 metadata manifest`)
+    throw corruptStoredData(source, `expected version 1 metadata manifest`)
   }
   if (
     typeof parsed.revision !== 'number' ||
     !Number.isInteger(parsed.revision) ||
     parsed.revision < 0
   ) {
-    throw corruptStoredData(path, 'expected revision to be a non-negative integer')
+    throw corruptStoredData(source, 'expected revision to be a non-negative integer')
   }
   return {
     version: 1,
     revision: parsed.revision,
-    aliases: parseNumberMap(path, parsed.aliases, 'aliases', true),
-    notes: parseStringMap(path, parsed.notes, 'notes'),
-    scales: parseNumberMap(path, parsed.scales, 'scales', false),
-  }
-}
-
-async function writeMetadataAtomically(
-  path: string,
-  manifest: UserLibraryMetadataManifest,
-): Promise<void> {
-  const dir = userLibraryDir()
-  try {
-    await mkdir(dir, { recursive: true })
-  } catch (error) {
-    throw corruptStoredData(dir, `failed to create user library directory (${errorMessage(error)})`)
-  }
-  const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`
-  try {
-    await writeFile(tempPath, JSON.stringify(manifest, null, 2))
-    await rename(tempPath, path)
-  } catch (error) {
-    await unlink(tempPath).catch(() => undefined)
-    throw corruptStoredData(path, `failed to write user library metadata (${errorMessage(error)})`)
+    aliases: parseNumberMap(source, parsed.aliases, 'aliases', true),
+    notes: parseStringMap(source, parsed.notes, 'notes'),
+    scales: parseNumberMap(source, parsed.scales, 'scales', false),
   }
 }
 
@@ -156,17 +138,38 @@ function cloneManifest(manifest: UserLibraryMetadataManifest): UserLibraryMetada
   }
 }
 
-export async function getUserLibraryMetadata(
-  name: string,
-): Promise<UserLibraryMetadataManifest> {
-  const path = metadataPathFor(name)
-  try {
-    const raw = await readFile(path, 'utf-8')
-    return parseUserLibraryMetadata(path, raw)
-  } catch (error) {
-    if (isMissingFileError(error)) return emptyManifest()
-    throw error
-  }
+async function readManifest(name: string): Promise<UserLibraryMetadataManifest> {
+  const db = await dbReady()
+  const row = await db
+    .selectFrom('user_library_metadata')
+    .select(['manifestJson'])
+    .where('name', '=', name)
+    .executeTakeFirst()
+  if (!row) return emptyManifest()
+  return parseUserLibraryMetadata(name, row.manifestJson)
+}
+
+async function writeManifest(name: string, manifest: UserLibraryMetadataManifest): Promise<void> {
+  const db = await dbReady()
+  const now = Date.now()
+  const manifestJson = JSON.stringify(manifest)
+  // Ensure the user_libraries parent row exists so the FK stays valid even if
+  // metadata is set before the .excalidrawlib payload is uploaded.
+  await db
+    .insertInto('user_libraries')
+    .values({ name, itemCount: null, createdAt: now, updatedAt: now })
+    .onConflict((oc) => oc.column('name').doNothing())
+    .execute()
+  await db
+    .insertInto('user_library_metadata')
+    .values({ name, manifestJson, updatedAt: now })
+    .onConflict((oc) => oc.column('name').doUpdateSet({ manifestJson, updatedAt: now }))
+    .execute()
+}
+
+export async function getUserLibraryMetadata(name: string): Promise<UserLibraryMetadataManifest> {
+  validateUserLibraryName(name)
+  return readManifest(name)
 }
 
 export async function setUserLibraryMetadata(
@@ -174,8 +177,8 @@ export async function setUserLibraryMetadata(
   revision: number,
   patch: Partial<MetadataSetPatch>,
 ): Promise<UserLibraryMetadataManifest> {
-  const path = metadataPathFor(name)
-  const current = await getUserLibraryMetadata(name)
+  validateUserLibraryName(name)
+  const current = await readManifest(name)
   if (current.revision !== revision) {
     throw new UserLibraryMetadataConflictError(
       `user library metadata revision mismatch for "${name}": expected ${revision}, current ${current.revision}`,
@@ -186,7 +189,7 @@ export async function setUserLibraryMetadata(
   if (patch.notes) next.notes = { ...next.notes, ...patch.notes }
   if (patch.scales) next.scales = { ...next.scales, ...patch.scales }
   next.revision = current.revision + 1
-  await writeMetadataAtomically(path, next)
+  await writeManifest(name, next)
   return next
 }
 
@@ -195,8 +198,8 @@ export async function deleteUserLibraryMetadata(
   revision: number,
   patch: MetadataDeletePatch,
 ): Promise<UserLibraryMetadataManifest> {
-  const path = metadataPathFor(name)
-  const current = await getUserLibraryMetadata(name)
+  validateUserLibraryName(name)
+  const current = await readManifest(name)
   if (current.revision !== revision) {
     throw new UserLibraryMetadataConflictError(
       `user library metadata revision mismatch for "${name}": expected ${revision}, current ${current.revision}`,
@@ -207,15 +210,12 @@ export async function deleteUserLibraryMetadata(
   for (const key of patch.noteKeys ?? []) delete next.notes[key]
   for (const key of patch.scaleKeys ?? []) delete next.scales[key]
   next.revision = current.revision + 1
-  await writeMetadataAtomically(path, next)
+  await writeManifest(name, next)
   return next
 }
 
 export async function removeUserLibraryMetadata(name: string): Promise<void> {
-  try {
-    await unlink(metadataPathFor(name))
-  } catch (error) {
-    if (isMissingFileError(error)) return
-    throw error
-  }
+  validateUserLibraryName(name)
+  const db = await dbReady()
+  await db.deleteFrom('user_library_metadata').where('name', '=', name).execute()
 }

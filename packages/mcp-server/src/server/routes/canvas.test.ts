@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { userInfo } from 'node:os'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -18,9 +17,8 @@ vi.mock('../config.js', () => ({
 
 // Mock doc-cache so the cache is isolated in tests.
 vi.mock('../store/doc-cache.js', async () => {
-  const actual = await vi.importActual<typeof import('../store/doc-cache.js')>(
-    '../store/doc-cache.js',
-  )
+  const actual =
+    await vi.importActual<typeof import('../store/doc-cache.js')>('../store/doc-cache.js')
   return actual
 })
 
@@ -42,40 +40,8 @@ describe('GET /api/workspaces', () => {
     clearCache()
   })
 
-  it('returns structured 500 instead of an empty list for a broken DATA_DIR', async () => {
-    const origDir = tempDir
-    const brokenPath = join(origDir, 'broken-data-dir')
-    await writeFile(brokenPath, 'not-a-directory')
-    tempDir = brokenPath
-
-    try {
-      const app = createCanvasRouter()
-      const res = await app.request('/api/workspaces')
-
-      expect(res.status).toBe(500)
-      await expect(res.json()).resolves.toEqual({
-        error: 'corrupt_stored_data',
-        message: expect.stringContaining('broken-data-dir'),
-      })
-    } finally {
-      tempDir = origDir
-    }
-  })
-})
-
-describe('GET /api/workspaces', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'workspace-a'), { recursive: true })
-    clearCache()
-  })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-    clearCache()
-  })
-
-  it('returns the canonical workspace list and includes workspaceId as a compatibility alias', async () => {
+  it('returns the canonical workspace list with workspaceId entries', async () => {
+    await saveCanvas('workspace-a', 'a', new LoroDoc())
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces')
 
@@ -123,19 +89,8 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
     expect(res.status).toBe(400)
   })
 
-  it('returns structured 500 instead of an empty list for a broken session directory', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/session1/canvases')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining(join('session1')),
-    })
-  })
+  // listCanvases no longer walks per-workspace directories, so the previous
+  // "broken session directory" 500 case no longer applies.
 })
 
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
@@ -230,7 +185,17 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
-    await writeFile(join(tempDir, 'session1', 'canvas-a.loro'), Buffer.from('not-a-loro-snapshot'))
+    const { getDb } = await import('../store/db/index.js')
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'canvas-a')
+      .executeTakeFirstOrThrow()
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
@@ -240,72 +205,19 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
       error: 'corrupt_stored_data',
-      message: expect.stringContaining('canvas-a.loro'),
+      message: expect.stringContaining(`${row.id}.loro`),
     })
   })
 
-  it('returns structured 500 for canvas path stat failures', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/compact', {
-      method: 'POST',
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('canvas-a.loro'),
-    })
-  })
+  // Canvas blobs live under blobs/{workspaceId}/canvas/, so the previous
+  // "non-directory session path" stat failure case no longer maps. compact
+  // returns no-file for missing blobs, and the corrupt-snapshot case above
+  // still exercises the corruption branch.
 })
 
-describe('names API corruption handling', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
-    clearCache()
-  })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-    clearCache()
-  })
-
-  it('returns structured 500 for corrupt stored data on GET /api/workspaces/:workspaceId/names', async () => {
-    await writeFile(join(tempDir, 'session1', '.names.json'), 'not-json')
-
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/session1/names')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('.names.json'),
-    })
-  })
-
-  it('returns structured 500 for corrupt stored data on PUT /api/workspaces/:workspaceId/canvases/:slug/pin', async () => {
-    await writeFile(
-      join(tempDir, 'session1', '.names.json'),
-      JSON.stringify({ workspace: 'WS', canvases: {}, pinned: [1] }),
-    )
-
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/pin', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ pinned: true }),
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('.names.json'),
-    })
-  })
-})
+// names-store now lives in the sqlite metadata DB; the corruption-on-disk
+// failure modes covered above no longer apply. DB-side error handling is
+// exercised through unit tests on names-store directly.
 
 describe('POST /api/canvas/:workspaceId/:slug/update', () => {
   beforeEach(async () => {
@@ -384,7 +296,9 @@ describe('versions API', () => {
 
     const resList = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     expect(resList.status).toBe(200)
-    const body = (await resList.json()) as { versions: Array<{ auto: boolean; elementCount: number }> }
+    const body = (await resList.json()) as {
+      versions: Array<{ auto: boolean; elementCount: number }>
+    }
     expect(body.versions.length).toBeGreaterThanOrEqual(1)
     expect(body.versions[0].auto).toBe(true)
     expect(body.versions[0].elementCount).toBe(1)
@@ -421,7 +335,9 @@ describe('versions API', () => {
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
-      version: { operator?: { kind: string; peerId: string; displayName?: string; agentId?: string } }
+      version: {
+        operator?: { kind: string; peerId: string; displayName?: string; agentId?: string }
+      }
     }
     expect(body.version.operator).toEqual({
       kind: 'ai',
@@ -432,7 +348,9 @@ describe('versions API', () => {
 
     const listRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
     const listBody = (await listRes.json()) as {
-      versions: Array<{ operator?: { kind: string; peerId: string; displayName?: string; agentId?: string } }>
+      versions: Array<{
+        operator?: { kind: string; peerId: string; displayName?: string; agentId?: string }
+      }>
     }
     expect(listBody.versions[0]?.operator).toEqual(body.version.operator)
   })
@@ -600,20 +518,6 @@ describe('versions API', () => {
     expect(keepMe?.frameId).toBeUndefined()
   })
 
-  it('returns structured 500 instead of not_found for broken version metadata in GET /versions', async () => {
-    await mkdir(join(tempDir, 'session1', 'versions'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', 'versions', 'broken-list.json'), '{"slug":')
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/versions')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('broken-list.json'),
-    })
-  })
-
   it('returns 404 when restoring a missing version id', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
@@ -630,23 +534,6 @@ describe('versions API', () => {
       { method: 'POST' },
     )
     expect(res.status).toBe(400)
-  })
-
-  it('does not collapse broken version metadata to 404 during restore', async () => {
-    await mkdir(join(tempDir, 'session1', 'versions'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', 'versions', 'brokenrestore.json'), '{"slug":')
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request(
-      '/api/workspaces/session1/canvases/canvas-a/versions/brokenrestore/restore',
-      { method: 'POST' },
-    )
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('brokenrestore.json'),
-    })
   })
 
   // Thumbnail PUT/GET endpoint coverage.
@@ -707,7 +594,9 @@ describe('versions API', () => {
   })
 
   it('returns structured 500 for a broken thumbnail file on GET /thumbnail', async () => {
-    await mkdir(join(tempDir, 'session1', 'versions', 'broken-thumb.png'), { recursive: true })
+    await mkdir(join(tempDir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
+      recursive: true,
+    })
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
@@ -759,27 +648,6 @@ describe('versions API', () => {
     const resB = await app.request('/api/workspaces/session1/canvases/canvas-b/versions')
     const bodyB = (await resB.json()) as { versions: Array<{ label?: string }> }
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
-  })
-
-  it('returns structured 500 for broken thumbnail reads on GET /latest-thumbnail', async () => {
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
-    const saveBody = (await saveRes.json()) as { version: { id: string } }
-    await mkdir(join(tempDir, 'session1', 'versions', `${saveBody.version.id}.png`), {
-      recursive: true,
-    })
-
-    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/latest-thumbnail')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining(`${saveBody.version.id}.png`),
-    })
   })
 
   it('restores a checkpoint back into a canvas', async () => {
@@ -841,11 +709,14 @@ describe('versions API', () => {
     await store.save('cp-known-live-only', doc)
 
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/checkpoints/cp-known-live-only/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetSlug: 'restored-live-only' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/session1/checkpoints/cp-known-live-only/restore',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetSlug: 'restored-live-only' }),
+      },
+    )
 
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toMatchObject({

@@ -1,37 +1,23 @@
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
 import { DATA_DIR } from '../config.js'
-import {
-  validateBranchName,
-  validateWorkspaceId,
-  validateSlug,
-} from '../validators.js'
-import { CorruptStoredDataError, isMissingFileError } from './corrupt-stored-data.js'
+import { validateBranchName, validateSlug, validateWorkspaceId } from '../validators.js'
+import { getDb } from './db/index.js'
+import { prepareDataDir } from './db/prepare.js'
+import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
 
-// Canvas-scoped branch state store. For each canvas it keeps:
-// - which branches exist (tipFrontiers / color / origin)
-// - which branch is currently HEAD
-// See docs/version-branching-spec.md §3.1.
+// Canvas-scoped branch state. Backed by:
+//   branches table         -> one row per branch keyed on (canvasId, name)
+//   canvases.currentBranch -> HEAD pointer per canvas row
 //
-// Persistence: {DATA_DIR}/{workspaceId}/branches/{slug}.json
-// - hierarchical slugs (for example "621/header") expand into subdirectories
-// - when the file is missing, loadCanvasBranches lazily returns a default main branch without writing
-//
-// Keep this separate from names-store (session-scoped workspace / pin) so branch data
-// does not create migration conflicts or schema bloat.
+// All accessors take (workspaceId, slug) so the public API stays stable
+// across the slug → canvasId migration. Internally the slug is resolved to
+// the stable canvas id before any branches/canvases write.
 
 export interface BranchMeta {
-  // Unique within the canvas. Follows the same rules as slug.
   name: string
-  // LoroDoc.frontiers() -> encodeFrontiers -> base64. Empty string means uninitialized.
   tipFrontiers: string
-  // Source branch at creation time. Informational after that. main itself stays undefined.
   baseBranch?: string
-  // Source version id, used by UI labels such as "branched from main @ v-abc".
   baseVersionId?: string
-  // #RRGGBB used by the UI chip and mini-graph lane.
   color: string
-  // ISO timestamp.
   createdAt: string
 }
 
@@ -40,12 +26,7 @@ export interface CanvasBranches {
   head: string
 }
 
-// Default color for the main branch. Matches the UI blue.
 export const DEFAULT_MAIN_COLOR = '#1971c2'
-
-function branchesPath(workspaceId: string, slug: string): string {
-  return join(DATA_DIR, workspaceId, 'branches', `${slug}.json`)
-}
 
 function defaultMain(): BranchMeta {
   return {
@@ -56,77 +37,54 @@ function defaultMain(): BranchMeta {
   }
 }
 
-function isValidBranchMeta(value: unknown): value is BranchMeta {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const v = value as Partial<BranchMeta>
-  if (typeof v.name !== 'string' || v.name.length === 0) return false
-  try {
-    validateBranchName(v.name)
-  } catch {
-    return false
-  }
-  if (typeof v.tipFrontiers !== 'string') return false
-  if (typeof v.color !== 'string') return false
-  if (typeof v.createdAt !== 'string') return false
-  if (v.baseBranch !== undefined) {
-    if (typeof v.baseBranch !== 'string') return false
-    try {
-      validateBranchName(v.baseBranch)
-    } catch {
-      return false
-    }
-  }
-  if (v.baseVersionId !== undefined && typeof v.baseVersionId !== 'string') return false
-  return true
+async function dbReady() {
+  await prepareDataDir(DATA_DIR)
+  return getDb(DATA_DIR)
 }
 
-// ── load (returns a default main branch when the file is missing; does not persist it) ──
-// If the file exists but JSON parsing or schema validation fails, throw CorruptStoredDataError.
-// Keep "missing" (ENOENT) distinct from "corrupt".
 export async function loadCanvasBranches(
   workspaceId: string,
   slug: string,
 ): Promise<CanvasBranches> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = branchesPath(workspaceId, slug)
-  let raw: string
-  try {
-    raw = await readFile(path, 'utf-8')
-  } catch (err) {
-    if (isMissingFileError(err)) {
-      return { branches: [defaultMain()], head: 'main' }
-    }
-    throw err
+  const db = await dbReady()
+  const canvasRow = await db
+    .selectFrom('canvases')
+    .select(['id', 'currentBranch'])
+    .where('workspaceId', '=', workspaceId)
+    .where('slug', '=', slug)
+    .executeTakeFirst()
+  if (!canvasRow) {
+    return { branches: [defaultMain()], head: 'main' }
   }
-  let parsed: Partial<CanvasBranches>
-  try {
-    parsed = JSON.parse(raw) as Partial<CanvasBranches>
-  } catch (err) {
-    throw new CorruptStoredDataError(
-      `Stored data at "${path}" is corrupt: invalid JSON (${(err as Error).message})`,
-    )
+  const branchRows = await db
+    .selectFrom('branches')
+    .select(['name', 'tipFrontiers', 'sourceBranchName', 'sourceVersionId', 'color', 'createdAt'])
+    .where('canvasId', '=', canvasRow.id)
+    .orderBy('createdAt', 'asc')
+    .orderBy('name', 'asc')
+    .execute()
+  if (branchRows.length === 0) {
+    return { branches: [defaultMain()], head: 'main' }
   }
-  if (!Array.isArray(parsed.branches) || !parsed.branches.every(isValidBranchMeta)) {
-    throw new CorruptStoredDataError(
-      `Stored data at "${path}" is corrupt: invalid branches[] schema`,
-    )
-  }
-  const branches = parsed.branches as BranchMeta[]
-  if (branches.length === 0) {
-    throw new CorruptStoredDataError(
-      `Stored data at "${path}" is corrupt: branches[] must contain at least one branch`,
-    )
-  }
-  if (typeof parsed.head !== 'string' || !branches.some((b) => b.name === parsed.head)) {
-    throw new CorruptStoredDataError(
-      `Stored data at "${path}" is corrupt: head "${String(parsed.head)}" is not present in branches[]`,
-    )
-  }
-  return { branches, head: parsed.head }
+  const branches: BranchMeta[] = branchRows.map((r) => ({
+    name: r.name,
+    tipFrontiers: r.tipFrontiers,
+    color: r.color ?? DEFAULT_MAIN_COLOR,
+    createdAt: new Date(r.createdAt).toISOString(),
+    ...(r.sourceBranchName !== null ? { baseBranch: r.sourceBranchName } : {}),
+    ...(r.sourceVersionId !== null ? { baseVersionId: r.sourceVersionId } : {}),
+  }))
+  const persistedHead = canvasRow.currentBranch
+  const head = branches.some((b) => b.name === persistedHead)
+    ? persistedHead
+    : branches.some((b) => b.name === 'main')
+      ? 'main'
+      : branches[0]!.name
+  return { branches, head }
 }
 
-// ── save (auto-creates parent directories) ──
 export async function saveCanvasBranches(
   workspaceId: string,
   slug: string,
@@ -134,12 +92,44 @@ export async function saveCanvasBranches(
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
-  const path = branchesPath(workspaceId, slug)
-  await mkdir(dirname(path), { recursive: true })
-  await writeFile(path, JSON.stringify(state, null, 2))
+  for (const branch of state.branches) {
+    validateBranchName(branch.name)
+  }
+  validateBranchName(state.head)
+  const db = await dbReady()
+  const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+  await db.transaction().execute(async (trx) => {
+    await trx.deleteFrom('branches').where('canvasId', '=', canvasId).execute()
+    if (state.branches.length > 0) {
+      await trx
+        .insertInto('branches')
+        .values(
+          state.branches.map((b) => ({
+            canvasId,
+            name: b.name,
+            tipFrontiers: b.tipFrontiers,
+            color: b.color ?? null,
+            sourceBranchName: b.baseBranch ?? null,
+            sourceVersionId: b.baseVersionId ?? null,
+            createdAt: parseIsoOrNow(b.createdAt),
+          })),
+        )
+        .execute()
+    }
+    await trx
+      .updateTable('canvases')
+      .set({ currentBranch: state.head, updatedAt: Date.now() })
+      .where('id', '=', canvasId)
+      .execute()
+  })
 }
 
-// Give these errors stable names so callers can distinguish conflict vs not found.
+function parseIsoOrNow(iso: string): number {
+  const t = Date.parse(iso)
+  return Number.isFinite(t) ? t : Date.now()
+}
+
+// Stable error names so callers can distinguish conflict vs not found.
 export class BranchConflictError extends Error {
   constructor(message: string) {
     super(message)
@@ -153,15 +143,7 @@ export class BranchNotFoundError extends Error {
   }
 }
 
-// Default color palette used when color is omitted.
-const BRANCH_COLOR_PALETTE = [
-  '#9333ea', // purple (experimental)
-  '#2f9e44', // green  (hotfix)
-  '#e03131', // red
-  '#f08c00', // amber
-  '#0c8599', // teal
-  '#e64980', // pink
-]
+const BRANCH_COLOR_PALETTE = ['#9333ea', '#2f9e44', '#e03131', '#f08c00', '#0c8599', '#e64980']
 
 function nextColor(existing: BranchMeta[]): string {
   const used = new Set(existing.map((b) => b.color.toLowerCase()))
@@ -171,9 +153,6 @@ function nextColor(existing: BranchMeta[]): string {
   return BRANCH_COLOR_PALETTE[existing.length % BRANCH_COLOR_PALETTE.length]!
 }
 
-// ── createBranch ──
-// initialTipFrontiers is resolved by the caller, typically with help from version-store.
-// Omit it to start with an empty string for uninitialized branches.
 export async function createBranch(
   workspaceId: string,
   slug: string,
@@ -206,9 +185,6 @@ export async function createBranch(
   return branch
 }
 
-// ── deleteBranch ──
-// main and the current HEAD cannot be deleted. This store returns 0 as the placeholder
-// unmergedCommits value; routes that need the real count must consult version-store.
 export async function deleteBranch(
   workspaceId: string,
   slug: string,
@@ -237,9 +213,6 @@ export async function deleteBranch(
   return { ok: true, unmergedCommits: 0 }
 }
 
-// ── setHead ──
-// Return NotFound for unknown branches. Idempotent: previousHead is the old head, head is the new head.
-// This store only persists metadata; route-level code performs any live LoroDoc checkout.
 export async function setHead(
   workspaceId: string,
   slug: string,
@@ -260,10 +233,6 @@ export async function setHead(
   return { head: name, previousHead }
 }
 
-// ── renameBranch ──
-// main cannot be renamed. Conflicts return Conflict, missing branches return NotFound.
-// If HEAD is renamed, update head too. Also rewrite baseBranch references that still point at the old name.
-// version-store branchName updates are handled separately in the route layer.
 export async function renameBranch(
   workspaceId: string,
   slug: string,
@@ -283,13 +252,10 @@ export async function renameBranch(
     throw new BranchNotFoundError(`Branch "${oldName}" not found on ${workspaceId}/${slug}`)
   }
   if (oldName === newName) {
-    // no-op
     return current
   }
   if (state.branches.some((b) => b.name === newName)) {
-    throw new BranchConflictError(
-      `Branch "${newName}" already exists on ${workspaceId}/${slug}`,
-    )
+    throw new BranchConflictError(`Branch "${newName}" already exists on ${workspaceId}/${slug}`)
   }
   const renamed: BranchMeta = { ...current, name: newName }
   const nextBranches = state.branches.map((b) => {
@@ -302,9 +268,6 @@ export async function renameBranch(
   return renamed
 }
 
-// ── getBranchTipBase64 ──
-// Getter used by route-layer merge flows to read target / source tipFrontiers.
-// Returns null for missing branches and preserves the empty string for uninitialized branches.
 export async function getBranchTipBase64(
   workspaceId: string,
   slug: string,
@@ -318,10 +281,6 @@ export async function getBranchTipBase64(
   return branch ? branch.tipFrontiers : null
 }
 
-// ── updateBranchTip ──
-// Overwrite a branch tipFrontiers value. Used to save the previous HEAD's current frontiers
-// during branch switches and to refresh the new HEAD tip after checkout.
-// Throws NotFound for missing branches.
 export async function updateBranchTip(
   workspaceId: string,
   slug: string,
@@ -347,4 +306,40 @@ export async function updateBranchTip(
     ],
   }
   await saveCanvasBranches(workspaceId, slug, next)
+}
+
+// ── slug rename ──
+// Update only canvases.slug. Branches and versions FK on canvasId so they do
+// not need to move; the blob path also uses canvasId so the .loro stays put.
+// Returns the canvas id whose slug just changed.
+export async function renameCanvasSlug(
+  workspaceId: string,
+  oldSlug: string,
+  newSlug: string,
+): Promise<{ canvasId: string }> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(oldSlug)
+  validateSlug(newSlug)
+  const db = await dbReady()
+  if (oldSlug === newSlug) {
+    const id = await getCanvasIdBySlug(db, workspaceId, oldSlug)
+    if (!id) {
+      throw new Error(`Canvas "${workspaceId}/${oldSlug}" not found`)
+    }
+    return { canvasId: id }
+  }
+  const id = await getCanvasIdBySlug(db, workspaceId, oldSlug)
+  if (!id) {
+    throw new Error(`Canvas "${workspaceId}/${oldSlug}" not found`)
+  }
+  const taken = await getCanvasIdBySlug(db, workspaceId, newSlug)
+  if (taken) {
+    throw new Error(`Canvas "${workspaceId}/${newSlug}" already exists`)
+  }
+  await db
+    .updateTable('canvases')
+    .set({ slug: newSlug, updatedAt: Date.now() })
+    .where('id', '=', id)
+    .execute()
+  return { canvasId: id }
 }

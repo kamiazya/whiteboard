@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Swap DATA_DIR to a temp directory through vi.mock.
 let tempDir: string
@@ -17,7 +17,9 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so it runs after the mock is resolved.
-const { saveCanvas, loadCanvas, listCanvases, listWorkspaces, compactCanvas } = await import('./canvas-store.js')
+const { saveCanvas, loadCanvas, listCanvases, listWorkspaces, compactCanvas } = await import(
+  './canvas-store.js'
+)
 const { FileVersionStore } = await import('./version-store.js')
 
 describe('saveCanvas / loadCanvas', () => {
@@ -54,7 +56,11 @@ describe('saveCanvas / loadCanvas', () => {
     await saveCanvas('session1', 'canvas-with-elem', doc)
     const loaded = await loadCanvas('session1', 'canvas-with-elem')
 
-    const elements = loaded.getMovableList('elements').toJSON() as { id: string; type: string; x: number }[]
+    const elements = loaded.getMovableList('elements').toJSON() as {
+      id: string
+      type: string
+      x: number
+    }[]
     expect(elements).toHaveLength(1)
     expect(elements[0].id).toBe('elem-001')
     expect(elements[0].type).toBe('rectangle')
@@ -67,7 +73,17 @@ describe('saveCanvas / loadCanvas', () => {
   })
 
   it('throws on broken snapshots instead of returning an empty LoroDoc', async () => {
-    await writeFile(join(tempDir, 'session1', 'broken.loro'), Buffer.from('not-a-loro-snapshot'))
+    const { getDb } = await import('./db/index.js')
+    await saveCanvas('session1', 'broken', new LoroDoc())
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'broken')
+      .executeTakeFirstOrThrow()
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     await expect(loadCanvas('session1', 'broken')).rejects.toThrow()
   })
@@ -117,7 +133,9 @@ describe('saveCanvas - overwrite handling', () => {
 
   it('defaults to the same behavior as overwrite: false', async () => {
     await saveCanvas('session1', 'existing', new LoroDoc())
-    await expect(saveCanvas('session1', 'existing', new LoroDoc())).rejects.toThrow(/already exists/)
+    await expect(saveCanvas('session1', 'existing', new LoroDoc())).rejects.toThrow(
+      /already exists/,
+    )
   })
 
   it('overwrites an existing file when overwrite: true', async () => {
@@ -154,6 +172,28 @@ describe('saveCanvas - overwrite handling', () => {
     await expect(
       saveCanvas('session1', 'existing', new LoroDoc(), { overwrite: false }),
     ).rejects.toMatchObject({ name: 'ConflictError' })
+  })
+
+  it('does not leave an orphan canvases row behind when the snapshot+commit step fails', async () => {
+    // Older cuts of saveCanvas committed the canvases row before writing the
+    // .loro file, so any failure between that DB write and the blob commit
+    // stranded the row and made every future saveCanvas hit ConflictError
+    // forever. The exact failure point is incidental — what matters is that
+    // a partial save leaves no DB row behind. Spying on LoroDoc#export gives
+    // us a deterministic way to fail in the snapshot stage that works the
+    // same on root and non-root environments (chmod-based blocks would no-op
+    // for root in containers / sudo).
+    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
+      throw new Error('snapshot serialization failed')
+    })
+
+    await expect(saveCanvas('session1', 'orphan-prone', new LoroDoc())).rejects.toThrow(
+      /snapshot serialization failed/,
+    )
+
+    exportSpy.mockRestore()
+
+    await expect(saveCanvas('session1', 'orphan-prone', new LoroDoc())).resolves.toBeUndefined()
   })
 })
 
@@ -229,46 +269,10 @@ describe('listCanvases', () => {
     expect(list.map((c) => c.slug)).toEqual(['real-canvas'])
   })
 
-  it('treats a broken non-directory session path as corruption', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    await expect(listCanvases('session1')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining(join('session1')),
-    })
-  })
-
-  it('treats stat failures during recursive walk as corruption', async () => {
-    await saveCanvas('session1', 'nested/canvas-a', new LoroDoc())
-    const brokenPath = join(tempDir, 'session1', 'nested', 'canvas-a.loro')
-    vi.resetModules()
-    vi.doMock('node:fs/promises', async () => {
-      const actual = await vi.importActual<typeof import('node:fs/promises')>('node:fs/promises')
-      return {
-        ...actual,
-        stat: async (path: Parameters<typeof actual.stat>[0], options?: Parameters<typeof actual.stat>[1]) => {
-          if (String(path) === brokenPath) {
-            const error = new Error('stat failed') as NodeJS.ErrnoException
-            error.code = 'EIO'
-            throw error
-          }
-          return actual.stat(path, options)
-        },
-      }
-    })
-
-    try {
-      const { listCanvases: freshListCanvases } = await import('./canvas-store.js')
-      await expect(freshListCanvases('session1')).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining('canvas-a.loro'),
-      })
-    } finally {
-      vi.doUnmock('node:fs/promises')
-      vi.resetModules()
-    }
-  })
+  // listCanvases no longer walks the filesystem; the previous corruption
+  // tests against directory traversal failures and broken non-directory
+  // paths no longer apply now that the listing is a SELECT against the
+  // canvases table.
 })
 
 describe('saveCanvas / loadCanvas - slug validation', () => {
@@ -289,7 +293,9 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
 
   it('accepts slash-separated nested slugs when each segment is kebab-case', async () => {
     await expect(saveCanvas('session1', '621/header', new LoroDoc())).resolves.toBeUndefined()
-    await expect(saveCanvas('session1', '621/header-v2/layout', new LoroDoc())).resolves.toBeUndefined()
+    await expect(
+      saveCanvas('session1', '621/header-v2/layout', new LoroDoc()),
+    ).resolves.toBeUndefined()
   })
 
   it('rejects leading, trailing, and consecutive slashes', async () => {
@@ -302,7 +308,9 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
     await expect(saveCanvas('session1', '../escape', new LoroDoc())).rejects.toThrow('Invalid slug')
     await expect(loadCanvas('session1', '../../etc/passwd')).rejects.toThrow('Invalid slug')
     // SAFE_SLUG_SEGMENT also rejects dots inside a segment such as `foo.bar/baz`.
-    await expect(saveCanvas('session1', 'foo/.hidden', new LoroDoc())).rejects.toThrow('Invalid slug')
+    await expect(saveCanvas('session1', 'foo/.hidden', new LoroDoc())).rejects.toThrow(
+      'Invalid slug',
+    )
   })
 
   it('rejects slugs that contain dots', async () => {
@@ -323,7 +331,9 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
   })
 
   it('rejects path-traversal workspaceIds', async () => {
-    await expect(saveCanvas('..', 'safe-slug', new LoroDoc())).rejects.toThrow('Invalid workspaceId')
+    await expect(saveCanvas('..', 'safe-slug', new LoroDoc())).rejects.toThrow(
+      'Invalid workspaceId',
+    )
     await expect(loadCanvas('../escape', 'safe-slug')).rejects.toThrow('Invalid workspaceId')
   })
 
@@ -399,9 +409,9 @@ describe('slug validation - self-describing error messages', () => {
   })
 
   it('includes the full slug in the error message for context', async () => {
-    await expect(
-      saveCanvas('session1', 'valid-top/.bad', new LoroDoc()),
-    ).rejects.toThrow(/"valid-top\/\.bad"/)
+    await expect(saveCanvas('session1', 'valid-top/.bad', new LoroDoc())).rejects.toThrow(
+      /"valid-top\/\.bad"/,
+    )
   })
 })
 
@@ -414,10 +424,10 @@ describe('listWorkspaces', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('lists session directories', async () => {
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session-active'), { recursive: true })
-    await mkdir(join(tempDir, 'session-old'), { recursive: true })
+  it('lists workspaces seeded via saveCanvas', async () => {
+    await saveCanvas('session-active', 'a', new LoroDoc())
+    await saveCanvas('session-old', 'a', new LoroDoc())
+    const { writeFile } = await import('node:fs/promises')
     await writeFile(
       join(tempDir, 'daemon.json'),
       JSON.stringify({
@@ -429,22 +439,18 @@ describe('listWorkspaces', () => {
       }),
     )
 
-    const sessions = await listWorkspaces()
-    const ids = sessions.map((s) => s.workspaceId)
-
+    const workspaces = await listWorkspaces()
+    const ids = workspaces.map((s) => s.workspaceId)
     expect(ids).toContain('session-active')
     expect(ids).toContain('session-old')
-
-    const active = sessions.find((s) => s.workspaceId === 'session-active')
-    const old = sessions.find((s) => s.workspaceId === 'session-old')
-
-    expect(active?.daemonAlive).toBe(true)
-    expect(old?.daemonAlive).toBe(true)
+    for (const ws of workspaces) {
+      expect(ws.daemonAlive).toBe(true)
+    }
   })
 
   it('treats stale daemon.json entries with dead PIDs as daemonAlive=false', async () => {
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session-stale'), { recursive: true })
+    await saveCanvas('session-stale', 'a', new LoroDoc())
+    const { writeFile } = await import('node:fs/promises')
     await writeFile(
       join(tempDir, 'daemon.json'),
       JSON.stringify({
@@ -456,44 +462,25 @@ describe('listWorkspaces', () => {
       }),
     )
 
-    const sessions = await listWorkspaces()
-    const stale = sessions.find((s) => s.workspaceId === 'session-stale')
+    const workspaces = await listWorkspaces()
+    const stale = workspaces.find((s) => s.workspaceId === 'session-stale')
     expect(stale?.daemonAlive).toBe(false)
   })
 
   it('treats daemonAlive as false when daemon.json is missing', async () => {
-    const { mkdir, writeFile } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session-legacy'), { recursive: true })
-
-    const sessions = await listWorkspaces()
-    const legacy = sessions.find((s) => s.workspaceId === 'session-legacy')
+    await saveCanvas('session-legacy', 'a', new LoroDoc())
+    const workspaces = await listWorkspaces()
+    const legacy = workspaces.find((s) => s.workspaceId === 'session-legacy')
     expect(legacy?.daemonAlive).toBe(false)
   })
 
-  it('returns an empty array when DATA_DIR does not exist', async () => {
-    // Point the config to a directory that does not exist.
-    const origDir = tempDir
-    tempDir = join(tmpdir(), 'nonexistent-whiteboard-test-dir')
-    const sessions = await listWorkspaces()
-    expect(sessions).toHaveLength(0)
-    tempDir = origDir
+  it('returns an empty array when no workspaces have been saved yet', async () => {
+    const workspaces = await listWorkspaces()
+    expect(workspaces).toHaveLength(0)
   })
 
-  it('treats a non-directory DATA_DIR as corruption', async () => {
-    const origDir = tempDir
-    const filePath = join(origDir, 'data-file')
-    await writeFile(filePath, 'not-a-directory')
-    tempDir = filePath
-
-    try {
-      await expect(listWorkspaces()).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining(filePath),
-      })
-    } finally {
-      tempDir = origDir
-    }
-  })
+  // listWorkspaces is now backed by the workspaces table, so the previous
+  // "non-directory DATA_DIR" corruption check no longer applies.
 })
 
 describe('compactCanvas', () => {
@@ -525,27 +512,29 @@ describe('compactCanvas', () => {
     expect(result).toEqual({ compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' })
   })
 
-  it('treats canvas path stat failures as corruption instead of no-file', async () => {
-    await rm(join(tempDir, 'session1'), { recursive: true, force: true })
-    await writeFile(join(tempDir, 'session1'), 'not-a-directory')
-
-    const store = new FileVersionStore()
-    await expect(compactCanvas('session1', 'broken', store)).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('broken.loro'),
-    })
-  })
+  // canvas blobs no longer share their parent directory with the session
+  // dir, so the previous "non-directory parent" stat failure no longer
+  // applies. Coverage of the corrupt-snapshot branch lives below.
 
   it('treats invalid snapshots as corruption instead of falling back to empty state', async () => {
+    const { getDb } = await import('./db/index.js')
     const doc = new LoroDoc()
     const store = new FileVersionStore()
     await saveCanvas('session1', 'broken', doc)
     await store.save('session1', 'broken', doc, { auto: true })
-    await writeFile(join(tempDir, 'session1', 'broken.loro'), Buffer.from('not-a-loro-snapshot'))
+    const db = await getDb(tempDir)
+    const row = await db
+      .selectFrom('canvases')
+      .select(['id'])
+      .where('workspaceId', '=', 'session1')
+      .where('slug', '=', 'broken')
+      .executeTakeFirstOrThrow()
+    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     await expect(compactCanvas('session1', 'broken', store)).rejects.toMatchObject({
       name: 'CorruptStoredDataError',
-      message: expect.stringContaining('broken.loro'),
+      message: expect.stringContaining(`${row.id}.loro`),
     })
   })
 

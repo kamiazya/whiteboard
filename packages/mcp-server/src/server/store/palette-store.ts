@@ -1,73 +1,63 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
 import { DATA_DIR } from '../config.js'
 import { validateWorkspaceId } from '../validators.js'
-import { assertPathWithinDir } from './path-guard.js'
-import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
+import { getDb } from './db/index.js'
+import { prepareDataDir } from './db/prepare.js'
+import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 
-const FILE_NAME = 'palette.json'
-
-function workspaceDir(workspaceId: string): string {
-  validateWorkspaceId(workspaceId)
-  const dir = join(DATA_DIR, workspaceId)
-  return assertPathWithinDir(dir, DATA_DIR, 'session path')
-}
-
-function palettePath(workspaceId: string): string {
-  return assertPathWithinDir(join(workspaceDir(workspaceId), FILE_NAME), DATA_DIR, 'session path')
-}
-
-function parsePalette(path: string, raw: string): Record<string, string> {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    throw corruptStoredData(path, 'expected valid palette JSON')
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw corruptStoredData(path, 'expected palette object')
-  }
-  const entries = Object.entries(parsed as Record<string, unknown>)
-  if (entries.some(([, value]) => typeof value !== 'string')) {
-    throw corruptStoredData(path, 'expected palette values to be strings')
-  }
-  return Object.fromEntries(entries) as Record<string, string>
-}
-
-async function savePalette(workspaceId: string, palette: Record<string, string>): Promise<void> {
-  const dir = workspaceDir(workspaceId)
-  await mkdir(dir, { recursive: true })
-  await writeFile(palettePath(workspaceId), JSON.stringify(palette, null, 2))
+async function dbReady() {
+  await prepareDataDir(DATA_DIR)
+  return getDb(DATA_DIR)
 }
 
 export async function loadPalette(workspaceId: string): Promise<Record<string, string>> {
-  const path = palettePath(workspaceId)
-  try {
-    const raw = await readFile(path, 'utf-8')
-    return parsePalette(path, raw)
-  } catch (error) {
-    if (isMissingFileError(error)) return {}
-    throw error
-  }
+  validateWorkspaceId(workspaceId)
+  const db = await dbReady()
+  const rows = await db
+    .selectFrom('palette')
+    .select(['key', 'value'])
+    .where('workspaceId', '=', workspaceId)
+    .execute()
+  const out: Record<string, string> = {}
+  for (const row of rows) out[row.key] = row.value
+  return out
 }
 
 export async function mergePaletteEntries(
   workspaceId: string,
   entries: Record<string, string>,
 ): Promise<Record<string, string>> {
-  const current = await loadPalette(workspaceId)
-  const next = { ...current, ...entries }
-  await savePalette(workspaceId, next)
-  return next
+  validateWorkspaceId(workspaceId)
+  const rows = Object.entries(entries).map(([key, value]) => ({ workspaceId, key, value }))
+  if (rows.length === 0) return loadPalette(workspaceId)
+  const db = await dbReady()
+  await upsertWorkspaceRow(db, workspaceId)
+  // Single multi-row insert with `excluded.value` so the conflict target keeps
+  // each incoming value rather than re-inserting the column-bound parameter
+  // from the first row. Avoids a per-key round-trip even though the typical
+  // palette is small.
+  await db
+    .insertInto('palette')
+    .values(rows)
+    .onConflict((oc) =>
+      oc.columns(['workspaceId', 'key']).doUpdateSet((eb) => ({
+        value: eb.ref('excluded.value'),
+      })),
+    )
+    .execute()
+  return loadPalette(workspaceId)
 }
 
 export async function deletePaletteEntries(
   workspaceId: string,
   keys: string[],
 ): Promise<Record<string, string>> {
-  const current = await loadPalette(workspaceId)
-  const next = { ...current }
-  for (const key of keys) delete next[key]
-  await savePalette(workspaceId, next)
-  return next
+  validateWorkspaceId(workspaceId)
+  if (keys.length === 0) return loadPalette(workspaceId)
+  const db = await dbReady()
+  await db
+    .deleteFrom('palette')
+    .where('workspaceId', '=', workspaceId)
+    .where('key', 'in', keys)
+    .execute()
+  return loadPalette(workspaceId)
 }

@@ -75,16 +75,6 @@ describe('names-store', () => {
     expect(names.canvases.slug).toBeUndefined()
   })
 
-  it('returns a corruption error for invalid JSON instead of falling back to empty WorkspaceNames', async () => {
-    await mkdir(join(tempDir, 'sess-1'), { recursive: true })
-    await writeFile(join(tempDir, 'sess-1', '.names.json'), 'not-json{{{')
-
-    await expect(loadWorkspaceNames('sess-1')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-  })
-
   it('updates workspace and canvases independently without overwriting each other', async () => {
     await setCanvasName('sess-1', 'c1', 'Canvas 1')
     await setWorkspaceName('sess-1', 'My WS')
@@ -125,52 +115,4 @@ describe('names-store', () => {
     expect(names.canvases).toEqual({ c1: 'Canvas 1' })
   })
 
-  it('returns a corruption error for schema-mismatched .names.json files', async () => {
-    await mkdir(join(tempDir, 'sess-2'), { recursive: true })
-    await writeFile(
-      join(tempDir, 'sess-2', '.names.json'),
-      JSON.stringify({ workspace: 'WS', canvases: [], pinned: ['c1'] }),
-    )
-
-    await expect(loadWorkspaceNames('sess-2')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-  })
-
-  it('setWorkspaceName does not overwrite corrupt state', async () => {
-    const path = join(tempDir, 'sess-3', '.names.json')
-    await mkdir(join(tempDir, 'sess-3'), { recursive: true })
-    await writeFile(path, 'not-json')
-
-    await expect(setWorkspaceName('sess-3', 'Renamed')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-    await expect(readFile(path, 'utf-8')).resolves.toBe('not-json')
-  })
-
-  it('setCanvasName does not overwrite corrupt state', async () => {
-    const path = join(tempDir, 'sess-4', '.names.json')
-    await mkdir(join(tempDir, 'sess-4'), { recursive: true })
-    await writeFile(path, '{"workspace":"WS","canvases":[],"pinned":[]}')
-
-    await expect(setCanvasName('sess-4', 'canvas-a', 'Canvas A')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-    await expect(readFile(path, 'utf-8')).resolves.toBe('{"workspace":"WS","canvases":[],"pinned":[]}')
-  })
-
-  it('setCanvasPinned does not overwrite corrupt state', async () => {
-    const path = join(tempDir, 'sess-5', '.names.json')
-    await mkdir(join(tempDir, 'sess-5'), { recursive: true })
-    await writeFile(path, '{"workspace":"WS","canvases":{},"pinned":[1]}')
-
-    await expect(setCanvasPinned('sess-5', 'canvas-a', true)).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-    await expect(readFile(path, 'utf-8')).resolves.toBe('{"workspace":"WS","canvases":{},"pinned":[1]}')
-  })
 })

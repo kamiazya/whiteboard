@@ -1,11 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Tests for the native Loro version store. It records frontiers in metadata,
-// and load() returns a past-state doc through checkout.
+// Tests for the native Loro version store backed by the sqlite metadata DB.
+// Frontiers and metadata live in the versions table; thumbnails live as PNG
+// blobs under blobs/{ws}/versions/.
 
 let tempDir: string
 
@@ -18,7 +19,7 @@ vi.mock('../config.js', () => ({
   DIST_APP_DIR: '/tmp/dist/app',
 }))
 
-const { FileVersionStore, pruneVersionArtifacts } = await import('./version-store.js')
+const { FileVersionStore } = await import('./version-store.js')
 
 function appendElement(doc: LoroDoc, id: string, type = 'rectangle'): void {
   const list = doc.getMovableList('elements')
@@ -33,7 +34,7 @@ function countElements(doc: LoroDoc): number {
   return list.filter((e) => !e.isDeleted).length
 }
 
-describe('FileVersionStore (Loro native)', () => {
+describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   let store: InstanceType<typeof FileVersionStore>
 
   beforeEach(async () => {
@@ -45,7 +46,7 @@ describe('FileVersionStore (Loro native)', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('save writes frontiers to metadata and returns a VersionEntry', async () => {
+  it('save records elementCount and returns a VersionEntry', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
     appendElement(doc, 'e2')
@@ -57,6 +58,7 @@ describe('FileVersionStore (Loro native)', () => {
     expect(entry.auto).toBe(true)
     expect(entry.label).toBeUndefined()
     expect(entry.hasThumbnail).toBe(false)
+    expect(entry.branchName).toBe('main')
   })
 
   it('round-trips save({ operator }) through list()', async () => {
@@ -85,12 +87,20 @@ describe('FileVersionStore (Loro native)', () => {
     expect(listed[0]?.operator).toEqual(entry.operator)
   })
 
+  it('list returns operator=undefined for entries saved without an operator', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const listed = await store.list('sess-1', 'canvas-a')
+    expect(listed).toHaveLength(1)
+    expect(listed[0]?.operator).toBeUndefined()
+  })
+
   it('load returns the past-state doc from save time', async () => {
     const live = new LoroDoc()
     appendElement(live, 'a')
     const entry = await store.save('sess-1', 'canvas-a', live, { auto: true, label: 'v1' })
 
-    // Add more elements after save().
     appendElement(live, 'b')
     appendElement(live, 'c')
     expect(countElements(live)).toBe(3)
@@ -113,9 +123,8 @@ describe('FileVersionStore (Loro native)', () => {
 
     await store.load('sess-1', entry.id, live)
 
-    // The live doc stays editable and unchanged.
     expect(countElements(live)).toBe(liveCountBefore)
-    appendElement(live, 'x3') // This should still be editable.
+    appendElement(live, 'x3')
     expect(countElements(live)).toBe(liveCountBefore + 1)
   })
 
@@ -123,50 +132,6 @@ describe('FileVersionStore (Loro native)', () => {
     const live = new LoroDoc()
     const past = await store.load('sess-1', 'nope', live)
     expect(past).toBeNull()
-  })
-
-  it('treats malformed meta JSON as corruption', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await writeFile(join(dir, 'brokenjson.json'), '{"slug":')
-
-    await expect(store.getFrontiersBase64('sess-1', 'brokenjson')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('brokenjson.json'),
-    })
-  })
-
-  it('treats wrong-shape metadata as corruption', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await writeFile(
-      join(dir, 'wrongshape.json'),
-      JSON.stringify({
-        slug: 'canvas-a',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        elementCount: 1,
-        auto: true,
-        frontiers: 123,
-      }),
-    )
-
-    await expect(store.getFrontiersBase64('sess-1', 'wrongshape')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('wrongshape.json'),
-    })
-  })
-
-  it('does not collapse corrupt metadata to null on load', async () => {
-    const live = new LoroDoc()
-    appendElement(live, 'a')
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await writeFile(join(dir, 'brokenload.json'), '{"slug":')
-
-    await expect(store.load('sess-1', 'brokenload', live)).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('brokenload.json'),
-    })
   })
 
   it('filters list by slug and returns newest first', async () => {
@@ -190,93 +155,6 @@ describe('FileVersionStore (Loro native)', () => {
     expect(listB[0].elementCount).toBe(2)
   })
 
-  it('returns corruption instead of skipping broken metadata in list()', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await writeFile(
-      join(dir, 'legacy.json'),
-      JSON.stringify({
-        slug: 'canvas-a',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        elementCount: 1,
-        auto: true,
-      }),
-    )
-    const doc = new LoroDoc()
-    appendElement(doc, 'x')
-    await store.save('sess-1', 'canvas-a', doc, { auto: true })
-
-    await expect(store.list('sess-1', 'canvas-a')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('legacy.json'),
-    })
-  })
-
-  it('legacy meta without operator is accepted and returns operator=undefined', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await writeFile(
-      join(dir, 'legacy-no-operator.json'),
-      JSON.stringify({
-        slug: 'canvas-a',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        elementCount: 1,
-        auto: true,
-        frontiers: 'AA==',
-        branchName: 'main',
-      }),
-    )
-
-    const listed = await store.list('sess-1', 'canvas-a')
-    expect(listed).toHaveLength(1)
-    expect(listed[0]?.operator).toBeUndefined()
-  })
-
-  it.each([
-    [
-      'invalid operator.kind',
-      {
-        kind: 'robot',
-        peerId: 'peer-1',
-      },
-    ],
-    [
-      'empty operator.peerId',
-      {
-        kind: 'human',
-        peerId: '',
-      },
-    ],
-    [
-      'wrong optional operator field type',
-      {
-        kind: 'system',
-        peerId: 'peer-1',
-        displayName: 42,
-      },
-    ],
-  ])('list rejects %s as corruption', async (_label, operator) => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await writeFile(
-      join(dir, 'bad-operator.json'),
-      JSON.stringify({
-        slug: 'canvas-a',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        elementCount: 1,
-        auto: true,
-        frontiers: 'AA==',
-        branchName: 'main',
-        operator,
-      }),
-    )
-
-    await expect(store.list('sess-1', 'canvas-a')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('bad-operator.json'),
-    })
-  })
-
   it('rejects invalid ids during validation', async () => {
     const live = new LoroDoc()
     await expect(store.load('sess-1', '../escape', live)).rejects.toThrow(/Invalid version id/i)
@@ -284,7 +162,6 @@ describe('FileVersionStore (Loro native)', () => {
     await expect(store.load('sess-1', '', live)).rejects.toThrow(/Invalid version id/i)
   })
 
-  // Thumbnail save/load support still applies to the native Loro store.
   it('round-trips saveThumbnail -> loadThumbnail and updates hasThumbnail', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
@@ -305,8 +182,28 @@ describe('FileVersionStore (Loro native)', () => {
     expect(res).toBeNull()
   })
 
+  it('refuses saveThumbnail for an id that does not belong to the workspace, leaving no orphan PNG', async () => {
+    // Older code wrote the blob first and then ran a workspace-scoped UPDATE.
+    // A foreign / hostile / deleted version id matched zero rows but the PNG
+    // was still on disk forever. The fix is "scope check before write" — this
+    // test pins that order so a future refactor can't reintroduce the orphan.
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    const ownEntry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    // ownEntry.id only exists in sess-1; pretending it belongs to sess-2 is
+    // exactly the cross-workspace case we want to reject.
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await expect(store.saveThumbnail('sess-2', ownEntry.id, png)).rejects.toThrow()
+    await expect(store.loadThumbnail('sess-2', ownEntry.id)).resolves.toBeNull()
+
+    // Sanity check: the legitimate workspace can still save / load.
+    await store.saveThumbnail('sess-1', ownEntry.id, png)
+    const loaded = await store.loadThumbnail('sess-1', ownEntry.id)
+    expect(loaded).not.toBeNull()
+  })
+
   it('does not swallow non-missing read failures in loadThumbnail', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
+    const dir = join(tempDir, 'blobs', 'sess-1', 'versions')
     await mkdir(join(dir, 'broken-thumb.png'), { recursive: true })
 
     await expect(store.loadThumbnail('sess-1', 'broken-thumb')).rejects.toMatchObject({
@@ -343,7 +240,24 @@ describe('FileVersionStore (Loro native)', () => {
     expect(manuals.some((v) => v.id === manualEntry.id)).toBe(true)
   })
 
-  // branchName support.
+  it('prune also removes the thumbnail blobs of evicted auto versions', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    // Save the first auto and attach a thumbnail before any eviction can happen.
+    const evictable = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await store.saveThumbnail('sess-1', evictable.id, png)
+    expect(await store.loadThumbnail('sess-1', evictable.id)).not.toBeNull()
+
+    // Push 50 more autos so the original one falls out of the retention window.
+    for (let i = 0; i < 50; i++) {
+      appendElement(doc, `auto-${i}`)
+      await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    }
+
+    expect(await store.loadThumbnail('sess-1', evictable.id)).toBeNull()
+  })
+
   describe('branchName', () => {
     it('persists opts.branchName into the entry and metadata', async () => {
       const doc = new LoroDoc()
@@ -365,16 +279,17 @@ describe('FileVersionStore (Loro native)', () => {
     })
 
     it('renameBranchInVersions rewrites branchName for every version on the target slug', async () => {
-      const store = new FileVersionStore()
       const a = new LoroDoc()
       appendElement(a, 'a1')
       const v1 = await store.save('sess-1', 'canvas-a', a, { auto: true, branchName: 'feature' })
       appendElement(a, 'a2')
       const v2 = await store.save('sess-1', 'canvas-a', a, { auto: true, branchName: 'feature' })
-      // Other slugs and other branch names must stay untouched.
       const b = new LoroDoc()
       appendElement(b, 'b1')
-      const vOther = await store.save('sess-1', 'canvas-b', b, { auto: true, branchName: 'feature' })
+      const vOther = await store.save('sess-1', 'canvas-b', b, {
+        auto: true,
+        branchName: 'feature',
+      })
       const vMain = await store.save('sess-1', 'canvas-a', a, { auto: true, branchName: 'main' })
 
       const renamedCount = await store.renameBranchInVersions(
@@ -393,134 +308,36 @@ describe('FileVersionStore (Loro native)', () => {
       expect(listB.find((v) => v.id === vOther.id)?.branchName).toBe('feature')
     })
 
-    it('returns 0 when versions/ is simply missing', async () => {
+    it('returns 0 when no version row matches the source branch', async () => {
       await expect(
         store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'experimental'),
       ).resolves.toBe(0)
     })
 
-    it('treats versions/ read failures as corruption', async () => {
-      await mkdir(join(tempDir, 'sess-1'), { recursive: true })
-      await writeFile(join(tempDir, 'sess-1', 'versions'), 'not-a-directory')
-
+    it('returns 0 for a no-op rename (oldName === newName)', async () => {
+      const doc = new LoroDoc()
+      appendElement(doc, 'e1')
+      await store.save('sess-1', 'canvas-a', doc, { auto: true, branchName: 'feature' })
       await expect(
-        store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'experimental'),
-      ).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining(join('sess-1', 'versions')),
-      })
-    })
-
-    it('treats version metadata read failures as corruption instead of skipping them', async () => {
-      const dir = join(tempDir, 'sess-1', 'versions')
-      await mkdir(join(dir, 'broken-read.json'), { recursive: true })
-
-      await expect(
-        store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'experimental'),
-      ).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining('broken-read.json'),
-      })
-    })
-
-    it('treats invalid JSON metadata as corruption instead of skipping it', async () => {
-      const dir = join(tempDir, 'sess-1', 'versions')
-      await mkdir(dir, { recursive: true })
-      await writeFile(join(dir, 'broken-json.json'), '{"slug":')
-
-      await expect(
-        store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'experimental'),
-      ).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining('broken-json.json'),
-      })
-    })
-
-    it('treats wrong-shape metadata as corruption instead of skipping it', async () => {
-      const dir = join(tempDir, 'sess-1', 'versions')
-      await mkdir(dir, { recursive: true })
-      await writeFile(
-        join(dir, 'wrong-shape.json'),
-        JSON.stringify({
-          slug: 'canvas-a',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          elementCount: 1,
-          auto: true,
-          frontiers: 123,
-        }),
-      )
-
-      await expect(
-        store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'experimental'),
-      ).rejects.toMatchObject({
-        name: 'CorruptStoredDataError',
-        message: expect.stringContaining('wrong-shape.json'),
-      })
-    })
-
-    it('hydrates missing branchName fields to "main" when listing legacy JSON files', async () => {
-      // Manually place a JSON file written by the old schema.
-      const { writeFile, mkdir } = await import('node:fs/promises')
-      const { join } = await import('node:path')
-      const dir = join(tempDir, 'sess-1', 'versions')
-      await mkdir(dir, { recursive: true })
-      const legacyMeta = {
-        slug: 'canvas-a',
-        createdAt: '2026-04-22T00:00:00.000Z',
-        elementCount: 1,
-        auto: true,
-        frontiers: 'AA==', // Dummy value with the right shape; checkout is not used here.
-        // branchName intentionally omitted.
-      }
-      await writeFile(join(dir, 'legacy01.json'), JSON.stringify(legacyMeta))
-
-      const listed = await store.list('sess-1', 'canvas-a')
-      expect(listed).toHaveLength(1)
-      expect(listed[0]?.branchName).toBe('main')
+        store.renameBranchInVersions('sess-1', 'canvas-a', 'feature', 'feature'),
+      ).resolves.toBe(0)
     })
   })
 
-  it('does not collapse broken metadata to null in earliestFrontiers', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await writeFile(join(dir, 'broken-oldest.json'), '{"slug":')
-
-    await expect(store.earliestFrontiers('sess-1', 'canvas-a')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('broken-oldest.json'),
-    })
+  it('earliestFrontiers returns null when no versions exist', async () => {
+    await expect(store.earliestFrontiers('sess-1', 'canvas-a')).resolves.toBeNull()
   })
 
-  it('treats missing files as a no-op in pruneVersionArtifacts', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
+  it('earliestFrontiers returns the oldest stored frontiers for the slug', async () => {
+    const a = new LoroDoc()
+    appendElement(a, 'a1')
+    await store.save('sess-1', 'canvas-a', a, { auto: true })
+    appendElement(a, 'a2')
+    await store.save('sess-1', 'canvas-a', a, { auto: true })
 
-    await expect(pruneVersionArtifacts(dir, ['missing'])).resolves.toEqual([])
-  })
-
-  it('surfaces broken versions directory layouts in pruneVersionArtifacts', async () => {
-    const brokenDir = join(tempDir, 'sess-1', 'versions-file')
-    await mkdir(join(tempDir, 'sess-1'), { recursive: true })
-    await writeFile(brokenDir, 'not-a-directory')
-
-    const errors = await pruneVersionArtifacts(brokenDir, ['v1'])
-    expect(errors).not.toHaveLength(0)
-    expect(errors[0]).toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('versions-file'),
-    })
-  })
-
-  it('does not silently treat unlink failures as success', async () => {
-    const dir = join(tempDir, 'sess-1', 'versions')
-    await mkdir(dir, { recursive: true })
-    await mkdir(join(dir, 'stuck.json'), { recursive: true })
-
-    const errors = await pruneVersionArtifacts(dir, ['stuck'])
-    expect(errors).not.toHaveLength(0)
-    expect(errors[0]).toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('stuck.json'),
-    })
+    const frontiers = await store.earliestFrontiers('sess-1', 'canvas-a')
+    expect(frontiers).not.toBeNull()
+    // Decoded Frontiers is a non-empty array of OpId-shaped objects.
+    expect(Array.isArray(frontiers)).toBe(true)
   })
 })

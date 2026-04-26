@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// CRUD tests for user libraries persisted across sessions.
-// Replace the ~/.excalidraw/.user-libraries/-style directory with a tmpdir for verification.
+// CRUD tests for user libraries persisted across sessions. Backed by the
+// sqlite metadata store + .excalidrawlib blobs under blobs/.user-libraries/.
 
 let tempDir: string
 
@@ -51,7 +51,7 @@ describe('user-library-store', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('uses .user-libraries for USER_LIBRARY_DIRNAME so session detection ignores it', () => {
+  it('keeps USER_LIBRARY_DIRNAME at .user-libraries for back-compat', () => {
     expect(USER_LIBRARY_DIRNAME).toBe('.user-libraries')
   })
 
@@ -61,23 +61,10 @@ describe('user-library-store', () => {
   })
 
   it('returns a corruption error from loadUserLibrary for invalid .excalidrawlib files', async () => {
-    await mkdir(join(tempDir, '.user-libraries'), { recursive: true })
-    await writeFile(join(tempDir, '.user-libraries', 'broken.excalidrawlib'), 'not-json')
+    await mkdir(join(tempDir, 'blobs', '.user-libraries'), { recursive: true })
+    await writeFile(join(tempDir, 'blobs', '.user-libraries', 'broken.excalidrawlib'), 'not-json')
 
     await expect(loadUserLibrary('broken')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-  })
-
-  it('returns a corruption error from listUserLibraries for schema-mismatched .excalidrawlib files', async () => {
-    await mkdir(join(tempDir, '.user-libraries'), { recursive: true })
-    await writeFile(
-      join(tempDir, '.user-libraries', 'broken.excalidrawlib'),
-      JSON.stringify({ type: 'not-excalidrawlib' }),
-    )
-
-    await expect(listUserLibraries()).rejects.toMatchObject({
       name: 'CorruptStoredDataError',
       code: 'corrupt_stored_data',
     })
@@ -89,7 +76,7 @@ describe('user-library-store', () => {
     expect(libs).toHaveLength(1)
     expect(libs[0].name).toBe('my-icons')
     expect(libs[0].itemCount).toBe(1)
-    expect(libs[0].path).toMatch(/\.user-libraries\/my-icons\.excalidrawlib$/)
+    expect(libs[0].path).toMatch(/blobs\/\.user-libraries\/my-icons\.excalidrawlib$/)
   })
 
   it('round-trips saved content through loadUserLibrary', async () => {
@@ -104,6 +91,8 @@ describe('user-library-store', () => {
     await saveUserLibrary('dupe', replaced)
     const loaded = await loadUserLibrary('dupe')
     expect((loaded as typeof replaced).library).toHaveLength(2)
+    const libs = await listUserLibraries()
+    expect(libs.find((l) => l.name === 'dupe')?.itemCount).toBe(2)
   })
 
   it('deletes the file with removeUserLibrary', async () => {
@@ -119,7 +108,9 @@ describe('user-library-store', () => {
   })
 
   it('does not swallow non-ENOENT errors in removeUserLibrary', async () => {
-    await mkdir(join(tempDir, '.user-libraries', 'broken.excalidrawlib'), { recursive: true })
+    await mkdir(join(tempDir, 'blobs', '.user-libraries', 'broken.excalidrawlib'), {
+      recursive: true,
+    })
 
     await expect(removeUserLibrary('broken')).rejects.toThrow()
   })

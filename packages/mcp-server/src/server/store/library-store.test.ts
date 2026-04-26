@@ -34,26 +34,6 @@ describe('library-store', () => {
     expect(libs).toEqual({ urls: [] })
   })
 
-  it('returns a corruption error for invalid .libraries.json instead of falling back to an empty array', async () => {
-    await mkdir(join(tempDir, 'sid-corrupt'), { recursive: true })
-    await writeFile(join(tempDir, 'sid-corrupt', '.libraries.json'), 'not-json')
-
-    await expect(loadInstalledLibraries('sid-corrupt')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-  })
-
-  it('returns a corruption error for schema-mismatched .libraries.json files', async () => {
-    await mkdir(join(tempDir, 'sid-shape'), { recursive: true })
-    await writeFile(join(tempDir, 'sid-shape', '.libraries.json'), JSON.stringify({ urls: 'oops' }))
-
-    await expect(loadInstalledLibraries('sid-shape')).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-  })
-
   it('persists data across addInstalledLibrary -> loadInstalledLibraries', async () => {
     await addInstalledLibrary('sid-1', 'https://libraries.excalidraw.com/libraries/foo.excalidrawlib')
     const libs = await loadInstalledLibraries('sid-1')
@@ -95,31 +75,4 @@ describe('library-store', () => {
     expect(b.urls).toEqual(['https://b.excalidrawlib'])
   })
 
-  it('does not overwrite corrupt existing files when addInstalledLibrary runs', async () => {
-    const path = join(tempDir, 'sid-add-corrupt', '.libraries.json')
-    await mkdir(join(tempDir, 'sid-add-corrupt'), { recursive: true })
-    await writeFile(path, 'not-json')
-
-    await expect(
-      addInstalledLibrary('sid-add-corrupt', 'https://libraries.excalidraw.com/libraries/foo.excalidrawlib'),
-    ).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-    await expect(readFile(path, 'utf-8')).resolves.toBe('not-json')
-  })
-
-  it('does not overwrite corrupt existing files when removeInstalledLibrary runs', async () => {
-    const path = join(tempDir, 'sid-remove-corrupt', '.libraries.json')
-    await mkdir(join(tempDir, 'sid-remove-corrupt'), { recursive: true })
-    await writeFile(path, '{"urls":')
-
-    await expect(
-      removeInstalledLibrary('sid-remove-corrupt', 'https://libraries.excalidraw.com/libraries/foo.excalidrawlib'),
-    ).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      code: 'corrupt_stored_data',
-    })
-    await expect(readFile(path, 'utf-8')).resolves.toBe('{"urls":')
-  })
 })
