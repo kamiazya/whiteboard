@@ -44,14 +44,21 @@ import { libraryCatalogListTool } from './tools/library-catalog.js'
 import { canvasInspectOutputSchema, canvasInspectTool } from './tools/canvas-inspect.js'
 import { insertTemplateTool, listTemplatesTool } from './tools/template.js'
 import {
+  assignGroupOutputSchema,
   assignToGroupTool,
   canvasClearTool,
+  clearedCountOutputSchema,
+  deletedElementsOutputSchema,
   deleteElementTool,
   deleteElementsTool,
   deleteGroupTool,
+  elementIdOutputSchema,
+  elementIdsOutputSchema,
+  listGroupsOutputSchema,
   listGroupsTool,
   moveElementsTool,
   reorderElementsTool,
+  reorderOutputSchema,
   updateElementTool,
 } from './tools/element-ops-tools.js'
 import {
@@ -81,29 +88,6 @@ import {
   WHITEBOARD_INSTALLED_LIBRARIES_URI,
   WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
-
-const genericOutputSchema = z.record(z.string(), z.unknown())
-
-const elementIdOutputSchema = z.object({ elementId: z.string() })
-
-const elementIdsOutputSchema = z.object({ elementIds: z.array(z.string()) })
-
-const deletedElementsOutputSchema = z.object({
-  deletedElementIds: z.array(z.string()),
-  deletedCount: z.number(),
-})
-
-const assignGroupOutputSchema = z.object({
-  groupId: z.string(),
-  elementIds: z.array(z.string()),
-})
-
-const reorderOutputSchema = z.object({
-  elementIds: z.array(z.string()),
-  action: z.string(),
-})
-
-const clearedCountOutputSchema = z.object({ clearedCount: z.number() })
 
 // Geometry primitive shared between several output shapes (library / template
 // listings, etc.). Schemas owned by individual tools live next to those tools.
@@ -236,15 +220,6 @@ const templateInsertOutputSchema = annotateBatchOutputSchema.extend({
   variables: z.record(z.string(), z.string()),
   bounds: boundsSchema,
   templateInstanceId: z.string(),
-})
-
-const listGroupsOutputSchema = z.object({
-  groups: z.array(
-    z.object({
-      groupId: z.string(),
-      memberIds: z.array(z.string()),
-    }),
-  ),
 })
 
 function structuredJsonResult<T extends object>(result: T) {
