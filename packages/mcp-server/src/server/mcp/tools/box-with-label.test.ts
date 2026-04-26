@@ -567,3 +567,41 @@ describe('decomposeBoxWithLabel', () => {
     })
   })
 })
+
+describe('decomposeBoxWithLabel - fillStyle defaults', () => {
+  it('leaves fillStyle undefined when no backgroundColor is set so the rectangle keeps the Excalidraw hand-drawn default', () => {
+    const [rect] = decomposeBoxWithLabel({
+      target: { x: 0, y: 0 },
+      width: 200,
+      height: 80,
+      text: 'hello',
+    })
+    expect(rect.backgroundColor).toBeUndefined()
+    expect(rect.fillStyle).toBeUndefined()
+  })
+
+  it('defaults fillStyle to "solid" when backgroundColor is themed so light text on a colored bg stays legible', () => {
+    const [rect] = decomposeBoxWithLabel({
+      target: { x: 0, y: 0 },
+      width: 200,
+      height: 80,
+      title: 'Client',
+      text: 'Browser / Mobile',
+      backgroundColor: '#1e88e5',
+      color: '#ffffff',
+    })
+    expect(rect.fillStyle).toBe('solid')
+  })
+
+  it('preserves an explicit fillStyle even when backgroundColor is set', () => {
+    const [rect] = decomposeBoxWithLabel({
+      target: { x: 0, y: 0 },
+      width: 200,
+      height: 80,
+      text: 'hello',
+      backgroundColor: '#1e88e5',
+      fillStyle: 'cross-hatch',
+    })
+    expect(rect.fillStyle).toBe('cross-hatch')
+  })
+})
