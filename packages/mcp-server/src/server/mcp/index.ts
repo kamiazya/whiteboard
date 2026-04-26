@@ -238,7 +238,12 @@ const boundsSchema = z.object({
 const createFrameOutputSchema = z.object({
   elementId: z.string(),
   bounds: boundsSchema,
-  assignedMembers: z.number(),
+  // tools/frame-embed.ts returns the ids of elements that were enclosed by
+  // the new frame (their frameId now points at it). Declaring this as
+  // z.number() previously turned every successful create_frame call into an
+  // MCP "Output validation error" even though the frame committed cleanly,
+  // so clients on the error path could wrongly retry.
+  assignedMembers: z.array(z.string()),
 })
 
 const updateFrameMembersOutputSchema = z.object({
