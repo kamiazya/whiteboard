@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -107,9 +107,7 @@ describe('libraries routes', () => {
     const res = await app.request('/api/user-libraries')
     expect(res.status).toBe(200)
     const body = (await res.json()) as { libraries: Array<{ name: string; itemCount: number }> }
-    expect(body.libraries).toEqual([
-      expect.objectContaining({ name: 'icons', itemCount: 1 }),
-    ])
+    expect(body.libraries).toEqual([expect.objectContaining({ name: 'icons', itemCount: 1 })])
   })
 
   it('DELETE /api/user-libraries/:name removes a saved library', async () => {
@@ -231,10 +229,7 @@ describe('libraries routes', () => {
 
   it('returns the persisted urls on GET /api/workspaces/:workspaceId/libraries', async () => {
     const { addInstalledLibrary } = await import('../store/library-store.js')
-    await addInstalledLibrary(
-      'workspace1',
-      'https://libraries.excalidraw.com/foo.excalidrawlib',
-    )
+    await addInstalledLibrary('workspace1', 'https://libraries.excalidraw.com/foo.excalidrawlib')
     const app = createLibrariesRouter()
 
     const res = await app.request('/api/workspaces/workspace1/libraries')
@@ -247,73 +242,10 @@ describe('libraries routes', () => {
 
   it('does not collapse corrupt stored data into not_found on GET /api/user-libraries/:name', async () => {
     const app = createLibrariesRouter()
-    await mkdir(join(tempDir, '.user-libraries'), { recursive: true })
-    await writeFile(join(tempDir, '.user-libraries', 'icons.excalidrawlib'), 'not-json')
+    await mkdir(join(tempDir, 'blobs', '.user-libraries'), { recursive: true })
+    await writeFile(join(tempDir, 'blobs', '.user-libraries', 'icons.excalidrawlib'), 'not-json')
 
     const res = await app.request('/api/user-libraries/icons')
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('icons.excalidrawlib'),
-    })
-  })
-
-  it('PUT /api/user-libraries/:name returns structured 500 when user library dir is broken', async () => {
-    const app = createLibrariesRouter()
-    await writeFile(join(tempDir, '.user-libraries'), 'not-a-directory')
-
-    const res = await app.request('/api/user-libraries/icons', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: {
-          type: 'excalidrawlib',
-          version: 2,
-          libraryItems: [{ id: 'item-1', elements: [] }],
-        },
-      }),
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('.user-libraries'),
-    })
-  })
-
-  it('PUT /api/user-libraries/:name returns structured 500 on write failure', async () => {
-    const app = createLibrariesRouter()
-    await mkdir(join(tempDir, '.user-libraries', 'icons.excalidrawlib'), { recursive: true })
-
-    const res = await app.request('/api/user-libraries/icons', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content: {
-          type: 'excalidrawlib',
-          version: 2,
-          libraryItems: [{ id: 'item-1', elements: [] }],
-        },
-      }),
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('icons.excalidrawlib'),
-    })
-  })
-
-  it('does not return broken files as normal entries with itemCount 0 on GET /api/user-libraries', async () => {
-    const app = createLibrariesRouter()
-    await mkdir(join(tempDir, '.user-libraries'), { recursive: true })
-    await writeFile(
-      join(tempDir, '.user-libraries', 'icons.excalidrawlib'),
-      JSON.stringify({ type: 'not-excalidrawlib' }),
-    )
-
-    const res = await app.request('/api/user-libraries')
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({

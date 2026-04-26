@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -31,7 +31,7 @@ describe('user-library-metadata-store', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('uses the .meta.json sidecar suffix', () => {
+  it('keeps the .meta.json suffix constant for back-compat', () => {
     expect(USER_LIBRARY_METADATA_FILENAME_SUFFIX).toBe('.meta.json')
   })
 
@@ -105,10 +105,25 @@ describe('user-library-metadata-store', () => {
     })
   })
 
-  it('does not overwrite a corrupt metadata file', async () => {
-    await mkdir(join(tempDir, '.user-libraries'), { recursive: true })
-    const path = join(tempDir, '.user-libraries', 'icons.meta.json')
-    await writeFile(path, 'not-json')
+  it('treats a manifestJson row that fails schema validation as corruption', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { prepareDataDir } = await import('./db/prepare.js')
+    await prepareDataDir(tempDir)
+    const db = await getDb(tempDir)
+    const now = Date.now()
+    // Seed a parent row so the FK on user_library_metadata.name resolves.
+    await db
+      .insertInto('user_libraries')
+      .values({ name: 'icons', itemCount: null, createdAt: now, updatedAt: now })
+      .onConflict((oc) => oc.column('name').doNothing())
+      .execute()
+    await db
+      .insertInto('user_library_metadata')
+      .values({ name: 'icons', manifestJson: 'not-json', updatedAt: now })
+      .onConflict((oc) =>
+        oc.column('name').doUpdateSet({ manifestJson: 'not-json', updatedAt: now }),
+      )
+      .execute()
 
     await expect(
       setUserLibraryMetadata('icons', 0, { aliases: { cloud_run: 13 } }),
@@ -117,24 +132,15 @@ describe('user-library-metadata-store', () => {
       code: 'corrupt_stored_data',
     })
 
-    await expect(readFile(path, 'utf-8')).resolves.toBe('not-json')
+    const row = await db
+      .selectFrom('user_library_metadata')
+      .select(['manifestJson'])
+      .where('name', '=', 'icons')
+      .executeTakeFirst()
+    expect(row?.manifestJson).toBe('not-json')
   })
 
-  it('leaves a valid JSON sidecar after atomic write without temp-file residue', async () => {
-    const manifest = await setUserLibraryMetadata('icons', 0, {
-      aliases: { cloud_run: 13 },
-      scales: { '13': 1.25 },
-    })
-    const dir = join(tempDir, '.user-libraries')
-    const files = await readdir(dir)
-
-    expect(files).toEqual(['icons.meta.json'])
-    await expect(readFile(join(dir, 'icons.meta.json'), 'utf-8')).resolves.toBe(
-      JSON.stringify(manifest, null, 2),
-    )
-  })
-
-  it('removeUserLibraryMetadata is a no-op for missing files', async () => {
+  it('removeUserLibraryMetadata is a no-op for missing rows', async () => {
     await expect(removeUserLibraryMetadata('ghost')).resolves.not.toThrow()
   })
 })

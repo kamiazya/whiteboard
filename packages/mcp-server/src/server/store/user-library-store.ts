@@ -1,24 +1,34 @@
-import { readFile, writeFile, mkdir, readdir, unlink } from 'node:fs/promises'
-import { join } from 'node:path'
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { DATA_DIR } from '../config.js'
 import { validateUserLibraryName } from '../validators.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
+import { getDb } from './db/index.js'
+import { prepareDataDir } from './db/prepare.js'
 
-// Store user-managed .excalidrawlib files across sessions.
-// Location: {DATA_DIR}/.user-libraries/{name}.excalidrawlib
-// Dot-prefixed directories under DATA_DIR are already excluded from canvas-store listWorkspaces.
+// User-managed `.excalidrawlib` libraries. Backed by:
+//   user_libraries table         -> registry row (name, itemCount, timestamps)
+//   blobs/.user-libraries/{name}.excalidrawlib  -> the JSON payload
+//
+// listUserLibraries reads the table; loadUserLibrary parses the FS payload so
+// callers still get the original .excalidrawlib structure. The path field on
+// UserLibrarySummary remains the absolute FS path so route handlers and MCP
+// tools that surface it to UIs do not change shape.
 
 export const USER_LIBRARY_DIRNAME = '.user-libraries'
 const EXT = '.excalidrawlib'
 
-// name must be a single segment. Allow only alphanumeric characters plus `-` / `_` / `.`,
-// and reject `/`, `\`, and `..` to prevent path traversal while keeping names UI-friendly.
-function userLibraryDir(): string {
-  return join(DATA_DIR, USER_LIBRARY_DIRNAME)
+function userLibraryBlobsDir(): string {
+  return join(DATA_DIR, 'blobs', USER_LIBRARY_DIRNAME)
 }
 
 function pathFor(name: string): string {
-  return join(userLibraryDir(), `${name}${EXT}`)
+  return join(userLibraryBlobsDir(), `${name}${EXT}`)
+}
+
+async function dbReady() {
+  await prepareDataDir(DATA_DIR)
+  return getDb(DATA_DIR)
 }
 
 function parseUserLibraryContent(path: string, raw: string): unknown {
@@ -56,44 +66,43 @@ function errorMessage(error: unknown): string {
   return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
 }
 
-// ── write ──
 export async function saveUserLibrary(name: string, content: unknown): Promise<void> {
   validateUserLibraryName(name)
-  const dir = userLibraryDir()
-  try {
-    await mkdir(dir, { recursive: true })
-  } catch (error) {
-    throw corruptStoredData(dir, `failed to create user library directory (${errorMessage(error)})`)
-  }
   const path = pathFor(name)
+  await mkdir(dirname(path), { recursive: true })
+  // Validate the payload up front so we never persist garbage that listing
+  // would later choke on.
+  const parsed = parseUserLibraryContent(path, JSON.stringify(content))
   try {
     await writeFile(path, JSON.stringify(content, null, 2))
   } catch (error) {
     throw corruptStoredData(path, `failed to write user library payload (${errorMessage(error)})`)
   }
+  const itemCount = countLibraryItems(parsed)
+  const now = Date.now()
+  const db = await dbReady()
+  await db
+    .insertInto('user_libraries')
+    .values({ name, itemCount, createdAt: now, updatedAt: now })
+    .onConflict((oc) => oc.column('name').doUpdateSet({ itemCount, updatedAt: now }))
+    .execute()
 }
 
-// ── read ──
 export async function loadUserLibrary(name: string): Promise<unknown | null> {
   validateUserLibraryName(name)
   const path = pathFor(name)
+  let raw: string
   try {
-    const raw = await readFile(path, 'utf-8')
-    return parseUserLibraryContent(path, raw)
+    raw = await readFile(path, 'utf-8')
   } catch (error) {
     if (isMissingFileError(error)) {
       return null
     }
-    if (error instanceof Error) {
-      throw error
-    }
-    return null
+    throw error
   }
+  return parseUserLibraryContent(path, raw)
 }
 
-// ── list ──
-// Return each entry with a lightweight item count (v1: library[], v2: libraryItems[]).
-// Invalid files fail loudly instead of being skipped.
 export interface UserLibrarySummary {
   name: string
   path: string
@@ -101,47 +110,28 @@ export interface UserLibrarySummary {
 }
 
 export async function listUserLibraries(): Promise<UserLibrarySummary[]> {
-  const dir = userLibraryDir()
-  let entries
-  try {
-    entries = await readdir(dir, { withFileTypes: true })
-  } catch (error) {
-    if (isMissingFileError(error)) {
-      return []
-    }
-    throw corruptStoredData(dir, 'failed to read user library directory')
-  }
-  const results: UserLibrarySummary[] = []
-  for (const entry of entries) {
-    if (!entry.isFile() || !entry.name.endsWith(EXT)) continue
-    const name = entry.name.slice(0, -EXT.length)
-    const p = join(dir, entry.name)
-    let raw: string
-    try {
-      raw = await readFile(p, 'utf-8')
-    } catch (error) {
-      throw corruptStoredData(
-        p,
-        error instanceof Error ? `failed to read payload (${error.message})` : 'failed to read payload',
-      )
-    }
-    const parsed = parseUserLibraryContent(p, raw)
-    results.push({ name, path: p, itemCount: countLibraryItems(parsed) })
-  }
-  // Keep the result order stable.
-  results.sort((a, b) => a.name.localeCompare(b.name))
-  return results
+  const db = await dbReady()
+  const rows = await db
+    .selectFrom('user_libraries')
+    .select(['name', 'itemCount'])
+    .orderBy('name', 'asc')
+    .execute()
+  return rows.map((r) => ({
+    name: r.name,
+    path: pathFor(r.name),
+    itemCount: r.itemCount ?? 0,
+  }))
 }
 
-// ── remove ──
 export async function removeUserLibrary(name: string): Promise<void> {
   validateUserLibraryName(name)
   try {
     await unlink(pathFor(name))
   } catch (error) {
-    if (isMissingFileError(error)) {
-      return
+    if (!isMissingFileError(error)) {
+      throw error
     }
-    throw error
   }
+  const db = await dbReady()
+  await db.deleteFrom('user_libraries').where('name', '=', name).execute()
 }
