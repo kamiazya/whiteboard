@@ -111,6 +111,24 @@ If the issue is client-specific:
 - Capture the mismatch between Inspector and the real client before changing server behavior.
 - Keep `docs/mcp-debugging.md` aligned with any new debugging workflow learned during the fix.
 
+## Zod Schema Discipline
+
+Use Zod as the **single source of truth** for every contract that crosses a process boundary (MCP tools, HTTP routes, persisted JSON, daemon registry, websocket messages).
+
+Concrete rules when adding or editing an MCP tool:
+
+- Declare each tool's `outputSchema` (and `inputSchema`) once. Tools are registered through `registerToolWithAnnotations`, which is generic over `O extends z.ZodTypeAny | undefined` and constrains the handler's return to `Promise<ToolHandlerReturn<O>>`. Never widen `outputSchema` to `unknown` or cast around the type binding to silence the compiler.
+- Annotate the matching `tools/*.ts` `execute` return type as `Promise<z.infer<typeof xxxOutputSchema>>` (or import the inferred type from the schema). A separately-written TypeScript interface alongside a Zod schema is the recipe that shipped the `create_frame` `assignedMembers: number` vs `string[]` bug — use `z.infer<>` instead.
+- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/mcp-e2e-checkpoint.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
+- When you fix a schema-vs-runtime drift, also commit the test or smoke step that would have caught it. Mutation-check the regression: revert the production fix, confirm `pnpm build` (compile-time guard) **or** `pnpm smoke:e2e` (runtime guard) fails, then restore.
+
+The same discipline applies elsewhere where a schema and a runtime payload travel separately:
+
+- Persisted JSON (`palette`, `manifestJson`, `frontiers`, etc.) → declare a Zod schema next to the parser, hydrate through `schema.parse(...)` instead of casting the JSON.
+- Hono routes whose response shape is consumed by typed clients (`packages/mcp-server/src/app/...`) → declare the response schema once and let both server and client import `z.infer<typeof responseSchema>`.
+
+If a contract is so loose that Zod would always be `z.unknown()` or `z.any()`, mark that intent in a comment so reviewers know it's deliberate, not an oversight.
+
 ## Tmp Workspace Discipline
 
 Store temporary working artifacts under top-level `./tmp/`, grouped by type instead of dropping files in the root of `tmp/`.
