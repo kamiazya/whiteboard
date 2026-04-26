@@ -152,6 +152,21 @@ async function main() {
   }
   console.log(`[e2e] annotate → rect`)
 
+  // Exercise create_frame so any drift between its zod outputSchema
+  // (assignedMembers etc.) and the runtime payload trips the SDK's structured-
+  // content validator at this layer instead of leaking out to MCP clients.
+  const rectId = ann.elementId ?? ann.elementIds?.[0]
+  if (!rectId) throw new Error('annotate returned no rectangle id to seed create_frame')
+  const frame = await callTool('create_frame', {
+    canvasId: created.id,
+    name: 'e2e-frame',
+    memberIds: [rectId],
+  })
+  if (!frame.elementId || !Array.isArray(frame.assignedMembers)) {
+    throw new Error(`create_frame returned unexpected shape: ${JSON.stringify(frame)}`)
+  }
+  console.log(`[e2e] create_frame → ${frame.elementId} (${frame.assignedMembers.length} members)`)
+
   const insBefore = await callTool('canvas_inspect', { canvasId: created.id })
   if (insBefore.elementCount < 1) throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
 
