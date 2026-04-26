@@ -22,9 +22,20 @@
 
 ## Quick install
 
-The published artifact is the npm package `@kamiazya/whiteboard-mcp`, served over MCP `stdio`.
+### Claude Code — plugin (recommended)
 
-### Claude Code
+In a Claude Code session, run:
+
+```
+/plugin marketplace add kamiazya/whiteboard
+/plugin install whiteboard@whiteboard-marketplace
+```
+
+This installs the MCP server **and** the bundled `/whiteboard`, `/whiteboard-coauthoring`, and `/whiteboard-audit` skills in one step.
+
+### Claude Code — MCP only
+
+If you only want the MCP server (no slash skills):
 
 ```bash
 claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest
@@ -40,11 +51,11 @@ command = "npx"
 args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 ```
 
+For the bundled skills under Codex, see [docs/development.md#bundled-skills-install](docs/development.md#bundled-skills-install).
+
 ### Verify
 
 In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The first call opens a Chromium tab pointed at the canvas and creates `~/.whiteboard/{workspaceId}/`.
-
-> **Skills are an opt-in extra.** The commands above start the MCP server but do **not** install the bundled `/whiteboard`, `/whiteboard-coauthoring`, and `/whiteboard-audit` skills. To enable them, install the package locally and link `node_modules/@kamiazya/whiteboard-mcp/skills/` into `~/.claude/skills/` and `~/.codex/skills/`. See [docs/development.md](docs/development.md#bundled-skills-install) for the full link / junction recipes.
 
 ## Workspaces
 
@@ -98,7 +109,6 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 
 - Live drawing and PNG export require a Chromium browser tab connected over WebSocket.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
-- `/plugin marketplace add` is not supported yet — there is no `marketplace.json`. Install via `claude mcp add` or `npx` for now.
 
 See [docs/configuration.md](docs/configuration.md#codex-sandbox-constraints) for sandbox quirks.
 
@@ -107,7 +117,6 @@ See [docs/configuration.md](docs/configuration.md#codex-sandbox-constraints) for
 Items intentionally not in this README yet — please file or upvote a tracking issue rather than adding noise inline:
 
 - A short animated demo GIF showing an agent prompt → tool calls → finished diagram.
-- A published Claude Code plugin marketplace so `/plugin marketplace add kamiazya/whiteboard` works.
 
 ## License
 
