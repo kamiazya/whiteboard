@@ -968,6 +968,83 @@ describe('versions API', () => {
     expect(body.elementCount).toBe(1)
   })
 
+  it('export-json writes to an explicit absolute outputPath when provided', async () => {
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    const map = list.insertContainer(0, new LoroMap())
+    map.set('id', 'rect-1')
+    map.set('type', 'rectangle')
+    doc.commit()
+    await saveCanvas('session1', 'canvas-a', doc)
+
+    const outputPath = join(tempDir, 'explicit', 'out.excalidraw')
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { filePath: string; elementCount: number }
+    expect(body.filePath).toBe(outputPath)
+  })
+
+  it('export-json rejects a relative outputPath with 400 invalid_output_path', async () => {
+    const doc = new LoroDoc()
+    doc.commit()
+    await saveCanvas('session1', 'canvas-a', doc)
+
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath: 'relative/out.excalidraw' }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
+  })
+
+  it('export-json refuses to overwrite an existing file by default and returns 409', async () => {
+    const doc = new LoroDoc()
+    doc.commit()
+    await saveCanvas('session1', 'canvas-a', doc)
+
+    const outputPath = join(tempDir, 'existing.excalidraw')
+    await writeFile(outputPath, 'OLD')
+
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath }),
+    })
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ error: 'output_exists' })
+  })
+
+  it('export-json overwrites the existing file when overwrite=true', async () => {
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    const map = list.insertContainer(0, new LoroMap())
+    map.set('id', 'rect-1')
+    map.set('type', 'rectangle')
+    doc.commit()
+    await saveCanvas('session1', 'canvas-a', doc)
+
+    const outputPath = join(tempDir, 'replace-me.excalidraw')
+    await writeFile(outputPath, 'OLD')
+
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath, overwrite: true }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { filePath: string }
+    expect(body.filePath).toBe(outputPath)
+  })
+
   it('returns 400 for an invalid checkpointId', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/sessions/session1/checkpoints/bad.id/restore', {

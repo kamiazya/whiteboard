@@ -13,6 +13,8 @@ interface ExportPngArgs {
   scale?: number
   minFontPx?: number
   frameId?: string
+  outputPath?: string
+  overwrite?: boolean
 }
 
 interface ExportErrorBody {
@@ -21,12 +23,14 @@ interface ExportErrorBody {
   hint?: string
 }
 
-function buildExportBody(args: ExportPngArgs): Record<string, number | string> {
-  const body: Record<string, number | string> = {}
+function buildExportBody(args: ExportPngArgs): Record<string, number | string | boolean> {
+  const body: Record<string, number | string | boolean> = {}
   if (args.padding !== undefined) body.padding = args.padding
   if (args.scale !== undefined) body.scale = args.scale
   if (args.minFontPx !== undefined) body.minFontPx = args.minFontPx
   if (args.frameId !== undefined) body.frameId = args.frameId
+  if (args.outputPath !== undefined) body.outputPath = args.outputPath
+  if (args.overwrite !== undefined) body.overwrite = args.overwrite
   return body
 }
 
@@ -34,7 +38,7 @@ async function requestExport(
   client: DaemonClient,
   sessionId: string,
   slug: string,
-  body: Record<string, number | string>,
+  body: Record<string, number | string | boolean>,
 ): Promise<Response> {
   return client.request(`/api/canvas/${sessionId}/${encodeURIComponent(slug)}/export`, {
     method: 'POST',
@@ -79,6 +83,9 @@ function throwExportError(res: Response, body: ExportErrorBody | null): never {
   if (body?.error === 'timeout') {
     throw new Error(body.message ?? 'Export timed out.')
   }
+  if (body?.error === 'invalid_output_path' || body?.error === 'output_exists') {
+    throw new Error(body.message ?? body.error)
+  }
   throw new Error(`Export failed: ${res.status} ${body?.message ?? 'unknown error'}`)
 }
 
@@ -109,6 +116,16 @@ export function exportPngTool() {
           type: 'string',
           description:
             'When set, export only the elements inside the given frame (plus the frame itself). Useful for section-scoped exports on large canvases to keep the resulting PNG small.',
+        },
+        outputPath: {
+          type: 'string',
+          description:
+            'Absolute path to write the PNG to. Useful for placing the export next to a source asset. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+        },
+        overwrite: {
+          type: 'boolean',
+          description:
+            'Replace an existing file at outputPath. Default: false. Without this, an existing outputPath is rejected with output_exists.',
         },
       },
       required: ['canvasId'],

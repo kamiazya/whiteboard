@@ -296,4 +296,73 @@ describe('exportPngTool execute', () => {
     const [url] = fetchMock.mock.calls[0]
     expect(url.toString()).toBe('http://localhost:3099/api/canvas/sid/621%2Fheader/export')
   })
+
+  it('forwards outputPath and overwrite to the daemon export route', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ filePath: '/abs/canvas.excalidraw.png' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const { exportPngTool } = await import('./export.js')
+    const tool = exportPngTool()
+    await tool.execute(
+      {
+        canvasId: 'sid/slug',
+        outputPath: '/abs/canvas.excalidraw.png',
+        overwrite: true,
+      },
+      client,
+    )
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init?.body as string)).toEqual({
+      outputPath: '/abs/canvas.excalidraw.png',
+      overwrite: true,
+    })
+  })
+
+  it('surfaces invalid_output_path errors from the export route', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: 'invalid_output_path',
+          message: 'outputPath must be an absolute path (received: relative.png)',
+        }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const { exportPngTool } = await import('./export.js')
+    const tool = exportPngTool()
+    await expect(
+      tool.execute(
+        { canvasId: 'sid/slug', outputPath: 'relative.png' },
+        client,
+      ),
+    ).rejects.toThrow(/absolute path/)
+  })
+
+  it('surfaces output_exists when the target file already exists', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          error: 'output_exists',
+          message:
+            'outputPath already exists. Pass overwrite=true to replace it: /abs/canvas.png',
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const { exportPngTool } = await import('./export.js')
+    const tool = exportPngTool()
+    await expect(
+      tool.execute(
+        { canvasId: 'sid/slug', outputPath: '/abs/canvas.png' },
+        client,
+      ),
+    ).rejects.toThrow(/already exists/)
+  })
 })
