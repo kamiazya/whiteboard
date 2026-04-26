@@ -5,7 +5,14 @@ import { z } from 'zod'
 import { DATA_DIR } from '../config.js'
 import { ensureDaemon } from '../../daemon/ensure-daemon.js'
 import { createDaemonClient } from './daemon-client.js'
-import { createCanvasTool, listCanvasTool, openCanvasTool } from './tools/canvas.js'
+import {
+  canvasCreateOutputSchema,
+  canvasListOutputSchema,
+  canvasOpenOutputSchema,
+  createCanvasTool,
+  listCanvasTool,
+  openCanvasTool,
+} from './tools/canvas.js'
 import { loadImageTool } from './tools/load.js'
 import { annotateTool } from './tools/annotate.js'
 import { annotateBatchTool } from './tools/annotate-batch.js'
@@ -64,34 +71,6 @@ import {
   WHITEBOARD_INSTALLED_LIBRARIES_URI,
   WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
-
-const canvasCreateOutputSchema = z.object({
-  id: z.string(),
-  url: z.string(),
-})
-
-const canvasListOutputSchema = z.object({
-  workspaces: z.array(
-    z.object({
-      workspaceId: z.string(),
-      daemonAlive: z.boolean(),
-      canvases: z.array(
-        z.object({
-          id: z.string(),
-          slug: z.string(),
-          url: z.string(),
-          updatedAt: z.string(),
-        }),
-      ),
-    }),
-  ),
-})
-
-const canvasOpenOutputSchema = z.object({
-  url: z.string(),
-  clientReady: z.boolean().optional(),
-  openFailed: z.string().optional(),
-})
 
 const exportPngOutputSchema = z.object({
   filePath: z.string(),
