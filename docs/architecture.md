@@ -40,6 +40,24 @@ This project is split into three main runtime layers:
 3. Local edits update the in-memory document and are persisted through daemon routes.
 4. WebSocket events broadcast document changes, version events, and branch head changes.
 
+## MCP tool surface
+
+The MCP server exposes a small, opinionated set of tools that match the canvas lifecycle.
+
+| Tool | Purpose |
+|---|---|
+| `canvas_create` / `canvas_list` / `canvas_inspect` / `canvas_open` | Canvas lifecycle. `canvas_open` supports `fullscreen: true` to hide the sidebar. |
+| `template_list` / `template_insert` | List and insert built-in template fragments. `template_insert` expands through `annotate_batch`, so inserted elements remain normally editable. See [templates.md](./templates.md). |
+| `annotate` / `annotate_batch` | Add elements, single-shot or batched with grid layout. |
+| `update_element` / `delete_element` / `move_elements` / `canvas_clear` | Edit elements. |
+| `viewport_set` | Control browser pan and zoom (`mode: "fit"` / `"move"`). |
+| `export_png` | Export PNG. On success it also returns `imageBase64` as MCP `ImageContent` to the LLM. |
+| `canvas_export_json` | Export in standard `.excalidraw` JSON format for round-tripping with Excalidraw desktop or excalidraw.com. |
+| `checkpoint_save` / `checkpoint_restore` | Save and restore state from snapshots under `.checkpoints/`. |
+| `load_image` | Import an external image into the canvas. |
+
+`viewport_set` and `export_png` send instructions to the browser over WebSocket and settle on ACK, which is why they need a connected canvas tab. See [wire-protocol.md](./wire-protocol.md) for the full WebSocket message shapes.
+
 ## Why Loro
 
 Loro is the CRDT layer used to keep whiteboard state mergeable and replayable.
