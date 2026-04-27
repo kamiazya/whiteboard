@@ -20,11 +20,11 @@ describe('Codex plugin spec contract', () => {
   it('keeps only plugin.json inside .codex-plugin and stores bundled components at the plugin root', () => {
     expect(readdirSync(codexPluginDir)).toEqual(['plugin.json'])
     expect(existsSync(resolve(pluginRoot, '.mcp.json'))).toBe(true)
-    expect(existsSync(resolve(pluginRoot, 'packages/mcp-server/skills'))).toBe(true)
+    expect(existsSync(resolve(pluginRoot, 'skills'))).toBe(true)
   })
 
   it('uses relative ./ paths for bundled Codex plugin components', () => {
-    expect(codexPlugin.skills).toBe('./packages/mcp-server/skills')
+    expect(codexPlugin.skills).toBe('./skills')
     expect(codexPlugin.mcpServers).toBe('./.mcp.json')
     expect(codexPlugin.skills.startsWith('./')).toBe(true)
     expect(codexPlugin.mcpServers.startsWith('./')).toBe(true)

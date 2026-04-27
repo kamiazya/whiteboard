@@ -26,7 +26,7 @@ describe('plugin support packaging', () => {
     const codexPlugin = readJson(resolve(repoRoot, '.codex-plugin/plugin.json'))
 
     expect(codexPlugin.name).toBe('whiteboard')
-    expect(codexPlugin.skills).toBe('./packages/mcp-server/skills')
+    expect(codexPlugin.skills).toBe('./skills')
     expect(codexPlugin.mcpServers).toBe('./.mcp.json')
   })
 
@@ -39,15 +39,18 @@ describe('plugin support packaging', () => {
     expect(whiteboardServer.args).toEqual(['-y', '@kamiazya/whiteboard-mcp@latest'])
   })
 
-  it('keeps Claude and Codex plugin manifests on the root release version track', () => {
+  it('keeps Claude, Codex, and Gemini plugin manifests on the root release version track', () => {
     const codexPlugin = readJson(resolve(repoRoot, '.codex-plugin/plugin.json'))
+    const geminiExtension = readJson(resolve(repoRoot, 'gemini-extension.json'))
     const syncedPaths = releasePlease.packages['.']['extra-files'].map(
       (entry: { path: string }) => entry.path,
     )
 
     expect(claudePlugin.version).toBe(rootPackage.version)
     expect(codexPlugin.version).toBe(rootPackage.version)
+    expect(geminiExtension.version).toBe(rootPackage.version)
     expect(syncedPaths).toContain('.claude-plugin/plugin.json')
     expect(syncedPaths).toContain('.codex-plugin/plugin.json')
+    expect(syncedPaths).toContain('gemini-extension.json')
   })
 })
