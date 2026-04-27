@@ -222,7 +222,11 @@ export function MergeDialog({
         )
         if (!res.ok) return
         const parsed = listVersionsResponseSchema.safeParse(await res.json())
-        if (cancelled || !parsed.success) return
+        if (cancelled) return
+        if (!parsed.success) {
+          setThumbs({ target: null, source: null })
+          return
+        }
         const latestFor = (name: string) => {
           const matches = parsed.data.versions
             .filter((v) => v.hasThumbnail && v.branchName === name)

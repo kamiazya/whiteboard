@@ -754,16 +754,15 @@ export function annotateTool() {
     ): Promise<z.infer<typeof annotateOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const sessionPalette = await apiGetPalette(client, workspaceId)
-      const unknownPaletteKeys: string[] = []
+      const unknownPaletteKeySet = new Set<string>()
       for (const colorArg of [args.color, args.backgroundColor]) {
         if (colorArg) {
           const { warningKey } = resolvePaletteColor(colorArg, sessionPalette)
-          if (warningKey) unknownPaletteKeys.push(warningKey)
+          if (warningKey) unknownPaletteKeySet.add(warningKey)
         }
       }
-      // Return box_with_label overflow diagnostics in the same shape as
-      // annotate_batch. This can be computed before fetching the snapshot.
-      const warnings: { overflow: boolean; requiredWidth: number; requiredHeight: number }[] = []
+      const unknownPaletteKeys = Array.from(unknownPaletteKeySet)
+      const warnings: z.infer<typeof annotateWarningSchema>[] = []
       if (
         args.type === 'box_with_label' &&
         (args.text !== undefined || args.title !== undefined) &&

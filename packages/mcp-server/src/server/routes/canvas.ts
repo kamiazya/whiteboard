@@ -466,12 +466,19 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    // Treat missing or non-JSON bodies as "no label / operator".
-    const raw = await c.req.json().catch(() => null)
+    // Empty body is valid (no label / operator); a non-empty body must parse as
+    // JSON and pass schema validation, otherwise return invalid_body.
+    const rawText = await c.req.text()
     let label: string | undefined
     let operator: OperatorInfo | undefined
-    if (raw !== null) {
-      const parsed = saveVersionRequestSchema.safeParse(raw)
+    if (rawText.length > 0) {
+      let json: unknown
+      try {
+        json = JSON.parse(rawText)
+      } catch {
+        return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
+      }
+      const parsed = saveVersionRequestSchema.safeParse(json)
       if (!parsed.success) {
         const message =
           parsed.error.issues[0]?.path[0] === 'operator'
@@ -607,10 +614,23 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    const parsed = exportCanvasJsonRequestSchema.safeParse(
-      await c.req.json().catch(() => ({})),
-    )
-    const body = parsed.success ? parsed.data : {}
+    const rawText = await c.req.text()
+    const body =
+      rawText.length === 0
+        ? exportCanvasJsonRequestSchema.parse({})
+        : await (async () => {
+            let json: unknown
+            try {
+              json = JSON.parse(rawText)
+            } catch {
+              return null
+            }
+            const parsed = exportCanvasJsonRequestSchema.safeParse(json)
+            return parsed.success ? parsed.data : null
+          })()
+    if (body === null) {
+      return c.json({ error: 'invalid_body', message: 'invalid export options' }, 400)
+    }
     const includeCustomFields = body.includeCustomFields === true
     const outputPath =
       typeof body.outputPath === 'string' && body.outputPath.length > 0 ? body.outputPath : undefined

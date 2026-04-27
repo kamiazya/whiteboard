@@ -71,6 +71,7 @@ export default function VersionTimeline({
       if (res.ok) {
         const parsed = listVersionsResponseSchema.safeParse(await res.json())
         if (parsed.success) setVersions(parsed.data.versions)
+        else setVersions([])
       }
     } finally {
       setLoading(false)

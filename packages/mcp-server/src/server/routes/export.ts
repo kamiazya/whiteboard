@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { join, dirname } from 'node:path'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
 import {
   type ExportErrorBody,
   type ExportResponse,
@@ -45,9 +46,28 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     }
 
     // The body is optional. Forward { padding?, scale?, minFontPx?, frameId? }
-    // to the browser. Treat Content-Length 0 or JSON parse failures as "no options".
-    const parsed = exportRequestSchema.safeParse(await c.req.json().catch(() => ({})))
-    const body = parsed.success ? parsed.data : {}
+    // to the browser. Empty body is fine; malformed JSON or schema-invalid
+    // payloads are rejected with 400 instead of being silently dropped.
+    const rawText = await c.req.text()
+    let body: z.infer<typeof exportRequestSchema> = {}
+    if (rawText.length > 0) {
+      let json: unknown
+      try {
+        json = JSON.parse(rawText)
+      } catch {
+        const errBody: ExportErrorBody = { error: 'invalid_request', message: 'malformed JSON' }
+        return c.json(errBody, 400)
+      }
+      const parsed = exportRequestSchema.safeParse(json)
+      if (!parsed.success) {
+        const errBody: ExportErrorBody = {
+          error: 'invalid_request',
+          message: 'invalid export options',
+        }
+        return c.json(errBody, 400)
+      }
+      body = parsed.data
+    }
     const options: Pick<typeof body, 'padding' | 'scale' | 'minFontPx' | 'frameId'> = {}
     if (body.padding !== undefined) options.padding = body.padding
     if (body.scale !== undefined) options.scale = body.scale

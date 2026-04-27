@@ -127,7 +127,9 @@ describe('publish contract', () => {
     // (the npx and claude-mcp-add paths only start the MCP server; skills are an opt-in extra).
     expect(developmentDoc).toContain('## Bundled skills install')
     expect(developmentDoc).toContain('node_modules/@kamiazya/whiteboard-mcp')
-    expect(developmentDoc).toContain('"$PKG/skills/whiteboard"')
+    expect(developmentDoc).toContain('"$PKG/skills/drawing-visuals"')
+    expect(developmentDoc).toContain('"$PKG/skills/coauthoring-visuals"')
+    expect(developmentDoc).toContain('"$PKG/skills/auditing-workspaces"')
     expect(developmentDoc).toContain('### macOS / Linux')
     expect(developmentDoc).toContain('### Windows (junction or copy)')
     expect(developmentDoc).toContain('$skillRoots = @(')
