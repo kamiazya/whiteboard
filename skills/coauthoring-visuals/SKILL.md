@@ -1,17 +1,17 @@
 ---
-name: whiteboard-coauthoring
-description: A collaborative workflow for AI and humans to evolve diagrams together on Excalidraw. Use it when you want to reduce misunderstanding and under-explained frames by gathering context, structuring frame by frame, and running fresh-viewer tests.
+name: coauthoring-visuals
+description: Evolve Excalidraw visuals collaboratively through structured context gathering, frame-by-frame refinement, and fresh-viewer testing. Use when visuals feel misunderstood, under-explained, or need tightening together.
 ---
 
-# whiteboard-coauthoring
+# coauthoring-visuals
 
 This skill is not a drawing API reference.
-`whiteboard` is the toolbox for how to draw.
-`whiteboard-coauthoring` is the workflow for what to ask, in what order, how to tighten each frame, and how to break the result from a fresh viewer's perspective.
+`drawing-visuals` is the toolbox for how to draw.
+`coauthoring-visuals` is the workflow for what to ask, in what order, how to tighten each frame, and how to break the result from a fresh viewer's perspective.
 
 Open [`references/workflow-map.md`](./references/workflow-map.md) first and decide which stage you are entering.
 
-- For canvas operations and diagram recipes, see [`../whiteboard/SKILL.md`](../whiteboard/SKILL.md)
+- For canvas operations and diagram recipes, see [`../drawing-visuals/SKILL.md`](../drawing-visuals/SKILL.md)
 - For smoke / regression validation, see `.claude/skills/whiteboard-smoke/SKILL.md` in the repo (for repo developers)
 - For a quick visual-direction pass, see [`references/visual-direction.md`](./references/visual-direction.md)
 - For depth and visual-argument judgment in technical diagrams, see [`references/visual-argument.md`](./references/visual-argument.md)

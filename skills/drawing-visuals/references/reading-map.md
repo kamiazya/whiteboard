@@ -5,7 +5,7 @@ Read only this first.
 `style-reference.md` and `visual-vocabulary.md` are the deep references.
 Do **not** open them end-to-end every time. Pick the diagram type first, then open only the notes you need.
 
-If the request is really about **how to collaborate on the diagram itself** such as "let's evolve this together," "tighten it frame by frame," or "stress-test it for a fresh viewer," open [`../../whiteboard-coauthoring/SKILL.md`](../../whiteboard-coauthoring/SKILL.md) before choosing any notes.
+If the request is really about **how to collaborate on the diagram itself** such as "let's evolve this together," "tighten it frame by frame," or "stress-test it for a fresh viewer," open [`../../coauthoring-visuals/SKILL.md`](../../coauthoring-visuals/SKILL.md) before choosing any notes.
 
 ## Which Note To Open
 

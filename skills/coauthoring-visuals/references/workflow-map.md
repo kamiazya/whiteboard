@@ -36,8 +36,8 @@ If you are unsure which stage to enter, start here.
 
 ## Division Of Labor
 
-- `whiteboard`: drawing and canvas operations such as boxes, arrows, frames, export
-- `whiteboard-coauthoring`: the collaboration workflow for building the diagram
+- `drawing-visuals`: drawing and canvas operations such as boxes, arrows, frames, export
+- `coauthoring-visuals`: the collaboration workflow for building the visual
 - `whiteboard-smoke` (for repo developers): post-change validation of skills and tools
 
 If a slide deck is chosen, open [`./slide-deck-patterns.md`](./slide-deck-patterns.md) and confirm one-slide-one-claim plus pacing.
