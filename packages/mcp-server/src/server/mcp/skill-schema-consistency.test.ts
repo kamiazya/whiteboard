@@ -39,12 +39,12 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SKILL_PATH = resolve(
   __dirname,
-  '../../../skills/whiteboard/SKILL.md',
+  '../../../../../skills/drawing-visuals/SKILL.md',
 )
 // SKILL.md uses progressive disclosure and moves details into references/*.md,
 // so schema string matching also reads the reference notes.
 const SKILL_REFERENCE_PATHS = [
-  resolve(__dirname, '../../../skills/whiteboard/references/library-first-workflow.md'),
+  resolve(__dirname, '../../../../../skills/drawing-visuals/references/library-first-workflow.md'),
 ]
 const skillText = [SKILL_PATH, ...SKILL_REFERENCE_PATHS]
   .map((p) => readFileSync(p, 'utf-8'))
