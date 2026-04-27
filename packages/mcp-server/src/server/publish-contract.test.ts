@@ -30,6 +30,8 @@ describe('publish contract', () => {
   const architectureDoc = readFileSync(resolve(repoRoot, 'docs/architecture.md'), 'utf-8')
   const securityModelDoc = readFileSync(resolve(repoRoot, 'docs/security-model.md'), 'utf-8')
   const wireProtocolDoc = readFileSync(resolve(repoRoot, 'docs/wire-protocol.md'), 'utf-8')
+  const developmentDoc = readFileSync(resolve(repoRoot, 'docs/development.md'), 'utf-8')
+  const claudeMarketplace = readJson(resolve(repoRoot, '.claude-plugin/marketplace.json'))
   const tsconfigServer = readJson(resolve(repoRoot, 'packages/mcp-server/tsconfig.server.json'))
   const vitestShared = readFileSync(resolve(repoRoot, 'packages/mcp-server/vitest.shared.ts'), 'utf-8')
   const rootReleaseConfig = readJson(resolve(repoRoot, 'release-please-config.json'))
@@ -103,23 +105,34 @@ describe('publish contract', () => {
   })
 
   it('documents npm install via the published CLI surface instead of deep dist paths', () => {
-    expect(rootReadme).toContain('"command": "npx"')
-    expect(rootReadme).toContain('"args": ["-y", "@kamiazya/whiteboard-mcp@latest"]')
-    expect(rootReadme).toContain('### Server-only install (`npx`)')
-    expect(rootReadme).toContain('### Full install with shared skills')
-    expect(rootReadme).toContain('The `npx` path starts the MCP server only. It does not install `/whiteboard` skills.')
-    expect(rootReadme).toContain('The only public release artifact today is the npm package `@kamiazya/whiteboard-mcp`.')
-    expect(rootReadme).toContain('The committed `.claude-plugin/`, `.codex-plugin/`, and `.mcp.json` files are repo-local wrappers and examples, not separately published release artifacts.')
-    expect(rootReadme).toContain('### Link the shared skills')
-    expect(rootReadme).toContain('#### Mac / Linux')
-    expect(rootReadme).toContain('#### Windows (junction or copy)')
-    expect(rootReadme).toContain('$skillRoots = @(')
-    expect(rootReadme).toContain('foreach ($root in $skillRoots)')
-    expect(rootReadme).toContain('foreach ($skill in $skills)')
-    expect(rootReadme).toContain('node_modules/@kamiazya/whiteboard-mcp/skills')
+    // Root README documents the three install paths (marketplace, claude mcp add, Codex TOML)
+    expect(rootReadme).toContain('/plugin marketplace add kamiazya/whiteboard')
+    expect(rootReadme).toContain('/plugin install whiteboard@whiteboard-marketplace')
+    expect(rootReadme).toContain('claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest')
     expect(rootReadme).toContain('command = "npx"')
     expect(rootReadme).toContain('args = ["-y", "@kamiazya/whiteboard-mcp@latest"]')
     expect(rootReadme).not.toContain('node_modules/@kamiazya/whiteboard-mcp/dist/server/mcp/index.js')
+
+    // The marketplace plugin manifest points at the existing .claude-plugin/plugin.json
+    // and the marketplace name in README must match the marketplace.json declaration.
+    expect(claudeMarketplace.name).toBe('whiteboard-marketplace')
+    expect(claudeMarketplace.plugins[0].name).toBe('whiteboard')
+    expect(claudeMarketplace.plugins[0].source).toBe('./')
+    // marketplace.json versions must stay aligned with the published mcp-server package
+    // (release-please-config.json tracks both jsonpaths in extra-files).
+    expect(claudeMarketplace.metadata.version).toBe(mcpPackage.version)
+    expect(claudeMarketplace.plugins[0].version).toBe(mcpPackage.version)
+
+    // The manual symlink / junction recipes for skill linking moved to docs/development.md
+    // (the npx and claude-mcp-add paths only start the MCP server; skills are an opt-in extra).
+    expect(developmentDoc).toContain('## Bundled skills install')
+    expect(developmentDoc).toContain('node_modules/@kamiazya/whiteboard-mcp')
+    expect(developmentDoc).toContain('"$PKG/skills/whiteboard"')
+    expect(developmentDoc).toContain('### macOS / Linux')
+    expect(developmentDoc).toContain('### Windows (junction or copy)')
+    expect(developmentDoc).toContain('$skillRoots = @(')
+    expect(developmentDoc).toContain('foreach ($root in $skillRoots)')
+    expect(developmentDoc).toContain('foreach ($skill in $skills)')
   })
 
   it('explains why dist and skills are both shipped in the npm tarball', () => {

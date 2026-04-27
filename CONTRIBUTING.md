@@ -67,6 +67,38 @@ This is not yet enforced as a hard CI gate because the existing codebase still h
 - README / AGENTS.md updated if the public surface changed
 - No secrets, `.env`, or large binaries committed
 
+## Release / Publish
+
+Releases are automated with [release-please](https://github.com/googleapis/release-please). Manual `npm publish` should not normally be needed.
+
+1. Push to `main` using Conventional Commits.
+2. The `release` GitHub Actions workflow opens or updates a `chore(main): release X.Y.Z` PR that bumps `package.json` and updates the changelog.
+3. A maintainer reviews and merges that PR.
+4. The workflow runs again from the merge with `release_created=true` and performs:
+   - `pnpm install --frozen-lockfile`
+   - `pnpm test` / `pnpm typecheck` / `pnpm smoke:e2e`
+   - `pnpm build` → `npm publish`
+   - GitHub Release + tag creation
+
+### Local checks before merging a release PR
+
+```bash
+pnpm test
+pnpm typecheck
+pnpm smoke:e2e
+npm pack --dry-run   # verify the tarball includes dist/, skills/, package README, and LICENSE
+```
+
+### Config files
+
+- [`release-please-config.json`](release-please-config.json) — release type and tag format
+- [`.release-please-manifest.json`](.release-please-manifest.json) — current version source of truth
+- [`.github/workflows/release.yml`](.github/workflows/release.yml) — workflow implementation
+
+### PR title rule
+
+The PR title becomes the squash-merge commit message that release-please reads. Use a Conventional Commit title (`fix:`, `feat(scope):`, `chore:`, …). CI rejects tool prefixes such as `[codex] ...`. Release-please PRs follow the same rule (`chore(main): release X.Y.Z`, `chore(main): release mcp-server X.Y.Z`) — the `v` prefix only applies to the resulting tag (`include-v-in-tag: true`), not the commit / PR title.
+
 ## Security
 
 Do **not** open public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md).

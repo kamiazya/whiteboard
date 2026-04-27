@@ -1,0 +1,41 @@
+{
+  "name": "whiteboard-marketplace",
+  "owner": {
+    "name": "kamiazya",
+    "url": "https://github.com/kamiazya"
+  },
+  "metadata": {
+    "description": "Claude Code plugin distribution for the @kamiazya/whiteboard collaborative Excalidraw MCP.",
+    "version": "0.0.4"
+  },
+  "plugins": [
+    {
+      "name": "whiteboard",
+      "source": "./",
+      "description": "Collaborative Excalidraw canvas for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the bundled /whiteboard, /whiteboard-coauthoring, and /whiteboard-audit skills.",
+      "version": "0.0.4",
+      "author": {
+        "name": "kamiazya",
+        "url": "https://github.com/kamiazya"
+      },
+      "homepage": "https://github.com/kamiazya/whiteboard",
+      "repository": "https://github.com/kamiazya/whiteboard",
+      "license": "MIT",
+      "keywords": [
+        "excalidraw",
+        "diagramming",
+        "mcp",
+        "whiteboard",
+        "claude-code",
+        "codex"
+      ],
+      "category": "productivity",
+      "tags": [
+        "diagramming",
+        "mcp",
+        "excalidraw",
+        "visualization"
+      ]
+    }
+  ]
+}
