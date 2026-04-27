@@ -1,5 +1,16 @@
 import { Hono } from 'hono'
 import {
+  type ListUserLibrariesResponse,
+  type RemoveUserLibraryResponse,
+  type SaveUserLibraryResponse,
+  addInstalledLibraryRequestSchema,
+  deleteUserLibraryMetadataRequestSchema,
+  removeInstalledLibraryRequestSchema,
+  saveUserLibraryRequestSchema,
+  setUserLibraryMetadataRequestSchema,
+  userLibraryContentSchema,
+} from '../../shared/api-contracts/libraries.js'
+import {
   loadInstalledLibraries,
   addInstalledLibrary,
   removeInstalledLibrary,
@@ -24,51 +35,6 @@ import {
   validateWorkspaceId,
   validateUserLibraryName,
 } from '../validators.js'
-
-function countLibraryItems(payload: unknown): number {
-  if (typeof payload !== 'object' || payload === null) {
-    throw new Error('content must be an object')
-  }
-  if ((payload as { type?: string }).type !== 'excalidrawlib') {
-    throw new Error('content must be an .excalidrawlib payload')
-  }
-  const parsed = payload as { library?: unknown; libraryItems?: unknown }
-  if (parsed.libraryItems !== undefined) {
-    if (!Array.isArray(parsed.libraryItems)) {
-      throw new Error('content.libraryItems must be an array')
-    }
-    return parsed.libraryItems.length
-  }
-  if (parsed.library !== undefined) {
-    if (!Array.isArray(parsed.library)) {
-      throw new Error('content.library must be an array')
-    }
-    return parsed.library.length
-  }
-  throw new Error('content must include libraryItems[] or library[]')
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === 'string')
-}
-
-function isRecordOfNumbers(value: unknown): value is Record<string, number> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.values(value).every((item) => typeof item === 'number' && Number.isFinite(item))
-  )
-}
-
-function isRecordOfStrings(value: unknown): value is Record<string, string> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    !Array.isArray(value) &&
-    Object.values(value).every((item) => typeof item === 'string')
-  )
-}
 
 // HTTP routes for session-scoped installed libraries (URL lists).
 // CanvasPage fetches these on mount to restore the browser-side library panel.
@@ -119,19 +85,21 @@ export function createLibrariesRouter() {
       if (body) return c.json(body, 400)
       throw err
     }
-    const body = await c.req.json<{ url?: string }>().catch(() => ({}) as { url?: string })
-    if (!body.url || typeof body.url !== 'string') {
+    const parsed = addInstalledLibraryRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    )
+    if (!parsed.success) {
       return c.json({ error: 'url (string) is required' }, 400)
     }
     try {
-      await validateExternalUrl(body.url)
+      await validateExternalUrl(parsed.data.url)
     } catch (err) {
       const issue = validationErrorBody(err)
       if (issue) return c.json(issue, 400)
       throw err
     }
     try {
-      const libs = await addInstalledLibrary(workspaceId, body.url)
+      const libs = await addInstalledLibrary(workspaceId, parsed.data.url)
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -149,12 +117,14 @@ export function createLibrariesRouter() {
       if (body) return c.json(body, 400)
       throw err
     }
-    const body = await c.req.json<{ url?: string }>().catch(() => ({}) as { url?: string })
-    if (!body.url || typeof body.url !== 'string') {
+    const parsed = removeInstalledLibraryRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    )
+    if (!parsed.success) {
       return c.json({ error: 'url (string) is required' }, 400)
     }
     try {
-      const libs = await removeInstalledLibrary(workspaceId, body.url)
+      const libs = await removeInstalledLibrary(workspaceId, parsed.data.url)
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -166,7 +136,8 @@ export function createLibrariesRouter() {
   app.get('/api/user-libraries', async (c) => {
     try {
       const libraries = await listUserLibraries()
-      return c.json({ libraries })
+      const response: ListUserLibrariesResponse = { libraries }
+      return c.json(response)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
@@ -201,42 +172,16 @@ export function createLibrariesRouter() {
       if (body) return c.json(body, 400)
       throw err
     }
-    const body = await c.req
-      .json<{
-        revision?: unknown
-        aliases?: unknown
-        notes?: unknown
-        scales?: unknown
-      }>()
-      .catch(() => null)
-    if (body === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+    const parsed = setUserLibraryMetadataRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    )
+    if (!parsed.success) {
+      const message =
+        parsed.error.issues[0]?.message ??
+        'revision must be a non-negative integer; aliases / notes / scales must match record shape'
+      return c.json({ error: 'invalid_body', message }, 400)
     }
-    if (typeof body.revision !== 'number' || !Number.isInteger(body.revision) || body.revision < 0) {
-      return c.json(
-        { error: 'invalid_body', message: 'revision must be a non-negative integer' },
-        400,
-      )
-    }
-    if (
-      body.aliases === undefined &&
-      body.notes === undefined &&
-      body.scales === undefined
-    ) {
-      return c.json(
-        { error: 'invalid_body', message: 'at least one of aliases, notes, or scales is required' },
-        400,
-      )
-    }
-    if (body.aliases !== undefined && !isRecordOfNumbers(body.aliases)) {
-      return c.json({ error: 'invalid_body', message: 'aliases must be a record of numbers' }, 400)
-    }
-    if (body.notes !== undefined && !isRecordOfStrings(body.notes)) {
-      return c.json({ error: 'invalid_body', message: 'notes must be a record of strings' }, 400)
-    }
-    if (body.scales !== undefined && !isRecordOfNumbers(body.scales)) {
-      return c.json({ error: 'invalid_body', message: 'scales must be a record of numbers' }, 400)
-    }
+    const body = parsed.data
     try {
       return c.json(
         await setUserLibraryMetadata(name, body.revision, {
@@ -263,42 +208,16 @@ export function createLibrariesRouter() {
       if (body) return c.json(body, 400)
       throw err
     }
-    const body = await c.req
-      .json<{
-        revision?: unknown
-        aliasKeys?: unknown
-        noteKeys?: unknown
-        scaleKeys?: unknown
-      }>()
-      .catch(() => null)
-    if (body === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+    const parsed = deleteUserLibraryMetadataRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    )
+    if (!parsed.success) {
+      const message =
+        parsed.error.issues[0]?.message ??
+        'revision must be a non-negative integer; aliasKeys / noteKeys / scaleKeys must be string arrays'
+      return c.json({ error: 'invalid_body', message }, 400)
     }
-    if (typeof body.revision !== 'number' || !Number.isInteger(body.revision) || body.revision < 0) {
-      return c.json(
-        { error: 'invalid_body', message: 'revision must be a non-negative integer' },
-        400,
-      )
-    }
-    if (
-      body.aliasKeys === undefined &&
-      body.noteKeys === undefined &&
-      body.scaleKeys === undefined
-    ) {
-      return c.json(
-        { error: 'invalid_body', message: 'at least one of aliasKeys, noteKeys, or scaleKeys is required' },
-        400,
-      )
-    }
-    if (body.aliasKeys !== undefined && !isStringArray(body.aliasKeys)) {
-      return c.json({ error: 'invalid_body', message: 'aliasKeys must be a string array' }, 400)
-    }
-    if (body.noteKeys !== undefined && !isStringArray(body.noteKeys)) {
-      return c.json({ error: 'invalid_body', message: 'noteKeys must be a string array' }, 400)
-    }
-    if (body.scaleKeys !== undefined && !isStringArray(body.scaleKeys)) {
-      return c.json({ error: 'invalid_body', message: 'scaleKeys must be a string array' }, 400)
-    }
+    const body = parsed.data
     try {
       return c.json(
         await deleteUserLibraryMetadata(name, body.revision, {
@@ -347,29 +266,41 @@ export function createLibrariesRouter() {
       if (body) return c.json(body, 400)
       throw err
     }
-    const body = await c.req
-      .json<{ content?: unknown }>()
-      .catch(() => null)
-    if (body === null) {
+    const raw = await c.req.json().catch(() => null)
+    if (raw === null || typeof raw !== 'object') {
       return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
     }
-    if (body.content === undefined) {
+    if ((raw as { content?: unknown }).content === undefined) {
       return c.json({ error: 'invalid_body', message: 'content is required' }, 400)
     }
-    try {
-      const itemCount = countLibraryItems(body.content)
-      try {
-        await saveUserLibrary(name, body.content)
-      } catch (err) {
-        const issue = handleCorruptStoredData(err)
-        if (issue) return c.json(issue.body, issue.status)
-        throw err
-      }
-      return c.json({ name, itemCount })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'invalid content'
-      return c.json({ error: 'invalid_body', message }, 400)
+    const parsed = saveUserLibraryRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_body', message: 'content is required' }, 400)
     }
+    const contentParsed = userLibraryContentSchema.safeParse(parsed.data.content)
+    if (!contentParsed.success) {
+      return c.json(
+        { error: 'invalid_body', message: 'content must be an .excalidrawlib payload' },
+        400,
+      )
+    }
+    const { libraryItems, library } = contentParsed.data
+    if (libraryItems === undefined && library === undefined) {
+      return c.json(
+        { error: 'invalid_body', message: 'content must include libraryItems[] or library[]' },
+        400,
+      )
+    }
+    const itemCount = libraryItems?.length ?? library?.length ?? 0
+    try {
+      await saveUserLibrary(name, parsed.data.content)
+    } catch (err) {
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+    const response: SaveUserLibraryResponse = { name, itemCount }
+    return c.json(response)
   })
 
   app.delete('/api/user-libraries/:name', async (c) => {
@@ -385,7 +316,11 @@ export function createLibrariesRouter() {
       await removeUserLibrary(name)
       await removeUserLibraryMetadata(name)
       const libraries = await listUserLibraries()
-      return c.json({ removed: name, remaining: libraries.map((library) => library.name) })
+      const response: RemoveUserLibraryResponse = {
+        removed: name,
+        remaining: libraries.map((library) => library.name),
+      }
+      return c.json(response)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)

@@ -4,6 +4,19 @@ import { userInfo } from 'node:os'
 import { LoroDoc as LoroDocCtor, LoroMap } from 'loro-crdt'
 import type { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
+import {
+  type ListCanvasesResponse,
+  type ListVersionsResponse,
+  type ListWorkspacesResponse,
+  type SaveVersionResponse,
+  createCanvasRequestSchema,
+  createCheckpointRequestSchema,
+  exportCanvasJsonRequestSchema,
+  restoreCheckpointRequestSchema,
+  saveVersionRequestSchema,
+  setNameRequestSchema,
+  setPinnedRequestSchema,
+} from '../../shared/api-contracts/canvas.js'
 import { reconcileElementsOnDoc } from '../../shared/reconcile-elements.js'
 import { getDoc, evictDoc } from '../store/doc-cache.js'
 import { listWorkspaces, listCanvases, saveCanvas, compactCanvas, ConflictError, canvasExists } from '../store/canvas-store.js'
@@ -41,25 +54,6 @@ export function setBroadcastFn(fn: BroadcastFn): void {
   broadcastLoroUpdate = fn
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function parseOperatorBody(value: unknown): OperatorInfo | null {
-  if (!isRecord(value)) return null
-  if (value.kind !== 'ai' && value.kind !== 'human' && value.kind !== 'system') return null
-  if (typeof value.peerId !== 'string' || value.peerId.trim().length === 0) return null
-  if (value.displayName !== undefined && typeof value.displayName !== 'string') return null
-  if (value.agentId !== undefined && typeof value.agentId !== 'string') return null
-  if (value.workspaceId !== undefined && typeof value.workspaceId !== 'string') return null
-  return {
-    kind: value.kind,
-    peerId: value.peerId,
-    ...(value.displayName !== undefined ? { displayName: value.displayName } : {}),
-    ...(value.agentId !== undefined ? { agentId: value.agentId } : {}),
-    ...(value.workspaceId !== undefined ? { workspaceId: value.workspaceId } : {}),
-  }
-}
 
 function defaultHumanDisplayName(): string {
   try {
@@ -158,12 +152,13 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
   app.get('/api/workspaces', async (c) => {
     try {
       const workspaces = await listWorkspaces()
-      return c.json({
+      const response: ListWorkspacesResponse = {
         workspaces: workspaces.map(({ workspaceId, daemonAlive }) => ({
           workspaceId,
           daemonAlive,
         })),
-      })
+      }
+      return c.json(response)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
@@ -183,7 +178,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
     try {
       const canvases = await listCanvases(workspaceId)
-      return c.json({ canvases })
+      const response: ListCanvasesResponse = { canvases }
+      return c.json(response)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
@@ -203,16 +199,21 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    let slug = ''
-    try {
-      const body = (await c.req.json()) as { slug?: unknown }
-      if (typeof body.slug !== 'string') {
-        return c.json({ error: 'invalid_body', message: 'slug is required' }, 400)
-      }
-      slug = body.slug.trim()
-      validateSlug(slug)
-    } catch {
+    const raw = await c.req.json().catch(() => null)
+    if (raw === null) {
       return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+    }
+    const parsed = createCanvasRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_body', message: 'slug is required' }, 400)
+    }
+    const slug = parsed.data.slug
+    try {
+      validateSlug(slug)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
     }
     try {
       const doc = new LoroDocCtor()
@@ -236,24 +237,23 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    let sourceSlug = ''
-    let checkpointId = ''
+    const raw = await c.req.json().catch(() => null)
+    if (raw === null) {
+      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+    }
+    const parsed = createCheckpointRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_body', message: 'sourceSlug is required' }, 400)
+    }
+    const sourceSlug = parsed.data.sourceSlug
+    const checkpointId = parsed.data.checkpointId ?? nanoid(18)
     try {
-      const body = (await c.req.json()) as { sourceSlug?: unknown; checkpointId?: unknown }
-      if (typeof body.sourceSlug !== 'string' || body.sourceSlug.trim() === '') {
-        return c.json({ error: 'invalid_body', message: 'sourceSlug is required' }, 400)
-      }
-      sourceSlug = body.sourceSlug.trim()
       validateSlug(sourceSlug)
-      checkpointId =
-        typeof body.checkpointId === 'string' && body.checkpointId.trim() !== ''
-          ? body.checkpointId.trim()
-          : nanoid(18)
       validateCheckpointId(checkpointId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+      throw err
     }
 
     try {
@@ -313,15 +313,12 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    let name = ''
-    try {
-      const body = (await c.req.json()) as { name?: string }
-      name = typeof body.name === 'string' ? body.name : ''
-    } catch {
+    const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
       return c.json({ error: 'invalid_body' }, 400)
     }
     try {
-      const updated = await setWorkspaceName(workspaceId, name)
+      const updated = await setWorkspaceName(workspaceId, parsed.data.name)
       return c.json(updated)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -341,15 +338,12 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    let name = ''
-    try {
-      const body = (await c.req.json()) as { name?: string }
-      name = typeof body.name === 'string' ? body.name : ''
-    } catch {
+    const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
       return c.json({ error: 'invalid_body' }, 400)
     }
     try {
-      const updated = await setCanvasName(workspaceId, slug, name)
+      const updated = await setCanvasName(workspaceId, slug, parsed.data.name)
       return c.json(updated)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -370,18 +364,12 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    let pinned: boolean
-    try {
-      const body = (await c.req.json()) as { pinned?: unknown }
-      if (typeof body.pinned !== 'boolean') {
-        return c.json({ error: 'invalid_body', message: 'pinned must be boolean' }, 400)
-      }
-      pinned = body.pinned
-    } catch {
-      return c.json({ error: 'invalid_body' }, 400)
+    const parsed = setPinnedRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_body', message: 'pinned must be boolean' }, 400)
     }
     try {
-      const updated = await setCanvasPinned(workspaceId, slug, pinned)
+      const updated = await setCanvasPinned(workspaceId, slug, parsed.data.pinned)
       return c.json(updated)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -457,7 +445,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
     try {
       const versions = await versionStore.list(workspaceId, slug)
-      return c.json({ versions })
+      const response: ListVersionsResponse = { versions }
+      return c.json(response)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
@@ -477,24 +466,21 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
+    // Treat missing or non-JSON bodies as "no label / operator".
+    const raw = await c.req.json().catch(() => null)
     let label: string | undefined
     let operator: OperatorInfo | undefined
-    try {
-      const body = (await c.req.json()) as { label?: unknown; operator?: unknown }
-      if (body.label !== undefined) {
-        if (typeof body.label !== 'string') {
-          return c.json({ error: 'invalid_body', message: 'label must be string' }, 400)
-        }
-        label = body.label
+    if (raw !== null) {
+      const parsed = saveVersionRequestSchema.safeParse(raw)
+      if (!parsed.success) {
+        const message =
+          parsed.error.issues[0]?.path[0] === 'operator'
+            ? 'operator is invalid'
+            : 'label must be string'
+        return c.json({ error: 'invalid_body', message }, 400)
       }
-      if (body.operator !== undefined) {
-        operator = parseOperatorBody(body.operator) ?? undefined
-        if (!operator) {
-          return c.json({ error: 'invalid_body', message: 'operator is invalid' }, 400)
-        }
-      }
-    } catch {
-      /* Treat missing or non-JSON bodies as "no label". */
+      label = parsed.data.label
+      operator = parsed.data.operator
     }
     try {
       const doc = await getDoc(workspaceId, slug)
@@ -522,7 +508,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
         ...(branchName !== undefined ? { branchName } : {}),
         operator: nextOperator,
       })
-      return c.json({ version: entry })
+      const response: SaveVersionResponse = { version: entry }
+      return c.json(response)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
@@ -565,18 +552,22 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    let targetSlug = ''
-    let overwrite = false
-    try {
-      const body = (await c.req.json()) as { targetSlug?: unknown; overwrite?: unknown }
-      if (typeof body.targetSlug !== 'string' || body.targetSlug.trim() === '') {
-        return c.json({ error: 'invalid_body', message: 'targetSlug is required' }, 400)
-      }
-      targetSlug = body.targetSlug.trim()
-      validateSlug(targetSlug)
-      overwrite = body.overwrite === true
-    } catch {
+    const raw = await c.req.json().catch(() => null)
+    if (raw === null) {
       return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+    }
+    const parsed = restoreCheckpointRequestSchema.safeParse(raw)
+    if (!parsed.success) {
+      return c.json({ error: 'invalid_body', message: 'targetSlug is required' }, 400)
+    }
+    const targetSlug = parsed.data.targetSlug
+    const overwrite = parsed.data.overwrite === true
+    try {
+      validateSlug(targetSlug)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
     }
 
     try {
@@ -616,23 +607,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
-    let includeCustomFields = false
-    let outputPath: string | undefined
-    let overwrite = false
-    try {
-      const body = (await c.req.json().catch(() => ({}))) as {
-        includeCustomFields?: unknown
-        outputPath?: unknown
-        overwrite?: unknown
-      }
-      includeCustomFields = body.includeCustomFields === true
-      if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
-        outputPath = body.outputPath
-      }
-      overwrite = body.overwrite === true
-    } catch {
-      /* empty body -> defaults */
-    }
+    const parsed = exportCanvasJsonRequestSchema.safeParse(
+      await c.req.json().catch(() => ({})),
+    )
+    const body = parsed.success ? parsed.data : {}
+    const includeCustomFields = body.includeCustomFields === true
+    const outputPath =
+      typeof body.outputPath === 'string' && body.outputPath.length > 0 ? body.outputPath : undefined
+    const overwrite = body.overwrite === true
     const doc = await getDoc(workspaceId, slug)
     try {
       return c.json(

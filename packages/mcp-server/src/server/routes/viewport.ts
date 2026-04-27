@@ -1,5 +1,9 @@
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
+import {
+  type ViewportErrorBody,
+  type ViewportResponse,
+} from '../../shared/api-contracts/canvas-runtime.js'
 import { sendViewportRequest, getClientCount } from './ws.js'
 import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
 
@@ -44,15 +48,13 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
 
     // Fast-fail with 503 if no WS client is connected.
     if (getClientCount(workspaceId, slug) === 0) {
-      return c.json(
-        {
-          error: 'no_client',
-          message:
-            'No browser client is connected to this canvas. Open the canvas in a browser and retry.',
-          hint: 'Call canvas_open first to open the canvas in a browser, then run viewport_set.',
-        },
-        503,
-      )
+      const noClient: ViewportErrorBody = {
+        error: 'no_client',
+        message:
+          'No browser client is connected to this canvas. Open the canvas in a browser and retry.',
+        hint: 'Call canvas_open first to open the canvas in a browser, then run viewport_set.',
+      }
+      return c.json(noClient, 503)
     }
 
     const requestId = nanoid()
@@ -72,19 +74,19 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
         pendingViewport.delete(requestId)
       })
 
-      return c.json({ ok: true })
+      const ok: ViewportResponse = { ok: true }
+      return c.json(ok)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (message === 'timeout') {
-        return c.json(
-          {
-            error: 'timeout',
-            message: `Viewport update timed out after ${Math.round(timeoutMs / 1000)}s. The browser client did not acknowledge.`,
-          },
-          504,
-        )
+        const timeoutBody: ViewportErrorBody = {
+          error: 'timeout',
+          message: `Viewport update timed out after ${Math.round(timeoutMs / 1000)}s. The browser client did not acknowledge.`,
+        }
+        return c.json(timeoutBody, 504)
       }
-      return c.json({ error: 'internal', message }, 500)
+      const internalBody: ViewportErrorBody = { error: 'internal', message }
+      return c.json(internalBody, 500)
     }
   })
 

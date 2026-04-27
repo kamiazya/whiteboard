@@ -3,25 +3,17 @@ import {
   validateWorkspaceId,
   validateSlug,
 } from '../validators.js'
+import {
+  clientTextMessageSchema,
+  type ClientTextMessage,
+} from '../../shared/ws-messages.js'
 
-export type ClientReadyMessage = { type: 'client_ready' }
-export type ExportResponseMessage = {
-  type: 'export_response'
-  requestId: string
-  data: string
-}
-export type ViewportResponseMessage = {
-  type: 'viewport_response'
-  requestId: string
-}
-export type WsClientTextMessage =
-  | ClientReadyMessage
-  | ExportResponseMessage
-  | ViewportResponseMessage
-
-function warnInvalidWsMessage(reason: string, value: unknown): void {
-  console.warn('[ws] ignored invalid client message:', reason, value)
-}
+export type {
+  ClientReadyMessage,
+  ExportResponseMessage,
+  ViewportResponseMessage,
+  ClientTextMessage as WsClientTextMessage,
+} from '../../shared/ws-messages.js'
 
 export function parseWsTargetFromRequestUrl(
   rawUrl: string | undefined,
@@ -46,42 +38,19 @@ export function parseWsTargetFromRequestUrl(
   return { workspaceId, slug: validateSlug(slug) }
 }
 
-export function parseWsClientTextMessage(text: string): WsClientTextMessage | null {
+export function parseWsClientTextMessage(text: string): ClientTextMessage | null {
   let raw: unknown
   try {
     raw = JSON.parse(text)
   } catch {
-    warnInvalidWsMessage('malformed JSON', text)
+    console.warn('[ws] ignored invalid client message: malformed JSON', text)
     return null
   }
 
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    warnInvalidWsMessage('message must be an object', raw)
+  const result = clientTextMessageSchema.safeParse(raw)
+  if (!result.success) {
+    console.warn('[ws] ignored invalid client message:', result.error.issues[0]?.message, raw)
     return null
   }
-
-  const type = (raw as { type?: unknown }).type
-  if (type === 'client_ready') {
-    return { type }
-  }
-  if (type === 'export_response') {
-    const requestId = (raw as { requestId?: unknown }).requestId
-    const data = (raw as { data?: unknown }).data
-    if (typeof requestId !== 'string' || typeof data !== 'string') {
-      warnInvalidWsMessage('export_response requires requestId and data', raw)
-      return null
-    }
-    return { type, requestId, data }
-  }
-  if (type === 'viewport_response') {
-    const requestId = (raw as { requestId?: unknown }).requestId
-    if (typeof requestId !== 'string') {
-      warnInvalidWsMessage('viewport_response requires requestId', raw)
-      return null
-    }
-    return { type, requestId }
-  }
-
-  warnInvalidWsMessage('unknown message type', raw)
-  return null
+  return result.data
 }

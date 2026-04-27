@@ -18,6 +18,7 @@ import {
   DialogTitle,
 } from './ui/dialog.js'
 import { cn } from '@/lib/utils'
+import { listVersionsResponseSchema } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
 
@@ -159,13 +160,6 @@ function CompareCard({ kind, branch, count, delta, thumbUrl, loading }: CompareC
   )
 }
 
-interface VersionThumbInfo {
-  id: string
-  createdAt: string
-  hasThumbnail: boolean
-  branchName?: string
-}
-
 function thumbUrlFor(workspaceId: string, slug: string, versionId: string): string {
   return `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${versionId}/thumbnail`
 }
@@ -227,11 +221,11 @@ export function MergeDialog({
           `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
         )
         if (!res.ok) return
-        const body = (await res.json()) as { versions: VersionThumbInfo[] }
-        if (cancelled) return
+        const parsed = listVersionsResponseSchema.safeParse(await res.json())
+        if (cancelled || !parsed.success) return
         const latestFor = (name: string) => {
-          const matches = body.versions
-            .filter((v) => v.hasThumbnail && (v.branchName ?? 'main') === name)
+          const matches = parsed.data.versions
+            .filter((v) => v.hasThumbnail && v.branchName === name)
             .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
           return matches[0] ?? null
         }

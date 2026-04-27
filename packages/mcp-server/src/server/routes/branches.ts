@@ -1,5 +1,18 @@
 import { Hono } from 'hono'
 import {
+  type BranchStatsResponse,
+  type CanvasBranchesState,
+  type CreateBranchResponse,
+  type DeleteBranchResponse,
+  type MergeResponse,
+  type RenameBranchResponse,
+  type SetHeadResponse,
+  createBranchRequestSchema,
+  mergeRequestSchema,
+  renameBranchRequestSchema,
+  setHeadRequestSchema,
+} from '../../shared/api-contracts/branches.js'
+import {
   BranchConflictError,
   BranchNotFoundError,
   createBranch,
@@ -136,7 +149,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       throw err
     }
     try {
-      const state = await loadCanvasBranches(sid, slug)
+      const state: CanvasBranchesState = await loadCanvasBranches(sid, slug)
       return c.json(state)
     } catch (err) {
       const corruption = handleCorruption(err)
@@ -156,27 +169,17 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       if (v) return c.json(v.body, v.status)
       throw err
     }
-    const body = await c.req
-      .json<{ name?: unknown; fromVersionId?: unknown; color?: unknown }>()
-      .catch(() => null)
-    if (body === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
-    }
-    if (typeof body.name !== 'string' || body.name.length === 0) {
+    const parsed = createBranchRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'name is required' }, 400)
     }
-    const nameValidation = validateBranchNameOrRespond(body.name)
+    const reqBody = parsed.data
+    const nameValidation = validateBranchNameOrRespond(reqBody.name)
     if (nameValidation) return c.json(nameValidation.body, nameValidation.status)
 
     let initialTipFrontiers: string | undefined
     let baseVersionId: string | undefined
-    if (body.fromVersionId !== undefined) {
-      if (typeof body.fromVersionId !== 'string' || body.fromVersionId.length === 0) {
-        return c.json(
-          { error: 'invalid_body', message: 'fromVersionId must be a non-empty string' },
-          400,
-        )
-      }
+    if (reqBody.fromVersionId !== undefined) {
       if (!resolveFromVersionFrontiers) {
         return c.json(
           {
@@ -187,28 +190,29 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
         )
       }
       try {
-        validateVersionId(body.fromVersionId)
+        validateVersionId(reqBody.fromVersionId)
       } catch (err) {
         const v = handleValidation(err)
         if (v) return c.json(v.body, v.status)
         throw err
       }
-      const resolved = await resolveFromVersionFrontiers(sid, body.fromVersionId)
+      const resolved = await resolveFromVersionFrontiers(sid, reqBody.fromVersionId)
       if (resolved === null) {
-        return c.json(branchNotFound(`Version "${body.fromVersionId}" not found`), 404)
+        return c.json(branchNotFound(`Version "${reqBody.fromVersionId}" not found`), 404)
       }
       initialTipFrontiers = resolved
-      baseVersionId = body.fromVersionId
+      baseVersionId = reqBody.fromVersionId
     }
 
     try {
       const branch = await createBranch(sid, slug, {
-        name: body.name,
+        name: reqBody.name,
         ...(initialTipFrontiers !== undefined ? { initialTipFrontiers } : {}),
         ...(baseVersionId !== undefined ? { baseVersionId } : {}),
-        ...(typeof body.color === 'string' ? { color: body.color } : {}),
+        ...(reqBody.color !== undefined ? { color: reqBody.color } : {}),
       })
-      return c.json({ branch }, 201)
+      const response: CreateBranchResponse = { branch }
+      return c.json(response, 201)
     } catch (err) {
       const v = handleValidation(err)
       if (v) return c.json(v.body, v.status)
@@ -240,7 +244,8 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
         unmerged = await countVersionsOnBranch(sid, slug, name)
       }
       const result = await deleteBranch(sid, slug, name)
-      return c.json({ ...result, unmergedCommits: unmerged })
+      const response: DeleteBranchResponse = { ...result, unmergedCommits: unmerged }
+      return c.json(response)
     } catch (err) {
       const v = handleValidation(err)
       if (v) return c.json(v.body, v.status)
@@ -271,25 +276,22 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       if (v) return c.json(v.body, v.status)
       throw err
     }
-    const body = await c.req
-      .json<{ branch?: unknown }>()
-      .catch(() => null)
-    if (body === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
-    }
-    if (typeof body.branch !== 'string' || body.branch.length === 0) {
+    const parsed = setHeadRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'branch is required' }, 400)
     }
-    const bn = validateBranchNameOrRespond(body.branch)
+    const targetBranch = parsed.data.branch
+    const bn = validateBranchNameOrRespond(targetBranch)
     if (bn) return c.json(bn.body, bn.status)
     try {
       // Read current state first so switching to the same HEAD can short-circuit without side effects.
       const before = await loadCanvasBranches(sid, slug)
-      if (!before.branches.some((b) => b.name === body.branch)) {
-        throw new BranchNotFoundError(`Branch "${body.branch}" not found on ${sid}/${slug}`)
+      if (!before.branches.some((b) => b.name === targetBranch)) {
+        throw new BranchNotFoundError(`Branch "${targetBranch}" not found on ${sid}/${slug}`)
       }
-      if (before.head === body.branch) {
-        return c.json({ head: body.branch, previousHead: before.head })
+      if (before.head === targetBranch) {
+        const same: SetHeadResponse = { head: targetBranch, previousHead: before.head }
+        return c.json(same)
       }
 
       // First ensure current-frontiers read and target checkout succeed.
@@ -301,7 +303,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
 
       // Reconcile to the new HEAD tipFrontiers only when non-empty.
       // checkoutTo handles strict prevalidation.
-      const newTip = before.branches.find((b) => b.name === body.branch)?.tipFrontiers ?? ''
+      const newTip = before.branches.find((b) => b.name === targetBranch)?.tipFrontiers ?? ''
       if (checkoutTo) {
         if (newTip.length > 0) {
           await checkoutTo(sid, slug, newTip)
@@ -309,23 +311,23 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       }
 
       const next = {
-        head: body.branch,
+        head: targetBranch,
         branches: before.branches.map((branch) => {
           if (branch.name !== before.head || currentFrontiers === null) return branch
           return { ...branch, tipFrontiers: currentFrontiers }
         }),
       }
       await saveCanvasBranches(sid, slug, next)
-      const result = { head: body.branch, previousHead: before.head }
+      const response: SetHeadResponse = { head: targetBranch, previousHead: before.head }
 
       // Notify all peers on the same key that HEAD changed.
       // checkoutTo may already have broadcast state, but the UI still needs an explicit
       // semantic signal that the active HEAD switched.
       if (notifyHeadChanged) {
-        notifyHeadChanged(sid, slug, body.branch)
+        notifyHeadChanged(sid, slug, targetBranch)
       }
 
-      return c.json(result)
+      return c.json(response)
     } catch (err) {
       const v = handleValidation(err)
       if (v) return c.json(v.body, v.status)
@@ -356,19 +358,15 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     const srcValidation = validateBranchNameOrRespond(source)
     if (srcValidation) return c.json(srcValidation.body, srcValidation.status)
 
-    const body = await c.req
-      .json<{ into?: unknown; dryRun?: unknown }>()
-      .catch(() => null)
-    if (body === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
-    }
-    if (typeof body.into !== 'string' || body.into.length === 0) {
+    const parsed = mergeRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'into is required' }, 400)
     }
-    const intoValidation = validateBranchNameOrRespond(body.into)
+    const reqBody = parsed.data
+    const intoValidation = validateBranchNameOrRespond(reqBody.into)
     if (intoValidation) return c.json(intoValidation.body, intoValidation.status)
 
-    if (source === body.into) {
+    if (source === reqBody.into) {
       return c.json(
         { error: 'invalid_body', message: 'source and into must differ' },
         400,
@@ -382,41 +380,41 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       )
     }
 
-    const dryRun = body.dryRun === true
+    const dryRun = reqBody.dryRun === true
     try {
-      const result = await performMerge(sid, slug, { source, into: body.into, dryRun })
-      const payload: Record<string, unknown> = { badges: result.badges }
+      const result = await performMerge(sid, slug, { source, into: reqBody.into, dryRun })
+      const response: MergeResponse = { badges: result.badges }
       if (result.committed) {
-        payload.committed = { elementCount: result.previewElementCount }
+        response.committed = { elementCount: result.previewElementCount }
       } else {
-        payload.preview = { elementCount: result.previewElementCount }
+        response.preview = { elementCount: result.previewElementCount }
       }
       // Optional target/source counts for the three-column UI.
       if (typeof result.targetElementCount === 'number') {
-        payload.target = { elementCount: result.targetElementCount }
+        response.target = { elementCount: result.targetElementCount }
       }
       if (typeof result.sourceElementCount === 'number') {
-        payload.source = { elementCount: result.sourceElementCount }
+        response.source = { elementCount: result.sourceElementCount }
       }
       // For dry runs, return the preview scene so MergeDialog can render Excalidraw.
       // After commit, the updated HEAD already drives the canvas state.
       if (!result.committed && Array.isArray(result.previewElements)) {
-        payload.previewElements = result.previewElements
+        response.previewElements = result.previewElements
       }
       // Include commit metadata used by UI highlighting and undo.
       if (result.committed) {
-        if (Array.isArray(result.newElementIds)) payload.newElementIds = result.newElementIds
+        if (Array.isArray(result.newElementIds)) response.newElementIds = result.newElementIds
         if (Array.isArray(result.changedElementIds))
-          payload.changedElementIds = result.changedElementIds
+          response.changedElementIds = result.changedElementIds
         if (Array.isArray(result.conflictElementIds))
-          payload.conflictElementIds = result.conflictElementIds
+          response.conflictElementIds = result.conflictElementIds
         if (typeof result.preMergeVersionId === 'string')
-          payload.preMergeVersionId = result.preMergeVersionId
-        if (result.switchedHead) payload.switchedHead = result.switchedHead
+          response.preMergeVersionId = result.preMergeVersionId
+        if (result.switchedHead) response.switchedHead = result.switchedHead
         if (typeof result.deletedSource === 'string')
-          payload.deletedSource = result.deletedSource
+          response.deletedSource = result.deletedSource
       }
-      return c.json(payload)
+      return c.json(response)
     } catch (err) {
       const v = handleValidation(err)
       if (v) return c.json(v.body, v.status)
@@ -456,7 +454,8 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       const unmergedCommits = countVersionsOnBranch
         ? await countVersionsOnBranch(sid, slug, name)
         : 0
-      return c.json({ unmergedCommits, isHead })
+      const response: BranchStatsResponse = { unmergedCommits, isHead }
+      return c.json(response)
     } catch (err) {
       const corrupt = handleCorruption(err)
       if (corrupt) return c.json(corrupt.body, corrupt.status)
@@ -480,34 +479,31 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     const oldValidation = validateBranchNameOrRespond(name)
     if (oldValidation) return c.json(oldValidation.body, oldValidation.status)
 
-    const body = await c.req
-      .json<{ name?: unknown }>()
-      .catch(() => null)
-    if (body === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
-    }
-    if (typeof body.name !== 'string' || body.name.length === 0) {
+    const parsed = renameBranchRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'name is required' }, 400)
     }
-    const newValidation = validateBranchNameOrRespond(body.name)
+    const newName = parsed.data.name
+    const newValidation = validateBranchNameOrRespond(newName)
     if (newValidation) return c.json(newValidation.body, newValidation.status)
 
     try {
-      const branch = await renameBranch(sid, slug, name, body.name)
+      const branch = await renameBranch(sid, slug, name, newName)
       let renamedVersionCount = 0
       if (renameInVersions) {
         try {
-          renamedVersionCount = await renameInVersions(sid, slug, name, body.name)
+          renamedVersionCount = await renameInVersions(sid, slug, name, newName)
         } catch (err) {
           try {
-            await renameBranch(sid, slug, body.name, name)
+            await renameBranch(sid, slug, newName, name)
           } catch {
             /* rollback best-effort; original error is returned */
           }
           throw err
         }
       }
-      return c.json({ branch, renamedVersionCount })
+      const response: RenameBranchResponse = { branch, renamedVersionCount }
+      return c.json(response)
     } catch (err) {
       const v = handleValidation(err)
       if (v) return c.json(v.body, v.status)
