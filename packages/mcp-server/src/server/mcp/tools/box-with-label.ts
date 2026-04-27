@@ -141,6 +141,9 @@ export function decomposeBoxWithLabel(
     ? Math.max(input.height, neededTotalHeight)
     : input.height
 
+  // Default fillStyle to solid when backgroundColor is explicit. Excalidraw's
+  // hachure default leaves white gaps that swallow light text on a colored
+  // bg; an explicit fillStyle from the caller still wins.
   const rect: RectSpec = {
     type: 'rectangle',
     target: input.target,
@@ -148,7 +151,7 @@ export function decomposeBoxWithLabel(
     height: effectiveHeight,
     color: input.color,
     backgroundColor: input.backgroundColor,
-    fillStyle: input.fillStyle,
+    fillStyle: input.fillStyle ?? (input.backgroundColor ? 'solid' : undefined),
     strokeWidth: input.strokeWidth,
     templateInstanceId: input.templateInstanceId,
   }

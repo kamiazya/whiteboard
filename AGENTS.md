@@ -165,6 +165,43 @@ pnpm build
 - This matters because release-please reads the merged commit history to decide version bumps and changelog entries.
 - Release Please PRs are also valid under the same rule, for example `chore(main): release vX.Y.Z` and `chore(main): release mcp-server vX.Y.Z`.
 
+## PR Visual Evidence
+
+When the change has a user-visible effect (canvas rendering, UI surface, MCP tool result that depends on state), attach the verification screenshot to the PR body. Reviewers should be able to see the bug and the fix without having to clone and reproduce.
+
+Workflow:
+
+1. Capture screenshots while doing the manual verification step from the workflow above. Save them under `tmp/screenshots/` per the tmp-workspace rule.
+2. Upload the captured screenshots to GitHub via the `gh image` extension (`drogers0/gh-image`):
+   ```
+   gh extension install drogers0/gh-image  # one-time setup
+   gh image tmp/screenshots/before.png tmp/screenshots/after.png
+   ```
+   This prints `![file.png](https://github.com/user-attachments/...)` lines.
+3. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section. Show before/after when the change is a fix; show one annotated capture when adding a new affordance.
+4. Keep the actual screenshot file in `tmp/screenshots/` until the PR merges; remove it afterward to keep the dir lean (the GitHub upload is the durable copy).
+
+Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `mcp-browser` regressions.
+
+## Source Comment Discipline
+
+Code lives a long time; comments live with the code. Only write comments that will still be useful five PRs from now.
+
+Keep:
+
+- The non-obvious **why** (a hidden constraint, an invariant, a workaround for a specific upstream bug, behavior that would surprise a reader).
+- A pointer to a durable spec, RFC, or vendor doc when behavior follows it.
+
+Drop:
+
+- References to the PR / issue / dogfood pass that introduced or surfaced the change ("Surfaced during PR #35 dogfood", "see tmp/issues/...md item #N", "the create_frame bug...").
+- Pointers to `tmp/notes/`, `tmp/issues/`, or `tmp/screenshots/` files. The `tmp/` directory is short-lived and the linked file may already be gone.
+- Personal narrative ("we found this when...") and TODO-style chronology.
+
+Process context belongs in the commit message, the PR body, and `git log`/`git blame`. The source file is for the long-term reader who has neither.
+
+If a comment looks valuable when written but you'd be embarrassed to read it three years from now, rewrite it as an enduring rationale or delete it.
+
 ## Avoid
 
 - Do not implement first and add tests later.

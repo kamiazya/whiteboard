@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
@@ -12,6 +13,36 @@ import {
   applyUpdate,
   listGroups,
 } from './element-ops.js'
+
+export const elementIdOutputSchema = z.object({ elementId: z.string() })
+
+export const elementIdsOutputSchema = z.object({ elementIds: z.array(z.string()) })
+
+export const deletedElementsOutputSchema = z.object({
+  deletedElementIds: z.array(z.string()),
+  deletedCount: z.number(),
+})
+
+export const clearedCountOutputSchema = z.object({ clearedCount: z.number() })
+
+export const assignGroupOutputSchema = z.object({
+  groupId: z.string(),
+  elementIds: z.array(z.string()),
+})
+
+export const reorderOutputSchema = z.object({
+  elementIds: z.array(z.string()),
+  action: z.string(),
+})
+
+export const listGroupsOutputSchema = z.object({
+  groups: z.array(
+    z.object({
+      groupId: z.string(),
+      memberIds: z.array(z.string()),
+    }),
+  ),
+})
 
 // Partially update fields on an existing element. Useful for relabeling or small
 // geometry/style tweaks. The caller is responsible for patch value validity.

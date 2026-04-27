@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
+import type { ExportRequestMessage } from '../../shared/ws-messages.js'
 import {
   applyRestoreComplete,
   buildWhiteboardWsProtocols,
   flushPendingExportRequests,
   handleIncomingExportRequest,
-  type ExportRequestMessage,
 } from './useWhiteboardSync.helpers.js'
 
 function makeExportRequest(requestId: string): ExportRequestMessage {

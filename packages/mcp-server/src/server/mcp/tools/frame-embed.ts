@@ -1,8 +1,29 @@
 import { LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
-import { parseCanvasId } from './canvas-id.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
+import { parseCanvasId } from './canvas-id.js'
+import { boundsSchema } from './shared-schemas.js'
+
+export const createFrameOutputSchema = z.object({
+  elementId: z.string(),
+  bounds: boundsSchema,
+  // Element ids whose frameId was set to this new frame.
+  assignedMembers: z.array(z.string()),
+})
+
+export const createEmbedOutputSchema = z.object({
+  elementId: z.string(),
+  url: z.string(),
+})
+
+export const updateFrameMembersOutputSchema = z.object({
+  frameId: z.string(),
+  bounds: boundsSchema,
+  addedMembers: z.array(z.string()),
+  removedMembers: z.array(z.string()),
+})
 
 // MCP tools for creating Excalidraw frame and embeddable elements. Frames group
 // child elements via frameId. Embeddables store a URL in link; allowlisted domains
@@ -99,11 +120,7 @@ export interface CreateFrameArgs {
   padding?: number
 }
 
-export interface CreateFrameResult {
-  elementId: string
-  bounds: { x: number; y: number; width: number; height: number }
-  assignedMembers: string[]
-}
+export type CreateFrameResult = z.infer<typeof createFrameOutputSchema>
 
 export function createFrameTool() {
   return {
@@ -199,10 +216,7 @@ export interface CreateEmbedArgs {
   height?: number
 }
 
-export interface CreateEmbedResult {
-  elementId: string
-  url: string
-}
+export type CreateEmbedResult = z.infer<typeof createEmbedOutputSchema>
 
 // Excalidraw only renders allowlisted URLs as iframes. This tool just stores the
 // URL in link; non-allowlisted targets show the usual validation placeholder.
@@ -265,12 +279,7 @@ export interface UpdateFrameMembersArgs {
   remove?: string[]
   padding?: number
 }
-export interface UpdateFrameMembersResult {
-  frameId: string
-  bounds: { x: number; y: number; width: number; height: number }
-  addedMembers: string[]
-  removedMembers: string[]
-}
+export type UpdateFrameMembersResult = z.infer<typeof updateFrameMembersOutputSchema>
 
 export function updateFrameMembersTool() {
   return {

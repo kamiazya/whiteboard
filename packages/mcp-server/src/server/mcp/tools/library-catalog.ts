@@ -2,6 +2,29 @@
 // clients discover a library by keyword and then install/insert it without
 // knowing the raw URL ahead of time. Results are cached in memory for 10 minutes.
 
+import { z } from 'zod'
+
+// Mirrors the upstream CatalogEntry shape declared below: `id` may be omitted,
+// and `authors` is an array of {name?, url?} objects.
+export const libraryCatalogListOutputSchema = z.object({
+  totalCount: z.number(),
+  returnedCount: z.number(),
+  items: z.array(
+    z.object({
+      id: z.string().optional(),
+      name: z.string(),
+      description: z.string().optional(),
+      authors: z
+        .array(z.object({ name: z.string().optional(), url: z.string().optional() }))
+        .optional(),
+      url: z.string(),
+      previewUrl: z.string().optional(),
+      created: z.string().optional(),
+      updated: z.string().optional(),
+    }),
+  ),
+})
+
 const CATALOG_URL = 'https://libraries.excalidraw.com/libraries.json'
 const CATALOG_BASE = 'https://libraries.excalidraw.com/libraries/'
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes

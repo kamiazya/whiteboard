@@ -1,5 +1,11 @@
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
+
+export const canvasExportJsonOutputSchema = z.object({
+  filePath: z.string(),
+  elementCount: z.number(),
+})
 
 interface CanvasExportJsonArgs {
   canvasId: string

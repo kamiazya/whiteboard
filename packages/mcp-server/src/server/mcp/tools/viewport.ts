@@ -1,5 +1,8 @@
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
+
+export const viewportSetOutputSchema = z.object({ ok: z.literal(true) })
 
 // Thin wrapper from MCP -> Hono route -> WS -> browser (excalidrawAPI).
 // useWhiteboardSync handles the actual scroll/zoom application.

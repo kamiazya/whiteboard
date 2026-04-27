@@ -2,8 +2,11 @@ import { readFile } from 'node:fs/promises'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { imageSize } from 'image-size'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
+
+export const loadImageOutputSchema = z.object({ elementId: z.string() })
 
 // Infer the MIME type for an image file.
 function getMimeType(filePath: string): string {
