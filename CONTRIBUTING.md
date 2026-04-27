@@ -97,7 +97,7 @@ npm pack --dry-run   # verify the tarball includes dist/, skills/, package READM
 
 ### PR title rule
 
-The PR title becomes the squash-merge commit message that release-please reads. Use a Conventional Commit title (`fix:`, `feat(scope):`, `chore:`, …). CI rejects tool prefixes such as `[codex] ...`. Release-please PRs follow the same rule (`chore(main): release vX.Y.Z`, `chore(main): release mcp-server vX.Y.Z`).
+The PR title becomes the squash-merge commit message that release-please reads. Use a Conventional Commit title (`fix:`, `feat(scope):`, `chore:`, …). CI rejects tool prefixes such as `[codex] ...`. Release-please PRs follow the same rule (`chore(main): release X.Y.Z`, `chore(main): release mcp-server X.Y.Z`) — the `v` prefix only applies to the resulting tag (`include-v-in-tag: true`), not the commit / PR title.
 
 ## Security
 

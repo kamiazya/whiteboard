@@ -67,7 +67,7 @@ Every canvas lives inside a workspace. The home page lists them with their canva
 
 ## Bundled skills
 
-Three opinionated `SKILL.md` packs ship inside the npm package and become slash skills once linked into `~/.claude/skills/` or `~/.codex/skills/`.
+Three opinionated `SKILL.md` packs ship inside the npm package. The recommended **plugin install above wires them up automatically** — no manual linking. If you instead used `claude mcp add`, the Codex CLI snippet, or `npx`, link them yourself per [docs/development.md#bundled-skills-install](docs/development.md#bundled-skills-install).
 
 | Skill | When to use |
 |---|---|
@@ -77,14 +77,16 @@ Three opinionated `SKILL.md` packs ship inside the npm package and become slash 
 
 ## Example transcript
 
-```
+```text
 You    Use whiteboard to sketch the request flow for our auth service:
        client → API gateway → token service → DB. Highlight where caching lives.
 
-Agent  → canvas_create({ slug: "auth-flow" })
-       → annotate_batch([ /* 4 service boxes + arrows */ ])
-       → annotate({ type: "label", text: "cache lives here", target: { x: 240, y: 360 } })
-       → export_png()
+Agent  cid = canvas_create({ slug: "auth-flow" }).id
+       annotate_batch({ canvasId: cid, annotations: [ /* 4 service boxes + arrows */ ] })
+       annotate({ canvasId: cid, type: "text",
+                  target: { x: 240, y: 360 },
+                  text: "cache lives here" })
+       export_png({ canvasId: cid })
 
        Drew a 4-stage flow on the auth-flow canvas. Cache callout placed
        between API gateway and token service. PNG attached.
