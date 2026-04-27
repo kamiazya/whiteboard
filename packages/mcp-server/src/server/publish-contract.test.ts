@@ -118,6 +118,10 @@ describe('publish contract', () => {
     expect(claudeMarketplace.name).toBe('whiteboard-marketplace')
     expect(claudeMarketplace.plugins[0].name).toBe('whiteboard')
     expect(claudeMarketplace.plugins[0].source).toBe('./')
+    // marketplace.json versions must stay aligned with the published mcp-server package
+    // (release-please-config.json tracks both jsonpaths in extra-files).
+    expect(claudeMarketplace.metadata.version).toBe(mcpPackage.version)
+    expect(claudeMarketplace.plugins[0].version).toBe(mcpPackage.version)
 
     // The manual symlink / junction recipes for skill linking moved to docs/development.md
     // (the npx and claude-mcp-add paths only start the MCP server; skills are an opt-in extra).

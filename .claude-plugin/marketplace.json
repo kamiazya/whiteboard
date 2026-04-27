@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugin distribution for the @kamiazya/whiteboard collaborative Excalidraw MCP.",
-    "version": "1.0.0"
+    "version": "0.0.4"
   },
   "plugins": [
     {
