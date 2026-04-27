@@ -1,8 +1,12 @@
 import { z } from 'zod'
+import {
+  viewportErrorBodySchema,
+  viewportResponseSchema,
+} from '../../../shared/api-contracts/canvas-runtime.js'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
 
-export const viewportSetOutputSchema = z.object({ ok: z.literal(true) })
+export { viewportResponseSchema as viewportSetOutputSchema }
 
 // Thin wrapper from MCP -> Hono route -> WS -> browser (excalidrawAPI).
 // useWhiteboardSync handles the actual scroll/zoom application.
@@ -63,7 +67,7 @@ export function viewportSetTool() {
         zoom?: number
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof viewportResponseSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const mode = args.mode ?? 'fit'
       // Only send explicitly specified values so browser defaults still apply.
@@ -81,9 +85,9 @@ export function viewportSetTool() {
         body: JSON.stringify(body),
       })
       if (!res.ok) {
-        const errBody = (await res.json().catch(() => null)) as
-          | { error?: string; message?: string; hint?: string }
-          | null
+        const raw = await res.json().catch(() => null)
+        const errParse = raw === null ? null : viewportErrorBodySchema.safeParse(raw)
+        const errBody = errParse?.success ? errParse.data : null
         if (errBody?.error === 'no_client') {
           throw new Error(
             `${errBody.message ?? 'No browser client connected.'}${errBody.hint ? ` Hint: ${errBody.hint}` : ''}`,
@@ -96,7 +100,7 @@ export function viewportSetTool() {
           `Viewport update failed: ${res.status} ${errBody?.message ?? 'unknown error'}`,
         )
       }
-      return (await res.json()) as { ok: true }
+      return viewportResponseSchema.parse(await res.json())
     },
   }
 }

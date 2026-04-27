@@ -225,7 +225,7 @@ export function listTemplatesTool() {
       type: 'object' as const,
       properties: {},
     },
-    execute: async () => ({
+    execute: async (): Promise<z.infer<typeof templateListOutputSchema>> => ({
       templates: BUILTIN_TEMPLATES.map((template) => ({
         id: template.id,
         title: template.title,
@@ -289,7 +289,7 @@ export function insertTemplateTool() {
         variables?: TemplateVariables
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof templateInsertOutputSchema>> => {
       const { template, source } = await resolveTemplateSource({
         templateId: args.templateId,
         templatePath: args.templatePath,

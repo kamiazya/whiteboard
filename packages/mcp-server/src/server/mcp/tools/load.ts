@@ -71,7 +71,7 @@ export function loadImageTool() {
     execute: async (
       args: { canvasId: string; imagePath: string; position?: string },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof loadImageOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const position = args.position ?? 'center'
 

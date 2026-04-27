@@ -13,6 +13,7 @@ import {
 import { decomposeBoxWithLabel } from './box-with-label.js'
 import { parseCanvasId } from './canvas-id.js'
 import { applyAssignToGroup } from './element-ops.js'
+import { resolvePaletteColor } from './color-palette.js'
 import { decomposeGroup } from './group.js'
 import { apiGetPalette } from './palette.js'
 import { type GridLayout, resolveGridPlacement, resolveLayout } from './resolve-layout.js'
@@ -34,6 +35,7 @@ export const annotateBatchOutputSchema = z.object({
   elementIds: z.array(z.string()),
   annotations: z.array(annotationResultSchema),
   warnings: z.array(annotateBatchWarningSchema),
+  unknownPaletteKeys: z.array(z.string()).optional(),
   byName: z.record(z.string(), annotationResultSchema),
   placements: z.array(
     z.object({
@@ -316,9 +318,19 @@ export function annotateBatchTool() {
         groupAs?: string
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof annotateBatchOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const sessionPalette = await apiGetPalette(client, workspaceId)
+      const unknownPaletteKeySet = new Set<string>()
+      for (const item of args.annotations) {
+        for (const colorArg of [item.color, item.backgroundColor]) {
+          if (colorArg) {
+            const { warningKey } = resolvePaletteColor(colorArg, sessionPalette)
+            if (warningKey) unknownPaletteKeySet.add(warningKey)
+          }
+        }
+      }
+      const unknownPaletteKeys = unknownPaletteKeySet.size > 0 ? Array.from(unknownPaletteKeySet) : undefined
       const warnings: AnnotationWarning[] = []
       // Layer 1: resolve targets for items that need layout before touching the doc.
       // Fail fast before fetching a snapshot if layout resolution fails.
@@ -547,7 +559,7 @@ export function annotateBatchTool() {
           message: `overlaps annotation${uniq.length === 1 ? '' : 's'} ${uniq.join(', ')} (IoU > ${overlapThreshold})`,
         })
       }
-      return { elementIds, annotations, warnings, byName, placements, overlaps }
+      return { elementIds, annotations, warnings, ...(unknownPaletteKeys ? { unknownPaletteKeys } : {}), byName, placements, overlaps }
     },
   }
 }

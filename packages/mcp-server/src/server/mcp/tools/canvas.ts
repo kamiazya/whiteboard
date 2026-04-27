@@ -1,5 +1,6 @@
 import open from 'open'
 import { z } from 'zod'
+import { clientCountResponseSchema } from '../../../shared/api-contracts/canvas-runtime.js'
 import type { DaemonClient } from '../daemon-client.js'
 import { daemonUrl } from '../daemon-client.js'
 
@@ -62,7 +63,7 @@ export function createCanvasTool() {
       args: { slug: string; issueNumber?: number; overwrite?: boolean },
       workspaceId: string,
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof canvasCreateOutputSchema>> => {
       const finalSlug = args.issueNumber ? `${args.issueNumber}-${args.slug}` : args.slug
       const res = await client.request(`/api/workspaces/${workspaceId}/canvases`, {
         method: 'POST',
@@ -102,7 +103,7 @@ export function listCanvasTool() {
     execute: async (
       args: { activeOnly?: boolean; slugContains?: string },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof canvasListOutputSchema>> => {
       const res = await client.request('/api/workspaces')
       if (!res.ok) {
         throw new Error(`Failed to list workspaces: ${res.status}`)
@@ -171,7 +172,7 @@ export function openCanvasTool() {
     execute: async (
       args: { id: string; fullscreen?: boolean; waitForClient?: boolean; waitTimeoutMs?: number },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof canvasOpenOutputSchema>> => {
       const qs = args.fullscreen ? '?fullscreen=1' : ''
       const url = daemonUrl(client, `/canvas/${args.id}${qs}`)
       // Browser launch may fail silently in headless, sandboxed, or no-display
@@ -199,8 +200,8 @@ export function openCanvasTool() {
         try {
           const res = await client.request(statusPath)
           if (res.ok) {
-            const body = (await res.json()) as { count: number; readyCount?: number }
-            if ((body.readyCount ?? body.count) > 0) {
+            const parsed = clientCountResponseSchema.safeParse(await res.json())
+            if (parsed.success && (parsed.data.readyCount ?? parsed.data.count) > 0) {
               clientReady = true
               break
             }

@@ -72,13 +72,12 @@ export const userLibraryRemoveOutputSchema = z.object({
   remaining: z.array(z.string()),
 })
 
-export const userLibraryMetadataManifestSchema = z.object({
-  version: z.literal(1),
-  revision: z.number(),
-  aliases: z.record(z.string(), z.number()),
-  notes: z.record(z.string(), z.string()),
-  scales: z.record(z.string(), z.number()),
-})
+import {
+  type UserLibraryMetadataManifest,
+  userLibraryMetadataManifestSchema,
+} from '../../../shared/api-contracts/libraries.js'
+
+export { userLibraryMetadataManifestSchema, type UserLibraryMetadataManifest }
 
 // MCP tools for working with libraries.excalidraw.com-compatible .excalidrawlib
 // payloads. Supports v1 and v2, listing item metadata and inserting cloned items
@@ -121,14 +120,6 @@ interface LibraryInsertBatchArgs extends LibrarySourceArgs {
   items: LibraryInsertBatchItem[]
   groupAs?: string
   scale?: number
-}
-
-interface UserLibraryMetadataManifest {
-  version: 1
-  revision: number
-  aliases: Record<string, number>
-  notes: Record<string, string>
-  scales: Record<string, number>
 }
 
 function normalizeLibraryPayload(raw: unknown, label: string): LibraryItemV2[] {
@@ -379,7 +370,7 @@ export function libraryListItemsTool() {
         userLibraryName?: string
       },
       client?: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof libraryListItemsOutputSchema>> => {
       const items = await loadLibrarySource(args, client)
       return {
         source: args.libraryUrl ?? args.libraryPath ?? `user:${args.userLibraryName}`,
@@ -442,7 +433,7 @@ export function libraryInsertItemTool() {
         scale?: number
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof libInsertItemOutputSchema>> => {
       const result = await insertLibraryBatch(
         {
           canvasId: args.canvasId,
@@ -523,7 +514,7 @@ export function libraryInsertBatchTool() {
       },
       required: ['canvasId', 'items'],
     },
-    execute: async (args: LibraryInsertBatchArgs, client: DaemonClient) => {
+    execute: async (args: LibraryInsertBatchArgs, client: DaemonClient): Promise<z.infer<typeof libraryInsertBatchOutputSchema>> => {
       if (args.scale !== undefined) requirePositiveScale(args.scale)
       if (args.items.length === 0) {
         return {
@@ -556,7 +547,7 @@ export function libraryInstallTool(workspaceId: string) {
       },
       required: ['libraryUrl'],
     },
-    execute: async (args: { libraryUrl: string }, client: DaemonClient) => {
+    execute: async (args: { libraryUrl: string }, client: DaemonClient): Promise<z.infer<typeof libraryInstallOutputSchema>> => {
       // Verify the URL eagerly so broken sources fail here.
       const items = await fetchLibrary(args.libraryUrl)
       const res = await client.request(`/api/workspaces/${workspaceId}/libraries`, {
@@ -588,7 +579,7 @@ export function libraryUninstallTool(workspaceId: string) {
       },
       required: ['libraryUrl'],
     },
-    execute: async (args: { libraryUrl: string }, client: DaemonClient) => {
+    execute: async (args: { libraryUrl: string }, client: DaemonClient): Promise<z.infer<typeof installedUrlsOutputSchema>> => {
       const res = await client.request(`/api/workspaces/${workspaceId}/libraries`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -612,7 +603,7 @@ export function libraryListInstalledTool(workspaceId: string) {
       type: 'object' as const,
       properties: {},
     },
-    execute: async (_args: object, client: DaemonClient) => {
+    execute: async (_args: object, client: DaemonClient): Promise<z.infer<typeof installedUrlsOutputSchema>> => {
       const res = await client.request(`/api/workspaces/${workspaceId}/libraries`)
       if (!res.ok) {
         throw new Error(`Failed to list installed libraries: ${res.status}`)
@@ -655,7 +646,7 @@ export function userLibrarySaveTool() {
     execute: async (
       args: { name: string; fromUrl?: string; content?: unknown },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof userLibrarySaveOutputSchema>> => {
       const hasUrl = !!args.fromUrl
       const hasContent = args.content !== undefined && args.content !== null
       if (hasUrl === hasContent) {
@@ -697,7 +688,7 @@ export function userLibraryListTool() {
       type: 'object' as const,
       properties: {},
     },
-    execute: async (_args: object, client: DaemonClient) => {
+    execute: async (_args: object, client: DaemonClient): Promise<z.infer<typeof userLibraryListOutputSchema>> => {
       const res = await client.request('/api/user-libraries')
       if (!res.ok) {
         throw new Error(`Failed to list user libraries: ${res.status}`)
@@ -720,7 +711,7 @@ export function userLibraryRemoveTool() {
       },
       required: ['name'],
     },
-    execute: async (args: { name: string }, client: DaemonClient) => {
+    execute: async (args: { name: string }, client: DaemonClient): Promise<z.infer<typeof userLibraryRemoveOutputSchema>> => {
       const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}`, {
         method: 'DELETE',
       })
@@ -744,7 +735,7 @@ export function userLibraryMetadataGetTool() {
       },
       required: ['name'],
     },
-    execute: async (args: { name: string }, client: DaemonClient) => {
+    execute: async (args: { name: string }, client: DaemonClient): Promise<z.infer<typeof userLibraryMetadataManifestSchema>> => {
       const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}/metadata`)
       return await readJsonOrThrow<UserLibraryMetadataManifest>(
         res,
@@ -779,7 +770,7 @@ export function userLibraryMetadataSetTool() {
         scales?: Record<string, number>
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof userLibraryMetadataManifestSchema>> => {
       const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}/metadata`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -823,7 +814,7 @@ export function userLibraryMetadataDeleteTool() {
         scaleKeys?: string[]
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof userLibraryMetadataManifestSchema>> => {
       const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}/metadata`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },

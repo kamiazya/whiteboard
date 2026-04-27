@@ -103,7 +103,7 @@ export function libraryCatalogListTool() {
         },
       },
     },
-    execute: async (args: { query?: string; limit?: number }) => {
+    execute: async (args: { query?: string; limit?: number }): Promise<z.infer<typeof libraryCatalogListOutputSchema>> => {
       const entries = await loadCatalog()
       const filtered = args.query
         ? entries.filter((e) => matchesQuery(e, args.query!))

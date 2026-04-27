@@ -76,15 +76,10 @@ export function resolveLayout(
   const hasRowCol = item.row !== undefined || item.col !== undefined
   const hasTarget = item.target !== undefined
 
-  if (hasRowCol && hasTarget) {
-    throw new Error('cannot specify both target and row/col for the same item')
-  }
-
-  if (hasTarget) {
-    return { x: item.target!.x, y: item.target!.y }
-  }
-
   if (!hasRowCol) {
+    if (hasTarget) {
+      return { x: item.target!.x, y: item.target!.y }
+    }
     throw new Error('item must specify either target or row/col')
   }
 
