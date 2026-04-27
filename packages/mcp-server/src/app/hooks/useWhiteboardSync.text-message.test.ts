@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  parseServerTextMessage,
-  type VersionCreatedPayload,
-} from './useWhiteboardSync.text-message.js'
+import type { VersionCreatedPayload } from '../../shared/ws-messages.js'
+import { parseServerTextMessage } from './useWhiteboardSync.text-message.js'
 
 function makeVersion(): VersionCreatedPayload {
   return {

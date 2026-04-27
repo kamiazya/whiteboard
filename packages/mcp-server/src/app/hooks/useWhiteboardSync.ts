@@ -10,12 +10,12 @@ import {
   buildWhiteboardWsUrl,
   flushPendingExportRequests,
   handleIncomingExportRequest,
-  type ExportRequestMessage,
 } from './useWhiteboardSync.helpers.js'
-import {
-  parseServerTextMessage,
-  type VersionCreatedPayload,
-} from './useWhiteboardSync.text-message.js'
+import { parseServerTextMessage } from './useWhiteboardSync.text-message.js'
+import type {
+  ExportRequestMessage,
+  VersionCreatedPayload,
+} from '../../shared/ws-messages.js'
 import type {
   ExcalidrawImperativeAPI,
   BinaryFileData,
