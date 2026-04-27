@@ -1,10 +1,11 @@
 import { z } from 'zod'
 
-// Single source of truth for the JSON text frames that flow over the daemon
-// WebSocket. Both the server (packages/mcp-server/src/server/routes/ws.ts) and
-// the React client (packages/mcp-server/src/app/hooks/useWhiteboardSync*) use
-// these schemas: producers ground their `JSON.stringify(...)` argument on
-// `z.infer<typeof xxxMessageSchema>`, consumers use `xxxMessageSchema.safeParse`.
+// Server's VersionEntry / OperatorInfo (in server/store/version-store.ts) is
+// the runtime source of truth for these payloads. We don't import that type
+// from the `shared/` layer to keep client-only consumers free of server
+// modules; instead the server-side compile pass on `tools/canvas.ts` /
+// `routes/ws.ts` exercises the equivalence by passing VersionEntry into
+// `sendVersionCreated`, which expects a payload that satisfies this schema.
 
 const operatorInfoSchema = z.object({
   kind: z.enum(['ai', 'human', 'system']),
@@ -61,13 +62,11 @@ export const exportRequestMessageSchema = z.object({
   padding: z.number().finite().optional(),
   scale: z.number().finite().optional(),
   minFontPx: z.number().finite().optional(),
-  // When set, export only elements inside the frame plus the frame itself, so
-  // section-level PNG exports stay small on large canvases.
+  // When set, export only elements inside the frame plus the frame itself,
+  // so section-level PNG exports stay small on large canvases.
   frameId: z.string().optional(),
 })
 
-// Server → client text frames. Anything else hitting parseServerTextMessage is
-// dropped with a warning by the consumer.
 export const serverTextMessageSchema = z.discriminatedUnion('type', [
   versionCreatedMessageSchema,
   headChangedMessageSchema,
@@ -77,7 +76,6 @@ export const serverTextMessageSchema = z.discriminatedUnion('type', [
   exportRequestMessageSchema,
 ])
 
-export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export type VersionCreatedPayload = z.infer<typeof versionCreatedPayloadSchema>
 export type VersionCreatedMessage = z.infer<typeof versionCreatedMessageSchema>
 export type HeadChangedMessage = z.infer<typeof headChangedMessageSchema>

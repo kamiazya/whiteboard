@@ -1,9 +1,7 @@
 import type { BinaryFiles } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
-import { type ExportRequestMessage } from '../../shared/ws-messages.js'
+import type { ExportRequestMessage } from '../../shared/ws-messages.js'
 import { buildWhiteboardWsProtocols } from '../../shared/ws-protocol.js'
-
-export type { ExportRequestMessage }
 
 type ExportApi = {
   getSceneElements: () => readonly ExcalidrawElement[]

@@ -1,29 +1,4 @@
-import {
-  type ExportRequestMessage,
-  type HeadChangedMessage,
-  type OperatorInfo,
-  type RestoreCompleteMessage,
-  type RestoreStartedMessage,
-  type ServerTextMessage,
-  serverTextMessageSchema,
-  type VersionCreatedMessage,
-  type VersionCreatedPayload,
-  type ViewportRequestMessage,
-} from '../../shared/ws-messages.js'
-
-// Re-export the shared types that the React hook + tests still import from
-// this module so the call sites don't have to learn a new path.
-export type {
-  ExportRequestMessage,
-  HeadChangedMessage,
-  OperatorInfo,
-  RestoreCompleteMessage,
-  RestoreStartedMessage,
-  ServerTextMessage,
-  VersionCreatedMessage,
-  VersionCreatedPayload,
-  ViewportRequestMessage,
-}
+import { type ServerTextMessage, serverTextMessageSchema } from '../../shared/ws-messages.js'
 
 export function parseServerTextMessage(
   raw: string,

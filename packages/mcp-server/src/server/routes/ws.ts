@@ -11,23 +11,6 @@ import {
   parseWsTargetFromRequestUrl,
 } from './ws-validation.js'
 
-// Centralized broadcaster. Typing the argument as ServerTextMessage makes
-// every send site fail at compile time if the payload doesn't match the zod
-// schema in shared/ws-messages.ts.
-function broadcastTextMessage(
-  workspaceId: string,
-  slug: string,
-  message: ServerTextMessage,
-): void {
-  const key = `${workspaceId}/${slug}`
-  const clients = connections.get(key)
-  if (!clients) return
-  const raw = JSON.stringify(message)
-  for (const ws of clients) {
-    ws.send(raw)
-  }
-}
-
 // Connection registry: key = "workspaceId/slug", value = Set<WebSocket>
 const connections = new Map<string, Set<WebSocket>>()
 const readyConnections = new Map<string, Set<WebSocket>>()
@@ -37,7 +20,33 @@ export function setRuntimeTouchFn(fn: () => void): void {
   runtimeTouch = fn
 }
 
-// WS broadcast helper that can exclude the sender.
+function omitUndefined<T extends object>(o: T): Partial<T> {
+  const out: Partial<T> = {}
+  for (const [k, v] of Object.entries(o) as Array<[keyof T, T[keyof T]]>) {
+    if (v !== undefined) out[k] = v
+  }
+  return out
+}
+
+function forEachClient(
+  workspaceId: string,
+  slug: string,
+  fn: (ws: WebSocket) => void,
+): void {
+  const clients = connections.get(`${workspaceId}/${slug}`)
+  if (!clients) return
+  for (const ws of clients) fn(ws)
+}
+
+function broadcastTextMessage(
+  workspaceId: string,
+  slug: string,
+  message: ServerTextMessage,
+): void {
+  const raw = JSON.stringify(message)
+  forEachClient(workspaceId, slug, (ws) => ws.send(raw))
+}
+
 // Exported so app.ts can wire it into the branches router checkoutTo flow.
 export function broadcastLoroUpdate(
   workspaceId: string,
@@ -45,14 +54,9 @@ export function broadcastLoroUpdate(
   update: Uint8Array,
   excludeWs?: WebSocket,
 ): void {
-  const key = `${workspaceId}/${slug}`
-  const clients = connections.get(key)
-  if (!clients) return
-  for (const ws of clients) {
-    if (ws !== excludeWs) {
-      ws.send(update)
-    }
-  }
+  forEachClient(workspaceId, slug, (ws) => {
+    if (ws !== excludeWs) ws.send(update)
+  })
 }
 
 // Set the broadcastFn used by canvas.ts.
@@ -76,7 +80,6 @@ export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
   autoVersionTrigger = fn
 }
 
-// Push version creation events to all WS clients on the canvas. The browser generates and uploads the thumbnail.
 export function sendVersionCreated(
   workspaceId: string,
   slug: string,
@@ -85,58 +88,43 @@ export function sendVersionCreated(
   broadcastTextMessage(workspaceId, slug, { type: 'version_created', version })
 }
 
-// Soft lock for restore: broadcast started/complete around reconcile.
-// Clients block pointer events while started is active to reduce races with other peers.
-// This is not an absolute CRDT lock, just a best-effort UX for the typically short restore window (<1s).
+// Soft lock for restore: clients block pointer events while started is active to
+// reduce races with other peers during the typically short restore window (<1s).
 export function sendRestoreEvent(
   workspaceId: string,
   slug: string,
   phase: 'started' | 'complete',
   label?: string,
 ): void {
-  if (phase === 'started') {
-    broadcastTextMessage(workspaceId, slug, {
-      type: 'restore_started',
-      ...(label !== undefined ? { label } : {}),
-    })
-  } else {
-    broadcastTextMessage(workspaceId, slug, { type: 'restore_complete' })
-  }
+  const message: ServerTextMessage =
+    phase === 'started'
+      ? { type: 'restore_started', ...omitUndefined({ label }) }
+      : { type: 'restore_complete' }
+  broadcastTextMessage(workspaceId, slug, message)
 }
 
-// Notify all peers on the same key when HEAD changes. broadcastLoroUpdate
-// already carries the state update; this is only a UI overlay signal.
 export function sendHeadChanged(workspaceId: string, slug: string, head: string): void {
   broadcastTextMessage(workspaceId, slug, { type: 'head_changed', head })
 }
 
-// Injected from viewport.ts: handles viewport_response messages.
-// viewport only sends an ACK, so matching on requestId is enough.
 let resolveViewportFn: ((requestId: string) => void) | null = null
 export function setResolveViewportFn(fn: (requestId: string) => void): void {
   resolveViewportFn = fn
 }
 
-// Send export_request to every WS client connected to a canvas. Used by export.ts.
 export function sendExportRequest(
   workspaceId: string,
   slug: string,
   requestId: string,
-  options?: { padding?: number; scale?: number; minFontPx?: number; frameId?: string },
+  options: { padding?: number; scale?: number; minFontPx?: number; frameId?: string } = {},
 ): void {
   broadcastTextMessage(workspaceId, slug, {
     type: 'export_request',
     requestId,
-    ...(options?.padding !== undefined ? { padding: options.padding } : {}),
-    ...(options?.scale !== undefined ? { scale: options.scale } : {}),
-    ...(options?.minFontPx !== undefined ? { minFontPx: options.minFontPx } : {}),
-    ...(options?.frameId !== undefined ? { frameId: options.frameId } : {}),
+    ...omitUndefined(options),
   })
 }
 
-// Send viewport_request to every WS client connected to a canvas. Used by viewport.ts.
-// The caller may provide any subset of mode / elementIds / animate / scrollX / scrollY / zoom.
-// The browser-side useWhiteboardSync viewport_request handler applies them through excalidrawAPI.
 export function sendViewportRequest(
   workspaceId: string,
   slug: string,
@@ -153,12 +141,7 @@ export function sendViewportRequest(
   broadcastTextMessage(workspaceId, slug, {
     type: 'viewport_request',
     requestId,
-    ...(params.mode !== undefined ? { mode: params.mode } : {}),
-    ...(params.elementIds !== undefined ? { elementIds: params.elementIds } : {}),
-    ...(params.animate !== undefined ? { animate: params.animate } : {}),
-    ...(params.scrollX !== undefined ? { scrollX: params.scrollX } : {}),
-    ...(params.scrollY !== undefined ? { scrollY: params.scrollY } : {}),
-    ...(params.zoom !== undefined ? { zoom: params.zoom } : {}),
+    ...omitUndefined(params),
   })
 }
 
