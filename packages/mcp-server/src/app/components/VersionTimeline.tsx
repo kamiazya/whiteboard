@@ -12,30 +12,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  type OperatorInfo,
+  type VersionEntry,
+  listVersionsResponseSchema,
+} from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 import { useBranches } from '../hooks/useBranches.js'
 import { buildMiniGraph } from '../lib/mini-graph.js'
-
-interface OperatorInfo {
-  kind: 'ai' | 'human' | 'system'
-  peerId: string
-  displayName?: string
-  agentId?: string
-  workspaceId?: string
-}
-
-interface VersionEntry {
-  id: string
-  slug: string
-  createdAt: string
-  elementCount: number
-  label?: string
-  auto: boolean
-  hasThumbnail: boolean
-  operator?: OperatorInfo
-  // Identify which branch created the commit. The server hydrates missing legacy metadata to "main".
-  branchName?: string
-}
 
 interface Props {
   workspaceId: string
@@ -85,8 +69,9 @@ export default function VersionTimeline({
         `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
       )
       if (res.ok) {
-        const body = (await res.json()) as { versions: VersionEntry[] }
-        setVersions(body.versions)
+        const parsed = listVersionsResponseSchema.safeParse(await res.json())
+        if (parsed.success) setVersions(parsed.data.versions)
+        else setVersions([])
       }
     } finally {
       setLoading(false)

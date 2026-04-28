@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { saveVersionResponseSchema } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 import VersionTimeline from './VersionTimeline.js'
 import { HeaderBranchChip } from './HeaderBranchChip.js'
@@ -208,8 +209,8 @@ export default function WorkspaceTopBar({
             }),
           )
         }
-        const body = (await res.json().catch(() => ({}))) as { version?: { id: string } }
-        const id = body.version?.id
+        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+        const id = parsed.success ? parsed.data.version.id : undefined
         if (id && getThumbnailBlob) {
           try {
             const blob = await getThumbnailBlob()

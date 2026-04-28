@@ -1,50 +1,55 @@
 import { z } from 'zod'
+import {
+  paletteResponseSchema,
+  type PaletteEntries,
+} from '../../../shared/api-contracts/palette.js'
 import type { DaemonClient } from '../daemon-client.js'
 
-export const paletteOutputSchema = z.object({ palette: z.record(z.string(), z.unknown()) })
+export { paletteResponseSchema as paletteOutputSchema }
 
-async function readJson<T>(res: Response): Promise<T> {
-  return (await res.json()) as T
+async function readPaletteResponse(res: Response, label: string): Promise<PaletteEntries> {
+  if (!res.ok) throw new Error(`${label} failed: ${res.status}`)
+  return paletteResponseSchema.parse(await res.json()).palette
 }
 
 export async function apiGetPalette(
   client: DaemonClient,
   workspaceId: string,
-): Promise<Record<string, string>> {
-  const res = await client.request(`/api/workspaces/${workspaceId}/palette`)
-  if (!res.ok) throw new Error(`GET /palette failed: ${res.status}`)
-  const body = await readJson<{ palette?: Record<string, string> }>(res)
-  return body.palette ?? {}
+): Promise<PaletteEntries> {
+  return readPaletteResponse(
+    await client.request(`/api/workspaces/${workspaceId}/palette`),
+    'GET /palette',
+  )
 }
 
 export async function apiSetPalette(
   client: DaemonClient,
   workspaceId: string,
-  entries: Record<string, string>,
-): Promise<Record<string, string>> {
-  const res = await client.request(`/api/workspaces/${workspaceId}/palette`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ entries }),
-  })
-  if (!res.ok) throw new Error(`PUT /palette failed: ${res.status}`)
-  const body = await readJson<{ palette?: Record<string, string> }>(res)
-  return body.palette ?? {}
+  entries: PaletteEntries,
+): Promise<PaletteEntries> {
+  return readPaletteResponse(
+    await client.request(`/api/workspaces/${workspaceId}/palette`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries }),
+    }),
+    'PUT /palette',
+  )
 }
 
 export async function apiDeletePalette(
   client: DaemonClient,
   workspaceId: string,
   keys: string[],
-): Promise<Record<string, string>> {
-  const res = await client.request(`/api/workspaces/${workspaceId}/palette`, {
-    method: 'DELETE',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keys }),
-  })
-  if (!res.ok) throw new Error(`DELETE /palette failed: ${res.status}`)
-  const body = await readJson<{ palette?: Record<string, string> }>(res)
-  return body.palette ?? {}
+): Promise<PaletteEntries> {
+  return readPaletteResponse(
+    await client.request(`/api/workspaces/${workspaceId}/palette`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys }),
+    }),
+    'DELETE /palette',
+  )
 }
 
 export function paletteGetTool() {
@@ -58,7 +63,7 @@ export function paletteGetTool() {
       },
       required: ['workspaceId'],
     },
-    execute: async (args: { workspaceId: string }, client: DaemonClient) => {
+    execute: async (args: { workspaceId: string }, client: DaemonClient): Promise<z.infer<typeof paletteResponseSchema>> => {
       return { palette: await apiGetPalette(client, args.workspaceId) }
     },
   }
@@ -77,9 +82,9 @@ export function paletteSetTool() {
       required: ['workspaceId', 'entries'],
     },
     execute: async (
-      args: { workspaceId: string; entries: Record<string, string> },
+      args: { workspaceId: string; entries: PaletteEntries },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof paletteResponseSchema>> => {
       return { palette: await apiSetPalette(client, args.workspaceId, args.entries) }
     },
   }
@@ -97,7 +102,7 @@ export function paletteDeleteTool() {
       },
       required: ['workspaceId', 'keys'],
     },
-    execute: async (args: { workspaceId: string; keys: string[] }, client: DaemonClient) => {
+    execute: async (args: { workspaceId: string; keys: string[] }, client: DaemonClient): Promise<z.infer<typeof paletteResponseSchema>> => {
       return { palette: await apiDeletePalette(client, args.workspaceId, args.keys) }
     },
   }

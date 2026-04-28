@@ -1,21 +1,38 @@
 {
   "name": "whiteboard",
   "version": "0.0.4",
-  "description": "Collaborative Excalidraw whiteboard for Codex. Bundles shared skills and points Codex at the packaged whiteboard MCP server.",
+  "description": "Collaborative Excalidraw whiteboard for Codex. Wraps the @kamiazya/whiteboard-mcp server and exposes the shared skills bundled with that package.",
+  "author": {
+    "name": "kamiazya",
+    "url": "https://github.com/kamiazya"
+  },
+  "homepage": "https://github.com/kamiazya/whiteboard",
   "repository": "https://github.com/kamiazya/whiteboard",
   "license": "MIT",
-  "skills": "./packages/mcp-server/skills",
+  "keywords": [
+    "excalidraw",
+    "diagramming",
+    "mcp",
+    "whiteboard",
+    "codex"
+  ],
+  "skills": "./skills",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Whiteboard",
-    "shortDescription": "Draw and refine diagrams on a shared Excalidraw canvas.",
-    "longDescription": "Use the Whiteboard plugin to create, annotate, inspect, and export collaborative diagrams through the shared whiteboard MCP server.",
+    "shortDescription": "Collaborative Excalidraw canvas for AI agents",
+    "longDescription": "Runs a live Excalidraw canvas in your browser and exposes MCP tools so Codex can draw, annotate, and refine diagrams alongside you. Canvases live locally under ~/.whiteboard/ and round-trip with stock .excalidraw JSON.",
     "developerName": "kamiazya",
     "category": "Productivity",
     "capabilities": [
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/kamiazya/whiteboard"
+    "websiteURL": "https://github.com/kamiazya/whiteboard",
+    "defaultPrompt": [
+      "Sketch the architecture for this service on the whiteboard",
+      "Draw a request flow diagram and export it as PNG",
+      "Open the whiteboard and annotate the current design"
+    ]
   }
 }

@@ -2,6 +2,12 @@ import { Hono } from 'hono'
 import { join, dirname } from 'node:path'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
+import { z } from 'zod'
+import {
+  type ExportErrorBody,
+  type ExportResponse,
+  exportRequestSchema,
+} from '../../shared/api-contracts/export.js'
 import { DATA_DIR } from '../config.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { sendExportRequest, getClientCount } from './ws.js'
@@ -40,17 +46,29 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     }
 
     // The body is optional. Forward { padding?, scale?, minFontPx?, frameId? }
-    // to the browser. Treat Content-Length 0 or JSON parse failures as "no options".
-    type ExportBody = {
-      padding?: number
-      scale?: number
-      minFontPx?: number
-      frameId?: string
-      outputPath?: string
-      overwrite?: boolean
+    // to the browser. Empty body is fine; malformed JSON or schema-invalid
+    // payloads are rejected with 400 instead of being silently dropped.
+    const rawText = await c.req.text()
+    let body: z.infer<typeof exportRequestSchema> = {}
+    if (rawText.length > 0) {
+      let json: unknown
+      try {
+        json = JSON.parse(rawText)
+      } catch {
+        const errBody: ExportErrorBody = { error: 'invalid_request', message: 'malformed JSON' }
+        return c.json(errBody, 400)
+      }
+      const parsed = exportRequestSchema.safeParse(json)
+      if (!parsed.success) {
+        const errBody: ExportErrorBody = {
+          error: 'invalid_request',
+          message: 'invalid export options',
+        }
+        return c.json(errBody, 400)
+      }
+      body = parsed.data
     }
-    const body = await c.req.json<ExportBody>().catch(() => ({}) as ExportBody)
-    const options: Pick<ExportBody, 'padding' | 'scale' | 'minFontPx' | 'frameId'> = {}
+    const options: Pick<typeof body, 'padding' | 'scale' | 'minFontPx' | 'frameId'> = {}
     if (body.padding !== undefined) options.padding = body.padding
     if (body.scale !== undefined) options.scale = body.scale
     if (body.minFontPx !== undefined) options.minFontPx = body.minFontPx
@@ -67,7 +85,8 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
       } catch (err) {
         if (err instanceof OutputPathError) {
           const status = err.code === 'output_exists' ? 409 : 400
-          return c.json({ error: err.code, message: err.message }, status)
+          const errBody: ExportErrorBody = { error: err.code, message: err.message }
+          return c.json(errBody, status)
         }
         throw err
       }
@@ -78,15 +97,13 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     // Do not wait for the timeout because that would not fix a missing client; report
     // the real cause immediately so the caller can open the canvas in a browser first.
     if (getClientCount(workspaceId, slug) === 0) {
-      return c.json(
-        {
-          error: 'no_client',
-          message:
-            'No browser client is connected to this canvas. Open the canvas in a browser and retry.',
-          hint: 'Call canvas_open first to open the canvas in a browser, then run export_png.',
-        },
-        503,
-      )
+      const noClient: ExportErrorBody = {
+        error: 'no_client',
+        message:
+          'No browser client is connected to this canvas. Open the canvas in a browser and retry.',
+        hint: 'Call canvas_open first to open the canvas in a browser, then run export_png.',
+      }
+      return c.json(noClient, 503)
     }
 
     const requestId = nanoid()
@@ -123,19 +140,19 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, buffer)
 
-      return c.json({ filePath })
+      const response: ExportResponse = { filePath }
+      return c.json(response)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (message === 'timeout') {
-        return c.json(
-          {
-            error: 'timeout',
-            message: `Export timed out after ${Math.round(timeoutMs / 1000)}s. The browser client did not respond.`,
-          },
-          504,
-        )
+        const timeoutBody: ExportErrorBody = {
+          error: 'timeout',
+          message: `Export timed out after ${Math.round(timeoutMs / 1000)}s. The browser client did not respond.`,
+        }
+        return c.json(timeoutBody, 504)
       }
-      return c.json({ error: 'internal', message }, 500)
+      const internalBody: ExportErrorBody = { error: 'internal', message }
+      return c.json(internalBody, 500)
     }
   })
 

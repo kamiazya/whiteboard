@@ -1,43 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  type BranchMeta,
+  type BranchStatsResponse,
+  type CanvasBranchesState,
+  type CreateBranchRequest,
+  type DeleteBranchResponse,
+  type MergeResponse,
+  type RenameBranchResponse,
+  type SetHeadResponse,
+  branchMetaSchema,
+  branchStatsResponseSchema,
+  createBranchResponseSchema,
+  deleteBranchResponseSchema,
+  mergeResponseSchema,
+  renameBranchResponseSchema,
+  setHeadResponseSchema,
+} from '../../shared/api-contracts/branches.js'
 import { apiFetch } from '../lib/api-client.js'
 
 // Branch API helpers plus the React hook wrapper.
 // - branchesApi: pure request helpers that can be tested without React.
 // - useBranches: bundles list state and mutators, and refetches on head_changed events.
 
-export interface BranchMeta {
-  name: string
-  tipFrontiers: string
-  baseBranch?: string
-  baseVersionId?: string
-  color: string
-  createdAt: string
-}
-
-export interface BranchesState {
-  branches: BranchMeta[]
-  head: string
-}
-
-export interface MergeResult {
-  badges: Array<Record<string, unknown>>
-  preview?: { elementCount: number }
-  committed?: { elementCount: number }
-  // Element counts used by MergeDialog's target/source/preview comparison columns.
-  target?: { elementCount: number }
-  source?: { elementCount: number }
-  // Alive preview elements returned by the server during dry-run.
-  // MergeDialog owns the rendering details, so the UI receives them as unknown[].
-  previewElements?: unknown[]
-  // Merge commit details used by the highlight and undo UI.
-  newElementIds?: string[]
-  changedElementIds?: string[]
-  conflictElementIds?: string[]
-  preMergeVersionId?: string
-  // Post-merge cleanup information when the server switches HEAD or deletes the source branch.
-  switchedHead?: { from: string; to: string }
-  deletedSource?: string
-}
+export type { BranchMeta }
+export type BranchesState = CanvasBranchesState
+export type MergeResult = MergeResponse
 
 // ── URL builder ──
 // Slugs can contain "/", so always encode them.
@@ -59,29 +46,23 @@ export function buildBranchUrls(workspaceId: string, slug: string): {
   }
 }
 
-// ── Response parser (defensive) ──
+// Defensive parse: filter malformed entries per-item so the BranchPicker keeps
+// rendering valid branches even if the server (or a stale cache) ships a rogue
+// row. branchMetaSchema is the single source of truth for the wire shape.
 export function parseBranchesResponse(raw: unknown): BranchesState {
-  const defaultState: BranchesState = { branches: [], head: 'main' }
-  if (!raw || typeof raw !== 'object') return defaultState
+  if (!raw || typeof raw !== 'object') return { branches: [], head: 'main' }
   const data = raw as { head?: unknown; branches?: unknown }
   const branches: BranchMeta[] = []
   if (Array.isArray(data.branches)) {
-    for (const b of data.branches) {
-      if (!b || typeof b !== 'object') continue
-      const bb = b as Partial<BranchMeta>
-      if (typeof bb.name !== 'string' || typeof bb.color !== 'string') continue
-      branches.push({
-        name: bb.name,
-        tipFrontiers: typeof bb.tipFrontiers === 'string' ? bb.tipFrontiers : '',
-        color: bb.color,
-        createdAt: typeof bb.createdAt === 'string' ? bb.createdAt : '',
-        ...(typeof bb.baseBranch === 'string' ? { baseBranch: bb.baseBranch } : {}),
-        ...(typeof bb.baseVersionId === 'string' ? { baseVersionId: bb.baseVersionId } : {}),
-      })
+    for (const entry of data.branches) {
+      const parsed = branchMetaSchema.safeParse(entry)
+      if (parsed.success) branches.push(parsed.data)
     }
   }
-  const head = typeof data.head === 'string' ? data.head : 'main'
-  return { branches, head }
+  return {
+    branches,
+    head: typeof data.head === 'string' ? data.head : 'main',
+  }
 }
 
 // Throw structured HTTP errors so callers can branch on status and body.
@@ -110,11 +91,7 @@ export function branchesApi(workspaceId: string, slug: string) {
       const res = await requireOk(await apiFetch(urls.list))
       return parseBranchesResponse(await res.json())
     },
-    async create(args: {
-      name: string
-      fromVersionId?: string
-      color?: string
-    }): Promise<BranchMeta> {
+    async create(args: CreateBranchRequest): Promise<BranchMeta> {
       const res = await requireOk(
         await apiFetch(urls.list, {
           method: 'POST',
@@ -122,23 +99,19 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify(args),
         }),
       )
-      const payload = (await res.json()) as { branch: BranchMeta }
-      return payload.branch
+      return createBranchResponseSchema.parse(await res.json()).branch
     },
-    async getStats(name: string): Promise<{ unmergedCommits: number; isHead: boolean }> {
+    async getStats(name: string): Promise<BranchStatsResponse> {
       const res = await requireOk(await apiFetch(urls.stats(name)))
-      return (await res.json()) as { unmergedCommits: number; isHead: boolean }
+      return branchStatsResponseSchema.parse(await res.json())
     },
-    async remove(name: string): Promise<{ ok: true; unmergedCommits: number }> {
+    async remove(name: string): Promise<DeleteBranchResponse> {
       const res = await requireOk(
         await apiFetch(urls.deleteBranch(name), { method: 'DELETE' }),
       )
-      return (await res.json()) as { ok: true; unmergedCommits: number }
+      return deleteBranchResponseSchema.parse(await res.json())
     },
-    async rename(
-      oldName: string,
-      newName: string,
-    ): Promise<{ branch: BranchMeta; renamedVersionCount: number }> {
+    async rename(oldName: string, newName: string): Promise<RenameBranchResponse> {
       const res = await requireOk(
         await apiFetch(urls.deleteBranch(oldName), {
           method: 'PATCH',
@@ -146,9 +119,9 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify({ name: newName }),
         }),
       )
-      return (await res.json()) as { branch: BranchMeta; renamedVersionCount: number }
+      return renameBranchResponseSchema.parse(await res.json())
     },
-    async setHead(branch: string): Promise<{ head: string; previousHead: string }> {
+    async setHead(branch: string): Promise<SetHeadResponse> {
       const res = await requireOk(
         await apiFetch(urls.head, {
           method: 'PUT',
@@ -156,7 +129,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify({ branch }),
         }),
       )
-      return (await res.json()) as { head: string; previousHead: string }
+      return setHeadResponseSchema.parse(await res.json())
     },
     async merge(source: string, args: { into: string; dryRun?: boolean }): Promise<MergeResult> {
       const res = await requireOk(
@@ -169,7 +142,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           }),
         }),
       )
-      return (await res.json()) as MergeResult
+      return mergeResponseSchema.parse(await res.json())
     },
   }
 }
@@ -181,11 +154,11 @@ export interface UseBranchesResult {
   loading: boolean
   error: BranchApiError | Error | null
   refetch: () => Promise<void>
-  createBranch: (args: { name: string; fromVersionId?: string; color?: string }) => Promise<BranchMeta>
+  createBranch: (args: CreateBranchRequest) => Promise<BranchMeta>
   deleteBranch: (name: string) => Promise<void>
-  getBranchStats: (name: string) => Promise<{ unmergedCommits: number; isHead: boolean }>
+  getBranchStats: (name: string) => Promise<BranchStatsResponse>
   renameBranch: (oldName: string, newName: string) => Promise<BranchMeta>
-  setHead: (branch: string) => Promise<{ head: string; previousHead: string }>
+  setHead: (branch: string) => Promise<SetHeadResponse>
   merge: (source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResult>
 }
 
@@ -233,7 +206,7 @@ export function useBranches(workspaceId: string, slug: string): UseBranchesResul
   }, [refetch, workspaceId, slug])
 
   const createBranch = useCallback(
-    async (args: { name: string; fromVersionId?: string; color?: string }) => {
+    async (args: CreateBranchRequest) => {
       const branch = await apiRef.current.create(args)
       await refetch()
       return branch

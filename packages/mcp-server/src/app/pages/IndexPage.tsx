@@ -5,6 +5,10 @@ import { Search, Radio, RadioTower, FileStack } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import {
+  listCanvasesResponseSchema,
+  listWorkspacesResponseSchema,
+} from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 
 interface RawWorkspace {
@@ -66,9 +70,7 @@ export default function IndexPage() {
     ;(async () => {
       try {
         const res = await apiFetch('/api/workspaces')
-        const { workspaces: rawList } = (await res.json()) as {
-          workspaces: { workspaceId: string; daemonAlive: boolean }[]
-        }
+        const rawList = listWorkspacesResponseSchema.parse(await res.json()).workspaces
         const enriched = await Promise.all(
           rawList.map(async (raw): Promise<EnrichedWorkspace> => {
             const id = raw.workspaceId
@@ -76,9 +78,7 @@ export default function IndexPage() {
               apiFetch(`/api/workspaces/${id}/canvases`),
               apiFetch(`/api/workspaces/${id}/names`),
             ])
-            const { canvases } = (await canvasesRes.json()) as {
-              canvases: { slug: string; updatedAt: string }[]
-            }
+            const { canvases } = listCanvasesResponseSchema.parse(await canvasesRes.json())
             const names: WorkspaceNames = namesRes.ok
               ? ((await namesRes.json()) as WorkspaceNames)
               : { canvases: {} }

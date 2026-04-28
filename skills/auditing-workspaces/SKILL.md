@@ -1,20 +1,20 @@
 ---
-name: whiteboard-audit
-description: Audit Excalidraw workspaces and canvases. Detect orphaned workspaces, tombstone-heavy canvases, and cache/disk mismatches, then report cleanup candidates.
+name: auditing-workspaces
+description: Audit Excalidraw workspaces and canvases to detect orphaned workspaces, tombstone-heavy canvases, and cache/disk mismatches. Use when workspaces are piling up, sync looks suspicious, or you want to check for stale artifacts before creating new canvases.
 ---
 
-# whiteboard-audit
+# auditing-workspaces
 
-Call the excalidraw MCP `/api/debug` endpoint to inspect workspace, canvas, and cache state.
+Call the whiteboard MCP `/api/debug` endpoint to inspect workspace, canvas, and cache state.
 Use it to find old workspaces (`hasActivePort=false`) and canvases dominated by tombstones, then report them as cleanup candidates.
 
-For the main drawing workflow, see the whiteboard skill in `skills/whiteboard/SKILL.md`.
+For the main drawing workflow, see the drawing-visuals skill in `skills/drawing-visuals/SKILL.md`.
 
 ---
 
 ## When To Use It
 
-- When excalidraw has been in heavy use and `~/.excalidraw/` seems bloated
+- When whiteboard has been in heavy use and `~/.whiteboard/` seems bloated
 - When you want to verify mechanically that a canvas is probably unused
 - When sync behavior looks suspicious and you want to compare cache vs disk state
 - Before opening a new canvas, when you want to check for duplicate slugs
@@ -25,12 +25,12 @@ For the main drawing workflow, see the whiteboard skill in `skills/whiteboard/SK
 
 ### Step 1: Find The Port For A Running Workspace
 
-In `~/.excalidraw/{workspaceId}/.port`, line 1 is the port number and line 2 is the PID.
+In `~/.whiteboard/{workspaceId}/.port`, line 1 is the port number and line 2 is the PID.
 An active workspace has a `.port` file and a live PID.
 
 ```bash
 # Quick check for running .port files
-ls $HOME/.excalidraw/*/.port 2>/dev/null
+ls $HOME/.whiteboard/*/.port 2>/dev/null
 ```
 
 If multiple workspaces are found, use the most recent one by mtime.
@@ -70,7 +70,7 @@ Check the following mechanically:
 
 | Concern | Condition | Suggested Action |
 | --- | --- | --- |
-| dead workspace | `hasActivePort=false` and canvases are not empty | candidate for deleting `~/.excalidraw/{workspaceId}/` |
+| dead workspace | `hasActivePort=false` and canvases are not empty | candidate for deleting `~/.whiteboard/{workspaceId}/` |
 | tombstone-heavy canvas | `tombstones / totalElements >= 0.5` and `totalElements >= 10` | consider rebuilding with `canvas_clear` or re-saving from a fresh snapshot |
 | empty canvas | `totalElements=0` | candidate for deletion |
 | cache leak | present in `cache.keys` but its workspace has `hasActivePort=false` | usually fixed by process restart; report it |
@@ -89,7 +89,7 @@ Tombstone-heavy: {slug count}
 Empty: {slug count}
 
 ### Deletion candidates
-- ~/.excalidraw/{workspaceId}/ ({reason})
+- ~/.whiteboard/{workspaceId}/ ({reason})
 
 ### Needs review
 - {workspaceId}/{slug}: tombstones {T}/{Total} -> consider canvas_clear
@@ -104,5 +104,5 @@ Do **not** delete anything automatically. Always confirm with the user before ru
 - `/api/debug` is a local-only endpoint. It is unauthenticated, so do not expose it externally
 - A canvas with `cached=true` is currently backed by an in-memory LoroDoc. `cached=false` means it was read from disk through `peekDoc` only and did not populate cache
 - `tombstones` count soft-deleted elements. They are part of the CRDT model, so do not delete them directly. If they are a problem, `canvas_clear` and rebuild is the safe route
-- Deleting all of `~/.excalidraw/` destroys all workspace history. Delete only dead workspaces selectively
-- If the numbers look wrong, restart the excalidraw MCP server first so doc-cache and filesystem state can resync, then rerun the audit
+- Deleting all of `~/.whiteboard/` destroys all workspace history. Delete only dead workspaces selectively
+- If the numbers look wrong, restart the whiteboard MCP server first so doc-cache and filesystem state can resync, then rerun the audit

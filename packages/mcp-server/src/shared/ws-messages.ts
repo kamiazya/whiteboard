@@ -84,3 +84,31 @@ export type RestoreCompleteMessage = z.infer<typeof restoreCompleteMessageSchema
 export type ViewportRequestMessage = z.infer<typeof viewportRequestMessageSchema>
 export type ExportRequestMessage = z.infer<typeof exportRequestMessageSchema>
 export type ServerTextMessage = z.infer<typeof serverTextMessageSchema>
+
+// ── Client → Server ──────────────────────────────────────────────────────────
+
+export const clientReadyMessageSchema = z.object({
+  type: z.literal('client_ready'),
+})
+
+export const exportResponseMessageSchema = z.object({
+  type: z.literal('export_response'),
+  requestId: z.string(),
+  data: z.string(),
+})
+
+export const viewportResponseMessageSchema = z.object({
+  type: z.literal('viewport_response'),
+  requestId: z.string(),
+})
+
+export const clientTextMessageSchema = z.discriminatedUnion('type', [
+  clientReadyMessageSchema,
+  exportResponseMessageSchema,
+  viewportResponseMessageSchema,
+])
+
+export type ClientReadyMessage = z.infer<typeof clientReadyMessageSchema>
+export type ExportResponseMessage = z.infer<typeof exportResponseMessageSchema>
+export type ViewportResponseMessage = z.infer<typeof viewportResponseMessageSchema>
+export type ClientTextMessage = z.infer<typeof clientTextMessageSchema>

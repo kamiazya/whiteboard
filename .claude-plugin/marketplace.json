@@ -12,7 +12,7 @@
     {
       "name": "whiteboard",
       "source": "./",
-      "description": "Collaborative Excalidraw canvas for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the bundled /whiteboard, /whiteboard-coauthoring, and /whiteboard-audit skills.",
+      "description": "Collaborative Excalidraw canvas for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the bundled /drawing-visuals, /coauthoring-visuals, and /auditing-workspaces skills.",
       "version": "0.0.4",
       "author": {
         "name": "kamiazya",

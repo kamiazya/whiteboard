@@ -269,7 +269,7 @@ export function canvasAutoLayoutTool() {
         groupGap?: number
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof canvasAutoLayoutOutputSchema>> => {
       const debugEnabled = shouldDebugAutoLayout()
       const timings: AutoLayoutPhaseTimings = {
         snapshotLoad: 0,

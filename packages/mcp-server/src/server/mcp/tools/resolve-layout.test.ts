@@ -41,10 +41,8 @@ describe('resolveLayout', () => {
     expect(resolveLayout(undefined, { target: { x: 10, y: 20 } })).toEqual({ x: 10, y: 20 })
   })
 
-  it('throws when target and row/col are both specified', () => {
-    expect(() =>
-      resolveLayout(LAYOUT, { row: 0, col: 0, target: { x: 1, y: 2 } }),
-    ).toThrow(/both target and row\/col/)
+  it('prefers row/col over target when both are specified', () => {
+    expect(resolveLayout(LAYOUT, { row: 0, col: 0, target: { x: 999, y: 999 } })).toEqual({ x: 0, y: 0 })
   })
 
   it('throws when only row is specified', () => {

@@ -36,7 +36,7 @@ export function checkpointSaveTool() {
     execute: async (
       args: { canvasId: string; id?: string },
       client: DaemonClient,
-    ): Promise<{ checkpointId: string; elementCount: number }> => {
+    ): Promise<z.infer<typeof checkpointSaveOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const checkpointId = args.id ?? nanoid(18)
       validateCheckpointId(checkpointId)
@@ -86,7 +86,7 @@ export function checkpointRestoreTool() {
       args: { checkpointId: string; targetSlug: string; overwrite?: boolean },
       workspaceId: string,
       client: DaemonClient,
-    ): Promise<{ canvasId: string; url: string; elementCount: number }> => {
+    ): Promise<z.infer<typeof checkpointRestoreOutputSchema>> => {
       validateCheckpointId(args.checkpointId)
       const res = await client.request(`/api/workspaces/${workspaceId}/checkpoints/${args.checkpointId}/restore`, {
         method: 'POST',
