@@ -1,6 +1,15 @@
 import { Hono } from 'hono'
-import { loadPalette, mergePaletteEntries, deletePaletteEntries } from '../store/palette-store.js'
-import { validationErrorBody, validateWorkspaceId } from '../validators.js'
+import {
+  type PaletteResponse,
+  paletteDeleteRequestSchema,
+  paletteSetRequestSchema,
+} from '../../shared/api-contracts/palette.js'
+import { deletePaletteEntries, loadPalette, mergePaletteEntries } from '../store/palette-store.js'
+import { validateWorkspaceId, validationErrorBody } from '../validators.js'
+
+function invalidBody(message: string) {
+  return { error: 'invalid_body', message }
+}
 
 export function createPaletteRouter() {
   const app = new Hono()
@@ -14,7 +23,8 @@ export function createPaletteRouter() {
       if (body) return c.json(body, 400)
       throw error
     }
-    return c.json({ palette: await loadPalette(workspaceId) })
+    const response: PaletteResponse = { palette: await loadPalette(workspaceId) }
+    return c.json(response)
   })
 
   app.put('/api/workspaces/:workspaceId/palette', async (c) => {
@@ -26,18 +36,14 @@ export function createPaletteRouter() {
       if (body) return c.json(body, 400)
       throw error
     }
-    const body = await c.req.json<{ entries?: unknown }>()
-    if (
-      typeof body.entries !== 'object' ||
-      body.entries === null ||
-      Array.isArray(body.entries) ||
-      Object.values(body.entries).some((value) => typeof value !== 'string')
-    ) {
-      return c.json({ error: 'invalid_body', message: 'entries must be Record<string, string>' }, 400)
+    const parsed = paletteSetRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
+      return c.json(invalidBody('entries must be Record<string, string>'), 400)
     }
-    return c.json({
-      palette: await mergePaletteEntries(workspaceId, body.entries as Record<string, string>),
-    })
+    const response: PaletteResponse = {
+      palette: await mergePaletteEntries(workspaceId, parsed.data.entries),
+    }
+    return c.json(response)
   })
 
   app.delete('/api/workspaces/:workspaceId/palette', async (c) => {
@@ -49,11 +55,14 @@ export function createPaletteRouter() {
       if (body) return c.json(body, 400)
       throw error
     }
-    const body = await c.req.json<{ keys?: unknown }>()
-    if (!Array.isArray(body.keys) || body.keys.some((value) => typeof value !== 'string')) {
-      return c.json({ error: 'invalid_body', message: 'keys must be string[]' }, 400)
+    const parsed = paletteDeleteRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
+      return c.json(invalidBody('keys must be a non-empty string[]'), 400)
     }
-    return c.json({ palette: await deletePaletteEntries(workspaceId, body.keys) })
+    const response: PaletteResponse = {
+      palette: await deletePaletteEntries(workspaceId, parsed.data.keys),
+    }
+    return c.json(response)
   })
 
   return app

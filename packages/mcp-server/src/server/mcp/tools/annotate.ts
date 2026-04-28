@@ -41,6 +41,7 @@ export const annotateOutputSchema = z.object({
   elementIds: z.array(z.string()).optional(),
   annotation: annotationResultSchema,
   warnings: z.array(annotateWarningSchema),
+  unknownPaletteKeys: z.array(z.string()).optional(),
 })
 
 // box_with_label and group are composite types accepted only by the public
@@ -750,12 +751,18 @@ export function annotateTool() {
         fontSize?: number
       },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof annotateOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const sessionPalette = await apiGetPalette(client, workspaceId)
-      // Return box_with_label overflow diagnostics in the same shape as
-      // annotate_batch. This can be computed before fetching the snapshot.
-      const warnings: { overflow: boolean; requiredWidth: number; requiredHeight: number }[] = []
+      const unknownPaletteKeySet = new Set<string>()
+      for (const colorArg of [args.color, args.backgroundColor]) {
+        if (colorArg) {
+          const { warningKey } = resolvePaletteColor(colorArg, sessionPalette)
+          if (warningKey) unknownPaletteKeySet.add(warningKey)
+        }
+      }
+      const unknownPaletteKeys = Array.from(unknownPaletteKeySet)
+      const warnings: z.infer<typeof annotateWarningSchema>[] = []
       if (
         args.type === 'box_with_label' &&
         (args.text !== undefined || args.title !== undefined) &&
@@ -791,9 +798,10 @@ export function annotateTool() {
       await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       // Preserve the legacy elementId/elementIds contract and add the structured
       // annotation result for callers that need internal composite ids.
+      const unknownKeys = unknownPaletteKeys.length > 0 ? { unknownPaletteKeys } : {}
       return elementIds.length === 1
-        ? { elementId: elementIds[0], annotation, warnings }
-        : { elementIds, annotation, warnings }
+        ? { elementId: elementIds[0], annotation, warnings, ...unknownKeys }
+        : { elementIds, annotation, warnings, ...unknownKeys }
     },
   }
 }

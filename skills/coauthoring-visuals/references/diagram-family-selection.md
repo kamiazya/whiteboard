@@ -9,7 +9,7 @@ The value to borrow from `markdown-viewer/skills` is not syntax, but the judgmen
 - Build Order: move from shell to detail
 - Per-Layer Patterns: recurring internal patterns for layers / lanes / zones
 - Cross-Cutting Concerns: what should be pushed into sidebars or other frames
-- Corresponding Drawing Notes: where to open the matching `whiteboard` notes
+- Corresponding Drawing Notes: where to open the matching `drawing-visuals` notes
 
 ## Pick The Family First
 
@@ -164,12 +164,12 @@ Do not let these become scattered boxes crossing the main connectors.
 
 ## Corresponding Drawing Notes
 
-Once the family is chosen, open the matching drawing note in the `whiteboard` skill:
+Once the family is chosen, open the matching drawing note in the `drawing-visuals` skill:
 
-- decomposition: [`../../whiteboard/references/decomposition-and-trees.md`](../../whiteboard/references/decomposition-and-trees.md)
-- layered architecture: [`../../whiteboard/references/layered-architectures.md`](../../whiteboard/references/layered-architectures.md)
-- workflow / swimlane: [`../../whiteboard/references/workflows-and-swimlanes.md`](../../whiteboard/references/workflows-and-swimlanes.md)
-- trust-boundary / security: [`../../whiteboard/references/trust-boundary-and-security.md`](../../whiteboard/references/trust-boundary-and-security.md)
-- cloud / network zone: [`../../whiteboard/references/cloud-and-network-zones.md`](../../whiteboard/references/cloud-and-network-zones.md)
-- comparison split: [`../../whiteboard/references/comparison-splits.md`](../../whiteboard/references/comparison-splits.md)
-- pipeline / roadmap: [`../../whiteboard/references/pipelines-and-roadmaps.md`](../../whiteboard/references/pipelines-and-roadmaps.md)
+- decomposition: [`../../drawing-visuals/references/decomposition-and-trees.md`](../../drawing-visuals/references/decomposition-and-trees.md)
+- layered architecture: [`../../drawing-visuals/references/layered-architectures.md`](../../drawing-visuals/references/layered-architectures.md)
+- workflow / swimlane: [`../../drawing-visuals/references/workflows-and-swimlanes.md`](../../drawing-visuals/references/workflows-and-swimlanes.md)
+- trust-boundary / security: [`../../drawing-visuals/references/trust-boundary-and-security.md`](../../drawing-visuals/references/trust-boundary-and-security.md)
+- cloud / network zone: [`../../drawing-visuals/references/cloud-and-network-zones.md`](../../drawing-visuals/references/cloud-and-network-zones.md)
+- comparison split: [`../../drawing-visuals/references/comparison-splits.md`](../../drawing-visuals/references/comparison-splits.md)
+- pipeline / roadmap: [`../../drawing-visuals/references/pipelines-and-roadmaps.md`](../../drawing-visuals/references/pipelines-and-roadmaps.md)

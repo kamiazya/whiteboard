@@ -18,7 +18,7 @@ CI and the release workflow assume Playwright-managed Chromium. Set `WHITEBOARD_
 
 ## Bundled skills install
 
-The MCP server ships three slash skills (`whiteboard`, `whiteboard-coauthoring`, `whiteboard-audit`) inside the npm package, but the `claude mcp add` / `npx` install paths only start the server. To make the skills available to the agent, install the package locally and symlink (or copy) them.
+The MCP server ships three slash skills (`drawing-visuals`, `coauthoring-visuals`, `auditing-workspaces`) inside the npm package, but the `claude mcp add` / `npx` install paths only start the server. To make the skills available to the agent, install the package locally and symlink (or copy) them.
 
 ```bash
 mkdir -p ~/tools/whiteboard && cd ~/tools/whiteboard
@@ -31,12 +31,12 @@ npm i @kamiazya/whiteboard-mcp
 ```bash
 PKG=$(pwd)/node_modules/@kamiazya/whiteboard-mcp
 mkdir -p ~/.claude/skills ~/.codex/skills
-ln -s "$PKG/skills/whiteboard"             ~/.claude/skills/whiteboard
-ln -s "$PKG/skills/whiteboard-coauthoring" ~/.claude/skills/whiteboard-coauthoring
-ln -s "$PKG/skills/whiteboard-audit"       ~/.claude/skills/whiteboard-audit
-ln -s "$PKG/skills/whiteboard"             ~/.codex/skills/whiteboard
-ln -s "$PKG/skills/whiteboard-coauthoring" ~/.codex/skills/whiteboard-coauthoring
-ln -s "$PKG/skills/whiteboard-audit"       ~/.codex/skills/whiteboard-audit
+ln -s "$PKG/skills/drawing-visuals"        ~/.claude/skills/drawing-visuals
+ln -s "$PKG/skills/coauthoring-visuals"    ~/.claude/skills/coauthoring-visuals
+ln -s "$PKG/skills/auditing-workspaces"    ~/.claude/skills/auditing-workspaces
+ln -s "$PKG/skills/drawing-visuals"        ~/.codex/skills/drawing-visuals
+ln -s "$PKG/skills/coauthoring-visuals"    ~/.codex/skills/coauthoring-visuals
+ln -s "$PKG/skills/auditing-workspaces"    ~/.codex/skills/auditing-workspaces
 ```
 
 ### Windows (junction or copy)
@@ -47,7 +47,7 @@ $skillRoots = @(
     (Join-Path $HOME ".claude\skills"),
     (Join-Path $HOME ".codex\skills")
 )
-$skills = "whiteboard", "whiteboard-coauthoring", "whiteboard-audit"
+$skills = "drawing-visuals", "coauthoring-visuals", "auditing-workspaces"
 $skillRoots | ForEach-Object { New-Item -ItemType Directory -Force $_ | Out-Null }
 foreach ($root in $skillRoots) {
     foreach ($skill in $skills) {
@@ -56,7 +56,7 @@ foreach ($root in $skillRoots) {
 }
 ```
 
-If junctions are restricted, copy the skill directories instead. Restart Claude Code or Codex, then confirm `/whiteboard` and `/whiteboard-coauthoring` appear in the skill list.
+If junctions are restricted, copy the skill directories instead. Restart Claude Code or Codex, then confirm `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` appear in the skill list.
 
 The bundled `skills/` inside `@kamiazya/whiteboard-mcp` remain the source of truth; the repo-local `.claude/skills/` directory contains internal-only project skills (smoke selection, restart triage) that are not part of the published artifact.
 

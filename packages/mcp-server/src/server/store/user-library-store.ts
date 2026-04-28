@@ -1,5 +1,10 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import {
+  type UserLibraryContent,
+  type UserLibrarySummary,
+  userLibraryContentSchema,
+} from '../../shared/api-contracts/libraries.js'
 import { DATA_DIR } from '../config.js'
 import { validateUserLibraryName } from '../validators.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
@@ -18,6 +23,8 @@ import { prepareDataDir } from './db/prepare.js'
 export const USER_LIBRARY_DIRNAME = '.user-libraries'
 const EXT = '.excalidrawlib'
 
+export type { UserLibrarySummary }
+
 function userLibraryBlobsDir(): string {
   return join(DATA_DIR, 'blobs', USER_LIBRARY_DIRNAME)
 }
@@ -31,35 +38,22 @@ async function dbReady() {
   return getDb(DATA_DIR)
 }
 
-function parseUserLibraryContent(path: string, raw: string): unknown {
+function parseUserLibraryContent(path: string, raw: string): UserLibraryContent {
   let parsed: unknown
   try {
-    parsed = JSON.parse(raw) as unknown
+    parsed = JSON.parse(raw)
   } catch {
     throw corruptStoredData(path, 'expected valid .excalidrawlib JSON payload')
   }
-
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    throw corruptStoredData(path, 'expected object payload')
+  const result = userLibraryContentSchema.safeParse(parsed)
+  if (!result.success) {
+    throw corruptStoredData(path, result.error.issues[0]?.message ?? 'invalid .excalidrawlib payload')
   }
-
-  const payload = parsed as { type?: unknown; library?: unknown; libraryItems?: unknown }
-  if (payload.type !== 'excalidrawlib') {
-    throw corruptStoredData(path, 'expected type "excalidrawlib"')
-  }
-  if (payload.library !== undefined && !Array.isArray(payload.library)) {
-    throw corruptStoredData(path, 'expected library to be an array when present')
-  }
-  if (payload.libraryItems !== undefined && !Array.isArray(payload.libraryItems)) {
-    throw corruptStoredData(path, 'expected libraryItems to be an array when present')
-  }
-
-  return parsed
+  return result.data
 }
 
-function countLibraryItems(content: unknown): number {
-  const payload = content as { library?: unknown[]; libraryItems?: unknown[] }
-  return payload.libraryItems?.length ?? payload.library?.length ?? 0
+function countLibraryItems(content: UserLibraryContent): number {
+  return content.libraryItems?.length ?? content.library?.length ?? 0
 }
 
 function errorMessage(error: unknown): string {
@@ -101,12 +95,6 @@ export async function loadUserLibrary(name: string): Promise<unknown | null> {
     throw error
   }
   return parseUserLibraryContent(path, raw)
-}
-
-export interface UserLibrarySummary {
-  name: string
-  path: string
-  itemCount: number
 }
 
 export async function listUserLibraries(): Promise<UserLibrarySummary[]> {

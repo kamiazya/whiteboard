@@ -41,7 +41,7 @@ export function canvasExportJsonTool() {
       },
       required: ['canvasId'],
     },
-    execute: async (args: CanvasExportJsonArgs, client: DaemonClient) => {
+    execute: async (args: CanvasExportJsonArgs, client: DaemonClient): Promise<z.infer<typeof canvasExportJsonOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const body: {
         includeCustomFields: boolean

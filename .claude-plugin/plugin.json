@@ -4,7 +4,7 @@
   "description": "Collaborative Excalidraw whiteboard for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the shared skills bundled with that package.",
   "repository": "https://github.com/kamiazya/whiteboard",
   "license": "MIT",
-  "skills": "./packages/mcp-server/skills",
+  "skills": "./skills",
   "mcpServers": {
     "whiteboard": {
       "command": "npx",

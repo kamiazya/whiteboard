@@ -678,6 +678,71 @@ describe('annotate_batch', () => {
     })
   })
 
+  describe('unknownPaletteKeys', () => {
+    it('reports unknown dotted color tokens absent from the palette', async () => {
+      const { annotateBatchTool } = await import('./annotate-batch.js')
+      const tool = annotateBatchTool()
+      const res = await tool.execute(
+        {
+          canvasId: 'sid/slug',
+          annotations: [
+            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
+            { type: 'rectangle', target: { x: 100, y: 0 }, coords: 'absolute', backgroundColor: 'role.server' },
+          ],
+        },
+        client,
+      )
+      expect(res.unknownPaletteKeys).toEqual(expect.arrayContaining(['role.client', 'role.server']))
+      expect(res.unknownPaletteKeys).toHaveLength(2)
+    })
+
+    it('deduplicates repeated unknown tokens', async () => {
+      const { annotateBatchTool } = await import('./annotate-batch.js')
+      const tool = annotateBatchTool()
+      const res = await tool.execute(
+        {
+          canvasId: 'sid/slug',
+          annotations: [
+            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
+            { type: 'rectangle', target: { x: 100, y: 0 }, coords: 'absolute', color: 'role.client' },
+          ],
+        },
+        client,
+      )
+      expect(res.unknownPaletteKeys).toEqual(['role.client'])
+    })
+
+    it('omits unknownPaletteKeys when all tokens resolve', async () => {
+      fetchMock.mockImplementation(async (url: string | URL, init?: { body?: unknown }) => {
+        const u = url.toString()
+        if (u.endsWith('/palette')) {
+          return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), { status: 200 })
+        }
+        if (u.endsWith('/snapshot')) {
+          const emptyDoc = new LoroDoc()
+          return new Response(emptyDoc.export({ mode: 'snapshot' }), { status: 200 })
+        }
+        if (u.endsWith('/update')) {
+          postedUpdate = new Uint8Array(init!.body as ArrayBuffer)
+          return new Response(null, { status: 204 })
+        }
+        throw new Error(`Unexpected fetch: ${u}`)
+      })
+      const { annotateBatchTool } = await import('./annotate-batch.js')
+      const tool = annotateBatchTool()
+      const res = await tool.execute(
+        {
+          canvasId: 'sid/slug',
+          annotations: [
+            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
+          ],
+        },
+        client,
+      )
+      expect(res.unknownPaletteKeys).toBeUndefined()
+    })
+  })
+
   describe('groupAs', () => {
     it('case 340', async () => {
       const { annotateBatchTool } = await import('./annotate-batch.js')

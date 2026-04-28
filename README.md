@@ -1,18 +1,26 @@
 # @kamiazya/whiteboard
 
-> A collaborative Excalidraw canvas for Claude Code and Codex. Draw with your AI agent to align on specs, architecture, and workflows — directly on a shared real-time whiteboard.
+> A collaborative Excalidraw canvas for Claude Code, Codex, and Gemini CLI. Draw with your AI agent to align on specs, architecture, and workflows — directly on a shared real-time whiteboard.
 
 [![npm version](https://img.shields.io/npm/v/@kamiazya/whiteboard-mcp.svg)](https://www.npmjs.com/package/@kamiazya/whiteboard-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml/badge.svg)](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml)
 
+## How whiteboard works
+
+You and your agent both reach the same Excalidraw canvas — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser over WebSocket.
+
 <p align="center">
-  <img src="docs/assets/architecture.png" alt="How whiteboard works: agent and you both draw on the same Excalidraw canvas via the Whiteboard MCP server" width="780" />
+  <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP controls the Browser Canvas via HTTP/WS." width="780" />
   <br />
   <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.excalidraw">architecture.excalidraw</a> to open it in Excalidraw and remix.</i></sub>
 </p>
 
-`@kamiazya/whiteboard-mcp` runs a live Excalidraw canvas in your browser and exposes MCP tools so Claude Code, Codex, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and round-trip with stock `.excalidraw` JSON.
+`@kamiazya/whiteboard-mcp` runs a live Excalidraw canvas in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and round-trip with stock `.excalidraw` JSON.
+
+<p align="center">
+  <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, Excalidraw drawing toolbar, live diagram synced from the agent in real time" width="780" />
+</p>
 
 ## Reach for whiteboard when…
 
@@ -20,9 +28,22 @@
 - **You're reviewing a change and want to mark up the architecture together.** Open an existing workspace, ask the agent to add the new path, compare against the previous frame, export a PNG for the PR description.
 - **You're writing docs or onboarding material and want a reusable diagram.** Drive the agent to produce the diagram, save the `.excalidraw`, drop the PNG into the doc — open it again later in [excalidraw.com](https://excalidraw.com) when something needs updating.
 
+| Aligning on a design | Reviewing and marking up | Presenting or sharing |
+|:---:|:---:|:---:|
+| ![Agent drew the architecture diagram](docs/assets/canvas-agent-drew.png) | ![Review notes added by the user](docs/assets/canvas-user-annotated.png) | ![Fullscreen presentation mode](docs/assets/canvas-presentation.png) |
+| **Agent drew it** — you guided the layout | **You annotated it** — review notes on the canvas | **Fullscreen mode** — clean export for docs |
+
+The same workflow works across any scenario — the agent draws boxes, arrows, and labels on a fresh canvas:
+
+<p align="center">
+  <img src="docs/assets/canvas-auth-flow.png" alt="Auth service request flow: client → API Gateway → Token Service → Database, with Redis Cache path shown" width="640" />
+  <br />
+  <sub><i>Auth service flow drawn by the agent — numbered steps, cache callout, color-coded components.</i></sub>
+</p>
+
 ## Quick install
 
-### Claude Code — plugin (recommended)
+### Claude Code
 
 In a Claude Code session, run:
 
@@ -31,17 +52,29 @@ In a Claude Code session, run:
 /plugin install whiteboard@whiteboard-marketplace
 ```
 
-This installs the MCP server **and** the bundled `/whiteboard`, `/whiteboard-coauthoring`, and `/whiteboard-audit` skills in one step.
+This installs the MCP server **and** the bundled `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills in one step.
 
-### Claude Code — MCP only
-
-If you only want the MCP server (no slash skills):
+<details>
+<summary>MCP only (no skills)</summary>
 
 ```bash
 claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest
 ```
 
-### Codex CLI
+</details>
+
+### Codex
+
+In a Codex session, run:
+
+```
+codex plugin marketplace add kamiazya/whiteboard
+```
+
+Then open `/plugins`, choose **kamiazya Whiteboard → whiteboard → Install plugin**, and restart Codex. This installs the MCP server **and** the bundled skills in one step.
+
+<details>
+<summary>MCP only (no skills)</summary>
 
 Add to `~/.codex/config.toml`:
 
@@ -51,19 +84,35 @@ command = "npx"
 args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 ```
 
-For the bundled skills under Codex, see [docs/development.md#bundled-skills-install](docs/development.md#bundled-skills-install).
+</details>
+
+### Gemini CLI
+
+```bash
+gemini extensions install https://github.com/kamiazya/whiteboard
+```
+
+<details>
+<summary>MCP only (no extension)</summary>
+
+Add to `~/.gemini/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "whiteboard": {
+      "command": "npx",
+      "args": ["-y", "@kamiazya/whiteboard-mcp@latest"]
+    }
+  }
+}
+```
+
+</details>
 
 ### Verify
 
 In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The first call opens a Chromium tab pointed at the canvas and creates `~/.whiteboard/{workspaceId}/`.
-
-## Workspaces
-
-Every canvas lives inside a workspace. The home page lists them with their canvases, and double-clicking the workspace name in the canvas header lets you rename it — no modal, no reload.
-
-| Before rename | After rename |
-|---|---|
-| ![Untitled workspace card with two canvases listed](docs/assets/workspace-list.png) | ![Same card with the workspace renamed to "demo"](docs/assets/workspace-list-renamed.png) |
 
 ## Bundled skills
 
@@ -71,9 +120,9 @@ Three opinionated `SKILL.md` packs ship inside the npm package. The recommended 
 
 | Skill | When to use |
 |---|---|
-| `/whiteboard` | When screen layout, structure, flow, or comparison still feels too ambiguous in text alone — start drawing on the canvas together. |
-| `/whiteboard-coauthoring` | A structured loop for evolving diagrams with the agent: gather context, structure frame by frame, run fresh-viewer tests on what you draw. |
-| `/whiteboard-audit` | Audit existing workspaces — detect orphaned workspaces, tombstone-heavy canvases, and cache/disk mismatches; report cleanup candidates. |
+| `/drawing-visuals` | When screen layout, structure, flow, or comparison still feels too ambiguous in text alone — start drawing on the canvas together. |
+| `/coauthoring-visuals` | A structured loop for evolving visuals with the agent: gather context, structure frame by frame, run fresh-viewer tests on what you draw. |
+| `/auditing-workspaces` | Audit existing workspaces — detect orphaned workspaces, tombstone-heavy canvases, and cache/disk mismatches; report cleanup candidates. |
 
 ## Example transcript
 
@@ -113,12 +162,6 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
 
 See [docs/configuration.md](docs/configuration.md#codex-sandbox-constraints) for sandbox quirks.
-
-## Open follow-ups
-
-Items intentionally not in this README yet — please file or upvote a tracking issue rather than adding noise inline:
-
-- A short animated demo GIF showing an agent prompt → tool calls → finished diagram.
 
 ## License
 

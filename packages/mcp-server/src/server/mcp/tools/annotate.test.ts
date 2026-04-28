@@ -95,6 +95,52 @@ describe('annotate (single) warnings', () => {
     expect(res.elementId).toBeDefined()
     expect(res.warnings ?? []).toEqual([])
   })
+
+  it('reports unknownPaletteKeys when a color token is not in the palette', async () => {
+    const { annotateTool } = await import('./annotate.js')
+    const tool = annotateTool()
+    const res = await tool.execute(
+      {
+        canvasId: 'sid/slug',
+        type: 'rectangle',
+        target: { x: 0, y: 0 },
+        coords: 'absolute',
+        color: 'role.client',
+        backgroundColor: 'role.server',
+      },
+      client,
+    )
+    expect(res.unknownPaletteKeys).toEqual(expect.arrayContaining(['role.client', 'role.server']))
+    expect(res.unknownPaletteKeys).toHaveLength(2)
+  })
+
+  it('omits unknownPaletteKeys when all color tokens resolve', async () => {
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const u = url.toString()
+      if (u.endsWith('/palette')) {
+        return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), { status: 200 })
+      }
+      if (u.endsWith('/snapshot')) {
+        const emptyDoc = new (await import('loro-crdt')).LoroDoc()
+        return new Response(emptyDoc.export({ mode: 'snapshot' }), { status: 200 })
+      }
+      if (u.endsWith('/update')) return new Response(null, { status: 204 })
+      throw new Error(`Unexpected fetch: ${u}`)
+    })
+    const { annotateTool } = await import('./annotate.js')
+    const tool = annotateTool()
+    const res = await tool.execute(
+      {
+        canvasId: 'sid/slug',
+        type: 'rectangle',
+        target: { x: 0, y: 0 },
+        coords: 'absolute',
+        color: 'role.client',
+      },
+      client,
+    )
+    expect(res.unknownPaletteKeys).toBeUndefined()
+  })
 })
 describe('suite 1', () => {
   function seedImage(doc: LoroDoc, id: string, x: number, y: number, w: number, h: number) {

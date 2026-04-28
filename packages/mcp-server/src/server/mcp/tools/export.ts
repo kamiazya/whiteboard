@@ -1,5 +1,11 @@
 import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
+import { clientCountResponseSchema } from '../../../shared/api-contracts/canvas-runtime.js'
+import {
+  type ExportErrorBody,
+  exportErrorBodySchema,
+  exportResponseSchema,
+} from '../../../shared/api-contracts/export.js'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
 
@@ -21,12 +27,6 @@ interface ExportPngArgs {
   frameId?: string
   outputPath?: string
   overwrite?: boolean
-}
-
-interface ExportErrorBody {
-  error?: string
-  message?: string
-  hint?: string
 }
 
 function buildExportBody(args: ExportPngArgs): Record<string, number | string | boolean> {
@@ -54,7 +54,10 @@ async function requestExport(
 }
 
 async function readExportErrorBody(res: Response): Promise<ExportErrorBody | null> {
-  return (await res.json().catch(() => null)) as ExportErrorBody | null
+  const raw = await res.json().catch(() => null)
+  if (raw === null) return null
+  const parsed = exportErrorBodySchema.safeParse(raw)
+  return parsed.success ? parsed.data : null
 }
 
 async function waitForClientReady(
@@ -69,8 +72,8 @@ async function waitForClientReady(
     try {
       const res = await client.request(statusPath)
       if (res.ok) {
-        const body = (await res.json()) as { count: number; readyCount?: number }
-        if ((body.readyCount ?? body.count) > 0) return true
+        const parsed = clientCountResponseSchema.safeParse(await res.json())
+        if (parsed.success && (parsed.data.readyCount ?? parsed.data.count) > 0) return true
       }
     } catch {
       // Browser startup races are expected; keep polling until timeout.
@@ -139,7 +142,7 @@ export function exportPngTool() {
     execute: async (
       args: ExportPngArgs,
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof exportPngOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const body = buildExportBody(args)
       let res = await requestExport(client, workspaceId, slug, body)
@@ -160,7 +163,7 @@ export function exportPngTool() {
           throwExportError(res, errBody)
         }
       }
-      const json = (await res.json()) as { filePath: string }
+      const json = exportResponseSchema.parse(await res.json())
       // Best-effort attach the PNG as base64 so MCP can return it as ImageContent.
       // If the file cannot be read (for example it was already removed), return
       // only filePath and let higher layers omit the image block.

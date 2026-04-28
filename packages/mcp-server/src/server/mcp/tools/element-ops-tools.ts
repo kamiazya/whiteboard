@@ -67,7 +67,7 @@ export function updateElementTool() {
     execute: async (
       args: { canvasId: string; elementId: string; patch: Record<string, unknown> },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof elementIdOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
@@ -93,7 +93,7 @@ export function deleteElementTool() {
       },
       required: ['canvasId', 'elementId'],
     },
-    execute: async (args: { canvasId: string; elementId: string }, client: DaemonClient) => {
+    execute: async (args: { canvasId: string; elementId: string }, client: DaemonClient): Promise<z.infer<typeof elementIdOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
@@ -128,7 +128,7 @@ export function deleteElementsTool() {
     execute: async (
       args: { canvasId: string; elementIds: string[] },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof deletedElementsOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
@@ -159,7 +159,7 @@ export function canvasClearTool() {
       },
       required: ['canvasId'],
     },
-    execute: async (args: { canvasId: string }, client: DaemonClient) => {
+    execute: async (args: { canvasId: string }, client: DaemonClient): Promise<z.infer<typeof clearedCountOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
@@ -194,7 +194,7 @@ export function moveElementsTool() {
     execute: async (
       args: { canvasId: string; elementIds: string[]; dx: number; dy: number },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof elementIdsOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
@@ -233,7 +233,7 @@ export function assignToGroupTool() {
     execute: async (
       args: { canvasId: string; groupId: string; elementIds: string[] },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof assignGroupOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
@@ -267,7 +267,7 @@ export function deleteGroupTool() {
     execute: async (
       args: { canvasId: string; groupId: string },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof deletedElementsOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
@@ -297,7 +297,7 @@ export function listGroupsTool() {
       },
       required: ['canvasId'],
     },
-    execute: async (args: { canvasId: string }, client: DaemonClient) => {
+    execute: async (args: { canvasId: string }, client: DaemonClient): Promise<z.infer<typeof listGroupsOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       return { groups: listGroups(doc) }
@@ -333,7 +333,7 @@ export function reorderElementsTool() {
     execute: async (
       args: { canvasId: string; elementIds: string[]; action: 'front' | 'back' },
       client: DaemonClient,
-    ) => {
+    ): Promise<z.infer<typeof reorderOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()

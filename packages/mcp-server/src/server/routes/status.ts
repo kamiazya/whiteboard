@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { type ClientCountResponse } from '../../shared/api-contracts/canvas-runtime.js'
 import { getClientCount, getReadyClientCount } from './ws.js'
 import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
 
@@ -25,10 +26,11 @@ export function createStatusRouter() {
       if (body) return c.json(body, 400)
       throw err
     }
-    return c.json({
+    const response: ClientCountResponse = {
       count: getClientCount(workspaceId, slug),
       readyCount: getReadyClientCount(workspaceId, slug),
-    })
+    }
+    return c.json(response)
   })
 
   return app

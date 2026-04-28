@@ -1,15 +1,15 @@
 ---
-name: whiteboard
-description: A tool for AI and humans to align by drawing on an Excalidraw workspace together. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone.
+name: drawing-visuals
+description: Draw and annotate visuals with your AI agent on a shared Excalidraw canvas. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone.
 ---
 
-# whiteboard
+# drawing-visuals
 
 Like a whiteboard on the wall of a meeting room, this is a tool for AI and humans to **align by drawing on the same Excalidraw workspace**.
 Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the canvas and can be revisited and refined later.
 
-Use the excalidraw MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `palette_get` / `palette_set` / `palette_delete` / `load_image` / `export_png` / `canvas_export_json` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `checkpoint_save` / `checkpoint_restore`) to create a canvas, draw the diagram, and export it as PNG or standard `.excalidraw` JSON.
+Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `palette_get` / `palette_set` / `palette_delete` / `load_image` / `export_png` / `canvas_export_json` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `checkpoint_save` / `checkpoint_restore`) to create a canvas, draw the diagram, and export it as PNG or standard `.excalidraw` JSON.
 Open exported PNGs with the Read tool and inspect them visually.
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
@@ -21,9 +21,9 @@ Open exported PNGs with the Read tool and inspect them visually.
 Do not read `style-reference.md` and `visual-vocabulary.md` end-to-end every time.
 Choose the diagram type through the reading map, then open only 1-2 relevant notes.
 
-If you need **the collaborative workflow for tightening the diagram together while talking with the user**, also open [`../whiteboard-coauthoring/SKILL.md`](../whiteboard-coauthoring/SKILL.md).
-This `whiteboard` skill covers canvas operations, diagram vocabulary, and drawing mechanics.
-`whiteboard-coauthoring` covers context gathering, frame-by-frame refinement, and fresh-viewer testing.
+If you need **the collaborative workflow for tightening the visual together while talking with the user**, also open [`../coauthoring-visuals/SKILL.md`](../coauthoring-visuals/SKILL.md).
+This `drawing-visuals` skill covers canvas operations, diagram vocabulary, and drawing mechanics.
+`coauthoring-visuals` covers context gathering, frame-by-frame refinement, and fresh-viewer testing.
 
 ---
 
@@ -66,8 +66,8 @@ If the diagram turns out unnecessary, a quick `canvas_create` can be discarded.
 
 ### Explicit User Triggers
 
-- `/whiteboard` - export the current canvas and consider the next adjustment
-- `/whiteboard <canvasId>` - work in the specified canvas
+- `/drawing-visuals` - export the current canvas and consider the next adjustment
+- `/drawing-visuals <canvasId>` - work in the specified canvas
 - "explain it as a diagram", "use the whiteboard", "share it visually"
 
 ---
@@ -310,6 +310,6 @@ Redrawing is normal whiteboard behavior, not failure.
 ## Notes
 
 - **Browser Ctrl+Z / undo buttons only revert GUI edits made in the browser itself**: browser undo delegates to the Loro UndoManager. That is collaboration-safe, but MCP-originated changes arrive as remote changes, so browser undo will not rewind them. If you need to rewind tool-driven work, use `checkpoint_save` / `checkpoint_restore`
-- **excalidraw MCP is a local dev tool**: outputs under `~/.excalidraw/` are outside git. If you need a PNG in a PR or other artifact, copy the exported file explicitly
+- **whiteboard MCP is a local dev tool**: outputs under `~/.whiteboard/` are outside git. If you need a PNG in a PR or other artifact, copy the exported file explicitly
 - **Wrapping behavior**: `text` wraps automatically when `width` is provided. `box_with_label` auto-fits by default and keeps explicit `string[]` line breaks. Use `autoFit: false` only when you truly need rigid line control
 - **Known stale-snapshot constraint**: if another client is editing at the same time, `annotate` coordinates can occasionally be based on an older snapshot. In local single-user practice the timing window is short and usually harmless

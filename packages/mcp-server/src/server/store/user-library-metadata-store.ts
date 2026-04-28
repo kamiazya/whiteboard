@@ -1,27 +1,16 @@
+import {
+  type UserLibraryMetadataManifest,
+  userLibraryMetadataManifestSchema,
+} from '../../shared/api-contracts/libraries.js'
 import { DATA_DIR } from '../config.js'
 import { validateUserLibraryName } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 
-// User library metadata. Backed by:
-//   user_library_metadata table -> name PK, manifestJson TEXT (JSON-encoded
-//                                  UserLibraryMetadataManifest)
-//
-// The manifest itself stays a structured object on the wire; on disk it is a
-// single JSON column so callers do not need to know the schema. Revision
-// conflicts are detected by reading the current row and comparing before
-// writing the next one.
-
 export const USER_LIBRARY_METADATA_FILENAME_SUFFIX = '.meta.json'
 
-export interface UserLibraryMetadataManifest {
-  version: 1
-  revision: number
-  aliases: Record<string, number>
-  notes: Record<string, string>
-  scales: Record<string, number>
-}
+export type { UserLibraryMetadataManifest }
 
 export class UserLibraryMetadataConflictError extends Error {
   readonly code = 'conflict'
@@ -54,78 +43,21 @@ async function dbReady() {
   return getDb(DATA_DIR)
 }
 
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-function manifestSource(name: string): string {
-  return `user_library_metadata/${name}`
-}
-
-function parseNumberMap(
-  source: string,
-  value: unknown,
-  field: 'aliases' | 'scales',
-  integerOnly: boolean,
-): Record<string, number> {
-  if (!isObjectRecord(value)) {
-    throw corruptStoredData(source, `expected ${field} to be an object`)
-  }
-  const out: Record<string, number> = {}
-  for (const [key, raw] of Object.entries(value)) {
-    if (typeof raw !== 'number' || Number.isNaN(raw) || !Number.isFinite(raw)) {
-      throw corruptStoredData(source, `expected ${field}.${key} to be a finite number`)
-    }
-    if (integerOnly && !Number.isInteger(raw)) {
-      throw corruptStoredData(source, `expected ${field}.${key} to be an integer`)
-    }
-    out[key] = raw
-  }
-  return out
-}
-
-function parseStringMap(source: string, value: unknown, field: 'notes'): Record<string, string> {
-  if (!isObjectRecord(value)) {
-    throw corruptStoredData(source, `expected ${field} to be an object`)
-  }
-  const out: Record<string, string> = {}
-  for (const [key, raw] of Object.entries(value)) {
-    if (typeof raw !== 'string') {
-      throw corruptStoredData(source, `expected ${field}.${key} to be a string`)
-    }
-    out[key] = raw
-  }
-  return out
-}
-
 function parseUserLibraryMetadata(name: string, raw: string): UserLibraryMetadataManifest {
-  const source = manifestSource(name)
+  const source = `user_library_metadata/${name}`
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
   } catch {
     throw corruptStoredData(source, 'expected valid user library metadata JSON')
   }
-  if (!isObjectRecord(parsed)) {
-    throw corruptStoredData(source, 'expected metadata object payload')
+  const result = userLibraryMetadataManifestSchema.safeParse(parsed)
+  if (!result.success) {
+    const issue = result.error.issues[0]
+    const where = issue?.path.length ? issue.path.join('.') : 'manifest'
+    throw corruptStoredData(source, `${where}: ${issue?.message ?? 'invalid metadata manifest'}`)
   }
-  if (parsed.version !== 1) {
-    throw corruptStoredData(source, `expected version 1 metadata manifest`)
-  }
-  if (
-    typeof parsed.revision !== 'number' ||
-    !Number.isInteger(parsed.revision) ||
-    parsed.revision < 0
-  ) {
-    throw corruptStoredData(source, 'expected revision to be a non-negative integer')
-  }
-  return {
-    version: 1,
-    revision: parsed.revision,
-    aliases: parseNumberMap(source, parsed.aliases, 'aliases', true),
-    notes: parseStringMap(source, parsed.notes, 'notes'),
-    scales: parseNumberMap(source, parsed.scales, 'scales', false),
-  }
+  return result.data
 }
 
 function cloneManifest(manifest: UserLibraryMetadataManifest): UserLibraryMetadataManifest {
