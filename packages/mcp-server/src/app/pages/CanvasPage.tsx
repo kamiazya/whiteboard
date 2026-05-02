@@ -3,7 +3,10 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { Excalidraw, exportToBlob } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { Minimize2, RotateCcw } from 'lucide-react'
+import { useThemeMode } from '../hooks/useThemeMode.js'
 import { useWhiteboardSync } from '../hooks/useWhiteboardSync.js'
+import { detectInitialFullscreen, isFullscreenHash } from './canvas-page-fullscreen.js'
+import { syncFullscreenHash } from './canvas-fullscreen-hash.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { MergeHighlight } from '../components/MergeHighlight.js'
@@ -24,10 +27,52 @@ export default function CanvasPage() {
   const workspaceId = params.workspaceId!
   const slug = params['*'] ?? ''
 
-  // Read ?fullscreen=1 once as the initial value.
-  // Keep later toggles in local state so fullscreen changes do not pollute browser history.
+  // Fullscreen on cold open is taken from either:
+  //   • the canonical `#fullscreen` hash (canvas_open emits this — fragment
+  //     changes on an already-open tab fire `hashchange` rather than a full
+  //     navigation, so in-page state survives and any future beforeunload
+  //     listener cannot block automation)
+  //   • the legacy `?fullscreen=1` query (kept for back-compat)
+  // Later toggles live in local state so they do not pollute history.
   const [searchParams] = useSearchParams()
-  const [isFullscreen, setIsFullscreen] = useState(searchParams.get('fullscreen') === '1')
+  const [isFullscreen, setIsFullscreen] = useState(() =>
+    typeof window === 'undefined'
+      ? false
+      : detectInitialFullscreen({
+          search: searchParams,
+          hash: window.location.hash,
+        }),
+  )
+
+  // hashchange handler so `canvas_open({ fullscreen: true })` against an
+  // already-open tab toggles in-place. The hash never auto-clears: leaving
+  // fullscreen via the in-page button or `Esc`/`f` removes the hash so a
+  // subsequent reload does not snap back into fullscreen.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const onHashChange = () => setIsFullscreen(isFullscreenHash(window.location.hash))
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
+  // Keep the URL hash in sync with the locally-toggled state. Use
+  // history.replaceState so the toggle is invisible to the back/forward
+  // stack and never causes a navigation. The shared helper is conservative:
+  // it never clobbers a non-`#fullscreen` hash, so payload-bearing hashes
+  // such as `#addLibrary=…` survive long enough for the library-import
+  // effect below to consume them.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    syncFullscreenHash(isFullscreen, {
+      location: window.location,
+      history: window.history,
+    })
+  }, [isFullscreen])
+
+  // Theme is per-browser, not per-canvas. The shared hook persists to
+  // localStorage and toggles `<html class="dark">` so the entire app shell
+  // (header, dropdowns, dialogs) flips alongside Excalidraw.
+  const { theme, resolvedTheme, setTheme } = useThemeMode()
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
 
   // apiRef is assigned in handleApiReady, so it is null immediately after mount.
@@ -211,6 +256,8 @@ export default function CanvasPage() {
             onRestored={clearLocalUndo}
             onEnterFullscreen={() => setIsFullscreen(true)}
             getThumbnailBlob={getThumbnailBlob}
+            theme={theme}
+            onToggleTheme={setTheme}
           />
           {/* Show the banner only when the current HEAD is not main and still has unmerged commits. */}
           <HeaderBranchBanner workspaceId={workspaceId} slug={slug} />
@@ -220,6 +267,7 @@ export default function CanvasPage() {
         <Excalidraw
           key={`${workspaceId}/${slug}`}
           excalidrawAPI={handleApiReady}
+          theme={resolvedTheme}
           libraryReturnUrl={typeof window !== 'undefined' ? window.location.origin + window.location.pathname : undefined}
           onChange={(elements: readonly ExcalidrawElement[], _appState: AppState, files: BinaryFiles) =>
             onSceneChange?.([...elements], files)

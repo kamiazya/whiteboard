@@ -56,6 +56,55 @@ Dark mode is not about splashing bright colors onto a black background. It is ab
 - If you remove the glow, does the meaning remain?
 - Does exported PNG still preserve zone / boundary presence?
 
+## Theme-Switched Export For Review
+
+`export_png` accepts `theme: "light" | "dark"`. Use it to verify the canvas
+survives a theme switch without changing the persisted appState:
+
+```js
+export_png({ canvasId, theme: "light", outputPath: "/abs/path/board-light.png" })
+export_png({ canvasId, theme: "dark",  outputPath: "/abs/path/board-dark.png", overwrite: true })
+```
+
+Inspect the two PNGs side by side and walk the **Quality Check** above against
+each one. Dashed / dotted strokes and low-opacity fills are usually the first
+things to disappear under dark; if they do, reinforce them with labels or stop
+relying on stroke style alone.
+
+### Pre-Export Review Checklist
+
+Walk this list against both PNGs before committing the canvas. Each item names
+a concrete failure mode the export should *not* show.
+
+- [ ] every box readable from labels alone — strip fills mentally and check that
+      titles still carry meaning
+- [ ] no neutral text below the equivalent of `text-muted-foreground` weight on
+      a stroke-only container — those titles vanish in dark
+- [ ] no light-grey fill (`#f1f5f9` family) used to mean "background / muted"
+      — it inverts to glaring near-white in dark
+- [ ] dashed / dotted strokes carry a label echoing their meaning (e.g.
+      "optional", "future") — dashing alone is too thin in dark
+- [ ] glow / shadow is the *secondary* signal, not the primary — removing it
+      mentally must not break the meaning
+- [ ] semantic colors (`primary`, `success`, `warning`, `danger`) keep the
+      same role in both PNGs — no blue→purple or success→muted drift
+
+If any item fails, fix it in the canvas, not in the export.
+
+## Failure Modes Seen In The Wild
+
+These are concrete patterns observed in real exported diagrams; treat each as a smell.
+
+| Pattern in light | What dark mode does to it | Fix |
+| --- | --- | --- |
+| stroke-only rect with dark text title (`color: "neutral"` or `#475569`) | title and body text both fall under the dark canvas → unreadable | bump text to a higher-contrast role (`color: "primary"` against transparent stays legible), or fill the box softly so text reads against fill |
+| light grey fill `#f1f5f9` used as "muted" / "secondary" | dark inverts to a near-white block that visually dominates the strong-fill main path | drop the fill to transparent and lean on stroke + label, or use `muted` semantic so the variable flips |
+| dashed border alone for "optional / planned" | dashing pixels disappear into the dark background, the box reads as solid | keep dashing for redundancy but add an explicit label like `(future)` or `[optional]` |
+| primary fill with `#ffffff` text (`Main path` style) | survives both themes unchanged — this is the safe default | use this combo for the canvas's main subject |
+
+Regenerate light and dark exports with `export_png({ theme: ... })` against
+the board you are reviewing, then compare them against the checklist above.
+
 ## If Stuck
 
 - For the base rules, see [`../style-reference.md`](../style-reference.md)

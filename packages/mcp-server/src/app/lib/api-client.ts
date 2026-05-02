@@ -1,3 +1,5 @@
+import { injectTraceContextIntoHeaders } from './browser-tracing.js'
+
 interface RuntimeConfig {
   daemonToken: string | null
 }
@@ -30,12 +32,15 @@ export async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Pr
   if (!isLocalApiRequest(input)) {
     return fetch(input, init)
   }
-  const { daemonToken } = readRuntimeConfig()
-  if (!daemonToken) {
-    return fetch(input, init)
-  }
   const headers = new Headers(init?.headers)
-  headers.set('Authorization', `Bearer ${daemonToken}`)
+  // Always inject the active trace context so the server middleware can
+  // stitch the inbound request span onto whatever client-side span (if
+  // any) is active. No-op when browser tracing has not been enabled.
+  injectTraceContextIntoHeaders(headers)
+  const { daemonToken } = readRuntimeConfig()
+  if (daemonToken) {
+    headers.set('Authorization', `Bearer ${daemonToken}`)
+  }
   return fetch(input, {
     ...init,
     headers,

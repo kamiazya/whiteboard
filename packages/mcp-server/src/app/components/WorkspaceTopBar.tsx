@@ -8,10 +8,11 @@ import {
   Pencil,
   Copy,
   FilePlus2,
-  FileText,
   Pin,
   Search,
 } from 'lucide-react'
+import { ThemeToggleButton } from './ThemeToggleButton.js'
+import type { ThemeMode } from '../hooks/useThemeMode.js'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -35,6 +36,7 @@ import { cn } from '@/lib/utils'
 import { saveVersionResponseSchema } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 import VersionTimeline from './VersionTimeline.js'
+import { CanvasThumb } from './CanvasThumb.js'
 import { HeaderBranchChip } from './HeaderBranchChip.js'
 import { HeaderSaveDot } from './HeaderSaveDot.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
@@ -44,30 +46,7 @@ interface CanvasInfo {
   updatedAt: string
 }
 
-// 56x36 thumbnail shown at the left edge of each dropdown item.
-// Fetch `/api/.../latest-thumbnail` and fall back to a placeholder on 404 or image load failure.
-// This stays as a tiny component because each item owns its own loading state.
-function CanvasThumb({ workspaceId, slug }: { workspaceId: string; slug: string }) {
-  const [failed, setFailed] = useState(false)
-  const src = `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/latest-thumbnail`
-  return (
-    <div className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/40">
-      {failed ? (
-        // If the canvas has no thumbnail yet, use a generic icon instead of an empty gray box.
-        <FileText className="size-4 text-muted-foreground/50" />
-      ) : (
-        <img
-          src={src}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          onError={() => setFailed(true)}
-          className="h-full w-full object-contain"
-        />
-      )}
-    </div>
-  )
-}
+// CanvasThumb is shared with IndexPage; see ./CanvasThumb.tsx.
 
 interface WorkspaceNames {
   workspace?: string
@@ -151,6 +130,11 @@ interface Props {
   onRestored?: () => void
   onEnterFullscreen: () => void
   getThumbnailBlob?: () => Promise<Blob | null>
+  // Theme preference is owned by the page so reloads can rehydrate from
+  // localStorage and pass the resolved value to <Excalidraw theme=...>. The
+  // button cycles light → dark → system.
+  theme?: ThemeMode
+  onToggleTheme?: (next: ThemeMode) => void
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -164,20 +148,26 @@ export default function WorkspaceTopBar({
   slug,
   canvases,
   onRestored,
+  theme,
+  onToggleTheme,
   onEnterFullscreen,
   getThumbnailBlob,
 }: Props) {
   const navigate = useNavigate()
   const [names, setNames] = useState<WorkspaceNames>({ canvases: {}, pinned: [] })
-  const [renamingWorkspace, setRenamingWorkspace] = useState(false)
   const [renamingCanvas, setRenamingCanvas] = useState(false)
   const [draft, setDraft] = useState('')
   const [versionOpen, setVersionOpen] = useState(false)
   const [canvasSearch, setCanvasSearch] = useState('')
   const versionPanelRef = useRef<HTMLDivElement | null>(null)
 
-  // Save state: dirty dot, Cmd/Ctrl+S, and beforeunload protection.
-  // Dirty tracking comes from the doc_changed and version_saved events dispatched by useWhiteboardSync.
+  // Save state: dirty dot + Cmd/Ctrl+S only.
+  // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
+  // → LoroDoc → WebSocket → daemon → SQLite blob in real time, so closing the
+  // tab cannot lose persisted content. The dirty dot here only tracks
+  // "haven't named a manual version yet"; warning the user about it via the
+  // browser's leave-confirmation dialog is misleading and was getting in the
+  // way of automation (e.g. Playwright workflows).
   const { isDirty } = useDirtyState(workspaceId, slug)
   const [saving, setSaving] = useState(false)
   const isMac =
@@ -253,16 +243,6 @@ export default function WorkspaceTopBar({
       window.removeEventListener('keydown', onKey, { capture: true } as EventListenerOptions)
   }, [saveVersion])
 
-  // Show the browser's built-in leave confirmation while the canvas is dirty.
-  useEffect(() => {
-    if (!isDirty) return
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault()
-      e.returnValue = ''
-    }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [isDirty])
   // New canvas dialog state. Seed the slug with the current group's prefix for faster repeated creation.
   const [newCanvasOpen, setNewCanvasOpen] = useState(false)
   const [newCanvasSlug, setNewCanvasSlug] = useState('')
@@ -282,24 +262,6 @@ export default function WorkspaceTopBar({
   useEffect(() => {
     fetchNames()
   }, [fetchNames])
-
-  // Shared rename commit helpers.
-  const commitWorkspaceName = async () => {
-    const name = draft.trim()
-    try {
-      const res = await apiFetch(`/api/workspaces/${workspaceId}/name`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name }),
-      })
-      if (res.ok) setNames((await res.json()) as WorkspaceNames)
-    } catch {
-      /* ignore */
-    } finally {
-      setRenamingWorkspace(false)
-      setDraft('')
-    }
-  }
 
   const commitCanvasName = async () => {
     const name = draft.trim()
@@ -322,7 +284,6 @@ export default function WorkspaceTopBar({
   }
 
   const cancelRename = () => {
-    setRenamingWorkspace(false)
     setRenamingCanvas(false)
     setDraft('')
   }
@@ -393,7 +354,6 @@ export default function WorkspaceTopBar({
     })
   }, [filteredCanvases, pinnedSet])
 
-  const workspaceDisplay = names.workspace ?? 'Untitled workspace'
   const canvasCustomName = names.canvases[slug]
   // Prefer the custom name when present; otherwise split the slug into prefix and leaf.
   // Muting the prefix helps show that nearby canvases belong to the same group.
@@ -401,7 +361,6 @@ export default function WorkspaceTopBar({
   const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? slug.slice(0, slashIndex) : null
   const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? slug.slice(slashIndex + 1) : null
   const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? slug : null)
-  const shortWorkspaceId = workspaceId.slice(0, 5) + '…' + workspaceId.slice(-3)
 
   // Close the version history popover on outside clicks.
   useEffect(() => {
@@ -481,44 +440,12 @@ export default function WorkspaceTopBar({
               <ChevronLeft className="size-4" />
             </Link>
           </TooltipTrigger>
-          <TooltipContent>All workspaces</TooltipContent>
+          <TooltipContent>Back to canvas list</TooltipContent>
         </Tooltip>
 
-        {/* workspace name (inline editable) */}
-        {renamingWorkspace ? (
-          <Input
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitWorkspaceName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitWorkspaceName()
-              else if (e.key === 'Escape') cancelRename()
-            }}
-            placeholder={workspaceDisplay}
-            className="h-7 max-w-[200px] text-sm"
-          />
-        ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onDoubleClick={() => {
-                  setDraft(names.workspace ?? '')
-                  setRenamingWorkspace(true)
-                }}
-                className="truncate rounded px-1.5 py-0.5 text-sm font-medium hover:bg-accent"
-              >
-                {workspaceDisplay}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Double-click to rename · {shortWorkspaceId}</TooltipContent>
-          </Tooltip>
-        )}
-
-        <span className="shrink-0 text-muted-foreground">/</span>
-
-        {/* canvas switcher dropdown */}
+        {/* canvas switcher dropdown — workspace identity is intentionally
+            hidden in OSS Local; the back-button returns to the flat canvas
+            list and the name shown here is the canvas, not the workspace. */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
@@ -711,6 +638,9 @@ export default function WorkspaceTopBar({
           </TooltipTrigger>
           <TooltipContent>Version history</TooltipContent>
         </Tooltip>
+        {onToggleTheme && theme && (
+          <ThemeToggleButton theme={theme} onChange={onToggleTheme} />
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
