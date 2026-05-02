@@ -3,8 +3,8 @@ import { dirname, join } from 'node:path'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
-import { isPidAlive, loadDaemonRecord } from '../../daemon/daemon-registry.js'
 import { DATA_DIR } from '../config.js'
+import { getLogger } from '../log.js'
 import { validateCanvasId, validateSlug, validateWorkspaceId } from '../validators.js'
 import {
   corruptStoredData,
@@ -111,10 +111,25 @@ export async function saveCanvas(
     const key = `${workspaceId}/${slug}`
     if (!warnedSnapshots.has(key)) {
       warnedSnapshots.add(key)
-      console.warn(
-        `[canvas-store] ${key} snapshot is ${(snapshot.byteLength / 1024 / 1024).toFixed(1)} MiB ` +
-          `(> ${SNAPSHOT_WARN_BYTES / 1024 / 1024} MiB). Consider compactCanvas() to GC op-log.`,
+      getLogger('canvas-store').warning(
+        {
+          workspaceId,
+          slug,
+          bytes: snapshot.byteLength,
+          thresholdBytes: SNAPSHOT_WARN_BYTES,
+        },
+        'snapshot exceeds soft cap; consider compactCanvas() to GC op-log',
       )
+    }
+  }
+  // Hand off to the auto-compact debouncer when one is registered. Wired
+  // by the route layer (where versionStore is in scope) so this module
+  // does not depend on the version-store concrete type.
+  if (autoCompactTrigger) {
+    try {
+      autoCompactTrigger(workspaceId, slug)
+    } catch (err) {
+      getLogger('canvas-store').warning({ workspaceId, slug, err }, 'autoCompactTrigger threw')
     }
   }
 }
@@ -159,8 +174,9 @@ export async function loadCanvas(workspaceId: string, slug: string): Promise<Lor
       }
       await saveCanvas(workspaceId, slug, doc, { overwrite: true })
     } catch (err) {
-      console.warn(
-        `[canvas-store] legacy list→movable migration persist failed for ${workspaceId}/${slug}: ${errorMessage(err)}`,
+      getLogger('canvas-store').warning(
+        { workspaceId, slug, err: err as Error },
+        'legacy list→movable migration persist failed',
       )
     }
   }
@@ -235,18 +251,103 @@ export async function compactCanvas(
     return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
   }
   await writeFile(path, shallow)
+  // Stamp the canvas row so the auto-Optimize loop can skip canvases that
+  // have not changed since the last successful compaction, and so the UI
+  // can surface "Auto-optimised Ns ago" without reading file mtimes.
+  await db
+    .updateTable('canvases')
+    .set({ lastCompactedAt: Date.now() })
+    .where('id', '=', canvasId)
+    .execute()
+  // Drop the cached LoroDoc for this canvas. Without this, a still-resident
+  // full doc (held open by an active WS connection or a previous getDoc)
+  // would be re-exported on the next save and clobber the shallow snapshot
+  // we just wrote. Done inside compactCanvas so every caller — manual
+  // optimize_canvases route and the debounced auto-compact alike — gets
+  // the same invariant for free.
+  const { evictDoc } = await import('./doc-cache.js')
+  evictDoc(workspaceId, slug)
   return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
 }
 
-// ── list workspaces from the workspaces table ──
-// daemonAlive still reflects the daemon record on disk; that is a runtime
-// signal, not workspace metadata, so it stays a separate fast probe.
-export async function listWorkspaces(): Promise<{ workspaceId: string; daemonAlive: boolean }[]> {
+// ── most-recent auto-compact timestamp across all canvases ───────────
+// Used by the storage report to show "Auto-optimised Ns ago" without
+// client-side aggregation. Returns null when no canvas has been compacted yet.
+export async function readLatestCompactedAt(): Promise<number | null> {
   const db = await dbReady()
-  const daemon = await loadDaemonRecord(DATA_DIR)
-  const daemonAlive = daemon ? isPidAlive(daemon.pid) : false
+  const row = await db
+    .selectFrom('canvases')
+    .select((eb) => eb.fn.max('lastCompactedAt').as('maxAt'))
+    .executeTakeFirst()
+  const value = row?.maxAt ?? null
+  return value === null || typeof value !== 'number' ? null : value
+}
+
+// ── auto-compact debouncer ────────────────────────────────────────────
+// saveCanvas calls a registered trigger after every write. The route layer
+// wires that trigger to scheduleAutoCompact below; tests can register a spy
+// instead to verify call ordering. Per-canvas timers coalesce a burst of
+// edits into a single compaction once the editing pause exceeds debounceMs.
+type AutoCompactTrigger = (workspaceId: string, slug: string) => void
+let autoCompactTrigger: AutoCompactTrigger | null = null
+
+// Resetting the trigger to null also drains any pending debounced timers so
+// a subsequent test's tempDir is not surprised by a stray compactCanvas
+// firing on a removed directory.
+export function setAutoCompactTrigger(fn: AutoCompactTrigger | null): void {
+  if (fn === null) {
+    for (const t of autoCompactTimers.values()) clearTimeout(t)
+    autoCompactTimers.clear()
+  }
+  autoCompactTrigger = fn
+}
+
+const AUTO_COMPACT_DEBOUNCE_MS = 30_000
+const autoCompactTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+export function scheduleAutoCompact(
+  workspaceId: string,
+  slug: string,
+  versionStore: VersionStore,
+  options: { debounceMs?: number } = {},
+): void {
+  const key = `${workspaceId}/${slug}`
+  const existing = autoCompactTimers.get(key)
+  if (existing) clearTimeout(existing)
+  const timer = setTimeout(() => {
+    autoCompactTimers.delete(key)
+    void compactCanvas(workspaceId, slug, versionStore)
+      .then((result) => {
+        if (result.compacted) {
+          getLogger('auto-compact').info(
+            {
+              workspaceId,
+              slug,
+              beforeBytes: result.beforeBytes,
+              afterBytes: result.afterBytes,
+            },
+            'compacted',
+          )
+        }
+      })
+      .catch((err) => {
+        getLogger('auto-compact').warning({ workspaceId, slug, err }, 'failed')
+      })
+  }, options.debounceMs ?? AUTO_COMPACT_DEBOUNCE_MS)
+  // Do not keep the event loop alive just for this debounce. Node will
+  // still flush the compaction if anything else (HTTP, WS) holds the
+  // loop open; in tests we explicitly wait for the timeout.
+  if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
+    timer.unref()
+  }
+  autoCompactTimers.set(key, timer)
+}
+
+// ── list workspaces from the workspaces table ──
+export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
+  const db = await dbReady()
   const rows = await db.selectFrom('workspaces').select(['id', 'updatedAt']).execute()
-  return rows.map((r) => ({ workspaceId: r.id, daemonAlive }))
+  return rows.map((r) => ({ workspaceId: r.id }))
 }
 
 // ── list canvases from the canvases table ──

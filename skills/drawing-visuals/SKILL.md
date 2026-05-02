@@ -9,7 +9,7 @@ Like a whiteboard on the wall of a meeting room, this is a tool for AI and human
 Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the canvas and can be revisited and refined later.
 
-Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `palette_get` / `palette_set` / `palette_delete` / `load_image` / `export_png` / `canvas_export_json` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `checkpoint_save` / `checkpoint_restore`) to create a canvas, draw the diagram, and export it as PNG or standard `.excalidraw` JSON.
+Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `palette_get` / `palette_set` / `palette_delete` / `load_image` / `export_png` / `canvas_export_json` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it as PNG or standard `.excalidraw` JSON.
 Open exported PNGs with the Read tool and inspect them visually.
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
@@ -209,6 +209,7 @@ Options:
 - `frameId`: exports only the frame plus its child elements
 - `outputPath`: absolute path to write the PNG to. When omitted, write to the workspace exports dir
 - `overwrite`: replace an existing file at `outputPath`. Default false; without it an existing file rejects with `output_exists`
+- `theme`: `"light"` or `"dark"`. Forces the rendered scene into the chosen theme without mutating persisted state. Pair both runs (`outputPath: ".../foo-light.png"` + `theme: "light"` and `.../foo-dark.png` + `theme: "dark"`) when reviewing dark-mode contrast or shipping diagrams that may live in mixed themes
 
 Inspect the exported PNG visually:
 
@@ -249,6 +250,8 @@ If the structure, layout, or intent itself is suspect, **create a new canvas and
 | --- | --- |
 | change text, color, or font size | `update_element({ elementId, patch: { ... } })` |
 | move one or many elements | `move_elements({ elementIds, dx, dy })` |
+| align a few sibling boxes to a shared edge or centre | `align_elements({ elementIds, alignment })` — `left` / `right` / `center` for x; `top` / `bottom` / `middle` for y; orthogonal axis untouched |
+| even out the spacing of three or more elements along a row or column | `distribute_elements({ elementIds, direction })` — `horizontal` along x, `vertical` along y; first and last stay fixed |
 | delete one unnecessary element | `delete_element({ elementId })` |
 | delete many unnecessary elements together | `delete_elements({ elementIds })` |
 | delete and rebuild a whole section | pre-group with `assign_to_group`, then remove with `delete_group` |
@@ -309,7 +312,7 @@ Redrawing is normal whiteboard behavior, not failure.
 
 ## Notes
 
-- **Browser Ctrl+Z / undo buttons only revert GUI edits made in the browser itself**: browser undo delegates to the Loro UndoManager. That is collaboration-safe, but MCP-originated changes arrive as remote changes, so browser undo will not rewind them. If you need to rewind tool-driven work, use `checkpoint_save` / `checkpoint_restore`
+- **Browser Ctrl+Z / undo buttons only revert GUI edits made in the browser itself**: browser undo delegates to the Loro UndoManager. That is collaboration-safe, but MCP-originated changes arrive as remote changes, so browser undo will not rewind them. If you need to rewind tool-driven work, save a `version_save({ canvasId, label })` before the risky edit and call `version_restore({ canvasId, versionId })` (or `version_restore` with `targetSlug` to fork into a new canvas instead of reconciling in place)
 - **whiteboard MCP is a local dev tool**: outputs under `~/.whiteboard/` are outside git. If you need a PNG in a PR or other artifact, copy the exported file explicitly
 - **Wrapping behavior**: `text` wraps automatically when `width` is provided. `box_with_label` auto-fits by default and keeps explicit `string[]` line breaks. Use `autoFit: false` only when you truly need rigid line control
 - **Known stale-snapshot constraint**: if another client is editing at the same time, `annotate` coordinates can occasionally be based on an older snapshot. In local single-user practice the timing window is short and usually harmless

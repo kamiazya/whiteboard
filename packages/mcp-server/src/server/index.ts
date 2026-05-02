@@ -32,10 +32,25 @@ async function main() {
     protectedResourceMetadata: resolveMcpProtectedResourceMetadataFromEnv(process.env),
   })
 
+  // Initialise OpenTelemetry before any HTTP / store wiring so the very
+  // first request on a freshly started daemon already carries a span. The
+  // SDK is a no-op unless WHITEBOARD_OTEL=1 or OTEL_EXPORTER_OTLP_ENDPOINT
+  // is set, so this costs nothing in the default path.
+  const { initTracing } = await import('./observability/tracing.js')
+  await initTracing({ role: daemonMode ? 'daemon' : 'http' })
+
   // Block startup until the schema is migrated and the v0 importer has run
   // so route handlers never see a half-initialized data directory.
   const { prepareDataDir } = await import('./store/db/prepare.js')
   await prepareDataDir(DATA_DIR)
+
+  // Best-effort: warm the headless renderer in the background so the first
+  // export_png call (when no browser is connected) does not pay the
+  // jsdom + canvas + resvg + woff2 startup cost. Errors are logged inside.
+  if (daemonMode) {
+    const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
+    void prewarmHeadlessExporter()
+  }
 
   const running = await startHttpServer({
     port,

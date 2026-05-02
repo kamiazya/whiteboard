@@ -6,18 +6,24 @@ import { WHITEBOARD_ROOT, DATA_DIR } from '../server/config.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { loadDaemonRecord, deleteDaemonRecord, isPidAlive, type DaemonRecord } from './daemon-registry.js'
 import { withDaemonStartupLock } from './daemon-lock.js'
+import { purgeOldDaemonLogs } from './log-rotation.js'
 
 // Send daemon stdout/stderr to a log file. Using `stdio: 'ignore'` makes
 // post-crash debugging much harder.
 // Logs rotate daily as `daemon-YYYY-MM-DD.log`, and append mode is safe even
-// when multiple daemon startups race on the same host.
+// when multiple daemon startups race on the same host. Old daemon-*.log
+// files (older than DEFAULT_DAEMON_LOG_RETAIN_DAYS) are dropped
+// fire-and-forget so daemon-startup latency does not include filesystem
+// walk time; failure is silent because rotation must never block startup.
 function openDaemonLogFile(dataDir: string): number | null {
   try {
     const logsDir = join(dataDir, 'logs')
     mkdirSync(logsDir, { recursive: true, mode: 0o700 })
     const date = new Date().toISOString().slice(0, 10) // YYYY-MM-DD
     const logPath = join(logsDir, `daemon-${date}.log`)
-    return openSync(logPath, 'a', 0o600)
+    const fd = openSync(logPath, 'a', 0o600)
+    void purgeOldDaemonLogs(dataDir).catch(() => {})
+    return fd
   } catch {
     // Logging is best-effort; daemon startup should continue on failure.
     return null

@@ -1,4 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
   type UserLibraryContent,
@@ -104,11 +104,26 @@ export async function listUserLibraries(): Promise<UserLibrarySummary[]> {
     .select(['name', 'itemCount'])
     .orderBy('name', 'asc')
     .execute()
-  return rows.map((r) => ({
-    name: r.name,
-    path: pathFor(r.name),
-    itemCount: r.itemCount ?? 0,
-  }))
+  // Stat each path so the management dialog can show per-pack size. A
+  // missing file (registry → blob mismatch) returns null bytes rather
+  // than throwing — listing should never fail on stale rows.
+  return Promise.all(
+    rows.map(async (r) => {
+      const path = pathFor(r.name)
+      let bytes: number | null
+      try {
+        bytes = (await stat(path)).size
+      } catch {
+        bytes = null
+      }
+      return {
+        name: r.name,
+        path,
+        itemCount: r.itemCount ?? 0,
+        bytes,
+      }
+    }),
+  )
 }
 
 export async function removeUserLibrary(name: string): Promise<void> {

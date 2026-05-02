@@ -133,7 +133,7 @@ pnpm build           # dist/server + dist/app
 pnpm test            # Vitest (all projects)
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke
-pnpm smoke:e2e       # checkpoint / route / no_client wiring smoke
+pnpm smoke:e2e       # version / route / no_client wiring smoke
 pnpm smoke:template  # template tool smoke
 pnpm smoke:claude    # Claude subprocess smoke (uses API quota)
 pnpm smoke:codex     # Codex subprocess smoke (uses API quota)
@@ -145,7 +145,7 @@ Default regression triple after a change:
 ```bash
 pnpm test        # unit tests (~3s, 460+ tests)
 pnpm typecheck   # tsc --noEmit (~10s)
-pnpm smoke:e2e   # stdio MCP subprocess: canvas_create -> checkpoint -> viewport / export no_client -> canvas_export_json round trip
+pnpm smoke:e2e   # stdio MCP subprocess: canvas_create -> version save/restore -> viewport / export no_client -> canvas_export_json round trip
 ```
 
 If you also need a zero-context LLM-level check:

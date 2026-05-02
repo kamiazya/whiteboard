@@ -21,7 +21,6 @@ async function importWithRelaxedValidators<T>(modulePath: string): Promise<T> {
       validateWorkspaceId: (value: string) => value,
       validateSlug: (value: string) => value,
       validateVersionId: (value: string) => value,
-      validateCheckpointId: (value: string) => value,
     }
   })
   return (await import(modulePath)) as T
@@ -72,20 +71,4 @@ describe('store path guards', () => {
     })
   })
 
-  it('returns ValidationError for checkpoint-store file escape attempts', async () => {
-    const { FileCheckpointStore } =
-      await importWithRelaxedValidators<typeof import('./checkpoint-store.js')>(
-        './checkpoint-store.js',
-      )
-    const { validationErrorBody } = await import('../validators.js')
-    const store = new FileCheckpointStore()
-
-    const error = await captureError(store.load('../escape'))
-
-    expect(error).toMatchObject({ name: 'ValidationError', error: 'invalid_path' })
-    expect(validationErrorBody(error)).toEqual({
-      error: 'invalid_path',
-      message: expect.stringMatching(/outside/i),
-    })
-  })
 })

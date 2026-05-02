@@ -71,3 +71,15 @@ export function clearDbCache(): void {
   }
   cache.clear()
 }
+
+// Test-only seam. `createIsolatedDb` registers a memory-backed Database under
+// a real dataDir so production code calling `getDb(DATA_DIR)` hits the same
+// instance the test prepared. Production never reaches this path —
+// `buildDb()` is the sole entry on the cold cache path.
+export function injectCachedDb(dataDir: string, db: Database): void {
+  cache.set(dataDir, Promise.resolve(db))
+}
+
+export function removeCachedDb(dataDir: string): void {
+  cache.delete(dataDir)
+}

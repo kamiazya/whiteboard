@@ -535,7 +535,6 @@ describe('createApp daemon mutation auth', () => {
             workspaces: [
               {
                 workspaceId: 'M7lgM0WguBnkfP_1iOFtY',
-                daemonAlive: true,
               },
             ],
           }),
@@ -610,52 +609,69 @@ describe('createApp daemon mutation auth', () => {
 
   it('logs initialize capabilities and per-request timing when MCP_HTTP_DEBUG=1', async () => {
     process.env.MCP_HTTP_DEBUG = '1'
+    const { captureLogsForTests } = await import('./log.js')
+    const cap = captureLogsForTests('debug')
     const app = createApp(createRuntimeOptions())
-    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined)
     const client = new Client({ name: 'debug-client', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL('http://localhost/mcp'), {
       fetch: (input, init) =>
         app.request(input instanceof URL ? input.toString() : String(input), init),
     })
 
-    await client.connect(transport)
-    await client.listTools()
-    await transport.close()
+    try {
+      await client.connect(transport)
+      await client.listTools()
+      await transport.close()
 
-    expect(infoSpy).toHaveBeenCalledWith(
-      '[mcp-http:init]',
-      expect.objectContaining({
-        clientInfo: { name: 'debug-client', version: '1.0.0' },
-        capabilities: expect.any(Object),
-      }),
-    )
-    expect(infoSpy).toHaveBeenCalledWith(
-      '[mcp-http]',
-      expect.objectContaining({
-        path: '/mcp',
-        jsonrpcMethod: 'initialize',
-        status: 200,
-        durationMs: expect.any(Number),
-      }),
-    )
-    expect(infoSpy).toHaveBeenCalledWith(
-      '[mcp-http]',
-      expect.objectContaining({
-        path: '/mcp',
-        jsonrpcMethod: 'tools/list',
-        status: 200,
-        durationMs: expect.any(Number),
-      }),
-    )
-    expect(infoSpy).toHaveBeenCalledWith(
-      '[mcp-http:construct]',
-      expect.objectContaining({ durationMs: expect.any(Number) }),
-    )
-    expect(infoSpy).toHaveBeenCalledWith(
-      '[mcp-http:destruct]',
-      expect.objectContaining({ durationMs: expect.any(Number) }),
-    )
-    infoSpy.mockRestore()
+      const records = cap.records
+      expect(
+        records.some(
+          (r) =>
+            r.scope === 'mcp-http' &&
+            r.msg === 'mcp-http:init' &&
+            r.data?.clientInfo &&
+            (r.data.clientInfo as { name: string }).name === 'debug-client',
+        ),
+      ).toBe(true)
+      expect(
+        records.some(
+          (r) =>
+            r.scope === 'mcp-http' &&
+            r.msg === 'mcp-http' &&
+            r.data?.jsonrpcMethod === 'initialize' &&
+            r.data?.status === 200 &&
+            typeof r.data?.durationMs === 'number',
+        ),
+      ).toBe(true)
+      expect(
+        records.some(
+          (r) =>
+            r.scope === 'mcp-http' &&
+            r.msg === 'mcp-http' &&
+            r.data?.jsonrpcMethod === 'tools/list' &&
+            r.data?.status === 200 &&
+            typeof r.data?.durationMs === 'number',
+        ),
+      ).toBe(true)
+      expect(
+        records.some(
+          (r) =>
+            r.scope === 'mcp-http' &&
+            r.msg === 'mcp-http:construct' &&
+            typeof r.data?.durationMs === 'number',
+        ),
+      ).toBe(true)
+      expect(
+        records.some(
+          (r) =>
+            r.scope === 'mcp-http' &&
+            r.msg === 'mcp-http:destruct' &&
+            typeof r.data?.durationMs === 'number',
+        ),
+      ).toBe(true)
+    } finally {
+      cap.restore()
+    }
   })
 
   it('keeps the SSE stream returned by GET /mcp open instead of closing it in the finally block', async () => {

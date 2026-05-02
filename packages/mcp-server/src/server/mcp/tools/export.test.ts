@@ -267,6 +267,59 @@ describe('exportPngTool execute', () => {
     }
   })
 
+  it('omits imageBase64 when the rendered PNG exceeds the configured byte cap', async () => {
+    // Mid-sized canvases can produce multi-MB PNGs; embedding them in JSON-RPC
+    // costs ~1.33x bytes plus a transient ~3x memory blowup at base64 encode
+    // time. Above the cap we return only the file path and let the caller
+    // open it themselves.
+    const dir = await mkdtemp(join(tmpdir(), 'export-png-cap-test-'))
+    const filePath = join(dir, 'big.png')
+    process.env.WHITEBOARD_EXPORT_MAX_BASE64_BYTES = '64'
+    const bytes = Buffer.alloc(256, 0xff)
+    await writeFile(filePath, bytes)
+    try {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ filePath }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      vi.resetModules()
+      const { exportPngTool } = await import('./export.js')
+      const tool = exportPngTool()
+      const res = await tool.execute({ canvasId: 'sid/slug' }, client)
+      expect(res.filePath).toBe(filePath)
+      expect(res.imageBase64).toBeUndefined()
+    } finally {
+      delete process.env.WHITEBOARD_EXPORT_MAX_BASE64_BYTES
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('still embeds imageBase64 when the PNG fits within the configured cap', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'export-png-fit-test-'))
+    const filePath = join(dir, 'small.png')
+    process.env.WHITEBOARD_EXPORT_MAX_BASE64_BYTES = '4096'
+    const bytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+    await writeFile(filePath, bytes)
+    try {
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ filePath }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+      vi.resetModules()
+      const { exportPngTool } = await import('./export.js')
+      const tool = exportPngTool()
+      const res = await tool.execute({ canvasId: 'sid/slug' }, client)
+      expect(res.imageBase64).toBe(bytes.toString('base64'))
+    } finally {
+      delete process.env.WHITEBOARD_EXPORT_MAX_BASE64_BYTES
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('case 378', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ filePath: '/does-not-exist/whiteboard-xyz/out.png' }), {

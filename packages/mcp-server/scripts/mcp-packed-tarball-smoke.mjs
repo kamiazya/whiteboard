@@ -104,7 +104,7 @@ console.log(`[tarball-smoke] installed entry → ${installedEntry}`)
 
 const smoke = spawnSync(
   'node',
-  [resolve(packageRoot, 'scripts/mcp-e2e-checkpoint.mjs'), `--entry=${installedEntry}`],
+  [resolve(packageRoot, 'scripts/mcp-e2e-smoke.mjs'), `--entry=${installedEntry}`],
   {
     cwd: repoRoot,
     stdio: 'inherit',

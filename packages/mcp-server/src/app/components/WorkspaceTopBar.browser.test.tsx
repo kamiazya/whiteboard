@@ -130,10 +130,52 @@ describe('WorkspaceTopBar browser mode', () => {
 
     expect(viewport!.scrollTop).toBeGreaterThan(before)
 
-    await page.getByText('Design review').click()
+    // Outside-click to close the popover. Workspace identity is no longer
+    // surfaced in the header so we click the back-button (always present)
+    // which is outside the version-history Popover bounds.
+    fireEvent.mouseDown(container.querySelector('a[href="/"]')!)
     await waitFor(() => {
       expect(container.textContent).not.toContain('Version 24')
     })
+  })
+
+  it('exposes a theme toggle that cycles light → dark → system → light', async () => {
+    const onToggleTheme = vi.fn()
+    const { rerender } = renderTopBar({ theme: 'light', onToggleTheme })
+
+    // light → dark
+    fireEvent.click(screen.getByRole('button', { name: /Theme: light/i }))
+    expect(onToggleTheme).toHaveBeenLastCalledWith('dark')
+
+    function rerenderWith(theme: 'dark' | 'system') {
+      rerender(
+        <MemoryRouter initialEntries={['/canvas/sess_1/design/login-flow']}>
+          <div className="h-[560px] w-[1100px] bg-background p-6">
+            <WorkspaceTopBar
+              workspaceId="sess_1"
+              slug="design/login-flow"
+              canvases={[
+                { slug: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
+                { slug: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
+              ]}
+              onEnterFullscreen={() => {}}
+              theme={theme}
+              onToggleTheme={onToggleTheme}
+            />
+          </div>
+        </MemoryRouter>,
+      )
+    }
+
+    // dark → system
+    rerenderWith('dark')
+    fireEvent.click(screen.getByRole('button', { name: /Theme: dark/i }))
+    expect(onToggleTheme).toHaveBeenLastCalledWith('system')
+
+    // system → light
+    rerenderWith('system')
+    fireEvent.click(screen.getByRole('button', { name: /Theme: system/i }))
+    expect(onToggleTheme).toHaveBeenLastCalledWith('light')
   })
 
   it('opens the restore dialog from a real history row and posts restore on confirm', async () => {
