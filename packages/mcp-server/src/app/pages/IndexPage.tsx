@@ -79,6 +79,13 @@ type TabKey = 'canvases' | 'storage'
 // re-minted on every open.
 const PRIMARY_WORKSPACE_KEY = 'whiteboard.indexPage.primaryWorkspaceId'
 
+// localStorage is shared across pages and writable from the dev
+// console, so the read-back value cannot be trusted blindly. Mirrors
+// the server-side `validateWorkspaceId` shape so an attacker-supplied
+// stash containing path separators can NOT flow into the create POST
+// URL or the post-create navigate.
+const WORKSPACE_ID_RE = /^[A-Za-z0-9_-]+$/
+
 function readTabFromHash(): TabKey {
   if (typeof window === 'undefined') return 'canvases'
   const h = window.location.hash.replace(/^#/, '')
@@ -140,12 +147,14 @@ export default function IndexPage() {
   const [primaryWorkspaceId, setPrimaryWorkspaceId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     try {
-      return window.localStorage.getItem(PRIMARY_WORKSPACE_KEY)
+      const stored = window.localStorage.getItem(PRIMARY_WORKSPACE_KEY)
+      return stored && WORKSPACE_ID_RE.test(stored) ? stored : null
     } catch {
       return null
     }
   })
   const rememberPrimaryWorkspace = useCallback((id: string) => {
+    if (!WORKSPACE_ID_RE.test(id)) return
     setPrimaryWorkspaceId(id)
     if (typeof window === 'undefined') return
     try {

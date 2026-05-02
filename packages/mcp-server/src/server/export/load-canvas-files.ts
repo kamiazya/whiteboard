@@ -56,8 +56,12 @@ export async function loadCanvasFiles(
   const dir = join(DATA_DIR, workspaceId, 'files')
   // Probe the directory once so a freshly-created workspace doesn't pay
   // for one stat() per referenced id when nothing is on disk yet.
+  // Treat a non-directory at this path the same as a missing dir:
+  // otherwise readFile(join(dir, ...)) below would surface ENOTDIR
+  // instead of the graceful empty-result fallback.
   try {
-    await stat(dir)
+    const dirStat = await stat(dir)
+    if (!dirStat.isDirectory()) return {}
   } catch (err) {
     if (isMissingFileError(err)) return {}
     throw err

@@ -92,6 +92,17 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   cleanup()
+  // The "reuses the freshly-minted workspace id" case writes
+  // whiteboard.indexPage.primaryWorkspaceId; clear it here so later
+  // browser tests in the same suite do not silently rehydrate from a
+  // previous case's stash.
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.removeItem('whiteboard.indexPage.primaryWorkspaceId')
+    } catch {
+      // Defensive — some envs may disallow storage access.
+    }
+  }
 })
 
 describe('IndexPage browser mode', () => {

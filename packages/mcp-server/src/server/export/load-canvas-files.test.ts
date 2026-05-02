@@ -32,7 +32,10 @@ afterEach(async () => {
 
 describe('loadCanvasFiles selective loading', () => {
   it('returns an empty map when the workspace has no files dir yet', async () => {
-    const out = await loadCanvasFiles('ws_empty', new Set())
+    // Pass a non-empty set so the function does NOT short-circuit at
+    // `referencedFileIds.size === 0` — that lets the test actually
+    // exercise the stat(dir) → ENOENT fallback branch.
+    const out = await loadCanvasFiles('ws_empty', new Set(['missing-file']))
     expect(out).toEqual({})
   })
 
@@ -50,6 +53,17 @@ describe('loadCanvasFiles selective loading', () => {
     expect(out['used-2'].mimeType).toBe('image/jpeg')
     // The unrelated file must be entirely absent from the result.
     expect(out['unrelated']).toBeUndefined()
+  })
+
+  it('treats a non-directory at <ws>/files as gracefully as a missing dir', async () => {
+    // Plant a regular file where the workspace's files DIRECTORY is
+    // expected. Without the isDirectory() guard the loader stat()s
+    // through and then the per-id readFile() raises ENOTDIR; the
+    // graceful fallback is the empty result.
+    await mkdir(join(tempDir, 'ws_notdir'), { recursive: true })
+    await writeFile(join(tempDir, 'ws_notdir', 'files'), Buffer.alloc(4, 0xff))
+    const out = await loadCanvasFiles('ws_notdir', new Set(['anything']))
+    expect(out).toEqual({})
   })
 
   it('returns {} when the referenced set is empty even if files exist on disk', async () => {

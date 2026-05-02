@@ -183,8 +183,13 @@ async function main() {
     const r = await callTool('annotate', {
       canvasId: created.id,
       type: 'rectangle',
-      target: { x: 200 + i * 50, y: 200 + i * 30, width: 60, height: 40 },
+      // target's Zod schema is { x, y } — Zod v4 strips unknown keys, so
+      // width/height nested inside target would be silently discarded.
+      // Hoist them to the top-level annotate parameters.
+      target: { x: 200 + i * 50, y: 200 + i * 30 },
       coords: 'absolute',
+      width: 60,
+      height: 40,
       color: '#1971c2',
     })
     const id = r.elementId ?? r.elementIds?.[0]
