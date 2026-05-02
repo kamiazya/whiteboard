@@ -9,9 +9,10 @@
 //   4. @resvg/resvg-js rasterises the SVG to PNG, with Excalifont woff2
 //      decompressed to TTF and passed via fontBuffers.
 //
-// This module is process-singleton: setupHeadlessDom() must run exactly once,
-// before @excalidraw/utils is imported, because the bundle reads
-// `window.navigator.platform` at module-load time.
+// This module is process-singleton: buildExporter() — invoked lazily by
+// getHeadlessExporter() — must run exactly once before @excalidraw/utils
+// is imported, because the bundle reads `window.navigator.platform` at
+// module-load time.
 
 import { readdir, readFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'

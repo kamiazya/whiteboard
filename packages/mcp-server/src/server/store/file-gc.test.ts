@@ -17,6 +17,7 @@ vi.mock('../config.js', () => ({
 
 const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
+const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -134,6 +135,11 @@ describe('purgeDanglingFiles', () => {
     // older code logged + skipped, which was equivalent to "those files
     // are dangling, delete them" — permanent data loss. Now the GC
     // pass must fail closed and leave every file on disk untouched.
+    // Install a structured-log capture so the warning surface is
+    // asserted alongside the fail-closed contract — silent skipping is
+    // the very behaviour this test exists to prevent.
+    const cap = captureLogsForTests('debug')
+
     await saveCanvas('ws_brk', 'broken', makeDocWithImage('only-by-broken-version'))
     await seedFile('ws_brk', 'only-by-broken-version', '.png', 222)
     await seedFile('ws_brk', 'really-dangling', '.png', 33)
@@ -174,5 +180,19 @@ describe('purgeDanglingFiles', () => {
     // would have been classified as dangling under the old behaviour.
     const remaining = (await readdir(join(tempDir, 'ws_brk', 'files'))).sort()
     expect(remaining).toEqual(['only-by-broken-version.png', 'really-dangling.png'])
+
+    try {
+      const fileGcWarnings = cap.records.filter(
+        (r) => r.scope === 'file-gc' && r.level === 'warning' && r.msg === 'skipped version',
+      )
+      expect(fileGcWarnings).toHaveLength(1)
+      expect(fileGcWarnings[0].data).toMatchObject({
+        workspaceId: 'ws_brk',
+        slug: 'broken',
+        versionId: 'v-broken',
+      })
+    } finally {
+      cap.restore()
+    }
   })
 })
