@@ -16,6 +16,7 @@ import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
 import { assertPathWithinDir } from './path-guard.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Loro-native versioning, backed by the sqlite metadata DB.
 //
@@ -178,59 +179,67 @@ export class FileVersionStore implements VersionStore {
   ): Promise<VersionEntry> {
     validateWorkspaceId(workspaceId)
     validateSlug(slug)
-    const branchName = opts.branchName ?? 'main'
-    validateBranchName(branchName)
-    const id = nanoid(12)
-    validateVersionId(id)
+    // Hold the per-workspace write barrier so a concurrent
+    // purgeDanglingFiles cannot interleave with the version row being
+    // created. The references this save records are a subset of what
+    // GC already inspected, but pairing both writers behind the same
+    // queue keeps the lock contract uniform — all "things that might
+    // change what GC considers referenced" run serially.
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const branchName = opts.branchName ?? 'main'
+      validateBranchName(branchName)
+      const id = nanoid(12)
+      validateVersionId(id)
 
-    const elementCount = (() => {
-      try {
-        const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
-        return list.filter((e) => !e.isDeleted).length
-      } catch {
-        return 0
-      }
-    })()
+      const elementCount = (() => {
+        try {
+          const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
+          return list.filter((e) => !e.isDeleted).length
+        } catch {
+          return 0
+        }
+      })()
 
-    const frontiers = bytesToBase64(encodeFrontiers(doc.frontiers()))
-    const createdAt = Date.now()
-    const operator = opts.operator
+      const frontiers = bytesToBase64(encodeFrontiers(doc.frontiers()))
+      const createdAt = Date.now()
+      const operator = opts.operator
 
-    const db = await dbReady()
-    const canvasId = await upsertCanvasRow(db, workspaceId, slug)
-    await db
-      .insertInto('versions')
-      .values({
+      const db = await dbReady()
+      const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+      await db
+        .insertInto('versions')
+        .values({
+          id,
+          canvasId,
+          branchName,
+          auto: opts.auto ? 1 : 0,
+          label: opts.label ?? null,
+          operatorKind: operator?.kind ?? 'system',
+          operatorPeerId: operator?.peerId ?? '',
+          operatorDisplayName: operator?.displayName ?? null,
+          operatorAgentId: operator?.agentId ?? null,
+          operatorWorkspaceId: operator?.workspaceId ?? null,
+          elementCount,
+          frontiers,
+          hasThumbnail: 0,
+          createdAt,
+        })
+        .execute()
+
+      await this.prune(workspaceId, canvasId)
+
+      return {
         id,
-        canvasId,
-        branchName,
-        auto: opts.auto ? 1 : 0,
-        label: opts.label ?? null,
-        operatorKind: operator?.kind ?? 'system',
-        operatorPeerId: operator?.peerId ?? '',
-        operatorDisplayName: operator?.displayName ?? null,
-        operatorAgentId: operator?.agentId ?? null,
-        operatorWorkspaceId: operator?.workspaceId ?? null,
+        slug,
+        createdAt: new Date(createdAt).toISOString(),
         elementCount,
-        frontiers,
-        hasThumbnail: 0,
-        createdAt,
-      })
-      .execute()
-
-    await this.prune(workspaceId, canvasId)
-
-    return {
-      id,
-      slug,
-      createdAt: new Date(createdAt).toISOString(),
-      elementCount,
-      auto: opts.auto,
-      branchName,
-      hasThumbnail: false,
-      ...(opts.label !== undefined ? { label: opts.label } : {}),
-      ...(operator !== undefined ? { operator } : {}),
-    }
+        auto: opts.auto,
+        branchName,
+        hasThumbnail: false,
+        ...(opts.label !== undefined ? { label: opts.label } : {}),
+        ...(operator !== undefined ? { operator } : {}),
+      }
+    })
   }
 
   async load(workspaceId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null> {

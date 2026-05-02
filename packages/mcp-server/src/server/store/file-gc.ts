@@ -108,6 +108,25 @@ async function collectReferencedFileIds(
 
 export interface PurgeFilesOptions {
   versionStore?: VersionStore
+  // Don't unlink files whose mtime is younger than this many ms. Closes
+  // the upload-but-not-yet-saveCanvas race: routes/files.ts writes the
+  // blob first, the user (or agent) calls saveCanvas later to add the
+  // image element that references it. Without a grace window, GC firing
+  // between those two events permanently deletes a file that was about
+  // to be referenced. Default 1 hour; tests pass 0 to bypass.
+  graceMs?: number
+}
+
+const DEFAULT_GRACE_MS = 60 * 60 * 1000
+
+function resolveGraceMs(options: PurgeFilesOptions): number {
+  if (typeof options.graceMs === 'number') return Math.max(0, options.graceMs)
+  const envRaw = process.env.WHITEBOARD_FILE_GC_GRACE_MS
+  if (typeof envRaw === 'string' && envRaw.length > 0) {
+    const parsed = Number.parseInt(envRaw, 10)
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  }
+  return DEFAULT_GRACE_MS
 }
 
 export async function purgeDanglingFiles(
@@ -119,6 +138,7 @@ export async function purgeDanglingFiles(
   // a concurrent saveCanvas / version-save cannot insert a new file
   // reference between snapshot and delete and have its file unlinked
   // as "dangling".
+  const graceMs = resolveGraceMs(options)
   return withWorkspaceWriteLock(workspaceId, async () => {
     const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
 
@@ -133,6 +153,7 @@ export async function purgeDanglingFiles(
 
     let purgedCount = 0
     let purgedBytes = 0
+    const now = Date.now()
     for (const entry of entries) {
       const ext = extname(entry).toLowerCase()
       // Skip anything that does not look like an image upload — the dir
@@ -145,6 +166,11 @@ export async function purgeDanglingFiles(
       const fullPath = join(dir, entry)
       try {
         const info = await stat(fullPath)
+        // Tombstone delay: a file uploaded just now isn't tied to any
+        // canvas yet, but the user is about to call saveCanvas with the
+        // matching image element. Spare freshly-touched files so that
+        // upload → saveCanvas window doesn't lose a legitimate blob.
+        if (graceMs > 0 && now - info.mtimeMs < graceMs) continue
         await unlink(fullPath)
         purgedCount += 1
         purgedBytes += info.size

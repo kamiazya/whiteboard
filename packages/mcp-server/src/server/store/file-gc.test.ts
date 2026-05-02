@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -26,7 +26,25 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 async function seedFile(workspaceId: string, fileId: string, ext: string, bytes: number): Promise<void> {
   const dir = join(tempDir, workspaceId, 'files')
   await mkdir(dir, { recursive: true })
-  await writeFile(join(dir, `${fileId}${ext}`), Buffer.alloc(bytes, 0xab))
+  const path = join(dir, `${fileId}${ext}`)
+  await writeFile(path, Buffer.alloc(bytes, 0xab))
+  // Age the file beyond the default GC grace window so existing
+  // dangling-files tests see the unlink path. Tests that exercise the
+  // grace window itself create files without calling seedFile (or use
+  // seedFreshFile below).
+  const past = (Date.now() - 2 * 60 * 60 * 1000) / 1000
+  await utimes(path, past, past)
+}
+
+async function seedFreshFile(
+  workspaceId: string,
+  fileId: string,
+  ext: string,
+  bytes: number,
+): Promise<void> {
+  const dir = join(tempDir, workspaceId, 'files')
+  await mkdir(dir, { recursive: true })
+  await writeFile(join(dir, `${fileId}${ext}`), Buffer.alloc(bytes, 0xcd))
 }
 
 function makeDocWithImage(fileId: string): LoroDoc {
@@ -193,6 +211,49 @@ describe('purgeDanglingFiles', () => {
       })
     } finally {
       cap.restore()
+    }
+  })
+
+  it('skips files whose mtime is within the configured grace window (Race C)', async () => {
+    // The upload-but-not-yet-saveCanvas race: routes/files.ts has just
+    // written `pending.png` to disk, but the user has not yet called
+    // saveCanvas with the matching image element. Without a grace
+    // window GC fires here and permanently deletes a file that was
+    // about to be referenced. With the default 1-hour grace, freshly-
+    // touched files are spared.
+    await seedFreshFile('ws_grace', 'pending', '.png', 64)
+    await seedFile('ws_grace', 'old-orphan', '.png', 32)
+
+    const result = await purgeDanglingFiles('ws_grace')
+    // old-orphan is past the grace window, gone. pending is fresh —
+    // preserved this round.
+    expect(result.purgedCount).toBe(1)
+    const remaining = (await readdir(join(tempDir, 'ws_grace', 'files'))).sort()
+    expect(remaining).toEqual(['pending.png'])
+  })
+
+  it('honours an explicit graceMs=0 to bypass the grace window', async () => {
+    // Operators who run a manual cleanup right after deciding nothing
+    // should be deferred can pass graceMs: 0 to delete fresh dangling
+    // files in the same call. Used by the tests above for the same
+    // reason.
+    await seedFreshFile('ws_grace0', 'fresh-orphan', '.png', 16)
+    const result = await purgeDanglingFiles('ws_grace0', { graceMs: 0 })
+    expect(result.purgedCount).toBe(1)
+    const remaining = await readdir(join(tempDir, 'ws_grace0', 'files'))
+    expect(remaining).toEqual([])
+  })
+
+  it('reads the grace window from WHITEBOARD_FILE_GC_GRACE_MS when no option is set', async () => {
+    const previous = process.env.WHITEBOARD_FILE_GC_GRACE_MS
+    process.env.WHITEBOARD_FILE_GC_GRACE_MS = '0'
+    try {
+      await seedFreshFile('ws_env', 'fresh-orphan', '.png', 8)
+      const result = await purgeDanglingFiles('ws_env')
+      expect(result.purgedCount).toBe(1)
+    } finally {
+      if (previous === undefined) delete process.env.WHITEBOARD_FILE_GC_GRACE_MS
+      else process.env.WHITEBOARD_FILE_GC_GRACE_MS = previous
     }
   })
 
