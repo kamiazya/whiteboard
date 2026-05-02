@@ -81,6 +81,8 @@
     "test:node": "vitest run --project mcp-node --project mcp-jsdom",
     "test:browser": "vitest run --project mcp-browser",
     "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
+    "docs:snapshots": "vitest run --config vitest.docs-snapshots.config.ts",
+    "docs:snapshots:check": "pnpm docs:snapshots && git diff --exit-code -- ../../docs/assets/",
     "test:watch": "vitest --project mcp-node --project mcp-jsdom",
     "check:pr-title": "node scripts/check-pr-title.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
