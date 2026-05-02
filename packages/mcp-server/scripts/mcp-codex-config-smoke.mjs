@@ -73,7 +73,7 @@ console.log('[codex-config-smoke] published config is wired to npx @kamiazya/whi
 
 const child = spawn(
   'node',
-  ['scripts/mcp-e2e-checkpoint.mjs', '--entry=dist/server/mcp/index.js'],
+  ['scripts/mcp-e2e-smoke.mjs', '--entry=dist/server/mcp/index.js'],
   {
     cwd: packageRoot,
     stdio: 'inherit',

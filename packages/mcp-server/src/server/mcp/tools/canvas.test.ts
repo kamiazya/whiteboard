@@ -17,7 +17,9 @@ vi.mock('nanoid', () => ({
   nanoid: () => 'test-session-id',
 }))
 
-const { createCanvasTool, listCanvasTool, openCanvasTool } = await import('./canvas.js')
+const { createCanvasTool, listCanvasTool, openCanvasTool, optimizeCanvasesTool } = await import(
+  './canvas.js'
+)
 const client = {
   port: 3099,
   baseUrl: 'http://localhost:3099',
@@ -107,8 +109,8 @@ describe('canvas_list', () => {
         return new Response(
           JSON.stringify({
             workspaces: [
-              { workspaceId: 'active-session', daemonAlive: true },
-              { workspaceId: 'stale-session', daemonAlive: false },
+              { workspaceId: 'active-session' },
+              { workspaceId: 'stale-session' },
             ],
           }),
           { status: 200 },
@@ -140,7 +142,6 @@ describe('canvas_list', () => {
       const { workspaces } = await tool.execute({ slugContains: 'header' }, client)
       expect(workspaces).toHaveLength(1)
       expect(workspaces[0].workspaceId).toBe('active-session')
-      expect(workspaces[0].daemonAlive).toBe(true)
       expect(workspaces[0].canvases.map((c) => c.slug)).toEqual(['621-Header'])
     } finally {
       globalThis.fetch = originalFetch
@@ -163,13 +164,21 @@ describe('canvas_open', () => {
   })
 
   it('case 102', async () => {
+    // Use a URL hash, not a query string, for fullscreen.
+    //
+    // When the browser already has the canvas open, opening the same path
+    // with a different query (`?fullscreen=1`) is treated as a navigation:
+    // the page unloads and `beforeunload` fires (e.g. the dirty-state
+    // dialog the WorkspaceTopBar registers). Fragment-only changes fire
+    // `hashchange` instead — no unload, no dialog. CanvasPage listens for
+    // both forms on mount so cold opens still work.
     const openMock = vi.fn(async () => undefined)
     vi.doMock('open', () => ({ default: openMock }))
     const { openCanvasTool } = await import('./canvas.js')
     const tool = openCanvasTool()
     const res = await tool.execute({ id: 'sid/slug', fullscreen: true }, client)
-    expect(res.url).toBe('http://localhost:3099/canvas/sid/slug?fullscreen=1')
-    expect(openMock).toHaveBeenCalledWith('http://localhost:3099/canvas/sid/slug?fullscreen=1')
+    expect(res.url).toBe('http://localhost:3099/canvas/sid/slug#fullscreen')
+    expect(openMock).toHaveBeenCalledWith('http://localhost:3099/canvas/sid/slug#fullscreen')
   })
 
   it('case 103', async () => {
@@ -252,5 +261,87 @@ describe('canvas_open', () => {
     const tool = openCanvasTool()
     const res = await tool.execute({ id: 'sid/slug' }, client)
     expect(res).toEqual({ url: 'http://localhost:3099/canvas/sid/slug', openFailed: 'boom' })
+  })
+})
+
+describe('optimize_canvases', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-mcp-test-'))
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('hits the per-canvas /compact endpoint when slug is given and wraps the result', async () => {
+    const tool = optimizeCanvasesTool()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      expect(input.toString()).toBe(
+        'http://localhost:3099/api/workspaces/sid/canvases/canvas-a/compact',
+      )
+      expect(init?.method).toBe('POST')
+      return new Response(
+        JSON.stringify({ compacted: true, beforeBytes: 2048, afterBytes: 512, reason: 'ok' }),
+        { status: 200 },
+      )
+    }) as typeof globalThis.fetch
+
+    try {
+      await expect(tool.execute({ slug: 'canvas-a' }, 'sid', client)).resolves.toEqual({
+        results: [
+          { slug: 'canvas-a', compacted: true, beforeBytes: 2048, afterBytes: 512, reason: 'ok' },
+        ],
+        totalBeforeBytes: 2048,
+        totalAfterBytes: 512,
+      })
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('hits /optimize-all when slug is omitted and returns the aggregated payload', async () => {
+    const tool = optimizeCanvasesTool()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
+      expect(input.toString()).toBe(
+        'http://localhost:3099/api/workspaces/sid/canvases/optimize-all',
+      )
+      expect(init?.method).toBe('POST')
+      return new Response(
+        JSON.stringify({
+          results: [
+            { slug: 'a', compacted: true, beforeBytes: 1000, afterBytes: 200, reason: 'ok' },
+            { slug: 'b', compacted: false, beforeBytes: 500, afterBytes: 500, reason: 'no-gain' },
+          ],
+          totalBeforeBytes: 1500,
+          totalAfterBytes: 700,
+        }),
+        { status: 200 },
+      )
+    }) as typeof globalThis.fetch
+
+    try {
+      const res = await tool.execute({}, 'sid', client)
+      expect(res.results).toHaveLength(2)
+      expect(res.totalBeforeBytes).toBe(1500)
+      expect(res.totalAfterBytes).toBe(700)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
+  })
+
+  it('throws on a non-2xx response so callers get a clear failure', async () => {
+    const tool = optimizeCanvasesTool()
+    const originalFetch = globalThis.fetch
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ message: 'workspace missing' }), { status: 404 }),
+    ) as typeof globalThis.fetch
+    try {
+      await expect(tool.execute({}, 'sid', client)).rejects.toThrow(/optimize|workspace missing/)
+    } finally {
+      globalThis.fetch = originalFetch
+    }
   })
 })

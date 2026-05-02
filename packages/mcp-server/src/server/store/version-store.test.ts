@@ -36,13 +36,17 @@ function countElements(doc: LoroDoc): number {
 
 describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   let store: InstanceType<typeof FileVersionStore>
+  let handle: Awaited<ReturnType<typeof import('./db/test-helpers.js').createIsolatedDb>>
 
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'version-store-test-'))
+    const { createIsolatedDb } = await import('./db/test-helpers.js')
+    handle = await createIsolatedDb({ dataDir: tempDir })
     store = new FileVersionStore()
   })
 
   afterEach(async () => {
+    await handle.dispose()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -339,5 +343,75 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(frontiers).not.toBeNull()
     // Decoded Frontiers is a non-empty array of OpId-shaped objects.
     expect(Array.isArray(frontiers)).toBe(true)
+  })
+
+  describe('pruneSandwichedAutoVersions', () => {
+    // Save a version while pinning Date.now() so chronological order is
+    // deterministic regardless of how fast the test runs.
+    async function saveAt(
+      slug: string,
+      kind: 'auto' | 'manual',
+      tMs: number,
+    ): Promise<{ id: string }> {
+      const doc = new LoroDoc()
+      appendElement(doc, `${kind}-${tMs}`)
+      const realNow = Date.now
+      vi.spyOn(Date, 'now').mockImplementation(() => tMs)
+      try {
+        const entry = await store.save('sess-1', slug, doc, {
+          auto: kind === 'auto',
+          label: kind === 'manual' ? `manual-${tMs}` : undefined,
+        })
+        return { id: entry.id }
+      } finally {
+        vi.spyOn(Date, 'now').mockImplementation(realNow)
+      }
+    }
+
+    it('drops auto versions strictly between two manual versions but keeps autos before the first / after the last', async () => {
+      // Pattern: M1, A1, A2, M2, A3, M3, A4
+      // Expected after prune: M1, M2, M3, A4 (A1, A2 are sandwiched between
+      // M1 and M2; A3 is sandwiched between M2 and M3; A4 is after the last
+      // manual so it stays).
+      const m1 = await saveAt('canvas-x', 'manual', 1_000)
+      const a1 = await saveAt('canvas-x', 'auto', 2_000)
+      const a2 = await saveAt('canvas-x', 'auto', 3_000)
+      const m2 = await saveAt('canvas-x', 'manual', 4_000)
+      const a3 = await saveAt('canvas-x', 'auto', 5_000)
+      const m3 = await saveAt('canvas-x', 'manual', 6_000)
+      const a4 = await saveAt('canvas-x', 'auto', 7_000)
+
+      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-x')
+      expect(result.deletedIds.sort()).toEqual([a1.id, a2.id, a3.id].sort())
+      expect(result.deletedCount).toBe(3)
+
+      const remaining = (await store.list('sess-1', 'canvas-x')).map((v) => v.id).sort()
+      expect(remaining).toEqual([m1.id, m2.id, m3.id, a4.id].sort())
+    })
+
+    it('keeps every auto when fewer than two manual versions exist (nothing to sandwich)', async () => {
+      const a1 = await saveAt('canvas-y', 'auto', 1_000)
+      const m1 = await saveAt('canvas-y', 'manual', 2_000)
+      const a2 = await saveAt('canvas-y', 'auto', 3_000)
+
+      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-y')
+      expect(result.deletedCount).toBe(0)
+      const remaining = (await store.list('sess-1', 'canvas-y')).map((v) => v.id).sort()
+      expect(remaining).toEqual([a1.id, m1.id, a2.id].sort())
+    })
+
+    it('removes the thumbnail PNG of pruned versions so disk usage actually drops', async () => {
+      await saveAt('canvas-z', 'manual', 1_000)
+      const a1 = await saveAt('canvas-z', 'auto', 2_000)
+      await saveAt('canvas-z', 'manual', 3_000)
+
+      // Stamp a thumbnail on the soon-to-be-pruned auto version.
+      await store.saveThumbnail('sess-1', a1.id, new Uint8Array([1, 2, 3]))
+      expect(await store.loadThumbnail('sess-1', a1.id)).not.toBeNull()
+
+      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-z')
+      expect(result.deletedIds).toEqual([a1.id])
+      expect(await store.loadThumbnail('sess-1', a1.id)).toBeNull()
+    })
   })
 })

@@ -21,7 +21,7 @@ describe('release smoke contract', () => {
 
   it('defines a packaged-artifact smoke for the MCP package and root workspace', () => {
     expect(mcpPackage.scripts['smoke:packaged']).toBe(
-      'node scripts/mcp-e2e-checkpoint.mjs --entry=dist/server/mcp/index.js',
+      'node scripts/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js',
     )
     expect(rootPackage.scripts['smoke:packaged']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:packaged',

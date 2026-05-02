@@ -47,14 +47,9 @@ describe('GET /api/workspaces', () => {
 
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string; daemonAlive: boolean }>
+      workspaces: Array<{ workspaceId: string }>
     }
-    expect(json.workspaces).toEqual([
-      expect.objectContaining({
-        workspaceId: 'workspace-a',
-        daemonAlive: false,
-      }),
-    ])
+    expect(json.workspaces).toEqual([{ workspaceId: 'workspace-a' }])
   })
 })
 
@@ -170,6 +165,9 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
       earliestFrontiers: vi.fn().mockResolvedValue([]),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
+      pruneSandwichedAutoVersions: vi
+        .fn()
+        .mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
 
@@ -213,6 +211,106 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   // "non-directory session path" stat failure case no longer maps. compact
   // returns no-file for missing blobs, and the corrupt-snapshot case above
   // still exercises the corruption branch.
+})
+
+describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
+  function createVersionStoreMock() {
+    return {
+      save: vi.fn(),
+      load: vi.fn(),
+      list: vi.fn(),
+      saveThumbnail: vi.fn(),
+      loadThumbnail: vi.fn(),
+      // No version cut available — each per-canvas compact returns
+      // reason: 'no-versions'. That is the realistic dry-run shape; what
+      // matters is the bulk endpoint loops every canvas and aggregates
+      // totals correctly.
+      earliestFrontiers: vi.fn().mockResolvedValue(null),
+      getFrontiersBase64: vi.fn(),
+      renameBranchInVersions: vi.fn(),
+    }
+  }
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
+    clearCache()
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+  })
+
+  it('iterates every canvas in the workspace and returns aggregated results', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    await saveCanvas('session1', 'canvas-b', new LoroDoc())
+
+    const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
+    const res = await app.request('/api/workspaces/session1/canvases/optimize-all', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      results: Array<{
+        slug: string
+        compacted: boolean
+        beforeBytes: number
+        afterBytes: number
+        reason?: string
+      }>
+      totalBeforeBytes: number
+      totalAfterBytes: number
+    }
+    expect(json.results.map((r) => r.slug).sort()).toEqual(['canvas-a', 'canvas-b'])
+    expect(json.results.every((r) => r.compacted === false)).toBe(true)
+    expect(json.results.every((r) => r.reason === 'no-versions')).toBe(true)
+    expect(json.totalBeforeBytes).toBeGreaterThan(0)
+    expect(json.totalAfterBytes).toBe(json.totalBeforeBytes)
+  })
+
+  it('returns an empty result set when the workspace has no canvases', async () => {
+    const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
+    const res = await app.request('/api/workspaces/session1/canvases/optimize-all', {
+      method: 'POST',
+    })
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      results: unknown[]
+      totalBeforeBytes: number
+      totalAfterBytes: number
+    }
+    expect(json.results).toEqual([])
+    expect(json.totalBeforeBytes).toBe(0)
+    expect(json.totalAfterBytes).toBe(0)
+  })
+
+  it('prune-sandwiched delegates to versionStore.pruneSandwichedAutoVersions for every canvas', async () => {
+    await saveCanvas('session1', 'canvas-a', new LoroDoc())
+    await saveCanvas('session1', 'canvas-b', new LoroDoc())
+
+    const versionStore = createVersionStoreMock()
+    versionStore.pruneSandwichedAutoVersions = vi
+      .fn()
+      .mockImplementation(async (_wid: string, slug: string) => ({
+        deletedCount: slug === 'canvas-a' ? 2 : 1,
+        deletedIds: slug === 'canvas-a' ? ['x', 'y'] : ['z'],
+      }))
+
+    const app = createCanvasRouter({ versionStore })
+    const res = await app.request('/api/workspaces/session1/versions/prune-sandwiched', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as {
+      results: Array<{ slug: string; deletedCount: number }>
+      totalDeleted: number
+    }
+    expect(json.totalDeleted).toBe(3)
+    expect(json.results.map((r) => r.slug).sort()).toEqual(['canvas-a', 'canvas-b'])
+    expect(versionStore.pruneSandwichedAutoVersions).toHaveBeenCalledTimes(2)
+  })
 })
 
 // names-store now lives in the sqlite metadata DB; the corruption-on-disk
@@ -650,168 +748,6 @@ describe('versions API', () => {
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
   })
 
-  it('restores a checkpoint back into a canvas', async () => {
-    const { FileCheckpointStore } = await import('../store/checkpoint-store.js')
-    const store = new FileCheckpointStore()
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    const map = list.insertContainer(0, new LoroMap())
-    map.set('id', 'restored-1')
-    map.set('type', 'rectangle')
-    map.set('x', 0)
-    map.set('y', 0)
-    map.set('width', 10)
-    map.set('height', 10)
-    doc.commit()
-    await store.save('cp-known', doc)
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/checkpoints/cp-known/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetSlug: 'restored-canvas' }),
-    })
-
-    expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toMatchObject({
-      canvasId: 'session1/restored-canvas',
-      elementCount: 1,
-    })
-
-    clearCache()
-    const { loadCanvas } = await import('../store/canvas-store.js')
-    const restored = await loadCanvas('session1', 'restored-canvas')
-    const elements = restored.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
-    expect(elements.map((el) => el.id)).toEqual(['restored-1'])
-  })
-
-  it('excludes tombstones from elementCount when restoring a checkpoint', async () => {
-    const { FileCheckpointStore } = await import('../store/checkpoint-store.js')
-    const store = new FileCheckpointStore()
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    const live = list.insertContainer(0, new LoroMap())
-    live.set('id', 'live-1')
-    live.set('type', 'rectangle')
-    live.set('x', 0)
-    live.set('y', 0)
-    live.set('width', 10)
-    live.set('height', 10)
-    const deleted = list.insertContainer(1, new LoroMap())
-    deleted.set('id', 'deleted-1')
-    deleted.set('type', 'rectangle')
-    deleted.set('x', 20)
-    deleted.set('y', 0)
-    deleted.set('width', 10)
-    deleted.set('height', 10)
-    deleted.set('isDeleted', true)
-    doc.commit()
-    await store.save('cp-known-live-only', doc)
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request(
-      '/api/workspaces/session1/checkpoints/cp-known-live-only/restore',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetSlug: 'restored-live-only' }),
-      },
-    )
-
-    expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toMatchObject({
-      canvasId: 'session1/restored-live-only',
-      elementCount: 1,
-    })
-  })
-
-  it('does not collapse broken checkpoints to 404 during restore', async () => {
-    await mkdir(join(tempDir, '.checkpoints'), { recursive: true })
-    await writeFile(join(tempDir, '.checkpoints', 'cp-broken.loro'), new Uint8Array([1, 2, 3, 4]))
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/checkpoints/cp-broken/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetSlug: 'restored-canvas' }),
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('cp-broken.loro'),
-    })
-  })
-
-  it('saves a checkpoint from a canvas', async () => {
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    const map = list.insertContainer(0, new LoroMap())
-    map.set('id', 'saved-1')
-    map.set('type', 'rectangle')
-    doc.commit()
-    await saveCanvas('session1', 'canvas-a', doc)
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/checkpoints', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceSlug: 'canvas-a', checkpointId: 'cp-save' }),
-    })
-
-    expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toEqual({
-      checkpointId: 'cp-save',
-      elementCount: 1,
-    })
-
-    const { FileCheckpointStore } = await import('../store/checkpoint-store.js')
-    const store = new FileCheckpointStore()
-    const saved = await store.load('cp-save')
-    expect(saved?.getMovableList('elements').toJSON()).toHaveLength(1)
-  })
-
-  it('excludes tombstones from elementCount when saving a checkpoint', async () => {
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    const live = list.insertContainer(0, new LoroMap())
-    live.set('id', 'saved-live')
-    live.set('type', 'rectangle')
-    const deleted = list.insertContainer(1, new LoroMap())
-    deleted.set('id', 'saved-deleted')
-    deleted.set('type', 'rectangle')
-    deleted.set('isDeleted', true)
-    doc.commit()
-    await saveCanvas('session1', 'canvas-live-count', doc)
-
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/checkpoints', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceSlug: 'canvas-live-count', checkpointId: 'cp-save-live-count' }),
-    })
-
-    expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toEqual({
-      checkpointId: 'cp-save-live-count',
-      elementCount: 1,
-    })
-  })
-
-  it('returns 404 when POST /api/workspaces/:workspaceId/checkpoints targets a missing sourceSlug', async () => {
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-    const res = await app.request('/api/workspaces/session1/checkpoints', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceSlug: 'missing-canvas' }),
-    })
-
-    expect(res.status).toBe(404)
-    await expect(res.json()).resolves.toMatchObject({
-      error: 'not_found',
-    })
-  })
-
   it('POST /api/canvas/:workspaceId/:slug/export-json writes an excalidraw export file', async () => {
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
@@ -915,15 +851,6 @@ describe('versions API', () => {
     expect(body.filePath).toBe(outputPath)
   })
 
-  it('returns 400 for an invalid checkpointId', async () => {
-    const app = createCanvasRouter()
-    const res = await app.request('/api/workspaces/session1/checkpoints/bad.id/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ targetSlug: 'canvas-a' }),
-    })
-    expect(res.status).toBe(400)
-  })
 })
 
 describe('createAutoVersionTrigger', () => {

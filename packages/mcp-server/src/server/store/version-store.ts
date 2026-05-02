@@ -4,6 +4,7 @@ import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { DATA_DIR } from '../config.js'
+import { getLogger } from '../log.js'
 import {
   validateBranchName,
   validateSlug,
@@ -80,6 +81,15 @@ export interface VersionStore {
     oldName: string,
     newName: string,
   ): Promise<number>
+  // Drop auto-saved versions strictly between two manual versions, per
+  // branch. Manual versions are explicit user save-points so sandwiched
+  // autos add no rollback value beyond what the bracketing manuals
+  // already give. Autos before the first manual or after the last manual
+  // stay (they are the only rollback target outside the bracketed range).
+  pruneSandwichedAutoVersions(
+    workspaceId: string,
+    slug: string,
+  ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
 function blobsRoot(): string {
@@ -331,6 +341,69 @@ export class FileVersionStore implements VersionStore {
     return Number(result.numUpdatedRows ?? 0)
   }
 
+  async pruneSandwichedAutoVersions(
+    workspaceId: string,
+    slug: string,
+  ): Promise<{ deletedCount: number; deletedIds: string[] }> {
+    validateWorkspaceId(workspaceId)
+    validateSlug(slug)
+    const db = await dbReady()
+    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!canvasId) return { deletedCount: 0, deletedIds: [] }
+    const rows = await db
+      .selectFrom('versions')
+      .select(['id', 'branchName', 'auto', 'createdAt'])
+      .where('canvasId', '=', canvasId)
+      .orderBy('branchName', 'asc')
+      .orderBy('createdAt', 'asc')
+      .orderBy('id', 'asc')
+      .execute()
+
+    const toDelete: string[] = []
+    const byBranch = new Map<string, typeof rows>()
+    for (const row of rows) {
+      const list = byBranch.get(row.branchName) ?? []
+      list.push(row)
+      byBranch.set(row.branchName, list)
+    }
+    for (const [, list] of byBranch) {
+      // Find first/last manual indexes. With <2 manuals there is no
+      // sandwich, so the branch is left untouched.
+      let firstManualIdx = -1
+      let lastManualIdx = -1
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].auto !== 1) {
+          if (firstManualIdx === -1) firstManualIdx = i
+          lastManualIdx = i
+        }
+      }
+      if (firstManualIdx === -1 || lastManualIdx === firstManualIdx) continue
+      for (let i = firstManualIdx + 1; i < lastManualIdx; i++) {
+        if (list[i].auto === 1) toDelete.push(list[i].id)
+      }
+    }
+    if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
+    await db
+      .deleteFrom('versions')
+      .where('canvasId', '=', canvasId)
+      .where('id', 'in', toDelete)
+      .execute()
+    for (const id of toDelete) {
+      const path = thumbnailPath(workspaceId, id)
+      try {
+        await unlink(path)
+      } catch (err) {
+        if (!isMissingFileError(err)) {
+          getLogger('version-store prune-sandwiched').error(
+            { path, err: err as Error },
+            'failed to remove thumbnail',
+          )
+        }
+      }
+    }
+    return { deletedCount: toDelete.length, deletedIds: toDelete }
+  }
+
   async getFrontiersBase64(workspaceId: string, id: string): Promise<string | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
@@ -394,8 +467,9 @@ export class FileVersionStore implements VersionStore {
         await unlink(path)
       } catch (error) {
         if (!isMissingFileError(error)) {
-          console.error(
-            `[version-store prune] failed to remove thumbnail ${path}: ${errorMessage(error)}`,
+          getLogger('version-store prune').error(
+            { path, err: error as Error },
+            'failed to remove thumbnail',
           )
         }
       }

@@ -13,7 +13,6 @@ export const canvasListOutputSchema = z.object({
   workspaces: z.array(
     z.object({
       workspaceId: z.string(),
-      daemonAlive: z.boolean(),
       canvases: z.array(
         z.object({
           id: z.string(),
@@ -32,9 +31,25 @@ export const canvasOpenOutputSchema = z.object({
   openFailed: z.string().optional(),
 })
 
+// Loro op-log compaction result. Reasons mirror canvas-store.compactCanvas,
+// kept as a free-form string here so a future server-side reason does not
+// have to go through a schema bump in lockstep.
+export const optimizeCanvasesOutputSchema = z.object({
+  results: z.array(
+    z.object({
+      slug: z.string(),
+      compacted: z.boolean(),
+      beforeBytes: z.number().int().nonnegative(),
+      afterBytes: z.number().int().nonnegative(),
+      reason: z.string().optional(),
+    }),
+  ),
+  totalBeforeBytes: z.number().int().nonnegative(),
+  totalAfterBytes: z.number().int().nonnegative(),
+})
+
 interface WorkspaceSummary {
   workspaceId: string
-  daemonAlive: boolean
 }
 
 interface CanvasSummary {
@@ -88,11 +103,6 @@ export function listCanvasTool() {
     inputSchema: {
       type: 'object' as const,
       properties: {
-        activeOnly: {
-          type: 'boolean',
-          description:
-            'Only return workspaces while the local Excalidraw daemon is currently alive. Default false.',
-        },
         slugContains: {
           type: 'string',
           description:
@@ -101,17 +111,14 @@ export function listCanvasTool() {
       },
     },
     execute: async (
-      args: { activeOnly?: boolean; slugContains?: string },
+      args: { slugContains?: string },
       client: DaemonClient,
     ): Promise<z.infer<typeof canvasListOutputSchema>> => {
       const res = await client.request('/api/workspaces')
       if (!res.ok) {
         throw new Error(`Failed to list workspaces: ${res.status}`)
       }
-      let workspaces = ((await res.json()) as { workspaces: WorkspaceSummary[] }).workspaces
-      if (args.activeOnly) {
-        workspaces = workspaces.filter((s) => s.daemonAlive === true)
-      }
+      const workspaces = ((await res.json()) as { workspaces: WorkspaceSummary[] }).workspaces
       const needle = args.slugContains?.toLowerCase()
       const result = await Promise.all(
         workspaces.map(async (workspace) => {
@@ -124,7 +131,6 @@ export function listCanvasTool() {
           if (needle) canvases = canvases.filter((c) => c.slug.toLowerCase().includes(needle))
           return {
             workspaceId,
-            daemonAlive: workspace.daemonAlive,
             canvases: canvases.map((c) => ({
               id: `${workspaceId}/${c.slug}`,
               slug: c.slug,
@@ -173,8 +179,15 @@ export function openCanvasTool() {
       args: { id: string; fullscreen?: boolean; waitForClient?: boolean; waitTimeoutMs?: number },
       client: DaemonClient,
     ): Promise<z.infer<typeof canvasOpenOutputSchema>> => {
-      const qs = args.fullscreen ? '?fullscreen=1' : ''
-      const url = daemonUrl(client, `/canvas/${args.id}${qs}`)
+      // Use a URL hash, not a query string, for fullscreen so callers can
+      // re-open the same canvas to toggle fullscreen without triggering a
+      // browser navigation. Fragment-only changes fire `hashchange` on the
+      // already-open tab; the page never reloads, in-page state is
+      // preserved, and Playwright's `browser_navigate` does not surface a
+      // leave-confirmation dialog. CanvasPage reads both `#fullscreen` and
+      // the legacy `?fullscreen=1` on mount.
+      const fragment = args.fullscreen ? '#fullscreen' : ''
+      const url = daemonUrl(client, `/canvas/${args.id}${fragment}`)
       // Browser launch may fail silently in headless, sandboxed, or no-display
       // environments. We still return the URL, but also include openFailed so
       // callers can distinguish this from later no_client failures in higher-level tools.
@@ -212,6 +225,67 @@ export function openCanvasTool() {
         await new Promise((r) => setTimeout(r, 100))
       }
       return openFailed ? { url, clientReady, openFailed } : { url, clientReady }
+    },
+  }
+}
+
+// Compact Loro op-log via shallow-snapshot. Single tool, two modes:
+//   • slug provided  → compact one canvas, return it as a 1-element results
+//   • slug omitted   → compact every canvas in the workspace, return per-canvas
+//                      array + aggregated totals
+// Both call into the same server-side compactCanvas() so cut-point semantics
+// (oldest retained version frontiers) and idempotency stay identical.
+export function optimizeCanvasesTool() {
+  return {
+    name: 'optimize_canvases',
+    description:
+      'Compact Loro op-log history (shallow-snapshot) on one canvas (slug given) or every canvas in the current workspace (slug omitted). Idempotent — returns reason "no-versions" / "no-gain" / "ok" per canvas.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        slug: {
+          type: 'string',
+          description:
+            'Optional canvas slug. When omitted, every canvas in the current workspace is compacted in sequence.',
+        },
+      },
+    },
+    execute: async (
+      args: { slug?: string },
+      workspaceId: string,
+      client: DaemonClient,
+    ): Promise<z.infer<typeof optimizeCanvasesOutputSchema>> => {
+      if (args.slug) {
+        const slug = args.slug
+        const res = await client.request(
+          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/compact`,
+          { method: 'POST' },
+        )
+        if (!res.ok) {
+          const body = (await res.json().catch(() => null)) as { message?: string } | null
+          throw new Error(body?.message ?? `optimize failed: ${res.status}`)
+        }
+        const single = (await res.json()) as {
+          compacted: boolean
+          beforeBytes: number
+          afterBytes: number
+          reason?: string
+        }
+        return {
+          results: [{ slug, ...single }],
+          totalBeforeBytes: single.beforeBytes,
+          totalAfterBytes: single.afterBytes,
+        }
+      }
+      const res = await client.request(
+        `/api/workspaces/${workspaceId}/canvases/optimize-all`,
+        { method: 'POST' },
+      )
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { message?: string } | null
+        throw new Error(body?.message ?? `optimize-all failed: ${res.status}`)
+      }
+      return (await res.json()) as z.infer<typeof optimizeCanvasesOutputSchema>
     },
   }
 }
