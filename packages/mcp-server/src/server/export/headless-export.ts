@@ -41,7 +41,17 @@ export async function exportCanvasHeadless(args: {
   ) as unknown as Array<Record<string, unknown> & { id: string; type: string; isDeleted?: boolean }>
   const liveElements = elements.filter((e) => e.isDeleted !== true)
   const sizedElements = applyMinFontPx(liveElements, args.options?.minFontPx)
-  const files = await loadCanvasFiles(args.workspaceId)
+  // Pick the fileIds the canvas actually references so the file loader
+  // does NOT touch attachments owned by other canvases in the same
+  // workspace. Skipping deleted elements means a tombstoned image
+  // does not pin the underlying blob into the export payload.
+  const referencedFileIds = new Set<string>()
+  for (const el of liveElements) {
+    if (el.type !== 'image') continue
+    const fileId = el.fileId
+    if (typeof fileId === 'string' && fileId.length > 0) referencedFileIds.add(fileId)
+  }
+  const files = await loadCanvasFiles(args.workspaceId, referencedFileIds)
 
   const scene = {
     type: 'excalidraw' as const,
