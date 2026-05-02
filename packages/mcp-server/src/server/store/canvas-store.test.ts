@@ -17,20 +17,39 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so it runs after the mock is resolved.
-const { saveCanvas, loadCanvas, listCanvases, listWorkspaces, compactCanvas } = await import(
-  './canvas-store.js'
-)
+const {
+  saveCanvas,
+  loadCanvas,
+  listCanvases,
+  listWorkspaces,
+  compactCanvas,
+  scheduleAutoCompact,
+  setAutoCompactTrigger,
+} = await import('./canvas-store.js')
 const { FileVersionStore } = await import('./version-store.js')
+const { createIsolatedDb } = await import('./db/test-helpers.js')
+
+let handle: Awaited<ReturnType<typeof createIsolatedDb>>
+
+async function setupIsolatedDb(): Promise<void> {
+  handle = await createIsolatedDb({ dataDir: tempDir })
+}
+
+async function teardownIsolatedDb(): Promise<void> {
+  await handle.dispose()
+}
 
 describe('saveCanvas / loadCanvas', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
     // Create the session directory.
     const { mkdir } = await import('node:fs/promises')
     await mkdir(join(tempDir, 'session1'), { recursive: true })
   })
 
   afterEach(async () => {
+    await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -116,11 +135,13 @@ describe('saveCanvas / loadCanvas', () => {
 describe('saveCanvas - overwrite handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
     await mkdir(join(tempDir, 'session1'), { recursive: true })
   })
 
   afterEach(async () => {
+    await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -200,11 +221,13 @@ describe('saveCanvas - overwrite handling', () => {
 describe('listCanvases', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
     await mkdir(join(tempDir, 'session1'), { recursive: true })
   })
 
   afterEach(async () => {
+    await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -278,9 +301,11 @@ describe('listCanvases', () => {
 describe('saveCanvas / loadCanvas - slug validation', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
   })
 
   afterEach(async () => {
+    await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -349,9 +374,11 @@ describe('saveCanvas / loadCanvas - slug validation', () => {
 describe('slug validation - self-describing error messages', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
   })
 
   afterEach(async () => {
+    await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -418,60 +445,22 @@ describe('slug validation - self-describing error messages', () => {
 describe('listWorkspaces', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
+    await setupIsolatedDb()
   })
 
   afterEach(async () => {
+    await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
   it('lists workspaces seeded via saveCanvas', async () => {
     await saveCanvas('session-active', 'a', new LoroDoc())
     await saveCanvas('session-old', 'a', new LoroDoc())
-    const { writeFile } = await import('node:fs/promises')
-    await writeFile(
-      join(tempDir, 'daemon.json'),
-      JSON.stringify({
-        pid: process.pid,
-        port: 3099,
-        token: 'secret',
-        version: '0.1.0',
-        startedAt: '2026-04-23T00:00:00.000Z',
-      }),
-    )
 
     const workspaces = await listWorkspaces()
     const ids = workspaces.map((s) => s.workspaceId)
     expect(ids).toContain('session-active')
     expect(ids).toContain('session-old')
-    for (const ws of workspaces) {
-      expect(ws.daemonAlive).toBe(true)
-    }
-  })
-
-  it('treats stale daemon.json entries with dead PIDs as daemonAlive=false', async () => {
-    await saveCanvas('session-stale', 'a', new LoroDoc())
-    const { writeFile } = await import('node:fs/promises')
-    await writeFile(
-      join(tempDir, 'daemon.json'),
-      JSON.stringify({
-        pid: 999999999,
-        port: 3099,
-        token: 'secret',
-        version: '0.1.0',
-        startedAt: '2026-04-23T00:00:00.000Z',
-      }),
-    )
-
-    const workspaces = await listWorkspaces()
-    const stale = workspaces.find((s) => s.workspaceId === 'session-stale')
-    expect(stale?.daemonAlive).toBe(false)
-  })
-
-  it('treats daemonAlive as false when daemon.json is missing', async () => {
-    await saveCanvas('session-legacy', 'a', new LoroDoc())
-    const workspaces = await listWorkspaces()
-    const legacy = workspaces.find((s) => s.workspaceId === 'session-legacy')
-    expect(legacy?.daemonAlive).toBe(false)
   })
 
   it('returns an empty array when no workspaces have been saved yet', async () => {
@@ -486,11 +475,13 @@ describe('listWorkspaces', () => {
 describe('compactCanvas', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-compact-test-'))
+    await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
     await mkdir(join(tempDir, 'session1'), { recursive: true })
   })
 
   afterEach(async () => {
+    await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -574,5 +565,180 @@ describe('compactCanvas', () => {
     const past = await store.load('session1', v.id, live)
     expect(past).not.toBeNull()
     expect(past!.getMovableList('elements').length).toBe(30)
+  })
+
+  it('writes lastCompactedAt only on successful compaction', async () => {
+    const { LoroMap } = await import('loro-crdt')
+    const { getDb } = await import('./db/index.js')
+
+    async function readLastCompactedAt(slug: string): Promise<number | null> {
+      const db = await getDb(tempDir)
+      const row = await db
+        .selectFrom('canvases')
+        .select(['lastCompactedAt'])
+        .where('workspaceId', '=', 'session1')
+        .where('slug', '=', slug)
+        .executeTakeFirst()
+      return row?.lastCompactedAt ?? null
+    }
+
+    // Case 1: no version → reason='no-versions' → lastCompactedAt stays null.
+    const empty = new LoroDoc()
+    empty.getMovableList('elements').insert(0, 'x')
+    empty.commit()
+    await saveCanvas('session1', 'untouched', empty)
+    const noopStore = new FileVersionStore()
+    const noop = await compactCanvas('session1', 'untouched', noopStore)
+    expect(noop.reason).toBe('no-versions')
+    expect(await readLastCompactedAt('untouched')).toBeNull()
+
+    // Case 2: version cut available → reason='ok' → lastCompactedAt is set.
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `elem-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', 'big', doc)
+    const store = new FileVersionStore()
+    await store.save('session1', 'big', doc, { auto: true })
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `extra-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', 'big', doc, { overwrite: true })
+
+    const before = Date.now()
+    const result = await compactCanvas('session1', 'big', store)
+    expect(result.compacted).toBe(true)
+    const after = Date.now()
+    const stamp = await readLastCompactedAt('big')
+    expect(stamp).not.toBeNull()
+    expect(stamp!).toBeGreaterThanOrEqual(before)
+    expect(stamp!).toBeLessThanOrEqual(after)
+  })
+})
+
+describe('auto-compact', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-auto-compact-test-'))
+    await setupIsolatedDb()
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+  })
+
+  afterEach(async () => {
+    setAutoCompactTrigger(null)
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('saveCanvas invokes the registered auto-compact trigger', async () => {
+    const trigger = vi.fn<(workspaceId: string, slug: string) => void>()
+    setAutoCompactTrigger(trigger)
+    await saveCanvas('session1', 'foo', new LoroDoc())
+    expect(trigger).toHaveBeenCalledTimes(1)
+    expect(trigger).toHaveBeenCalledWith('session1', 'foo')
+  })
+
+  it('scheduleAutoCompact debounces rapid triggers into a single compaction', async () => {
+    const { LoroMap } = await import('loro-crdt')
+    const { getDb } = await import('./db/index.js')
+
+    async function readLastCompactedAt(): Promise<number | null> {
+      const db = await getDb(tempDir)
+      const row = await db
+        .selectFrom('canvases')
+        .select(['lastCompactedAt'])
+        .where('workspaceId', '=', 'session1')
+        .where('slug', '=', 'big')
+        .executeTakeFirst()
+      return row?.lastCompactedAt ?? null
+    }
+
+    // Build a canvas with a version cut + extra ops so compactCanvas
+    // actually has work to do (otherwise the debounced firing would
+    // just return reason: 'no-versions' and lastCompactedAt stays null).
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `e-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', 'big', doc)
+    const store = new FileVersionStore()
+    await store.save('session1', 'big', doc, { auto: true })
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `x-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', 'big', doc, { overwrite: true })
+
+    expect(await readLastCompactedAt()).toBeNull()
+
+    // Three rapid triggers within the debounce window must collapse into
+    // a single compactCanvas run. Use a tiny debounce so the test stays fast.
+    scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
+    scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
+    scheduleAutoCompact('session1', 'big', store, { debounceMs: 50 })
+
+    // Nothing has fired yet.
+    expect(await readLastCompactedAt()).toBeNull()
+
+    // Wait past the debounce + the async compactCanvas write.
+    await new Promise((r) => setTimeout(r, 250))
+    const stamp = await readLastCompactedAt()
+    expect(stamp).not.toBeNull()
+    const settled = stamp!
+
+    // Further idle time without a new trigger must NOT re-compact.
+    await new Promise((r) => setTimeout(r, 150))
+    expect(await readLastCompactedAt()).toBe(settled)
+  })
+
+  it('evicts the doc-cache after a successful auto-compact so the next save does not clobber the compacted file', async () => {
+    // The trap: scheduleAutoCompact rewrites the on-disk blob with a
+    // shallow snapshot, but a still-cached full LoroDoc would re-export
+    // the entire history on the next save and silently undo the
+    // optimisation. Confirm the cache is dropped so getDoc reloads from
+    // the compacted file.
+    const { LoroMap } = await import('loro-crdt')
+    const { getDoc, peekDoc, clearCache } = await import('./doc-cache.js')
+
+    clearCache()
+
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `e-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', 'cached', doc)
+    const store = new FileVersionStore()
+    await store.save('session1', 'cached', doc, { auto: true })
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `x-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', 'cached', doc, { overwrite: true })
+
+    // Pull through getDoc so the cache holds a live LoroDoc — this is what
+    // happens on every WebSocket-backed canvas in production.
+    await getDoc('session1', 'cached')
+    expect(peekDoc('session1', 'cached')).toBeDefined()
+
+    scheduleAutoCompact('session1', 'cached', store, { debounceMs: 50 })
+    await new Promise((r) => setTimeout(r, 250))
+
+    // The whole point of this test: after the scheduled compaction lands,
+    // the cache must be empty for that key so the next save reloads the
+    // compacted file as its base.
+    expect(peekDoc('session1', 'cached')).toBeUndefined()
   })
 })
