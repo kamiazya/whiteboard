@@ -73,6 +73,12 @@ interface FlatCanvas {
 
 type TabKey = 'canvases' | 'storage'
 
+// localStorage key for the implicit primary workspace id. Survives
+// remount so a freshly-minted workspace is reused across the
+// post-create navigate → user-comes-back flow instead of being
+// re-minted on every open.
+const PRIMARY_WORKSPACE_KEY = 'whiteboard.indexPage.primaryWorkspaceId'
+
 function readTabFromHash(): TabKey {
   if (typeof window === 'undefined') return 'canvases'
   const h = window.location.hash.replace(/^#/, '')
@@ -125,7 +131,30 @@ export default function IndexPage() {
   // The first workspace from /api/workspaces is the implicit "current"
   // workspace for new-canvas creation. Workspace identity stays internal —
   // the user never names it — but creates need *some* target id.
-  const [primaryWorkspaceId, setPrimaryWorkspaceId] = useState<string | null>(null)
+  //
+  // Persist the chosen id in localStorage so a freshly-minted workspace
+  // (no pre-existing /api/workspaces entry) is still reused on the next
+  // create after the user navigates between pages. Without this every
+  // sequential create from a cold-start install would mint its own
+  // throwaway workspace.
+  const [primaryWorkspaceId, setPrimaryWorkspaceId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    try {
+      return window.localStorage.getItem(PRIMARY_WORKSPACE_KEY)
+    } catch {
+      return null
+    }
+  })
+  const rememberPrimaryWorkspace = useCallback((id: string) => {
+    setPrimaryWorkspaceId(id)
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.setItem(PRIMARY_WORKSPACE_KEY, id)
+    } catch {
+      // Storage failures are not user-facing — falling back to in-memory
+      // state is still better than minting a new workspace per click.
+    }
+  }, [])
   // Theme toggle lives in the IndexPage header so users do not have to open a
   // canvas to flip light/dark/system.
   const { theme, setTheme } = useThemeMode()
@@ -151,7 +180,10 @@ export default function IndexPage() {
       try {
         const res = await apiFetch('/api/workspaces')
         const workspaces = listWorkspacesResponseSchema.parse(await res.json()).workspaces
-        setPrimaryWorkspaceId(workspaces[0]?.workspaceId ?? null)
+        // Prefer the server's first workspace when present; otherwise leave
+        // whatever was rehydrated from localStorage in place so a minted
+        // id from an earlier session survives until the server catches up.
+        if (workspaces[0]?.workspaceId) rememberPrimaryWorkspace(workspaces[0].workspaceId)
         const perWorkspace = await Promise.all(
           workspaces.map(async (ws: RawWorkspace): Promise<FlatCanvas[]> => {
             const id = ws.workspaceId
@@ -343,7 +375,14 @@ export default function IndexPage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         workspaceId={primaryWorkspaceId}
-        onCreated={navigate}
+        onCreated={(targetWs, path) => {
+          // Capture the (possibly freshly-minted) workspace id back into
+          // shared state + localStorage so a second create from the same
+          // session reuses it. Without this, every cold-start create
+          // spawns its own throwaway workspace.
+          rememberPrimaryWorkspace(targetWs)
+          navigate(path)
+        }}
       />
     </div>
   )
@@ -539,7 +578,9 @@ function NewCanvasDialog({
   open: boolean
   onOpenChange: (next: boolean) => void
   workspaceId: string | null
-  onCreated: (path: string) => void
+  // Receives both the (possibly freshly-minted) workspace id and the
+  // canvas path so the parent can persist the id and run the navigate.
+  onCreated: (workspaceId: string, path: string) => void
 }) {
   const [slug, setSlug] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -572,7 +613,7 @@ function NewCanvasDialog({
         }
         onOpenChange(false)
         setSlug('')
-        onCreated(`/canvas/${targetWs}/${encodeURIComponent(value)}`)
+        onCreated(targetWs, `/canvas/${targetWs}/${encodeURIComponent(value)}`)
       } catch (err) {
         setErrorMsg(String(err))
       } finally {
