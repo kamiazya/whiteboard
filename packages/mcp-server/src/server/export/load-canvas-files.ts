@@ -13,9 +13,22 @@
 // for unrelated entries.
 
 import { readFile, stat } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { DATA_DIR } from '../config.js'
 import { isMissingFileError } from '../store/corrupt-stored-data.js'
+
+// `fileId` rides through Excalidraw element data, which any tool
+// (annotate, update_element) or a malicious canvas import can mutate.
+// Path separators / parent-directory escapes / NUL bytes have no
+// legitimate use and would resolve outside the workspace files dir, so
+// drop them before constructing any path.
+function isSafeFileId(id: string): boolean {
+  if (id.length === 0 || id.length > 256) return false
+  if (id.includes('/') || id.includes('\\')) return false
+  if (id.includes('\0')) return false
+  if (id === '.' || id === '..') return false
+  return true
+}
 
 const EXT_TO_MIME: Record<string, string> = {
   '.png': 'image/png',
@@ -51,10 +64,16 @@ export async function loadCanvasFiles(
   }
 
   const out: Record<string, CanvasFile> = {}
+  const resolvedDir = resolve(dir)
   for (const fileId of referencedFileIds) {
+    if (!isSafeFileId(fileId)) continue
     for (const ext of KNOWN_EXTS) {
       const mime = EXT_TO_MIME[ext] as string
       const path = join(dir, `${fileId}${ext}`)
+      // Belt + suspenders: even if isSafeFileId regresses, refuse to
+      // read anything that resolves outside the per-workspace files dir.
+      const resolved = resolve(path)
+      if (resolved !== resolvedDir && !resolved.startsWith(resolvedDir + sep)) continue
       let buf: Buffer
       try {
         buf = await readFile(path)

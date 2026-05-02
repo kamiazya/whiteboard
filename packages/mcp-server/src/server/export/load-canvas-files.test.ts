@@ -70,6 +70,42 @@ describe('loadCanvasFiles selective loading', () => {
     expect(Object.keys(out)).toEqual(['real'])
   })
 
+  it('refuses to read files whose id contains path separators (no traversal)', async () => {
+    // The fileId travels through Excalidraw element data, which can be
+    // mutated by any tool (annotate / update_element) or a malicious
+    // canvas import. A traversal id like `../../secrets/hostkey` must
+    // NOT resolve to a path outside the workspace's files dir, even
+    // when such a file exists on disk with a known extension. Plant
+    // a "secret" file at the resolved-traversal location so a regression
+    // would be observable as actual file leakage.
+    const outsideRoot = join(tempDir, 'secrets')
+    await mkdir(outsideRoot, { recursive: true })
+    await writeFile(join(outsideRoot, 'hostkey.png'), Buffer.from('SECRET'))
+    // The workspace's files dir must exist so the function does not
+    // short-circuit on the stat() probe before reaching the per-id loop.
+    await mkdir(join(tempDir, 'ws_evil', 'files'), { recursive: true })
+
+    const out = await loadCanvasFiles(
+      'ws_evil',
+      new Set(['../../secrets/hostkey']),
+    )
+    // The traversal id must be silently dropped — never returned, never
+    // base64 in the response, never read from disk.
+    expect(out).toEqual({})
+  })
+
+  it('refuses absolute fileIds (no escape via leading /)', async () => {
+    await mkdir(tempDir, { recursive: true })
+    await writeFile(join(tempDir, 'absolute-leak.png'), Buffer.from('SECRET'))
+    await mkdir(join(tempDir, 'ws_evil', 'files'), { recursive: true })
+
+    const out = await loadCanvasFiles(
+      'ws_evil',
+      new Set([join(tempDir, 'absolute-leak')]),
+    )
+    expect(out).toEqual({})
+  })
+
   it('honours every supported MIME extension from the lookup table', async () => {
     await seedFile('ws_mime', 'a', '.png', 1)
     await seedFile('ws_mime', 'b', '.jpg', 1)
