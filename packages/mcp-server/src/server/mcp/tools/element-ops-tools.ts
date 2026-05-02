@@ -32,9 +32,37 @@ export const assignGroupOutputSchema = z.object({
   elementIds: z.array(z.string()),
 })
 
+export const alignInputSchema = z.object({
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  elementIds: z
+    .array(z.string())
+    .min(2)
+    .describe(
+      'Element ids to align. Needs at least 2; the orthogonal axis is left untouched.',
+    ),
+  alignment: z
+    .enum(['left', 'center', 'right', 'top', 'middle', 'bottom'])
+    .describe(
+      "Target axis. 'left'/'right'/'center' move x; 'top'/'bottom'/'middle' move y.",
+    ),
+})
+
 export const alignOutputSchema = z.object({
   elementIds: z.array(z.string()),
   alignment: z.enum(['left', 'center', 'right', 'top', 'middle', 'bottom']),
+})
+
+export const distributeInputSchema = z.object({
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  elementIds: z
+    .array(z.string())
+    .min(3)
+    .describe(
+      'Element ids to distribute. Needs at least 3; first and last (along the chosen axis) stay fixed.',
+    ),
+  direction: z
+    .enum(['horizontal', 'vertical'])
+    .describe('"horizontal" distributes along x; "vertical" distributes along y.'),
 })
 
 export const distributeOutputSchema = z.object({
@@ -225,30 +253,12 @@ export function alignElementsTool() {
     name: 'align_elements',
     description:
       'Align multiple elements to a shared edge or centre. left / right / center act on x; top / bottom / middle act on y. The orthogonal axis is left untouched so align_left + distribute_vertical can be chained. Needs ≥ 2 elements. All-or-nothing on missing ids.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementIds: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 2,
-        },
-        alignment: {
-          type: 'string',
-          enum: ['left', 'center', 'right', 'top', 'middle', 'bottom'],
-          description:
-            "Target axis. 'left'/'right'/'center' move x; 'top'/'bottom'/'middle' move y.",
-        },
-      },
-      required: ['canvasId', 'elementIds', 'alignment'],
-    },
+    // Single source of truth for the contract: the Zod input/output schemas.
+    // execute()'s arg + return types are inferred so a future schema edit
+    // can't drift from the handler signature.
+    inputSchema: alignInputSchema,
     execute: async (
-      args: {
-        canvasId: string
-        elementIds: string[]
-        alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
-      },
+      args: z.infer<typeof alignInputSchema>,
       client: DaemonClient,
     ): Promise<z.infer<typeof alignOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
@@ -269,29 +279,9 @@ export function distributeElementsTool() {
     name: 'distribute_elements',
     description:
       'Distribute multiple elements with even spacing along an axis. Sorts by the chosen axis, keeps the leading and trailing element fixed, and shifts everything in between so the gap between adjacent elements is constant. Needs ≥ 3 elements. All-or-nothing on missing ids.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementIds: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 3,
-        },
-        direction: {
-          type: 'string',
-          enum: ['horizontal', 'vertical'],
-          description: '"horizontal" distributes along x; "vertical" distributes along y.',
-        },
-      },
-      required: ['canvasId', 'elementIds', 'direction'],
-    },
+    inputSchema: distributeInputSchema,
     execute: async (
-      args: {
-        canvasId: string
-        elementIds: string[]
-        direction: 'horizontal' | 'vertical'
-      },
+      args: z.infer<typeof distributeInputSchema>,
       client: DaemonClient,
     ): Promise<z.infer<typeof distributeOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)

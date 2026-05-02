@@ -175,6 +175,40 @@ async function main() {
   }
   console.log(`[e2e] create_frame → ${frame.elementId} (${frame.assignedMembers.length} members)`)
 
+  // Exercise align_elements / distribute_elements so any drift between
+  // their Zod input schema and the registered tool surface trips the SDK
+  // structured-content validator here instead of in production.
+  const layoutIds = []
+  for (let i = 0; i < 3; i++) {
+    const r = await callTool('annotate', {
+      canvasId: created.id,
+      type: 'rectangle',
+      target: { x: 200 + i * 50, y: 200 + i * 30, width: 60, height: 40 },
+      coords: 'absolute',
+      color: '#1971c2',
+    })
+    const id = r.elementId ?? r.elementIds?.[0]
+    if (!id) throw new Error(`layout annotate ${i} returned no id`)
+    layoutIds.push(id)
+  }
+  const aligned = await callTool('align_elements', {
+    canvasId: created.id,
+    elementIds: layoutIds,
+    alignment: 'left',
+  })
+  if (aligned.alignment !== 'left' || aligned.elementIds.length !== 3) {
+    throw new Error(`align_elements returned unexpected shape: ${JSON.stringify(aligned)}`)
+  }
+  const distributed = await callTool('distribute_elements', {
+    canvasId: created.id,
+    elementIds: layoutIds,
+    direction: 'horizontal',
+  })
+  if (distributed.direction !== 'horizontal' || distributed.elementIds.length !== 3) {
+    throw new Error(`distribute_elements returned unexpected shape: ${JSON.stringify(distributed)}`)
+  }
+  console.log('[e2e] align_elements / distribute_elements → OK')
+
   const insBefore = await callTool('canvas_inspect', { canvasId: created.id })
   if (insBefore.elementCount < 1) throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
 
