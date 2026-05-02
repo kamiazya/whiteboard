@@ -142,7 +142,7 @@
     "@tanstack/intent": "^0.0.29",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^24",
+    "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8",
