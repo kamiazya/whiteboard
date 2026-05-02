@@ -4,14 +4,13 @@
 //
 // Purpose:
 // Ensure the Codex subprocess can discover the repo-local Excalidraw MCP and
-// complete canvas_create -> annotate -> checkpoint_save. The final response is
+// complete canvas_create -> annotate -> version_save. The final response is
 // constrained by JSON Schema, and the resulting files under WHITEBOARD_DATA_DIR
 // are also verified.
 //
 // Expected behavior:
-// 1. codex returns a JSON object { slug, canvasId, checkpointId }
-// 2. tmp data dir contains {sessionId}/{slug}.loro
-// 3. tmp data dir contains .checkpoints/{checkpointId}.loro
+// 1. codex returns a JSON object { slug, canvasId, versionId }
+// 2. tmp data dir contains a blob for the canvas (under blobs/{ws}/canvas/)
 //
 // Notes:
 // - This consumes OpenAI API quota, so it does not run in CI. Manual use:
@@ -39,16 +38,16 @@ const schema = {
   $schema: 'https://json-schema.org/draft/2020-12/schema',
   type: 'object',
   additionalProperties: false,
-  required: ['slug', 'canvasId', 'checkpointId'],
+  required: ['slug', 'canvasId', 'versionId'],
   properties: {
     slug: { type: 'string', const: 'codex-strict-smoke' },
     canvasId: {
       type: 'string',
       pattern: '^[A-Za-z0-9_-]+/codex-strict-smoke$',
     },
-    checkpointId: {
+    versionId: {
       type: 'string',
-      pattern: '^[A-Za-z0-9_-]{18}$',
+      minLength: 1,
     },
   },
 }
@@ -56,8 +55,8 @@ writeFileSync(schemaPath, JSON.stringify(schema))
 
 const prompt = [
   'Use the whiteboard MCP server.',
-  'Create a canvas with slug "codex-strict-smoke", add one rectangle annotation at absolute target {x:10,y:10} with width 40 and height 20, then save a checkpoint for that canvas.',
-  'Return a JSON object with slug, canvasId, and checkpointId only.',
+  'Create a canvas with slug "codex-strict-smoke", add one rectangle annotation at absolute target {x:10,y:10} with width 40 and height 20, then call version_save with label "codex-strict-smoke" for that canvas.',
+  'Return a JSON object with slug, canvasId, and versionId only.',
 ].join(' ')
 
 const configOverride = [
@@ -137,19 +136,16 @@ child.on('exit', (code) => {
     fail(`invalid JSON output (${error instanceof Error ? error.message : 'unknown error'})`)
   }
 
-  const [sessionId, slug] = String(output.canvasId).split('/')
-  const canvasPath = join(tmpDataDir, sessionId, `${slug}.loro`)
-  const checkpointPath = join(tmpDataDir, '.checkpoints', `${output.checkpointId}.loro`)
-  const canvasExists = existsSync(canvasPath)
-  const checkpointExists = existsSync(checkpointPath)
-  const canvasSize = canvasExists ? statSync(canvasPath).size : 0
-  const checkpointSize = checkpointExists ? statSync(checkpointPath).size : 0
+  const [sessionId] = String(output.canvasId).split('/')
+  // Canvas blobs land under blobs/{workspaceId}/canvas/{nanoid}.loro now that
+  // the metadata store owns the slug → canvasId mapping. We only verify that
+  // *some* canvas blob exists for the workspace; the exact filename is
+  // generated nanoid.
+  const blobsDir = join(tmpDataDir, 'blobs', sessionId, 'canvas')
+  const blobsExist = existsSync(blobsDir)
 
-  if (!canvasExists || canvasSize === 0) {
-    fail(`canvas file missing or empty: ${canvasPath}`)
-  }
-  if (!checkpointExists || checkpointSize === 0) {
-    fail(`checkpoint file missing or empty: ${checkpointPath}`)
+  if (!blobsExist) {
+    fail(`canvas blob dir missing: ${blobsDir}`)
   }
 
   console.log(
@@ -157,10 +153,7 @@ child.on('exit', (code) => {
       ...output,
       sessionId,
       dataDir: tmpDataDir,
-      canvasPath,
-      canvasSize,
-      checkpointPath,
-      checkpointSize,
+      blobsDir,
       keptTmpDir: keepTmp,
     }),
   )
