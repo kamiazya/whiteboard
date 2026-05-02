@@ -159,10 +159,6 @@ export function validateBranchName(name: string): string {
   return name
 }
 
-export function validateCheckpointId(id: string): string {
-  return validateSafeIdentifier(id, 'checkpoint id')
-}
-
 export function validateCanvasId(id: string): string {
   return validateSafeIdentifier(id, 'canvas id')
 }

@@ -59,13 +59,14 @@ pnpm typecheck
 pnpm smoke:e2e
 ```
 
-`scripts/mcp-e2e-checkpoint.mjs` launches stdio MCP in a subprocess and verifies at least the following.
+`scripts/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and verifies at least the following.
 
 - `canvas_create`
 - `annotate`
 - `canvas_inspect`
-- `checkpoint_save`
-- `checkpoint_restore`
+- `version_save`
+- `version_restore` (with and without `targetSlug`)
+- `version_list`
 - `viewport_set` returning `no_client`
 - `export_png` returning `no_client`
 
@@ -87,12 +88,12 @@ This consumes quota. Use it only when you need to confirm that the LLM can call 
   - It is likely missing from `src/server/mcp/index.ts`
 - If you get an error other than `no_client`
   - A guard likely regressed in `routes/export.ts`, `routes/viewport.ts`, or `routes/ws.ts`
-- If checkpoint restore returns the wrong element count
-  - There is likely a regression in `routes/canvas.ts` or `store/checkpoint-store.ts`
+- If version restore returns the wrong element count
+  - There is likely a regression in `routes/canvas.ts` or `store/version-store.ts`
 
 ## Working Rules
 
 - After server/daemon changes, start from the `daemon:dev` path and try verification without restarting Claude
 - If you touched MCP schema or registration, explicitly state that a restart is required
 - In general, progress through `test -> typecheck -> smoke:e2e`, stopping on failures
-- When you add a new tool, add one case to `scripts/mcp-e2e-checkpoint.mjs` when feasible
+- When you add a new tool, add one case to `scripts/mcp-e2e-smoke.mjs` when feasible

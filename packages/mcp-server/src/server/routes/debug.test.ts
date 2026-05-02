@@ -67,7 +67,6 @@ describe('GET /api/debug', () => {
     const json = (await res.json()) as {
       workspaces: Array<{
         workspaceId: string
-        daemonAlive: boolean
         canvases: Array<{
           slug: string
           totalElements: number
@@ -99,28 +98,6 @@ describe('GET /api/debug', () => {
         tombstones: 0,
       }),
     )
-  })
-
-  it('sets daemonAlive=true when the PID from daemon.json is alive', async () => {
-    await saveCanvas('sess-alive', 'a', makeDocWithElements(0, 0))
-    await writeFile(
-      join(tempDir, 'daemon.json'),
-      JSON.stringify({
-        pid: process.pid,
-        port: 3099,
-        token: 'secret',
-        version: '0.1.0',
-        startedAt: '2026-04-23T00:00:00.000Z',
-      }),
-    )
-
-    const app = createDebugRouter()
-    const res = await app.request('/api/debug')
-    const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string; daemonAlive: boolean }>
-    }
-    const session = json.workspaces.find((s) => s.workspaceId === 'sess-alive')
-    expect(session?.daemonAlive).toBe(true)
   })
 
   it('marks only canvases touched through getDoc as cached in the cache section', async () => {

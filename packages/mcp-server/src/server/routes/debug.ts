@@ -14,7 +14,6 @@ type CanvasInfo = {
 
 type WorkspaceInfo = {
   workspaceId: string
-  daemonAlive: boolean
   canvases: CanvasInfo[]
 }
 
@@ -73,12 +72,12 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
   app.get('/api/debug', async (c) => {
     const workspaces = await listWorkspaces()
     const workspaceInfos: WorkspaceInfo[] = await Promise.all(
-      workspaces.map(async ({ workspaceId, daemonAlive }) => {
+      workspaces.map(async ({ workspaceId }) => {
         const canvases = await listCanvases(workspaceId)
         const canvasInfos = await Promise.all(
           canvases.map(({ slug }) => summarizeCanvas(workspaceId, slug)),
         )
-        return { workspaceId, daemonAlive, canvases: canvasInfos }
+        return { workspaceId, canvases: canvasInfos }
       }),
     )
 

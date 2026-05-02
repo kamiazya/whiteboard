@@ -1,13 +1,20 @@
+// user-library-metadata-store does no FS writes outside the DB and no
+// internal Kysely transactions, so it qualifies for the file-scoped fixture
+// + per-test BEGIN/ROLLBACK pattern. Migrations run once for the whole file
+// instead of per `it`. See palette-store.test.ts for the rationale on why
+// raw BEGIN/ROLLBACK is used instead of `db.transaction().execute(...)`.
+
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { sql } from 'kysely'
+import { describe, expect, test as baseTest, vi } from 'vitest'
 
-let tempDir: string
+let tempDirRef = ''
 
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
-    return tempDir
+    return tempDirRef
   },
   WHITEBOARD_ROOT: '/tmp',
   REPO_ROOT: '/tmp',
@@ -21,21 +28,44 @@ const {
   removeUserLibraryMetadata,
   USER_LIBRARY_METADATA_FILENAME_SUFFIX,
 } = await import('./user-library-metadata-store.js')
+const { createIsolatedDb } = await import('./db/test-helpers.js')
+
+interface StoreFixture {
+  db: Awaited<ReturnType<typeof createIsolatedDb>>['db']
+  tempDir: string
+}
+
+const test = baseTest.extend<{ store: StoreFixture }>({
+  store: [
+    async ({}, use) => {
+      const dir = await mkdtemp(join(tmpdir(), 'user-lib-meta-test-'))
+      tempDirRef = dir
+      const handle = await createIsolatedDb({ dataDir: dir })
+      await use({ db: handle.db, tempDir: dir })
+      await handle.dispose()
+      await rm(dir, { recursive: true, force: true })
+      tempDirRef = ''
+    },
+    { scope: 'file' },
+  ],
+})
+
+test.aroundEach(async (runTest, { store }) => {
+  await sql`BEGIN`.execute(store.db)
+  try {
+    await runTest()
+  } finally {
+    await sql`ROLLBACK`.execute(store.db)
+  }
+})
 
 describe('user-library-metadata-store', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'user-lib-meta-test-'))
-  })
 
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
-  it('keeps the .meta.json suffix constant for back-compat', () => {
+  test('keeps the .meta.json suffix constant for back-compat', () => {
     expect(USER_LIBRARY_METADATA_FILENAME_SUFFIX).toBe('.meta.json')
   })
 
-  it('returns an empty manifest when metadata does not exist', async () => {
+  test('returns an empty manifest when metadata does not exist', async () => {
     await expect(getUserLibraryMetadata('icons')).resolves.toEqual({
       version: 1,
       revision: 0,
@@ -45,7 +75,7 @@ describe('user-library-metadata-store', () => {
     })
   })
 
-  it('merges aliases, notes, and scales and increments revision', async () => {
+  test('merges aliases, notes, and scales and increments revision', async () => {
     const first = await setUserLibraryMetadata('icons', 0, {
       aliases: { cloud_run: 13 },
       notes: { '13': 'preferred icon' },
@@ -72,7 +102,7 @@ describe('user-library-metadata-store', () => {
     })
   })
 
-  it('deletes selected alias/note/scale keys and increments revision', async () => {
+  test('deletes selected alias/note/scale keys and increments revision', async () => {
     await setUserLibraryMetadata('icons', 0, {
       aliases: { cloud_run: 13, pubsub: 7 },
       notes: { '13': 'preferred icon', '7': 'event bus' },
@@ -94,7 +124,7 @@ describe('user-library-metadata-store', () => {
     })
   })
 
-  it('rejects revision conflicts instead of last-write-wins', async () => {
+  test('rejects revision conflicts instead of last-write-wins', async () => {
     await setUserLibraryMetadata('icons', 0, { aliases: { cloud_run: 13 } })
 
     await expect(
@@ -105,11 +135,11 @@ describe('user-library-metadata-store', () => {
     })
   })
 
-  it('treats a manifestJson row that fails schema validation as corruption', async () => {
+  test('treats a manifestJson row that fails schema validation as corruption', async ({ store }) => {
     const { getDb } = await import('./db/index.js')
     const { prepareDataDir } = await import('./db/prepare.js')
-    await prepareDataDir(tempDir)
-    const db = await getDb(tempDir)
+    await prepareDataDir(store.tempDir)
+    const db = await getDb(store.tempDir)
     const now = Date.now()
     // Seed a parent row so the FK on user_library_metadata.name resolves.
     await db
@@ -140,7 +170,7 @@ describe('user-library-metadata-store', () => {
     expect(row?.manifestJson).toBe('not-json')
   })
 
-  it('removeUserLibraryMetadata is a no-op for missing rows', async () => {
+  test('removeUserLibraryMetadata is a no-op for missing rows', async () => {
     await expect(removeUserLibraryMetadata('ghost')).resolves.not.toThrow()
   })
 })
