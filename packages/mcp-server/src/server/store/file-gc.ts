@@ -8,6 +8,7 @@ import { listCanvases, loadCanvas } from './canvas-store.js'
 import { isMissingFileError } from './corrupt-stored-data.js'
 import { assertPathWithinDir } from './path-guard.js'
 import type { VersionStore } from './version-store.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Garbage-collect files in <DATA_DIR>/<workspaceId>/files/ that are not
 // referenced by any live canvas in the workspace — and, when a versionStore
@@ -114,39 +115,46 @@ export async function purgeDanglingFiles(
   options: PurgeFilesOptions = {},
 ): Promise<PurgeFilesResult> {
   validateWorkspaceId(workspaceId)
-  const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
+  // Hold the workspace write barrier across the collect + unlink pass so
+  // a concurrent saveCanvas / version-save cannot insert a new file
+  // reference between snapshot and delete and have its file unlinked
+  // as "dangling".
+  return withWorkspaceWriteLock(workspaceId, async () => {
+    const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
 
-  const dir = workspaceFilesDir(workspaceId)
-  let entries: string[]
-  try {
-    entries = await readdir(dir)
-  } catch (err) {
-    if (isMissingFileError(err)) return { purgedCount: 0, purgedBytes: 0 }
-    throw err
-  }
-
-  let purgedCount = 0
-  let purgedBytes = 0
-  for (const entry of entries) {
-    const ext = extname(entry).toLowerCase()
-    // Skip anything that does not look like an image upload — the dir is
-    // ours, but stray files (.tmp, partial uploads) should not be deleted
-    // by the dangling-references heuristic; leave them for a future, more
-    // explicit cleanup.
-    if (!IMAGE_EXTS.has(ext)) continue
-    const fileId = basename(entry, ext)
-    if (referenced.has(fileId)) continue
-    const fullPath = join(dir, entry)
+    const dir = workspaceFilesDir(workspaceId)
+    let entries: string[]
     try {
-      const info = await stat(fullPath)
-      await unlink(fullPath)
-      purgedCount += 1
-      purgedBytes += info.size
+      entries = await readdir(dir)
     } catch (err) {
-      // Race: file vanished between stat and unlink, or unlink failed for
-      // another reason — log and move on. Subsequent runs will retry.
-      getLogger('file-gc').warning({ workspaceId, entry, err }, 'purge skipped')
+      if (isMissingFileError(err)) return { purgedCount: 0, purgedBytes: 0 }
+      throw err
     }
-  }
-  return { purgedCount, purgedBytes }
+
+    let purgedCount = 0
+    let purgedBytes = 0
+    for (const entry of entries) {
+      const ext = extname(entry).toLowerCase()
+      // Skip anything that does not look like an image upload — the dir
+      // is ours, but stray files (.tmp, partial uploads) should not be
+      // deleted by the dangling-references heuristic; leave them for a
+      // future, more explicit cleanup.
+      if (!IMAGE_EXTS.has(ext)) continue
+      const fileId = basename(entry, ext)
+      if (referenced.has(fileId)) continue
+      const fullPath = join(dir, entry)
+      try {
+        const info = await stat(fullPath)
+        await unlink(fullPath)
+        purgedCount += 1
+        purgedBytes += info.size
+      } catch (err) {
+        // Race: file vanished between stat and unlink, or unlink failed
+        // for another reason — log and move on. Subsequent runs will
+        // retry.
+        getLogger('file-gc').warning({ workspaceId, entry, err }, 'purge skipped')
+      }
+    }
+    return { purgedCount, purgedBytes }
+  })
 }
