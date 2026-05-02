@@ -21,25 +21,29 @@ import { extractContextFromHeaders, getTracer } from './tracing.js'
 // can group by low-cardinality route, so getting that right matters more
 // than naming the span at start time.
 
-function resolveMatchedRoute(c: Parameters<MiddlewareHandler>[0]): string {
+function resolveMatchedRoute(c: Parameters<MiddlewareHandler>[0]): string | undefined {
   // Hono populates `matchedRoutes` with every middleware + handler the
   // request hit, in order. Skip the wildcard middlewares (those whose
-  // path is "/*" or "/api/*" etc.) and return the first concrete one.
-  // Falls back to the path itself for unrouted requests.
+  // path contains "/*") and return the first concrete one.
+  // Returns undefined for genuinely unmatched requests (404s, probes,
+  // typos) — per OpenTelemetry HTTP semconv v1.41+, http.route MUST be
+  // omitted in that case rather than substituted with the raw request
+  // path, otherwise per-route latency dashboards collapse under
+  // unique-per-request cardinality.
   type MatchedRoute = { path?: string; handler?: unknown; method?: string }
   const matched = (c.req as unknown as { matchedRoutes?: MatchedRoute[] }).matchedRoutes
   if (Array.isArray(matched)) {
     for (let i = matched.length - 1; i >= 0; i--) {
       const path = matched[i]?.path
-      if (typeof path === 'string' && !path.endsWith('/*') && !path.includes('/*')) {
+      if (typeof path === 'string' && !path.includes('/*')) {
         return path
       }
     }
   }
   // routePath is the registered path of the *current* middleware/handler;
   // when a concrete route handled the request it is the right value.
-  if (c.req.routePath && !c.req.routePath.endsWith('/*')) return c.req.routePath
-  return c.req.path
+  if (c.req.routePath && !c.req.routePath.includes('/*')) return c.req.routePath
+  return undefined
 }
 
 export function tracingMiddleware(): MiddlewareHandler {
@@ -50,8 +54,11 @@ export function tracingMiddleware(): MiddlewareHandler {
     const parentCtx = extractContextFromHeaders(headers)
     const tracer = getTracer('whiteboard.http')
     const span = tracer.startSpan(
-      // Provisional name; renamed once the route is known.
-      `${c.req.method} ${c.req.path}`,
+      // Provisional name; renamed once the route is known. Use the
+      // method-only form for the provisional value too so an unmatched
+      // 404 stays low-cardinality even if next() throws before we can
+      // resolve a concrete route.
+      c.req.method,
       {
         kind: SpanKind.SERVER,
         attributes: {
@@ -63,17 +70,22 @@ export function tracingMiddleware(): MiddlewareHandler {
       parentCtx,
     )
     const ctxWithSpan = trace.setSpan(parentCtx, span)
+    const applyRoute = (): void => {
+      const route = resolveMatchedRoute(c)
+      if (route) {
+        span.updateName(`${c.req.method} ${route}`)
+        span.setAttribute(ATTR_HTTP_ROUTE, route)
+      }
+    }
     try {
       await context.with(ctxWithSpan, () => next())
-      const route = resolveMatchedRoute(c)
-      span.updateName(`${c.req.method} ${route}`)
-      span.setAttribute(ATTR_HTTP_ROUTE, route)
+      applyRoute()
       span.setAttribute(ATTR_HTTP_RESPONSE_STATUS_CODE, c.res.status)
       if (c.res.status >= 500) {
         span.setStatus({ code: SpanStatusCode.ERROR })
       }
     } catch (err) {
-      span.setAttribute(ATTR_HTTP_ROUTE, resolveMatchedRoute(c))
+      applyRoute()
       span.setStatus({
         code: SpanStatusCode.ERROR,
         message: err instanceof Error ? err.message : String(err),

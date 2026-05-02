@@ -78,4 +78,23 @@ describe('tracingMiddleware http.route attribute', () => {
     expect(span.attributes['http.response.status_code']).toBe(200)
     expect(span.attributes['http.route']).toBe('/health')
   })
+
+  it('omits http.route and uses {method} span name for unmatched 404 paths', async () => {
+    // Per OpenTelemetry HTTP semconv v1.41+, server spans MUST NOT use
+    // the raw request path as a substitute for http.route, and the span
+    // name MUST be `{method}` alone when no low-cardinality route
+    // template is available. Without this, a single 404 hit on a typoed
+    // URL pollutes per-route latency aggregations with a unique label.
+    const app = buildApp()
+    const res = await app.request('/totally/made/up/url')
+    expect(res.status).toBe(404)
+    const spans = exporter.getFinishedSpans()
+    expect(spans).toHaveLength(1)
+    const span = spans[0]
+    expect(span.attributes['http.route']).toBeUndefined()
+    expect(span.name).toBe('GET')
+    // url.path stays high-cardinality on purpose — it is the per-request
+    // attribute, not the per-route grouper.
+    expect(span.attributes['url.path']).toBe('/totally/made/up/url')
+  })
 })

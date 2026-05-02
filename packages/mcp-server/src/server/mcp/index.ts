@@ -41,6 +41,7 @@ import {
 } from './tools/canvas.js'
 import {
   alignElementsTool,
+  alignInputSchema,
   alignOutputSchema,
   assignGroupOutputSchema,
   assignToGroupTool,
@@ -51,6 +52,7 @@ import {
   deleteElementTool,
   deleteGroupTool,
   distributeElementsTool,
+  distributeInputSchema,
   distributeOutputSchema,
   elementIdOutputSchema,
   elementIdsOutputSchema,
@@ -1472,17 +1474,10 @@ export async function createExcalidrawMcpServer() {
     alignTool.name,
     {
       description: alignTool.description,
-      inputSchema: {
-        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
-        elementIds: z.array(z.string()).min(2).describe(
-          'Element ids to align. Needs at least 2; the orthogonal axis is left untouched.',
-        ),
-        alignment: z
-          .enum(['left', 'center', 'right', 'top', 'middle', 'bottom'])
-          .describe(
-            "Target axis. 'left'/'right'/'center' move x; 'top'/'bottom'/'middle' move y.",
-          ),
-      },
+      // Input + output schemas come from element-ops-tools.ts as the single
+      // source of truth — execute()'s arg type is z.infer<typeof
+      // alignInputSchema> there, so registration and runtime stay in sync.
+      inputSchema: alignInputSchema.shape,
       outputSchema: alignOutputSchema,
     },
     async ({ canvasId, elementIds, alignment }) => {
@@ -1497,15 +1492,7 @@ export async function createExcalidrawMcpServer() {
     distributeTool.name,
     {
       description: distributeTool.description,
-      inputSchema: {
-        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
-        elementIds: z.array(z.string()).min(3).describe(
-          'Element ids to distribute. Needs at least 3; first and last (along the chosen axis) stay fixed.',
-        ),
-        direction: z
-          .enum(['horizontal', 'vertical'])
-          .describe('"horizontal" distributes along x; "vertical" distributes along y.'),
-      },
+      inputSchema: distributeInputSchema.shape,
       outputSchema: distributeOutputSchema,
     },
     async ({ canvasId, elementIds, direction }) => {

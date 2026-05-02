@@ -195,4 +195,39 @@ describe('purgeDanglingFiles', () => {
       cap.restore()
     }
   })
+
+  it('serialises against a concurrent saveCanvas that adds a new file reference', async () => {
+    // Race scenario: user has foo.png on disk left over from an earlier
+    // session, but no canvas references it yet. They open a canvas and
+    // add an image element pointing at foo. Just as that saveCanvas is
+    // committing, a background purgeDanglingFiles fires.
+    //
+    // Without a workspace write barrier, GC's collectReferencedFileIds
+    // could observe the pre-save state (no references) and unlink
+    // foo.png. With the lock, the save commits first and the purge
+    // pass sees the new reference.
+    await seedFile('ws_race', 'about-to-reference', '.png', 200)
+
+    const empty = new LoroDoc()
+    await saveCanvas('ws_race', 'page', empty)
+
+    // Build the post-save doc by extending the empty doc.
+    const next = await import('./canvas-store.js').then((m) => m.loadCanvas('ws_race', 'page'))
+    const list = next.getMovableList('elements')
+    const map = list.insertContainer(0, new LoroMap())
+    map.set('id', 'el-late-binding')
+    map.set('type', 'image')
+    map.set('fileId', 'about-to-reference')
+    map.set('isDeleted', false)
+    next.commit()
+
+    // Kick the save first so it acquires the lock; then kick the purge.
+    const savePromise = saveCanvas('ws_race', 'page', next, { overwrite: true })
+    const purgePromise = purgeDanglingFiles('ws_race')
+    const [, purgeResult] = await Promise.all([savePromise, purgePromise])
+
+    expect(purgeResult.purgedCount).toBe(0)
+    const remaining = (await readdir(join(tempDir, 'ws_race', 'files'))).sort()
+    expect(remaining).toEqual(['about-to-reference.png'])
+  })
 })
