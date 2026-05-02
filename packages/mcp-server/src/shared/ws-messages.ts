@@ -65,6 +65,12 @@ export const exportRequestMessageSchema = z.object({
   // When set, export only elements inside the frame plus the frame itself,
   // so section-level PNG exports stay small on large canvases.
   frameId: z.string().optional(),
+  // Forces the exported scene into 'light' or 'dark' regardless of the
+  // connected client's current theme. Must be carried through here too —
+  // omitting it from the schema causes the WebSocket parser to silently
+  // strip the field, so a forced-theme export_png request would render in
+  // whatever theme the browser tab happens to be in.
+  theme: z.enum(['light', 'dark']).optional(),
 })
 
 export const serverTextMessageSchema = z.discriminatedUnion('type', [
@@ -102,13 +108,28 @@ export const viewportResponseMessageSchema = z.object({
   requestId: z.string(),
 })
 
+// W3C `traceparent` carrier sent ahead of a binary Loro update so the
+// server can parent its `ws.message.binary` span on the client's active
+// span. Validated as `00-<32hex>-<16hex>-<2hex>` to match the W3C
+// trace-context spec; invalid values are dropped silently with a warning.
+export const wsTraceMessageSchema = z.object({
+  type: z.literal('ws_trace'),
+  traceparent: z.string().regex(/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/),
+  // Optional W3C tracestate string. Pass-through for vendor-specific
+  // sampling decisions; the server forwards it to the propagator without
+  // interpretation.
+  tracestate: z.string().optional(),
+})
+
 export const clientTextMessageSchema = z.discriminatedUnion('type', [
   clientReadyMessageSchema,
   exportResponseMessageSchema,
   viewportResponseMessageSchema,
+  wsTraceMessageSchema,
 ])
 
 export type ClientReadyMessage = z.infer<typeof clientReadyMessageSchema>
 export type ExportResponseMessage = z.infer<typeof exportResponseMessageSchema>
 export type ViewportResponseMessage = z.infer<typeof viewportResponseMessageSchema>
+export type WsTraceMessage = z.infer<typeof wsTraceMessageSchema>
 export type ClientTextMessage = z.infer<typeof clientTextMessageSchema>

@@ -12,6 +12,10 @@ export const exportRequestSchema = z.object({
   frameId: z.string().optional(),
   outputPath: z.string().optional(),
   overwrite: z.boolean().optional(),
+  // theme: forces the rendered scene into 'light' or 'dark'. Lets callers
+  // export the same canvas under both themes for dark-mode QA / before-after
+  // comparison without mutating the persisted appState.
+  theme: z.enum(['light', 'dark']).optional(),
 })
 
 export const exportResponseSchema = z.object({
