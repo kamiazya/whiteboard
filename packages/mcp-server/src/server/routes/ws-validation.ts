@@ -7,6 +7,9 @@ import {
   clientTextMessageSchema,
   type ClientTextMessage,
 } from '../../shared/ws-messages.js'
+import { getLogger } from '../log.js'
+
+const log = getLogger('ws')
 
 export type {
   ClientReadyMessage,
@@ -43,13 +46,16 @@ export function parseWsClientTextMessage(text: string): ClientTextMessage | null
   try {
     raw = JSON.parse(text)
   } catch {
-    console.warn('[ws] ignored invalid client message: malformed JSON', text)
+    log.warning({ text }, 'ignored invalid client message: malformed JSON')
     return null
   }
 
   const result = clientTextMessageSchema.safeParse(raw)
   if (!result.success) {
-    console.warn('[ws] ignored invalid client message:', result.error.issues[0]?.message, raw)
+    log.warning(
+      { reason: result.error.issues[0]?.message, raw },
+      'ignored invalid client message',
+    )
     return null
   }
   return result.data

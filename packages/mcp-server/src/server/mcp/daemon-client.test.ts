@@ -6,7 +6,7 @@ describe('createDaemonClient', () => {
   it('request builds URLs from baseUrl and attaches bearer auth', async () => {
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      expect(input.toString()).toBe('http://127.0.0.1:3099/api/workspaces/demo/checkpoints')
+      expect(input.toString()).toBe('http://127.0.0.1:3099/api/workspaces/demo/canvases')
       expect(init?.method).toBe('POST')
       expect(init?.headers).toBeInstanceOf(Headers)
       expect(new Headers(init?.headers).get('authorization')).toBe('Bearer secret-token')
@@ -19,7 +19,7 @@ describe('createDaemonClient', () => {
         port: 3099,
         token: 'secret-token',
       })
-      const res = await client.request('/api/workspaces/demo/checkpoints', { method: 'POST' })
+      const res = await client.request('/api/workspaces/demo/canvases', { method: 'POST' })
       expect(res.status).toBe(200)
     } finally {
       globalThis.fetch = originalFetch
