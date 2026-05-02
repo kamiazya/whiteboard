@@ -58,5 +58,21 @@
         "noUselessTypeConstraint": "warn"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "packages/mcp-server/src/server/**/*.ts",
+        "!packages/mcp-server/src/server/log.ts",
+        "!packages/mcp-server/src/server/**/*.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "error"
+          }
+        }
+      }
+    }
+  ]
 }

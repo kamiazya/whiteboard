@@ -1,16 +1,53 @@
-# Repo-level Codex config.
+# Repo Codex MCP override.
+#
+# Connects every Codex reload to the long-lived daemon launched by
+# `pnpm mcp:http:dev`, which serves http://127.0.0.1:3099/mcp. The HTTP
+# transport sidesteps the stdio + daemon-registry path that would otherwise
+# reuse stale daemons recorded in ~/.whiteboard/daemon.json.
+#
+# A SessionStart hook below starts the dev daemon automatically. If hooks are
+# disabled or the project is not trusted yet, start it manually:
+#   pnpm mcp:http:dev
+#
 # Codex merges config layers in this order, with later layers winning:
-#   system < user (~/.codex/config.toml) < cwd < tree (./.codex/config.toml) < repo (<git-root>/.codex/config.toml) < runtime
-# As a result, `mcp_servers.whiteboard` in this file overrides the user's server with the same name,
-# so opening this repo in Codex starts the local checkout dev server (`mcp-dev-launch.mjs`) immediately.
+#   system < user (~/.codex/config.toml) < cwd < tree (./.codex/config.toml)
+#   < repo (<git-root>/.codex/config.toml) < runtime
+# This file disables the plugin-provided published `whiteboard` stdio server
+# and adds `whiteboard_dev` for the local HTTP daemon. The separate name avoids
+# merging `url` into the plugin's stdio `command`/`args` entry.
 #
 # Trust gating: the cwd / tree / repo layers stay disabled unless either
-#   [projects."<absolute_path>"] trust_level = "trusted"
-# is present in the user's ~/.codex/config.toml, or the user approves the trust prompt in the Codex TUI.
-# Right after cloning the repo it is untrusted, so one approval is required first.
+#   [projects."<absolute_path>"]
+#   trust_level = "trusted"
+# is present in the user's ~/.codex/config.toml, or the user approves the
+# trust prompt in the Codex TUI. Right after cloning the repo it is
+# untrusted, so one approval is required first.
 # Official spec: https://github.com/openai/codex/blob/main/docs/config.md
 
+[features]
+codex_hooks = true
+
+[[hooks.SessionStart]]
+matcher = "*"
+
+[[hooks.SessionStart.hooks]]
+type = "command"
+command = 'node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/ensure-http-dev-daemon.mjs" --quiet'
+# `ensure-http-dev-daemon.mjs` waits up to 30s for `pnpm mcp:http:dev` to
+# bind on cold checkouts (tsx + happy-dom + canvas + resvg startup), so
+# the hook timeout must be at least that long — otherwise the hook is
+# killed mid-wait, the daemon is still warming up, and the first MCP
+# connection races a not-yet-listening port.
+timeout = 40
+statusMessage = "Starting whiteboard MCP dev daemon"
+
+# Codex currently merges this repo-local table with the plugin-provided
+# `.mcp.json` stdio entry when the server name is also `whiteboard`. That leaves
+# `command`/`args` in place and rejects `url` with "url is not supported for
+# stdio", so the hot-reload HTTP endpoint uses a dev-only server name.
 [mcp_servers.whiteboard]
-command = "node"
-args = ["./packages/mcp-server/scripts/mcp-dev-launch.mjs"]
-env = { WHITEBOARD_DEV = "1" }
+enabled = false
+
+[mcp_servers.whiteboard_dev]
+url = "http://127.0.0.1:3099/mcp"
+http_headers = { Authorization = "Bearer whiteboard-dev" }

@@ -24,6 +24,10 @@ export interface CanvasesTable {
   currentBranch: string
   createdAt: Timestamp
   updatedAt: Timestamp
+  // Last time the Loro op-log was successfully compacted via shallow-snapshot.
+  // Null for canvases that have never been compacted; consumed by the auto-
+  // Optimize loop to skip canvases that have not changed since last run.
+  lastCompactedAt: Timestamp | null
 }
 
 export interface BranchesTable {

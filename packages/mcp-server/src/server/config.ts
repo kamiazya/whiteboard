@@ -7,9 +7,10 @@ import { dirname, resolve } from 'node:path'
 // From src/server/config.ts, going up two directories reaches the package root.
 export const WHITEBOARD_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
-// Force owner-only permissions for the data dir, tokens, and checkpoints.
-// On shared VMs or dev containers, a default umask like 0755 can leave
-// daemon tokens readable by other users. Windows ignores POSIX modes here.
+// Force owner-only permissions for the data dir, tokens, and stored
+// canvases. On shared VMs or dev containers, a default umask like 0755 can
+// leave daemon tokens readable by other users. Windows ignores POSIX modes
+// here.
 const POSIX_DATA_DIR_MODE = 0o700
 
 function canWriteDir(path: string): boolean {

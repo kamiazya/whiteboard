@@ -6,7 +6,7 @@ Runtime environment variables and sandbox quirks.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, checkpoints, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
+| `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
 | `WHITEBOARD_CHROME_PATH` | Override the Chromium binary used for browser automation and `export_png`. | unset (Playwright-managed Chromium) |
 | `WHITEBOARD_DEV` | When set to `1`, the dev-launch wrapper enables source-tree watching so a `tsx watch` change restarts the daemon in place. | unset |
 | `WHITEBOARD_MCP_AUTHORIZATION_SERVER(S)` | Authorization Server URL exposed in MCP Protected Resource Metadata, in preparation for remote OAuth 2.1. | unset |
@@ -26,7 +26,6 @@ Inside the Codex sandbox, two issues are common:
 Each workspace lives at `${WHITEBOARD_DATA_DIR}/{workspaceId}/` and contains:
 
 - `*.loro` — Loro CRDT snapshots (one per canvas)
-- `.checkpoints/{id}.loro` — named restore points
 - `*.png`, `*.excalidraw` — exports (via `export_png` / `canvas_export_json`)
 - `palette.json`, `manifestJson`, library metadata, and other persisted JSON
 

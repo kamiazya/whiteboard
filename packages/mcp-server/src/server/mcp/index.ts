@@ -2,9 +2,33 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { DATA_DIR } from '../config.js'
 import { ensureDaemon } from '../../daemon/ensure-daemon.js'
+import { getLogger } from '../log.js'
+import { getTracer } from '../observability/tracing.js'
+import { wireMcpLogging } from './logging.js'
+
+// Cached MCP tracer. Calls into the no-op API when tracing is disabled.
+const mcpTracer = (): ReturnType<typeof getTracer> => getTracer('whiteboard.mcp')
+import { PACKAGE_VERSION } from '../../shared/package-version.js'
+import { DATA_DIR } from '../config.js'
+import { isDirectEntryPoint } from '../entrypoint.js'
 import { createDaemonClient } from './daemon-client.js'
+import { ensureWorkspaceId } from './session-resolver.js'
+import {
+  buildDrawDiagramPrompt,
+  formatInstalledLibrariesResource,
+  formatRecentCanvasesResource,
+  getStandaloneHelpText,
+  WHITEBOARD_DRAW_PROMPT,
+  WHITEBOARD_HELP_URI,
+  WHITEBOARD_INSTALLED_LIBRARIES_URI,
+  WHITEBOARD_RECENT_CANVASES_URI,
+} from './standalone-help.js'
+import { annotateBatchOutputSchema, annotateBatchTool } from './tools/annotate-batch.js'
+import { annotateOutputSchema, annotateTool } from './tools/annotate.js'
+import { canvasAutoLayoutOutputSchema, canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
+import { canvasExportJsonOutputSchema, canvasExportJsonTool } from './tools/canvas-export-json.js'
+import { canvasInspectOutputSchema, canvasInspectTool } from './tools/canvas-inspect.js'
 import {
   canvasCreateOutputSchema,
   canvasListOutputSchema,
@@ -12,20 +36,49 @@ import {
   createCanvasTool,
   listCanvasTool,
   openCanvasTool,
+  optimizeCanvasesOutputSchema,
+  optimizeCanvasesTool,
 } from './tools/canvas.js'
-import { loadImageOutputSchema, loadImageTool } from './tools/load.js'
-import { annotateOutputSchema, annotateTool } from './tools/annotate.js'
-import { annotateBatchOutputSchema, annotateBatchTool } from './tools/annotate-batch.js'
-import { exportPngOutputSchema, exportPngTool } from './tools/export.js'
-import { viewportSetOutputSchema, viewportSetTool } from './tools/viewport.js'
-import { canvasExportJsonOutputSchema, canvasExportJsonTool } from './tools/canvas-export-json.js'
-import { canvasAutoLayoutOutputSchema, canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
 import {
-  paletteDeleteTool,
-  paletteGetTool,
-  paletteOutputSchema,
-  paletteSetTool,
-} from './tools/palette.js'
+  alignElementsTool,
+  alignOutputSchema,
+  assignGroupOutputSchema,
+  assignToGroupTool,
+  canvasClearTool,
+  clearedCountOutputSchema,
+  deletedElementsOutputSchema,
+  deleteElementsTool,
+  deleteElementTool,
+  deleteGroupTool,
+  distributeElementsTool,
+  distributeOutputSchema,
+  elementIdOutputSchema,
+  elementIdsOutputSchema,
+  listGroupsOutputSchema,
+  listGroupsTool,
+  moveElementsTool,
+  reorderElementsTool,
+  reorderOutputSchema,
+  updateElementTool,
+} from './tools/element-ops-tools.js'
+import { exportPngOutputSchema, exportPngTool } from './tools/export.js'
+import {
+  versionListOutputSchema,
+  versionListTool,
+  versionRestoreOutputSchema,
+  versionRestoreTool,
+  versionSaveOutputSchema,
+  versionSaveTool,
+} from './tools/version.js'
+import {
+  createEmbedOutputSchema,
+  createEmbedTool,
+  createFrameOutputSchema,
+  createFrameTool,
+  updateFrameMembersOutputSchema,
+  updateFrameMembersTool,
+} from './tools/frame-embed.js'
+import { libraryCatalogListOutputSchema, libraryCatalogListTool } from './tools/library-catalog.js'
 import {
   installedUrlsOutputSchema,
   libInsertItemOutputSchema,
@@ -49,59 +102,20 @@ import {
   userLibrarySaveOutputSchema,
   userLibrarySaveTool,
 } from './tools/library.js'
-import { libraryCatalogListOutputSchema, libraryCatalogListTool } from './tools/library-catalog.js'
-import { canvasInspectOutputSchema, canvasInspectTool } from './tools/canvas-inspect.js'
+import { loadImageOutputSchema, loadImageTool } from './tools/load.js'
+import {
+  paletteDeleteTool,
+  paletteGetTool,
+  paletteOutputSchema,
+  paletteSetTool,
+} from './tools/palette.js'
 import {
   insertTemplateTool,
   listTemplatesTool,
   templateInsertOutputSchema,
   templateListOutputSchema,
 } from './tools/template.js'
-import {
-  assignGroupOutputSchema,
-  assignToGroupTool,
-  canvasClearTool,
-  clearedCountOutputSchema,
-  deletedElementsOutputSchema,
-  deleteElementTool,
-  deleteElementsTool,
-  deleteGroupTool,
-  elementIdOutputSchema,
-  elementIdsOutputSchema,
-  listGroupsOutputSchema,
-  listGroupsTool,
-  moveElementsTool,
-  reorderElementsTool,
-  reorderOutputSchema,
-  updateElementTool,
-} from './tools/element-ops-tools.js'
-import {
-  checkpointRestoreOutputSchema,
-  checkpointRestoreTool,
-  checkpointSaveOutputSchema,
-  checkpointSaveTool,
-} from './tools/checkpoint.js'
-import {
-  createEmbedOutputSchema,
-  createEmbedTool,
-  createFrameOutputSchema,
-  createFrameTool,
-  updateFrameMembersOutputSchema,
-  updateFrameMembersTool,
-} from './tools/frame-embed.js'
-import { ensureWorkspaceId } from './session-resolver.js'
-import { PACKAGE_VERSION } from '../../shared/package-version.js'
-import { isDirectEntryPoint } from '../entrypoint.js'
-import {
-  buildDrawDiagramPrompt,
-  formatInstalledLibrariesResource,
-  formatRecentCanvasesResource,
-  getStandaloneHelpText,
-  WHITEBOARD_DRAW_PROMPT,
-  WHITEBOARD_HELP_URI,
-  WHITEBOARD_INSTALLED_LIBRARIES_URI,
-  WHITEBOARD_RECENT_CANVASES_URI,
-} from './standalone-help.js'
+import { viewportSetOutputSchema, viewportSetTool } from './tools/viewport.js'
 
 function structuredJsonResult<T extends object>(result: T) {
   const structuredContent = result as T & { [key: string]: unknown }
@@ -188,12 +202,18 @@ const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: string 
   // Mutating + idempotent (safe to rerun with the same arguments)
   update_element: { profile: MUTATING_IDEMPOTENT, title: 'Update element fields' },
   move_elements: { profile: MUTATING_IDEMPOTENT, title: 'Move elements (relative dx/dy)' },
+  align_elements: { profile: MUTATING_IDEMPOTENT, title: 'Align elements to a shared edge or centre' },
+  distribute_elements: { profile: MUTATING_IDEMPOTENT, title: 'Distribute elements with even spacing' },
   reorder_elements: { profile: MUTATING_IDEMPOTENT, title: 'Reorder elements (front/back)' },
   viewport_set: { profile: MUTATING_IDEMPOTENT, title: 'Set browser viewport' },
   palette_set: { profile: MUTATING_IDEMPOTENT, title: 'Set palette entries' },
   user_library_metadata_set: { profile: MUTATING_IDEMPOTENT, title: 'Set user library metadata' },
   assign_to_group: { profile: MUTATING_IDEMPOTENT, title: 'Assign elements to group' },
   update_frame_members: { profile: MUTATING_IDEMPOTENT, title: 'Update frame members' },
+  optimize_canvases: {
+    profile: MUTATING_IDEMPOTENT,
+    title: 'Optimize canvas storage (compact Loro op-log)',
+  },
 
   // Mutating non-idempotent (side effects / new IDs / state changes)
   canvas_create: { profile: MUTATING, title: 'Create canvas' },
@@ -202,13 +222,14 @@ const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: string 
   load_image: { profile: MUTATING, title: 'Load image into canvas' },
   canvas_auto_layout: { profile: MUTATING, title: 'Auto-layout canvas (DAG)' },
   template_insert: { profile: MUTATING, title: 'Insert template parts' },
-  checkpoint_save: { profile: MUTATING, title: 'Save canvas checkpoint' },
-  checkpoint_restore: { profile: MUTATING, title: 'Restore canvas from checkpoint' },
   create_frame: { profile: MUTATING, title: 'Create frame container' },
   create_embed: { profile: MUTATING, title: 'Embed external URL into canvas' },
   library_insert_item: { profile: MUTATING, title: 'Insert library item' },
   library_insert_batch: { profile: MUTATING, title: 'Insert multiple library items' },
   user_library_save: { profile: MUTATING, title: 'Save user library' },
+  version_save: { profile: MUTATING, title: 'Save labeled version' },
+  version_restore: { profile: MUTATING, title: 'Restore canvas from version' },
+  version_list: { profile: READ_ONLY, title: 'List versions' },
 
   // Mutating + external (fetches over HTTPS and writes daemon state)
   library_install: { profile: MUTATING_EXTERNAL, title: 'Install library from HTTPS URL' },
@@ -240,18 +261,61 @@ function registerToolWithAnnotations<
   const profile = TOOL_PROFILES[name]
   if (!profile) {
     // Fall back conservatively to MUTATING and emit a warning so it is noticed.
-    console.warn(`[mcp] tool "${name}" has no annotations profile; defaulting to MUTATING`)
+    getLogger('mcp').warning({ name }, 'tool has no annotations profile; defaulting to MUTATING')
   }
   const annotations = profile
     ? { ...profile.profile, title: profile.title }
     : { ...MUTATING, title: name }
-  // Wrap the handler so thrown errors become isError responses.
+  // Wrap the handler so thrown errors become isError responses, and so
+  // every tool call is observable as a single MCP-semconv span.
   const wrappedHandler = async (
     args: { [K in keyof I]: z.infer<I[K]> },
     extra: Parameters<typeof handler>[1],
   ): Promise<unknown> => {
+    const tracer = mcpTracer()
+    const requestId =
+      typeof (extra as { requestId?: unknown })?.requestId === 'string' ||
+      typeof (extra as { requestId?: unknown })?.requestId === 'number'
+        ? String((extra as { requestId: unknown }).requestId)
+        : undefined
+    return tracer.startActiveSpan(
+      `mcp.tool.call ${name}`,
+      {
+        kind: 1, // SpanKind.SERVER (avoid importing the enum here to keep the dispatch path slim)
+        attributes: {
+          'mcp.method.name': 'tools/call',
+          'mcp.tool.name': name,
+          ...(requestId === undefined ? {} : { 'mcp.request.id': requestId }),
+        },
+      },
+      async (span) => {
+        try {
+          const out = await handler(args, extra)
+          return out
+        } catch (err) {
+          span.recordException(err instanceof Error ? err : new Error(String(err)))
+          span.setStatus({
+            code: 2, // SpanStatusCode.ERROR — kept inline for the same reason
+            message: err instanceof Error ? err.message : String(err),
+          })
+          throw err
+        } finally {
+          span.end()
+        }
+      },
+    )
+  }
+  const innerWrappedHandler = wrappedHandler
+  // Outer error catcher converts thrown errors into MCP isError responses.
+  // Kept separate so the span finishes BEFORE we rewrite the throw into a
+  // structured response — otherwise the error would still mark the span
+  // ERROR but the user would see a "successful" tool call.
+  const outerHandler = async (
+    args: { [K in keyof I]: z.infer<I[K]> },
+    extra: Parameters<typeof handler>[1],
+  ): Promise<unknown> => {
     try {
-      return await handler(args, extra)
+      return await innerWrappedHandler(args, extra)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       return {
@@ -263,8 +327,8 @@ function registerToolWithAnnotations<
   return (server.registerTool as unknown as (
     n: string,
     c: object,
-    h: typeof wrappedHandler,
-  ) => unknown)(name, { ...config, annotations }, wrappedHandler)
+    h: typeof outerHandler,
+  ) => unknown)(name, { ...config, annotations }, outerHandler)
 }
 
 export async function createExcalidrawMcpServer() {
@@ -278,6 +342,26 @@ export async function createExcalidrawMcpServer() {
     name: 'whiteboard',
     version: PACKAGE_VERSION,
   })
+
+  // Bridge our logger to MCP `notifications/message` and accept
+  // `logging/setLevel` from clients. Records still hit stderr in the base
+  // sink, so HTTP-only callers and stdio operators retain their view.
+  // Wire MCP `notifications/message` capability + log destination, then
+  // chain disposal of the destination onto the underlying server's
+  // `onclose`. The HTTP `/mcp` handler builds a fresh McpServer per
+  // request and closes it (transitively, via `transport.close()`) in a
+  // finally block; without this restore() the global log destination set
+  // would grow once per request and every record would fan out to the
+  // closed transports of every prior request.
+  const loggingHandle = wireMcpLogging(server)
+  const previousOnClose = server.server.onclose?.bind(server.server)
+  server.server.onclose = () => {
+    try {
+      loggingHandle.restore()
+    } finally {
+      previousOnClose?.()
+    }
+  }
 
   server.registerResource(
     'whiteboard-help',
@@ -329,6 +413,7 @@ export async function createExcalidrawMcpServer() {
   const canvasTool = createCanvasTool()
   const listTool = listCanvasTool()
   const openTool = openCanvasTool()
+  const optimizeTool = optimizeCanvasesTool()
   const loadTool = loadImageTool()
   const annotateToolDef = annotateTool()
   const annotateBatchToolDef = annotateBatchTool()
@@ -362,13 +447,16 @@ export async function createExcalidrawMcpServer() {
   const deleteGroupT = deleteGroupTool()
   const listGroupsT = listGroupsTool()
   const moveTool = moveElementsTool()
+  const alignTool = alignElementsTool()
+  const distributeTool = distributeElementsTool()
   const reorderTool = reorderElementsTool()
   const clearTool = canvasClearTool()
-  const checkpointSave = checkpointSaveTool()
-  const checkpointRestore = checkpointRestoreTool()
   const frameCreate = createFrameTool()
   const frameUpdateMembers = updateFrameMembersTool()
   const embedCreate = createEmbedTool()
+  const versionSave = versionSaveTool()
+  const versionRestore = versionRestoreTool()
+  const versionList = versionListTool()
 
   const withDaemon = async <T>(run: (client: ReturnType<typeof createDaemonClient>) => Promise<T>): Promise<T> => {
     const daemon = await ensureDaemon()
@@ -451,17 +539,14 @@ export async function createExcalidrawMcpServer() {
     {
       description: listTool.description,
       inputSchema: {
-        activeOnly: z.boolean().optional().describe(
-          'When true, only return workspaces whose local Excalidraw daemon is currently alive (port + PID liveness). Default false (returns all workspaces including dead ones).',
-        ),
         slugContains: z.string().optional().describe(
           'Case-insensitive substring filter on canvas slug. Workspaces with 0 matching canvases are omitted from the output to reduce noise.',
         ),
       },
       outputSchema: canvasListOutputSchema,
     },
-    async ({ activeOnly, slugContains }) => {
-      const result = await withDaemon((client) => listTool.execute({ activeOnly, slugContains }, client))
+    async ({ slugContains }) => {
+      const result = await withDaemon((client) => listTool.execute({ slugContains }, client))
       return structuredJsonResult(result)
     },
   )
@@ -489,6 +574,25 @@ export async function createExcalidrawMcpServer() {
     async ({ id, fullscreen, waitForClient, waitTimeoutMs }) => {
       const result = await withDaemon((client) =>
         openTool.execute({ id, fullscreen, waitForClient, waitTimeoutMs }, client),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(server,
+    optimizeTool.name,
+    {
+      description: optimizeTool.description,
+      inputSchema: {
+        slug: z.string().optional().describe(
+          'Canvas slug to optimize. When omitted, every canvas in the current workspace is compacted in sequence.',
+        ),
+      },
+      outputSchema: optimizeCanvasesOutputSchema,
+    },
+    async ({ slug }) => {
+      const result = await withDaemon((client) =>
+        optimizeTool.execute({ slug }, workspaceId, client),
       )
       return structuredJsonResult(result)
     },
@@ -797,12 +901,27 @@ export async function createExcalidrawMcpServer() {
         minFontPx: z.number().optional().describe(
           'Minimum font size (px) enforced on text elements before export. Clones with Math.max(fontSize, minFontPx) so small annotation text stays legible. Original scene unchanged.',
         ),
+        frameId: z.string().optional().describe(
+          'When set, export only the frame and its children. Useful for section-scoped exports on large canvases.',
+        ),
+        outputPath: z.string().optional().describe(
+          'Absolute path to write the PNG to. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+        ),
+        overwrite: z.boolean().optional().describe(
+          'Replace an existing file at outputPath. Default false; without it an existing outputPath is rejected with output_exists.',
+        ),
+        theme: z.enum(['light', 'dark']).optional().describe(
+          'Force the rendered scene into "light" or "dark" without mutating the persisted appState. Use it to export the same canvas under both themes for dark-mode QA or contrast review.',
+        ),
       },
       outputSchema: exportPngOutputSchema,
     },
-    async ({ canvasId, padding, scale, minFontPx }) => {
+    async ({ canvasId, padding, scale, minFontPx, frameId, outputPath, overwrite, theme }) => {
       const result = await withDaemon((client) =>
-        exportTool.execute({ canvasId, padding, scale, minFontPx }, client),
+        exportTool.execute(
+          { canvasId, padding, scale, minFontPx, frameId, outputPath, overwrite, theme },
+          client,
+        ),
       )
       // Return filePath in the text block and attach the image payload as a
       // separate ImageContent block. If reading fails, omit the image block and
@@ -1350,6 +1469,54 @@ export async function createExcalidrawMcpServer() {
   )
 
   registerToolWithAnnotations(server,
+    alignTool.name,
+    {
+      description: alignTool.description,
+      inputSchema: {
+        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+        elementIds: z.array(z.string()).min(2).describe(
+          'Element ids to align. Needs at least 2; the orthogonal axis is left untouched.',
+        ),
+        alignment: z
+          .enum(['left', 'center', 'right', 'top', 'middle', 'bottom'])
+          .describe(
+            "Target axis. 'left'/'right'/'center' move x; 'top'/'bottom'/'middle' move y.",
+          ),
+      },
+      outputSchema: alignOutputSchema,
+    },
+    async ({ canvasId, elementIds, alignment }) => {
+      const result = await withDaemon((client) =>
+        alignTool.execute({ canvasId, elementIds, alignment }, client),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(server,
+    distributeTool.name,
+    {
+      description: distributeTool.description,
+      inputSchema: {
+        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+        elementIds: z.array(z.string()).min(3).describe(
+          'Element ids to distribute. Needs at least 3; first and last (along the chosen axis) stay fixed.',
+        ),
+        direction: z
+          .enum(['horizontal', 'vertical'])
+          .describe('"horizontal" distributes along x; "vertical" distributes along y.'),
+      },
+      outputSchema: distributeOutputSchema,
+    },
+    async ({ canvasId, elementIds, direction }) => {
+      const result = await withDaemon((client) =>
+        distributeTool.execute({ canvasId, elementIds, direction }, client),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(server,
     reorderTool.name,
     {
       description: reorderTool.description,
@@ -1382,44 +1549,58 @@ export async function createExcalidrawMcpServer() {
   )
 
   registerToolWithAnnotations(server,
-    checkpointSave.name,
+    versionSave.name,
     {
-      description: checkpointSave.description,
+      description: versionSave.description,
       inputSchema: {
-        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form to snapshot.'),
-        id: z.string().regex(/^[a-zA-Z0-9._-]+$/, { message: 'Invalid checkpoint id' }).optional().describe(
-          'Optional checkpoint id. When omitted, a fresh nanoid is generated. Must match /^[a-zA-Z0-9._-]+$/ (no path traversal).',
+        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+        label: z.string().optional().describe(
+          'Optional human-readable label shown in the History panel.',
         ),
       },
-      outputSchema: checkpointSaveOutputSchema,
+      outputSchema: versionSaveOutputSchema,
     },
-    async ({ canvasId, id }) => {
-      const result = await withDaemon((client) => checkpointSave.execute({ canvasId, id }, client))
+    async ({ canvasId, label }) => {
+      const result = await withDaemon((client) => versionSave.execute({ canvasId, label }, client))
       return structuredJsonResult(result)
     },
   )
 
   registerToolWithAnnotations(server,
-    checkpointRestore.name,
+    versionRestore.name,
     {
-      description: checkpointRestore.description,
+      description: versionRestore.description,
       inputSchema: {
-        checkpointId: z.string().describe(
-          'Checkpoint id returned by checkpoint_save. Throws if not found.',
-        ),
-        targetSlug: z.string().describe(
-          'Slug of the canvas to restore into. Created if it does not exist.',
+        canvasId: z.string().describe('Source canvas ID in "{workspaceId}/{slug}" form.'),
+        versionId: z.string().describe('Version id returned from version_save or version_list.'),
+        targetSlug: z.string().optional().describe(
+          'When set, restore as a new canvas under this slug in the same workspace. Original canvas is left untouched.',
         ),
         overwrite: z.boolean().optional().describe(
-          'When true, replace an existing canvas with the same slug. Default false — existing slug throws "already exists".',
+          'Only used with targetSlug. When true, replace an existing canvas at targetSlug. Default false.',
         ),
       },
-      outputSchema: checkpointRestoreOutputSchema,
+      outputSchema: versionRestoreOutputSchema,
     },
-    async ({ checkpointId, targetSlug, overwrite }) => {
+    async ({ canvasId, versionId, targetSlug, overwrite }) => {
       const result = await withDaemon((client) =>
-        checkpointRestore.execute({ checkpointId, targetSlug, overwrite }, workspaceId, client),
+        versionRestore.execute({ canvasId, versionId, targetSlug, overwrite }, client),
       )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(server,
+    versionList.name,
+    {
+      description: versionList.description,
+      inputSchema: {
+        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+      },
+      outputSchema: versionListOutputSchema,
+    },
+    async ({ canvasId }) => {
+      const result = await withDaemon((client) => versionList.execute({ canvasId }, client))
       return structuredJsonResult(result)
     },
   )
@@ -1513,6 +1694,13 @@ export async function createExcalidrawMcpServer() {
 }
 
 export async function main() {
+  // Initialise OpenTelemetry so traces span the stdio entrypoint too. The
+  // SDK is a no-op unless WHITEBOARD_OTEL=1 or OTEL_EXPORTER_OTLP_ENDPOINT
+  // is set; the fallback exporter writes JSON to stderr only, which is
+  // safe alongside the stdout JSON-RPC channel this entrypoint owns.
+  const { initTracing } = await import('../observability/tracing.js')
+  await initTracing({ role: 'stdio-mcp' })
+
   // The HTTP daemon runs prepareDataDir in src/server/index.ts; the stdio
   // entrypoint reaches createExcalidrawMcpServer first, so call the same
   // hook here to keep schema and v0 import bootstrapping symmetric.

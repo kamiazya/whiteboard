@@ -3,11 +3,13 @@ import type { DaemonClient } from '../daemon-client.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
 import {
+  applyAlign,
   applyAssignToGroup,
   applyClear,
   applyDelete,
   applyDeleteGroup,
   applyDeleteMany,
+  applyDistribute,
   applyMove,
   applyReorder,
   applyUpdate,
@@ -28,6 +30,16 @@ export const clearedCountOutputSchema = z.object({ clearedCount: z.number() })
 export const assignGroupOutputSchema = z.object({
   groupId: z.string(),
   elementIds: z.array(z.string()),
+})
+
+export const alignOutputSchema = z.object({
+  elementIds: z.array(z.string()),
+  alignment: z.enum(['left', 'center', 'right', 'top', 'middle', 'bottom']),
+})
+
+export const distributeOutputSchema = z.object({
+  elementIds: z.array(z.string()),
+  direction: z.enum(['horizontal', 'vertical']),
 })
 
 export const reorderOutputSchema = z.object({
@@ -202,6 +214,93 @@ export function moveElementsTool() {
       doc.commit()
       await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
       return { elementIds: args.elementIds }
+    },
+  }
+}
+
+// Snap multiple elements to a shared edge or centre. Bound arrows re-snap to
+// the new box centres because the underlying applyMove handles binding.
+export function alignElementsTool() {
+  return {
+    name: 'align_elements',
+    description:
+      'Align multiple elements to a shared edge or centre. left / right / center act on x; top / bottom / middle act on y. The orthogonal axis is left untouched so align_left + distribute_vertical can be chained. Needs ≥ 2 elements. All-or-nothing on missing ids.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
+        elementIds: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 2,
+        },
+        alignment: {
+          type: 'string',
+          enum: ['left', 'center', 'right', 'top', 'middle', 'bottom'],
+          description:
+            "Target axis. 'left'/'right'/'center' move x; 'top'/'bottom'/'middle' move y.",
+        },
+      },
+      required: ['canvasId', 'elementIds', 'alignment'],
+    },
+    execute: async (
+      args: {
+        canvasId: string
+        elementIds: string[]
+        alignment: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+      },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof alignOutputSchema>> => {
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
+      const prevVV = doc.version()
+      applyAlign(doc, args.elementIds, args.alignment)
+      doc.commit()
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      return { elementIds: args.elementIds, alignment: args.alignment }
+    },
+  }
+}
+
+// Even-space the inner elements between the two outer ones along the chosen
+// axis, keeping the leading and trailing element fixed in place.
+export function distributeElementsTool() {
+  return {
+    name: 'distribute_elements',
+    description:
+      'Distribute multiple elements with even spacing along an axis. Sorts by the chosen axis, keeps the leading and trailing element fixed, and shifts everything in between so the gap between adjacent elements is constant. Needs ≥ 3 elements. All-or-nothing on missing ids.',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
+        elementIds: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 3,
+        },
+        direction: {
+          type: 'string',
+          enum: ['horizontal', 'vertical'],
+          description: '"horizontal" distributes along x; "vertical" distributes along y.',
+        },
+      },
+      required: ['canvasId', 'elementIds', 'direction'],
+    },
+    execute: async (
+      args: {
+        canvasId: string
+        elementIds: string[]
+        direction: 'horizontal' | 'vertical'
+      },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof distributeOutputSchema>> => {
+      const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      const doc = await apiGetSnapshot(client, workspaceId, slug)
+      const prevVV = doc.version()
+      applyDistribute(doc, args.elementIds, args.direction)
+      doc.commit()
+      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      return { elementIds: args.elementIds, direction: args.direction }
     },
   }
 }

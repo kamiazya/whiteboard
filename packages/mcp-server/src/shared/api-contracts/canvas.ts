@@ -10,11 +10,6 @@ export const createCanvasRequestSchema = z.object({
   slug: z.string().trim().min(1),
 })
 
-export const createCheckpointRequestSchema = z.object({
-  sourceSlug: z.string().trim().min(1),
-  checkpointId: z.string().trim().min(1).optional(),
-})
-
 // `name: ''` deletes the stored name and falls back to the slug/workspaceId.
 export const setNameRequestSchema = z.object({
   name: z.string(),
@@ -39,8 +34,15 @@ export const saveVersionRequestSchema = z.object({
   operator: operatorInfoSchema.optional(),
 })
 
-export const restoreCheckpointRequestSchema = z.object({
-  targetSlug: z.string().trim().min(1),
+// POST /api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore
+// Body is optional. Two restore modes share the same endpoint:
+//   • body absent or `targetSlug` absent — in-place reconcile against the
+//     current canvas (default; what the History panel uses).
+//   • `targetSlug` set — write the past doc as a new canvas under that slug
+//     in the same workspace. Overwrites only when `overwrite: true`.
+//     Replaces what the now-removed `checkpoint_restore` flow did.
+export const restoreVersionRequestSchema = z.object({
+  targetSlug: z.string().trim().min(1).optional(),
   overwrite: z.boolean().optional(),
 })
 
@@ -77,7 +79,6 @@ export const saveVersionResponseSchema = z.object({
 // "open workspaces" grid.
 export const workspaceSummarySchema = z.object({
   workspaceId: z.string(),
-  daemonAlive: z.boolean(),
 })
 
 export const listWorkspacesResponseSchema = z.object({
@@ -94,12 +95,11 @@ export const listCanvasesResponseSchema = z.object({
 })
 
 export type CreateCanvasRequest = z.infer<typeof createCanvasRequestSchema>
-export type CreateCheckpointRequest = z.infer<typeof createCheckpointRequestSchema>
 export type SetNameRequest = z.infer<typeof setNameRequestSchema>
 export type SetPinnedRequest = z.infer<typeof setPinnedRequestSchema>
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>
 export type SaveVersionRequest = z.infer<typeof saveVersionRequestSchema>
-export type RestoreCheckpointRequest = z.infer<typeof restoreCheckpointRequestSchema>
+export type RestoreVersionRequest = z.infer<typeof restoreVersionRequestSchema>
 export type ExportCanvasJsonRequest = z.infer<typeof exportCanvasJsonRequestSchema>
 export type VersionEntry = z.infer<typeof versionEntrySchema>
 export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>

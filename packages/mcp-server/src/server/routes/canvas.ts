@@ -10,27 +10,31 @@ import {
   type ListWorkspacesResponse,
   type SaveVersionResponse,
   createCanvasRequestSchema,
-  createCheckpointRequestSchema,
   exportCanvasJsonRequestSchema,
-  restoreCheckpointRequestSchema,
+  restoreVersionRequestSchema,
   saveVersionRequestSchema,
   setNameRequestSchema,
   setPinnedRequestSchema,
 } from '../../shared/api-contracts/canvas.js'
 import { reconcileElementsOnDoc } from '../../shared/reconcile-elements.js'
+import { getLogger } from '../log.js'
 import { getDoc, evictDoc } from '../store/doc-cache.js'
-import { listWorkspaces, listCanvases, saveCanvas, compactCanvas, ConflictError, canvasExists } from '../store/canvas-store.js'
+import {
+  canvasExists,
+  ConflictError,
+  compactCanvas,
+  listCanvases,
+  listWorkspaces,
+  saveCanvas,
+  scheduleAutoCompact,
+  setAutoCompactTrigger,
+} from '../store/canvas-store.js'
 import {
   FileVersionStore,
   type VersionStore,
   type VersionEntry,
   type OperatorInfo,
 } from '../store/version-store.js'
-import {
-  FileCheckpointStore,
-  type CheckpointStore,
-  validateCheckpointId,
-} from '../store/checkpoint-store.js'
 import {
   loadWorkspaceNames,
   setWorkspaceName,
@@ -108,7 +112,7 @@ export function createAutoVersionTrigger(
       lastAt.set(key, now)
       return entry
     } catch (err) {
-      console.error('[auto-version] save failed:', err)
+      getLogger('auto-version').error({ err: err as Error }, 'save failed')
       return null
     }
   }
@@ -117,7 +121,6 @@ export function createAutoVersionTrigger(
 export interface CanvasRouterOptions {
   // Allow tests to replace the store. Production uses FileVersionStore.
   versionStore?: VersionStore
-  checkpointStore?: CheckpointStore
   // Auto-version interval in milliseconds. Tests can reduce it.
   autoVersionIntervalMs?: number
   // Resolve the HEAD branch name for manual and auto version saves.
@@ -135,7 +138,6 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     return null
   }
   const versionStore = options.versionStore ?? new FileVersionStore()
-  const checkpointStore = options.checkpointStore ?? new FileCheckpointStore()
   const autoInterval = options.autoVersionIntervalMs ?? AUTO_VERSION_INTERVAL_MS
   const triggerAutoVersion = createAutoVersionTrigger(
     versionStore,
@@ -148,15 +150,22 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     setAutoVersionTrigger?.(triggerAutoVersion)
   })
 
+  // Auto-compact debounce: every successful saveCanvas reschedules a per-
+  // canvas compaction. The 30s default lets active editing sessions burst
+  // without thrashing the op-log; once the user pauses, the shallow-snapshot
+  // runs in the background. Tests can override the trigger via
+  // setAutoCompactTrigger(null) before assertions if they want to isolate
+  // the save path from the compact path.
+  setAutoCompactTrigger((workspaceId, slug) => {
+    scheduleAutoCompact(workspaceId, slug, versionStore)
+  })
+
   // GET /api/workspaces
   app.get('/api/workspaces', async (c) => {
     try {
       const workspaces = await listWorkspaces()
       const response: ListWorkspacesResponse = {
-        workspaces: workspaces.map(({ workspaceId, daemonAlive }) => ({
-          workspaceId,
-          daemonAlive,
-        })),
+        workspaces: workspaces.map(({ workspaceId }) => ({ workspaceId })),
       }
       return c.json(response)
     } catch (err) {
@@ -228,57 +237,6 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  app.post('/api/workspaces/:workspaceId/checkpoints', async (c) => {
-    const { workspaceId } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    const raw = await c.req.json().catch(() => null)
-    if (raw === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
-    }
-    const parsed = createCheckpointRequestSchema.safeParse(raw)
-    if (!parsed.success) {
-      return c.json({ error: 'invalid_body', message: 'sourceSlug is required' }, 400)
-    }
-    const sourceSlug = parsed.data.sourceSlug
-    const checkpointId = parsed.data.checkpointId ?? nanoid(18)
-    try {
-      validateSlug(sourceSlug)
-      validateCheckpointId(checkpointId)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-
-    try {
-      if (!(await canvasExists(workspaceId, sourceSlug))) {
-        return c.json(
-          {
-            error: 'not_found',
-            message: `Canvas "${workspaceId}/${sourceSlug}" not found.`,
-          },
-          404,
-        )
-      }
-      const doc = await getDoc(workspaceId, sourceSlug)
-      await checkpointStore.save(checkpointId, doc)
-      return c.json({
-        checkpointId,
-        elementCount: countElements(doc),
-      })
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      const message = err instanceof Error ? err.message : 'checkpoint save failed'
-      return c.json({ error: 'checkpoint_save_failed', message }, 500)
-    }
-  })
 
   // User-facing workspace / canvas names.
   // When unnamed, the UI falls back to session id / slug, so the API only returns stored values.
@@ -425,7 +383,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
         sendVersionCreated(workspaceId, slug, entry)
       })
       .catch((err: unknown) => {
-        console.error('[canvas] auto-version trigger failed:', err)
+        getLogger('canvas').error({ err: err as Error }, 'auto-version trigger failed')
       })
 
     return c.json({ ok: true })
@@ -549,58 +507,75 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
   })
 
-  app.post('/api/workspaces/:workspaceId/checkpoints/:checkpointId/restore', async (c) => {
-    const { workspaceId, checkpointId } = c.req.param()
+  // POST /api/workspaces/:workspaceId/versions/prune-sandwiched
+  // Drop auto-saved versions strictly between two manual versions, per
+  // canvas, per branch. Manuals are explicit user save-points; sandwiched
+  // autos add no rollback value once both bracket points exist. Loops over
+  // every canvas in the workspace and aggregates totals.
+  app.post('/api/workspaces/:workspaceId/versions/prune-sandwiched', async (c) => {
+    const { workspaceId } = c.req.param()
     try {
       validateWorkspaceId(workspaceId)
-      validateCheckpointId(checkpointId)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
-    const raw = await c.req.json().catch(() => null)
-    if (raw === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
-    }
-    const parsed = restoreCheckpointRequestSchema.safeParse(raw)
-    if (!parsed.success) {
-      return c.json({ error: 'invalid_body', message: 'targetSlug is required' }, 400)
-    }
-    const targetSlug = parsed.data.targetSlug
-    const overwrite = parsed.data.overwrite === true
     try {
-      validateSlug(targetSlug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-
-    try {
-      const doc = await checkpointStore.load(checkpointId)
-      if (!doc) {
-        return c.json(
-          {
-            error: 'not_found',
-            message: `Checkpoint "${checkpointId}" not found — it may have been pruned (>100) or never created.`,
-          },
-          404,
-        )
+      const canvases = await listCanvases(workspaceId)
+      const results: Array<{ slug: string; deletedCount: number }> = []
+      let totalDeleted = 0
+      for (const { slug } of canvases) {
+        const r = await versionStore.pruneSandwichedAutoVersions(workspaceId, slug)
+        results.push({ slug, deletedCount: r.deletedCount })
+        totalDeleted += r.deletedCount
       }
-      await saveCanvas(workspaceId, targetSlug, doc, { overwrite })
-      evictDoc(workspaceId, targetSlug)
-      return c.json({
-        canvasId: `${workspaceId}/${targetSlug}`,
-        elementCount: countElements(doc),
-      })
+      return c.json({ results, totalDeleted })
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+  })
+
+  // POST /api/workspaces/:workspaceId/canvases/optimize-all
+  // Bulk per-canvas compact for the whole workspace. Loops sequentially to
+  // keep the doc-cache coherent (each compact evicts its own slot) and
+  // because the underlying Loro IO is fast enough that parallelism only
+  // adds race risk. Returns a per-canvas array plus aggregated totals so
+  // the UI can show a meaningful summary in one round-trip.
+  app.post('/api/workspaces/:workspaceId/canvases/optimize-all', async (c) => {
+    const { workspaceId } = c.req.param()
+    try {
+      validateWorkspaceId(workspaceId)
+    } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
-      const message = err instanceof Error ? err.message : 'restore failed'
-      return c.json({ error: 'restore_failed', message }, 500)
+      throw err
+    }
+    try {
+      const canvases = await listCanvases(workspaceId)
+      const results: Array<{
+        slug: string
+        compacted: boolean
+        beforeBytes: number
+        afterBytes: number
+        reason?: string
+      }> = []
+      let totalBeforeBytes = 0
+      let totalAfterBytes = 0
+      for (const { slug } of canvases) {
+        const result = await compactCanvas(workspaceId, slug, versionStore)
+        if (result.compacted) evictDoc(workspaceId, slug)
+        results.push({ slug, ...result })
+        totalBeforeBytes += result.beforeBytes
+        totalAfterBytes += result.afterBytes
+      }
+      return c.json({ results, totalBeforeBytes, totalAfterBytes })
+    } catch (err) {
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
     }
   })
 
@@ -752,11 +727,20 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
   })
 
   // POST /api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore
-  // Loro-native restore reconciles current elements against the checked-out past state.
-  // CRDTs cannot forget history, so restore commits new ops that represent the past state:
-  //   only in past    -> insert into current, or un-tombstone and restore fields
-  //   only in current -> set isDeleted=true (tombstone)
-  //   in both         -> copy differing fields from past onto current
+  //
+  // Two modes share this endpoint:
+  //
+  //   1. In-place reconcile (default; History panel uses this).
+  //      CRDTs cannot forget history, so restore commits new ops that
+  //      represent the past state:
+  //        only in past    -> insert into current, or un-tombstone + restore fields
+  //        only in current -> set isDeleted=true (tombstone)
+  //        in both         -> copy differing fields from past onto current
+  //
+  //   2. Restore-as-new-canvas — body `{ targetSlug, overwrite? }`.
+  //      Writes the past doc as a brand-new canvas under `targetSlug` in the
+  //      same workspace. The original canvas / live doc / WS clients are not
+  //      touched. Replaces the deleted `checkpoint_restore` flow.
   app.post(
     '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore',
     async (c) => {
@@ -770,12 +754,62 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (body) return c.json(body, 400)
       throw err
     }
+    // Body is optional. Empty body / non-JSON ⇒ in-place mode.
+    const rawText = await c.req.text()
+    let targetSlug: string | undefined
+    let overwrite = false
+    if (rawText.length > 0) {
+      let parsedJson: unknown
+      try {
+        parsedJson = JSON.parse(rawText)
+      } catch {
+        return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
+      }
+      const parsed = restoreVersionRequestSchema.safeParse(parsedJson)
+      if (!parsed.success) {
+        return c.json({ error: 'invalid_body', message: 'invalid restore options' }, 400)
+      }
+      targetSlug = parsed.data.targetSlug
+      overwrite = parsed.data.overwrite === true
+    }
     try {
       const doc = await getDoc(workspaceId, slug)
       const past = await versionStore.load(workspaceId, id, doc)
       if (!past) {
         return c.json({ error: 'not_found' }, 404)
       }
+
+      // Restore-as-new-canvas branch.
+      if (targetSlug !== undefined) {
+        try {
+          validateSlug(targetSlug)
+        } catch (err) {
+          const body = validationErrorBody(err)
+          if (body) return c.json(body, 400)
+          throw err
+        }
+        try {
+          await saveCanvas(workspaceId, targetSlug, past, { overwrite })
+        } catch (err) {
+          if (err instanceof ConflictError) {
+            return c.json(
+              {
+                error: 'output_exists',
+                message: `Target canvas "${targetSlug}" already exists. Pass overwrite=true to replace it.`,
+              },
+              409,
+            )
+          }
+          throw err
+        }
+        evictDoc(workspaceId, targetSlug)
+        return c.json({
+          canvasId: `${workspaceId}/${targetSlug}`,
+          elementCount: countElements(past),
+        })
+      }
+
+      // In-place reconcile branch (default).
       let label: string | undefined
       const all = await versionStore.list(workspaceId, slug)
       label = all.find((v) => v.id === id)?.label

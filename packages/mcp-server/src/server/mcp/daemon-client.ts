@@ -1,3 +1,5 @@
+import { injectContextIntoHeaders } from '../observability/tracing.js'
+
 export interface DaemonClient {
   port: number
   baseUrl: string
@@ -12,6 +14,14 @@ function buildUrl(baseUrl: string, path: string): string {
 function withBearerToken(init: RequestInit | undefined, token: string): RequestInit {
   const headers = new Headers(init?.headers)
   headers.set('Authorization', `Bearer ${token}`)
+  // Forward the active OpenTelemetry context as W3C `traceparent` so the
+  // daemon's HTTP middleware can stitch the inbound request span onto the
+  // current MCP tool span. No-op when tracing is disabled (the OTel API
+  // returns a no-op context with an invalid trace ID, which propagation
+  // skips).
+  const carrier: Record<string, string> = {}
+  injectContextIntoHeaders(carrier)
+  for (const [k, v] of Object.entries(carrier)) headers.set(k, v)
   return {
     ...init,
     headers,

@@ -17,15 +17,20 @@ vi.mock('../config.js', () => ({
 
 // Use dynamic import so the module loads after the mocks resolve.
 const { getDoc, applyAndPersist, clearCache } = await import('./doc-cache.js')
+const { createIsolatedDb } = await import('./db/test-helpers.js')
+
+let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
 describe('getDoc', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-cache-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    handle = await createIsolatedDb({ dataDir: tempDir })
     clearCache()
   })
 
   afterEach(async () => {
+    await handle.dispose()
     await rm(tempDir, { recursive: true, force: true })
     clearCache()
   })
@@ -52,10 +57,12 @@ describe('applyAndPersist', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-cache-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
+    handle = await createIsolatedDb({ dataDir: tempDir })
     clearCache()
   })
 
   afterEach(async () => {
+    await handle.dispose()
     await rm(tempDir, { recursive: true, force: true })
     clearCache()
   })

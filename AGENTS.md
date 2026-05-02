@@ -89,10 +89,30 @@ pnpm mcp:debug:http
 - If request flow is unclear, restart with `MCP_HTTP_DEBUG=1 pnpm mcp:http:dev` and inspect the `[mcp-http:init]` / `[mcp-http]` logs.
 - Keep the detailed checklist in `docs/mcp-debugging.md` in sync with actual repo workflow.
 
-Recommended local client config during development:
+The repo ships HTTP-mode overrides for both clients:
 
-- Codex: point `mcp_servers.whiteboard.url` to `http://127.0.0.1:3099/mcp`
-- Claude Code: `claude mcp add --transport http whiteboard http://127.0.0.1:3099/mcp --scope local`
+- `.claude/settings.json` → `http://127.0.0.1:3099/mcp`
+- `.codex/config.toml` → `http://127.0.0.1:3099/mcp`
+
+Both Claude Code (`.claude/settings.json`) and Codex
+(`.codex/config.toml`) wire a `SessionStart` hook to
+`packages/mcp-server/scripts/ensure-http-dev-daemon.mjs`. The hook
+probes port 3099 and, if nothing is listening, spawns `pnpm mcp:http:dev`
+detached so the first MCP request can connect immediately. It is
+idempotent — if our authenticated daemon is already up it exits
+without touching anything; if a foreign service is on the port it
+fails loudly so the developer can investigate. Output goes to
+`tmp/logs/mcp-http-dev.log`. If hooks are disabled or the project is
+not trusted yet, run `pnpm mcp:http:dev` manually in another terminal
+before opening the repo.
+
+With HTTP transport every client reload connects to the same long-lived
+daemon, picking up source changes immediately and avoiding the stale-daemon
+reuse that the old stdio + daemon-registry path was prone to.
+
+stdio is reserved for packaged-distribution checks (validating
+`@kamiazya/whiteboard-mcp` as it ships on npm). Day-to-day MCP development
+inside this repo always goes through HTTP.
 
 When changing MCP transport, routing, or tool registration:
 
@@ -119,7 +139,7 @@ Concrete rules when adding or editing an MCP tool:
 
 - Declare each tool's `outputSchema` (and `inputSchema`) once. Tools are registered through `registerToolWithAnnotations`, which is generic over `O extends z.ZodTypeAny | undefined` and constrains the handler's return to `Promise<ToolHandlerReturn<O>>`. Never widen `outputSchema` to `unknown` or cast around the type binding to silence the compiler.
 - Annotate the matching `tools/*.ts` `execute` return type as `Promise<z.infer<typeof xxxOutputSchema>>` (or import the inferred type from the schema). A separately-written TypeScript interface alongside a Zod schema is the recipe that shipped the `create_frame` `assignedMembers: number` vs `string[]` bug — use `z.infer<>` instead.
-- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/mcp-e2e-checkpoint.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
+- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/mcp-e2e-smoke.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
 - When you fix a schema-vs-runtime drift, also commit the test or smoke step that would have caught it. Mutation-check the regression: revert the production fix, confirm `pnpm build` (compile-time guard) **or** `pnpm smoke:e2e` (runtime guard) fails, then restore.
 
 The same discipline applies elsewhere where a schema and a runtime payload travel separately:
@@ -141,6 +161,74 @@ Store temporary working artifacts under top-level `./tmp/`, grouped by type inst
 When adding a new temporary artifact, put it in the right bucket immediately.
 When an issue is resolved, delete its file from `tmp/issues/`.
 When a temporary screenshot, script, or note is no longer useful, delete it instead of leaving stale debris behind.
+
+## Logging
+
+Server-side code never calls `console.*` directly. Use the project logger:
+
+```ts
+import { getLogger } from './log.js'   // path varies by file depth
+
+const log = getLogger('canvas-store')
+log.warning('skipped corrupt row', { workspaceId, slug, err })
+```
+
+Why this exists:
+
+- Levels follow the RFC 5424 names (`debug` / `info` / `notice` / `warning` /
+  `error` / `critical` / `alert` / `emergency`) so the server can forward records
+  unchanged through MCP `notifications/message` (see
+  `src/server/mcp/logging.ts`).
+- The default sink writes one JSON line per record to `stderr`. Stdio MCP
+  parses JSON-RPC frames on stdout, so anything noisier on stdout would corrupt
+  the stream — the linter (`noConsole` Biome rule scoped to
+  `packages/mcp-server/src/server/**`) blocks new `console.*` from leaking in.
+- `WHITEBOARD_LOG_LEVEL` (default `warning`) gates emission. `MCP_HTTP_DEBUG=1`
+  lowers it to `info` automatically so HTTP-tracing logs survive without
+  toggling two env vars.
+- Clients can call MCP `logging/setLevel` to adjust their per-session view; the
+  SDK handles the request once the `logging: {}` capability is registered.
+
+Tests use `resetLoggerForTests({ level, sink })` to install a fake sink and
+assert against structured records instead of spying on `console`.
+
+## Doc Screenshots
+
+Images under `docs/assets/` that are produced from the running UI (canvas
+list, storage tab, etc.) are regenerated by Vitest browser-mode tests
+that render real components against deterministic mocked data and write
+PNGs straight to their final paths.
+
+```bash
+pnpm --filter @kamiazya/whiteboard-mcp docs:snapshots
+```
+
+Each `*.docs-snapshot.test.tsx` under
+`packages/mcp-server/src/app/docs-snapshots/` mounts a component, waits
+for the post-fetch render to settle, then calls `page.screenshot({ path:
+… })`. To add a new doc image:
+
+1. Drop a new `<name>.docs-snapshot.test.tsx` file under that directory.
+2. Pin the system clock with `vi.setSystemTime(...)` so any "Xd ago"
+   labels stay stable across regenerations.
+3. Save to the canonical asset path with
+   `resolveDocAssetPath('foo.png')` from `_helpers.ts`.
+4. Run `pnpm docs:snapshots` and commit the resulting PNG alongside the
+   markdown change that references it.
+
+The project is excluded from the regular `pnpm test` run because it
+writes into the repo. Cross-platform font rendering means snapshots
+generated on Linux CI will not be byte-identical to macOS / Windows
+captures, so for now treat this as a developer-driven workflow:
+regenerate locally, commit.
+
+`pnpm docs:snapshots:check` invokes the generator twice before running
+`git diff --exit-code` because Vite's first run after a config change
+can re-optimise dependencies and produce a one-off pixel drift; the
+second run is the stable artifact. If a regeneration leaves
+unexpected diffs in `docs/assets/`, it almost always means a real UI
+change rather than residual jitter — re-run twice and inspect the
+remaining diff.
 
 ## Completion Checklist
 
