@@ -92,6 +92,17 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   cleanup()
+  // The "reuses the freshly-minted workspace id" case writes
+  // whiteboard.indexPage.primaryWorkspaceId; clear it here so later
+  // browser tests in the same suite do not silently rehydrate from a
+  // previous case's stash.
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.removeItem('whiteboard.indexPage.primaryWorkspaceId')
+    } catch {
+      // Defensive — some envs may disallow storage access.
+    }
+  }
 })
 
 describe('IndexPage browser mode', () => {
@@ -345,6 +356,120 @@ describe('IndexPage browser mode', () => {
       const loc = container.querySelector('[data-testid="loc"]')?.textContent ?? ''
       expect(loc).toMatch(/^\/canvas\/ws_1\/fresh-idea$/)
     })
+  })
+
+  it('reuses the freshly-minted workspace id across sequential creates when no workspaces exist yet', async () => {
+    // Cold-start flow: GET /api/workspaces returns []. The first New
+    // canvas mints a workspace id; the second click MUST land in the same
+    // workspace, otherwise every successive canvas spawns its own
+    // throwaway workspace and the user can never group them together
+    // until a page reload.
+    const postedWorkspaceIds: string[] = []
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (init?.method === 'POST' && url.startsWith('/api/workspaces/') && url.endsWith('/canvases')) {
+        const wid = url.split('/')[3]
+        postedWorkspaceIds.push(wid)
+        return Promise.resolve(jsonResponse({ slug: 'first' }))
+      }
+      if (url === '/api/workspaces') {
+        // No pre-existing workspaces — the dialog has to mint one.
+        return Promise.resolve(jsonResponse({ workspaces: [] }))
+      }
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(
+          jsonResponse({
+            totalBytes: 0,
+            fileCount: 0,
+            byCategory: {
+              blobs: { bytes: 0, files: 0 },
+              versions: { bytes: 0, files: 0 },
+              files: { bytes: 0, files: 0 },
+              libraries: { bytes: 0, files: 0 },
+              db: { bytes: 0, files: 0 },
+              other: { bytes: 0, files: 0 },
+            },
+          }),
+        )
+      }
+      if (url.endsWith('/canvases')) return Promise.resolve(jsonResponse({ canvases: [] }))
+      if (url.endsWith('/names')) return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    // Clean slate so the test does not pick up another test's stash.
+    if (typeof window !== 'undefined') window.localStorage.clear()
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<IndexPage />} />
+          {/* Stub destination so the post-create navigate has somewhere to go. */}
+          <Route path="/canvas/:wid/*" element={<div data-testid="canvas-page" />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await expect.element(page.getByRole('heading', { name: /Whiteboard/i })).toBeInTheDocument()
+
+    // First create: empty workspaces list, dialog mints a fresh id.
+    const trigger = await page.getByRole('button', { name: /new canvas/i }).element()
+    ;(trigger as HTMLButtonElement).click()
+    const inputEl = (await waitFor(() => {
+      const el = document.getElementById('new-canvas-slug') as HTMLInputElement | null
+      if (!el) throw new Error('slug input not yet mounted')
+      return el
+    })) as HTMLInputElement
+    fireEvent.change(inputEl, { target: { value: 'first' } })
+    const submit = await page.getByRole('button', { name: /^create$/i }).element()
+    fireEvent.submit(submit.closest('form')!)
+
+    await waitFor(() => {
+      expect(postedWorkspaceIds).toHaveLength(1)
+    })
+    const firstWs = postedWorkspaceIds[0]
+    expect(firstWs).toMatch(/^[A-Za-z0-9_-]+$/)
+    expect(firstWs.length).toBeGreaterThan(0)
+
+    // The whole point of the regression: the minted id must be persisted
+    // somewhere durable (localStorage) so the next IndexPage mount
+    // reuses it. Without this, every cold-start create spawns a fresh
+    // workspace and orphans the previous canvas.
+    expect(window.localStorage.getItem('whiteboard.indexPage.primaryWorkspaceId')).toBe(firstWs)
+
+    // And the bug-mirror: a fresh IndexPage mount (the user navigates back
+    // to `/` after seeing their new canvas) reads the id from
+    // localStorage and uses it as `workspaceId`. Verify by remounting
+    // and asserting the next POST goes to the same workspace id.
+    cleanup()
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Routes>
+          <Route path="/" element={<IndexPage />} />
+          <Route path="/canvas/:wid/*" element={<div data-testid="canvas-page" />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await expect.element(page.getByRole('heading', { name: /Whiteboard/i })).toBeInTheDocument()
+    const trigger2 = await page.getByRole('button', { name: /new canvas/i }).element()
+    ;(trigger2 as HTMLButtonElement).click()
+    const inputEl2 = (await waitFor(() => {
+      const el = document.getElementById('new-canvas-slug') as HTMLInputElement | null
+      if (!el) throw new Error('slug input not yet mounted (second mount)')
+      return el
+    })) as HTMLInputElement
+    fireEvent.change(inputEl2, { target: { value: 'second' } })
+    const submit2 = await page.getByRole('button', { name: /^create$/i }).element()
+    fireEvent.submit(submit2.closest('form')!)
+
+    await waitFor(() => {
+      expect(postedWorkspaceIds).toHaveLength(2)
+    })
+    expect(postedWorkspaceIds[1]).toBe(firstWs)
   })
 
   it('exposes Optimize on each canvas card kebab and POSTs to the compact endpoint', async () => {

@@ -15,6 +15,7 @@ import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import type { VersionStore } from './version-store.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Give the error a stable name so callers, including MCP tools, can detect overwrite conflicts.
 export class ConflictError extends Error {
@@ -65,6 +66,13 @@ export async function saveCanvas(
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
+  // Hold the workspace write barrier across the snapshot write + DB
+  // upsert so a concurrent purgeDanglingFiles cannot observe a referenced
+  // file as dangling: GC's collectReferencedFileIds() runs over the same
+  // workspace blobs we are about to mutate, and chaining both behind the
+  // workspace lock ensures it sees this save as either fully applied or
+  // not yet started.
+  return withWorkspaceWriteLock(workspaceId, async () => {
   const overwrite = options.overwrite ?? false
   const db = await dbReady()
   const existingCanvasId = await getCanvasIdBySlug(db, workspaceId, slug)
@@ -132,6 +140,7 @@ export async function saveCanvas(
       getLogger('canvas-store').warning({ workspaceId, slug, err }, 'autoCompactTrigger threw')
     }
   }
+  })
 }
 
 // ── load LoroDoc, returning an empty document when the blob is missing ──

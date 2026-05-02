@@ -163,7 +163,6 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
       const result = await exportCanvasHeadless({
         workspaceId,
         slug,
-        dataDir: DATA_DIR,
         options: {
           padding: body.padding,
           scale: body.scale,
