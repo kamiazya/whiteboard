@@ -103,7 +103,6 @@ describe('exportCanvasHeadless minFontPx', () => {
     await exportCanvasHeadless({
       workspaceId: 'ws_a',
       slug: 'design',
-      dataDir: tempDir,
       options: { minFontPx: 14 },
     })
 
@@ -136,7 +135,6 @@ describe('exportCanvasHeadless minFontPx', () => {
     const result = await exportCanvasHeadless({
       workspaceId: 'ws_c',
       slug: 'design',
-      dataDir: tempDir,
     })
 
     const text = findTextChunk(result.png)
@@ -167,7 +165,6 @@ describe('exportCanvasHeadless minFontPx', () => {
     await exportCanvasHeadless({
       workspaceId: 'ws_b',
       slug: 'design',
-      dataDir: tempDir,
     })
 
     const scene = renderSpy.mock.calls[0][0] as {

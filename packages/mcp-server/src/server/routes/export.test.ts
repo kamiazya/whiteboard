@@ -44,7 +44,6 @@ vi.mock('./ws.js', () => ({
 type MockHeadlessArgs = {
   workspaceId: string
   slug: string
-  dataDir: string
   options?: {
     padding?: number
     scale?: number

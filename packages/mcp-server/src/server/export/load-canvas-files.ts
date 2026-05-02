@@ -7,6 +7,7 @@
 
 import { readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import { DATA_DIR } from '../config.js'
 import { isMissingFileError } from '../store/corrupt-stored-data.js'
 
 const EXT_TO_MIME: Record<string, string> = {
@@ -26,10 +27,9 @@ export interface CanvasFile {
 }
 
 export async function loadCanvasFiles(
-  dataDir: string,
   workspaceId: string,
 ): Promise<Record<string, CanvasFile>> {
-  const dir = join(dataDir, workspaceId, 'files')
+  const dir = join(DATA_DIR, workspaceId, 'files')
   let entries: string[]
   try {
     entries = await readdir(dir)
