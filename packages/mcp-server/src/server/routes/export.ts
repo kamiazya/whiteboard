@@ -122,7 +122,24 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
         ? renderHeadless(workspaceId, slug, body)
         : renderViaBrowser(workspaceId, slug, options, hasOptions, timeoutMs))
     } catch (err) {
-      return c.json(toErrorBody(err, timeoutMs), errorStatus(err))
+      // Browser path failure where the WS clients have all disconnected
+      // since the count check is recoverable: the headless path can
+      // still produce a PNG. Re-sample the count and only fall back if
+      // the canvas exists, so a typo still surfaces as canvas_not_found
+      // instead of silently rendering blank bytes.
+      if (
+        !useHeadless &&
+        getClientCount(workspaceId, slug) === 0 &&
+        (await canvasExists(workspaceId, slug))
+      ) {
+        try {
+          pngBuffer = await renderHeadless(workspaceId, slug, body)
+        } catch (headlessErr) {
+          return c.json(toErrorBody(headlessErr, timeoutMs), errorStatus(headlessErr))
+        }
+      } else {
+        return c.json(toErrorBody(err, timeoutMs), errorStatus(err))
+      }
     }
 
     const filePath = outputPath ?? defaultExportPath(workspaceId, slug)

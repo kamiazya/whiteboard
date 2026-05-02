@@ -58,9 +58,15 @@ const httpLog = getLogger('mcp-http')
 // MCP_HTTP_DEBUG=1 historically meant "show http traces unconditionally". Keep
 // that contract: bump the logger threshold down to info so the structured
 // records below land on stderr / `notifications/message` even when the
-// operator has not set WHITEBOARD_LOG_LEVEL=info.
-if (shouldLogMcpHttpDebug() && getLogLevel() === 'warning') {
-  setLogLevel('info')
+// operator has not set WHITEBOARD_LOG_LEVEL=info. The previous gate only
+// fired when the level was *exactly* `warning`; any stricter level
+// (`notice`, `error`, `critical`, …) silently dropped every httpLog.info
+// record below, defeating the whole point of the env switch.
+if (shouldLogMcpHttpDebug()) {
+  const currentLogLevel = getLogLevel()
+  if (currentLogLevel !== 'debug' && currentLogLevel !== 'info') {
+    setLogLevel('info')
+  }
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {

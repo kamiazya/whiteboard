@@ -228,6 +228,13 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
       earliestFrontiers: vi.fn().mockResolvedValue(null),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
+      // The bulk-optimize route doesn't exercise prune by default, but the
+      // VersionStore contract requires it. Returning a no-op result keeps
+      // the mock fully type-compatible so a future route change that does
+      // call this method here cannot trip on a missing key.
+      pruneSandwichedAutoVersions: vi
+        .fn()
+        .mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
 

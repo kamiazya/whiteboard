@@ -37,6 +37,10 @@ interface StoreFixture {
 
 const test = baseTest.extend<{ store: StoreFixture }>({
   store: [
+    // vitest's test.extend requires object destructuring on the first
+    // parameter at runtime; renaming to a plain identifier throws
+    // FixtureParseError.
+    // biome-ignore lint/correctness/noEmptyPattern: vitest fixture API requires object destructuring
     async ({}, use) => {
       const dir = await mkdtemp(join(tmpdir(), 'user-lib-meta-test-'))
       tempDirRef = dir

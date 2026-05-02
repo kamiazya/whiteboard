@@ -355,8 +355,11 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     ): Promise<{ id: string }> {
       const doc = new LoroDoc()
       appendElement(doc, `${kind}-${tMs}`)
-      const realNow = Date.now
-      vi.spyOn(Date, 'now').mockImplementation(() => tMs)
+      // Capture the spy handle so we can mockRestore() in finally — the
+      // previous "re-spy with realNow" trick installed a new spy on top of
+      // an already-spied Date.now from a sibling call, leaking the wrapper
+      // into later assertions instead of restoring the original.
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => tMs)
       try {
         const entry = await store.save('sess-1', slug, doc, {
           auto: kind === 'auto',
@@ -364,7 +367,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         })
         return { id: entry.id }
       } finally {
-        vi.spyOn(Date, 'now').mockImplementation(realNow)
+        nowSpy.mockRestore()
       }
     }
 
