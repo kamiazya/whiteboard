@@ -49,6 +49,21 @@ function forEachClient(
   for (const ws of clients) fn(ws)
 }
 
+// Iterate only sockets that have signalled `client_ready`. Used for
+// viewport_request: a pre-ready tab cannot apply the viewport yet, and
+// the request is already replayed when the client emits `client_ready`,
+// so broadcasting to non-ready sockets would just deliver the message
+// twice.
+function forEachReadyClient(
+  workspaceId: string,
+  slug: string,
+  fn: (ws: WebSocket) => void,
+): void {
+  const ready = readyConnections.get(`${workspaceId}/${slug}`)
+  if (!ready) return
+  for (const ws of ready) fn(ws)
+}
+
 function broadcastTextMessage(
   workspaceId: string,
   slug: string,
@@ -165,7 +180,12 @@ export function sendViewportRequest(
   // needs to happen at viewport_set time.
   const raw = JSON.stringify(message)
   lastViewportRequestByCanvas.set(`${workspaceId}/${slug}`, raw)
-  forEachClient(workspaceId, slug, (ws) => ws.send(raw))
+  // Send only to ready sockets. Pre-ready tabs cannot apply the viewport
+  // yet AND will already get the cached request replayed when they
+  // signal `client_ready`, so broadcasting to all sockets here would
+  // deliver the message twice and re-trigger the pre-ready race the
+  // cache was meant to fix.
+  forEachReadyClient(workspaceId, slug, (ws) => ws.send(raw))
 }
 
 // Return the number of WS clients connected to a canvas. Used for export.ts preflight checks.

@@ -4,6 +4,21 @@ import { snapArrowEndpoints, type Rect } from './snap-arrow.js'
 // Scan the Excalidraw element list (doc.getMovableList('elements')) and return the
 // LoroMap for the requested id, or undefined when it is missing. Like annotate.ts,
 // these helpers mutate the doc directly as pure Loro operations.
+// Drop duplicates from an id list while preserving first-occurrence
+// order. Layout helpers (align / distribute) rely on this — without
+// dedup an id listed twice participates in geometry math twice and gets
+// translated twice, overshooting the target.
+function uniqueInOrder(ids: string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const id of ids) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+  }
+  return out
+}
+
 function findElementMap(doc: LoroDoc, elementId: string): LoroMap | undefined {
   const list = doc.getMovableList('elements')
   for (let i = 0; i < list.length; i++) {
@@ -297,6 +312,11 @@ export function applyAlign(
   elementIds: string[],
   alignment: AlignAxis,
 ): void {
+  // Drop duplicate ids before any geometry is computed; otherwise an id
+  // listed twice would participate in min/max/centroid math twice and
+  // applyMove() would shift it twice. Preserve first-occurrence order so
+  // callers can still rely on positional semantics for tied bounds.
+  elementIds = uniqueInOrder(elementIds)
   if (elementIds.length < 2) {
     throw new Error('align needs at least 2 elements')
   }
@@ -360,6 +380,8 @@ export function applyDistribute(
   elementIds: string[],
   direction: DistributeAxis,
 ): void {
+  // See applyAlign() for why duplicates are dropped up front.
+  elementIds = uniqueInOrder(elementIds)
   if (elementIds.length < 3) {
     throw new Error('distribute needs at least 3 elements')
   }

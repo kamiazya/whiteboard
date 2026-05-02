@@ -57,11 +57,24 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
 
 // Walk every canvas in the workspace (live state, plus past versions when
 // a versionStore is supplied) and collect referenced fileIds.
+export class IncompleteFileGcScanError extends Error {
+  constructor(
+    public readonly workspaceId: string,
+    public readonly skipped: ReadonlyArray<{ slug: string; versionId: string; cause: unknown }>,
+  ) {
+    super(
+      `file-gc: refusing to purge ${workspaceId} because ${skipped.length} version(s) could not be inspected`,
+    )
+    this.name = 'IncompleteFileGcScanError'
+  }
+}
+
 async function collectReferencedFileIds(
   workspaceId: string,
   versionStore?: VersionStore,
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
+  const skipped: Array<{ slug: string; versionId: string; cause: unknown }> = []
   const canvases = await listCanvases(workspaceId)
   for (const { slug } of canvases) {
     const live = await loadCanvas(workspaceId, slug)
@@ -70,10 +83,10 @@ async function collectReferencedFileIds(
     const versions = await versionStore.list(workspaceId, slug)
     for (const v of versions) {
       // load() forks the live doc internally and checks out the version's
-      // frontiers, so each call returns an independent past-state doc.
-      // Failures (missing frontier rows, corrupt data) are skipped — the
-      // worst case is a re-introduced dangling file, never a deleted live
-      // one.
+      // frontiers. If a version cannot be inspected (missing frontier
+      // rows, corrupt data) we record it as skipped — the file referenced
+      // only by that version would otherwise look dangling and be deleted
+      // permanently. Fail-closed at the caller below.
       try {
         const past = await versionStore.load(workspaceId, v.id, live)
         if (past) collectFromDoc(past, referenced)
@@ -82,8 +95,12 @@ async function collectReferencedFileIds(
           { workspaceId, slug, versionId: v.id, err },
           'skipped version',
         )
+        skipped.push({ slug, versionId: v.id, cause: err })
       }
     }
+  }
+  if (skipped.length > 0) {
+    throw new IncompleteFileGcScanError(workspaceId, skipped)
   }
   return referenced
 }

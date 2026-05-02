@@ -16,7 +16,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
-const { purgeDanglingFiles } = await import('./file-gc.js')
+const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -126,5 +126,53 @@ describe('purgeDanglingFiles', () => {
 
     const remaining = (await readdir(join(tempDir, 'ws_v', 'files'))).sort()
     expect(remaining).toEqual(['live-now.png', 'version-only.png'])
+  })
+
+  it('refuses to purge when a saved version cannot be inspected', async () => {
+    // The dangerous case: list() reports a version exists but load()
+    // throws, so we cannot enumerate the fileIds it referenced. The
+    // older code logged + skipped, which was equivalent to "those files
+    // are dangling, delete them" — permanent data loss. Now the GC
+    // pass must fail closed and leave every file on disk untouched.
+    await saveCanvas('ws_brk', 'broken', makeDocWithImage('only-by-broken-version'))
+    await seedFile('ws_brk', 'only-by-broken-version', '.png', 222)
+    await seedFile('ws_brk', 'really-dangling', '.png', 33)
+
+    const fakeStore = {
+      list: async () => [
+        {
+          id: 'v-broken',
+          slug: 'broken',
+          createdAt: '2026-04-25T00:00:00.000Z',
+          elementCount: 1,
+          auto: false,
+          hasThumbnail: false,
+          branchName: 'main',
+        },
+      ],
+      load: async () => {
+        throw new Error('frontier rows missing')
+      },
+      // The remaining VersionStore methods are unreachable from this code path.
+      save: async () => {
+        throw new Error('not used')
+      },
+      saveThumbnail: async () => {
+        throw new Error('not used')
+      },
+      loadThumbnail: async () => null,
+      earliestFrontiers: async () => null,
+      getFrontiersBase64: async () => null,
+    }
+
+    await expect(
+      // biome-ignore lint/suspicious/noExplicitAny: minimal VersionStore stub for the failure path
+      purgeDanglingFiles('ws_brk', { versionStore: fakeStore as any }),
+    ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
+
+    // Crucially: nothing was deleted, even though only-by-broken-version
+    // would have been classified as dangling under the old behaviour.
+    const remaining = (await readdir(join(tempDir, 'ws_brk', 'files'))).sort()
+    expect(remaining).toEqual(['only-by-broken-version.png', 'really-dangling.png'])
   })
 })

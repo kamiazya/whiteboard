@@ -239,8 +239,19 @@ export async function prewarmHeadlessExporter(): Promise<void> {
 
 // Public entry — idempotent. The first call sets up DOM + canvas globals and
 // resolves a singleton exporter; subsequent calls reuse it.
+//
+// Failure recovery: if buildExporter() rejects (e.g. an Excalifont read
+// error during prewarm) we drop the cached promise so the next call
+// retries from scratch — replaying a rejected promise forever would
+// brick every export until the daemon restarts.
 export function getHeadlessExporter(): Promise<HeadlessExporter> {
-  if (!setupPromise) setupPromise = buildExporter()
+  if (!setupPromise) {
+    const pending = buildExporter().catch((err) => {
+      if (setupPromise === pending) setupPromise = null
+      throw err
+    })
+    setupPromise = pending
+  }
   return setupPromise
 }
 

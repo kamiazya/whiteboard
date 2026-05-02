@@ -461,6 +461,21 @@ describe('applyAlign', () => {
     expect(() => applyAlign(doc, ['a'], 'left')).toThrow(/at least 2/)
   })
 
+  it('treats duplicate ids as a single element so they are not moved twice', () => {
+    // Without dedup, "a" appears twice in the geometry math: its x is
+    // counted twice toward the centre/min/max, AND applyMove() is run
+    // for the duplicate, overshooting the target. Pass a duplicate of
+    // "a" alongside one other id and assert the final x lands at the
+    // same value as the no-duplicate call.
+    const docDup = new LoroDoc()
+    seedElement(docDup, 'a', { type: 'rectangle', x: 10, y: 10, width: 100, height: 50 })
+    seedElement(docDup, 'b', { type: 'rectangle', x: 200, y: 30, width: 80, height: 60 })
+
+    applyAlign(docDup, ['a', 'a', 'b'], 'left')
+    expect(readElement(docDup, 'a')?.x).toBe(10)
+    expect(readElement(docDup, 'b')?.x).toBe(10)
+  })
+
   it('throws when an element id is missing', () => {
     expect(() => applyAlign(doc, ['a', 'nonexistent'], 'left')).toThrow(/not found/)
   })
