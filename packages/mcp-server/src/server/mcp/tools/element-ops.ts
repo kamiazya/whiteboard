@@ -286,3 +286,116 @@ export function applyReorder(
     }
   }
 }
+
+export type AlignAxis = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'
+
+// Snap a set of elements to a shared axis. Each element is shifted into place
+// by reusing applyMove with a single-id call so that bound arrows re-snap to
+// the new box centres exactly the way move_elements does.
+export function applyAlign(
+  doc: LoroDoc,
+  elementIds: string[],
+  alignment: AlignAxis,
+): void {
+  if (elementIds.length < 2) {
+    throw new Error('align needs at least 2 elements')
+  }
+  const maps = elementIds.map((id) => requireElementMap(doc, id))
+  const rects = maps.map((m) => rectFromMap(m))
+
+  // Compute the target x or y for each element. We keep the orthogonal axis
+  // untouched so callers can stack align_left followed by distribute_vertical
+  // without one undoing the other.
+  let targetXFor: ((r: { x: number; width: number }) => number) | null = null
+  let targetYFor: ((r: { y: number; height: number }) => number) | null = null
+  switch (alignment) {
+    case 'left': {
+      const min = Math.min(...rects.map((r) => r.x))
+      targetXFor = () => min
+      break
+    }
+    case 'right': {
+      const max = Math.max(...rects.map((r) => r.x + r.width))
+      targetXFor = (r) => max - r.width
+      break
+    }
+    case 'center': {
+      const avg = rects.reduce((sum, r) => sum + (r.x + r.width / 2), 0) / rects.length
+      targetXFor = (r) => avg - r.width / 2
+      break
+    }
+    case 'top': {
+      const min = Math.min(...rects.map((r) => r.y))
+      targetYFor = () => min
+      break
+    }
+    case 'bottom': {
+      const max = Math.max(...rects.map((r) => r.y + r.height))
+      targetYFor = (r) => max - r.height
+      break
+    }
+    case 'middle': {
+      const avg = rects.reduce((sum, r) => sum + (r.y + r.height / 2), 0) / rects.length
+      targetYFor = (r) => avg - r.height / 2
+      break
+    }
+  }
+
+  for (let i = 0; i < elementIds.length; i++) {
+    const r = rects[i]
+    const dx = targetXFor ? targetXFor(r) - r.x : 0
+    const dy = targetYFor ? targetYFor(r) - r.y : 0
+    if (dx === 0 && dy === 0) continue
+    applyMove(doc, [elementIds[i]], dx, dy)
+  }
+}
+
+export type DistributeAxis = 'horizontal' | 'vertical'
+
+// Even-space the inner elements between the bounding pair, keeping the first
+// and last element fixed in place. Mirrors the standard "distribute" semantics
+// of vector tools and the reference mcp_excalidraw implementation.
+export function applyDistribute(
+  doc: LoroDoc,
+  elementIds: string[],
+  direction: DistributeAxis,
+): void {
+  if (elementIds.length < 3) {
+    throw new Error('distribute needs at least 3 elements')
+  }
+  const maps = elementIds.map((id) => requireElementMap(doc, id))
+  const rects = maps.map((m) => rectFromMap(m))
+
+  // Sort by leading edge along the chosen axis. Build (originalId, rect) pairs
+  // so we can apply moves back to the right element after sorting.
+  const indexed = elementIds.map((id, i) => ({ id, rect: rects[i] }))
+  indexed.sort((a, b) =>
+    direction === 'horizontal' ? a.rect.x - b.rect.x : a.rect.y - b.rect.y,
+  )
+
+  if (direction === 'horizontal') {
+    const first = indexed[0].rect
+    const last = indexed[indexed.length - 1].rect
+    const span = last.x + last.width - first.x
+    const totalWidth = indexed.reduce((sum, e) => sum + e.rect.width, 0)
+    const gap = (span - totalWidth) / (indexed.length - 1)
+    let cursor = first.x
+    for (const { id, rect } of indexed) {
+      const dx = cursor - rect.x
+      if (dx !== 0) applyMove(doc, [id], dx, 0)
+      cursor += rect.width + gap
+    }
+  } else {
+    const first = indexed[0].rect
+    const last = indexed[indexed.length - 1].rect
+    const span = last.y + last.height - first.y
+    const totalHeight = indexed.reduce((sum, e) => sum + e.rect.height, 0)
+    const gap = (span - totalHeight) / (indexed.length - 1)
+    let cursor = first.y
+    for (const { id, rect } of indexed) {
+      const dy = cursor - rect.y
+      if (dy !== 0) applyMove(doc, [id], 0, dy)
+      cursor += rect.height + gap
+    }
+  }
+}
