@@ -28,9 +28,23 @@ export default mergeConfig(
     define: {
       __DOCS_ASSETS_DIR__: JSON.stringify(DOCS_ASSETS_DIR),
     },
+    // The doc-snapshot tests need to read existing scene fixtures (e.g.
+    // docs/assets/architecture.excalidraw) as raw JSON so they can hand
+    // them to Excalidraw without an extra fixture-copy step. Vite's
+    // default allow-list is the package root; widen it to the repo root
+    // so the `@docs-assets/...` alias resolves under `docs/assets/`.
+    server: {
+      fs: { allow: [resolve(__dirname, '..', '..')] },
+    },
+    resolve: {
+      alias: {
+        '@docs-assets': DOCS_ASSETS_DIR,
+      },
+    },
     test: {
       name: 'mcp-docs-snapshots',
       include: ['src/app/**/*.docs-snapshot.test.tsx'],
+      setupFiles: ['./src/app/docs-snapshots/_setup.ts'],
       css: true,
       // Generous timeout: each test mounts a real component, waits for
       // network-mocked content + Excalidraw / fonts to settle, then writes

@@ -220,6 +220,14 @@ generated on Linux CI will not be byte-identical to macOS / Windows
 captures, so for now treat this as a developer-driven workflow:
 regenerate locally, commit.
 
+`pnpm docs:snapshots:check` invokes the generator twice before running
+`git diff --exit-code` because Vite's first run after a config change
+can re-optimise dependencies and produce a one-off pixel drift; the
+second run is the stable artifact. If a regeneration leaves
+unexpected diffs in `docs/assets/`, it almost always means a real UI
+change rather than residual jitter — re-run twice and inspect the
+remaining diff.
+
 ## Completion Checklist
 
 Before closing a change:

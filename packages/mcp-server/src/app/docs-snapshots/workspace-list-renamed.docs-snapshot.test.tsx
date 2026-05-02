@@ -6,12 +6,11 @@ import '../index.css'
 import IndexPage from '../pages/IndexPage.js'
 import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'
 
-// Generates docs/assets/workspace-list.png — the index page with two
-// workspaces and a small canvas roster, used in README and workspace docs.
+// Generates docs/assets/workspace-list-renamed.png — companion to
+// workspace-list.png. Same dataset, but with display names set so the
+// user-friendly canvas label takes precedence over the slug. Renders
+// the IndexPage after a rename pass.
 
-// Fixed reference time so canvas updatedAt values render consistent
-// "Xd ago" labels regardless of when the snapshot is regenerated. The
-// canvas dates below are picked relative to this anchor.
 const NOW = new Date('2026-05-02T12:00:00.000Z')
 
 beforeEach(() => {
@@ -26,8 +25,6 @@ beforeEach(() => {
       if (url === '/api/workspaces/ws_main/canvases') {
         return jsonResponse({
           canvases: [
-            // 1d, 2d, 5d ago relative to NOW (2026-05-02T12:00Z) so the
-            // rendered labels stay stable across regenerations.
             { slug: 'design/login-flow', updatedAt: '2026-05-01T12:00:00.000Z' },
             { slug: 'design/onboarding', updatedAt: '2026-04-30T12:00:00.000Z' },
             { slug: 'architecture/overview', updatedAt: '2026-04-27T12:00:00.000Z' },
@@ -39,14 +36,22 @@ beforeEach(() => {
           canvases: [{ slug: 'inbox', updatedAt: '2026-04-29T12:00:00.000Z' }],
         })
       }
-      // Pre-rename state: no display names set yet, no canvas pinned.
-      // The companion workspace-list-renamed test seeds the rename-applied
-      // half so the two images form a coherent before / after pair.
+      // The "renamed" half: every canvas has a friendly display name and
+      // the workspace name itself is set, so the cards show titles like
+      // "Auth signup flow" instead of the raw `design/login-flow` slug.
       if (url === '/api/workspaces/ws_main/names') {
-        return jsonResponse({ workspace: null, canvases: {}, pinned: [] })
+        return jsonResponse({
+          workspace: 'Production designs',
+          canvases: {
+            'design/login-flow': 'Auth signup flow',
+            'design/onboarding': 'New user onboarding',
+            'architecture/overview': 'System architecture',
+          },
+          pinned: ['architecture/overview'],
+        })
       }
       if (url === '/api/workspaces/ws_sketches/names') {
-        return jsonResponse({ workspace: null, canvases: {}, pinned: [] })
+        return jsonResponse({ workspace: 'Quick sketches', canvases: { inbox: 'Today\'s inbox' }, pinned: [] })
       }
       if (url === '/api/runtime/storage') {
         return jsonResponse({
@@ -77,8 +82,8 @@ afterEach(() => {
   cleanup()
 })
 
-describe('docs snapshot — workspace list', () => {
-  it('writes docs/assets/workspace-list.png', async () => {
+describe('docs snapshot — workspace list (renamed)', () => {
+  it('writes docs/assets/workspace-list-renamed.png', async () => {
     render(
       <MemoryRouter>
         <div className="min-h-screen w-full bg-background p-6">
@@ -87,14 +92,11 @@ describe('docs snapshot — workspace list', () => {
       </MemoryRouter>,
     )
 
-    // Wait for the canvas list to settle; the screenshot we want is the
-    // post-network-fetch render where display names + pin states are
-    // already applied.
     await waitFor(() => {
       const link = document.querySelector('a[href*="ws_main"]')
       if (!link) throw new Error('canvas list not yet rendered')
     })
 
-    await page.screenshot({ path: resolveDocAssetPath('workspace-list.png') })
+    await page.screenshot({ path: resolveDocAssetPath('workspace-list-renamed.png') })
   })
 })
