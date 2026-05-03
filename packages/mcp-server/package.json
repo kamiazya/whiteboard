@@ -139,7 +139,7 @@
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
     "@tailwindcss/vite": "^4",
-    "@tanstack/intent": "^0.0.29",
+    "@tanstack/intent": "^0.0.39",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^24",
