@@ -26,6 +26,7 @@
 
 // Authoritative list — keep in sync with registerToolWithAnnotations calls in index.ts.
 export const ALL_REGISTERED_TOOLS = [
+  'align_elements',
   'annotate',
   'annotate_batch',
   'assign_to_group',
@@ -41,6 +42,7 @@ export const ALL_REGISTERED_TOOLS = [
   'delete_element',
   'delete_elements',
   'delete_group',
+  'distribute_elements',
   'export_png',
   'library_catalog_list',
   'library_insert_batch',
@@ -52,6 +54,7 @@ export const ALL_REGISTERED_TOOLS = [
   'list_groups',
   'load_image',
   'move_elements',
+  'optimize_canvases',
   'palette_delete',
   'palette_get',
   'palette_set',
@@ -85,15 +88,16 @@ export const COVERED_TOOLS = [
   'palette_get',
   'library_list_installed',
   'library_list_items',
+  'export_png',
   'library_uninstall',
 ] as const
 
 export const ERROR_PATH_ONLY_TOOLS = [
   'viewport_set',
-  'export_png',
 ] as const
 
 export const UNIT_ONLY_TOOLS = [
+  'align_elements',
   'annotate_batch',
   'assign_to_group',
   'canvas_auto_layout',
@@ -103,12 +107,14 @@ export const UNIT_ONLY_TOOLS = [
   'delete_element',
   'delete_elements',
   'delete_group',
+  'distribute_elements',
   'library_catalog_list',
   'library_insert_batch',
   'library_insert_item',
   'list_groups',
   'load_image',
   'move_elements',
+  'optimize_canvases',
   'palette_delete',
   'palette_set',
   'reorder_elements',

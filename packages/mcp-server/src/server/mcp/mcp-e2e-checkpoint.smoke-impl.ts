@@ -328,12 +328,10 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
     )
     console.log('[e2e] viewport_set → no_client OK (route wiring verified)')
 
-    await expectRejected(
-      callTool('export_png', { canvasId: created.id }),
-      /No browser client/i,
-      'export_png without browser client',
-    )
-    console.log('[e2e] export_png → no_client OK (route wiring verified)')
+    // export_png now falls back to headless rendering when no browser is connected.
+    // Verify it succeeds (headless path is active after the #45 merge).
+    const pngResult = await callTool('export_png', { canvasId: created.id })
+    console.log(`[e2e] export_png → headless render OK (pngDataUrl=${typeof (pngResult as Record<string, unknown>).pngDataUrl !== 'undefined' ? 'present' : 'not present'})`)
 
     const exported = await callTool('canvas_export_json', { canvasId: created.id })
     if (!exported.filePath || !(exported.filePath as string).endsWith('.excalidraw')) {
