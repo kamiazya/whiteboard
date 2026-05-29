@@ -8,7 +8,7 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard
 pnpm install
-pnpm test         # unit tests (mcp-node + mcp-jsdom + mcp-browser)
+pnpm test         # all tests (mcp-node + mcp-jsdom + mcp-browser + mcp-smoke + apps/web + web-browser)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```

@@ -12,6 +12,7 @@ Use this repo's standard development loop for every feature, bug fix, or refacto
 - Use `mcp-node` for pure functions, stores, routes, server behavior, and persistence logic.
 - Use `mcp-jsdom` for React components and hooks when browser layout and pointer behavior are not the core risk.
 - Use `mcp-browser` for popovers, dialogs, scroll, focus, keyboard, pointer behavior, restore flows, and other real browser interactions.
+- Use `web-browser` for `apps/web` tests that require real browser APIs not available in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`. File suffix: `.browser.test.tsx`.
 - Promote to E2E when the bug depends on real routes, server composition, websocket timing, persistence order, or multi-step page flows.
 
 Do not jump to broad E2E first if a smaller failing test can isolate the bug.
@@ -57,16 +58,16 @@ Do not stop at manual verification without preserving the scenario in automation
 
 ## Browser Mode And Trace
 
-`mcp-browser` is the default place for real browser regression tests inside this repo.
+`mcp-browser` is the default place for real browser regression tests in `packages/mcp-server`. Use `web-browser` for `apps/web` browser tests (IndexedDB, OPFS, etc.). `pnpm test:browser` runs both.
 
 Use:
 
 ```bash
-pnpm run test:browser
-pnpm run test:browser:trace
+pnpm run test:browser        # mcp-browser + web-browser
+pnpm run test:browser:trace  # same, with trace artifacts on failure
 ```
 
-- Failure traces are stored under `packages/mcp-server/tmp/vitest-traces`.
+- Failure traces are stored under `<package>/tmp/vitest-traces`.
 - Check traces before adding temporary debug code.
 - Remove temporary debug overlays, logging, and instrumentation before finishing.
 

@@ -1,0 +1,29 @@
+# CODEOWNERS for the whiteboard repo.
+#
+# Owner: the repo owner. The repository URL in the root package.json
+# (`https://github.com/kamiazya/whiteboard.git`) is the source of truth
+# for this username.
+
+* @kamiazya
+
+# Repo-level files
+/package.json @kamiazya
+/.github/CODEOWNERS @kamiazya
+
+# Runtime / daemon lifecycle
+/packages/mcp-server/src/server/** @kamiazya
+/packages/mcp-server/src/daemon/** @kamiazya
+/packages/mcp-server/src/cli/** @kamiazya
+
+# Security-sensitive surface
+/packages/mcp-server/src/server/security/** @kamiazya
+/packages/mcp-server/src/server/routes/runtime.ts @kamiazya
+/packages/mcp-server/src/server/routes/auth.ts @kamiazya
+/packages/mcp-server/src/server/routes/ws-auth.ts @kamiazya
+/packages/mcp-server/src/shared/diagnostics/** @kamiazya
+/packages/mcp-server/src/shared/api-contracts/problem-details.ts @kamiazya
+
+# Release / distribution
+/packages/mcp-server/package.json @kamiazya
+/packages/mcp-server/scripts/** @kamiazya
+/tests/e2e/distribution/** @kamiazya

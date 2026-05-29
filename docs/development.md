@@ -130,29 +130,48 @@ This does not affect normal published usage through `npx -y @kamiazya/whiteboard
 pnpm dev             # Vite + MCP server together
 pnpm mcp             # MCP server only (tsx)
 pnpm build           # dist/server + dist/app
-pnpm test            # Vitest (all projects)
+pnpm test            # Vitest — mcp-node + mcp-jsdom + mcp-browser + mcp-smoke + apps/web + web-browser
+pnpm test:browser    # Vitest browser-mode (mcp-browser + web-browser)
+pnpm --filter @kamiazya/whiteboard-mcp test:smoke   # mcp-smoke project only (startup + e2e + template)
 pnpm typecheck       # tsc --noEmit
-pnpm smoke           # MCP smoke
-pnpm smoke:e2e       # checkpoint / route / no_client wiring smoke
-pnpm smoke:template  # template tool smoke
-pnpm smoke:claude    # Claude subprocess smoke (uses API quota)
-pnpm smoke:codex     # Codex subprocess smoke (uses API quota)
 pnpm intent:validate # TanStack Intent validate
+```
+
+Individual smoke commands (delegated to `@kamiazya/whiteboard-mcp`). They all share the same TypeScript implementations, but run two ways: the distribution smokes (`smoke:packaged` / `smoke:tarball` / `smoke:codex-config`) run as Vitest tests under `vitest.distribution.config.ts`, while `smoke:e2e` / `smoke:template` and the external-CLI smokes run as `scripts/mcp-*.mjs` CLI wrappers:
+
+```bash
+pnpm smoke                # startup: MCP server stays alive for 3 s, no fatal stderr
+pnpm smoke:e2e            # full stdio round-trip: canvas_create → checkpoint → restore → export
+pnpm smoke:checkpoint     # alias for smoke:e2e
+pnpm smoke:template       # template tool render and content checks
+pnpm smoke:packaged       # dist/server/mcp/index.js passes full e2e (build required)
+pnpm smoke:tarball        # npm pack → install → installed entry passes e2e (build required)
+pnpm smoke:codex-config   # plugin manifest + published MCP config valid (build required)
+pnpm test:distribution    # pnpm build + all three distribution smokes above
+pnpm smoke:claude         # Claude CLI integration (uses API quota, requires Claude CLI)
+pnpm smoke:codex          # Codex CLI integration (uses API quota, requires Codex CLI)
 ```
 
 Default regression triple after a change:
 
 ```bash
-pnpm test        # unit tests (~3s, 460+ tests)
-pnpm typecheck   # tsc --noEmit (~10s)
-pnpm smoke:e2e   # stdio MCP subprocess: canvas_create -> checkpoint -> viewport / export no_client -> canvas_export_json round trip
+pnpm test        # all default Vitest projects (mcp-node, mcp-jsdom, mcp-browser, mcp-smoke, apps/web, web-browser)
+pnpm typecheck   # tsc --noEmit
+pnpm smoke:e2e   # also covered by pnpm test; run standalone for quick MCP-only iteration
+```
+
+For the hosted browser app (`apps/web`, Cloudflare Pages), the pre-deploy artifact gates are aggregated by `check:pages-release` and are not part of `pnpm test` (they need a build + Playwright); see [testing.md → Hosted Web App Release Gates](testing.md#hosted-web-app-cloudflare-pages-release-gates):
+
+```bash
+pnpm check:pages-release   # → @whiteboard/checks runner: pnpm build + smoke:artifact + smoke:preview-origin
+# smoke:preview-origin needs Playwright and a local 127.0.0.1 bind (EPERM in a restricted sandbox).
 ```
 
 If you also need a zero-context LLM-level check:
 
 ```bash
 pnpm smoke:claude   # spawn the claude CLI; verifies tools are callable via description / schema (uses API quota)
-pnpm smoke:all      # smoke:e2e + smoke:claude
+pnpm smoke:all      # smoke:e2e + smoke:template + smoke:claude
 ```
 
 The project-scoped skills `.claude/skills/whiteboard-mcp-smoke/SKILL.md` (restart triage) and `.claude/skills/whiteboard-smoke/SKILL.md` (smoke selection) encode this workflow so a "verify behavior" request can trigger it without restarting manually.

@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "gates": [
+    {
+      "id": "test",
+      "command": "pnpm test",
+      "category": "unit",
+      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "fast"
+    },
+    {
+      "id": "typecheck",
+      "command": "pnpm typecheck",
+      "category": "typecheck",
+      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "fast"
+    },
+    {
+      "id": "build",
+      "command": "pnpm build",
+      "category": "build",
+      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "medium"
+    },
+    {
+      "id": "check:release-artifacts",
+      "command": "pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts",
+      "category": "release-artifacts",
+      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "fast"
+    },
+    {
+      "id": "smoke:tarball",
+      "command": "pnpm smoke:tarball",
+      "category": "tarball",
+      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "medium"
+    },
+    {
+      "id": "smoke:packaged",
+      "command": "pnpm smoke:packaged",
+      "category": "mcp-protocol",
+      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "medium"
+    },
+    {
+      "id": "smoke:codex-config",
+      "command": "pnpm smoke:codex-config",
+      "category": "codex-config",
+      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "fast"
+    },
+    {
+      "id": "test:e2e:distribution",
+      "command": "pnpm test:e2e:distribution",
+      "category": "distribution",
+      "requiredFor": ["local-release", "docker-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "slow"
+    },
+    {
+      "id": "smoke:docker",
+      "command": "pnpm smoke:docker",
+      "category": "docker",
+      "requiredFor": ["docker-release"],
+      "requiresDocker": true,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "slow"
+    },
+    {
+      "id": "smoke:docker-backup-restore",
+      "command": "pnpm smoke:docker-backup-restore",
+      "category": "docker",
+      "requiredFor": ["docker-release"],
+      "requiresDocker": true,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "slow"
+    },
+    {
+      "id": "mutation:contracts",
+      "command": "pnpm mutation:contracts",
+      "category": "mutation",
+      "requiredFor": ["local-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "slow"
+    },
+    {
+      "id": "smoke:web-artifact",
+      "command": "pnpm --filter @kamiazya/whiteboard-web smoke:artifact",
+      "category": "pages",
+      "requiredFor": ["pages-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "medium"
+    },
+    {
+      "id": "smoke:web-preview-origin",
+      "command": "pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin",
+      "category": "pages",
+      "requiredFor": ["pages-release"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "slow"
+    }
+  ]
+}

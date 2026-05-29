@@ -26,10 +26,11 @@ on:
         required: false
         default: ''
 
+# Needed for release-please: write PRs, create tags/releases.
+# packages: write is NOT included here — it is scoped to docker-publish-sign only.
 permissions:
   contents: write
   pull-requests: write
-  packages: write
 
 jobs:
   release-please:
@@ -53,6 +54,7 @@ jobs:
     needs: release-please
     if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || inputs.force_publish_tag != '' }}
     runs-on: ubuntu-latest
+    environment: production-npm
     permissions:
       contents: read
       id-token: write  # npm provenance (OIDC) for signed publish on npm v9.5+
@@ -60,6 +62,15 @@ jobs:
       run:
         working-directory: packages/mcp-server
     steps:
+      - name: Validate tag shape
+        env:
+          TAG: ${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^mcp-server-v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Tag '$TAG' does not match mcp-server-v<semver>"
+            exit 1
+          fi
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.force_publish_tag != '' && inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
@@ -88,38 +99,11 @@ jobs:
         working-directory: .
         run: pnpm audit --prod --audit-level=high
 
-      - name: Unit tests
-        working-directory: .
-        run: pnpm test
-
-      - name: Typecheck
-        working-directory: .
-        run: pnpm typecheck
-
-      - name: Stdio E2E smoke (no quota required)
+      - name: Release candidate gate
         working-directory: .
         env:
           WHITEBOARD_DEV: '1'
-        run: pnpm smoke:e2e
-
-      - name: Build
-        run: pnpm build
-
-      - name: Packaged stdio smoke
-        working-directory: .
-        run: pnpm smoke:packaged
-
-      - name: Packed tarball smoke
-        working-directory: .
-        run: pnpm smoke:tarball
-
-      - name: Codex config smoke
-        working-directory: .
-        run: pnpm smoke:codex-config
-
-      - name: Template smoke
-        working-directory: .
-        run: pnpm smoke:template
+        run: pnpm check:release-candidate
 
       - name: Verify pack contents (README / LICENSE / no test / no .map only)
         # Sanity-check the tarball contents before publish. Fail immediately if required files are missing or forbidden files are included.
@@ -140,7 +124,82 @@ jobs:
             });
           '
 
+      - name: Upload npm SBOM artifact
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee7ef5a6fab9f92b81 # v4
+        with:
+          name: npm-sbom-${{ github.run_id }}
+          path: packages/mcp-server/_artifacts/npm-sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 90
+
       - name: Publish to npm
         # Assumes OIDC Trusted Publisher is configured (no NPM_TOKEN required).
-        # Setup steps are documented in tmp/notes/2026-04-25-releasing-checklist.md
         run: npm publish --access public --provenance
+
+  docker-publish-sign:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || inputs.force_publish_tag != '' }}
+    runs-on: ubuntu-latest
+    environment: production-docker
+    permissions:
+      contents: read
+      id-token: write   # cosign keyless signing (OIDC)
+      packages: write   # GHCR push
+    steps:
+      - name: Validate tag shape
+        env:
+          TAG: ${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+        run: |
+          if [[ ! "$TAG" =~ ^mcp-server-v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::error::Tag '$TAG' does not match mcp-server-v<semver>"
+            exit 1
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.force_publish_tag != '' && inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+
+      - uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v6.0.3
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
+
+      - name: Release candidate gate (docker)
+        env:
+          WHITEBOARD_DEV: '1'
+        run: pnpm check:release-candidate:docker
+
+      - name: Log in to GHCR
+        uses: docker/login-action@9780b0c442fbb1117ed29e0efdff1e18412f7567 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@471d034f5dc41e67f0b11ffcddfb0b8f6adb7c1a # v6
+        with:
+          context: .
+          file: Dockerfile.server
+          push: true
+          tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
+          sbom: true
+          provenance: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@59acb6260d9c0ba8f4a2f9d9b48431a222b68e20 # v3
+
+      - name: Sign the Docker image
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          IMAGE_REPO: ghcr.io/${{ github.repository }}
+        run: cosign sign --yes $IMAGE_REPO@$DIGEST

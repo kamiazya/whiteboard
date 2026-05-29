@@ -33,7 +33,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
+        run: |
+          pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
+          pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium
 
       - name: Audit (high+ vulnerabilities, prod deps only)
         # Gate on CVEs that affect published artifacts so they are caught at PR time.
@@ -59,6 +61,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Web app artifact smoke
+        run: pnpm --filter @kamiazya/whiteboard-web smoke:artifact
+
+      - name: Web app preview-origin behavioral smoke
+        run: pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
+
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
 
@@ -67,3 +75,61 @@ jobs:
 
       - name: Codex config smoke
         run: pnpm smoke:codex-config
+
+      - name: Check release artifacts
+        run: pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts
+
+  dry-run-npm:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v6.0.3
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: npm publish dry-run
+        run: pnpm publish:dry-run:npm
+
+      - name: Upload npm dry-run artifacts
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee7ef5a6fab9f92b81 # v4
+        with:
+          name: npm-tarball-dry-run-${{ github.run_id }}
+          path: packages/mcp-server/tmp/publish-dry-run/
+          if-no-files-found: error
+
+  dry-run-docker:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: pnpm/action-setup@903f9c1a6ebcba6cf41d87230be49611ac97822e # v6.0.3
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Docker build dry-run
+        run: pnpm publish:dry-run:docker
+
+      - name: Upload docker dry-run metadata
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee7ef5a6fab9f92b81 # v4
+        with:
+          name: docker-image-dry-run-${{ github.run_id }}
+          path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json
+          if-no-files-found: warn

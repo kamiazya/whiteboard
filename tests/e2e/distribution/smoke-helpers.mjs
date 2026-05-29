@@ -1,0 +1,56 @@
+#!/usr/bin/env node
+// Shared leak-detection helpers for distribution smoke scripts.
+// Only pure, behavior-invariant utilities belong here; process lifecycle,
+// temp-dir creation, and Docker helpers remain in each script.
+
+/**
+ * Core security leak patterns: auth headers, JWTs, local filesystem paths,
+ * TypeScript stack frames. All distribution smoke scripts check against this set.
+ */
+export const BASE_LEAK_PATTERNS = [
+  /Authorization/i,
+  /Bearer/i,
+  // Raw JWT (three base64url segments) — must not appear in server output.
+  /eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/,
+  /\/opt\//,
+  /\/home\//,
+  /\/root\//,
+  /\/Users\//,
+  /\/private\//,
+  // Canonical /tmp/ literal (regex form matches "/tmp/" but not "notmp/foo")
+  /(^|[^a-zA-Z])\/tmp\//,
+  // TypeScript source-map line references — indicate a raw stack frame leaked
+  /\.ts:\d/,
+]
+
+/**
+ * Canvas plaintext deny-list. Used by scripts that exercise log/support-bundle
+ * formatting where canvas content must be stripped before output.
+ */
+export const CANVAS_LEAK_PATTERNS = [
+  /canvasText/,
+  /rawPayload/,
+  /"scene"/,
+  /"elements"/,
+  /"files"/,
+]
+
+/**
+ * Assert that `text` does not match any BASE_LEAK_PATTERNS entry and does not
+ * include any `extraLiterals` string. Throws on the first match so the calling
+ * script exits non-zero (the throw propagates through any surrounding
+ * try/finally cleanup block before the process terminates).
+ *
+ * @param {string} label - Surface identifier printed in the failure message.
+ * @param {string} text - Content to inspect.
+ * @param {string[]} [extraLiterals=[]] - Additional literal strings to deny
+ *   (checked with String.prototype.includes, not regex).
+ */
+export function assertNoLeak(label, text, extraLiterals = []) {
+  for (const re of BASE_LEAK_PATTERNS) {
+    if (re.test(text)) throw new Error(`[smoke] ${label} leak: ${re}`)
+  }
+  for (const literal of extraLiterals) {
+    if (text.includes(literal)) throw new Error(`[smoke] ${label} leak: literal "${literal}"`)
+  }
+}

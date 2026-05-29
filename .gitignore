@@ -144,6 +144,9 @@ vite.config.ts.timestamp-*
 
 tmp
 
+# Generated artifacts (SBOM, dry-run outputs) — not committed, uploaded via CI
+packages/mcp-server/_artifacts/
+
 # Playwright MCP runtime logs
 .playwright-mcp/
 

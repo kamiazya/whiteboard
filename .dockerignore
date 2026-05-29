@@ -1,0 +1,40 @@
+# .dockerignore — excludes files that must not enter the Docker build context.
+
+# Secrets and local env files (never bake credentials into the image).
+.env
+.env.*
+*.env
+!.env.server.example
+
+# Version control
+.git
+.gitignore
+
+# CI/tooling/IDE config
+.github
+.claude
+.vscode
+.idea
+*.code-workspace
+
+# Build artifacts regenerated inside the Docker build stages.
+node_modules/
+packages/mcp-server/node_modules/
+packages/mcp-server/dist/
+packages/mcp-server/coverage/
+packages/mcp-server/tmp/
+
+# Test suites and distribution smokes (not needed to build the image).
+tests/
+
+# Documentation (not needed at runtime).
+docs/
+
+# Temporary files.
+tmp/
+*.log
+*.tgz
+
+# macOS / Windows metadata.
+.DS_Store
+Thumbs.db

@@ -302,6 +302,51 @@ tsx scripts/mcp-template-smoke.mjs
 
 ---
 
+## Hosted Web App (Cloudflare Pages) Release Gates
+
+`apps/web` (`@kamiazya/whiteboard-web`) is the zero-install browser-only app deployed to Cloudflare Pages. Its release-readiness is enforced by a mix of `web-browser` regressions, node/jsdom policy tests, and artifact smokes. Deploy/runtime contract details live in [pages-deploy-mvp.md](pages-deploy-mvp.md).
+
+| Gate | Command | What it enforces | Build / browser needed |
+|---|---|---|---|
+| Artifact smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:artifact` | `dist/index.html` + `dist/_headers` exist; CSP has no wildcard sources; no Cloudflare secrets in any artifact; preview-origin rejection wired into the JS bundle | `pnpm build` first (reads `apps/web/dist/`) |
+| Preview-origin smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin` | Built `dist/` loaded in real Chromium with a preview `publicOrigin` renders `data-provider="invalid-config"`, not browser-local | Build + Playwright |
+| Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserLocalCanvasPage.browser.test.tsx`: IndexedDB save / reload / cleanup / post-cleanup-reload, plus the network-negative gate (no `/api/*` or daemon fetch during editing) | Real browser (Playwright) |
+| Origin policy | `pnpm --filter @kamiazya/whiteboard-web test` (`pages-origin-policy.test.ts`, `headers-policy.test.ts`) | `classifyPagesOrigin` keeps preview origins a distinct rejected class — a preview origin is never `production`, so it never enters a trusted/local-daemon allowlist; `_headers` CSP shape | jsdom only |
+| Boundary + secrets drift | `pnpm test` (`web-app-boundary.test.ts`, `mcp-node`) | `apps/web` source imports no server/cli/daemon/Node-only modules; `wrangler.toml` lists no preview origins and no `account_id`; no `.github/workflows/` file deploys `apps/web` with Cloudflare secrets; `apps/` stays out of the npm tarball | none |
+
+`web-app-boundary.test.ts` and the `web-browser` regression run as part of `pnpm test`. The two `smoke:*` artifact gates require a build, so they are **not** part of the default `pnpm test`.
+
+### `check:pages-release` (orchestrated by `@whiteboard/checks`)
+
+One stable root command runs the build + both artifact smokes. It delegates to the private `@whiteboard/checks` tooling package (`tools/checks`), which prints each step, runs it from the repo root, and fails fast with the failing step's exit code:
+
+```bash
+pnpm check:pages-release
+# → pnpm --filter @whiteboard/checks pages-release, which runs in order:
+#     1. pnpm build
+#     2. pnpm --filter @kamiazya/whiteboard-web smoke:artifact
+#     3. pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
+```
+
+The layering is **root command → `@whiteboard/checks` orchestrator → package-local primitives**: the `apps/web smoke:*` scripts stay as low-level primitives, and `@whiteboard/checks` only orchestrates them. The runner is **matrix-driven** — it reads the `pages-release` tier from [`release-gate-matrix.json`](../tests/e2e/distribution/release-gate-matrix.json), which stays the single policy source (add a Pages gate there, not in runner code). The wiring (root delegation, the private package, the matrix-driven runner) is enforced by the `pages-release tier wiring drift` block in `release-gate-matrix.test.ts`.
+
+It is **release-candidate adjacent**: deliberately kept out of `check:release-candidate`, `check:release-candidate:docker`/`:local`, and the CI `verify` job, because `smoke:preview-origin` needs Playwright and a local `127.0.0.1` HTTP bind (it fails with `EPERM` in a network-restricted sandbox; runs green in a normal environment). Run it before a Cloudflare Pages deploy, not on every PR.
+
+### Security review map
+
+Which gate enforces each hosted-app security property (entry points for `security-reviewer`):
+
+| Property | Enforced by |
+|---|---|
+| CSP has no wildcard sources; `script-src`/`default-src` are `'self'` | `smoke:artifact` (CSP directive checks) + `headers-policy.test.ts` |
+| No Cloudflare secrets / account IDs in the built artifact | `smoke:artifact` (secret scan over `dist/`) |
+| No Cloudflare secrets in `apps/web` config or `.github/workflows/` | `web-app-boundary.test.ts` (CF secrets drift guard) |
+| Preview origin is rejected at runtime (renders `invalid-config`) | `smoke:preview-origin` (behavioral) + bundle wiring check in `smoke:artifact` |
+| Production origin is an exact match (`https://whiteboard.pages.dev`), preview is a distinct class | `pages-origin-policy.test.ts` (`classifyPagesOrigin`) |
+| Preview origin never enters a trusted / local-daemon allowlist | `pages-origin-policy.test.ts` (preview ≠ production) + `web-app-boundary.test.ts` (no preview origin in `wrangler.toml`); local-daemon / server-mode wildcard rejection is held separately by `server-mode-exposure` |
+
+---
+
 ## Quality Gates
 
 Common commands are also summarized in [CONTRIBUTING.md](../CONTRIBUTING.md#quality-gates). This section is the canonical gate matrix.
@@ -322,6 +367,7 @@ pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 | MCP tool or route change | `pnpm smoke:e2e` green; real MCP client verify |
 | Browser interaction or UI flow | `pnpm test:browser` green; manual browser verify |
 | Packaging, tarball, or binary | `pnpm test:distribution` green |
+| Hosted web app / Cloudflare Pages artifact | `pnpm check:pages-release` (build + `smoke:artifact` + `smoke:preview-origin`); release-candidate adjacent, see [Hosted Web App Release Gates](#hosted-web-app-cloudflare-pages-release-gates) |
 | Typing or packaging impact | `pnpm --filter @kamiazya/whiteboard-mcp typecheck && pnpm build` |
 | Behavioral production change inside Stryker target set | Run `pnpm mutation:contracts`; report killed/survived in PR body |
 | Deferred property | Record reason + unblock condition in `tmp/issues/` or planning note |
