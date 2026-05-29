@@ -8,7 +8,9 @@ import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { detectMergeBadges } from '../shared/merge-engine.js'
 import { reconcileElementsOnDoc } from '../shared/reconcile-elements.js'
 import { DIST_APP_DIR } from './config.js'
+import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createExcalidrawMcpServer } from './mcp/index.js'
+import { tracingMiddleware } from './observability/http-tracing.js'
 import { createDaemonMutationAuthMiddleware } from './routes/auth.js'
 import { createBranchesRouter } from './routes/branches.js'
 import { createCanvasRouter } from './routes/canvas.js'
@@ -54,6 +56,22 @@ function errorMessage(error: unknown): string {
 
 function shouldLogMcpHttpDebug(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.MCP_HTTP_DEBUG === '1'
+}
+
+const httpLog = getLogger('mcp-http')
+
+// MCP_HTTP_DEBUG=1 historically meant "show http traces unconditionally". Keep
+// that contract: bump the logger threshold down to info so the structured
+// records below land on stderr / `notifications/message` even when the
+// operator has not set WHITEBOARD_LOG_LEVEL=info. The previous gate only
+// fired when the level was *exactly* `warning`; any stricter level
+// (`notice`, `error`, `critical`, …) silently dropped every httpLog.info
+// record below, defeating the whole point of the env switch.
+if (shouldLogMcpHttpDebug()) {
+  const currentLogLevel = getLogLevel()
+  if (currentLogLevel !== 'debug' && currentLogLevel !== 'info') {
+    setLogLevel('info')
+  }
 }
 
 function isJsonObject(value: unknown): value is Record<string, unknown> {
@@ -328,6 +346,11 @@ export function createApp(options: AppOptions) {
     serverModeGetStatus = sanitizeServerModeStatus(options.getStatus, options.publicBaseUrl)
   }
 
+  // Tracing middleware first so the request span wraps every other
+  // middleware (auth, headers, route handler). When OTel is disabled the
+  // tracer is a no-op so the wrapping cost is negligible.
+  app.use('*', tracingMiddleware())
+
   app.use('*', async (_c, next) => {
     options.touch()
     await next()
@@ -409,7 +432,7 @@ export function createApp(options: AppOptions) {
     if (debug) {
       const initializeDebug = extractInitializeDebugPayload(parsedBody)
       if (initializeDebug) {
-        console.info('[mcp-http:init]', initializeDebug)
+        httpLog.info(initializeDebug, 'mcp-http:init')
       }
     }
     // The MCP SDK throws 'Already connected' if a single Server is connected to
@@ -424,22 +447,26 @@ export function createApp(options: AppOptions) {
       const constructStartedAt = debug ? Date.now() : 0
       const server = await createExcalidrawMcpServer()
       if (debug) {
-        console.info('[mcp-http:construct]', {
-          durationMs: Date.now() - constructStartedAt,
-        })
+        httpLog.info(
+          { durationMs: Date.now() - constructStartedAt },
+          'mcp-http:construct',
+        )
       }
       await server.connect(transport)
       response = await transport.handleRequest(c.req.raw, { parsedBody })
       if (debug) {
         const body = isJsonObject(parsedBody) ? parsedBody : {}
-        console.info('[mcp-http]', {
-          httpMethod: c.req.method.toUpperCase(),
-          path: c.req.path,
-          jsonrpcMethod: body.method ?? null,
-          requestId: body.id ?? null,
-          status: response.status,
-          durationMs: Date.now() - startedAt,
-        })
+        httpLog.info(
+          {
+            httpMethod: c.req.method.toUpperCase(),
+            path: c.req.path,
+            jsonrpcMethod: body.method ?? null,
+            requestId: body.id ?? null,
+            status: response.status,
+            durationMs: Date.now() - startedAt,
+          },
+          'mcp-http',
+        )
       }
       return response
     } finally {
@@ -455,9 +482,7 @@ export function createApp(options: AppOptions) {
         .includes('text/event-stream')
       if (isSseResponse) {
         if (debug) {
-          console.info('[mcp-http:destruct-skipped]', {
-            reason: 'sse-stream-active',
-          })
+          httpLog.info({ reason: 'sse-stream-active' }, 'mcp-http:destruct-skipped')
         }
       } else {
         const destructStartedAt = debug ? Date.now() : 0
@@ -467,15 +492,14 @@ export function createApp(options: AppOptions) {
           // Closing failures from a finished request should not leak into the
           // response path. Log only when MCP_HTTP_DEBUG=1 for visibility.
           if (debug) {
-            console.info('[mcp-http:destruct-error]', {
-              message: errorMessage(error),
-            })
+            httpLog.info({ message: errorMessage(error) }, 'mcp-http:destruct-error')
           }
         }
         if (debug) {
-          console.info('[mcp-http:destruct]', {
-            durationMs: Date.now() - destructStartedAt,
-          })
+          httpLog.info(
+            { durationMs: Date.now() - destructStartedAt },
+            'mcp-http:destruct',
+          )
         }
       }
     }
@@ -498,7 +522,11 @@ export function createApp(options: AppOptions) {
       },
     }),
   )
-  app.route('/', createFilesRouter())
+  // Shared versionStore so the files router can do version-aware purge
+  // and the branches router can resolve frontiers — they would each
+  // instantiate their own otherwise.
+  const sharedVersionStore = new FileVersionStore()
+  app.route('/', createFilesRouter({ versionStore: sharedVersionStore }))
   app.route('/', createExportRouter())
   app.route('/', createViewportRouter())
   app.route('/', createDebugRouter({ token }))
@@ -514,7 +542,7 @@ export function createApp(options: AppOptions) {
   }))
   // Branches router: branch metadata plus checkout / broadcast integration.
   {
-    const versionStore = new FileVersionStore()
+    const versionStore = sharedVersionStore
     app.route(
       '/',
       createBranchesRouter({
@@ -706,8 +734,9 @@ export function createApp(options: AppOptions) {
             preMergeVersionId = beforeVersion.id
           } catch (err) {
             // Snapshot failure should not block the merge itself.
-            console.warn(
-              `[merge] pre-merge snapshot failed for ${sid}/${slug}: ${(err as Error).message}`,
+            getLogger('merge').warning(
+              { workspaceId: sid, slug, err: err as Error },
+              'pre-merge snapshot failed',
             )
           }
 
@@ -756,8 +785,9 @@ export function createApp(options: AppOptions) {
               }
             }
           } catch (err) {
-            console.warn(
-              `[merge] post-merge head switch failed for ${sid}/${slug}: ${(err as Error).message}`,
+            getLogger('merge').warning(
+              { workspaceId: sid, slug, err: err as Error },
+              'post-merge head switch failed',
             )
           }
           if (source !== 'main' && source !== into) {
@@ -766,8 +796,9 @@ export function createApp(options: AppOptions) {
               deletedSource = source
             } catch (err) {
               // For example: still HEAD, already deleted, and similar cleanup races.
-              console.warn(
-                `[merge] post-merge delete source failed for ${sid}/${slug}: ${(err as Error).message}`,
+              getLogger('merge').warning(
+                { workspaceId: sid, slug, err: err as Error },
+                'post-merge delete source failed',
               )
             }
           }

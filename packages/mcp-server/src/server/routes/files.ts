@@ -4,6 +4,8 @@ import { join, extname, basename } from 'node:path'
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises'
 import { DATA_DIR } from '../config.js'
 import { corruptStoredData, corruptStoredDataBody, isMissingFileError } from '../store/corrupt-stored-data.js'
+import { purgeDanglingFiles } from '../store/file-gc.js'
+import type { VersionStore } from '../store/version-store.js'
 import {
   validationErrorBody,
   validateFileId,
@@ -43,7 +45,14 @@ async function readStoredFileNames(dir: string): Promise<string[] | null> {
   }
 }
 
-export function createFilesRouter() {
+export interface FilesRouterOptions {
+  // Provide a versionStore for version-aware purge. Without one, the
+  // purge endpoint walks only the live state of each canvas and leaves
+  // files referenced exclusively by saved versions untouched.
+  versionStore?: VersionStore
+}
+
+export function createFilesRouter(options: FilesRouterOptions = {}) {
   const app = new Hono()
 
   // PUT /api/canvas/:workspaceId/:slug/file/:fileId
@@ -134,6 +143,32 @@ export function createFilesRouter() {
       const body = corruptStoredDataBody(error)
       if (body) return c.json(body, 500)
       throw error
+    }
+  })
+
+  // POST /api/workspaces/:workspaceId/files/purge-dangling
+  // Delete files under <workspaceId>/files/ whose stem is not referenced
+  // by any image element in the workspace's live canvases. Safe and
+  // idempotent — past versions referencing dropped images render as
+  // broken images, matching the existing op-log compaction trade-off.
+  app.post('/api/workspaces/:workspaceId/files/purge-dangling', async (c) => {
+    const { workspaceId } = c.req.param()
+    try {
+      validateWorkspaceId(workspaceId)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    try {
+      const result = await purgeDanglingFiles(workspaceId, {
+        versionStore: options.versionStore,
+      })
+      return c.json(result)
+    } catch (err) {
+      const body = corruptStoredDataBody(err)
+      if (body) return c.json(body, 500)
+      throw err
     }
   })
 

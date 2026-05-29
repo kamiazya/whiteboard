@@ -43,11 +43,16 @@ const SAMPLE_LIB = {
 }
 
 describe('user-library-store', () => {
+  let handle: Awaited<ReturnType<typeof import('./db/test-helpers.js').createIsolatedDb>>
+
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'user-lib-test-'))
+    const { createIsolatedDb } = await import('./db/test-helpers.js')
+    handle = await createIsolatedDb({ dataDir: tempDir })
   })
 
   afterEach(async () => {
+    await handle.dispose()
     await rm(tempDir, { recursive: true, force: true })
   })
 

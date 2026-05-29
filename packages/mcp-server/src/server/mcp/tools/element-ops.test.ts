@@ -1,11 +1,13 @@
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
+  applyAlign,
   applyAssignToGroup,
   applyClear,
   applyDelete,
   applyDeleteGroup,
   applyDeleteMany,
+  applyDistribute,
   applyMove,
   applyReorder,
   applyUpdate,
@@ -392,5 +394,181 @@ describe('group ops (logical grouping for bulk delete)', () => {
       const deleted = applyDeleteGroup(doc, 'sec-11')
       expect(deleted).toEqual(['b']) // a was already tombstoned, so it is skipped
     })
+  })
+})
+
+describe('applyAlign', () => {
+  let doc: LoroDoc
+  beforeEach(() => {
+    doc = new LoroDoc()
+    seedElement(doc, 'a', { type: 'rectangle', x: 10, y: 10, width: 100, height: 50 })
+    seedElement(doc, 'b', { type: 'rectangle', x: 200, y: 30, width: 80, height: 60 })
+    seedElement(doc, 'c', { type: 'rectangle', x: 50, y: 100, width: 120, height: 40 })
+  })
+
+  it('snaps to leftmost x for alignment="left"', () => {
+    applyAlign(doc, ['a', 'b', 'c'], 'left')
+    expect(readElement(doc, 'a')?.x).toBe(10)
+    expect(readElement(doc, 'b')?.x).toBe(10)
+    expect(readElement(doc, 'c')?.x).toBe(10)
+    // y untouched
+    expect(readElement(doc, 'b')?.y).toBe(30)
+  })
+
+  it('snaps right edges to the rightmost edge for alignment="right"', () => {
+    applyAlign(doc, ['a', 'b', 'c'], 'right')
+    // rightmost edge: max(110, 280, 170) = 280
+    expect(readElement(doc, 'a')?.x).toBe(280 - 100)
+    expect(readElement(doc, 'b')?.x).toBe(280 - 80)
+    expect(readElement(doc, 'c')?.x).toBe(280 - 120)
+  })
+
+  it('snaps centres to the average centre for alignment="center"', () => {
+    applyAlign(doc, ['a', 'b', 'c'], 'center')
+    // centres: 60, 240, 110 → avg = 136.666...
+    const avg = (60 + 240 + 110) / 3
+    expect((readElement(doc, 'a')?.x as number) + 100 / 2).toBeCloseTo(avg)
+    expect((readElement(doc, 'b')?.x as number) + 80 / 2).toBeCloseTo(avg)
+    expect((readElement(doc, 'c')?.x as number) + 120 / 2).toBeCloseTo(avg)
+  })
+
+  it('snaps to topmost y for alignment="top"', () => {
+    applyAlign(doc, ['a', 'b', 'c'], 'top')
+    expect(readElement(doc, 'a')?.y).toBe(10)
+    expect(readElement(doc, 'b')?.y).toBe(10)
+    expect(readElement(doc, 'c')?.y).toBe(10)
+    // x untouched
+    expect(readElement(doc, 'b')?.x).toBe(200)
+  })
+
+  it('snaps bottom edges to the lowest edge for alignment="bottom"', () => {
+    applyAlign(doc, ['a', 'b', 'c'], 'bottom')
+    // bottom edges: 60, 90, 140 → max = 140
+    expect((readElement(doc, 'a')?.y as number) + 50).toBe(140)
+    expect((readElement(doc, 'b')?.y as number) + 60).toBe(140)
+    expect((readElement(doc, 'c')?.y as number) + 40).toBe(140)
+  })
+
+  it('snaps middles to the average middle for alignment="middle"', () => {
+    applyAlign(doc, ['a', 'b', 'c'], 'middle')
+    const avg = (35 + 60 + 120) / 3 // y + height/2 of each
+    expect((readElement(doc, 'a')?.y as number) + 50 / 2).toBeCloseTo(avg)
+    expect((readElement(doc, 'b')?.y as number) + 60 / 2).toBeCloseTo(avg)
+    expect((readElement(doc, 'c')?.y as number) + 40 / 2).toBeCloseTo(avg)
+  })
+
+  it('throws when fewer than 2 elements are passed', () => {
+    expect(() => applyAlign(doc, ['a'], 'left')).toThrow(/at least 2/)
+  })
+
+  it('treats duplicate ids as a single element so they are not moved twice', () => {
+    // Without dedup, "a" appears twice in the geometry math: its x is
+    // counted twice toward the centre/min/max, AND applyMove() is run
+    // for the duplicate, overshooting the target. Pass a duplicate of
+    // "a" alongside one other id and assert the final x lands at the
+    // same value as the no-duplicate call.
+    const docDup = new LoroDoc()
+    seedElement(docDup, 'a', { type: 'rectangle', x: 10, y: 10, width: 100, height: 50 })
+    seedElement(docDup, 'b', { type: 'rectangle', x: 200, y: 30, width: 80, height: 60 })
+
+    applyAlign(docDup, ['a', 'a', 'b'], 'left')
+    expect(readElement(docDup, 'a')?.x).toBe(10)
+    expect(readElement(docDup, 'b')?.x).toBe(10)
+  })
+
+  it('throws when an element id is missing', () => {
+    expect(() => applyAlign(doc, ['a', 'nonexistent'], 'left')).toThrow(/not found/)
+  })
+
+  it('re-snaps bound arrow when an aligned box actually moves', () => {
+    seedElement(doc, 'arrow1', {
+      type: 'arrow',
+      x: 110,
+      y: 35,
+      width: 100,
+      height: 0,
+      points: [[0, 0], [100, 0]],
+      startBoxId: 'a',
+      endBoxId: 'b',
+    })
+    // Box b is the one that will move under align="left", so wire arrow1
+    // through b's boundElements where applyMove looks for re-snap targets.
+    const list = doc.getMovableList('elements')
+    const all = list.toJSON() as Array<Record<string, unknown>>
+    const bIdx = all.findIndex((e) => e.id === 'b')
+    const bMap = list.get(bIdx) as LoroMap
+    bMap.set('boundElements', [{ id: 'arrow1', type: 'arrow' }] as never)
+
+    applyAlign(doc, ['a', 'b'], 'left')
+    // After alignment, both boxes share x=10. The arrow should re-route to
+    // the new layout instead of staying at the original (110, 35) origin.
+    const arrow = readElement(doc, 'arrow1')
+    expect(arrow?.x as number).not.toBe(110)
+  })
+})
+
+describe('applyDistribute', () => {
+  let doc: LoroDoc
+  beforeEach(() => {
+    doc = new LoroDoc()
+    // 4 boxes with uneven gaps. Sorted by x: a(0..50), b(80..120), c(170..210), d(300..380)
+    seedElement(doc, 'a', { type: 'rectangle', x: 0, y: 0, width: 50, height: 30 })
+    seedElement(doc, 'b', { type: 'rectangle', x: 80, y: 0, width: 40, height: 30 })
+    seedElement(doc, 'c', { type: 'rectangle', x: 170, y: 0, width: 40, height: 30 })
+    seedElement(doc, 'd', { type: 'rectangle', x: 300, y: 0, width: 80, height: 30 })
+  })
+
+  it('produces equal horizontal gaps between adjacent elements', () => {
+    applyDistribute(doc, ['a', 'b', 'c', 'd'], 'horizontal')
+    const a = readElement(doc, 'a') as Record<string, number>
+    const b = readElement(doc, 'b') as Record<string, number>
+    const c = readElement(doc, 'c') as Record<string, number>
+    const d = readElement(doc, 'd') as Record<string, number>
+    // Endpoints stay fixed: a starts at 0 and d ends at 380.
+    expect(a.x).toBe(0)
+    expect(d.x + d.width).toBe(380)
+    const gap1 = b.x - (a.x + a.width)
+    const gap2 = c.x - (b.x + b.width)
+    const gap3 = d.x - (c.x + c.width)
+    expect(gap1).toBeCloseTo(gap2)
+    expect(gap2).toBeCloseTo(gap3)
+  })
+
+  it('handles vertical distribution the same way along the y axis', () => {
+    // Re-seed in the y axis.
+    doc = new LoroDoc()
+    seedElement(doc, 'a', { type: 'rectangle', x: 0, y: 0, width: 30, height: 50 })
+    seedElement(doc, 'b', { type: 'rectangle', x: 0, y: 80, width: 30, height: 40 })
+    seedElement(doc, 'c', { type: 'rectangle', x: 0, y: 170, width: 30, height: 40 })
+    seedElement(doc, 'd', { type: 'rectangle', x: 0, y: 300, width: 30, height: 80 })
+    applyDistribute(doc, ['a', 'b', 'c', 'd'], 'vertical')
+    const a = readElement(doc, 'a') as Record<string, number>
+    const b = readElement(doc, 'b') as Record<string, number>
+    const c = readElement(doc, 'c') as Record<string, number>
+    const d = readElement(doc, 'd') as Record<string, number>
+    expect(a.y).toBe(0)
+    expect(d.y + d.height).toBe(380)
+    const gap1 = b.y - (a.y + a.height)
+    const gap2 = c.y - (b.y + b.height)
+    const gap3 = d.y - (c.y + c.height)
+    expect(gap1).toBeCloseTo(gap2)
+    expect(gap2).toBeCloseTo(gap3)
+  })
+
+  it('throws when fewer than 3 elements are passed', () => {
+    expect(() => applyDistribute(doc, ['a', 'b'], 'horizontal')).toThrow(/at least 3/)
+  })
+
+  it('throws when an element id is missing', () => {
+    expect(() => applyDistribute(doc, ['a', 'b', 'nope'], 'horizontal')).toThrow(/not found/)
+  })
+
+  it('respects the input order for the moved elements regardless of id ordering', () => {
+    // Pass ids in non-axis order; sort happens internally on x.
+    applyDistribute(doc, ['d', 'a', 'c', 'b'], 'horizontal')
+    const a = readElement(doc, 'a') as Record<string, number>
+    const d = readElement(doc, 'd') as Record<string, number>
+    expect(a.x).toBe(0)
+    expect(d.x + d.width).toBe(380)
   })
 })

@@ -1,5 +1,6 @@
 import { LoroMap } from 'loro-crdt'
 import { z } from 'zod'
+import { getLogger } from '../../log.js'
 import type { DaemonClient } from '../daemon-client.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
@@ -454,13 +455,16 @@ export function canvasAutoLayoutTool() {
       timings.updatePost = roundMs(nowMs() - phaseStart)
 
       if (debugEnabled) {
-        console.debug('[canvas_auto_layout]', {
-          canvasId: args.canvasId,
-          nodeCount: nodes.length,
-          edgeCount: edges.length,
-          movedCount,
-          timingsMs: timings,
-        })
+        getLogger('canvas_auto_layout').debug(
+          {
+            canvasId: args.canvasId,
+            nodeCount: nodes.length,
+            edgeCount: edges.length,
+            movedCount,
+            timingsMs: timings,
+          },
+          'layout pass complete',
+        )
       }
 
       return {

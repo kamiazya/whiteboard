@@ -26,13 +26,18 @@ const {
   renameBranch,
   DEFAULT_MAIN_COLOR,
 } = await import('./branches-store.js')
+const { createIsolatedDb } = await import('./db/test-helpers.js')
+
+let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
 describe('branches-store', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-branches-test-'))
+    handle = await createIsolatedDb({ dataDir: tempDir })
   })
 
   afterEach(async () => {
+    await handle.dispose()
     await rm(tempDir, { recursive: true, force: true })
   })
 

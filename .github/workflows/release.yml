@@ -105,6 +105,39 @@ jobs:
           WHITEBOARD_DEV: '1'
         run: pnpm check:release-candidate
 
+      - name: Unit tests
+        working-directory: .
+        run: pnpm test
+
+      - name: Typecheck
+        working-directory: .
+        run: pnpm typecheck
+
+      - name: Stdio E2E smoke (no quota required)
+        working-directory: .
+        env:
+          WHITEBOARD_DEV: '1'
+        run: pnpm smoke:e2e
+
+      - name: Build
+        run: pnpm build
+
+      - name: Packaged stdio smoke
+        working-directory: .
+        run: pnpm smoke:packaged
+
+      - name: Packed tarball smoke
+        working-directory: .
+        run: pnpm smoke:tarball
+
+      - name: Codex config smoke
+        working-directory: .
+        run: pnpm smoke:codex-config
+
+      - name: Template smoke
+        working-directory: .
+        run: pnpm smoke:template
+
       - name: Verify pack contents (README / LICENSE / no test / no .map only)
         # Sanity-check the tarball contents before publish. Fail immediately if required files are missing or forbidden files are included.
         run: |

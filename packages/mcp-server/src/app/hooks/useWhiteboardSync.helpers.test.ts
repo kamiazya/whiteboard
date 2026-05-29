@@ -116,6 +116,74 @@ describe('pending export requests', () => {
   })
 })
 
+describe('export_request forced theme', () => {
+  // The browser path has to honour theme just like the headless path, so a
+  // single export_png(theme=dark) call always renders dark regardless of
+  // whether the connected client is sitting in light mode.
+  it('overrides appState.theme and viewBackgroundColor when theme=dark is set', async () => {
+    const elements = [makeElement({ id: 'rect', type: 'rectangle', frameId: null })]
+    const api = {
+      getSceneElements: vi.fn(() => elements),
+      // Simulate a browser client currently sitting in light mode — the
+      // exporter must NOT inherit this when the request forces a theme.
+      getAppState: vi.fn(() => ({ theme: 'light', viewBackgroundColor: '#ffffff' })),
+      getFiles: vi.fn(() => ({})),
+    }
+    let capturedAppState: Record<string, unknown> | undefined
+    const exportToBlobFn = vi.fn(async (args: { appState: Record<string, unknown> }) => {
+      capturedAppState = args.appState
+      return new Blob(['png'], { type: 'image/png' })
+    })
+
+    await handleIncomingExportRequest(
+      { type: 'export_request', requestId: 'req-theme', theme: 'dark' },
+      {
+        api,
+        pending: [],
+        send: vi.fn(),
+        exportToBlobFn,
+        blobToBase64Fn: vi.fn(async () => 'x'),
+      },
+    )
+
+    if (!capturedAppState) throw new Error('exportToBlobFn was not called')
+    const appState = capturedAppState
+    expect(appState.theme).toBe('dark')
+    // Match the headless renderer's default dark background so the two paths
+    // produce visually-comparable PNGs for the same canvas.
+    expect(appState.viewBackgroundColor).toBe('#121212')
+  })
+
+  it('leaves appState.theme alone when no theme is set on the request', async () => {
+    const api = {
+      getSceneElements: vi.fn(() => []),
+      getAppState: vi.fn(() => ({ theme: 'light', viewBackgroundColor: '#abcdef' })),
+      getFiles: vi.fn(() => ({})),
+    }
+    let capturedAppState: Record<string, unknown> | undefined
+    const exportToBlobFn = vi.fn(async (args: { appState: Record<string, unknown> }) => {
+      capturedAppState = args.appState
+      return new Blob(['png'])
+    })
+
+    await handleIncomingExportRequest(
+      { type: 'export_request', requestId: 'req-no-theme' },
+      {
+        api,
+        pending: [],
+        send: vi.fn(),
+        exportToBlobFn,
+        blobToBase64Fn: vi.fn(async () => 'x'),
+      },
+    )
+
+    if (!capturedAppState) throw new Error('exportToBlobFn was not called')
+    const appState = capturedAppState
+    expect(appState.theme).toBe('light')
+    expect(appState.viewBackgroundColor).toBe('#abcdef')
+  })
+})
+
 describe('export_request frameId filtering', () => {
   // frameId limits the export to the frame and its children so large canvases can be exported section by section.
   it('passes only the frame and its children to exportToBlobFn when frameId is set', async () => {

@@ -6,6 +6,29 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml/badge.svg)](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml)
 
+## Start here
+
+whiteboard is a **browser-first whiteboard that grows with you**: open a canvas in
+your browser, run it locally for durable private storage, and self-host it for a
+team when you're ready.
+
+**Try it in your browser** — no account; your canvas data stays in your own
+browser. <sub>*Browser-local: runs in your browser, data stays on your machine.*</sub>
+*[Get started →](docs/tutorials/getting-started.md) — runs locally from a checkout today.*
+
+### ▶ Draw with your AI agent
+
+The fastest way to get value today. Claude Code, Codex, or Gemini draw on the
+canvas alongside you over MCP. <sub>*Local daemon: a server on your own machine.*</sub>
+
+**→ [Get started: Quick install](#quick-install)**
+
+---
+
+**Self-host for your team** — run whiteboard as a shared server behind your own
+identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub>
+→ [Self-host with Docker](docs/docker-server.md)
+
 ## How whiteboard works
 
 You and your agent both reach the same Excalidraw canvas — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser over WebSocket.
@@ -22,26 +45,6 @@ You and your agent both reach the same Excalidraw canvas — they talk, the agen
   <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, Excalidraw drawing toolbar, live diagram synced from the agent in real time" width="780" />
 </p>
 
-## Start here
-
-whiteboard is a **browser-first whiteboard that grows with you**: open a canvas in
-your browser, run it locally for durable private storage, and self-host it for a
-team when you're ready.
-
-**Try it in your browser** — zero install, no account; your canvas data stays in
-your own browser (Browser-local). *[Get started →](docs/tutorials/getting-started.md) (runs locally today).*
-
-### ▶ Draw with your AI agent
-
-The fastest way to get value today. Claude Code, Codex, or Gemini draw on the
-canvas alongside you over MCP (Local daemon).
-
-**→ [Get started: Quick install](#quick-install)**
-
----
-
-**Self-host for your team** — run whiteboard as a shared server behind your own
-identity provider and TLS. → [Self-host with Docker](docs/docker-server.md) (Server mode)
 
 ## Reach for whiteboard when…
 
