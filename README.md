@@ -22,6 +22,27 @@ You and your agent both reach the same Excalidraw canvas — they talk, the agen
   <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, Excalidraw drawing toolbar, live diagram synced from the agent in real time" width="780" />
 </p>
 
+## Start here
+
+whiteboard is a **browser-first whiteboard that grows with you**: open a canvas in
+your browser, run it locally for durable private storage, and self-host it for a
+team when you're ready.
+
+**Try it in your browser** — zero install, no account; your canvas data stays in
+your own browser (Browser-local). *[Get started →](docs/tutorials/getting-started.md) (runs locally today).*
+
+### ▶ Draw with your AI agent
+
+The fastest way to get value today. Claude Code, Codex, or Gemini draw on the
+canvas alongside you over MCP (Local daemon).
+
+**→ [Get started: Quick install](#quick-install)**
+
+---
+
+**Self-host for your team** — run whiteboard as a shared server behind your own
+identity provider and TLS. → [Self-host with Docker](docs/docker-server.md) (Server mode)
+
 ## Reach for whiteboard when…
 
 - **You're aligning with your agent on a design and text alone keeps drifting.** Sketch the request flow once, ask the agent to fill in the missing edges, point at the diagram instead of re-explaining.
@@ -61,6 +82,8 @@ This installs the MCP server **and** the bundled `/drawing-visuals`, `/coauthori
 claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest
 ```
 
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/development.md#bundled-skills-install)
+
 </details>
 
 ### Codex
@@ -83,6 +106,8 @@ Add to `~/.codex/config.toml`:
 command = "npx"
 args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 ```
+
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/development.md#bundled-skills-install)
 
 </details>
 
@@ -107,6 +132,8 @@ Add to `~/.gemini/settings.json`:
   }
 }
 ```
+
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/development.md#bundled-skills-install)
 
 </details>
 
