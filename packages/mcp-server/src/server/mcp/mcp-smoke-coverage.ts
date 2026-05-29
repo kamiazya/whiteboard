@@ -11,7 +11,7 @@
  *   2. Add the tool to exactly one of the four category arrays.
  *   3. The property test (tool-structured-content.property.test.ts) will fail
  *      if the categories do not cover ALL_REGISTERED_TOOLS exactly.
- *   4. The smoke (mcp-e2e-checkpoint.mjs) will fail if tools/list no longer
+ *   4. The smoke (mcp-e2e-checkpoint.mjs / smoke-impl.ts) will fail if tools/list no longer
  *      matches ALL_REGISTERED_TOOLS.
  *
  * Category meanings:
@@ -36,8 +36,6 @@ export const ALL_REGISTERED_TOOLS = [
   'canvas_inspect',
   'canvas_list',
   'canvas_open',
-  'checkpoint_restore',
-  'checkpoint_save',
   'create_embed',
   'create_frame',
   'delete_element',
@@ -68,6 +66,9 @@ export const ALL_REGISTERED_TOOLS = [
   'user_library_metadata_set',
   'user_library_remove',
   'user_library_save',
+  'version_list',
+  'version_restore',
+  'version_save',
   'viewport_set',
 ] as const satisfies readonly string[]
 
@@ -77,8 +78,9 @@ export const COVERED_TOOLS = [
   'annotate',
   'create_frame',
   'canvas_inspect',
-  'checkpoint_save',
-  'checkpoint_restore',
+  'version_save',
+  'version_restore',
+  'version_list',
   'canvas_export_json',
   'palette_get',
   'library_list_installed',
