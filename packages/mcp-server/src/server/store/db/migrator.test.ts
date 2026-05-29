@@ -1,6 +1,7 @@
 import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Migrator } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -38,6 +39,36 @@ describe('runMigrations', () => {
     await expect(stat(join(tempDir, 'whiteboard.db'))).resolves.toBeDefined()
     // Re-running is a no-op: kysely's __kysely_migration tracking table marks
     // every migration as applied so the second call returns silently.
+    await expect(runMigrations(db)).resolves.toBeUndefined()
+  })
+
+  // Forward-compat regression: the published mcp-server-v0.0.6 release shipped a
+  // 0002-canvases-last-compacted-at migration, so databases created by it record that
+  // name in the migration log. The current schema dropped that migration/feature; without
+  // a no-op re-registration kysely would reject those DBs with
+  // "corrupted migrations: previously executed migration 0002-canvases-last-compacted-at is missing".
+  // Remove the no-op 0002 from migrations/index.ts and this test goes red (mutation check).
+  it('migrates a v0.0.6-era DB whose log already records 0002-canvases-last-compacted-at', async () => {
+    await prepareDataDir(tempDir)
+    const db = await getDb(tempDir)
+
+    // Reproduce a v0.0.6 database: migrate with a provider that includes the
+    // 0002 name so kysely writes it into the migration log (its content is
+    // irrelevant — the corrupted check is name-based), exactly as v0.0.6 would have.
+    const { migrations } = await import('./migrations/index.js')
+    const v006Migrator = new Migrator({
+      db,
+      provider: {
+        getMigrations: async () => ({
+          ...migrations,
+          '0002-canvases-last-compacted-at': { up: async () => {}, down: async () => {} },
+        }),
+      },
+    })
+    const seed = await v006Migrator.migrateToLatest()
+    expect(seed.error).toBeUndefined()
+
+    // Current production migrator must not reject this DB as corrupted.
     await expect(runMigrations(db)).resolves.toBeUndefined()
   })
 
