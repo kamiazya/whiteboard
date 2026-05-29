@@ -15,6 +15,8 @@ import type { Migration } from 'kysely'
 // migration log, so migrateToLatest() passes. This intentionally does NOT restore the
 // feature: fresh databases gain nothing, and the leftover column on upgraded v0.0.6
 // databases is harmless because no current code reads it. Do not repurpose this name.
+//
+// The next free migration index is 0003.
 export const migration: Migration = {
   async up(): Promise<void> {},
   async down(): Promise<void> {},
