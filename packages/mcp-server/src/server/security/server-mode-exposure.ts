@@ -129,6 +129,7 @@ export function resolveServerModeExposure(
   }
 
   const allowedOrigins = input.allowedOrigins ?? []
+  const normalizedOrigins: string[] = []
   for (const origin of allowedOrigins) {
     if (origin === '*') {
       return { ok: false, code: 'server_mode.wildcard_origin_forbidden' }
@@ -152,6 +153,11 @@ export function resolveServerModeExposure(
     ) {
       return { ok: false, code: 'server_mode.external_url_must_be_origin' }
     }
+    // Store the URL-normalised origin (lowercased host, explicit-default port
+    // dropped) so the per-request exact-match compares canonical forms. An
+    // operator writing `https://Example.com:443` otherwise false-denies the
+    // browser's canonical `https://example.com`.
+    normalizedOrigins.push(parsedOrigin.origin)
   }
 
   return {
@@ -161,7 +167,7 @@ export function resolveServerModeExposure(
     // slash that `URL.href` would include — consistent with the Origin header
     // format browsers send.
     publicBaseUrl: parsed.origin,
-    allowedOrigins,
+    allowedOrigins: normalizedOrigins,
     trustedProxy: input.trustedProxy ?? false,
   }
 }

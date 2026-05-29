@@ -161,6 +161,23 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
     }
   })
 
+  it('allowedOrigins are URL-normalised (explicit :443 / uppercase host) for canonical exact-match', () => {
+    // Regression (security LOW-2): stored allowedOrigins must be new URL(o).origin so the
+    // per-request exact-match compares canonical forms; an operator's https://App.Example.com:443
+    // must not false-deny the browser's canonical https://app.example.com.
+    const d = resolveServerModeExposure({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: 'https://example.com',
+      allowedOrigins: ['https://App.Example.com:443'],
+    })
+    expect(d.ok).toBe(true)
+    if (d.ok) {
+      expect(d.allowedOrigins).toEqual(['https://app.example.com'])
+      expect(isOriginAllowedForServerMode('https://app.example.com', d.allowedOrigins)).toBe(true)
+    }
+  })
+
   it('valid https origin without trailing slash → publicBaseUrl equals origin', () => {
     const d = resolveServerModeExposure({
       mode: 'server-mode',

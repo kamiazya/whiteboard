@@ -51,7 +51,14 @@ async function findAvailablePort(start = 3099): Promise<number> {
       const port = typeof addr === 'object' && addr ? addr.port : start
       server.close(() => resolve(port))
     })
-    server.on('error', () => {
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      // Only retry the next port when this one is in use. Any other error (EACCES,
+      // EADDRNOTAVAIL, …) is permanent for this scan and must reject immediately
+      // instead of walking ~62k ports and hiding the real cause behind a generic message.
+      if (error.code !== 'EADDRINUSE') {
+        reject(error)
+        return
+      }
       if (start >= 65535) {
         reject(new Error('No available TCP port found'))
         return

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -71,6 +71,21 @@ describe('validateOutputPath', () => {
       await expect(
         validateOutputPath(join(tempDir, '..', 'escape.png'), false, tempDir),
       ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+    })
+
+    it('rejects a path inside allowedDir that resolves outside via a symlink', async () => {
+      // allowedDir/link -> outsideDir. The lexical containment check passes (link is under
+      // allowedDir as a string), but realpath resolves the parent outside allowedDir, so it
+      // must reject (security MEDIUM-2 — symlink sandbox escape).
+      const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-output-path-outside-'))
+      try {
+        await symlink(outsideDir, join(tempDir, 'link'))
+        await expect(
+          validateOutputPath(join(tempDir, 'link', 'escape.png'), false, tempDir),
+        ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+      } finally {
+        await rm(outsideDir, { recursive: true, force: true })
+      }
     })
 
     it('rejects a path with control characters', async () => {

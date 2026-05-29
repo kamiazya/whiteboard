@@ -170,7 +170,10 @@ function resolveServerModeApiScopes(method: string, path: string): readonly Auth
     return ['canvas:write']
   }
   if (path === '/api/import-migration-bundle') return ['canvas:write']
-  if (path.startsWith('/api/canvas/')) return ['canvas:read']
+  // Catch-all for remaining /api/canvas/ routes. Honor the write/read split so a mutating
+  // POST (e.g. /viewport) is not authorized with only canvas:read; the specific write routes
+  // above (update/export/export-json) still take precedence.
+  if (path.startsWith('/api/canvas/')) return isWrite ? ['canvas:write'] : ['canvas:read']
 
   // User library routes — writes mutate workspace-level shared library state
   if (path.startsWith('/api/user-libraries')) {
