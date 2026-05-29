@@ -42,18 +42,26 @@ function createRuntimeOptions(
   options?: Parameters<typeof createLocalTokenMcpHttpAuthStrategy>[0],
 ) {
   return {
+    authMode: 'local-daemon' as const,
     token,
     mcpAuth: options ? createLocalTokenMcpHttpAuthStrategy({ token, ...options }) : undefined,
     touch: vi.fn(),
     shutdown: vi.fn(async () => undefined),
     getStatus: () => ({
+      ok: true,
       pid: 10,
+      host: '127.0.0.1',
       port: 3099,
+      baseUrl: 'http://127.0.0.1:3099',
+      version: PACKAGE_VERSION,
       startedAt: '2026-04-23T00:00:00.000Z',
       uptimeMs: 100,
       idleForMs: 10,
-      connectedClients: 0,
-      readyClients: 0,
+      auth: { mode: 'local-token', hasToken: Boolean(token) },
+      storage: { dataDir: '/tmp', dataDirWritable: true },
+      app: { served: true, buildPresent: false },
+      mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
+      clients: { connected: 0, ready: 0 },
     }),
   }
 }

@@ -89,7 +89,7 @@ export function createLibrariesRouter() {
       await c.req.json().catch(() => ({})),
     )
     if (!parsed.success) {
-      return c.json({ error: 'url (string) is required' }, 400)
+      return c.json({ error: 'invalid_body', message: 'url (string) is required' }, 400)
     }
     try {
       await validateExternalUrl(parsed.data.url)
@@ -121,7 +121,7 @@ export function createLibrariesRouter() {
       await c.req.json().catch(() => ({})),
     )
     if (!parsed.success) {
-      return c.json({ error: 'url (string) is required' }, 400)
+      return c.json({ error: 'invalid_body', message: 'url (string) is required' }, 400)
     }
     try {
       const libs = await removeInstalledLibrary(workspaceId, parsed.data.url)

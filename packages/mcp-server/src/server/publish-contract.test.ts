@@ -213,6 +213,6 @@ describe('publish contract', () => {
     expect(vitestShared).toContain("reporter: ['text', 'html', 'lcov']")
     expect(vitestShared).toContain("reportsDirectory: './tmp/coverage'")
     expect(vitestShared).toContain("include: ['src/**/*.{ts,tsx}']")
-    expect(vitestShared).toContain("exclude: ['**/*.test.*', 'src/app/components/ui/**', 'dist/**']")
+    expect(vitestShared).toContain("exclude: ['**/*.test.*', '**/*.smoke-impl.ts', '**/*.distribution-impl.ts', 'src/app/components/ui/**', 'dist/**']")
   })
 })

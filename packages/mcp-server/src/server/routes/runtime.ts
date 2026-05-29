@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
-import type { RuntimeStatus } from '../http-server.js'
+import { runtimeStatusResponseSchema } from '../../shared/api-contracts/runtime.js'
+import type { RuntimeStatusResponse } from '../../shared/api-contracts/runtime.js'
 import { isAuthorized } from './auth.js'
 import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 
@@ -7,7 +8,7 @@ export interface RuntimeRouterOptions {
   token?: string
   mcpAuth?: McpHttpAuthStrategy
   touch: () => void
-  getStatus: () => RuntimeStatus
+  getStatus: () => RuntimeStatusResponse
   shutdown: () => Promise<void>
 }
 
@@ -28,7 +29,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
 
   app.get('/api/runtime/status', (c) => {
     options.touch()
-    return c.json(options.getStatus())
+    return c.json(runtimeStatusResponseSchema.parse(options.getStatus()))
   })
 
   app.post('/api/runtime/touch', (c) => {

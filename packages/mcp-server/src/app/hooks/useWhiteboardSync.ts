@@ -62,6 +62,10 @@ export interface UseWhiteboardSyncOptions {
   // Called right after auto-save creates a version, typically to upload a thumbnail.
   // It is stored in a ref, so it does not need to sit in effect dependency arrays.
   onVersionCreated?: (version: VersionCreatedPayload) => void
+  // Called when a file (image) upload fails and the canvas commit is skipped.
+  onFileUploadFailed?: () => void
+  // Called after a successful file upload, allowing callers to clear a previous error.
+  onFileUploadSucceeded?: () => void
 }
 
 export function applyHydratedSceneToApi(args: {
@@ -90,9 +94,13 @@ export function useWhiteboardSync(
   const undoManagerRef = useRef<UndoManager | null>(null)
   const [apiReady, setApiReady] = useState(false)
 
-  // Keep onVersionCreated in a ref so websocket effects do not reconnect just because the callback changed.
+  // Keep callbacks in refs so effects do not reconnect when the caller re-renders with new function identities.
   const onVersionCreatedRef = useRef(options.onVersionCreated)
   onVersionCreatedRef.current = options.onVersionCreated
+  const onFileUploadFailedRef = useRef(options.onFileUploadFailed)
+  onFileUploadFailedRef.current = options.onFileUploadFailed
+  const onFileUploadSucceededRef = useRef(options.onFileUploadSucceeded)
+  onFileUploadSucceededRef.current = options.onFileUploadSucceeded
 
   // Soft-lock state used while another peer is restoring. CanvasPage shows an overlay and blocks input.
   // label is optional; a generic message is used when it is absent.
@@ -434,8 +442,11 @@ export function useWhiteboardSync(
         workspaceId,
         slug,
         (fileId) => uploadedFileIdsRef.current.add(fileId),
-      ).catch((err: unknown) => {
+      ).then(() => {
+        if (newEntries.length > 0) onFileUploadSucceededRef.current?.()
+      }).catch((err: unknown) => {
         console.error('[whiteboard] file upload failed, commit skipped:', err)
+        onFileUploadFailedRef.current?.()
       })
     }, 300)
     // canvasKey already encodes workspaceId/slug, but listing both keeps the

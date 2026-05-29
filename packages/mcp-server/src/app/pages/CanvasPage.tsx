@@ -33,6 +33,8 @@ export default function CanvasPage() {
   // apiRef is assigned in handleApiReady, so it is null immediately after mount.
   // onVersionCreated is read through a ref inside the hook, so recreating it on each render is fine.
   const { onApiReady, onSceneChange, clearLocalUndo, restoreInProgress, restoreLabel } = useWhiteboardSync(workspaceId, slug, {
+    onFileUploadFailed: () => setFileUploadError(true),
+    onFileUploadSucceeded: () => setFileUploadError(false),
     onVersionCreated: async (v) => {
       // Only generate thumbnails for auto-save. Manual save already uploads one from the header flow.
       if (!v.auto) return
@@ -74,6 +76,7 @@ export default function CanvasPage() {
     })
   }
 
+  const [fileUploadError, setFileUploadError] = useState(false)
   const [canvases, setCanvases] = useState<{ slug: string; updatedAt: string }[]>([])
 
   // Import and restore Excalidraw libraries.
@@ -217,6 +220,15 @@ export default function CanvasPage() {
         </>
       )}
       <main className="relative flex-1">
+        {fileUploadError && (
+          <div
+            role="alert"
+            data-testid="file-upload-error"
+            className="absolute top-2 left-1/2 z-50 -translate-x-1/2 rounded border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive shadow"
+          >
+            Could not upload the file. Please try again.
+          </div>
+        )}
         <Excalidraw
           key={`${workspaceId}/${slug}`}
           excalidrawAPI={handleApiReady}

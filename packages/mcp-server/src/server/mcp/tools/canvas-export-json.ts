@@ -31,7 +31,7 @@ export function canvasExportJsonTool() {
         outputPath: {
           type: 'string',
           description:
-            'Absolute path to write the .excalidraw file to. Useful when round-tripping a local file. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+            'Absolute path to write the .excalidraw file to. Must be inside the workspace exports directory. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
         },
         overwrite: {
           type: 'boolean',
@@ -71,7 +71,7 @@ export function canvasExportJsonTool() {
           errBody?.message ?? errBody?.error ?? `Failed to export canvas JSON: ${res.status}`,
         )
       }
-      return (await res.json()) as { filePath: string; elementCount: number }
+      return canvasExportJsonOutputSchema.parse(await res.json())
     },
   }
 }

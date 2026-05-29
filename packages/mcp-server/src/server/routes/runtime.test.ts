@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { runtimeStatusResponseSchema, type RuntimeStatusResponse } from '../../shared/api-contracts/runtime.js'
 import { createRuntimeRouter } from './runtime.js'
 
 function createApp() {
@@ -9,13 +10,20 @@ function createApp() {
     touch,
     shutdown,
     getStatus: () => ({
+      ok: true,
       pid: 10,
+      host: '127.0.0.1',
       port: 3099,
+      baseUrl: 'http://127.0.0.1:3099',
+      version: '0.0.0',
       startedAt: '2026-04-23T00:00:00.000Z',
       uptimeMs: 100,
       idleForMs: 50,
-      connectedClients: 2,
-      readyClients: 1,
+      auth: { mode: 'local-token', hasToken: true },
+      storage: { dataDir: '/tmp/data', dataDirWritable: true },
+      app: { served: true, buildPresent: false },
+      mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
+      clients: { connected: 2, ready: 1 },
     }),
   })
 
@@ -45,8 +53,7 @@ describe('runtime routes', () => {
     await expect(res.json()).resolves.toMatchObject({
       pid: 10,
       port: 3099,
-      connectedClients: 2,
-      readyClients: 1,
+      clients: { connected: 2, ready: 1 },
     })
     expect(touch).toHaveBeenCalledTimes(1)
   })
@@ -61,5 +68,15 @@ describe('runtime routes', () => {
     expect(touch).toHaveBeenCalledTimes(1)
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(shutdown).toHaveBeenCalledTimes(1)
+  })
+
+  it('status response conforms to runtimeStatusResponseSchema (parse does not throw)', async () => {
+    const { app } = createApp()
+    const res = await app.request('/api/runtime/status', {
+      headers: { Authorization: 'Bearer secret' },
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(() => runtimeStatusResponseSchema.parse(body)).not.toThrow()
   })
 })

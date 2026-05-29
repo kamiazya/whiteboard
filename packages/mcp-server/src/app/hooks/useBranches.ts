@@ -61,7 +61,7 @@ export function parseBranchesResponse(raw: unknown): BranchesState {
   }
   return {
     branches,
-    head: typeof data.head === 'string' ? data.head : 'main',
+    head: typeof data.head === 'string' && data.head.length > 0 ? data.head : 'main',
   }
 }
 
@@ -83,6 +83,19 @@ async function requireOk(res: Response): Promise<Response> {
   throw err
 }
 
+function parseSchemaOrThrow<T>(
+  schema: { safeParse(data: unknown): { success: true; data: T } | { success: false } },
+  data: unknown,
+): T {
+  const result = schema.safeParse(data)
+  if (result.success) return result.data
+  const err: BranchApiError = {
+    status: 0,
+    body: { error: 'contract_mismatch', message: 'Unexpected branch API response' },
+  }
+  throw err
+}
+
 // Imperative API helpers independent from React.
 export function branchesApi(workspaceId: string, slug: string) {
   const urls = buildBranchUrls(workspaceId, slug)
@@ -99,17 +112,17 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify(args),
         }),
       )
-      return createBranchResponseSchema.parse(await res.json()).branch
+      return parseSchemaOrThrow(createBranchResponseSchema, await res.json()).branch
     },
     async getStats(name: string): Promise<BranchStatsResponse> {
       const res = await requireOk(await apiFetch(urls.stats(name)))
-      return branchStatsResponseSchema.parse(await res.json())
+      return parseSchemaOrThrow(branchStatsResponseSchema, await res.json())
     },
     async remove(name: string): Promise<DeleteBranchResponse> {
       const res = await requireOk(
         await apiFetch(urls.deleteBranch(name), { method: 'DELETE' }),
       )
-      return deleteBranchResponseSchema.parse(await res.json())
+      return parseSchemaOrThrow(deleteBranchResponseSchema, await res.json())
     },
     async rename(oldName: string, newName: string): Promise<RenameBranchResponse> {
       const res = await requireOk(
@@ -119,7 +132,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify({ name: newName }),
         }),
       )
-      return renameBranchResponseSchema.parse(await res.json())
+      return parseSchemaOrThrow(renameBranchResponseSchema, await res.json())
     },
     async setHead(branch: string): Promise<SetHeadResponse> {
       const res = await requireOk(
@@ -129,7 +142,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify({ branch }),
         }),
       )
-      return setHeadResponseSchema.parse(await res.json())
+      return parseSchemaOrThrow(setHeadResponseSchema, await res.json())
     },
     async merge(source: string, args: { into: string; dryRun?: boolean }): Promise<MergeResult> {
       const res = await requireOk(
@@ -142,7 +155,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           }),
         }),
       )
-      return mergeResponseSchema.parse(await res.json())
+      return parseSchemaOrThrow(mergeResponseSchema, await res.json())
     },
   }
 }
@@ -167,22 +180,37 @@ export function useBranches(workspaceId: string, slug: string): UseBranchesResul
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<BranchApiError | Error | null>(null)
   const apiRef = useRef(branchesApi(workspaceId, slug))
+  const fetchSeqRef = useRef(0)
+  const mountedRef = useRef(false)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   // Recreate the API wrapper whenever session or slug changes.
+  // Bump the sequence so any in-flight request started for the previous canvas is discarded.
   useEffect(() => {
     apiRef.current = branchesApi(workspaceId, slug)
+    fetchSeqRef.current += 1
   }, [workspaceId, slug])
 
   const refetch = useCallback(async () => {
+    fetchSeqRef.current += 1
+    const seq = fetchSeqRef.current
     setLoading(true)
     try {
       const next = await apiRef.current.list()
+      if (seq !== fetchSeqRef.current || !mountedRef.current) return
       setState(next)
       setError(null)
     } catch (err) {
+      if (seq !== fetchSeqRef.current || !mountedRef.current) return
       setError(err as BranchApiError | Error)
     } finally {
-      setLoading(false)
+      if (seq === fetchSeqRef.current && mountedRef.current) setLoading(false)
     }
   }, [])
 

@@ -189,6 +189,34 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
       message: 'fromVersionId is not supported in this deployment',
     })
   })
+
+  it('returns 400 invalid_body with message "malformed JSON" when body is not valid JSON', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json{{{',
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({
+      error: 'invalid_body',
+      message: 'malformed JSON',
+    })
+  })
+
+  it('returns 400 invalid_body with message "name is required" when body is valid JSON but name is missing', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({
+      error: 'invalid_body',
+      message: 'name is required',
+    })
+  })
 })
 
 describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
@@ -804,6 +832,44 @@ describe('PATCH /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
       body: JSON.stringify({}),
     })
     expect(res.status).toBe(400)
+  })
+
+  it('returns 400 invalid_body with message "malformed JSON" when rename body is not valid JSON', async () => {
+    const app = makeApp({ renameInVersions: vi.fn().mockResolvedValue(0) })
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'feature' }),
+    })
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/feature', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: 'not-json{{{',
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({
+      error: 'invalid_body',
+      message: 'malformed JSON',
+    })
+  })
+
+  it('returns 400 invalid_body with message "name is required" when rename body is valid JSON but name is missing', async () => {
+    const app = makeApp({ renameInVersions: vi.fn().mockResolvedValue(0) })
+    await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'feature' }),
+    })
+    const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches/feature', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({
+      error: 'invalid_body',
+      message: 'name is required',
+    })
   })
 
   it('returns 500 and rolls back the branch rename when renameInVersions reports corruption', async () => {

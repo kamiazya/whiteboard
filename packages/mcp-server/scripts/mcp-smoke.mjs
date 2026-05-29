@@ -1,58 +1,17 @@
 #!/usr/bin/env node
-// Startup smoke test for the MCP server.
-// Spawns src/server/mcp/index.ts via node --import tsx/esm and verifies that
-// no SyntaxError or immediate exit happens within 3 seconds.
-// This guards against regressions where missing exports break startup.
-
-import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join, resolve, dirname } from 'node:path'
+// Direct invocation requires tsx:
+//   node --import tsx/esm scripts/mcp-smoke.mjs
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const whiteboardRoot = resolve(__dirname, '..')
-const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-smoke-'))
+const root = resolve(__dirname, '..')
+const entry = resolve(root, 'src/server/mcp/index.ts')
 
-const child = spawn('node', ['--import', 'tsx/esm', 'src/server/mcp/index.ts'], {
-  cwd: whiteboardRoot,
-  env: { ...process.env, WHITEBOARD_DATA_DIR: tmpDataDir },
-  stdio: ['ignore', 'pipe', 'pipe'],
-})
-
-let stderr = ''
-let exited = false
-let exitCode = null
-
-child.stderr.on('data', (chunk) => {
-  stderr += chunk.toString()
-})
-child.on('exit', (code) => {
-  exited = true
-  exitCode = code
-})
-
-const WAIT_MS = 3000
-await new Promise((r) => setTimeout(r, WAIT_MS))
-
-// Detect fatal startup errors.
-const fatalPatterns = [/SyntaxError/, /Cannot find module/, /does not provide an export/]
-const fatal = fatalPatterns.find((p) => p.test(stderr))
-
-// Cleanup.
-if (!exited) child.kill('SIGTERM')
-rmSync(tmpDataDir, { recursive: true, force: true })
-
-if (fatal) {
-  console.error(`[mcp-smoke] FAIL: matched ${fatal}`)
-  console.error(stderr)
+try {
+  const { runStartupSmoke } = await import(resolve(root, 'src/server/mcp/startup.smoke-impl.ts'))
+  await runStartupSmoke({ entry, root })
+} catch (err) {
+  console.error(`[mcp-smoke] FAIL: ${err instanceof Error ? err.message : String(err)}`)
   process.exit(1)
 }
-if (exited && exitCode !== 0 && exitCode !== null) {
-  console.error(`[mcp-smoke] FAIL: MCP exited with code ${exitCode} within ${WAIT_MS}ms`)
-  console.error(stderr)
-  process.exit(1)
-}
-
-console.log(`[mcp-smoke] OK: MCP stayed alive for ${WAIT_MS}ms`)
-process.exit(0)

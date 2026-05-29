@@ -126,4 +126,16 @@ describe('canvas_export_json', () => {
       ),
     ).rejects.toThrow(/already exists/)
   })
+
+  it('rejects when daemon response is missing required fields (schema mismatch)', async () => {
+    const tool = canvasExportJsonTool()
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({ filePath: '/tmp/export.excalidraw' }), // elementCount missing
+        { status: 200 },
+      )
+    }) as typeof globalThis.fetch
+
+    await expect(tool.execute({ canvasId: 'sid/canvas-a' }, client)).rejects.toThrow()
+  })
 })

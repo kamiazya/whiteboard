@@ -155,4 +155,27 @@ describe('WorkspaceTopBar browser mode', () => {
       expect(onRestored).toHaveBeenCalledTimes(1)
     })
   })
+
+  it('does not dispatch excalidraw:version_saved when POST /versions returns invalid schema', async () => {
+    // The default beforeEach mock returns { ok: true } for POST /versions,
+    // which does not match saveVersionResponseSchema (missing version.id, branchName, etc.).
+    const versionSavedFired = vi.fn()
+    window.addEventListener('excalidraw:version_saved', versionSavedFired)
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    renderTopBar()
+
+    // Ctrl+S triggers saveVersion(''); fire on window (capture listener)
+    fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+
+    // Wait for saveVersion to complete: it logs console.error on schema mismatch
+    await waitFor(() => {
+      expect(consoleErrorSpy).toHaveBeenCalled()
+    })
+
+    expect(versionSavedFired).not.toHaveBeenCalled()
+
+    window.removeEventListener('excalidraw:version_saved', versionSavedFired)
+    consoleErrorSpy.mockRestore()
+  })
 })

@@ -1,8 +1,13 @@
-import { serve } from '@hono/node-server'
+import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
+import { join } from 'node:path'
 import type { Socket } from 'node:net'
+import { serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
 import { IdleTimer } from '../daemon/idle-timer.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
+import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { createApp } from './app.js'
+import { DATA_DIR, DIST_APP_DIR } from './config.js'
 import { handleWsUpgrade, getConnectionStats, setRuntimeTouchFn } from './routes/ws.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
@@ -10,15 +15,7 @@ import { validationErrorBody } from './validators.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 
-export interface RuntimeStatus {
-  pid: number
-  port: number
-  startedAt: string
-  uptimeMs: number
-  idleForMs: number
-  connectedClients: number
-  readyClients: number
-}
+export type RuntimeStatus = RuntimeStatusResponse
 
 export interface StartHttpServerOptions {
   port: number
@@ -55,16 +52,26 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   })
 
   const touch = () => idleTimer.touch()
-  const getRuntimeStatus = (): RuntimeStatus => {
+  const getRuntimeStatus = (): RuntimeStatusResponse => {
     const stats = getConnectionStats()
     return {
+      ok: true,
       pid: process.pid,
+      host,
       port: options.port,
+      baseUrl: `http://${host}:${options.port}`,
+      version: PACKAGE_VERSION,
       startedAt,
       uptimeMs: Date.now() - startedAtMs,
       idleForMs: idleTimer.getIdleForMs(),
-      connectedClients: stats.connectedClients,
-      readyClients: stats.readyClients,
+      auth: { mode: 'local-token', hasToken: Boolean(options.token) },
+      storage: {
+        dataDir: DATA_DIR,
+        dataDirWritable: (() => { try { accessSync(DATA_DIR, fsConstants.W_OK); return true } catch { return false } })(),
+      },
+      app: { served: true, buildPresent: existsSync(join(DIST_APP_DIR, 'index.html')) },
+      mcp: { httpEnabled: true, endpoint: `http://${host}:${options.port}/mcp` },
+      clients: { connected: stats.connectedClients, ready: stats.readyClients },
     }
   }
 
@@ -101,6 +108,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   }
 
   const app = createApp({
+    authMode: 'local-daemon',
     token: options.token,
     mcpAuth: options.mcpAuth,
     touch,

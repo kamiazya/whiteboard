@@ -847,7 +847,7 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'explicit', 'out.excalidraw')
+    const outputPath = join(tempDir, 'session1', 'exports', 'explicit', 'out.excalidraw')
     const app = createCanvasRouter()
     const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
       method: 'POST',
@@ -879,7 +879,8 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'existing.excalidraw')
+    const outputPath = join(tempDir, 'session1', 'exports', 'existing.excalidraw')
+    await mkdir(join(tempDir, 'session1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const app = createCanvasRouter()
@@ -901,7 +902,8 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'replace-me.excalidraw')
+    const outputPath = join(tempDir, 'session1', 'exports', 'replace-me.excalidraw')
+    await mkdir(join(tempDir, 'session1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const app = createCanvasRouter()

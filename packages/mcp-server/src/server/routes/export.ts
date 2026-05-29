@@ -12,6 +12,7 @@ import { DATA_DIR } from '../config.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { sendExportRequest, getClientCount } from './ws.js'
 import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
+import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
 
 // requestId -> { resolve, reject }
 const pendingExports = new Map<
@@ -81,12 +82,11 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     let outputPath: string | undefined
     if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
       try {
-        await validateOutputPath(body.outputPath, body.overwrite === true)
+        await validateOutputPath(body.outputPath, body.overwrite === true, join(DATA_DIR, workspaceId, 'exports'))
       } catch (err) {
         if (err instanceof OutputPathError) {
-          const status = err.code === 'output_exists' ? 409 : 400
-          const errBody: ExportErrorBody = { error: err.code, message: err.message }
-          return c.json(errBody, status)
+          const { status, body: errBody } = toCanvasOutputPathErrorBody(err)
+          return c.json(errBody as ExportErrorBody, status)
         }
         throw err
       }

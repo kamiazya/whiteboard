@@ -33,7 +33,7 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "whiteboard-mcp": "dist/server/mcp/index.js"
+    "whiteboard": "dist/cli/index.js"
   },
   "files": [
     "dist",
@@ -63,6 +63,12 @@
     "directory": "packages/mcp-server"
   },
   "scripts": {
+    "publish:dry-run:npm": "node scripts/publish-dry-run-npm.mjs",
+    "publish:dry-run:docker": "node scripts/publish-dry-run-docker.mjs",
+    "generate:sbom:npm": "node scripts/generate-npm-sbom.mjs",
+    "smoke:docker": "node ../../tests/e2e/distribution/packaged-server-mode-docker-smoke.mjs",
+    "smoke:docker-backup-restore": "node ../../tests/e2e/distribution/packaged-server-mode-backup-restore-smoke.mjs",
+    "mutation:contracts": "stryker run",
     "mcp": "node --import tsx/esm src/server/mcp/index.ts",
     "mcp:http": "node dist/server/index.js --daemon --port=3099",
     "mcp:http:dev": "tsx watch src/server/index.ts --daemon --port=3099",
@@ -71,7 +77,7 @@
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
     "daemon": "node dist/server/index.js --daemon",
     "daemon:dev": "tsx watch src/server/index.ts --daemon",
-    "build:server": "tsc -p tsconfig.server.json && chmod +x dist/server/mcp/index.js",
+    "build:server": "tsc -p tsconfig.server.json && chmod +x dist/cli/index.js",
     "build:app": "vite build",
     "build": "pnpm build:server && pnpm build:app",
     "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
@@ -81,20 +87,23 @@
     "test:node": "vitest run --project mcp-node --project mcp-jsdom",
     "test:browser": "vitest run --project mcp-browser",
     "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
+    "test:smoke": "vitest run --project mcp-smoke",
+    "test:distribution": "pnpm build && vitest run --config vitest.distribution.config.ts",
     "test:watch": "vitest --project mcp-node --project mcp-jsdom",
     "check:pr-title": "node scripts/check-pr-title.mjs",
+    "check:release-artifacts": "node scripts/check-release-artifacts.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "smoke": "node scripts/mcp-smoke.mjs",
-    "smoke:checkpoint": "node scripts/mcp-e2e-checkpoint.mjs",
-    "smoke:e2e": "node scripts/mcp-e2e-checkpoint.mjs",
-    "smoke:packaged": "node scripts/mcp-e2e-checkpoint.mjs --entry=dist/server/mcp/index.js",
-    "smoke:tarball": "node scripts/mcp-packed-tarball-smoke.mjs",
-    "smoke:codex-config": "node scripts/mcp-codex-config-smoke.mjs",
+    "smoke": "vitest run --project mcp-smoke startup",
+    "smoke:checkpoint": "node --import tsx/esm scripts/mcp-e2e-checkpoint.mjs",
+    "smoke:e2e": "node --import tsx/esm scripts/mcp-e2e-checkpoint.mjs",
+    "smoke:packaged": "vitest run --config vitest.distribution.config.ts packaged",
+    "smoke:tarball": "vitest run --config vitest.distribution.config.ts tarball",
+    "smoke:codex-config": "vitest run --config vitest.distribution.config.ts codex-config",
     "smoke:template": "tsx scripts/mcp-template-smoke.mjs",
     "smoke:claude": "node scripts/mcp-claude-cli-smoke.mjs",
     "smoke:codex": "node scripts/mcp-codex-cli-smoke.mjs",
     "smoke:all": "pnpm smoke:e2e && pnpm smoke:template && pnpm smoke:claude",
-    "prepublishOnly": "test -x dist/server/mcp/index.js"
+    "prepublishOnly": "test -x dist/cli/index.js"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.0",
@@ -103,6 +112,7 @@
     "@modelcontextprotocol/sdk": "~1.29.0",
     "hono": "^4.12.15",
     "image-size": "^2",
+    "jose": "^6.2.2",
     "kysely": "^0.28.16",
     "loro-crdt": "^1.11.1",
     "nanoid": "^5.1.9",
@@ -111,6 +121,7 @@
     "zod": "^4"
   },
   "devDependencies": {
+    "@fast-check/vitest": "^0.4.1",
     "@excalidraw/excalidraw": "^0.18.1",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -148,6 +159,9 @@
     "vite-plugin-static-copy": "^4.1.0",
     "vite-plugin-top-level-await": "^1",
     "vite-plugin-wasm": "^3",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "fast-check": "^4.7.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1"
   }
 }

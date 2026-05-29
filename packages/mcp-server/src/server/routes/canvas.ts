@@ -45,6 +45,8 @@ import {
   validateSlug,
   validateVersionId,
 } from '../validators.js'
+import { isValidPngSignature } from './canvas-thumbnail.js'
+import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
 
 // WS broadcast function injected from ws.ts.
 type BroadcastFn = (workspaceId: string, slug: string, update: Uint8Array, excludeWs?: WebSocket) => void
@@ -649,8 +651,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       )
     } catch (err) {
       if (err instanceof OutputPathError) {
-        const status = err.code === 'output_exists' ? 409 : 400
-        return c.json({ error: err.code, message: err.message }, status)
+        const { status, body } = toCanvasOutputPathErrorBody(err)
+        return c.json(body, status)
       }
       throw err
     }
@@ -672,14 +674,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     const bytes = new Uint8Array(await c.req.arrayBuffer())
-    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
-    if (
-      bytes.length < 8 ||
-      bytes[0] !== 0x89 ||
-      bytes[1] !== 0x50 ||
-      bytes[2] !== 0x4e ||
-      bytes[3] !== 0x47
-    ) {
+    if (!isValidPngSignature(bytes)) {
       return c.json({ error: 'invalid_png' }, 400)
     }
     try {

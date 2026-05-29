@@ -43,6 +43,38 @@ describe('validateOutputPath', () => {
     await expect(validateOutputPath(path, true)).resolves.toBeUndefined()
   })
 
+  describe('allowedDir confinement', () => {
+    it('accepts a path inside allowedDir', async () => {
+      await expect(
+        validateOutputPath(join(tempDir, 'sub', 'out.png'), false, tempDir),
+      ).resolves.toBeUndefined()
+    })
+
+    it('rejects a path outside allowedDir with invalid_output_path', async () => {
+      await expect(
+        validateOutputPath('/tmp/attack.png', false, tempDir),
+      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+    })
+
+    it('rejects a path that escapes allowedDir via traversal with invalid_output_path', async () => {
+      await expect(
+        validateOutputPath(join(tempDir, '..', 'escape.png'), false, tempDir),
+      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+    })
+
+    it('rejects a path with control characters', async () => {
+      await expect(
+        validateOutputPath(join(tempDir, 'bad\x00.png'), false, tempDir),
+      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+    })
+
+    it('still rejects relative paths even when allowedDir is set', async () => {
+      await expect(
+        validateOutputPath('relative.png', false, tempDir),
+      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+    })
+  })
+
   it('treats only ENOENT as "missing" and propagates other stat errors', async () => {
     // Make a directory unreadable, then probe a path inside it. stat() should
     // fail with EACCES rather than ENOENT, and validateOutputPath must

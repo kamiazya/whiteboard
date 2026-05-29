@@ -1,5 +1,8 @@
 import { stat } from 'node:fs/promises'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, resolve, sep } from 'node:path'
+
+// biome-ignore lint/suspicious/noControlCharactersInRegex: rejection-class regex
+const CONTROL_CHAR_PATTERN = /[\x00-\x1f\x7f-\x9f]/
 
 export type OutputPathErrorCode = 'invalid_output_path' | 'output_exists'
 
@@ -31,12 +34,26 @@ async function fileExistsOrThrow(path: string): Promise<boolean> {
 export async function validateOutputPath(
   outputPath: string,
   overwrite: boolean,
+  allowedDir?: string,
 ): Promise<void> {
   if (!isAbsolute(outputPath)) {
     throw new OutputPathError(
       'invalid_output_path',
       `outputPath must be an absolute path (received: ${outputPath})`,
     )
+  }
+  if (allowedDir !== undefined) {
+    if (CONTROL_CHAR_PATTERN.test(outputPath)) {
+      throw new OutputPathError('invalid_output_path', 'outputPath contains invalid characters')
+    }
+    const resolvedDir = resolve(allowedDir)
+    const resolvedPath = resolve(outputPath)
+    if (resolvedPath !== resolvedDir && !resolvedPath.startsWith(resolvedDir + sep)) {
+      throw new OutputPathError(
+        'invalid_output_path',
+        `outputPath must be inside the allowed directory (${resolvedDir})`,
+      )
+    }
   }
   if (overwrite) return
   if (await fileExistsOrThrow(outputPath)) {

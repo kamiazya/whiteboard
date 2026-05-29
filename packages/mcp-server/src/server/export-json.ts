@@ -47,7 +47,8 @@ async function resolveOutputPath(args: {
   overwrite?: boolean
 }): Promise<string> {
   if (args.outputPath !== undefined) {
-    await validateOutputPath(args.outputPath, args.overwrite === true)
+    const exportsDir = join(args.dataDir ?? DATA_DIR, args.workspaceId, 'exports')
+    await validateOutputPath(args.outputPath, args.overwrite === true, exportsDir)
     return args.outputPath
   }
 

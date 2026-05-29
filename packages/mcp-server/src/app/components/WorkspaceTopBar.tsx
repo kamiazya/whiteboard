@@ -34,6 +34,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { saveVersionResponseSchema } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
+import { safeErrorCopy } from '../lib/error-copy.js'
 import VersionTimeline from './VersionTimeline.js'
 import { HeaderBranchChip } from './HeaderBranchChip.js'
 import { HeaderSaveDot } from './HeaderSaveDot.js'
@@ -200,8 +201,12 @@ export default function WorkspaceTopBar({
           },
         )
         if (!res.ok) return false
-        // Manual save can bypass the server's version_created websocket path, so dispatch
-        // version_saved optimistically right after POST succeeds. A later WS event becomes a no-op.
+        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+        if (!parsed.success) {
+          console.error('[workspace-top-bar] version save response did not match expected schema')
+          return false
+        }
+        // Dispatch version_saved after schema validation so dirty state only clears on a well-formed response.
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
             new CustomEvent('excalidraw:version_saved', {
@@ -209,8 +214,7 @@ export default function WorkspaceTopBar({
             }),
           )
         }
-        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-        const id = parsed.success ? parsed.data.version.id : undefined
+        const id = parsed.data.version.id
         if (id && getThumbnailBlob) {
           try {
             const blob = await getThumbnailBlob()
@@ -450,10 +454,10 @@ export default function WorkspaceTopBar({
         navigate(`/canvas/${workspaceId}/${encodeURIComponent(target)}`)
         return
       }
-      const body = (await res.json().catch(() => ({}))) as { message?: string }
-      setNewCanvasError(body.message ?? `Failed (HTTP ${res.status}).`)
+      const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      setNewCanvasError(safeErrorCopy({ status: res.status, body }, 'Failed to create canvas.'))
     } catch (err) {
-      setNewCanvasError(err instanceof Error ? err.message : 'Network error.')
+      setNewCanvasError(safeErrorCopy(err, 'Failed to create canvas.'))
     } finally {
       setNewCanvasBusy(false)
     }
@@ -628,6 +632,7 @@ export default function WorkspaceTopBar({
               <DropdownMenuItem
                 onSelect={openNewCanvas}
                 className="gap-2 rounded-none font-medium"
+                data-testid="new-canvas-menu-item"
               >
                 <FilePlus2 className="size-3.5" />
                 New canvas…

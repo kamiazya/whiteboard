@@ -254,6 +254,34 @@ describe('libraries routes', () => {
     })
   })
 
+  it('POST /api/workspaces/:workspaceId/libraries returns { error, message } when url is missing', async () => {
+    const app = createLibrariesRouter()
+    const res = await app.request('/api/workspaces/workspace1/libraries', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({
+      error: 'invalid_body',
+      message: 'url (string) is required',
+    })
+  })
+
+  it('DELETE /api/workspaces/:workspaceId/libraries returns { error, message } when url is missing', async () => {
+    const app = createLibrariesRouter()
+    const res = await app.request('/api/workspaces/workspace1/libraries', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toEqual({
+      error: 'invalid_body',
+      message: 'url (string) is required',
+    })
+  })
+
   it('rejects invalid session ids, user library names, and unsafe library urls with 400', async () => {
     const app = createLibrariesRouter()
 

@@ -10,7 +10,9 @@ export default mergeConfig(
         'src/daemon/**/*.test.ts',
         'src/server/**/*.test.ts',
         'src/shared/**/*.test.ts',
+        'src/cli/**/*.test.ts',
       ],
+      exclude: ['src/**/*.smoke.test.ts', 'src/**/*.distribution.test.ts'],
       environment: 'node',
       // Several mcp-node tests stand up a full createApp + MCP client + JSON-RPC
       // roundtrip in one case, which on slower CI runners flirts with vitest's

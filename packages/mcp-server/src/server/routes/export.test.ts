@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
@@ -308,7 +308,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       })
     })
     const app = makeApp()
-    const outputPath = join(tempDir, 'subdir', 'custom.excalidraw.png')
+    const outputPath = join(tempDir, 's1', 'exports', 'subdir', 'custom.excalidraw.png')
 
     const res = await app.request('/api/canvas/s1/canvas-a/export', {
       method: 'POST',
@@ -321,6 +321,82 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     const bytes = await readFile(outputPath)
     // PNG signature
     expect(bytes[0]).toBe(0x89)
+  })
+
+  it('rejects outputPath outside the workspace exports dir even if inside DATA_DIR', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    // ${DATA_DIR}/daemon.json is inside DATA_DIR but not inside ${DATA_DIR}/s1/exports
+    const daemonFile = join(tempDir, 'daemon.json')
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath: daemonFile }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
+    expect(mockSendExportRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects outputPath outside workspace exports dir (different workspace checkpoints)', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    // ${DATA_DIR}/s1/.checkpoints is inside DATA_DIR/s1 but not in ${DATA_DIR}/s1/exports
+    const checkpointFile = join(tempDir, 's1', '.checkpoints', 'v1.json')
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath: checkpointFile }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
+    expect(mockSendExportRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects outputPath fully outside DATA_DIR', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath: '/tmp/attack.png' }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
+    expect(mockSendExportRequest).not.toHaveBeenCalled()
+  })
+
+  it('does not leak internal paths in invalid_output_path error response', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }),
+    })
+    expect(res.status).toBe(400)
+    const body = await res.json() as { error: string; message: string }
+    expect(body.error).toBe('invalid_output_path')
+    expect(body.message).not.toContain(tempDir)
+    expect(body.message).not.toContain('daemon.json')
+  })
+
+  it('does not leak internal paths in output_exists error response', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    const outputPath = join(tempDir, 's1', 'exports', 'exists.png')
+    await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
+    await writeFile(outputPath, 'OLD')
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath }),
+    })
+    expect(res.status).toBe(409)
+    const body = await res.json() as { error: string; message: string }
+    expect(body.error).toBe('output_exists')
+    expect(body.message).not.toContain(tempDir)
+    expect(body.message).not.toContain('exists.png')
   })
 
   it('rejects a relative PNG outputPath with 400 invalid_output_path', async () => {
@@ -347,7 +423,8 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       })
     })
     const app = makeApp()
-    const outputPath = join(tempDir, 'pre-existing.png')
+    const outputPath = join(tempDir, 's1', 'exports', 'pre-existing.png')
+    await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const res = await app.request('/api/canvas/s1/canvas-a/export', {
@@ -372,7 +449,8 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       })
     })
     const app = makeApp()
-    const outputPath = join(tempDir, 'replace.png')
+    const outputPath = join(tempDir, 's1', 'exports', 'replace.png')
+    await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const res = await app.request('/api/canvas/s1/canvas-a/export', {

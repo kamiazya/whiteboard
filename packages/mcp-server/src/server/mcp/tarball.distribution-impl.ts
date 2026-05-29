@@ -1,0 +1,127 @@
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+
+import { runE2eCheckpointSmoke } from './mcp-e2e-checkpoint.smoke-impl.js'
+
+interface RunPackedTarballSmokeOptions {
+  packageRoot: string
+  repoRoot: string
+}
+
+function spawnChecked(
+  command: string,
+  args: string[],
+  opts: { cwd: string; env: NodeJS.ProcessEnv },
+): void {
+  const result = spawnSync(command, args, {
+    cwd: opts.cwd,
+    encoding: 'utf-8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: opts.env,
+  })
+  if (result.status !== 0) {
+    const stderr = (result.stderr as string)?.trim()
+    const stdout = (result.stdout as string)?.trim()
+    throw new Error(
+      `[tarball-smoke] ${command} ${args.join(' ')} exited with ${result.status ?? 'null'}${
+        stderr ? `\n${stderr}` : stdout ? `\n${stdout}` : ''
+      }`,
+    )
+  }
+}
+
+export async function runPackedTarballSmoke({
+  packageRoot,
+  repoRoot,
+}: RunPackedTarballSmokeOptions): Promise<void> {
+  const installDir = mkdtempSync(join(tmpdir(), 'whiteboard-tarball-install-'))
+  const npmCacheDir = mkdtempSync(join(tmpdir(), 'whiteboard-npm-cache-'))
+  let packedTarballPath: string | null = null
+
+  const cleanup = () => {
+    rmSync(installDir, { recursive: true, force: true })
+    rmSync(npmCacheDir, { recursive: true, force: true })
+    if (packedTarballPath) rmSync(packedTarballPath, { force: true })
+  }
+
+  // Ensures cleanup runs even when process.exit() is called externally (e.g. SIGINT).
+  process.once('exit', cleanup)
+
+  try {
+    const env = { ...process.env, npm_config_cache: npmCacheDir } as NodeJS.ProcessEnv
+
+    const packResult = spawnSync('npm', ['pack', '--json'], {
+      cwd: packageRoot,
+      encoding: 'utf-8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    })
+    if (packResult.status !== 0) {
+      const stderr = (packResult.stderr as string)?.trim()
+      const stdout = (packResult.stdout as string)?.trim()
+      throw new Error(
+        `[tarball-smoke] npm pack exited with ${packResult.status ?? 'null'}${
+          stderr ? `\n${stderr}` : stdout ? `\n${stdout}` : ''
+        }`,
+      )
+    }
+
+    const packJson = JSON.parse(packResult.stdout as string) as Array<{ filename?: string }>
+    const packedTarball = packJson[0]?.filename
+    if (!packedTarball) {
+      throw new Error(
+        `[tarball-smoke] npm pack --json did not return a filename: ${packResult.stdout as string}`,
+      )
+    }
+
+    packedTarballPath = resolve(packageRoot, packedTarball)
+    if (!existsSync(packedTarballPath)) {
+      throw new Error(`[tarball-smoke] packed tarball was not created: ${packedTarballPath}`)
+    }
+
+    writeFileSync(
+      resolve(installDir, 'package.json'),
+      JSON.stringify({ name: 'whiteboard-tarball-smoke', private: true }, null, 2),
+    )
+
+    console.log(`[tarball-smoke] pack → ${packedTarballPath}`)
+    console.log(`[tarball-smoke] install dir → ${installDir}`)
+
+    spawnChecked(
+      'pnpm',
+      ['add', '--prefer-offline', '--package-import-method=copy', packedTarballPath],
+      { cwd: installDir, env },
+    )
+
+    const installedPackageRoot = resolve(installDir, 'node_modules/@kamiazya/whiteboard-mcp')
+    const installedEntry = resolve(installedPackageRoot, 'dist/server/mcp/index.js')
+    const installedBin = resolve(
+      installDir,
+      process.platform === 'win32'
+        ? 'node_modules/.bin/whiteboard.cmd'
+        : 'node_modules/.bin/whiteboard',
+    )
+
+    if (!existsSync(installedPackageRoot)) {
+      throw new Error(`[tarball-smoke] package was not installed: ${installedPackageRoot}`)
+    }
+    if (!existsSync(installedEntry)) {
+      throw new Error(`[tarball-smoke] installed entrypoint missing: ${installedEntry}`)
+    }
+    if (!existsSync(installedBin)) {
+      throw new Error(`[tarball-smoke] installed bin missing: ${installedBin}`)
+    }
+
+    console.log(`[tarball-smoke] installed package → ${installedPackageRoot}`)
+    console.log(`[tarball-smoke] installed entry → ${installedEntry}`)
+
+    await runE2eCheckpointSmoke({ entry: installedEntry, root: repoRoot })
+
+    console.log('[tarball-smoke] installed tarball entrypoint OK')
+  } finally {
+    process.removeListener('exit', cleanup)
+    cleanup()
+  }
+}

@@ -30,8 +30,8 @@ describe('exportCanvasJsonDoc with outputPath', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('writes to the provided absolute outputPath instead of the default exports dir', async () => {
-    const outputPath = join(tempDir, 'custom-export.excalidraw')
+  it('writes to the provided absolute outputPath inside the workspace exports dir', async () => {
+    const outputPath = join(tempDir, 'sid', 'exports', 'custom-export.excalidraw')
 
     const result = await exportCanvasJsonDoc({
       workspaceId: 'sid',
@@ -52,7 +52,7 @@ describe('exportCanvasJsonDoc with outputPath', () => {
   })
 
   it('creates parent directories for outputPath when they do not exist', async () => {
-    const outputPath = join(tempDir, 'nested', 'deep', 'out.excalidraw')
+    const outputPath = join(tempDir, 'sid', 'exports', 'nested', 'deep', 'out.excalidraw')
 
     const result = await exportCanvasJsonDoc({
       workspaceId: 'sid',
@@ -64,6 +64,31 @@ describe('exportCanvasJsonDoc with outputPath', () => {
 
     expect(result.filePath).toBe(outputPath)
     await expect(readFile(outputPath, 'utf-8')).resolves.toMatch(/"type": "excalidraw"/)
+  })
+
+  it('rejects an outputPath outside the workspace exports dir even if inside dataDir', async () => {
+    // ${dataDir}/daemon.json is inside dataDir but not inside ${dataDir}/sid/exports
+    await expect(
+      exportCanvasJsonDoc({
+        workspaceId: 'sid',
+        slug: 'canvas-a',
+        doc: buildDocWithRect(),
+        dataDir: tempDir,
+        outputPath: join(tempDir, 'daemon.json'),
+      }),
+    ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+  })
+
+  it('rejects an outputPath outside the workspace exports dir (different workspace path)', async () => {
+    await expect(
+      exportCanvasJsonDoc({
+        workspaceId: 'sid',
+        slug: 'canvas-a',
+        doc: buildDocWithRect(),
+        dataDir: tempDir,
+        outputPath: join(tempDir, 'sid', '.checkpoints', 'v1.json'),
+      }),
+    ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
   })
 
   it('rejects a relative outputPath with a typed OutputPathError', async () => {
@@ -82,7 +107,8 @@ describe('exportCanvasJsonDoc with outputPath', () => {
   })
 
   it('refuses to overwrite an existing file by default and throws output_exists', async () => {
-    const outputPath = join(tempDir, 'already-here.excalidraw')
+    const outputPath = join(tempDir, 'sid', 'exports', 'already-here.excalidraw')
+    await mkdir(join(tempDir, 'sid', 'exports'), { recursive: true })
     await writeFile(outputPath, '{"type":"excalidraw","existing":true}')
 
     await expect(
@@ -103,8 +129,8 @@ describe('exportCanvasJsonDoc with outputPath', () => {
   })
 
   it('replaces an existing file when overwrite=true', async () => {
-    const outputPath = join(tempDir, 'will-be-replaced.excalidraw')
-    await mkdir(tempDir, { recursive: true })
+    const outputPath = join(tempDir, 'sid', 'exports', 'will-be-replaced.excalidraw')
+    await mkdir(join(tempDir, 'sid', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD CONTENTS')
 
     const result = await exportCanvasJsonDoc({

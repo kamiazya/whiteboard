@@ -129,7 +129,7 @@ export function exportPngTool() {
         outputPath: {
           type: 'string',
           description:
-            'Absolute path to write the PNG to. Useful for placing the export next to a source asset. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+            'Absolute path to write the PNG to. Must be inside the workspace exports directory. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
         },
         overwrite: {
           type: 'boolean',
