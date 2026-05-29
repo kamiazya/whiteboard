@@ -26,11 +26,11 @@ describe('publish contract', () => {
     resolve(repoRoot, 'packages/mcp-server/README.md'),
     'utf-8',
   )
-  const mcpDebuggingDoc = readFileSync(resolve(repoRoot, 'docs/mcp-debugging.md'), 'utf-8')
+  const mcpDebuggingDoc = readFileSync(resolve(repoRoot, 'docs/contributing/mcp-debugging.md'), 'utf-8')
   const architectureDoc = readFileSync(resolve(repoRoot, 'docs/architecture.md'), 'utf-8')
   const securityModelDoc = readFileSync(resolve(repoRoot, 'docs/security-model.md'), 'utf-8')
   const wireProtocolDoc = readFileSync(resolve(repoRoot, 'docs/wire-protocol.md'), 'utf-8')
-  const developmentDoc = readFileSync(resolve(repoRoot, 'docs/development.md'), 'utf-8')
+  const developmentDoc = readFileSync(resolve(repoRoot, 'docs/contributing/development.md'), 'utf-8')
   const claudeMarketplace = readJson(resolve(repoRoot, '.claude-plugin/marketplace.json'))
   const tsconfigServer = readJson(resolve(repoRoot, 'packages/mcp-server/tsconfig.server.json'))
   const vitestShared = readFileSync(resolve(repoRoot, 'packages/mcp-server/vitest.shared.ts'), 'utf-8')
@@ -123,7 +123,7 @@ describe('publish contract', () => {
     expect(claudeMarketplace.metadata.version).toBe(mcpPackage.version)
     expect(claudeMarketplace.plugins[0].version).toBe(mcpPackage.version)
 
-    // The manual symlink / junction recipes for skill linking moved to docs/development.md
+    // The manual symlink / junction recipes for skill linking moved to docs/contributing/development.md
     // (the npx and claude-mcp-add paths only start the MCP server; skills are an opt-in extra).
     expect(developmentDoc).toContain('## Bundled skills install')
     expect(developmentDoc).toContain('node_modules/@kamiazya/whiteboard-mcp')

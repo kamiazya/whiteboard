@@ -3,14 +3,14 @@
 Developer- and maintainer-facing documentation for people changing this repository. End users
 do not need anything here — user-facing docs live under the [documentation home](../).
 
-The detailed contributor guides move here in a later migration slice. Planned layout:
+Contributor and maintainer guides:
 
-- **development** — local checkout and the HTTP MCP development loop.
-- **testing** — test strategy, layer selection, property/mutation testing, and quality gates.
-- **mcp-debugging** — debugging the MCP server during development.
-- **releasing** — release-please and npm/GHCR publishing.
-- **deployment/cloudflare-pages** — deploying the hosted browser app.
-- **architecture/** — internal architecture (overview, C4, ADRs) and the wire-protocol reference.
+- **[development](development.md)** — local checkout and the HTTP MCP development loop.
+- **[testing](testing.md)** — test strategy, layer selection, property/mutation testing, and quality gates.
+- **[mcp-debugging](mcp-debugging.md)** — debugging the MCP server during development.
+- **[releasing](releasing.md)** — release-please and npm/GHCR publishing.
+- **[deployment/cloudflare-pages](deployment/cloudflare-pages.md)** — deploying the hosted browser app.
+- **architecture/** — internal architecture (overview, C4, ADRs) and the wire-protocol reference _(planned)_.
 
 See also the repo-root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [AGENTS.md](../../AGENTS.md).
 

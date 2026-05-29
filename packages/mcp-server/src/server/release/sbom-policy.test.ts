@@ -3,7 +3,7 @@
 //   - release.yml publish-mcp job has SBOM generation + upload steps.
 //   - release.yml docker-publish-sign job has sbom:true and provenance:true (OCI attestations).
 //   - generate-npm-sbom.mjs does not leak SBOM contents or credentials to stdout.
-//   - Runbook (docs/release-publishing.md) covers required keywords.
+//   - Runbook (docs/contributing/releasing.md) covers required keywords.
 // PBT: validateSbomSummary() catches malformed safe-stdout summary shapes.
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -147,8 +147,8 @@ describe('Docker SBOM and provenance drift (release.yml docker-publish-sign job)
 
 // ── Runbook drift ─────────────────────────────────────────────────────────────
 
-describe('runbook (docs/release-publishing.md) keyword drift', () => {
-  const runbook = () => readFile('docs/release-publishing.md')
+describe('runbook (docs/contributing/releasing.md) keyword drift', () => {
+  const runbook = () => readFile('docs/contributing/releasing.md')
 
   it('runbook mentions production-npm environment', () => {
     expect(runbook()).toContain('production-npm')
