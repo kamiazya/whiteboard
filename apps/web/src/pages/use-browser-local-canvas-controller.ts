@@ -1,5 +1,174 @@
+import { useState, useEffect, useRef, useCallback } from 'react'
+import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+
 export type BrowserLocalPersistenceState =
   | { kind: 'saved'; lastSavedAt: null | string }
   | { kind: 'pending'; lastSavedAt: null | string }
   | { kind: 'saving'; lastSavedAt: null | string }
   | { kind: 'degraded'; reason: string; message: string; lastSavedAt: null | string }
+
+export interface BrowserLocalCanvasController {
+  snapshot: CanvasSnapshot | null
+  persistence: BrowserLocalPersistenceState
+  cleanupCompleted: boolean
+  cleanupError: string | null
+  updateScene(elements: unknown[]): void
+  triggerCleanup(): Promise<void>
+}
+
+const DEBOUNCE_MS = 1000
+
+export function useBrowserLocalCanvasController(
+  store: BrowserLocalStore,
+): BrowserLocalCanvasController {
+  const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null)
+  const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
+    kind: 'saved',
+    lastSavedAt: null,
+  })
+  const [cleanupCompleted, setCleanupCompleted] = useState(false)
+  const [cleanupError, setCleanupError] = useState<string | null>(null)
+
+  // Stable refs so timer callbacks always see current state without re-creating
+  const storeRef = useRef(store)
+  storeRef.current = store
+  const setPersistenceRef = useRef(setPersistence)
+  setPersistenceRef.current = setPersistence
+  const persistenceRef = useRef(persistence)
+  persistenceRef.current = persistence
+  const pendingSnapshotRef = useRef<CanvasSnapshot | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Returns true if there was nothing to flush or the flush succeeded.
+  // Returns false if a pending save failed — callers that depend on data
+  // integrity (e.g. triggerCleanup) must abort when this returns false.
+  const flushSave = useCallback(async (): Promise<boolean> => {
+    if (saveTimerRef.current !== null) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    const snap = pendingSnapshotRef.current
+    if (snap === null) return true
+    pendingSnapshotRef.current = null
+    setPersistenceRef.current((p) => ({ kind: 'saving', lastSavedAt: p.lastSavedAt ?? null }))
+    try {
+      await storeRef.current.save(snap)
+      setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
+      return true
+    } catch {
+      // Generic safe copy — do not expose raw IndexedDB error
+      setPersistenceRef.current((p) => ({
+        kind: 'degraded',
+        reason: 'save-failed',
+        message: 'Changes could not be saved.',
+        lastSavedAt: p.lastSavedAt ?? null,
+      }))
+      return false
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      let id = await storeRef.current.getDefaultCanvasId()
+      if (cancelled) return
+
+      if (id === null) {
+        id = storeRef.current.generateId()
+        const newSnapshot: CanvasSnapshot = {
+          id,
+          name: 'untitled',
+          scene: { elements: [] },
+          updatedAt: new Date().toISOString(),
+        }
+        await storeRef.current.setDefaultCanvasId(id)
+        await storeRef.current.save(newSnapshot)
+        if (!cancelled) setSnapshot(newSnapshot)
+        return
+      }
+
+      const result = await storeRef.current.load(id)
+      if (cancelled) return
+      if (result.kind === 'ok') {
+        setSnapshot(result.snapshot)
+      } else {
+        // corrupted or not-found: generic safe copy, no raw error
+        setPersistenceRef.current({
+          kind: 'degraded',
+          reason: 'load-failed',
+          message: 'The canvas data could not be read.',
+          lastSavedAt: null,
+        })
+      }
+    }
+
+    load().catch(() => {
+      if (!cancelled) {
+        setPersistenceRef.current({
+          kind: 'degraded',
+          reason: 'load-failed',
+          message: 'The canvas could not be loaded.',
+          lastSavedAt: null,
+        })
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, []) // store identity is stable; storeRef tracks current value
+
+  const updateScene = useCallback((elements: unknown[]) => {
+    setSnapshot((prev) => {
+      if (prev === null) return prev
+      const updated: CanvasSnapshot = {
+        ...prev,
+        scene: { elements },
+        updatedAt: new Date().toISOString(),
+      }
+      pendingSnapshotRef.current = updated
+      return updated
+    })
+    setPersistenceRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt ?? null }))
+    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      void flushSave()
+    }, DEBOUNCE_MS)
+  }, [flushSave])
+
+  const triggerCleanup = useCallback(async () => {
+    setCleanupError(null)
+    // Abort if flush fails — unsaved edits must not be silently discarded.
+    const flushed = await flushSave()
+    if (!flushed) {
+      setCleanupError('Your changes could not be saved. The canvas copy has been kept.')
+      return
+    }
+    // Abort if a previous save already failed; data integrity is uncertain.
+    if (persistenceRef.current.kind === 'degraded') {
+      setCleanupError('The canvas could not be safely removed. Your copy has been kept.')
+      return
+    }
+    const id = await storeRef.current.getDefaultCanvasId()
+    if (id === null) return
+    try {
+      const result = await storeRef.current.del(id)
+      if (!result.deleted) return  // pointer-mismatch or not-found: silent no-op
+      setSnapshot(null)
+      setCleanupCompleted(true)
+    } catch {
+      // Generic safe copy — do not expose raw IDB error
+      setCleanupError('The canvas could not be removed. Your copy has been kept.')
+    }
+  }, [flushSave])
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current)
+    }
+  }, [])
+
+  return { snapshot, persistence, cleanupCompleted, cleanupError, updateScene, triggerCleanup }
+}

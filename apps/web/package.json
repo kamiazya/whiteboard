@@ -1,0 +1,34 @@
+{
+  "name": "@kamiazya/whiteboard-web",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Hosted browser app for whiteboard — Cloudflare Pages deploy target",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:browser": "vitest run --config vitest.browser.config.ts",
+    "typecheck": "tsc --noEmit",
+    "smoke:artifact": "node scripts/smoke-artifact.mjs",
+    "smoke:preview-origin": "node scripts/smoke-preview-origin.mjs"
+  },
+  "dependencies": {
+    "react": "^19",
+    "react-dom": "^19",
+    "zod": "^4"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/browser-playwright": "^4.1.5",
+    "fake-indexeddb": "^6.2.5",
+    "playwright": "1.59.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10",
+    "vitest": "^4.1.5"
+  }
+}
