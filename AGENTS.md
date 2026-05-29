@@ -88,7 +88,7 @@ pnpm mcp:debug:http
 - Use `stdio` MCP only for packaged-distribution checks or when specifically validating the standalone entrypoint behavior.
 - Prefer the official MCP Inspector for first-pass debugging before switching to client-specific debugging.
 - If request flow is unclear, restart with `MCP_HTTP_DEBUG=1 pnpm mcp:http:dev` and inspect the `[mcp-http:init]` / `[mcp-http]` logs.
-- Keep the detailed checklist in `docs/mcp-debugging.md` in sync with actual repo workflow.
+- Keep the detailed checklist in `docs/contributing/mcp-debugging.md` in sync with actual repo workflow.
 
 Recommended local client config during development:
 
@@ -110,7 +110,7 @@ Preferred MCP debugging order:
 If the issue is client-specific:
 
 - Capture the mismatch between Inspector and the real client before changing server behavior.
-- Keep `docs/mcp-debugging.md` aligned with any new debugging workflow learned during the fix.
+- Keep `docs/contributing/mcp-debugging.md` aligned with any new debugging workflow learned during the fix.
 
 ## Zod Schema Discipline
 

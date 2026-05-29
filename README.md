@@ -82,7 +82,7 @@ This installs the MCP server **and** the bundled `/drawing-visuals`, `/coauthori
 claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest
 ```
 
-> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/development.md#bundled-skills-install)
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
 
 </details>
 
@@ -107,7 +107,7 @@ command = "npx"
 args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 ```
 
-> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/development.md#bundled-skills-install)
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
 
 </details>
 
@@ -133,7 +133,7 @@ Add to `~/.gemini/settings.json`:
 }
 ```
 
-> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/development.md#bundled-skills-install)
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
 
 </details>
 
@@ -143,7 +143,7 @@ In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The fi
 
 ## Bundled skills
 
-Three opinionated `SKILL.md` packs ship inside the npm package. The recommended **plugin install above wires them up automatically** — no manual linking. If you instead used `claude mcp add`, the Codex CLI snippet, or `npx`, link them yourself per [docs/development.md#bundled-skills-install](docs/development.md#bundled-skills-install).
+Three opinionated `SKILL.md` packs ship inside the npm package. The recommended **plugin install above wires them up automatically** — no manual linking. If you instead used `claude mcp add`, the Codex CLI snippet, or `npx`, link them yourself per [docs/contributing/development.md#bundled-skills-install](docs/contributing/development.md#bundled-skills-install).
 
 | Skill | When to use |
 |---|---|
@@ -174,11 +174,11 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 
 | Topic | Where |
 |---|---|
-| Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/development.md](docs/development.md) |
+| Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/contributing/development.md](docs/contributing/development.md) |
 | Environment variables, storage layout, Codex sandbox quirks | [docs/configuration.md](docs/configuration.md) |
 | Components, data flow, MCP tool surface, design boundaries | [docs/architecture.md](docs/architecture.md) |
 | Custom template fragment JSON format used by `template_insert` | [docs/templates.md](docs/templates.md) |
-| MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/mcp-debugging.md](docs/mcp-debugging.md) |
+| MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
 | Token-gated local HTTP, daemon trust model | [docs/security-model.md](docs/security-model.md) |
 | WebSocket message shapes between daemon and browser | [docs/wire-protocol.md](docs/wire-protocol.md) |
 | Test layers, commit conventions, release process | [CONTRIBUTING.md](CONTRIBUTING.md) |
