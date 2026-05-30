@@ -698,6 +698,19 @@ describe('versions API', () => {
     expect(res.status).toBe(404)
   })
 
+  // GET /latest-thumbnail is consumed by CanvasThumb's <img src>. A 404 makes
+  // the browser log "Failed to load resource: 404" for every thumbnail-less
+  // canvas, which is console noise (the component already has an onError
+  // fallback). Returning 204 No Content is a success status, so no console
+  // error is logged, while the empty body still triggers <img> onError → the
+  // FileText placeholder.
+  it('returns 204 (not 404) from GET /latest-thumbnail when the canvas has no thumbnail', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/latest-thumbnail')
+    expect(res.status).toBe(204)
+    expect(await res.arrayBuffer()).toEqual(new ArrayBuffer(0))
+  })
+
   it('returns structured 500 for a broken thumbnail file on GET /thumbnail', async () => {
     await mkdir(join(tempDir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
       recursive: true,

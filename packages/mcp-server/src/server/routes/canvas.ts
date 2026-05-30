@@ -707,9 +707,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     try {
       const versions = await versionStore.list(workspaceId, slug)
       const latestWithThumb = versions.find((v) => v.hasThumbnail)
-      if (!latestWithThumb) return c.json({ error: 'not_found' }, 404)
+      // No thumbnail yet is a normal state (e.g. a brand-new canvas). This
+      // endpoint backs CanvasThumb's <img src>, so a 404 would make the browser
+      // log "Failed to load resource: 404" as console noise. Return 204 No
+      // Content instead: a success status (no console error) whose empty body
+      // still trips the <img> onError handler → the FileText placeholder.
+      if (!latestWithThumb) return c.body(null, 204)
       const bytes = await versionStore.loadThumbnail(workspaceId, latestWithThumb.id)
-      if (!bytes) return c.json({ error: 'not_found' }, 404)
+      if (!bytes) return c.body(null, 204)
       return c.body(bytes.buffer as ArrayBuffer, 200, {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=300',
