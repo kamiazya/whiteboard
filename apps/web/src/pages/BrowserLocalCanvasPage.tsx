@@ -33,6 +33,18 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
 
   const elements = pageState.snapshot.scene.elements as Array<{ type: string; id: string }>
 
+  // Map the persistence state machine to user-facing copy. `degraded` carries its own
+  // message; the other states are not shown as raw enum tokens.
+  const status = pageState.persistence
+  const persistenceLabel =
+    status.kind === 'saved'
+      ? 'Saved'
+      : status.kind === 'saving'
+        ? 'Saving…'
+        : status.kind === 'pending'
+          ? 'Unsaved changes'
+          : status.message
+
   function addRectangle() {
     const next = [...elements, { type: 'rectangle', id: crypto.randomUUID() }]
     updateScene(next)
@@ -42,7 +54,7 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
     <main>
       <header>
         <h1>{pageState.snapshot.name}</h1>
-        <span>{pageState.persistence.kind}</span>
+        <span>{persistenceLabel}</span>
         {cleanupError && (
           <div role="alert" aria-live="assertive">{cleanupError}</div>
         )}

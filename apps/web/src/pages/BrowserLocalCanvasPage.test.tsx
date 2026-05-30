@@ -88,6 +88,43 @@ describe('BrowserLocalCanvasPage', () => {
     expect(screen.getByTestId('cleanup-completed')).toBeTruthy()
   })
 
+  it('renders a human-readable save status instead of the raw state enum', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    expect(screen.getByText('Saved')).toBeTruthy()
+    // the raw "saved" enum token must not leak to the UI
+    expect(screen.queryByText('saved')).toBeNull()
+  })
+
+  it('surfaces the degraded save message in the header when a save fails', async () => {
+    const base = new MemoryStore()
+    await base.setDefaultCanvasId('c1')
+    await base.save(snap)
+    const failingSaveStore: BrowserLocalStore = {
+      getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      load: base.load.bind(base),
+      save: async () => {
+        throw new Error('idb write failed')
+      },
+      del: base.del.bind(base),
+      generateId: base.generateId.bind(base),
+    }
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={failingSaveStore} />)
+    })
+    const addBtn = screen.getByRole('button', { name: /add rectangle/i })
+    await act(async () => {
+      addBtn.click()
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.getByText('Changes could not be saved.')).toBeTruthy()
+  })
+
   it('makes no network requests during load or cleanup', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('', { status: 200 }),
