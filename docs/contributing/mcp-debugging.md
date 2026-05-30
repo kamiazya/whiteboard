@@ -137,3 +137,35 @@ Log format:
 ### 5. Regression
 
 - After manual verification, preserve the scenario in `mcp-node`, `mcp-browser`, or E2E as appropriate
+
+## Database Migration Errors
+
+If the daemon fails to start with:
+
+```
+Database migration failed: corrupted migrations: previously executed migration 0002-canvases-last-compacted-at is missing
+```
+
+or a similar "corrupted migrations" message, your local database is incompatible with the current codebase.
+
+**Pre-1.0 policy**: `~/.whiteboard` databases are **disposable**. On an incompatible upgrade, re-create the database:
+
+```bash
+# 1. Stop any running daemon first
+# 2. Back up any canvas files you want to keep
+cp -r ~/.whiteboard ~/.whiteboard.bak
+
+# 3. Remove the database
+rm ~/.whiteboard/whiteboard.db
+
+# 4. Restart the daemon — it will create a fresh database
+pnpm mcp:http:dev
+```
+
+The daemon should print `READY` after re-creating the schema from scratch.
+
+A fresh `WHITEBOARD_DATA_DIR` always works as a quick sanity check:
+
+```bash
+WHITEBOARD_DATA_DIR=/tmp/wb-test WHITEBOARD_DEV=1 pnpm mcp:http:dev
+```
