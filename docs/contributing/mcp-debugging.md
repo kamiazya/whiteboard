@@ -169,3 +169,23 @@ A fresh `WHITEBOARD_DATA_DIR` always works as a quick sanity check:
 ```bash
 WHITEBOARD_DATA_DIR=/tmp/wb-test WHITEBOARD_DEV=1 pnpm mcp:http:dev
 ```
+
+## MCP Tools Not Visible After Starting Daemon
+
+If you start the daemon **after** opening a Claude Code (or Codex) session, the whiteboard
+MCP tools will not appear in that session. MCP connections are established at session start;
+a daemon launched mid-session is not picked up automatically.
+
+**Fix:** start the daemon first, then start or restart the Claude Code session.
+
+```bash
+# 1. Start the daemon
+pnpm mcp:http:dev
+
+# 2. Open a new Claude Code session (or run /mcp reconnect if your client supports it)
+```
+
+The repo-local `SessionStart` hook (`packages/mcp-server/scripts/ensure-http-dev-daemon.mjs`)
+probes port 3099 and auto-spawns the daemon when a session opens, so in normal use this
+situation should not arise. If the hook is disabled or the project is not yet trusted, start
+the daemon manually before opening the session.
