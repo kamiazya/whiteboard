@@ -24,7 +24,14 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
   }
 
   if (pageState.kind === 'cleanup-completed') {
-    return <div data-testid="cleanup-completed">Canvas removed.</div>
+    return (
+      <div data-testid="cleanup-completed">
+        <p>Canvas removed.</p>
+        <button type="button" onClick={() => void startFresh()}>
+          Start fresh
+        </button>
+      </div>
+    )
   }
 
   if (pageState.kind === 'loading') {

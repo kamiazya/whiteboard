@@ -125,6 +125,27 @@ describe('BrowserLocalCanvasPage', () => {
     expect(screen.getByText('Changes could not be saved.')).toBeTruthy()
   })
 
+  it('offers a Start fresh action in the cleanup-completed view', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    const deleteBtn = screen.getByRole('button', { name: /delete/i })
+    await act(async () => {
+      deleteBtn.click()
+      await vi.runAllTimersAsync()
+    })
+    // cleanup-completed must not be a dead end: Start fresh mints a new canvas.
+    const startFresh = screen.getByRole('button', { name: /start fresh/i })
+    await act(async () => {
+      startFresh.click()
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.getByRole('main')).toBeTruthy()
+  })
+
   it('makes no network requests during load or cleanup', async () => {
     const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response('', { status: 200 }),
