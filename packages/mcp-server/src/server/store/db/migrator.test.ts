@@ -17,6 +17,9 @@ vi.mock('../../config.js', () => ({
 
 const { getDb, closeDb, clearDbCache } = await import('./index.js')
 const { runMigrations } = await import('./migrator.js')
+const { IncompatibleDatabaseError, isIncompatibleDatabaseError } = await import(
+  './incompatible-database.js'
+)
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
 
 describe('runMigrations', () => {
@@ -70,6 +73,38 @@ describe('runMigrations', () => {
 
     // Current production migrator must not reject this DB as corrupted.
     await expect(runMigrations(db)).resolves.toBeUndefined()
+  })
+
+  // Graceful-failure: a DB whose migration log records a name the current code
+  // does not ship (e.g. a newer release's migration, opened by an older build)
+  // makes kysely throw a cryptic "corrupted migrations" error. runMigrations
+  // must surface this as a typed, actionable IncompatibleDatabaseError that
+  // points at the disposable-DB recovery docs — not the raw kysely message.
+  it('throws an actionable IncompatibleDatabaseError when the DB log has an unknown migration', async () => {
+    await prepareDataDir(tempDir)
+    const db = await getDb(tempDir)
+
+    // Seed a migration name the current provider does NOT know about, so the
+    // current runMigrations sees an applied-but-missing migration = corrupted.
+    const { migrations } = await import('./migrations/index.js')
+    const futureMigrator = new Migrator({
+      db,
+      provider: {
+        getMigrations: async () => ({
+          ...migrations,
+          '9999-from-a-newer-release': { up: async () => {}, down: async () => {} },
+        }),
+      },
+    })
+    const seed = await futureMigrator.migrateToLatest()
+    expect(seed.error).toBeUndefined()
+
+    await expect(runMigrations(db)).rejects.toThrow(IncompatibleDatabaseError)
+    // The message must be actionable: name the recovery path, not kysely internals.
+    await expect(runMigrations(db)).rejects.toThrow(/whiteboard\.db|re-create|mcp-debugging/)
+    // The typed guard recognizes it.
+    const err = await runMigrations(db).catch((e: unknown) => e)
+    expect(isIncompatibleDatabaseError(err)).toBe(true)
   })
 
   it('exposes the expected canvas + branches + versions schema after init', async () => {

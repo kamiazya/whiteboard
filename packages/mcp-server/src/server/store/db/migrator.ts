@@ -1,6 +1,15 @@
 import { type MigrationProvider, Migrator } from 'kysely'
 import type { Database } from './index.js'
+import { IncompatibleDatabaseError } from './incompatible-database.js'
 import { migrations } from './migrations/index.js'
+
+// kysely throws this phrase when the DB's migration log records a migration the
+// current provider does not ship (the "applied but missing from code" case).
+// This is an upstream message signature — kysely has no typed error for it — so
+// it can break if kysely changes the wording on a future upgrade. The
+// migrator.test.ts "unknown migration" case exercises the real kysely path and
+// will go red if the phrase drifts, flagging the need to update this match.
+const KYSELY_CORRUPTED_MIGRATIONS_SIGNATURE = 'corrupted migrations'
 
 // Static migration provider. Migrations are imported eagerly so the runtime
 // list is whatever ships with the bundle. This intentionally diverges from
@@ -17,10 +26,24 @@ export async function runMigrations(db: Database): Promise<void> {
   const { error, results } = await migrator.migrateToLatest()
   if (error) {
     const failed = results?.find((r) => r.status === 'Error')?.migrationName
+    const detail = error instanceof Error ? error.message : String(error)
+
+    // An incompatible migration history (DB created by a build that ships a
+    // migration this build lacks) is unrecoverable by re-running. Re-frame the
+    // cryptic kysely error into an actionable one pointing at the disposable-DB
+    // recovery steps, instead of letting it surface as an opaque startup failure.
+    if (detail.includes(KYSELY_CORRUPTED_MIGRATIONS_SIGNATURE)) {
+      throw new IncompatibleDatabaseError(
+        'Database is incompatible with this build — its migration history records a ' +
+          'migration this version does not ship. Pre-1.0 databases are disposable: ' +
+          're-create it by removing ~/.whiteboard/whiteboard.db and restarting. ' +
+          'See docs/contributing/mcp-debugging.md (Database Migration Errors).',
+        { cause: error },
+      )
+    }
+
     throw new Error(
-      `Database migration failed${failed ? ` at ${failed}` : ''}: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Database migration failed${failed ? ` at ${failed}` : ''}: ${detail}`,
     )
   }
 }
