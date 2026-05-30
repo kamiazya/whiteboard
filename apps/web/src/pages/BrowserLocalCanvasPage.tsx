@@ -7,7 +7,7 @@ interface BrowserLocalCanvasPageProps {
 }
 
 export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
-  const { snapshot, persistence, cleanupCompleted, cleanupError, updateScene, triggerCleanup } =
+  const { snapshot, persistence, cleanupCompleted, cleanupError, updateScene, triggerCleanup, startFresh } =
     useBrowserLocalCanvasController(store)
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
@@ -16,6 +16,9 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
     return (
       <div role="alert" aria-live="assertive">
         <p>{pageState.message}</p>
+        <button type="button" onClick={() => void startFresh()}>
+          Start fresh
+        </button>
       </div>
     )
   }

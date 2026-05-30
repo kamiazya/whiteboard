@@ -15,6 +15,7 @@ export interface BrowserLocalCanvasController {
   cleanupError: string | null
   updateScene(elements: unknown[]): void
   triggerCleanup(): Promise<void>
+  startFresh(): Promise<void>
 }
 
 const DEBOUNCE_MS = 1000
@@ -164,11 +165,37 @@ export function useBrowserLocalCanvasController(
     }
   }, [flushSave])
 
+  const startFresh = useCallback(async () => {
+    setCleanupError(null)
+    // Recover from an unreadable/deleted canvas: drop the stale pointer (best-effort)
+    // and mint a new untitled canvas so the degraded/cleanup view is never a dead end.
+    const existingId = await storeRef.current.getDefaultCanvasId()
+    if (existingId !== null) {
+      try {
+        await storeRef.current.del(existingId)
+      } catch {
+        // A failed delete must not block creating a fresh canvas.
+      }
+    }
+    const id = storeRef.current.generateId()
+    const fresh: CanvasSnapshot = {
+      id,
+      name: 'untitled',
+      scene: { elements: [] },
+      updatedAt: new Date().toISOString(),
+    }
+    await storeRef.current.setDefaultCanvasId(id)
+    await storeRef.current.save(fresh)
+    setSnapshot(fresh)
+    setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
+    setCleanupCompleted(false)
+  }, [])
+
   useEffect(() => {
     return () => {
       if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current)
     }
   }, [])
 
-  return { snapshot, persistence, cleanupCompleted, cleanupError, updateScene, triggerCleanup }
+  return { snapshot, persistence, cleanupCompleted, cleanupError, updateScene, triggerCleanup, startFresh }
 }

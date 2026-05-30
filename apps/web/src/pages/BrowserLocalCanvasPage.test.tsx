@@ -50,6 +50,28 @@ describe('BrowserLocalCanvasPage', () => {
     expect(screen.getByRole('alert').textContent).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
   })
 
+  it('offers a Start fresh recovery action in the load-degraded banner', async () => {
+    const base = new MemoryStore()
+    const failingStore: BrowserLocalStore = {
+      getDefaultCanvasId: async () => 'c1',
+      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      load: async () => ({ kind: 'corrupted' }),
+      save: base.save.bind(base),
+      del: base.del.bind(base),
+      generateId: base.generateId.bind(base),
+    }
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={failingStore} />)
+    })
+    // The degraded banner must not be a dead end: a recovery action mints a fresh canvas.
+    const startFresh = screen.getByRole('button', { name: /start fresh/i })
+    await act(async () => {
+      startFresh.click()
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.getByRole('main')).toBeTruthy()
+  })
+
   it('renders cleanup-completed view after delete button click', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
