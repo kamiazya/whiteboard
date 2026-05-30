@@ -64,7 +64,9 @@
       "includes": [
         "packages/mcp-server/src/server/**/*.ts",
         "!packages/mcp-server/src/server/log.ts",
-        "!packages/mcp-server/src/server/**/*.test.ts"
+        "!packages/mcp-server/src/server/**/*.test.ts",
+        "!packages/mcp-server/src/server/**/*.smoke-impl.ts",
+        "!packages/mcp-server/src/server/**/*.distribution-impl.ts"
       ],
       "linter": {
         "rules": {

@@ -53,7 +53,8 @@
     "intent:validate": "npx @tanstack/intent@latest validate",
     "intent:list": "npx @tanstack/intent@latest list",
     "lint": "biome check .",
-    "lint:fix": "biome check --write ."
+    "lint:fix": "biome check --write .",
+    "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

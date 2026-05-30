@@ -47,3 +47,23 @@ describe('release.yml — root permissions policy', () => {
     ).not.toMatch(/^  packages:\s+write/m)
   })
 })
+
+describe('ci.yml — server noConsole lint gate', () => {
+  it('runs the server noConsole gate in the verify job', async () => {
+    const text = await readFile(join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf-8')
+    expect(
+      text,
+      'ci.yml must run pnpm lint:noconsole so AGENTS.md server-console discipline is enforced in CI',
+    ).toMatch(/run:\s+pnpm lint:noconsole/)
+  })
+
+  it('the lint:noconsole script targets the server tree with the noConsole rule', async () => {
+    const pkg = JSON.parse(await readFile(join(REPO_ROOT, 'package.json'), 'utf-8')) as {
+      scripts?: Record<string, string>
+    }
+    const script = pkg.scripts?.['lint:noconsole'] ?? ''
+    expect(script, 'lint:noconsole script must exist').not.toBe('')
+    expect(script).toContain('lint/suspicious/noConsole')
+    expect(script).toContain('packages/mcp-server/src/server')
+  })
+})
