@@ -26,7 +26,6 @@ export function HeaderSaveDot({
 }: HeaderSaveDotProps): JSX.Element | null {
   if (!dirty && !saving) {
     // Remove the node entirely while clean. The parent does not reserve fixed width here.
-    // beforeunload is handled separately in WorkspaceTopBar.
     return null
   }
   const label = saving ? 'Saving…' : 'Unsaved changes'

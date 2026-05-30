@@ -3,8 +3,8 @@ import { loadCanvas, saveCanvas } from './canvas-store.js'
 
 // key: "workspaceId/slug"
 //
-// LRU eviction keeps LoroDoc memory from growing without bound during dogfooding
-// across many canvases or during long daemon uptime. One canvas can hold several MiB
+// LRU eviction keeps LoroDoc memory from growing without bound across many
+// canvases or during long daemon uptime. One canvas can hold several MiB
 // of CRDT history, so cap the cache at 32 entries. This uses Map insertion order as
 // the minimal implementation with no extra dependency.
 //

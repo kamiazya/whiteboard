@@ -133,8 +133,12 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
 
     const toolsResult = (await rpc('tools/list', {})) as { tools: Array<{ name: string }> }
     const names = toolsResult.tools.map((t) => t.name)
-    if (!names.includes('checkpoint_save') || !names.includes('checkpoint_restore')) {
-      throw new Error(`checkpoint tools missing from tools/list: ${names.join(', ')}`)
+    if (
+      !names.includes('version_save') ||
+      !names.includes('version_restore') ||
+      !names.includes('version_list')
+    ) {
+      throw new Error(`version tools missing from tools/list: ${names.join(', ')}`)
     }
     // Guard: tools/list name set must equal ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts.
     // Set comparison catches renames and additions/deletions that a count check would miss.
@@ -256,23 +260,30 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
       throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
     }
 
-    const saved = await callTool('checkpoint_save', { canvasId: created.id })
-    if (!saved.checkpointId) throw new Error('checkpoint_save returned no id')
+    const saved = await callTool('version_save', { canvasId: created.id })
+    if (!saved.versionId) throw new Error('version_save returned no id')
     if (saved.elementCount !== insBefore.elementCount) {
       throw new Error(
         `element count mismatch: save=${saved.elementCount} inspect=${insBefore.elementCount}`,
       )
     }
-    console.log(`[e2e] checkpoint_save → ${saved.checkpointId} (${saved.elementCount} elems)`)
+    console.log(`[e2e] version_save → ${saved.versionId} (${saved.elementCount} elems)`)
 
-    const restored = await callTool('checkpoint_restore', {
-      checkpointId: saved.checkpointId,
+    const versions = await callTool('version_list', { canvasId: created.id })
+    if (!Array.isArray(versions.versions) || (versions.versions as unknown[]).length < 1) {
+      throw new Error(`version_list returned unexpected shape: ${JSON.stringify(versions)}`)
+    }
+    console.log(`[e2e] version_list → ${(versions.versions as unknown[]).length} versions`)
+
+    const restored = await callTool('version_restore', {
+      canvasId: created.id,
+      versionId: saved.versionId,
       targetSlug: 'e2e-restored',
     })
     if (!(restored.canvasId as string).endsWith('/e2e-restored')) {
       throw new Error(`unexpected restore canvasId: ${restored.canvasId}`)
     }
-    console.log(`[e2e] checkpoint_restore → ${restored.canvasId}`)
+    console.log(`[e2e] version_restore → ${restored.canvasId}`)
 
     const insAfter = await callTool('canvas_inspect', { canvasId: restored.canvasId })
     if (insAfter.elementCount !== insBefore.elementCount) {
@@ -291,27 +302,24 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
     )
 
     await expectRejected(
-      callTool('checkpoint_restore', {
-        checkpointId: saved.checkpointId,
+      callTool('version_restore', {
+        canvasId: created.id,
+        versionId: saved.versionId,
         targetSlug: 'e2e-restored',
       }),
       /already exists/,
       'duplicate restore without overwrite',
     )
 
-    await callTool('checkpoint_restore', {
-      checkpointId: saved.checkpointId,
+    await callTool('version_restore', {
+      canvasId: created.id,
+      versionId: saved.versionId,
       targetSlug: 'e2e-restored',
       overwrite: true,
     })
-    console.log(`[e2e] checkpoint_restore overwrite=true OK`)
+    console.log(`[e2e] version_restore overwrite=true OK`)
 
-    await expectRejected(
-      callTool('checkpoint_save', { canvasId: created.id, id: '../escape' }),
-      /Invalid checkpoint id/,
-      'bad checkpoint id',
-    )
-    console.log('[e2e] validation errors propagate correctly')
+    console.log('[e2e] version_save / version_restore / version_list all OK')
 
     await expectRejected(
       callTool('viewport_set', { canvasId: created.id, mode: 'fit' }),
@@ -320,12 +328,10 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
     )
     console.log('[e2e] viewport_set → no_client OK (route wiring verified)')
 
-    await expectRejected(
-      callTool('export_png', { canvasId: created.id }),
-      /No browser client/i,
-      'export_png without browser client',
-    )
-    console.log('[e2e] export_png → no_client OK (route wiring verified)')
+    // export_png now falls back to headless rendering when no browser is connected.
+    // Verify it succeeds (headless path is active after the #45 merge).
+    const pngResult = await callTool('export_png', { canvasId: created.id })
+    console.log(`[e2e] export_png → headless render OK (pngDataUrl=${typeof (pngResult as Record<string, unknown>).pngDataUrl !== 'undefined' ? 'present' : 'not present'})`)
 
     const exported = await callTool('canvas_export_json', { canvasId: created.id })
     if (!exported.filePath || !(exported.filePath as string).endsWith('.excalidraw')) {

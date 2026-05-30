@@ -7,14 +7,14 @@
 // without relying on prompts or conversation history from the parent client.
 //
 // Expected behavior:
-// Call canvas_create -> annotate -> checkpoint_save as one flow and succeed if
-// the last line prints a checkpointId (nanoid, 18 chars).
+// Call canvas_create -> annotate -> version_save as one flow and succeed if
+// the last line prints a versionId.
 //
 // Notes:
 // This consumes API quota, so it does not run in CI. Manual use:
 //   node scripts/mcp-claude-cli-smoke.mjs
 // For a lightweight version that does not consume quota and talks directly to
-// JSON-RPC stdio, use scripts/mcp-e2e-checkpoint.mjs.
+// JSON-RPC stdio, use scripts/mcp-e2e-smoke.mjs.
 
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -44,15 +44,15 @@ const prompt = [
   'Do exactly these three steps in order, no extra work:',
   '1. call canvas_create with slug="claude-smoke".',
   '2. call annotate with type=rectangle at {x:10,y:10}, width=40, height=20 on the canvas id returned above.',
-  '3. call checkpoint_save for that canvas id.',
-  'Return only the checkpointId on the last line, nothing else.',
+  '3. call version_save for that canvas id with label "claude-smoke".',
+  'Return only the versionId on the last line, nothing else.',
 ].join('\n')
 
 const args = [
   '-p', prompt,
   '--mcp-config', mcpConfigPath,
   '--strict-mcp-config',
-  '--allowedTools', 'mcp__excalidraw__canvas_create mcp__excalidraw__annotate mcp__excalidraw__checkpoint_save',
+  '--allowedTools', 'mcp__excalidraw__canvas_create mcp__excalidraw__annotate mcp__excalidraw__version_save',
   '--max-turns', '6',
   '--output-format', 'text',
 ]
@@ -78,14 +78,14 @@ child.on('exit', (code) => {
   }
   const lines = stdout.trim().split('\n').filter(Boolean)
   const last = lines[lines.length - 1] ?? ''
-  // checkpointId uses nanoid(18) = [A-Za-z0-9_-]{18}
-  const m = last.match(/([A-Za-z0-9_-]{18})/)
+  // versionId is a nanoid string; match a generic alphanumeric run.
+  const m = last.match(/([A-Za-z0-9_-]{6,})/)
   if (!m) {
-    console.error('[claude-smoke] FAIL: no checkpointId in output')
+    console.error('[claude-smoke] FAIL: no versionId in output')
     console.error('--- stdout ---')
     console.error(stdout)
     process.exit(1)
   }
-  console.log(`[claude-smoke] OK: checkpointId=${m[1]}`)
+  console.log(`[claude-smoke] OK: versionId=${m[1]}`)
   process.exit(0)
 })

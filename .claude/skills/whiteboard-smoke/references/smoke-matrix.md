@@ -19,8 +19,8 @@ This repo splits smoke tests into five kinds. Pick the **smallest one** that mat
   - `packages/mcp-server/scripts/mcp-smoke.mjs`
   - Verifies that the MCP server does not die immediately within 3 seconds
 - `pnpm smoke:e2e`
-  - `packages/mcp-server/scripts/mcp-e2e-checkpoint.mjs`
-  - Verifies canvas and checkpoint behavior by calling stdio JSON-RPC directly
+  - `packages/mcp-server/scripts/mcp-e2e-smoke.mjs`
+  - Verifies canvas, version save/restore, and route wiring by calling stdio JSON-RPC directly
 - `pnpm smoke:template`
   - `packages/mcp-server/scripts/mcp-template-smoke.mjs`
   - Calls the template tool directly, mocking fetch and validating behavior

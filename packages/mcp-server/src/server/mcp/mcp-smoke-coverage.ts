@@ -11,7 +11,7 @@
  *   2. Add the tool to exactly one of the four category arrays.
  *   3. The property test (tool-structured-content.property.test.ts) will fail
  *      if the categories do not cover ALL_REGISTERED_TOOLS exactly.
- *   4. The smoke (mcp-e2e-checkpoint.mjs) will fail if tools/list no longer
+ *   4. The smoke (mcp-e2e-checkpoint.mjs / smoke-impl.ts) will fail if tools/list no longer
  *      matches ALL_REGISTERED_TOOLS.
  *
  * Category meanings:
@@ -26,6 +26,7 @@
 
 // Authoritative list — keep in sync with registerToolWithAnnotations calls in index.ts.
 export const ALL_REGISTERED_TOOLS = [
+  'align_elements',
   'annotate',
   'annotate_batch',
   'assign_to_group',
@@ -36,13 +37,12 @@ export const ALL_REGISTERED_TOOLS = [
   'canvas_inspect',
   'canvas_list',
   'canvas_open',
-  'checkpoint_restore',
-  'checkpoint_save',
   'create_embed',
   'create_frame',
   'delete_element',
   'delete_elements',
   'delete_group',
+  'distribute_elements',
   'export_png',
   'library_catalog_list',
   'library_insert_batch',
@@ -54,6 +54,7 @@ export const ALL_REGISTERED_TOOLS = [
   'list_groups',
   'load_image',
   'move_elements',
+  'optimize_canvases',
   'palette_delete',
   'palette_get',
   'palette_set',
@@ -68,6 +69,9 @@ export const ALL_REGISTERED_TOOLS = [
   'user_library_metadata_set',
   'user_library_remove',
   'user_library_save',
+  'version_list',
+  'version_restore',
+  'version_save',
   'viewport_set',
 ] as const satisfies readonly string[]
 
@@ -77,21 +81,23 @@ export const COVERED_TOOLS = [
   'annotate',
   'create_frame',
   'canvas_inspect',
-  'checkpoint_save',
-  'checkpoint_restore',
+  'version_save',
+  'version_restore',
+  'version_list',
   'canvas_export_json',
   'palette_get',
   'library_list_installed',
   'library_list_items',
+  'export_png',
   'library_uninstall',
 ] as const
 
 export const ERROR_PATH_ONLY_TOOLS = [
   'viewport_set',
-  'export_png',
 ] as const
 
 export const UNIT_ONLY_TOOLS = [
+  'align_elements',
   'annotate_batch',
   'assign_to_group',
   'canvas_auto_layout',
@@ -101,12 +107,14 @@ export const UNIT_ONLY_TOOLS = [
   'delete_element',
   'delete_elements',
   'delete_group',
+  'distribute_elements',
   'library_catalog_list',
   'library_insert_batch',
   'library_insert_item',
   'list_groups',
   'load_image',
   'move_elements',
+  'optimize_canvases',
   'palette_delete',
   'palette_set',
   'reorder_elements',

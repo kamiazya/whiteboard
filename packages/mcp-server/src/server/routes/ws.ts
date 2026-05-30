@@ -1,7 +1,10 @@
 import type { WebSocket, RawData } from 'ws'
 import type { IncomingMessage } from 'node:http'
+import { SpanKind } from '@opentelemetry/api'
 import type { LoroDoc } from 'loro-crdt'
 import type { ServerTextMessage } from '../../shared/ws-messages.js'
+import { getLogger } from '../log.js'
+import { extractContextFromHeaders, getTracer } from '../observability/tracing.js'
 import { getDoc } from '../store/doc-cache.js'
 import { saveCanvas } from '../store/canvas-store.js'
 import type { VersionEntry } from '../store/version-store.js'
@@ -14,6 +17,14 @@ import {
 // Connection registry: key = "workspaceId/slug", value = Set<WebSocket>
 const connections = new Map<string, Set<WebSocket>>()
 const readyConnections = new Map<string, Set<WebSocket>>()
+
+// Sticky viewport state per canvas. The MCP `viewport_set` tool only fires the
+// `viewport_request` once and broadcasts to whoever is connected at that
+// moment. Without this cache, a Playwright tab opening the same canvas a
+// second later would land at default zoom/scroll and quietly mask that the
+// fit/move request worked at all on the daemon-Chromium tab. Replaying on
+// `client_ready` (not earlier) avoids racing the Excalidraw mount path.
+const lastViewportRequestByCanvas = new Map<string, string>()
 let runtimeTouch: () => void = () => {}
 
 export function setRuntimeTouchFn(fn: () => void): void {
@@ -36,6 +47,21 @@ function forEachClient(
   const clients = connections.get(`${workspaceId}/${slug}`)
   if (!clients) return
   for (const ws of clients) fn(ws)
+}
+
+// Iterate only sockets that have signalled `client_ready`. Used for
+// viewport_request: a pre-ready tab cannot apply the viewport yet, and
+// the request is already replayed when the client emits `client_ready`,
+// so broadcasting to non-ready sockets would just deliver the message
+// twice.
+function forEachReadyClient(
+  workspaceId: string,
+  slug: string,
+  fn: (ws: WebSocket) => void,
+): void {
+  const ready = readyConnections.get(`${workspaceId}/${slug}`)
+  if (!ready) return
+  for (const ws of ready) fn(ws)
 }
 
 function broadcastTextMessage(
@@ -116,7 +142,13 @@ export function sendExportRequest(
   workspaceId: string,
   slug: string,
   requestId: string,
-  options: { padding?: number; scale?: number; minFontPx?: number; frameId?: string } = {},
+  options: {
+    padding?: number
+    scale?: number
+    minFontPx?: number
+    frameId?: string
+    theme?: 'light' | 'dark'
+  } = {},
 ): void {
   broadcastTextMessage(workspaceId, slug, {
     type: 'export_request',
@@ -138,11 +170,22 @@ export function sendViewportRequest(
     zoom?: number
   } = {},
 ): void {
-  broadcastTextMessage(workspaceId, slug, {
-    type: 'viewport_request',
+  const message = {
+    type: 'viewport_request' as const,
     requestId,
     ...omitUndefined(params),
-  })
+  }
+  // Pre-serialise once: the broadcast and the later replay-on-client_ready
+  // both ship the same bytes, and JSON.stringify is the only allocation that
+  // needs to happen at viewport_set time.
+  const raw = JSON.stringify(message)
+  lastViewportRequestByCanvas.set(`${workspaceId}/${slug}`, raw)
+  // Send only to ready sockets. Pre-ready tabs cannot apply the viewport
+  // yet AND will already get the cached request replayed when they
+  // signal `client_ready`, so broadcasting to all sockets here would
+  // deliver the message twice and re-trigger the pre-ready race the
+  // cache was meant to fix.
+  forEachReadyClient(workspaceId, slug, (ws) => ws.send(raw))
 }
 
 // Return the number of WS clients connected to a canvas. Used for export.ts preflight checks.
@@ -189,10 +232,16 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
   const doc = await getDoc(workspaceId, slug)
   ws.send(doc.export({ mode: 'snapshot' }))
 
+  // Holds the most recent W3C trace-context the client announced via
+  // `ws_trace`. Consumed (and cleared) by the next binary frame so each
+  // batch of edits is parented on the originating client span. Holding it
+  // in closure scope keeps the per-canvas connection map untouched.
+  let pendingTraceContext: ReturnType<typeof extractContextFromHeaders> | null = null
+
   ws.on('message', async (data: RawData, isBinary: boolean) => {
     runtimeTouch()
     if (!isBinary) {
-      // text frame = JSON（export_response / viewport_response）
+      // text frame = JSON（export_response / viewport_response / ws_trace）
       const text = Buffer.isBuffer(data) ? data.toString() : String(data)
       const msg = parseWsClientTextMessage(text)
       if (msg === null) return
@@ -201,6 +250,23 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
           readyConnections.set(key, new Set())
         }
         readyConnections.get(key)!.add(ws)
+        // Replay the latest viewport_request to just-now-ready clients so
+        // late joiners (Playwright tab opening after viewport_set fired,
+        // reload, reconnect after WS hiccup) inherit the same fit / scroll
+        // / zoom intent the daemon-Chromium tab already received.
+        const cachedViewport = lastViewportRequestByCanvas.get(key)
+        if (cachedViewport !== undefined) ws.send(cachedViewport)
+        return
+      }
+      if (msg.type === 'ws_trace') {
+        // Extract the W3C trace-context the client just announced. The
+        // value lives until the next binary frame consumes it; if the
+        // client sends another ws_trace before any binary frame, the
+        // newer one wins.
+        pendingTraceContext = extractContextFromHeaders({
+          traceparent: msg.traceparent,
+          tracestate: msg.tracestate,
+        })
         return
       }
       if (msg.type === 'export_response') {
@@ -218,21 +284,41 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
         ? new Uint8Array(data)
         : new Uint8Array(Buffer.concat(data as Buffer[]))
 
-    const currentDoc = await getDoc(workspaceId, slug)
-    currentDoc.import(bytes)
-    await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
-    broadcastLoroUpdate(workspaceId, slug, bytes, ws)
+    // If the client announced a traceparent ahead of this frame, parent
+    // the span on it so a UI-driven edit stitches end-to-end. Otherwise
+    // open a parentless span so we still get a per-update timeline.
+    const parentCtx = pendingTraceContext
+    pendingTraceContext = null
+    const spanStartOptions = {
+      kind: SpanKind.SERVER,
+      attributes: {
+        'whiteboard.workspace_id': workspaceId,
+        'whiteboard.slug': slug,
+        'whiteboard.update_bytes': bytes.byteLength,
+      },
+    } as const
+    const wsSpan = parentCtx
+      ? getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions, parentCtx)
+      : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
+    try {
+      const currentDoc = await getDoc(workspaceId, slug)
+      currentDoc.import(bytes)
+      await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
+      broadcastLoroUpdate(workspaceId, slug, bytes, ws)
 
-    // Trigger auto-versioning on the WS path as well, since browser edits primarily use it.
-    // The trigger is throttled, so frequent edits stay safe.
-    // On success, push version_created to all clients so the browser can generate and upload a thumbnail.
-    autoVersionTrigger(workspaceId, slug, currentDoc)
-      .then((entry) => {
-        if (entry) sendVersionCreated(workspaceId, slug, entry)
-      })
-      .catch((err: unknown) => {
-        console.error('[ws] auto-version trigger failed:', err)
-      })
+      // Trigger auto-versioning on the WS path as well, since browser edits primarily use it.
+      // The trigger is throttled, so frequent edits stay safe.
+      // On success, push version_created to all clients so the browser can generate and upload a thumbnail.
+      autoVersionTrigger(workspaceId, slug, currentDoc)
+        .then((entry) => {
+          if (entry) sendVersionCreated(workspaceId, slug, entry)
+        })
+        .catch((err: unknown) => {
+          getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
+        })
+    } finally {
+      wsSpan.end()
+    }
   })
 
   ws.on('close', () => {
@@ -242,6 +328,12 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
       clients.delete(ws)
       if (clients.size === 0) {
         connections.delete(key)
+        // Intentionally keep `lastViewportRequestByCanvas[key]` even when
+        // the connection count hits zero. A reload (Playwright or anyone)
+        // closes the old WS before the new WS opens, so clearing here
+        // would defeat the whole point of cache-and-replay. The cache
+        // tops out at one short string per canvas, so the leak is
+        // negligible; the next viewport_set overwrites the entry.
       }
     }
     const readyClients = readyConnections.get(key)

@@ -4,6 +4,7 @@ import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { DATA_DIR } from '../config.js'
+import { getLogger } from '../log.js'
 import {
   validateBranchName,
   validateSlug,
@@ -15,6 +16,7 @@ import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
 import { assertPathWithinDir } from './path-guard.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Loro-native versioning, backed by the sqlite metadata DB.
 //
@@ -80,6 +82,15 @@ export interface VersionStore {
     oldName: string,
     newName: string,
   ): Promise<number>
+  // Drop auto-saved versions strictly between two manual versions, per
+  // branch. Manual versions are explicit user save-points so sandwiched
+  // autos add no rollback value beyond what the bracketing manuals
+  // already give. Autos before the first manual or after the last manual
+  // stay (they are the only rollback target outside the bracketed range).
+  pruneSandwichedAutoVersions(
+    workspaceId: string,
+    slug: string,
+  ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
 function blobsRoot(): string {
@@ -168,59 +179,67 @@ export class FileVersionStore implements VersionStore {
   ): Promise<VersionEntry> {
     validateWorkspaceId(workspaceId)
     validateSlug(slug)
-    const branchName = opts.branchName ?? 'main'
-    validateBranchName(branchName)
-    const id = nanoid(12)
-    validateVersionId(id)
+    // Hold the per-workspace write barrier so a concurrent
+    // purgeDanglingFiles cannot interleave with the version row being
+    // created. The references this save records are a subset of what
+    // GC already inspected, but pairing both writers behind the same
+    // queue keeps the lock contract uniform — all "things that might
+    // change what GC considers referenced" run serially.
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const branchName = opts.branchName ?? 'main'
+      validateBranchName(branchName)
+      const id = nanoid(12)
+      validateVersionId(id)
 
-    const elementCount = (() => {
-      try {
-        const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
-        return list.filter((e) => !e.isDeleted).length
-      } catch {
-        return 0
-      }
-    })()
+      const elementCount = (() => {
+        try {
+          const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
+          return list.filter((e) => !e.isDeleted).length
+        } catch {
+          return 0
+        }
+      })()
 
-    const frontiers = bytesToBase64(encodeFrontiers(doc.frontiers()))
-    const createdAt = Date.now()
-    const operator = opts.operator
+      const frontiers = bytesToBase64(encodeFrontiers(doc.frontiers()))
+      const createdAt = Date.now()
+      const operator = opts.operator
 
-    const db = await dbReady()
-    const canvasId = await upsertCanvasRow(db, workspaceId, slug)
-    await db
-      .insertInto('versions')
-      .values({
+      const db = await dbReady()
+      const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+      await db
+        .insertInto('versions')
+        .values({
+          id,
+          canvasId,
+          branchName,
+          auto: opts.auto ? 1 : 0,
+          label: opts.label ?? null,
+          operatorKind: operator?.kind ?? 'system',
+          operatorPeerId: operator?.peerId ?? '',
+          operatorDisplayName: operator?.displayName ?? null,
+          operatorAgentId: operator?.agentId ?? null,
+          operatorWorkspaceId: operator?.workspaceId ?? null,
+          elementCount,
+          frontiers,
+          hasThumbnail: 0,
+          createdAt,
+        })
+        .execute()
+
+      await this.prune(workspaceId, canvasId)
+
+      return {
         id,
-        canvasId,
-        branchName,
-        auto: opts.auto ? 1 : 0,
-        label: opts.label ?? null,
-        operatorKind: operator?.kind ?? 'system',
-        operatorPeerId: operator?.peerId ?? '',
-        operatorDisplayName: operator?.displayName ?? null,
-        operatorAgentId: operator?.agentId ?? null,
-        operatorWorkspaceId: operator?.workspaceId ?? null,
+        slug,
+        createdAt: new Date(createdAt).toISOString(),
         elementCount,
-        frontiers,
-        hasThumbnail: 0,
-        createdAt,
-      })
-      .execute()
-
-    await this.prune(workspaceId, canvasId)
-
-    return {
-      id,
-      slug,
-      createdAt: new Date(createdAt).toISOString(),
-      elementCount,
-      auto: opts.auto,
-      branchName,
-      hasThumbnail: false,
-      ...(opts.label !== undefined ? { label: opts.label } : {}),
-      ...(operator !== undefined ? { operator } : {}),
-    }
+        auto: opts.auto,
+        branchName,
+        hasThumbnail: false,
+        ...(opts.label !== undefined ? { label: opts.label } : {}),
+        ...(operator !== undefined ? { operator } : {}),
+      }
+    })
   }
 
   async load(workspaceId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null> {
@@ -331,6 +350,69 @@ export class FileVersionStore implements VersionStore {
     return Number(result.numUpdatedRows ?? 0)
   }
 
+  async pruneSandwichedAutoVersions(
+    workspaceId: string,
+    slug: string,
+  ): Promise<{ deletedCount: number; deletedIds: string[] }> {
+    validateWorkspaceId(workspaceId)
+    validateSlug(slug)
+    const db = await dbReady()
+    const canvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (!canvasId) return { deletedCount: 0, deletedIds: [] }
+    const rows = await db
+      .selectFrom('versions')
+      .select(['id', 'branchName', 'auto', 'createdAt'])
+      .where('canvasId', '=', canvasId)
+      .orderBy('branchName', 'asc')
+      .orderBy('createdAt', 'asc')
+      .orderBy('id', 'asc')
+      .execute()
+
+    const toDelete: string[] = []
+    const byBranch = new Map<string, typeof rows>()
+    for (const row of rows) {
+      const list = byBranch.get(row.branchName) ?? []
+      list.push(row)
+      byBranch.set(row.branchName, list)
+    }
+    for (const [, list] of byBranch) {
+      // Find first/last manual indexes. With <2 manuals there is no
+      // sandwich, so the branch is left untouched.
+      let firstManualIdx = -1
+      let lastManualIdx = -1
+      for (let i = 0; i < list.length; i++) {
+        if (list[i].auto !== 1) {
+          if (firstManualIdx === -1) firstManualIdx = i
+          lastManualIdx = i
+        }
+      }
+      if (firstManualIdx === -1 || lastManualIdx === firstManualIdx) continue
+      for (let i = firstManualIdx + 1; i < lastManualIdx; i++) {
+        if (list[i].auto === 1) toDelete.push(list[i].id)
+      }
+    }
+    if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
+    await db
+      .deleteFrom('versions')
+      .where('canvasId', '=', canvasId)
+      .where('id', 'in', toDelete)
+      .execute()
+    for (const id of toDelete) {
+      const path = thumbnailPath(workspaceId, id)
+      try {
+        await unlink(path)
+      } catch (err) {
+        if (!isMissingFileError(err)) {
+          getLogger('version-store prune-sandwiched').error(
+            { path, err: err as Error },
+            'failed to remove thumbnail',
+          )
+        }
+      }
+    }
+    return { deletedCount: toDelete.length, deletedIds: toDelete }
+  }
+
   async getFrontiersBase64(workspaceId: string, id: string): Promise<string | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
@@ -394,8 +476,9 @@ export class FileVersionStore implements VersionStore {
         await unlink(path)
       } catch (error) {
         if (!isMissingFileError(error)) {
-          console.error(
-            `[version-store prune] failed to remove thumbnail ${path}: ${errorMessage(error)}`,
+          getLogger('version-store prune').error(
+            { path, err: error as Error },
+            'failed to remove thumbnail',
           )
         }
       }

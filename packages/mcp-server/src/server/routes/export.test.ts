@@ -21,6 +21,7 @@ type MockedExportOptions = {
   scale?: number
   minFontPx?: number
   frameId?: string
+  theme?: 'light' | 'dark'
 }
 const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
 const mockSendExportRequest = vi.fn<
@@ -37,6 +38,38 @@ vi.mock('./ws.js', () => ({
   ) => mockSendExportRequest(workspaceId, slug, requestId, options),
 }))
 
+// Stub the headless renderer so route tests do not pull jsdom/canvas/resvg in
+// every run. The fallback path just needs to return a valid PNG buffer for the
+// route to write to disk.
+type MockHeadlessArgs = {
+  workspaceId: string
+  slug: string
+  options?: {
+    padding?: number
+    scale?: number
+    frameId?: string
+    minFontPx?: number
+    theme?: 'light' | 'dark'
+  }
+}
+const mockExportCanvasHeadless =
+  vi.fn<(args: MockHeadlessArgs) => Promise<{ png: Buffer; width: number; height: number }>>()
+
+vi.mock('../export/headless-export.js', () => ({
+  exportCanvasHeadless: (args: MockHeadlessArgs) => mockExportCanvasHeadless(args),
+}))
+
+// Default canvasExists to true so existing tests that already construct a
+// route + mock the headless renderer keep passing without each having to
+// stub the metadata-DB lookup. Missing-canvas tests opt out by overriding
+// the mock per-case.
+const mockCanvasExists = vi.fn<(workspaceId: string, slug: string) => Promise<boolean>>(
+  async () => true,
+)
+vi.mock('../store/canvas-store.js', () => ({
+  canvasExists: (workspaceId: string, slug: string) => mockCanvasExists(workspaceId, slug),
+}))
+
 const { createExportRouter, resolveExportRequest } = await import('./export.js')
 
 function makeApp(options: { timeoutMs?: number } = {}) {
@@ -50,34 +83,59 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-test-'))
     mockGetClientCount.mockReset()
     mockSendExportRequest.mockReset()
+    mockExportCanvasHeadless.mockReset()
   })
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('returns 503 immediately when there are no WS clients', async () => {
+  it('falls back to headless rendering when no WS clients are connected', async () => {
     mockGetClientCount.mockReturnValue(0)
+    const fakePng = Buffer.from('fake-png-bytes')
+    mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
     const app = makeApp()
 
-    const start = Date.now()
     const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
-    const elapsed = Date.now() - start
 
-    expect(res.status).toBe(503)
-    // Respond immediately instead of waiting for the normal timeout window.
-    expect(elapsed).toBeLessThan(500)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { filePath: string }
+    expect(body.filePath).toMatch(/canvas-a-.*\.excalidraw\.png$/)
+    expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 's1', slug: 'canvas-a' }),
+    )
     expect(mockSendExportRequest).not.toHaveBeenCalled()
+
+    const written = await readFile(body.filePath)
+    expect(written.equals(fakePng)).toBe(true)
   })
 
-  it('includes a canvas_open hint in the zero-client error JSON', async () => {
+  it('returns 404 with canvas_not_found when no browser is connected and the canvas does not exist', async () => {
+    // Headless fallback used to silently succeed for unknown canvasIds:
+    // getDoc + loadCanvas hand back an empty LoroDoc on cache miss, so a
+    // typo would happily produce a blank PNG. Surface it as a 404 instead.
     mockGetClientCount.mockReturnValue(0)
+    mockCanvasExists.mockResolvedValueOnce(false)
+    const app = makeApp()
+
+    const res = await app.request('/api/canvas/s1/missing-canvas/export', { method: 'POST' })
+
+    expect(res.status).toBe(404)
+    const body = (await res.json()) as { error: string; message?: string }
+    expect(body.error).toBe('canvas_not_found')
+    // Refuse before paying the resvg startup cost.
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
+  })
+
+  it('returns 500 with headless_export_failed when headless rendering throws', async () => {
+    mockGetClientCount.mockReturnValue(0)
+    mockExportCanvasHeadless.mockRejectedValue(new Error('boom'))
     const app = makeApp()
     const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
-    const body = (await res.json()) as { error: string; message: string; hint?: string }
-    expect(body.error).toBe('no_client')
-    expect(body.message.toLowerCase()).toContain('no browser')
-    expect(body.hint).toContain('canvas_open')
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('headless_export_failed')
+    expect(body.message).toBe('boom')
   })
 
   it('returns 504 and a timeout error when a WS client does not respond', async () => {
@@ -167,6 +225,62 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       scale: 2,
       minFontPx: 14,
     })
+  })
+
+  it('forwards theme to sendExportRequest options when a WS client is connected', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
+      queueMicrotask(() => {
+        resolveExportRequest(
+          requestId,
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        )
+      })
+    })
+    const app = makeApp()
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: 'dark' }),
+    })
+    expect(res.status).toBe(200)
+    const call = mockSendExportRequest.mock.calls[0]
+    expect(call[3]).toEqual({ theme: 'dark' })
+  })
+
+  it('forwards theme to the headless export when no WS client is connected', async () => {
+    mockGetClientCount.mockReturnValue(0)
+    const fakePng = Buffer.from('fake-dark-png')
+    mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
+    const app = makeApp()
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: 'dark', padding: 16 }),
+    })
+    expect(res.status).toBe(200)
+    expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 's1',
+        slug: 'canvas-a',
+        options: expect.objectContaining({ theme: 'dark', padding: 16 }),
+      }),
+    )
+  })
+
+  it('rejects invalid theme values with 400 invalid_request', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: 'sepia' }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_request' })
+    expect(mockSendExportRequest).not.toHaveBeenCalled()
   })
 
   it('passes frameId through to sendExportRequest options', async () => {

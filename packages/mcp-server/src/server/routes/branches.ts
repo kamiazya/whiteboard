@@ -485,13 +485,13 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     const oldValidation = validateBranchNameOrRespond(name)
     if (oldValidation) return c.json(oldValidation.body, oldValidation.status)
 
-    let renameRawBody: unknown
+    let rawRenameBody: unknown
     try {
-      renameRawBody = await c.req.json()
+      rawRenameBody = await c.req.json()
     } catch {
       return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
     }
-    const parsed = renameBranchRequestSchema.safeParse(renameRawBody)
+    const parsed = renameBranchRequestSchema.safeParse(rawRenameBody)
     if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'name is required' }, 400)
     }

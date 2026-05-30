@@ -81,4 +81,38 @@ describe('palette router', () => {
       palette: { 'accent.target': '#1971c2' },
     })
   })
+
+  // Validation gates for each verb so a routing change cannot accidentally
+  // expose a workspaceId-bypass shape.
+  it('rejects GET with an invalid workspaceId before touching disk', async () => {
+    const res = await createApp().request('/api/workspaces/bad..id/palette')
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects PUT with an invalid workspaceId', async () => {
+    const res = await createApp().request('/api/workspaces/bad..id/palette', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: { foo: '#fff' } }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects DELETE with an invalid workspaceId', async () => {
+    const res = await createApp().request('/api/workspaces/bad..id/palette', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys: ['foo'] }),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 400 when PUT body is not a Record<string, string>', async () => {
+    const res = await createApp().request('/api/workspaces/session1/palette', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: { foo: 42 } }),
+    })
+    expect(res.status).toBe(400)
+  })
 })

@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import { z } from 'zod'
 import { clientCountResponseSchema } from '../../../shared/api-contracts/canvas-runtime.js'
 import {
@@ -19,6 +19,20 @@ export const exportPngOutputSchema = z.object({
 const EXPORT_PNG_WAIT_TIMEOUT_MS = 5_000
 const EXPORT_PNG_WAIT_INTERVAL_MS = 100
 
+// Hard ceiling on PNG bytes we are willing to base64-encode and ship through
+// MCP. base64 itself is ~1.33x and the SDK round-trips through JSON, so a 4 MiB
+// raw PNG already costs ~6 MiB of strings and ~12 MiB of transient buffers.
+// Above this cap, the tool returns only the file path so the caller can open
+// the file directly. Override with WHITEBOARD_EXPORT_MAX_BASE64_BYTES.
+const DEFAULT_MAX_BASE64_BYTES = 4 * 1024 * 1024
+
+function resolveMaxBase64Bytes(): number {
+  const raw = process.env.WHITEBOARD_EXPORT_MAX_BASE64_BYTES
+  if (!raw) return DEFAULT_MAX_BASE64_BYTES
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MAX_BASE64_BYTES
+}
+
 interface ExportPngArgs {
   canvasId: string
   padding?: number
@@ -27,6 +41,7 @@ interface ExportPngArgs {
   frameId?: string
   outputPath?: string
   overwrite?: boolean
+  theme?: 'light' | 'dark'
 }
 
 function buildExportBody(args: ExportPngArgs): Record<string, number | string | boolean> {
@@ -37,6 +52,7 @@ function buildExportBody(args: ExportPngArgs): Record<string, number | string | 
   if (args.frameId !== undefined) body.frameId = args.frameId
   if (args.outputPath !== undefined) body.outputPath = args.outputPath
   if (args.overwrite !== undefined) body.overwrite = args.overwrite
+  if (args.theme !== undefined) body.theme = args.theme
   return body
 }
 
@@ -129,12 +145,18 @@ export function exportPngTool() {
         outputPath: {
           type: 'string',
           description:
-            'Absolute path to write the PNG to. Must be inside the workspace exports directory. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+            'Absolute path to write the PNG to. Useful for placing the export next to a source asset. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
         },
         overwrite: {
           type: 'boolean',
           description:
             'Replace an existing file at outputPath. Default: false. Without this, an existing outputPath is rejected with output_exists.',
+        },
+        theme: {
+          type: 'string',
+          enum: ['light', 'dark'],
+          description:
+            'Force the rendered scene into "light" or "dark" without mutating the persisted appState. Use it to export the same canvas under both themes for dark-mode QA, contrast review, or before/after comparison.',
         },
       },
       required: ['canvasId'],
@@ -165,12 +187,19 @@ export function exportPngTool() {
       }
       const json = exportResponseSchema.parse(await res.json())
       // Best-effort attach the PNG as base64 so MCP can return it as ImageContent.
-      // If the file cannot be read (for example it was already removed), return
-      // only filePath and let higher layers omit the image block.
+      // Stat first and skip the read entirely once the file exceeds the cap —
+      // a 16 MiB PNG would otherwise allocate ~22 MiB transient strings before
+      // we even know we have to drop it. If the file cannot be read (for
+      // example it was already removed), return only filePath and let higher
+      // layers omit the image block.
       let imageBase64: string | undefined
       try {
-        const bytes = await readFile(json.filePath)
-        imageBase64 = bytes.toString('base64')
+        const cap = resolveMaxBase64Bytes()
+        const info = await stat(json.filePath)
+        if (info.size <= cap) {
+          const bytes = await readFile(json.filePath)
+          imageBase64 = bytes.toString('base64')
+        }
       } catch {
         imageBase64 = undefined
       }

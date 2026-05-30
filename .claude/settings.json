@@ -1,14 +1,40 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": [
+    "Repo Claude Code MCP override.",
+    "Connects every reload to the long-lived daemon launched by",
+    "  pnpm mcp:http:dev",
+    "which serves http://127.0.0.1:3099/mcp. The HTTP transport sidesteps the",
+    "stdio + daemon-registry path that would otherwise reuse stale daemons",
+    "recorded in ~/.whiteboard/daemon.json.",
+    "",
+    "The SessionStart hook starts the dev daemon automatically. If hooks are",
+    "disabled, Claude Code will see a connection error on the whiteboard MCP",
+    "server. Start it in another terminal first:",
+    "  pnpm mcp:http:dev"
+  ],
   "mcpServers": {
     "whiteboard": {
-      "command": "node",
-      "args": [
-        "./packages/mcp-server/scripts/mcp-dev-launch.mjs"
-      ],
-      "env": {
-        "WHITEBOARD_DEV": "1"
+      "type": "http",
+      "url": "http://127.0.0.1:3099/mcp",
+      "headers": {
+        "Authorization": "Bearer whiteboard-dev"
       }
     }
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node packages/mcp-server/scripts/ensure-http-dev-daemon.mjs --quiet",
+            "_comment": "ensure-http-dev-daemon waits up to 30s for `pnpm mcp:http:dev` to bind on cold checkouts; keep this timeout above that so the hook is not killed mid-wait.",
+            "timeout": 40
+          }
+        ]
+      }
+    ]
   }
 }

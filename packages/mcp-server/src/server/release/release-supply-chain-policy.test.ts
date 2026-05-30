@@ -259,7 +259,7 @@ describe('supply-chain-policy.json signing strategy safety', () => {
 })
 
 describe('design note content drift', () => {
-  const NOTE_PATH = 'tmp/notes/2026-05-22-release-signing-provenance-sbom.md'
+  const NOTE_PATH = 'packages/mcp-server/src/server/release/release-signing-provenance-sbom.md'
   const noteExists = existsSync(join(ROOT, NOTE_PATH))
   // Guard against missing file: tests below will still fail individually if missing,
   // but won't throw at collection time.

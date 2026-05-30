@@ -34,6 +34,10 @@ export const userLibrarySummarySchema = z.object({
   name: z.string(),
   path: z.string(),
   itemCount: z.number().int().nonnegative(),
+  // On-disk size of the .excalidrawlib payload. Stat'd at list-time;
+  // null when the file is missing (registry → blob mismatch). The
+  // management dialog uses this to help users pick large packs to remove.
+  bytes: z.number().int().nonnegative().nullable().optional(),
 })
 
 export const listUserLibrariesResponseSchema = z.object({

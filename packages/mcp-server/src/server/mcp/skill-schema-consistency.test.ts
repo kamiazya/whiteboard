@@ -22,6 +22,8 @@ import {
   deleteElementTool,
   moveElementsTool,
   reorderElementsTool,
+  alignElementsTool,
+  distributeElementsTool,
   updateElementTool,
 } from './tools/element-ops-tools.js'
 import { exportPngTool } from './tools/export.js'
@@ -83,6 +85,8 @@ const tools: AnyTool[] = [
   updateElementTool(),
   deleteElementTool(),
   moveElementsTool(),
+  alignElementsTool(),
+  distributeElementsTool(),
   canvasClearTool(),
   exportPngTool(),
   createFrameTool(),
@@ -117,6 +121,8 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
       'update_element',
       'delete_element',
       'move_elements',
+      'align_elements',
+      'distribute_elements',
       'canvas_clear',
       'export_png',
       'create_frame',
@@ -256,8 +262,8 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
   // If a tool is added or removed, toolNames and SKILL.md must be updated too.
   describe('tool count invariants', () => {
     it('keeps tools[] and toolByName at 20 entries', () => {
-      expect(tools.length).toBe(20)
-      expect(toolByName.size).toBe(20)
+      expect(tools.length).toBe(22)
+      expect(toolByName.size).toBe(22)
     })
   })
 

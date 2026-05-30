@@ -28,7 +28,7 @@ This project is split into three main runtime layers:
   - Applies remote updates and emits local edits
 - **storage**
   - Lives under `~/.whiteboard/{workspaceId}/`
-  - Stores canvas state, branches, checkpoints, exports, and library metadata
+  - Stores canvas state, branches, versions, exports, and library metadata
 
 ## Data flow
 
@@ -59,7 +59,7 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | `viewport_set` | Control browser pan and zoom (`mode: "fit"` / `"move"`). |
 | `export_png` | Export PNG. On success it also returns `imageBase64` as MCP `ImageContent` to the LLM. |
 | `canvas_export_json` | Export in standard `.excalidraw` JSON format for round-tripping with Excalidraw desktop or excalidraw.com. |
-| `checkpoint_save` / `checkpoint_restore` | Save and restore state from snapshots under `.checkpoints/`. |
+| `version_save` / `version_restore` / `version_list` | Save and restore labeled canvas versions. `version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
 | `load_image` | Import an external image into the canvas. |
 
 `viewport_set` and `export_png` send instructions to the browser over WebSocket and settle on ACK, which is why they need a connected canvas tab. See [wire-protocol.md](./wire-protocol.md) for the full WebSocket message shapes.
@@ -70,7 +70,7 @@ Loro is the CRDT layer used to keep whiteboard state mergeable and replayable.
 
 - It supports incremental updates for collaboration flows.
 - It supports snapshot export for persistence and restore.
-- It works well with versioning, branching, and checkpoint restore.
+- It works well with versioning, branching, and version restore.
 
 ## Design boundaries
 

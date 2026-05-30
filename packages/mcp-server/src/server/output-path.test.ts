@@ -1,8 +1,19 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, rm, writeFile, mkdir, chmod } from 'node:fs/promises'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { OutputPathError, validateOutputPath } from './output-path.js'
+
+// Wrap node:fs/promises so a single test can `mockRejectedValueOnce` on
+// stat() to inject an EACCES without depending on real kernel permissions.
+// Every other call still hits the real implementation, so happy-path tests
+// continue to round-trip through the disk they always have.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const real = await importOriginal<typeof import('node:fs/promises')>()
+  return { ...real, stat: vi.fn(real.stat) }
+})
+
+const fsp = await import('node:fs/promises')
+const { OutputPathError, validateOutputPath } = await import('./output-path.js')
 
 describe('validateOutputPath', () => {
   let tempDir: string
@@ -76,27 +87,20 @@ describe('validateOutputPath', () => {
   })
 
   it('treats only ENOENT as "missing" and propagates other stat errors', async () => {
-    // Make a directory unreadable, then probe a path inside it. stat() should
-    // fail with EACCES rather than ENOENT, and validateOutputPath must
-    // surface that instead of pretending the file is absent.
-    if (process.platform === 'win32') {
-      // Skipping: posix permission semantics are not portable to Windows.
-      return
-    }
-    const lockedDir = join(tempDir, 'locked')
-    await mkdir(lockedDir)
-    const probe = join(lockedDir, 'probe.bin')
-    await chmod(lockedDir, 0o000)
-    try {
-      await expect(validateOutputPath(probe, false)).rejects.toThrow()
-      // The thrown error must NOT be the friendly OutputPathError for
-      // output_exists / invalid_output_path; it should be the underlying
-      // EACCES so the caller is not silently stepped over.
-      await validateOutputPath(probe, false).catch((err) => {
-        expect(err).not.toBeInstanceOf(OutputPathError)
-      })
-    } finally {
-      await chmod(lockedDir, 0o755)
-    }
+    // Earlier this test used chmod 0o000 on a real dir to coax EACCES out of
+    // stat(). That works on POSIX as a non-root user but no-ops under root
+    // (containers, sudo, some CI sandboxes) and is skipped entirely on
+    // Windows. Spying on stat reproduces the contract — "any stat error other
+    // than ENOENT must surface, not get masked as 'file does not exist'" —
+    // on every platform without depending on kernel permission semantics.
+    const probe = join(tempDir, 'locked', 'probe.bin')
+    const eacces = Object.assign(new Error('EACCES'), { code: 'EACCES' })
+    vi.mocked(fsp.stat).mockRejectedValueOnce(eacces)
+    await expect(validateOutputPath(probe, false)).rejects.toBe(eacces)
+    // It must NOT be normalised into the friendly output_exists /
+    // invalid_output_path error; the caller relies on the raw errno to
+    // distinguish "permission problem on the destination" from a benign
+    // "file is missing".
+    expect(eacces).not.toBeInstanceOf(OutputPathError)
   })
 })

@@ -6,7 +6,6 @@ const { annotateBatchTool } = await import('./annotate-batch.js')
 const { canvasAutoLayoutTool } = await import('./canvas-auto-layout.js')
 const { assignToGroupTool, deleteGroupTool } = await import('./element-ops-tools.js')
 const { createFrameTool, updateFrameMembersTool } = await import('./frame-embed.js')
-const { checkpointSaveTool, checkpointRestoreTool } = await import('./checkpoint.js')
 
 const client = {
   port: 3099,
@@ -34,7 +33,6 @@ interface CanvasElement {
 
 interface HarnessState {
   canvases: Map<string, LoroDoc>
-  checkpoints: Map<string, Uint8Array>
 }
 
 interface Point {
@@ -95,57 +93,6 @@ function installFetchMock(state: HarnessState) {
       const doc = ensureCanvas(state, canvasId)
       doc.import(await decodeBinaryBody(init?.body))
       return new Response(null, { status: 204 })
-    }
-
-    if (
-      parts[0] === 'api' &&
-      ['sessions', 'workspaces'].includes(parts[1] ?? '') &&
-      parts[3] === 'checkpoints' &&
-      parts.length === 4
-    ) {
-      const workspaceId = parts[2]
-      const body = JSON.parse(String(init?.body ?? '{}')) as { sourceSlug: string; checkpointId: string }
-      const sourceDoc = ensureCanvas(state, `${workspaceId}/${body.sourceSlug}`)
-      state.checkpoints.set(body.checkpointId, sourceDoc.export({ mode: 'snapshot' }))
-      return new Response(
-        JSON.stringify({
-          checkpointId: body.checkpointId,
-          elementCount: countLiveElements(state, `${workspaceId}/${body.sourceSlug}`),
-        }),
-        { status: 200 },
-      )
-    }
-
-    if (
-      parts[0] === 'api' &&
-      ['sessions', 'workspaces'].includes(parts[1] ?? '') &&
-      parts[3] === 'checkpoints' &&
-      parts[5] === 'restore' &&
-      method === 'POST'
-    ) {
-      const workspaceId = parts[2]
-      const checkpointId = parts[4]
-      const snapshot = state.checkpoints.get(checkpointId)
-      if (!snapshot) {
-        return new Response(JSON.stringify({ message: `Checkpoint "${checkpointId}" not found` }), {
-          status: 404,
-        })
-      }
-      const body = JSON.parse(String(init?.body ?? '{}')) as { targetSlug: string; overwrite?: boolean }
-      const targetCanvasId = `${workspaceId}/${body.targetSlug}`
-      if (!body.overwrite && state.canvases.has(targetCanvasId)) {
-        return new Response(JSON.stringify({ message: `Canvas "${targetCanvasId}" already exists` }), {
-          status: 409,
-        })
-      }
-      state.canvases.set(targetCanvasId, LoroDoc.fromSnapshot(snapshot))
-      return new Response(
-        JSON.stringify({
-          canvasId: targetCanvasId,
-          elementCount: countLiveElements(state, targetCanvasId),
-        }),
-        { status: 200 },
-      )
     }
 
     throw new Error(`Unexpected fetch: ${url.toString()}`)
@@ -312,7 +259,7 @@ describe('canvas_auto_layout', () => {
   let originalEnv: string | undefined
 
   beforeEach(() => {
-    state = { canvases: new Map(), checkpoints: new Map() }
+    state = { canvases: new Map() }
     restoreFetch = installFetchMock(state).restore
     originalEnv = process.env.WHITEBOARD_MCP_DEBUG_AUTO_LAYOUT
   })
@@ -487,54 +434,64 @@ describe('canvas_auto_layout', () => {
     const canvasId = 'sid/debug'
     const annotate = annotateTool()
     const autoLayout = canvasAutoLayoutTool()
-    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => undefined)
+    const { captureLogsForTests } = await import('../../log.js')
+    const cap = captureLogsForTests('debug')
 
-    await annotate.execute(
-      {
+    try {
+      await annotate.execute(
+        {
+          canvasId,
+          type: 'rectangle',
+          coords: 'absolute',
+          target: { x: 200, y: 200 },
+          width: 120,
+          height: 60,
+        },
+        client,
+      )
+
+      delete process.env.WHITEBOARD_MCP_DEBUG_AUTO_LAYOUT
+      const withoutDebug = await autoLayout.execute({ canvasId }, client)
+      expect(withoutDebug).toEqual({
+        nodeCount: 1,
+        edgeCount: 0,
+        movedCount: 1,
+      })
+      expect(Object.keys(withoutDebug).sort()).toEqual(['edgeCount', 'movedCount', 'nodeCount'])
+      // canvas_auto_layout records may not appear, but other infrastructure
+      // (e.g. snapshot warnings) might. Filter to the layout scope only.
+      expect(cap.records.filter((r) => r.scope === 'canvas_auto_layout')).toHaveLength(0)
+
+      process.env.WHITEBOARD_MCP_DEBUG_AUTO_LAYOUT = '1'
+      await autoLayout.execute({ canvasId }, client)
+      const layoutCalls = cap.records.filter((r) => r.scope === 'canvas_auto_layout')
+      expect(layoutCalls).toHaveLength(1)
+      const record = layoutCalls[0]
+      expect(record.level).toBe('debug')
+      expect(record.msg).toBe('layout pass complete')
+      const payload = record.data
+      expect(payload).toMatchObject({
         canvasId,
-        type: 'rectangle',
-        coords: 'absolute',
-        target: { x: 200, y: 200 },
-        width: 120,
-        height: 60,
-      },
-      client,
-    )
-
-    delete process.env.WHITEBOARD_MCP_DEBUG_AUTO_LAYOUT
-    const withoutDebug = await autoLayout.execute({ canvasId }, client)
-    expect(withoutDebug).toEqual({
-      nodeCount: 1,
-      edgeCount: 0,
-      movedCount: 1,
-    })
-    expect(Object.keys(withoutDebug).sort()).toEqual(['edgeCount', 'movedCount', 'nodeCount'])
-    expect(debugSpy).not.toHaveBeenCalled()
-
-    process.env.WHITEBOARD_MCP_DEBUG_AUTO_LAYOUT = '1'
-    await autoLayout.execute({ canvasId }, client)
-    expect(debugSpy).toHaveBeenCalledTimes(1)
-    const [message, payload] = debugSpy.mock.calls[0]
-    expect(message).toBe('[canvas_auto_layout]')
-    expect(payload).toMatchObject({
-      canvasId,
-      timingsMs: {
-        snapshotLoad: expect.any(Number),
-        graphExtract: expect.any(Number),
-        layoutSolve: expect.any(Number),
-        arrowRebindAndLabelRelocate: expect.any(Number),
-        updatePost: expect.any(Number),
-      },
-    })
+        timingsMs: {
+          snapshotLoad: expect.any(Number),
+          graphExtract: expect.any(Number),
+          layoutSolve: expect.any(Number),
+          arrowRebindAndLabelRelocate: expect.any(Number),
+          updatePost: expect.any(Number),
+        },
+      })
+    } finally {
+      cap.restore()
+    }
   })
 })
 
-describe('dogfood regressions', () => {
+describe('layout regression cases', () => {
   let state: HarnessState
   let restoreFetch: () => void
 
   beforeEach(() => {
-    state = { canvases: new Map(), checkpoints: new Map() }
+    state = { canvases: new Map() }
     restoreFetch = installFetchMock(state).restore
   })
 
@@ -691,54 +648,4 @@ describe('dogfood regressions', () => {
     )
   })
 
-  it('case 61', async () => {
-    const canvasId = 'sid/source-canvas'
-    const annotate = annotateTool()
-    const save = checkpointSaveTool()
-    const restore = checkpointRestoreTool()
-
-    const first = await annotate.execute(
-      {
-        canvasId,
-        type: 'rectangle',
-        coords: 'absolute',
-        target: { x: 80, y: 90 },
-        width: 120,
-        height: 60,
-      },
-      client,
-    )
-    const saved = await save.execute({ canvasId, id: 'cp-dogfood' }, client)
-    expect(saved).toEqual({ checkpointId: 'cp-dogfood', elementCount: 1 })
-
-    await annotate.execute(
-      {
-        canvasId,
-        type: 'rectangle',
-        coords: 'absolute',
-        target: { x: 260, y: 90 },
-        width: 120,
-        height: 60,
-      },
-      client,
-    )
-
-    const restored = await restore.execute(
-      { checkpointId: 'cp-dogfood', targetSlug: 'restored-canvas' },
-      'sid',
-      client,
-    )
-    expect(restored.canvasId).toBe('sid/restored-canvas')
-
-    const restoredElements = readElements(state, restored.canvasId)
-    expect(restoredElements).toHaveLength(1)
-    expect(restoredElements[0]).toMatchObject({
-      id: first.elementId,
-      x: 80,
-      y: 90,
-      width: 120,
-      height: 60,
-      isDeleted: false,
-    })
-  })
 })

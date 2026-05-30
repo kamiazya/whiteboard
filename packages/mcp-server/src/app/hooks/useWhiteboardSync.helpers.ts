@@ -77,10 +77,23 @@ async function sendExportResponse(
         })
       : scoped
   const rawAppState = api.getAppState()
+  // Mirror the headless renderer: when the export request forces a theme
+  // we override appState.theme and viewBackgroundColor so the same canvas
+  // renders consistently across the browser and headless paths. Without
+  // this, a connected light-mode tab would silently emit a light PNG even
+  // for an export_png(theme="dark") request.
+  const themeOverride =
+    msg.theme !== undefined
+      ? {
+          theme: msg.theme,
+          viewBackgroundColor: msg.theme === 'dark' ? '#121212' : '#ffffff',
+        }
+      : null
   const appState = {
     ...rawAppState,
     exportEmbedScene: true,
     ...(msg.scale !== undefined ? { exportScale: msg.scale } : {}),
+    ...(themeOverride ?? {}),
   }
   const blob = await deps.exportToBlobFn({
     elements,
