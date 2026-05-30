@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Wrap node:fs/promises so a single test can `mockRejectedValueOnce` on
 // stat() to inject an EACCES without depending on real kernel permissions.
@@ -27,9 +27,7 @@ describe('validateOutputPath', () => {
   })
 
   it('accepts an absolute path that does not exist yet', async () => {
-    await expect(
-      validateOutputPath(join(tempDir, 'fresh.bin'), false),
-    ).resolves.toBeUndefined()
+    await expect(validateOutputPath(join(tempDir, 'fresh.bin'), false)).resolves.toBeUndefined()
   })
 
   it('throws invalid_output_path for a relative path', async () => {
@@ -62,9 +60,10 @@ describe('validateOutputPath', () => {
     })
 
     it('rejects a path outside allowedDir with invalid_output_path', async () => {
-      await expect(
-        validateOutputPath('/tmp/attack.png', false, tempDir),
-      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+      await expect(validateOutputPath('/tmp/attack.png', false, tempDir)).rejects.toMatchObject({
+        name: 'OutputPathError',
+        code: 'invalid_output_path',
+      })
     })
 
     it('rejects a path that escapes allowedDir via traversal with invalid_output_path', async () => {
@@ -88,6 +87,17 @@ describe('validateOutputPath', () => {
       }
     })
 
+    it('accepts a path inside allowedDir that resolves to another in-sandbox location via a symlink', async () => {
+      // allowedDir/link -> allowedDir/real, both inside the sandbox. realpath resolves the
+      // parent to a path still under allowedDir, so a legitimate in-sandbox symlink must be
+      // accepted: the symlink re-containment check must not over-reject valid in-sandbox targets.
+      await mkdir(join(tempDir, 'real'))
+      await symlink(join(tempDir, 'real'), join(tempDir, 'link'))
+      await expect(
+        validateOutputPath(join(tempDir, 'link', 'out.png'), false, tempDir),
+      ).resolves.toBeUndefined()
+    })
+
     it('rejects a path with control characters', async () => {
       await expect(
         validateOutputPath(join(tempDir, 'bad\x00.png'), false, tempDir),
@@ -95,9 +105,10 @@ describe('validateOutputPath', () => {
     })
 
     it('still rejects relative paths even when allowedDir is set', async () => {
-      await expect(
-        validateOutputPath('relative.png', false, tempDir),
-      ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+      await expect(validateOutputPath('relative.png', false, tempDir)).rejects.toMatchObject({
+        name: 'OutputPathError',
+        code: 'invalid_output_path',
+      })
     })
   })
 

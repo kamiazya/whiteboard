@@ -5,17 +5,16 @@
 // the record before exiting. The dispatcher keeps the process alive with its
 // own never-resolving promise after calling this function.
 
-import { readFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { nanoid } from 'nanoid'
-import { DATA_DIR } from '../server/config.js'
+import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
 import {
   deleteDaemonRecord,
   isPidAlive,
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
-import { withDaemonStartupLock } from '../daemon/daemon-lock.js'
+import { DATA_DIR } from '../server/config.js'
 import { startHttpServer } from '../server/http-server.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
@@ -43,7 +42,8 @@ export interface DaemonRunOptions {
   tokenStdin: boolean
 }
 
-async function findAvailablePort(start = 3099): Promise<number> {
+// Exported for unit testing of the EADDRINUSE-only retry contract.
+export async function findAvailablePort(start = 3099): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer()
     server.listen(start, '127.0.0.1', () => {
@@ -72,7 +72,9 @@ async function readTokenFromStdin(): Promise<string> {
   return new Promise((resolve, reject) => {
     let buf = ''
     process.stdin.setEncoding('utf8')
-    process.stdin.on('data', (chunk) => { buf += chunk })
+    process.stdin.on('data', (chunk) => {
+      buf += chunk
+    })
     process.stdin.on('end', () => resolve(buf.trim()))
     process.stdin.on('error', reject)
   })
@@ -112,7 +114,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   }
 
   return await withDaemonStartupLock(dataDir, async () => {
-    const port = options.port ?? await findAvailablePort()
+    const port = options.port ?? (await findAvailablePort())
     const host = options.host ?? '127.0.0.1'
 
     const running = await startHttpServer({ port, host, token })
