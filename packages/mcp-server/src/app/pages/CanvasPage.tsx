@@ -44,6 +44,16 @@ export default function CanvasPage() {
         }),
   )
 
+  // Abort any in-flight auto-version thumbnail upload on unmount so a
+  // pending PUT does not surface as "TypeError: Failed to fetch" after the
+  // page has navigated away (e.g. the browser back button).
+  useEffect(() => {
+    const controller = thumbnailAbortRef.current
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
   // hashchange handler so `canvas_open({ fullscreen: true })` against an
   // already-open tab toggles in-place. The hash never auto-clears: leaving
   // fullscreen via the in-page button or `Esc`/`f` removes the hash so a
@@ -74,6 +84,10 @@ export default function CanvasPage() {
   // (header, dropdowns, dialogs) flips alongside Excalidraw.
   const { theme, resolvedTheme, setTheme } = useThemeMode()
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null)
+  // Aborts an in-flight auto-version thumbnail PUT when the page unmounts.
+  // The upload is fired from a websocket callback (onVersionCreated), not a
+  // useEffect, so it needs a component-scoped controller to be cancellable.
+  const thumbnailAbortRef = useRef<AbortController>(new AbortController())
 
   // apiRef is assigned in handleApiReady, so it is null immediately after mount.
   // onVersionCreated is read through a ref inside the hook, so recreating it on each render is fine.
@@ -88,9 +102,15 @@ export default function CanvasPage() {
         if (!blob) return
         await apiFetch(
           `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`,
-          { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: blob },
+          {
+            method: 'PUT',
+            headers: { 'Content-Type': 'image/png' },
+            body: blob,
+            signal: thumbnailAbortRef.current.signal,
+          },
         )
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return
         // A thumbnail upload failure does not invalidate the version itself.
         console.error('[canvas-page] auto-version thumbnail upload failed:', err)
       }
@@ -130,6 +150,7 @@ export default function CanvasPage() {
   // - Clear the hash after import to avoid double-importing on reload.
   useEffect(() => {
     let cancelled = false
+    const controller = new AbortController()
     const importLibrary = async (
       api: ExcalidrawImperativeAPI,
       url: string,
@@ -138,7 +159,7 @@ export default function CanvasPage() {
       try {
         const safeUrl = getImportableLibraryUrl(url)
         if (safeUrl === null) return false
-        const res = await fetch(safeUrl)
+        const res = await fetch(safeUrl, { signal: controller.signal })
         if (!res.ok) {
           console.error('[library] fetch failed', res.status, safeUrl)
           return false
@@ -172,7 +193,7 @@ export default function CanvasPage() {
 
       // 1) Restore server-registered libraries without opening the library panel.
       try {
-        const res = await apiFetch(`/api/workspaces/${workspaceId}/libraries`)
+        const res = await apiFetch(`/api/workspaces/${workspaceId}/libraries`, { signal: controller.signal })
         if (res.ok) {
           const { urls } = (await res.json()) as { urls: string[] }
           for (const url of getInstalledLibraryUrls(urls)) {
@@ -199,8 +220,10 @@ export default function CanvasPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url: libUrl }),
+            signal: controller.signal,
           })
         } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') return
           console.error('[library] register failed', err)
         }
       }
@@ -208,22 +231,23 @@ export default function CanvasPage() {
     run()
     return () => {
       cancelled = true
+      controller.abort()
     }
   }, [workspaceId, slug])
 
   useEffect(() => {
-    let cancelled = false
-    apiFetch(`/api/workspaces/${workspaceId}/canvases`)
+    const controller = new AbortController()
+    apiFetch(`/api/workspaces/${workspaceId}/canvases`, { signal: controller.signal })
       .then((res) => res.json() as Promise<{ canvases: { slug: string; updatedAt: string }[] }>)
       .then(({ canvases }) => {
-        if (cancelled) return
         setCanvases(canvases)
       })
-      .catch(() => {
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return
         /* The canvas should still work even if the header list fails to load. */
       })
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [workspaceId, slug])
 
