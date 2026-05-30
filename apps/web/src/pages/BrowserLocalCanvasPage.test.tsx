@@ -72,6 +72,32 @@ describe('BrowserLocalCanvasPage', () => {
     expect(screen.getByRole('main')).toBeTruthy()
   })
 
+  it('shows a recovery-failed message when Start fresh cannot save', async () => {
+    const base = new MemoryStore()
+    const failingFreshStore: BrowserLocalStore = {
+      getDefaultCanvasId: async () => 'c1',
+      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      load: async () => ({ kind: 'corrupted' }),
+      save: async () => {
+        throw new Error('idb write failed')
+      },
+      del: base.del.bind(base),
+      generateId: () => 'fresh-id',
+    }
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={failingFreshStore} />)
+    })
+    const startFresh = screen.getByRole('button', { name: /start fresh/i })
+    await act(async () => {
+      startFresh.click()
+      await vi.runAllTimersAsync()
+    })
+    // A failed recovery save must not show the editor (no dangling pointer / false "Saved");
+    // it surfaces a retry message instead.
+    expect(screen.queryByRole('main')).toBeNull()
+    expect(screen.getByText('Could not start a new canvas. Please try again.')).toBeTruthy()
+  })
+
   it('renders cleanup-completed view after delete button click', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')

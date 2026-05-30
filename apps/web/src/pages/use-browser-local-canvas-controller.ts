@@ -167,16 +167,6 @@ export function useBrowserLocalCanvasController(
 
   const startFresh = useCallback(async () => {
     setCleanupError(null)
-    // Recover from an unreadable/deleted canvas: drop the stale pointer (best-effort)
-    // and mint a new untitled canvas so the degraded/cleanup view is never a dead end.
-    const existingId = await storeRef.current.getDefaultCanvasId()
-    if (existingId !== null) {
-      try {
-        await storeRef.current.del(existingId)
-      } catch {
-        // A failed delete must not block creating a fresh canvas.
-      }
-    }
     const id = storeRef.current.generateId()
     const fresh: CanvasSnapshot = {
       id,
@@ -184,8 +174,30 @@ export function useBrowserLocalCanvasController(
       scene: { elements: [] },
       updatedAt: new Date().toISOString(),
     }
-    await storeRef.current.setDefaultCanvasId(id)
-    await storeRef.current.save(fresh)
+    try {
+      // Save the new canvas BEFORE repointing the default id, so a failed write never
+      // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).
+      await storeRef.current.save(fresh)
+      const existingId = await storeRef.current.getDefaultCanvasId()
+      await storeRef.current.setDefaultCanvasId(id)
+      if (existingId !== null && existingId !== id) {
+        try {
+          await storeRef.current.del(existingId)
+        } catch {
+          // Dropping the old canvas is best-effort; failure must not abort recovery.
+        }
+      }
+    } catch {
+      // Recovery itself failed — keep the user on a retry-able degraded view instead of
+      // optimistically showing "Saved" over a dangling pointer.
+      setPersistenceRef.current({
+        kind: 'degraded',
+        reason: 'recovery-failed',
+        message: 'Could not start a new canvas. Please try again.',
+        lastSavedAt: null,
+      })
+      return
+    }
     setSnapshot(fresh)
     setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
     setCleanupCompleted(false)
