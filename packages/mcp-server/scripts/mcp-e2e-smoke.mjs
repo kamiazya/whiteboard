@@ -388,8 +388,9 @@ async function main() {
   // ignores `theme`, both files would be byte-identical and the contrast QA
   // workflow recommended in skills/drawing-visuals/dark-mode-techniques.md
   // would silently produce identical exports.
-  const lightOut = join(tmpDataDir, 'theme-light.png')
-  const darkOut = join(tmpDataDir, 'theme-dark.png')
+  const themeExportsDir = join(tmpDataDir, created.id.split('/')[0], 'exports')
+  const lightOut = join(themeExportsDir, 'theme-light.png')
+  const darkOut = join(themeExportsDir, 'theme-dark.png')
   const themeLight = await callTool('export_png', {
     canvasId: created.id,
     theme: 'light',
