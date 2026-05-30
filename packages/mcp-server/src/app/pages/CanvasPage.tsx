@@ -48,7 +48,7 @@ export default function CanvasPage() {
   // pending PUT does not surface as "TypeError: Failed to fetch" after the
   // page has navigated away (e.g. the browser back button).
   useEffect(() => {
-    const controller = thumbnailAbortRef.current
+    const controller = ensureThumbnailAbort()
     return () => {
       controller.abort()
     }
@@ -87,7 +87,11 @@ export default function CanvasPage() {
   // Aborts an in-flight auto-version thumbnail PUT when the page unmounts.
   // The upload is fired from a websocket callback (onVersionCreated), not a
   // useEffect, so it needs a component-scoped controller to be cancellable.
-  const thumbnailAbortRef = useRef<AbortController>(new AbortController())
+  const thumbnailAbortRef = useRef<AbortController | null>(null)
+  const ensureThumbnailAbort = (): AbortController => {
+    thumbnailAbortRef.current ??= new AbortController()
+    return thumbnailAbortRef.current
+  }
 
   // apiRef is assigned in handleApiReady, so it is null immediately after mount.
   // onVersionCreated is read through a ref inside the hook, so recreating it on each render is fine.
@@ -106,7 +110,7 @@ export default function CanvasPage() {
             method: 'PUT',
             headers: { 'Content-Type': 'image/png' },
             body: blob,
-            signal: thumbnailAbortRef.current.signal,
+            signal: ensureThumbnailAbort().signal,
           },
         )
       } catch (err) {
@@ -177,6 +181,7 @@ export default function CanvasPage() {
         })
         return true
       } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') return false
         console.error('[library] import failed', err)
         return false
       }
