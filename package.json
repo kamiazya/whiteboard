@@ -10,6 +10,7 @@
     "url": "https://github.com/kamiazya/whiteboard.git"
   },
   "scripts": {
+    "worktree:new": "node tools/new-worktree.mjs",
     "build": "pnpm -r build",
     "test": "vitest run",
     "test:all": "vitest run",
