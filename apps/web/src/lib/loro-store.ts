@@ -9,11 +9,15 @@ import { z } from 'zod'
  *    changes in a backward-incompatible way; old records will be rejected as
  *    'corrupted' and the caller is responsible for recovery.
  */
+// z.custom pins the inferred type to Uint8Array<ArrayBuffer> (matching lib:ES2020+DOM),
+// which is narrower than the z.instanceof(Uint8Array) result (Uint8Array<ArrayBufferLike>).
+const uint8ArraySchema = z.custom<Uint8Array>((v) => v instanceof Uint8Array)
+
 export const loroRecordEnvelopeSchema = z.object({
   v: z.literal(1),
-  snapshot: z.instanceof(Uint8Array),
+  snapshot: uint8ArraySchema,
   updatedAt: z.string(),
-  deltas: z.array(z.instanceof(Uint8Array)).optional(),
+  deltas: z.array(uint8ArraySchema).optional(),
 })
 
 export type LoroRecordEnvelope = z.infer<typeof loroRecordEnvelopeSchema>

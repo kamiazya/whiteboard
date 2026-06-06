@@ -77,6 +77,14 @@ export interface CanvasBackendHandlers {
    * connection and every subsequent reconnect after a close/error cycle.
    */
   onConnected: () => void
+  /**
+   * Optional error callback for backend-level failures. Defaults to a no-op
+   * so existing implementors (e.g. DaemonBackend) are source-compatible.
+   * 'corrupt-snapshot' / 'corrupt-delta': Loro bytes failed to parse.
+   * 'unsupported-version': envelope version not recognised by this client.
+   * 'storage-failure': IndexedDB open or transaction failed.
+   */
+  onError?: (reason: 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version' | 'storage-failure') => void
 }
 
 // ── CanvasBackend interface ───────────────────────────────────────────────────
