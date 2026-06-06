@@ -86,6 +86,11 @@ export { userLibraryMetadataManifestSchema, type UserLibraryMetadataManifest }
 // attacker-controlled payloads fetched from external URLs are always validated
 // before use — never cast directly.
 
+const boundElementRefSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+})
+
 const libraryElementSchema = z.object({
   id: z.string(),
   type: z.string(),
@@ -93,6 +98,7 @@ const libraryElementSchema = z.object({
   y: z.number(),
   width: z.number(),
   height: z.number(),
+  boundElements: z.array(boundElementRefSchema).nullish(),
 }).passthrough()
 
 const libraryItemV2Schema = z.object({

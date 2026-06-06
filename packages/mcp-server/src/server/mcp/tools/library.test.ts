@@ -146,6 +146,56 @@ describe('libraryPayloadV1Schema / libraryPayloadV2Schema', () => {
     const result = libraryPayloadV2Schema.safeParse(payload)
     expect(result.success).toBe(false)
   })
+
+  it('rejects a v2 element with a null entry in boundElements', () => {
+    // A null entry in boundElements bypasses the schema with passthrough() but
+    // crashes resolveLibraryItem when it tries to read be.id on the null value.
+    const payload = {
+      type: 'excalidrawlib',
+      version: 2,
+      libraryItems: [
+        {
+          elements: [
+            {
+              id: 'rect-1',
+              type: 'rectangle',
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              boundElements: [null],
+            },
+          ],
+        },
+      ],
+    }
+    const result = libraryPayloadV2Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a v2 element with a boundElements entry missing the id field', () => {
+    const payload = {
+      type: 'excalidrawlib',
+      version: 2,
+      libraryItems: [
+        {
+          elements: [
+            {
+              id: 'rect-1',
+              type: 'rectangle',
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              boundElements: [{ type: 'text' }],
+            },
+          ],
+        },
+      ],
+    }
+    const result = libraryPayloadV2Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
 })
 
 describe('session library tools', () => {
