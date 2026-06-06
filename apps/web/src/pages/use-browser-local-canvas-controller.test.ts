@@ -263,6 +263,56 @@ describe('useBrowserLocalCanvasController', () => {
     expect((await store.load('c1')).kind).toBe('not-found')
   })
 
+  it('startFresh deletes the old canvas record before repointing the default', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
+    await act(async () => {})
+    await act(async () => {
+      await result.current.startFresh()
+    })
+    // The old canvas must not linger in the store: del() clears the default pointer,
+    // so it has to run while 'c1' is still the default — i.e. before setDefaultCanvasId(new).
+    expect((await store.load('c1')).kind).toBe('not-found')
+    const newId = await store.getDefaultCanvasId()
+    expect(newId).not.toBeNull()
+    expect(newId).not.toBe('c1')
+    expect((await store.load(newId as string)).kind).toBe('ok')
+  })
+
+  it('startFresh degrades and cleans up its orphan when repointing the default fails', async () => {
+    const base = new MemoryStore()
+    await base.setDefaultCanvasId('c1')
+    await base.save(snap)
+    const failingStore: BrowserLocalStore = {
+      getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+      load: base.load.bind(base),
+      save: base.save.bind(base),
+      del: base.del.bind(base),
+      removeCanvas: base.removeCanvas.bind(base),
+      generateId: () => 'fresh-1',
+      setDefaultCanvasId: async () => {
+        throw new Error('IndexedDB: meta write aborted')
+      },
+    }
+    const { result } = renderHook(() => useBrowserLocalCanvasController(failingStore))
+    await act(async () => {})
+    await act(async () => {
+      await result.current.startFresh()
+    })
+    expect(result.current.persistence.kind).toBe('degraded')
+    if (result.current.persistence.kind === 'degraded') {
+      expect(result.current.persistence.reason).toBe('recovery-failed')
+    }
+    // del() ran before the failed repoint, so the abandoned canvas is gone and the pointer is
+    // null — a retry starts cleanly. The freshly-saved canvas is cleaned up via removeCanvas
+    // so the failed recovery leaves no orphaned record behind.
+    expect((await base.load('c1')).kind).toBe('not-found')
+    expect((await base.load('fresh-1')).kind).toBe('not-found')
+    expect(await base.getDefaultCanvasId()).toBeNull()
+  })
+
   it('save/reload roundtrip: saved elements persist in store', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')

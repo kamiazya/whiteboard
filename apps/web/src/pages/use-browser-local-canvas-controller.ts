@@ -179,7 +179,9 @@ export function useBrowserLocalCanvasController(
       // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).
       await storeRef.current.save(fresh)
       const existingId = await storeRef.current.getDefaultCanvasId()
-      await storeRef.current.setDefaultCanvasId(id)
+      // del() only removes the canvas the default pointer currently aims at (and clears
+      // the pointer as it goes), so the old canvas must be dropped BEFORE repointing —
+      // calling it after setDefaultCanvasId(id) always pointer-mismatches and leaks the row.
       if (existingId !== null && existingId !== id) {
         try {
           await storeRef.current.del(existingId)
@@ -187,9 +189,18 @@ export function useBrowserLocalCanvasController(
           // Dropping the old canvas is best-effort; failure must not abort recovery.
         }
       }
+      await storeRef.current.setDefaultCanvasId(id)
     } catch {
-      // Recovery itself failed — keep the user on a retry-able degraded view instead of
-      // optimistically showing "Saved" over a dangling pointer.
+      // Recovery itself failed. If the failure landed on the final setDefaultCanvasId, the
+      // freshly-saved canvas is written but never pointed to — del() can't reach it (it only
+      // removes the current default), so drop the orphan via the pointer-independent
+      // removeCanvas. Best-effort: cleanup failure must not mask the degraded view, which
+      // keeps the user on a retry-able state instead of showing "Saved" over a dangling pointer.
+      try {
+        await storeRef.current.removeCanvas?.(id)
+      } catch {
+        // Orphan cleanup is best-effort; leaving a stray empty record is harmless.
+      }
       setPersistenceRef.current({
         kind: 'degraded',
         reason: 'recovery-failed',

@@ -23,6 +23,10 @@ export interface BrowserLocalStore {
   load(id: string): Promise<LoadResult>
   save(snapshot: CanvasSnapshot): Promise<void>
   del(expectedId: string): Promise<DeleteResult>
+  // Unconditional delete of a canvas record by id, independent of the default pointer.
+  // Optional capability used for best-effort cleanup of records del() cannot reach
+  // (it only removes the canvas the default pointer currently aims at).
+  removeCanvas?(id: string): Promise<void>
   generateId(): string
 }
 
@@ -54,6 +58,10 @@ export class MemoryStore implements BrowserLocalStore {
     this.canvases.delete(expectedId)
     this.defaultId = null
     return { deleted: true }
+  }
+
+  async removeCanvas(id: string): Promise<void> {
+    this.canvases.delete(id)
   }
 
   generateId(): string {
@@ -156,6 +164,16 @@ export class IndexedDBStore implements BrowserLocalStore {
         if (earlyResult !== null) resolve(earlyResult)
         else reject(tx.error ?? new DOMException('Transaction aborted unexpectedly', 'AbortError'))
       }
+      tx.onerror = () => { db.close(); reject(tx.error) }
+    })
+  }
+
+  async removeCanvas(id: string): Promise<void> {
+    const db = await openDb()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('canvases', 'readwrite')
+      tx.objectStore('canvases').delete(id)
+      tx.oncomplete = () => { db.close(); resolve() }
       tx.onerror = () => { db.close(); reject(tx.error) }
     })
   }
