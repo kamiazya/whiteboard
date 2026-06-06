@@ -90,6 +90,11 @@ export class BrowserLocalBackend implements CanvasBackend {
 
   // ── Private ──────────────────────────────────────────────────────────────────
 
+  /** True once the original connect() handlers are no longer the live ones. */
+  private isStale(handlers: CanvasBackendHandlers): boolean {
+    return this.disconnected || this.handlers !== handlers
+  }
+
   private async loadAndDeliver(): Promise<void> {
     const handlers = this.handlers
     if (!handlers) return
@@ -98,12 +103,12 @@ export class BrowserLocalBackend implements CanvasBackend {
     try {
       result = await this.store.load(this.canvasId)
     } catch {
-      if (this.disconnected || this.handlers !== handlers) return
+      if (this.isStale(handlers)) return
       handlers.onError?.('storage-failure')
       return
     }
 
-    if (this.disconnected || this.handlers !== handlers) return
+    if (this.isStale(handlers)) return
 
     if (result.kind === 'not-found') {
       // No persisted data: deliver an empty snapshot so the hook can initialise.
