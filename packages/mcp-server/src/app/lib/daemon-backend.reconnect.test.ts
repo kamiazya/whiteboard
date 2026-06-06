@@ -64,6 +64,18 @@ function makeBackend(): InstanceType<typeof DaemonBackend> {
   return new DaemonBackend('ws-sid', 'slug', 'http://localhost/')
 }
 
+function lastSocket(): FakeWebSocket {
+  return FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+}
+
+function triggerClose(socket: FakeWebSocket): void {
+  socket.onclose?.(new Event('close') as CloseEvent)
+}
+
+function deliverFrame(socket: FakeWebSocket, byte: number): void {
+  socket.onmessage?.(new MessageEvent('message', { data: new Uint8Array([byte]).buffer }))
+}
+
 // ── Setup / teardown ─────────────────────────────────────────────────────────
 
 let originalWebSocket: typeof WebSocket
@@ -106,7 +118,7 @@ describe('exponential backoff delay sequence', () => {
     const backend = makeBackend()
     backend.connect(makeHandlers())
 
-    FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
+    triggerClose(FakeWebSocket.instances[0])
     expect(FakeWebSocket.instances).toHaveLength(1)
 
     await vi.advanceTimersByTimeAsync(499)
@@ -126,7 +138,7 @@ describe('exponential backoff delay sequence', () => {
 
     for (const delay of expectedDelays) {
       const countBefore = FakeWebSocket.instances.length
-      FakeWebSocket.instances[countBefore - 1].onclose?.(new Event('close') as CloseEvent)
+      triggerClose(lastSocket())
 
       // One millisecond short — must not have reconnected yet.
       await vi.advanceTimersByTimeAsync(delay - 1)
@@ -145,12 +157,12 @@ describe('exponential backoff delay sequence', () => {
     backend.connect(makeHandlers())
 
     // First close: attempt=0 → 500ms.
-    FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
+    triggerClose(FakeWebSocket.instances[0])
     await vi.advanceTimersByTimeAsync(500)
     expect(FakeWebSocket.instances).toHaveLength(2)
 
     // Second close without open: attempt=1 → 1000ms.
-    FakeWebSocket.instances[1].onclose?.(new Event('close') as CloseEvent)
+    triggerClose(FakeWebSocket.instances[1])
     await vi.advanceTimersByTimeAsync(999)
     expect(FakeWebSocket.instances).toHaveLength(2) // not yet
     await vi.advanceTimersByTimeAsync(1)
@@ -158,7 +170,7 @@ describe('exponential backoff delay sequence', () => {
 
     // onopen resets attempt to 0; next close must be 500ms again.
     FakeWebSocket.instances[2].onopen?.(new Event('open'))
-    FakeWebSocket.instances[2].onclose?.(new Event('close') as CloseEvent)
+    triggerClose(FakeWebSocket.instances[2])
     await vi.advanceTimersByTimeAsync(499)
     expect(FakeWebSocket.instances).toHaveLength(3) // not yet
     await vi.advanceTimersByTimeAsync(1)
@@ -180,21 +192,17 @@ describe('snapshotReceived state machine', () => {
     backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
 
     // Receive initial snapshot on first connection.
-    FakeWebSocket.instances[0].onmessage?.(
-      new MessageEvent('message', { data: new Uint8Array([1]).buffer }),
-    )
+    deliverFrame(FakeWebSocket.instances[0], 1)
     expect(onSnapshot).toHaveBeenCalledTimes(1)
     expect(onRemoteUpdate).toHaveBeenCalledTimes(0)
 
     // Automatic reconnect (onclose without disconnect()).
-    FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
+    triggerClose(FakeWebSocket.instances[0])
     await vi.advanceTimersByTimeAsync(500)
     expect(FakeWebSocket.instances).toHaveLength(2)
 
     // First frame on the new socket routes to onRemoteUpdate, not onSnapshot.
-    FakeWebSocket.instances[1].onmessage?.(
-      new MessageEvent('message', { data: new Uint8Array([2]).buffer }),
-    )
+    deliverFrame(FakeWebSocket.instances[1], 2)
     expect(onSnapshot).toHaveBeenCalledTimes(1)
     expect(onRemoteUpdate).toHaveBeenCalledTimes(1)
 
@@ -207,17 +215,14 @@ describe('snapshotReceived state machine', () => {
     const backend = makeBackend()
     backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
 
-    FakeWebSocket.instances[0].onmessage?.(
-      new MessageEvent('message', { data: new Uint8Array([1]).buffer }),
-    )
+    deliverFrame(FakeWebSocket.instances[0], 1)
     expect(onSnapshot).toHaveBeenCalledTimes(1)
 
     // Full disconnect resets snapshotReceived.
     backend.disconnect()
     backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
 
-    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
-    ws.onmessage?.(new MessageEvent('message', { data: new Uint8Array([2]).buffer }))
+    deliverFrame(lastSocket(), 2)
 
     // First frame of the fresh connection is treated as a snapshot again.
     expect(onSnapshot).toHaveBeenCalledTimes(2)
@@ -235,7 +240,7 @@ describe('disconnect() cancels the reconnect loop', () => {
     backend.connect(makeHandlers())
 
     // Trigger a close so a backoff timer is scheduled.
-    FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
+    triggerClose(FakeWebSocket.instances[0])
     expect(FakeWebSocket.instances).toHaveLength(1)
 
     // Cancel before the 500ms timer fires.
@@ -254,7 +259,7 @@ describe('disconnect() cancels the reconnect loop', () => {
     backend.disconnect()
 
     // Close the socket to simulate its eventual failure; no reconnect must follow.
-    FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
+    triggerClose(FakeWebSocket.instances[0])
     await vi.advanceTimersByTimeAsync(1000)
     expect(FakeWebSocket.instances).toHaveLength(1)
   })
