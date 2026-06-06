@@ -1188,6 +1188,13 @@ describe('createAutoVersionTrigger', () => {
     // The trigger holds an ephemeral per-canvas timestamp registry (Map<key, number>).
     // This test confirms the registry persists its state across calls within the same
     // trigger instance so that the throttle window is correctly enforced.
+    //
+    // Pin the clock so both the "first call always fires" invariant and the
+    // "second call is throttled" assertion are grounded in an explicit time,
+    // not a wall-clock assumption.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+
     const doc = new LoroDoc()
     const entry = {
       id: 'v1',
@@ -1198,7 +1205,7 @@ describe('createAutoVersionTrigger', () => {
       hasThumbnail: false,
     }
     const save = vi.fn().mockResolvedValue(entry)
-    // Use a large interval so the second call always falls within the window.
+    // Use a large interval so the second call (at the same pinned instant) always falls within the window.
     const trigger = createAutoVersionTrigger(
       {
         save,
@@ -1212,15 +1219,17 @@ describe('createAutoVersionTrigger', () => {
       60_000,
     )
 
-    // First call: no prior save recorded → now - 0 >= intervalMs is always true → should save.
+    // First call: no prior save recorded → now - 0 >= intervalMs is true → should save.
     const first = await trigger('session1', 'canvas-a', doc)
     expect(first).toEqual(entry)
     expect(save).toHaveBeenCalledTimes(1)
 
-    // Second call immediately after: within the 60s window → must return null.
+    // Second call at the same pinned instant: within the 60s window → must return null.
     const second = await trigger('session1', 'canvas-a', doc)
     expect(second).toBeNull()
     expect(save).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
   })
 })
 
