@@ -137,6 +137,28 @@ describe('LoroStore (real IndexedDB)', () => {
     const result = await store.load('legacy-canvas')
     expect(result.kind).toBe('not-found')
   })
+
+  it('appendDelta before any save is a no-op (no snapshot yet)', async () => {
+    const store = new LoroStore()
+    const delta = new Uint8Array([1, 2, 3])
+    // Should resolve without throwing — snapshot must exist first
+    await expect(store.appendDelta('canvas-99', delta)).resolves.toBeUndefined()
+    // load still returns not-found: no record was created
+    const result = await store.load('canvas-99')
+    expect(result.kind).toBe('not-found')
+  })
+
+  it('appendDelta with a corrupt existing record throws so the caller can surface storage-failure', async () => {
+    // Seed a corrupt envelope
+    const db = await openLoroDb()
+    await writeRaw(db, 'loroCanvases', 'corrupt-canvas', { v: 99, garbage: true })
+    db.close()
+
+    const store = new LoroStore()
+    const delta = new Uint8Array([1, 2, 3])
+    // Corrupt record must not silently swallow the delta — must throw
+    await expect(store.appendDelta('corrupt-canvas', delta)).rejects.toThrow()
+  })
 })
 
 // --- helpers for raw IndexedDB access in tests ---

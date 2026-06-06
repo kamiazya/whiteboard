@@ -76,7 +76,14 @@ export class LoroStore {
           deltas: parsed.data.deltas,
         })
       }
-      req.onerror = () => resolve({ kind: 'corrupted' })
+      // req.onerror fires when the get request itself fails; close db and resolve as corrupted
+      // so the IDB connection is not leaked. Prevent the error from propagating to tx.onerror.
+      req.onerror = (e) => { e.preventDefault(); db.close(); resolve({ kind: 'corrupted' }) }
+      // tx.onerror/tx.onabort fire when the transaction errors before req completes
+      // (e.g. quota exceeded, database closing mid-read). Without these the promise
+      // never settles and loadAndDeliver stalls permanently.
+      tx.onerror = () => { db.close(); resolve({ kind: 'corrupted' }) }
+      tx.onabort = () => { db.close(); resolve({ kind: 'corrupted' }) }
       tx.oncomplete = () => db.close()
     })
   }
@@ -114,7 +121,12 @@ export class LoroStore {
           return
         }
         const parsed = loroRecordEnvelopeSchema.safeParse(raw)
-        if (!parsed.success) return // Corrupt record; skip silently.
+        if (!parsed.success) {
+          // Corrupt envelope: abort the transaction so the promise rejects and
+          // the caller (BrowserLocalBackend) can route to onError('storage-failure').
+          tx.abort()
+          return
+        }
         const updated: LoroRecordEnvelope = {
           ...parsed.data,
           deltas: [...(parsed.data.deltas ?? []), delta],
@@ -124,6 +136,8 @@ export class LoroStore {
       }
       tx.oncomplete = () => { db.close(); resolve() }
       tx.onerror = () => { db.close(); reject(tx.error) }
+      // tx.onabort fires when our code calls tx.abort() (corrupt envelope branch above).
+      tx.onabort = () => { db.close(); reject(new DOMException('Corrupt envelope; delta not appended', 'AbortError')) }
     })
   }
 }

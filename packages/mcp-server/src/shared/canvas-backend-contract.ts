@@ -80,11 +80,11 @@ export interface CanvasBackendHandlers {
   /**
    * Optional error callback for backend-level failures. Defaults to a no-op
    * so existing implementors (e.g. DaemonBackend) are source-compatible.
-   * 'corrupt-snapshot' / 'corrupt-delta': Loro bytes failed to parse.
-   * 'unsupported-version': envelope version not recognised by this client.
-   * 'storage-failure': IndexedDB open or transaction failed.
+   * 'corrupt-snapshot': envelope Zod parse failed or existing IDB record is corrupt.
+   * 'storage-failure': IDB open, transaction, or write failed; or corrupt record
+   *   detected during a pushLocalUpdate (delta would be lost).
    */
-  onError?: (reason: 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version' | 'storage-failure') => void
+  onError?: (reason: 'corrupt-snapshot' | 'storage-failure') => void
 }
 
 // ── CanvasBackend interface ───────────────────────────────────────────────────
