@@ -1,0 +1,166 @@
+/**
+ * 3-B: LoroStore — IndexedDB v2 Loro snapshot+delta store.
+ *
+ * Real browser tests because IndexedDB requires a browser environment.
+ */
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Loro } from 'loro-crdt'
+import { LoroStore, loroRecordEnvelopeSchema } from './loro-store.js'
+
+async function clearDb(): Promise<void> {
+  return new Promise((resolve) => {
+    const req = indexedDB.deleteDatabase('whiteboard')
+    req.onsuccess = () => resolve()
+    req.onerror = () => resolve()
+  })
+}
+
+function makeSnapshot(elements: unknown[]): Uint8Array {
+  const doc = new Loro()
+  const list = doc.getList('elements')
+  for (const el of elements) list.push(el)
+  return doc.export({ mode: 'snapshot' })
+}
+
+describe('loroRecordEnvelopeSchema', () => {
+  it('accepts a valid envelope with v:1, snapshot Uint8Array, updatedAt string', () => {
+    const envelope = {
+      v: 1,
+      snapshot: new Uint8Array([1, 2, 3]),
+      updatedAt: '2026-06-06T00:00:00.000Z',
+    }
+    const result = loroRecordEnvelopeSchema.safeParse(envelope)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects payload with wrong v', () => {
+    const bad = { v: 2, snapshot: new Uint8Array([1]), updatedAt: '2026-01-01T00:00:00Z' }
+    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it('rejects payload missing snapshot field', () => {
+    const bad = { v: 1, updatedAt: '2026-01-01T00:00:00Z' }
+    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it('rejects payload where snapshot is not a Uint8Array', () => {
+    const bad = { v: 1, snapshot: [1, 2, 3], updatedAt: '2026-01-01T00:00:00Z' }
+    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it('rejects payload missing updatedAt', () => {
+    const bad = { v: 1, snapshot: new Uint8Array([1]) }
+    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
+  })
+})
+
+describe('LoroStore (real IndexedDB)', () => {
+  beforeEach(async () => { await clearDb() })
+  afterEach(async () => { await clearDb() })
+
+  it('load returns not-found for unknown canvasId', async () => {
+    const store = new LoroStore()
+    const result = await store.load('unknown-id')
+    expect(result).toEqual({ kind: 'not-found' })
+  })
+
+  it('save then load returns ok with the snapshot bytes', async () => {
+    const store = new LoroStore()
+    const snapshot = makeSnapshot([{ id: 'a', type: 'rect' }])
+    await store.save('canvas-1', snapshot)
+    const result = await store.load('canvas-1')
+    expect(result.kind).toBe('ok')
+    if (result.kind === 'ok') {
+      expect(result.snapshot).toBeInstanceOf(Uint8Array)
+      expect(result.snapshot.length).toBeGreaterThan(0)
+      // Verify the bytes decode to the same content
+      const doc2 = new Loro()
+      doc2.import(result.snapshot)
+      expect(doc2.getList('elements').toJSON()).toEqual([{ id: 'a', type: 'rect' }])
+    }
+  })
+
+  it('save then load with deltas returns all deltas in order', async () => {
+    const store = new LoroStore()
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'a' })
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const v0 = doc.version()
+    doc.getList('elements').push({ id: 'b' })
+    const delta1 = doc.export({ mode: 'update', from: v0 })
+    const v1 = doc.version()
+    doc.getList('elements').push({ id: 'c' })
+    const delta2 = doc.export({ mode: 'update', from: v1 })
+
+    await store.save('canvas-1', snapshot)
+    await store.appendDelta('canvas-1', delta1)
+    await store.appendDelta('canvas-1', delta2)
+
+    const result = await store.load('canvas-1')
+    expect(result.kind).toBe('ok')
+    if (result.kind === 'ok') {
+      expect(result.deltas).toHaveLength(2)
+      // Replay snapshot + deltas on a fresh doc
+      const fresh = new Loro()
+      fresh.import(result.snapshot)
+      for (const d of result.deltas ?? []) fresh.import(d)
+      expect(fresh.getList('elements').toJSON()).toEqual([
+        { id: 'a' }, { id: 'b' }, { id: 'c' },
+      ])
+    }
+  })
+
+  it('corrupt record in IDB returns corrupted', async () => {
+    // Manually write a bad record into the loroCanvases store
+    const db = await openLoroDb()
+    await writeRaw(db, 'loroCanvases', 'bad-canvas', { v: 99, garbage: true })
+    db.close()
+
+    const store = new LoroStore()
+    const result = await store.load('bad-canvas')
+    expect(result.kind).toBe('corrupted')
+  })
+
+  it('legacy v1 JSON record in canvases store is not-found for LoroStore', async () => {
+    // Seed a v1 JSON record into the legacy 'canvases' store
+    const db = await openLoroDb()
+    await writeRaw(db, 'canvases', 'legacy-canvas', {
+      id: 'legacy-canvas',
+      name: 'Legacy',
+      scene: { elements: [] },
+      updatedAt: '2026-01-01T00:00:00Z',
+    })
+    db.close()
+
+    const store = new LoroStore()
+    // LoroStore reads from 'loroCanvases', not 'canvases' — must return not-found
+    const result = await store.load('legacy-canvas')
+    expect(result.kind).toBe('not-found')
+  })
+})
+
+// --- helpers for raw IndexedDB access in tests ---
+
+function openLoroDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    // Open at the CURRENT DB_VERSION so upgrade runs if needed
+    const req = indexedDB.open('whiteboard', 2)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+function writeRaw(db: IDBDatabase, store: string, key: string, value: unknown): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite')
+    tx.objectStore(store).put(value, key)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error)
+  })
+}
