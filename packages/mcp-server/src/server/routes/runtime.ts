@@ -19,7 +19,7 @@ export interface RuntimeRouterOptions {
 export function createRuntimeRouter(options: RuntimeRouterOptions) {
   const app = new Hono()
 
-  app.get('/api/runtime/ping', (c): Response => {
+  app.get('/api/runtime/ping', (c) => {
     return c.json(daemonPingResponseSchema.parse({ ok: true, pid: process.pid }))
   })
 

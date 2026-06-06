@@ -1,8 +1,8 @@
 import { z } from 'zod'
 
-// OQ5 (security decision, not resolved here): pid is process-internal data that
-// becomes cross-origin-readable once CORS is applied to /api/runtime/ping.
-// The schema keeps pid present; stripping it requires a separate human decision.
+// pid is process-internal data that becomes cross-origin-readable once CORS is
+// applied to /api/runtime/ping. The schema keeps it present deliberately;
+// dropping it from the contract is a security decision, not an oversight.
 export const daemonPingResponseSchema = z.object({
   ok: z.literal(true),
   pid: z.number(),
