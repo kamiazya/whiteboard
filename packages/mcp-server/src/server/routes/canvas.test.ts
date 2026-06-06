@@ -711,6 +711,29 @@ describe('versions API', () => {
     expect(await res.arrayBuffer()).toEqual(new ArrayBuffer(0))
   })
 
+  it('returns 204 from GET /latest-thumbnail when metadata claims a thumbnail but the blob is gone', async () => {
+    // A version is listed as hasThumbnail=true but loadThumbnail resolves null
+    // (blob pruned/missing without throwing). This is the second 204 branch,
+    // distinct from "no thumbnailed version exists": the <img> still needs a
+    // success status to avoid 404 console noise.
+    const versionStore = {
+      save: vi.fn(),
+      load: vi.fn(),
+      list: vi.fn().mockResolvedValue([{ id: 'v1', hasThumbnail: true }]),
+      saveThumbnail: vi.fn(),
+      loadThumbnail: vi.fn().mockResolvedValue(null),
+      earliestFrontiers: vi.fn().mockResolvedValue([]),
+      getFrontiersBase64: vi.fn(),
+      renameBranchInVersions: vi.fn(),
+      pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
+    } as unknown as Parameters<typeof createCanvasRouter>[0]['versionStore']
+
+    const app = createCanvasRouter({ versionStore })
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/latest-thumbnail')
+    expect(res.status).toBe(204)
+    expect(await res.arrayBuffer()).toEqual(new ArrayBuffer(0))
+  })
+
   it('returns structured 500 for a broken thumbnail file on GET /thumbnail', async () => {
     await mkdir(join(tempDir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
       recursive: true,
