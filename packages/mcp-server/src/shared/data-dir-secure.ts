@@ -57,4 +57,3 @@ export function resolveDataDir(
 }
 
 export const DATA_DIR = resolveDataDir()
-export const DIST_APP_DIR = resolve(WHITEBOARD_ROOT, 'dist/app')

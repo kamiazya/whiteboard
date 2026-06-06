@@ -158,3 +158,13 @@ describe('WHITEBOARD_ROOT depth: shared module resolves to package root', () => 
     expect(DATA_DIR.length).toBeGreaterThan(0)
   })
 })
+
+describe('shared/data-dir-secure.ts module boundary', () => {
+  it('does not export DIST_APP_DIR — that is a server-layer concern', async () => {
+    // DIST_APP_DIR (dist/app web-asset directory) is meaningful only to the HTTP
+    // server's static-file middleware. Daemon and CLI code imports this shared
+    // module and must not transitively pull in a server-specific path constant.
+    const mod = await import('./data-dir-secure.js')
+    expect('DIST_APP_DIR' in mod).toBe(false)
+  })
+})
