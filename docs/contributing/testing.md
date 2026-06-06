@@ -230,7 +230,7 @@ Keep E2E suites small and focused. If E2E finds a bug, add the nearest-layer reg
 
 ## Smoke & Distribution Tests
 
-MCP startup, protocol, and distribution-artifact smokes run as Vitest projects. The shared implementations under `src/server/mcp/*.smoke-impl.ts` and `*.distribution-impl.ts` are used by both the Vitest tests and the `scripts/mcp-*.mjs` CLI wrappers.
+MCP startup, protocol, and distribution-artifact smokes run as Vitest projects. The shared implementations under `src/server/mcp/*.smoke-impl.ts` and `*.distribution-impl.ts` are used by both the Vitest tests and the `scripts/smoke/mcp-*.mjs` CLI wrappers.
 
 ### `mcp-smoke` — included in `pnpm test`
 
