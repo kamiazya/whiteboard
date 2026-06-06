@@ -123,12 +123,18 @@ describe('validateBrowserExternalUrl', () => {
       expectRejected('http://[::]/')
     })
 
-    it('rejects fe80::/10 link-local', () => {
+    it('rejects fe80::/10 link-local addresses via range guard', () => {
       expectRejected('http://[fe80::1]/')
-      expectRejected('http://[fe80::1%25eth0]/')
       expectRejected('http://[fe9f::1]/')
       expectRejected('http://[fea0::1]/')
       expectRejected('http://[feb0::1]/')
+    })
+
+    it('rejects zone-scoped link-local addresses at parse time (WHATWG URL rejects zone-ID syntax)', () => {
+      // `new URL('http://[fe80::1%25eth0]/')` throws Invalid URL in the WHATWG
+      // parser before the range guard is reached. The rejection is correct but
+      // comes from parse failure, not from the fe80::/10 range check.
+      expectRejected('http://[fe80::1%25eth0]/')
     })
 
     it('rejects fc00::/7 ULA (fc and fd prefixes)', () => {
@@ -148,10 +154,22 @@ describe('validateBrowserExternalUrl', () => {
     })
 
     it('rejects IPv4-mapped IPv6 addresses with private IPv4 (::ffff:192.168.x.x)', () => {
+      // The WHATWG URL parser normalises dotted-decimal input (e.g. ::ffff:192.168.1.1)
+      // to two hex 16-bit groups (::ffff:c0a8:101) in url.hostname before the
+      // policy check runs, so the hex-group path is the only reachable path.
       expectRejected('http://[::ffff:192.168.1.1]/')
       expectRejected('http://[::ffff:10.0.0.1]/')
       expectRejected('http://[::ffff:172.16.0.1]/')
       expectRejected('http://[::ffff:127.0.0.1]/')
+    })
+
+    it('WHATWG URL normalises IPv4-mapped addresses to hex-group form', () => {
+      // Regression guard for the parseMappedIpv4 assumption: dotted input is
+      // never seen by the policy function because the parser normalises it first.
+      const dotted = new URL('http://[::ffff:192.168.1.1]/')
+      expect(dotted.hostname).toBe('[::ffff:c0a8:101]')
+      const public_ = new URL('http://[::ffff:8.8.8.8]/')
+      expect(public_.hostname).toBe('[::ffff:808:808]')
     })
   })
 
@@ -159,7 +177,7 @@ describe('validateBrowserExternalUrl', () => {
     it('accepts public IPv4 addresses', () => {
       expectAccepted('http://8.8.8.8/')
       expectAccepted('https://1.1.1.1/')
-      expectAccepted('http://203.0.113.1/')
+      expectAccepted('http://8.8.4.4/')
     })
 
     it('accepts public domain names', () => {

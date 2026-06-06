@@ -40,13 +40,10 @@ function isPrivateOrLocalIpv4(octets: number[]): boolean {
 }
 
 // Resolves the IPv4 octets embedded in an IPv4-mapped IPv6 suffix (the part
-// after `::ffff:`). The WHATWG URL parser normalises the dotted-decimal form
-// (`192.168.1.1`) into two hex 16-bit groups (`c0a8:101`), so both shapes
-// must be decoded back to octets.
+// after `::ffff:`). The WHATWG URL parser always normalises the input to the
+// two-hex-16-bit-group form (e.g. `c0a8:101`) before it reaches url.hostname,
+// so the suffix seen here is always hex, never dotted-decimal.
 function parseMappedIpv4(suffix: string): number[] | null {
-  const dotted = parseIpv4(suffix)
-  if (dotted !== null) return dotted
-
   const hexParts = suffix.split(':')
   if (hexParts.length !== 2) return null
   const hi = Number.parseInt(hexParts[0], 16)
