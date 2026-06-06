@@ -54,12 +54,14 @@
     "intent:list": "npx @tanstack/intent@latest list",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server"
+    "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server",
+    "prepare": "lefthook install || true"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
     "@cyclonedx/cyclonedx-npm": "^4",
     "@tanstack/intent": "^0.0.29",
+    "lefthook": "^2.1.9",
     "vitest": "^4.1.5"
   },
   "pnpm": {

@@ -1,0 +1,26 @@
+# Git hooks via lefthook (https://lefthook.dev). A LOCAL safety net — CI is the
+# authoritative gate. Bypass a run with `LEFTHOOK=0 git ...` or `git commit/push --no-verify`.
+#
+# Design for this repo (pnpm monorepo, heavy git-worktree automation):
+#  - pre-commit stays FAST + NON-BLOCKING (format only) so it never disrupts the many
+#    automated worktree commits the dev-loop makes.
+#  - the real gate lives on pre-push, run only by the integrator who pushes — it mirrors
+#    CI so a broken build / failing test / typecheck error is caught before it leaves the machine.
+
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json}"
+      run: pnpm biome format --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
+    typecheck:
+      run: pnpm -r typecheck
+    test-node:
+      run: pnpm test --project mcp-node
+    noconsole:
+      run: pnpm lint:noconsole
