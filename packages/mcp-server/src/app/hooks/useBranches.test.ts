@@ -70,9 +70,10 @@ describe('parseBranchesResponse', () => {
   })
 
   it('falls back to "main" when head is an empty string', () => {
-    expect(
-      parseBranchesResponse({ head: '', branches: [] }),
-    ).toEqual<BranchesState>({ branches: [], head: 'main' })
+    expect(parseBranchesResponse({ head: '', branches: [] })).toEqual<BranchesState>({
+      branches: [],
+      head: 'main',
+    })
   })
 })
 
@@ -85,16 +86,22 @@ describe('branchesApi', () => {
   })
 
   it('list() GETs branches URL and parses response', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
-      new Response(
-        JSON.stringify({
-          head: 'main',
-          branches: [
-            { name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '2026-04-23T00:00:00Z' },
-          ],
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            head: 'main',
+            branches: [
+              {
+                name: 'main',
+                tipFrontiers: '',
+                color: '#1971c2',
+                createdAt: '2026-04-23T00:00:00Z',
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        ),
     )
     vi.stubGlobal('fetch', fetchMock)
     const api = branchesApi('sess_1', 'canvas-a')
@@ -105,18 +112,19 @@ describe('branchesApi', () => {
   })
 
   it('create() POSTs JSON body', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
-      new Response(
-        JSON.stringify({
-          branch: {
-            name: 'feature',
-            tipFrontiers: '',
-            color: '#9333ea',
-            createdAt: '2026-04-23T01:00:00Z',
-          },
-        }),
-        { status: 201, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(
+          JSON.stringify({
+            branch: {
+              name: 'feature',
+              tipFrontiers: '',
+              color: '#9333ea',
+              createdAt: '2026-04-23T01:00:00Z',
+            },
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } },
+        ),
     )
     vi.stubGlobal('fetch', fetchMock)
     const api = branchesApi('sess_1', 'canvas-a')
@@ -129,11 +137,12 @@ describe('branchesApi', () => {
   })
 
   it('create() rejects with response error payload on 4xx/5xx', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
-      new Response(
-        JSON.stringify({ error: 'branch_conflict', message: 'exists' }),
-        { status: 409, headers: { 'Content-Type': 'application/json' } },
-      ),
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ error: 'branch_conflict', message: 'exists' }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        }),
     )
     vi.stubGlobal('fetch', fetchMock)
     const api = branchesApi('sess_1', 'canvas-a')
@@ -144,8 +153,9 @@ describe('branchesApi', () => {
   })
 
   it('setHead() PUTs { branch } and parses result', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
-      new Response(JSON.stringify({ head: 'feature', previousHead: 'main' }), { status: 200 }),
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ head: 'feature', previousHead: 'main' }), { status: 200 }),
     )
     vi.stubGlobal('fetch', fetchMock)
     const api = branchesApi('sess_1', 'canvas-a')
@@ -158,8 +168,8 @@ describe('branchesApi', () => {
   })
 
   it('remove() issues DELETE', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
-      new Response(JSON.stringify({ ok: true, unmergedCommits: 0 }), { status: 200 }),
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => new Response(JSON.stringify({ ok: true, unmergedCommits: 0 }), { status: 200 }),
     )
     vi.stubGlobal('fetch', fetchMock)
     const api = branchesApi('sess_1', 'canvas-a')
@@ -171,11 +181,9 @@ describe('branchesApi', () => {
   })
 
   it('merge() POSTs to merge URL with { into, dryRun }', async () => {
-    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(async () =>
-      new Response(
-        JSON.stringify({ badges: [], preview: { elementCount: 5 } }),
-        { status: 200 },
-      ),
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ badges: [], preview: { elementCount: 5 } }), { status: 200 }),
     )
     vi.stubGlobal('fetch', fetchMock)
     const api = branchesApi('sess_1', 'canvas-a')
@@ -191,31 +199,53 @@ describe('branchesApi', () => {
 
   describe('contract_mismatch normalization: malformed 200 must not leak ZodError', () => {
     it.each([
-      ['create', (api: ReturnType<typeof branchesApi>) => api.create({ name: 'x' }), JSON.stringify({ branch: null })],
-      ['setHead', (api: ReturnType<typeof branchesApi>) => api.setHead('main'), JSON.stringify({ head: 42, previousHead: 'main' })],
-      ['remove', (api: ReturnType<typeof branchesApi>) => api.remove('feature'), JSON.stringify({ ok: 'yes' })],
-      ['rename', (api: ReturnType<typeof branchesApi>) => api.rename('old', 'new-name'), JSON.stringify({ branch: null, renamedVersionCount: 'x' })],
-      ['getStats', (api: ReturnType<typeof branchesApi>) => api.getStats('feature'), JSON.stringify({ unmergedCommits: 'bad' })],
-      ['merge', (api: ReturnType<typeof branchesApi>) => api.merge('feature', { into: 'main' }), JSON.stringify({ badges: 'not-an-array' })],
-    ])(
-      '%s() rejects with structured error (not ZodError) when server returns malformed 200',
-      async (_label, call, malformedBody) => {
-        vi.stubGlobal(
-          'fetch',
-          vi.fn(async () =>
+      [
+        'create',
+        (api: ReturnType<typeof branchesApi>) => api.create({ name: 'x' }),
+        JSON.stringify({ branch: null }),
+      ],
+      [
+        'setHead',
+        (api: ReturnType<typeof branchesApi>) => api.setHead('main'),
+        JSON.stringify({ head: 42, previousHead: 'main' }),
+      ],
+      [
+        'remove',
+        (api: ReturnType<typeof branchesApi>) => api.remove('feature'),
+        JSON.stringify({ ok: 'yes' }),
+      ],
+      [
+        'rename',
+        (api: ReturnType<typeof branchesApi>) => api.rename('old', 'new-name'),
+        JSON.stringify({ branch: null, renamedVersionCount: 'x' }),
+      ],
+      [
+        'getStats',
+        (api: ReturnType<typeof branchesApi>) => api.getStats('feature'),
+        JSON.stringify({ unmergedCommits: 'bad' }),
+      ],
+      [
+        'merge',
+        (api: ReturnType<typeof branchesApi>) => api.merge('feature', { into: 'main' }),
+        JSON.stringify({ badges: 'not-an-array' }),
+      ],
+    ])('%s() rejects with structured error (not ZodError) when server returns malformed 200', async (_label, call, malformedBody) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
             new Response(malformedBody, {
               status: 200,
               headers: { 'Content-Type': 'application/json' },
             }),
-          ),
-        )
-        const api = branchesApi('sess_1', 'canvas-a')
-        const err = await call(api).catch((e: unknown) => e)
-        // ZodError extends Error; a structured BranchApiError is a plain object
-        expect(err instanceof Error).toBe(false)
-        expect(err).toMatchObject({ body: { error: 'contract_mismatch' } })
-      },
-    )
+        ),
+      )
+      const api = branchesApi('sess_1', 'canvas-a')
+      const err = await call(api).catch((e: unknown) => e)
+      // ZodError extends Error; a structured BranchApiError is a plain object
+      expect(err instanceof Error).toBe(false)
+      expect(err).toMatchObject({ body: { error: 'contract_mismatch' } })
+    })
   })
 })
 
@@ -237,10 +267,10 @@ describe('useBranches hook', () => {
       'fetch',
       vi.fn(async () => {
         await gate
-        return new Response(
-          JSON.stringify({ head: 'should-not-appear', branches: [] }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        )
+        return new Response(JSON.stringify({ head: 'should-not-appear', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
       }),
     )
 
@@ -256,12 +286,57 @@ describe('useBranches hook', () => {
       await new Promise((r) => setTimeout(r, 0))
     })
 
-    const stateUpdateErrors = consoleErrorSpy.mock.calls.filter((args) =>
-      typeof args[0] === 'string' && args[0].includes('unmounted'),
+    const stateUpdateErrors = consoleErrorSpy.mock.calls.filter(
+      (args) => typeof args[0] === 'string' && args[0].includes('unmounted'),
     )
     expect(stateUpdateErrors).toHaveLength(0)
 
     consoleErrorSpy.mockRestore()
+  })
+
+  it('refetches on excalidraw:head_changed only for the matching workspace/slug pair', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderHook(() => useBranches('sess_1', 'canvas-a'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    const afterMount = fetchMock.mock.calls.length
+    expect(afterMount).toBeGreaterThan(0)
+
+    // A head_changed for a DIFFERENT workspace/slug must NOT trigger a refetch.
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('excalidraw:head_changed', {
+          detail: { workspaceId: 'other', slug: 'canvas-a', head: 'x' },
+        }),
+      )
+      window.dispatchEvent(
+        new CustomEvent('excalidraw:head_changed', {
+          detail: { workspaceId: 'sess_1', slug: 'other-canvas', head: 'x' },
+        }),
+      )
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(fetchMock.mock.calls.length).toBe(afterMount)
+
+    // A head_changed for the matching pair triggers exactly one refetch.
+    await act(async () => {
+      window.dispatchEvent(
+        new CustomEvent('excalidraw:head_changed', {
+          detail: { workspaceId: 'sess_1', slug: 'canvas-a', head: 'y' },
+        }),
+      )
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(afterMount)
   })
 
   it('discards in-flight canvas-a fetch when key changes to canvas-b before it resolves', async () => {
@@ -277,15 +352,15 @@ describe('useBranches hook', () => {
         callCount++
         if (callCount === 1) {
           await canvasAGate
-          return new Response(
-            JSON.stringify({ head: 'canvas-a-head', branches: [] }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          )
+          return new Response(JSON.stringify({ head: 'canvas-a-head', branches: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
         }
-        return new Response(
-          JSON.stringify({ head: 'canvas-b-head', branches: [] }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        )
+        return new Response(JSON.stringify({ head: 'canvas-b-head', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
       }),
     )
 
