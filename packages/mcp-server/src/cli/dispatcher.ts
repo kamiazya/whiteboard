@@ -15,6 +15,7 @@
 
 import { resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
   parseDaemonRunArgs,
   parseDaemonSubcommandArgs,
@@ -57,6 +58,13 @@ export async function main(argv: readonly string[]): Promise<number> {
   // Preserve the original stdio-MCP behavior for backward compatibility.
   if (argv.length === 0) {
     return await dispatchMcp()
+  }
+
+  // Handle --version / -v before any command routing so the flag works
+  // regardless of position and never falls through to the unknown-command path.
+  if (argv[0] === '--version' || argv[0] === '-v') {
+    process.stdout.write(`${PACKAGE_VERSION}\n`)
+    return 0
   }
 
   const [command, subcommand, ...rest] = argv
@@ -267,8 +275,12 @@ async function dispatchServerRun(rest: readonly string[]): Promise<number> {
           process.exit(0)
         }
       }
-      process.on('SIGTERM', () => { void gracefulShutdown() })
-      process.on('SIGINT', () => { void gracefulShutdown() })
+      process.on('SIGTERM', () => {
+        void gracefulShutdown()
+      })
+      process.on('SIGINT', () => {
+        void gracefulShutdown()
+      })
       return await new Promise<never>(() => undefined)
     }
   }

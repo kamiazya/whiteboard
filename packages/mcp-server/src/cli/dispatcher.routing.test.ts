@@ -157,9 +157,7 @@ describe('dispatcher routing: whiteboard mcp', () => {
 describe('dispatcher routing: whiteboard daemon status', () => {
   it('routes to runDaemonStatus and exits 0', async () => {
     vi.mocked(daemonStatusModule.runDaemonStatus).mockClear()
-    const { result: exitCode } = await captureStdio(() =>
-      main(['daemon', 'status', '--json']),
-    )
+    const { result: exitCode } = await captureStdio(() => main(['daemon', 'status', '--json']))
     expect(exitCode).toBe(0)
     expect(vi.mocked(daemonStatusModule.runDaemonStatus)).toHaveBeenCalledOnce()
   })
@@ -172,9 +170,7 @@ describe('dispatcher routing: whiteboard daemon status', () => {
 describe('dispatcher routing: whiteboard daemon doctor', () => {
   it('routes to runDaemonDoctor and exits 0', async () => {
     vi.mocked(daemonDoctorModule.runDaemonDoctor).mockClear()
-    const { result: exitCode } = await captureStdio(() =>
-      main(['daemon', 'doctor', '--json']),
-    )
+    const { result: exitCode } = await captureStdio(() => main(['daemon', 'doctor', '--json']))
     expect(exitCode).toBe(0)
     expect(vi.mocked(daemonDoctorModule.runDaemonDoctor)).toHaveBeenCalledOnce()
   })
@@ -187,9 +183,7 @@ describe('dispatcher routing: whiteboard daemon doctor', () => {
 describe('dispatcher routing: whiteboard daemon stop', () => {
   it('routes to runDaemonStop and exits 0', async () => {
     vi.mocked(daemonStopModule.runDaemonStop).mockClear()
-    const { result: exitCode } = await captureStdio(() =>
-      main(['daemon', 'stop', '--json']),
-    )
+    const { result: exitCode } = await captureStdio(() => main(['daemon', 'stop', '--json']))
     expect(exitCode).toBe(0)
     expect(vi.mocked(daemonStopModule.runDaemonStop)).toHaveBeenCalledOnce()
   })
@@ -202,9 +196,7 @@ describe('dispatcher routing: whiteboard daemon stop', () => {
 describe('dispatcher routing: whiteboard daemon logs', () => {
   it('routes to runDaemonLogs and exits 0', async () => {
     vi.mocked(daemonLogsModule.runDaemonLogs).mockClear()
-    const { result: exitCode } = await captureStdio(() =>
-      main(['daemon', 'logs', '--json']),
-    )
+    const { result: exitCode } = await captureStdio(() => main(['daemon', 'logs', '--json']))
     expect(exitCode).toBe(0)
     expect(vi.mocked(daemonLogsModule.runDaemonLogs)).toHaveBeenCalledOnce()
   })
@@ -232,9 +224,7 @@ describe('dispatcher routing: whiteboard daemon support-bundle', () => {
 describe('dispatcher routing: whiteboard daemon run', () => {
   it('routes to runDaemonRun (refused case exits 1)', async () => {
     vi.mocked(daemonRunModule.runDaemonRun).mockClear()
-    const { result: exitCode, stderr } = await captureStdio(() =>
-      main(['daemon', 'run', '--json']),
-    )
+    const { result: exitCode, stderr } = await captureStdio(() => main(['daemon', 'run', '--json']))
     // runDaemonRun mock returns `refused` → exit 1
     expect(exitCode).toBe(1)
     expect(stderr).toMatch(/already running/)
@@ -252,9 +242,7 @@ describe('dispatcher routing: whiteboard daemon run', () => {
 describe('dispatcher routing: whiteboard server status', () => {
   it('routes to runServerStatus and exits 0', async () => {
     vi.mocked(serverStatusModule.runServerStatus).mockClear()
-    const { result: exitCode } = await captureStdio(() =>
-      main(['server', 'status', '--json']),
-    )
+    const { result: exitCode } = await captureStdio(() => main(['server', 'status', '--json']))
     expect(exitCode).toBe(0)
     expect(vi.mocked(serverStatusModule.runServerStatus)).toHaveBeenCalledOnce()
   })
@@ -269,7 +257,9 @@ describe('dispatcher routing: whiteboard server doctor', () => {
     vi.mocked(serverDoctorModule.runServerDoctor).mockClear()
     const { result: exitCode } = await captureStdio(() =>
       main([
-        'server', 'doctor', '--json',
+        'server',
+        'doctor',
+        '--json',
         '--external-url=https://w.example.com',
         '--auth-strategy=oauth-jwt',
         '--jwt-issuer=https://auth.example.com',
@@ -289,9 +279,7 @@ describe('dispatcher routing: whiteboard server doctor', () => {
 describe('dispatcher routing: whiteboard server stop', () => {
   it('routes to runServerStop and exits 0', async () => {
     vi.mocked(serverStopModule.runServerStop).mockClear()
-    const { result: exitCode } = await captureStdio(() =>
-      main(['server', 'stop', '--json']),
-    )
+    const { result: exitCode } = await captureStdio(() => main(['server', 'stop', '--json']))
     expect(exitCode).toBe(0)
     expect(vi.mocked(serverStopModule.runServerStop)).toHaveBeenCalledOnce()
   })
@@ -399,9 +387,7 @@ describe('dispatcher routing: whiteboard server support-bundle', () => {
 // ---------------------------------------------------------------------------
 describe('dispatcher routing: unknown top-level command', () => {
   it('returns exit 64 for an unrecognized command', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['bogus-command']),
-    )
+    const { result: exitCode, stdout, stderr } = await captureStdio(() => main(['bogus-command']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/Unknown command/)
@@ -418,9 +404,11 @@ describe('dispatcher routing: unknown top-level command', () => {
 
 describe('dispatcher routing: unknown daemon subcommand', () => {
   it('returns exit 64 for an unknown daemon subcommand', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['daemon', 'bogus-subcommand']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'bogus-subcommand']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/Unknown command/)
@@ -429,11 +417,38 @@ describe('dispatcher routing: unknown daemon subcommand', () => {
 
 describe('dispatcher routing: unknown server subcommand', () => {
   it('returns exit 64 for an unknown server subcommand', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'bogus-subcommand']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'bogus-subcommand']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/Unknown server subcommand/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// --version / -v → print version and exit 0
+// ---------------------------------------------------------------------------
+describe('dispatcher routing: --version flag', () => {
+  it('returns exit 0 for --version', async () => {
+    const { result: exitCode } = await captureStdio(() => main(['--version']))
+    expect(exitCode).toBe(0)
+  })
+
+  it('prints a version string to stdout for --version', async () => {
+    const { stdout } = await captureStdio(() => main(['--version']))
+    expect(stdout).toMatch(/\d+\.\d+\.\d+/)
+  })
+
+  it('returns exit 0 for -v', async () => {
+    const { result: exitCode } = await captureStdio(() => main(['-v']))
+    expect(exitCode).toBe(0)
+  })
+
+  it('prints a version string to stdout for -v', async () => {
+    const { stdout } = await captureStdio(() => main(['-v']))
+    expect(stdout).toMatch(/\d+\.\d+\.\d+/)
   })
 })
