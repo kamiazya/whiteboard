@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { exportToBlob, CaptureUpdateAction, restoreElements } from '@excalidraw/excalidraw'
-import { commitAfterUpload } from '../lib/commit-pipeline.js'
+import { commitAfterUpload, type UploadFilesFn } from '../lib/commit-pipeline.js'
 import { resolveParentedElements } from '../../shared/resolve-parented-elements.js'
 import {
   applyRestoreComplete,
@@ -424,9 +424,8 @@ export function useWhiteboardSync(
       // (e.g. tests, BrowserLocalBackend) can persist files without going through the
       // daemon HTTP layer directly.
       const backend = backendRef.current
-      const uploadFn = backend
-        ? (entries: [string, import('@excalidraw/excalidraw/types').BinaryFileData][], onSuccess: (id: string) => void) =>
-            backend.putFile(entries, onSuccess)
+      const uploadFn: UploadFilesFn | undefined = backend
+        ? (entries, onSuccess) => backend.putFile(entries, onSuccess)
         : undefined
       commitAfterUpload(
         newEntries,

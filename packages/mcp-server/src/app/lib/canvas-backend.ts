@@ -95,9 +95,6 @@ export interface CanvasBackend {
   /** Send client_ready to the server (gated on OPEN state + api present). */
   sendClientReady(): void
 
-  /** Send viewport_response ACK for the given requestId. */
-  sendViewportResponse(requestId: string): void
-
   /** Send export_response with the given PNG data for the given requestId. */
   sendExportResponse(requestId: string, data: string): void
 }

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { VersionCreatedPayload } from '../../shared/ws-messages.js'
-import { parseServerTextMessage } from './useWhiteboardSync.text-message.js'
+// Import from the canonical location so coverage targets the implementation file,
+// not the re-export shim.
+import { parseServerTextMessage } from '../lib/ws-text-message.js'
 
 function makeVersion(): VersionCreatedPayload {
   return {

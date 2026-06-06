@@ -31,7 +31,6 @@ function makeFakeBackend(): CanvasBackend & { _handlers: CanvasBackendHandlers |
     getFile: vi.fn(() => Promise.resolve(null)),
     putFile: vi.fn(() => Promise.resolve()),
     sendClientReady: vi.fn(),
-    sendViewportResponse: vi.fn(),
     sendExportResponse: vi.fn(),
   }
 }

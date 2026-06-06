@@ -101,14 +101,6 @@ export class DaemonBackend implements CanvasBackend {
     ws.send(JSON.stringify(msg))
   }
 
-  sendViewportResponse(requestId: string): void {
-    const msg = viewportResponseMessageSchema.parse({
-      type: 'viewport_response',
-      requestId,
-    })
-    this.ws?.send(JSON.stringify(msg))
-  }
-
   sendExportResponse(requestId: string, data: string): void {
     const msg = exportResponseMessageSchema.parse({
       type: 'export_response',

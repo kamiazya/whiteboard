@@ -437,19 +437,6 @@ describe('DaemonBackend', () => {
     })
   })
 
-  describe('sendViewportResponse', () => {
-    it('sends a viewport_response JSON message with the given requestId', () => {
-      const backend = makeBackend()
-      backend.connect(makeHandlers())
-      const ws = FakeWebSocket.instances[0]
-      ws.readyState = FakeWebSocket.OPEN
-      backend.sendViewportResponse('req-42')
-      expect(ws.send).toHaveBeenCalledTimes(1)
-      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual({ type: 'viewport_response', requestId: 'req-42' })
-      backend.disconnect()
-    })
-  })
-
   describe('sendExportResponse', () => {
     it('sends an export_response JSON message with requestId and data', () => {
       const backend = makeBackend()
@@ -480,13 +467,16 @@ describe('DaemonBackend', () => {
       backend.disconnect()
     })
 
-    it('sendViewportResponse payload matches viewportResponseMessageSchema', async () => {
+    it('viewport_request inline ACK payload matches viewportResponseMessageSchema', async () => {
+      // The ACK is sent inline in the onmessage handler on the closure-captured socket,
+      // not via a public sendViewportResponse method. This test verifies that the inline
+      // ACK serializes to a schema-valid viewport_response.
       const { viewportResponseMessageSchema } = await import('../../shared/ws-messages.js')
       const backend = makeBackend()
       backend.connect(makeHandlers())
       const ws = FakeWebSocket.instances[0]
       ws.readyState = FakeWebSocket.OPEN
-      backend.sendViewportResponse('vp-req')
+      ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'viewport_request', requestId: 'vp-req', mode: 'fit' }) }))
       const parsed = viewportResponseMessageSchema.safeParse(JSON.parse(ws.send.mock.calls[0][0]))
       expect(parsed.success).toBe(true)
       backend.disconnect()
