@@ -39,6 +39,22 @@ function isPrivateOrLocalIpv4(octets: number[]): boolean {
   )
 }
 
+// Resolves the IPv4 octets embedded in an IPv4-mapped IPv6 suffix (the part
+// after `::ffff:`). The WHATWG URL parser normalises the dotted-decimal form
+// (`192.168.1.1`) into two hex 16-bit groups (`c0a8:101`), so both shapes
+// must be decoded back to octets.
+function parseMappedIpv4(suffix: string): number[] | null {
+  const dotted = parseIpv4(suffix)
+  if (dotted !== null) return dotted
+
+  const hexParts = suffix.split(':')
+  if (hexParts.length !== 2) return null
+  const hi = Number.parseInt(hexParts[0], 16)
+  const lo = Number.parseInt(hexParts[1], 16)
+  if (Number.isNaN(hi) || Number.isNaN(lo)) return null
+  return [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff]
+}
+
 function isPrivateOrLocalIpv6(hostname: string): boolean {
   const normalized = hostname.toLowerCase()
   if (normalized === '::' || normalized === '::1') return true
@@ -54,20 +70,8 @@ function isPrivateOrLocalIpv6(hostname: string): boolean {
   if (normalized.startsWith('ff')) return true
   if (normalized.startsWith('2001:db8')) return true
   if (normalized.startsWith('::ffff:')) {
-    const suffix = normalized.slice('::ffff:'.length)
-    // Dotted-decimal form (e.g. ::ffff:192.168.1.1)
-    const dotted = parseIpv4(suffix)
-    if (dotted !== null) return isPrivateOrLocalIpv4(dotted)
-    // Hex form produced by the WHATWG URL parser (e.g. ::ffff:c0a8:101)
-    const hexParts = suffix.split(':')
-    if (hexParts.length === 2) {
-      const hi = Number.parseInt(hexParts[0], 16)
-      const lo = Number.parseInt(hexParts[1], 16)
-      if (!Number.isNaN(hi) && !Number.isNaN(lo)) {
-        const octets = [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff]
-        return isPrivateOrLocalIpv4(octets)
-      }
-    }
+    const octets = parseMappedIpv4(normalized.slice('::ffff:'.length))
+    if (octets !== null) return isPrivateOrLocalIpv4(octets)
   }
   return false
 }
