@@ -1,9 +1,9 @@
 # Architecture
 
 <p align="center">
-  <img src="./assets/architecture.png" alt="Agent and user both draw on the same Excalidraw canvas via the Whiteboard MCP server" width="780" />
+  <img src="../assets/architecture.png" alt="Agent and user both draw on the same Excalidraw canvas via the Whiteboard MCP server" width="780" />
   <br />
-  <sub><i>Source: <a href="./assets/architecture.excalidraw">architecture.excalidraw</a> — open in Excalidraw to remix.</i></sub>
+  <sub><i>Source: <a href="../assets/architecture.excalidraw">architecture.excalidraw</a> — open in Excalidraw to remix.</i></sub>
 </p>
 
 This project is split into three main runtime layers:

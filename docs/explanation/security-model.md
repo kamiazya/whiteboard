@@ -6,13 +6,13 @@ This server is currently designed for local use first.
 
 - The daemon binds to `127.0.0.1` (not `localhost`) by default, restricting access to the loopback interface.
 - Mutating HTTP routes (`POST`, `PUT`, `DELETE` under `/api/*`) are protected with a local Bearer token when configured. Read-only `GET /api/*` routes are unauthenticated by design — they serve canvas metadata to the local browser without requiring credentials.
-- The `/mcp` HTTP transport applies token checks and restricts the `Origin` header to loopback addresses (`127.0.0.1` or `::1`; bare `localhost` is not treated as equivalent).
+- The `/mcp` HTTP transport applies token checks and restricts the `Origin` header to loopback addresses (`127.0.0.1`, `::1`, or `localhost`).
 - The packaged `stdio` MCP path does not use OAuth. Trust comes from the local process that launches the server.
 
 ## HTTP protections
 
-- **Bearer token**: local HTTP clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is stored in the daemon's HTML bootstrap payload only for the local browser session and is not persisted to disk in cleartext.
-- **Origin checks**: `/mcp` only allows loopback browser origins (`127.0.0.1` or `::1`) for local HTTP use. `localhost` is not accepted as a loopback alias because browser policies treat it differently across platforms.
+- **Bearer token**: local HTTP clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the stdio MCP server can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
+- **Origin checks**: `/mcp` only allows loopback browser origins (`127.0.0.1`, `::1`, or `localhost`) for local HTTP use. All three resolve to the same loopback interface; allowing `localhost` is consistent with browser behavior across platforms.
 - **Security headers**: the app serves `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, and same-origin cross-origin headers.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
 
