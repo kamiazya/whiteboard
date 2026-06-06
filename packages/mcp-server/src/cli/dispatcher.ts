@@ -60,9 +60,9 @@ export async function main(argv: readonly string[]): Promise<number> {
     return await dispatchMcp()
   }
 
-  // Handle --version / -v before any command routing so the flag works
-  // regardless of position and never falls through to the unknown-command path.
-  if (argv[0] === '--version' || argv[0] === '-v') {
+  // Handle --version / -v anywhere in argv so the flag works regardless
+  // of position and never falls through to the unknown-command path.
+  if (argv.includes('--version') || argv.includes('-v')) {
     process.stdout.write(`${PACKAGE_VERSION}\n`)
     return 0
   }

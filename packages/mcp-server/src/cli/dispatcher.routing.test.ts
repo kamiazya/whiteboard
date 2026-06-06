@@ -437,9 +437,14 @@ describe('dispatcher routing: --version flag', () => {
     expect(exitCode).toBe(0)
   })
 
-  it('prints a version string to stdout for --version', async () => {
+  it('prints only a bare semver line to stdout for --version', async () => {
     const { stdout } = await captureStdio(() => main(['--version']))
-    expect(stdout).toMatch(/\d+\.\d+\.\d+/)
+    expect(stdout).toMatch(/^\d+\.\d+\.\d+\n$/)
+  })
+
+  it('writes nothing to stderr for --version', async () => {
+    const { stderr } = await captureStdio(() => main(['--version']))
+    expect(stderr).toBe('')
   })
 
   it('returns exit 0 for -v', async () => {
@@ -447,8 +452,25 @@ describe('dispatcher routing: --version flag', () => {
     expect(exitCode).toBe(0)
   })
 
-  it('prints a version string to stdout for -v', async () => {
+  it('prints only a bare semver line to stdout for -v', async () => {
     const { stdout } = await captureStdio(() => main(['-v']))
-    expect(stdout).toMatch(/\d+\.\d+\.\d+/)
+    expect(stdout).toMatch(/^\d+\.\d+\.\d+\n$/)
+  })
+
+  it('writes nothing to stderr for -v', async () => {
+    const { stderr } = await captureStdio(() => main(['-v']))
+    expect(stderr).toBe('')
+  })
+
+  it('returns exit 0 for --version in mid-position (e.g. daemon --version)', async () => {
+    const { result: exitCode, stdout } = await captureStdio(() => main(['daemon', '--version']))
+    expect(exitCode).toBe(0)
+    expect(stdout).toMatch(/^\d+\.\d+\.\d+\n$/)
+  })
+
+  it('returns exit 0 for -v in mid-position (e.g. server -v)', async () => {
+    const { result: exitCode, stdout } = await captureStdio(() => main(['server', '-v']))
+    expect(exitCode).toBe(0)
+    expect(stdout).toMatch(/^\d+\.\d+\.\d+\n$/)
   })
 })
