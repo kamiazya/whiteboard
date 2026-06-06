@@ -141,9 +141,36 @@ describe('reconcileElementsOnDoc', () => {
       current.commit()
 
       const els = snapshot(current)
-      const ids = els.map((e) => e.id)
-      expect(ids).toContain('a')
-      expect(ids).toContain('new')
+      expect(els).toHaveLength(2)
+      // Past-only elements must appear after pre-existing current elements,
+      // preserving canvas stacking order.
+      expect(els.map((e) => e.id)).toEqual(['a', 'new'])
+    })
+  })
+
+  describe('elements with invalid or missing id (silent-skip guard)', () => {
+    it('silently skips a past-side element whose id is absent', () => {
+      // An element with no `id` field in the past list must not be inserted into current.
+      const current = docOf([])
+      const past = docOf([{ type: 'rectangle' }] as El[])
+
+      reconcileElementsOnDoc(current, past)
+      current.commit()
+
+      expect(snapshot(current)).toHaveLength(0)
+    })
+
+    it('silently skips a current-side element whose id is not a string', () => {
+      // An element whose id is not a string must not be tombstoned.
+      const current = docOf([{ id: 42, type: 'rectangle' }] as unknown as El[])
+      const past = docOf([])
+
+      reconcileElementsOnDoc(current, past)
+      current.commit()
+
+      const els = snapshot(current)
+      expect(els).toHaveLength(1)
+      expect(els[0]?.isDeleted).toBeUndefined()
     })
   })
 
