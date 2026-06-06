@@ -9,8 +9,10 @@ Contributor and maintainer guides:
 - **[testing](testing.md)** — test strategy, layer selection, property/mutation testing, and quality gates.
 - **[mcp-debugging](mcp-debugging.md)** — debugging the MCP server during development.
 - **[releasing](releasing.md)** — release-please and npm/GHCR publishing.
+- **[observability](observability.md)** — OpenTelemetry tracing for the daemon and MCP entrypoint.
+- **[review-checklist](review-checklist.md)** — checklist for PR authors and reviewers.
 - **[deployment/cloudflare-pages](deployment/cloudflare-pages.md)** — deploying the hosted browser app.
-- **architecture/** — internal architecture (overview, C4, ADRs) and the wire-protocol reference _(planned)_.
+- **architecture/** — internal architecture (overview, C4, ADRs) and the wire-protocol reference.
 
 See also the repo-root [CONTRIBUTING.md](../../CONTRIBUTING.md) and [AGENTS.md](../../AGENTS.md).
 

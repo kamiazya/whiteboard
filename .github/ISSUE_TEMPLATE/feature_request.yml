@@ -1,0 +1,59 @@
+name: Feature request
+description: Propose a new feature or improvement for Whiteboard.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting an improvement. Please describe the problem you want to solve and your proposed solution.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem or limitation does this address? Be specific.
+      placeholder: "When I try to ... I cannot ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the feature or change you would like to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you have considered and why you prefer your proposal.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project does this affect?
+      options:
+        - MCP tools
+        - Canvas / Excalidraw UI
+        - Daemon / HTTP server
+        - WebSocket / real-time sync
+        - Templates
+        - Docker / server mode
+        - Documentation
+        - Developer tooling
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, links, or any other context that helps explain the request.
+    validations:
+      required: false

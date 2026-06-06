@@ -27,7 +27,7 @@ canvas alongside you over MCP. <sub>*Local daemon: a server on your own machine.
 
 **Self-host for your team** — run whiteboard as a shared server behind your own
 identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub>
-→ [Self-host with Docker](docs/docker-server.md)
+→ [Self-host with Docker](docs/how-to/self-host-with-docker.md)
 
 ## How whiteboard works
 
@@ -178,12 +178,12 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 | Topic | Where |
 |---|---|
 | Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/contributing/development.md](docs/contributing/development.md) |
-| Environment variables, storage layout, Codex sandbox quirks | [docs/configuration.md](docs/configuration.md) |
-| Components, data flow, MCP tool surface, design boundaries | [docs/architecture.md](docs/architecture.md) |
-| Custom template fragment JSON format used by `template_insert` | [docs/templates.md](docs/templates.md) |
+| Environment variables, storage layout, Codex sandbox quirks | [docs/reference/configuration.md](docs/reference/configuration.md) |
+| Components, data flow, MCP tool surface, design boundaries | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
+| Custom template fragment JSON format used by `template_insert` | [docs/reference/templates.md](docs/reference/templates.md) |
 | MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
-| Token-gated local HTTP, daemon trust model | [docs/security-model.md](docs/security-model.md) |
-| WebSocket message shapes between daemon and browser | [docs/wire-protocol.md](docs/wire-protocol.md) |
+| Token-gated local HTTP, daemon trust model | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
+| WebSocket message shapes between daemon and browser | [docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md) |
 | Test layers, commit conventions, release process | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## Limitations
@@ -191,7 +191,7 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 - Live drawing and PNG export require a Chromium browser tab connected over WebSocket.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
 
-See [docs/configuration.md](docs/configuration.md#codex-sandbox-constraints) for sandbox quirks.
+See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.
 
 ## License
 

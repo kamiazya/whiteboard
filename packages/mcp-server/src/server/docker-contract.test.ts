@@ -1,7 +1,7 @@
 // Contract tests for the server-mode Docker artifact.
 //
 // These tests read Dockerfile.server, docker-compose.server.yml,
-// .env.server.example, and docs/docker-server.md and assert that the
+// .env.server.example, and docs/how-to/self-host-with-docker.md and assert that the
 // published contracts are met without running Docker:
 //
 //   - Entrypoint uses `whiteboard server run --json`, not daemon run or --token.
@@ -38,7 +38,7 @@ function readText(relPath: string): string {
 const dockerfile = readText('Dockerfile.server')
 const compose = readText('docker-compose.server.yml')
 const envExample = readText('.env.server.example')
-const docs = readText('docs/docker-server.md')
+const docs = readText('docs/how-to/self-host-with-docker.md')
 
 describe('Dockerfile.server contracts', () => {
   it('entrypoint uses whiteboard server run --json (not daemon run)', () => {
@@ -194,7 +194,7 @@ describe('.env.server.example contracts', () => {
   })
 })
 
-describe('docs/docker-server.md contracts', () => {
+describe('docs/how-to/self-host-with-docker.md contracts', () => {
   it('references whiteboard server run, not daemon run', () => {
     expect(docs).toMatch(/whiteboard server run/)
     expect(docs).not.toMatch(/whiteboard daemon run/)

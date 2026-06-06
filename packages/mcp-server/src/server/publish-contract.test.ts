@@ -27,9 +27,9 @@ describe('publish contract', () => {
     'utf-8',
   )
   const mcpDebuggingDoc = readFileSync(resolve(repoRoot, 'docs/contributing/mcp-debugging.md'), 'utf-8')
-  const architectureDoc = readFileSync(resolve(repoRoot, 'docs/architecture.md'), 'utf-8')
-  const securityModelDoc = readFileSync(resolve(repoRoot, 'docs/security-model.md'), 'utf-8')
-  const wireProtocolDoc = readFileSync(resolve(repoRoot, 'docs/wire-protocol.md'), 'utf-8')
+  const architectureDoc = readFileSync(resolve(repoRoot, 'docs/explanation/architecture.md'), 'utf-8')
+  const securityModelDoc = readFileSync(resolve(repoRoot, 'docs/explanation/security-model.md'), 'utf-8')
+  const wireProtocolDoc = readFileSync(resolve(repoRoot, 'docs/contributing/architecture/wire-protocol.md'), 'utf-8')
   const developmentDoc = readFileSync(resolve(repoRoot, 'docs/contributing/development.md'), 'utf-8')
   const claudeMarketplace = readJson(resolve(repoRoot, '.claude-plugin/marketplace.json'))
   const tsconfigServer = readJson(resolve(repoRoot, 'packages/mcp-server/tsconfig.server.json'))
@@ -197,9 +197,9 @@ describe('publish contract', () => {
   })
 
   it('ships architecture, security, and wire-protocol docs and links them from README', () => {
-    expect(rootReadme).toContain('[docs/architecture.md](docs/architecture.md)')
-    expect(rootReadme).toContain('[docs/security-model.md](docs/security-model.md)')
-    expect(rootReadme).toContain('[docs/wire-protocol.md](docs/wire-protocol.md)')
+    expect(rootReadme).toContain('[docs/explanation/architecture.md](docs/explanation/architecture.md)')
+    expect(rootReadme).toContain('[docs/explanation/security-model.md](docs/explanation/security-model.md)')
+    expect(rootReadme).toContain('[docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md)')
     expect(architectureDoc).toContain('# Architecture')
     expect(architectureDoc).toContain('stdio MCP server')
     expect(architectureDoc).toContain('daemon')
