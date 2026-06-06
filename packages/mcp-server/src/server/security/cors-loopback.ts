@@ -11,7 +11,14 @@ export function isLoopbackHostname(hostname: string): boolean {
 export function normalizeOriginHostname(originHeader: string | undefined): string | null {
   if (!originHeader) return null
   try {
-    return new URL(originHeader).hostname
+    const hostname = new URL(originHeader).hostname
+    // URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets
+    // so isLoopbackHostname can match against the bare address "::1".
+    // See WHATWG URL spec §4.1 (host serializing).
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      return hostname.slice(1, -1)
+    }
+    return hostname
   } catch {
     return null
   }

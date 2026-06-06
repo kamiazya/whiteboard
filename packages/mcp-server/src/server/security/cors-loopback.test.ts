@@ -47,6 +47,27 @@ describe('normalizeOriginHostname', () => {
   it('returns hostname for an external origin', () => {
     expect(normalizeOriginHostname('https://evil.example')).toBe('evil.example')
   })
+
+  it('returns bare ::1 for an IPv6 loopback origin', () => {
+    // new URL('http://[::1]:5173').hostname returns '[::1]' (with brackets).
+    // normalizeOriginHostname must strip the brackets so isLoopbackHostname
+    // can match against '::1'.
+    expect(normalizeOriginHostname('http://[::1]:5173')).toBe('::1')
+  })
+})
+
+describe('isLoopbackHostname + normalizeOriginHostname integration', () => {
+  it('accepts an IPv6 loopback origin through the full pipeline', () => {
+    const hostname = normalizeOriginHostname('http://[::1]:5173')
+    expect(hostname).not.toBeNull()
+    expect(isLoopbackHostname(hostname!)).toBe(true)
+  })
+
+  it('accepts an IPv4-mapped loopback origin through the full pipeline', () => {
+    const hostname = normalizeOriginHostname('http://127.0.0.1:5173')
+    expect(hostname).not.toBeNull()
+    expect(isLoopbackHostname(hostname!)).toBe(true)
+  })
 })
 
 describe('appendVary', () => {
