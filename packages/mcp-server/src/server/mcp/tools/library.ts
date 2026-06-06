@@ -83,24 +83,39 @@ export { userLibraryMetadataManifestSchema, type UserLibraryMetadataManifest }
 // payloads. Supports v1 and v2, listing item metadata and inserting cloned items
 // onto the canvas with fresh ids and shifted coordinates.
 
-interface LibraryItemV2 {
-  id?: string
-  status?: string
-  name?: string
-  elements: LibraryElement[]
-}
+// Zod is the single source of truth for the .excalidrawlib wire format so that
+// attacker-controlled payloads fetched from external URLs are always validated
+// before use — never cast directly.
 
-interface LibraryPayloadV1 {
-  type: 'excalidrawlib'
-  version: 1
-  library: LibraryElement[][]
-}
+const libraryElementSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+}).passthrough()
 
-interface LibraryPayloadV2 {
-  type: 'excalidrawlib'
-  version: 2
-  libraryItems: LibraryItemV2[]
-}
+const libraryItemV2Schema = z.object({
+  id: z.string().optional(),
+  status: z.string().optional(),
+  name: z.string().optional(),
+  elements: z.array(libraryElementSchema),
+})
+
+export const libraryPayloadV1Schema = z.object({
+  type: z.literal('excalidrawlib'),
+  version: z.literal(1),
+  library: z.array(z.array(libraryElementSchema)),
+})
+
+export const libraryPayloadV2Schema = z.object({
+  type: z.literal('excalidrawlib'),
+  version: z.literal(2),
+  libraryItems: z.array(libraryItemV2Schema),
+})
+
+type LibraryItemV2 = z.infer<typeof libraryItemV2Schema>
 
 interface LibrarySourceArgs {
   libraryUrl?: string
@@ -123,17 +138,25 @@ interface LibraryInsertBatchArgs extends LibrarySourceArgs {
 }
 
 function normalizeLibraryPayload(raw: unknown, label: string): LibraryItemV2[] {
-  if ((raw as { type?: string }).type !== 'excalidrawlib') {
+  const v2 = libraryPayloadV2Schema.safeParse(raw)
+  if (v2.success) return v2.data.libraryItems
+
+  const v1 = libraryPayloadV1Schema.safeParse(raw)
+  if (v1.success) return v1.data.library.map((elements) => ({ elements }))
+
+  // Surface the version field in the error when present to help diagnosis.
+  const version =
+    raw !== null && typeof raw === 'object' && 'version' in raw
+      ? (raw as { version: unknown }).version
+      : undefined
+  if (
+    raw === null ||
+    typeof raw !== 'object' ||
+    (raw as { type?: unknown }).type !== 'excalidrawlib'
+  ) {
     throw new Error(`Not an .excalidrawlib payload: ${label}`)
   }
-  const version = (raw as { version?: number }).version
-  if (version === 2 && Array.isArray((raw as LibraryPayloadV2).libraryItems)) {
-    return (raw as LibraryPayloadV2).libraryItems
-  }
-  if (version === 1 && Array.isArray((raw as LibraryPayloadV1).library)) {
-    return (raw as LibraryPayloadV1).library.map((elements) => ({ elements }))
-  }
-  throw new Error(`Unsupported .excalidrawlib version: ${version}`)
+  throw new Error(`Unsupported or malformed .excalidrawlib payload (version ${version}): ${label}`)
 }
 
 async function fetchLibrary(url: string): Promise<LibraryItemV2[]> {

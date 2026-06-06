@@ -446,6 +446,30 @@ async function main() {
   if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
   console.log(`[e2e] canvas_export_json → ${body.elements.length} elems in standard JSON (type=${body.type}, v${body.version})`)
 
+  // library_list_items via a local .excalidrawlib file: validates that the
+  // schema-based normalizeLibraryPayload accepts a standard v2 payload and that
+  // the MCP SDK validates the structured response against libraryListItemsOutputSchema.
+  const libPath = join(tmpDataDir, 'smoke.excalidrawlib')
+  writeFileSync(
+    libPath,
+    JSON.stringify({
+      type: 'excalidrawlib',
+      version: 2,
+      libraryItems: [
+        {
+          id: 'smoke-item',
+          name: 'smoke rect',
+          elements: [{ id: 'el-1', type: 'rectangle', x: 0, y: 0, width: 100, height: 50 }],
+        },
+      ],
+    }),
+  )
+  const libListed = await callTool('library_list_items', { libraryPath: libPath })
+  if (libListed.itemCount !== 1 || libListed.items[0]?.name !== 'smoke rect') {
+    throw new Error(`library_list_items returned unexpected shape: ${JSON.stringify(libListed)}`)
+  }
+  console.log(`[e2e] library_list_items → itemCount=${libListed.itemCount} name=${libListed.items[0].name}`)
+
   console.log('\n[e2e] ALL OK')
 }
 
