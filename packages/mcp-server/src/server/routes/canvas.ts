@@ -87,11 +87,9 @@ export function createAutoVersionTrigger(
   // If omitted or null, keep the previous behavior and let VersionStore.save fall back to "main".
   getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>,
 ): (workspaceId: string, slug: string, doc: LoroDoc) => Promise<VersionEntry | null> {
-  // Ephemeral per-canvas timestamp registry: tracks the last successful save time
-  // so repeated calls within intervalMs are no-ops. In-place Map mutation is
-  // intentional here — this is a private, process-local throttle state that is
-  // never shared or observed outside this closure. The immutability rule applies
-  // to shared/observable data; a timer registry is the canonical exception.
+  // Per-canvas last-save timestamps. In-place Map mutation is intentional: this is
+  // closure-private throttle state, never shared or observed, so the immutability
+  // rule (which guards shared/observable data) does not apply.
   const lastAt = new Map<string, number>()
   return async function triggerAutoVersion(workspaceId, slug, doc) {
     const key = `${workspaceId}/${slug}`
