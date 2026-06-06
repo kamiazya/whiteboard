@@ -97,20 +97,24 @@ export class DaemonBackend implements CanvasBackend {
   sendClientReady(): void {
     const ws = this.ws
     if (!ws || ws.readyState !== WebSocket.OPEN) return
-    const msg: ReturnType<typeof clientReadyMessageSchema.parse> =
-      clientReadyMessageSchema.parse({ type: 'client_ready' })
+    const msg = clientReadyMessageSchema.parse({ type: 'client_ready' })
     ws.send(JSON.stringify(msg))
   }
 
   sendViewportResponse(requestId: string): void {
-    const msg: ReturnType<typeof viewportResponseMessageSchema.parse> =
-      viewportResponseMessageSchema.parse({ type: 'viewport_response', requestId })
+    const msg = viewportResponseMessageSchema.parse({
+      type: 'viewport_response',
+      requestId,
+    })
     this.ws?.send(JSON.stringify(msg))
   }
 
   sendExportResponse(requestId: string, data: string): void {
-    const msg: ReturnType<typeof exportResponseMessageSchema.parse> =
-      exportResponseMessageSchema.parse({ type: 'export_response', requestId, data })
+    const msg = exportResponseMessageSchema.parse({
+      type: 'export_response',
+      requestId,
+      data,
+    })
     this.ws?.send(JSON.stringify(msg))
   }
 
