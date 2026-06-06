@@ -54,13 +54,17 @@ import { isValidPngSignature } from './canvas-thumbnail.js'
 import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
 
 // WS broadcast function injected from ws.ts.
-type BroadcastFn = (workspaceId: string, slug: string, update: Uint8Array, excludeWs?: WebSocket) => void
+type BroadcastFn = (
+  workspaceId: string,
+  slug: string,
+  update: Uint8Array,
+  excludeWs?: WebSocket,
+) => void
 let broadcastLoroUpdate: BroadcastFn = () => {}
 
 export function setBroadcastFn(fn: BroadcastFn): void {
   broadcastLoroUpdate = fn
 }
-
 
 function defaultHumanDisplayName(): string {
   try {
@@ -83,6 +87,11 @@ export function createAutoVersionTrigger(
   // If omitted or null, keep the previous behavior and let VersionStore.save fall back to "main".
   getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>,
 ): (workspaceId: string, slug: string, doc: LoroDoc) => Promise<VersionEntry | null> {
+  // Ephemeral per-canvas timestamp registry: tracks the last successful save time
+  // so repeated calls within intervalMs are no-ops. In-place Map mutation is
+  // intentional here — this is a private, process-local throttle state that is
+  // never shared or observed outside this closure. The immutability rule applies
+  // to shared/observable data; a timer registry is the canonical exception.
   const lastAt = new Map<string, number>()
   return async function triggerAutoVersion(workspaceId, slug, doc) {
     const key = `${workspaceId}/${slug}`
@@ -240,7 +249,6 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       return c.json({ title: 'Failed to create canvas.' }, 500)
     }
   })
-
 
   // User-facing workspace / canvas names.
   // When unnamed, the UI falls back to session id / slug, so the API only returns stored values.
@@ -612,7 +620,9 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
     const includeCustomFields = body.includeCustomFields === true
     const outputPath =
-      typeof body.outputPath === 'string' && body.outputPath.length > 0 ? body.outputPath : undefined
+      typeof body.outputPath === 'string' && body.outputPath.length > 0
+        ? body.outputPath
+        : undefined
     const overwrite = body.overwrite === true
     const doc = await getDoc(workspaceId, slug)
     try {
@@ -637,9 +647,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
 
   // PUT /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
   // Body is PNG binary from the browser exportToBlob result. Validate the PNG signature minimally.
-  app.put(
-    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
-    async (c) => {
+  app.put('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
     const { workspaceId, slug, id } = c.req.param()
     try {
       validateWorkspaceId(workspaceId)
@@ -665,9 +673,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
 
   // GET /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
   // Return the PNG with cache headers, or 404 if it has not been saved.
-  app.get(
-    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
-    async (c) => {
+  app.get('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
     const { workspaceId, slug, id } = c.req.param()
     try {
       validateWorkspaceId(workspaceId)
@@ -743,9 +749,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
   //      Writes the past doc as a brand-new canvas under `targetSlug` in the
   //      same workspace. The original canvas / live doc / WS clients are not
   //      touched. Replaces the deleted `checkpoint_restore` flow.
-  app.post(
-    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore',
-    async (c) => {
+  app.post('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore', async (c) => {
     const { workspaceId, slug, id } = c.req.param()
     try {
       validateWorkspaceId(workspaceId)

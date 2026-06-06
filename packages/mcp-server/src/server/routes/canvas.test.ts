@@ -281,9 +281,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
       earliestFrontiers: vi.fn().mockResolvedValue([]),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
-      pruneSandwichedAutoVersions: vi
-        .fn()
-        .mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
+      pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
 
@@ -348,9 +346,7 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
       // VersionStore contract requires it. Returning a no-op result keeps
       // the mock fully type-compatible so a future route change that does
       // call this method here cannot trip on a missing key.
-      pruneSandwichedAutoVersions: vi
-        .fn()
-        .mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
+      pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
 
@@ -1011,7 +1007,6 @@ describe('versions API', () => {
     const body = (await res.json()) as { filePath: string }
     expect(body.filePath).toBe(outputPath)
   })
-
 })
 
 describe('createAutoVersionTrigger', () => {
@@ -1187,6 +1182,45 @@ describe('createAutoVersionTrigger', () => {
     await expect(trigger('session1', 'canvas-a', doc)).resolves.toBeNull()
     await expect(trigger('session1', 'canvas-a', doc)).resolves.toEqual(entry)
     expect(save).toHaveBeenCalledTimes(2)
+  })
+
+  it('throttles repeated calls within the interval window by tracking last-save time per canvas key', async () => {
+    // The trigger holds an ephemeral per-canvas timestamp registry (Map<key, number>).
+    // This test confirms the registry persists its state across calls within the same
+    // trigger instance so that the throttle window is correctly enforced.
+    const doc = new LoroDoc()
+    const entry = {
+      id: 'v1',
+      slug: 'canvas-a',
+      createdAt: '2026-04-23T00:00:00.000Z',
+      elementCount: 0,
+      auto: true,
+      hasThumbnail: false,
+    }
+    const save = vi.fn().mockResolvedValue(entry)
+    // Use a large interval so the second call always falls within the window.
+    const trigger = createAutoVersionTrigger(
+      {
+        save,
+        load: vi.fn(),
+        list: vi.fn(),
+        saveThumbnail: vi.fn(),
+        loadThumbnail: vi.fn(),
+        earliestFrontiers: vi.fn(),
+        getFrontiersBase64: vi.fn(),
+      },
+      60_000,
+    )
+
+    // First call: below-threshold (nothing saved yet) → should save.
+    const first = await trigger('session1', 'canvas-a', doc)
+    expect(first).toEqual(entry)
+    expect(save).toHaveBeenCalledTimes(1)
+
+    // Second call immediately after: within the 60s window → must return null.
+    const second = await trigger('session1', 'canvas-a', doc)
+    expect(second).toBeNull()
+    expect(save).toHaveBeenCalledTimes(1)
   })
 })
 
