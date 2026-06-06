@@ -14,7 +14,7 @@ import {
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
-import { DATA_DIR } from '../server/config.js'
+import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { startHttpServer } from '../server/http-server.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 

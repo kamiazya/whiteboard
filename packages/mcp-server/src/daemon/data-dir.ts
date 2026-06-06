@@ -1,6 +1,6 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { homedir, tmpdir as osTmpdir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 
 function defaultCheckWritable(path: string): boolean {
   try {
@@ -25,7 +25,7 @@ export function resolveDefaultDataDir(
 ): string {
   const envOverride = env.WHITEBOARD_DATA_DIR
   if (envOverride !== undefined) {
-    return isAbsolute(envOverride) ? envOverride : resolve(envOverride)
+    return resolve(envOverride)
   }
 
   const homeDir = options?.homeDir ?? homedir()

@@ -38,6 +38,25 @@ describe('resolveDefaultDataDir', () => {
     )
     expect(result).toMatch(/^\//)
   })
+
+  it('normalises absolute env-override the same way resolveDataDir does (no redundant slashes or dot segments)', () => {
+    // resolveDataDir always calls resolve(), so a path like /home/user//data
+    // or /home/user/./data becomes /home/user/data. resolveDefaultDataDir must
+    // agree so contract tests that compare the two resolvers stay consistent.
+    const result = resolveDefaultDataDir(
+      { WHITEBOARD_DATA_DIR: '/home/user//data' },
+      { checkWritable: () => true, homeDir: '/home/user', tmpDir: '/tmp' },
+    )
+    expect(result).toBe('/home/user/data')
+  })
+
+  it('normalises absolute env-override with dot segments', () => {
+    const result = resolveDefaultDataDir(
+      { WHITEBOARD_DATA_DIR: '/home/user/./data' },
+      { checkWritable: () => true, homeDir: '/home/user', tmpDir: '/tmp' },
+    )
+    expect(result).toBe('/home/user/data')
+  })
 })
 
 // ---------------------------------------------------------------------------
