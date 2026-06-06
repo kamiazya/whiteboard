@@ -8,6 +8,7 @@ import {
   resetTracingForTesting,
   SERVICE_NAME,
   shutdownTracing,
+  StderrSpanExporter,
   tracingEnabled,
 } from './tracing.js'
 
@@ -286,7 +287,7 @@ describe('initTracing() role resolution', () => {
 })
 
 // ---------------------------------------------------------------------------
-// initTracing() — signal-handler registration
+// initTracing() — signal-handler registration and cleanup
 // ---------------------------------------------------------------------------
 
 describe('initTracing() signal-handler flush registration', () => {
@@ -310,6 +311,30 @@ describe('initTracing() signal-handler flush registration', () => {
     expect(process.listenerCount('SIGTERM')).toBe(beforeSIGTERM + 1)
     expect(process.listenerCount('SIGINT')).toBe(beforeSIGINT + 1)
     expect(process.listenerCount('beforeExit')).toBe(beforeExit + 1)
+  })
+
+  it('removes signal listeners when shutdownTracing() is called so repeated cycles do not accumulate listeners', async () => {
+    const baselineSIGTERM = process.listenerCount('SIGTERM')
+    const baselineSIGINT = process.listenerCount('SIGINT')
+    const baselineBeforeExit = process.listenerCount('beforeExit')
+
+    await initTracing()
+    await shutdownTracing()
+
+    expect(process.listenerCount('SIGTERM')).toBe(baselineSIGTERM)
+    expect(process.listenerCount('SIGINT')).toBe(baselineSIGINT)
+    expect(process.listenerCount('beforeExit')).toBe(baselineBeforeExit)
+  })
+
+  it('does not accumulate listeners across repeated init/shutdown cycles', async () => {
+    const baselineSIGTERM = process.listenerCount('SIGTERM')
+
+    for (let i = 0; i < 3; i++) {
+      await initTracing()
+      await shutdownTracing()
+    }
+
+    expect(process.listenerCount('SIGTERM')).toBe(baselineSIGTERM)
   })
 })
 
@@ -368,5 +393,81 @@ describe('initTracing() catch path', () => {
     const handle = await initTracingFresh()
     expect(handle).toBeNull()
     vi.doUnmock('@opentelemetry/sdk-node')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// StderrSpanExporter — direct unit tests
+// ---------------------------------------------------------------------------
+
+// Build a minimal span-like object that satisfies the exporter's input type.
+function makeSpan(name = 'test-span') {
+  return {
+    name,
+    kind: 0,
+    startTime: [0, 0] as [number, number],
+    endTime: [1, 0] as [number, number],
+    duration: [1, 0] as [number, number],
+    attributes: {},
+    status: { code: 0 },
+    spanContext: () => ({ traceId: 'a'.repeat(32), spanId: 'b'.repeat(16) }),
+    parentSpanContext: undefined,
+  }
+}
+
+describe('StderrSpanExporter', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('calls resultCallback with code=0 and writes JSON to stderr on success', () => {
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const exporter = new StderrSpanExporter(undefined)
+    const callback = vi.fn()
+
+    exporter.export([makeSpan()], callback)
+
+    expect(process.stderr.write).toHaveBeenCalledOnce()
+    const written = (process.stderr.write as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+    const parsed = JSON.parse(written.trim())
+    expect(parsed.name).toBe('test-span')
+    expect(callback).toHaveBeenCalledWith({ code: 0 })
+  })
+
+  it('calls resultCallback with code=1 and a wrapped Error when process.stderr.write throws', () => {
+    const writeError = new Error('write error')
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => {
+      throw writeError
+    })
+    const exporter = new StderrSpanExporter(undefined)
+    const callback = vi.fn()
+
+    exporter.export([makeSpan()], callback)
+
+    expect(callback).toHaveBeenCalledWith({ code: 1, error: writeError })
+  })
+
+  it('wraps a non-Error thrown value in an Error when calling resultCallback', () => {
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => {
+      throw 'string error'
+    })
+    const exporter = new StderrSpanExporter(undefined)
+    const callback = vi.fn()
+
+    exporter.export([makeSpan()], callback)
+
+    const result = (callback as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      code: number
+      error: Error
+    }
+    expect(result.code).toBe(1)
+    expect(result.error).toBeInstanceOf(Error)
+    expect(result.error.message).toBe('string error')
+  })
+
+  it('shutdown() and forceFlush() resolve without throwing', async () => {
+    const exporter = new StderrSpanExporter(undefined)
+    await expect(exporter.shutdown()).resolves.toBeUndefined()
+    await expect(exporter.forceFlush()).resolves.toBeUndefined()
   })
 })
