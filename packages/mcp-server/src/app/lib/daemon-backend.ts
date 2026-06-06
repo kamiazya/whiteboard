@@ -1,7 +1,5 @@
 /**
- * DaemonBackend: the current WebSocket + apiFetch transport, extracted from
- * useWhiteboardSync. Behavior is byte-for-byte identical to the inline WS
- * code that previously lived in the hook.
+ * DaemonBackend: the WebSocket + apiFetch transport for the canvas editor.
  *
  * Ownership split:
  * - DaemonBackend owns: WS create/reconnect/backoff/send, binaryType,
@@ -14,6 +12,13 @@
  * so useWhiteboardSync.reconnect.test.tsx, which swaps globalThis.WebSocket
  * and asserts exact instance counts + 500/1000/2000/4000/8000 backoff,
  * continues to pass unmodified.
+ *
+ * snapshotReceived is an instance field, not a per-openSocket local, so a
+ * reconnect does not reset it. After the initial snapshot is received, every
+ * subsequent binary frame — including the first frame on a reconnected socket
+ * — routes to onRemoteUpdate (import/merge) rather than onSnapshot (replace).
+ * Replacing the LoroDoc on reconnect would destroy local unsynced edits and
+ * UndoManager history.
  */
 import { apiFetch } from './api-client.js'
 import { uploadFiles } from './upload-files.js'
@@ -22,6 +27,11 @@ import {
   buildWhiteboardWsProtocols,
 } from '../../shared/ws-protocol.js'
 import { parseServerTextMessage } from './ws-text-message.js'
+import {
+  clientReadyMessageSchema,
+  exportResponseMessageSchema,
+  viewportResponseMessageSchema,
+} from '../../shared/ws-messages.js'
 import type { CanvasBackend, CanvasBackendHandlers } from './canvas-backend.js'
 import type { BinaryFileData } from '@excalidraw/excalidraw/types'
 
@@ -34,6 +44,10 @@ export class DaemonBackend implements CanvasBackend {
   private cancelled = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private attempt = 0
+  // Hoisted to instance scope so reconnects do not reset it. Only reset by
+  // disconnect() or when the canvas (workspaceId/slug) changes via a new
+  // connect() call after the hook tears down the previous backend.
+  private snapshotReceived = false
 
   constructor(workspaceId: string, slug: string, locationHref: string) {
     this.workspaceId = workspaceId
@@ -49,6 +63,7 @@ export class DaemonBackend implements CanvasBackend {
 
   disconnect(): void {
     this.cancelled = true
+    this.snapshotReceived = false
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
@@ -82,15 +97,21 @@ export class DaemonBackend implements CanvasBackend {
   sendClientReady(): void {
     const ws = this.ws
     if (!ws || ws.readyState !== WebSocket.OPEN) return
-    ws.send(JSON.stringify({ type: 'client_ready' }))
+    const msg: ReturnType<typeof clientReadyMessageSchema.parse> =
+      clientReadyMessageSchema.parse({ type: 'client_ready' })
+    ws.send(JSON.stringify(msg))
   }
 
   sendViewportResponse(requestId: string): void {
-    this.ws?.send(JSON.stringify({ type: 'viewport_response', requestId }))
+    const msg: ReturnType<typeof viewportResponseMessageSchema.parse> =
+      viewportResponseMessageSchema.parse({ type: 'viewport_response', requestId })
+    this.ws?.send(JSON.stringify(msg))
   }
 
   sendExportResponse(requestId: string, data: string): void {
-    this.ws?.send(JSON.stringify({ type: 'export_response', requestId, data }))
+    const msg: ReturnType<typeof exportResponseMessageSchema.parse> =
+      exportResponseMessageSchema.parse({ type: 'export_response', requestId, data })
+    this.ws?.send(JSON.stringify(msg))
   }
 
   private openSocket(handlers: CanvasBackendHandlers): void {
@@ -109,8 +130,6 @@ export class DaemonBackend implements CanvasBackend {
     // check in the message handler fails.
     ws.binaryType = 'arraybuffer'
     this.ws = ws
-
-    let snapshotReceived = false
 
     ws.onopen = () => {
       this.attempt = 0
@@ -140,8 +159,8 @@ export class DaemonBackend implements CanvasBackend {
     ws.onmessage = (event: MessageEvent) => {
       if (event.data instanceof ArrayBuffer) {
         const bytes = new Uint8Array(event.data)
-        if (!snapshotReceived) {
-          snapshotReceived = true
+        if (!this.snapshotReceived) {
+          this.snapshotReceived = true
           handlers.onSnapshot(bytes)
         } else {
           handlers.onRemoteUpdate(bytes)
@@ -182,7 +201,12 @@ export class DaemonBackend implements CanvasBackend {
           // ACK always goes on the same socket captured in this message closure,
           // not via this.ws, so concurrent reconnects do not mis-route the ACK.
           ws.send(
-            JSON.stringify({ type: 'viewport_response', requestId: msg.requestId }),
+            JSON.stringify(
+              viewportResponseMessageSchema.parse({
+                type: 'viewport_response',
+                requestId: msg.requestId,
+              }),
+            ),
           )
           return
         }

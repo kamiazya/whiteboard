@@ -364,7 +364,12 @@ export function useWhiteboardSync(
   // backend's typed sendExportResponse. The helper hands us a JSON string; we
   // parse it once and forward the fields.
   const sendExportResponseMessage = useCallback((message: string): void => {
-    const parsed = JSON.parse(message) as { requestId: string; data: string }
+    let parsed: { requestId: string; data: string }
+    try {
+      parsed = JSON.parse(message) as { requestId: string; data: string }
+    } catch {
+      return
+    }
     backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
   }, [])
 

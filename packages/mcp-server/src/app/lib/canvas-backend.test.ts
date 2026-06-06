@@ -229,25 +229,35 @@ describe('DaemonBackend', () => {
       backend.disconnect()
     })
 
-    it('resets snapshot state after reconnect so new socket fires onSnapshot again', async () => {
+    it('routes first frame after reconnect to onRemoteUpdate (import), not onSnapshot (replace)', async () => {
+      // Reconnecting imports into the existing doc — replacing it would destroy
+      // local unsynced edits and UndoManager history.
       const backend = makeBackend()
       const onSnapshot = vi.fn()
       const onRemoteUpdate = vi.fn()
       backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
 
       const ws0 = FakeWebSocket.instances[0]
+      // First frame on initial connection → snapshot.
       ws0.onmessage?.(new MessageEvent('message', { data: new Uint8Array([1]).buffer }))
       expect(onSnapshot).toHaveBeenCalledTimes(1)
+      expect(onRemoteUpdate).toHaveBeenCalledTimes(0)
 
-      // Close and reconnect
+      // Close and reconnect.
       ws0.onclose?.(new Event('close') as CloseEvent)
       await vi.advanceTimersByTimeAsync(500)
       expect(FakeWebSocket.instances).toHaveLength(2)
 
+      // First frame on the reconnected socket → import (merge), NOT snapshot (replace).
       const ws1 = FakeWebSocket.instances[1]
       ws1.onmessage?.(new MessageEvent('message', { data: new Uint8Array([2]).buffer }))
-      expect(onSnapshot).toHaveBeenCalledTimes(2)
-      expect(onRemoteUpdate).not.toHaveBeenCalled()
+      expect(onSnapshot).toHaveBeenCalledTimes(1)
+      expect(onRemoteUpdate).toHaveBeenCalledTimes(1)
+
+      // Subsequent frames also route to onRemoteUpdate.
+      ws1.onmessage?.(new MessageEvent('message', { data: new Uint8Array([3]).buffer }))
+      expect(onSnapshot).toHaveBeenCalledTimes(1)
+      expect(onRemoteUpdate).toHaveBeenCalledTimes(2)
       backend.disconnect()
     })
   })
@@ -401,6 +411,97 @@ describe('DaemonBackend', () => {
       await backend.putFile(entries as Parameters<typeof backend.putFile>[0], onFileSuccess)
 
       expect(uploadFilesMock).toHaveBeenCalledWith(entries, 'ws-sid', 'slug', onFileSuccess)
+    })
+  })
+
+  describe('sendClientReady', () => {
+    it('sends a client_ready JSON message when the socket is OPEN', () => {
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.OPEN
+      backend.sendClientReady()
+      expect(ws.send).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual({ type: 'client_ready' })
+      backend.disconnect()
+    })
+
+    it('does not send when the socket is not OPEN', () => {
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.CONNECTING
+      backend.sendClientReady()
+      expect(ws.send).not.toHaveBeenCalled()
+      backend.disconnect()
+    })
+  })
+
+  describe('sendViewportResponse', () => {
+    it('sends a viewport_response JSON message with the given requestId', () => {
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.OPEN
+      backend.sendViewportResponse('req-42')
+      expect(ws.send).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual({ type: 'viewport_response', requestId: 'req-42' })
+      backend.disconnect()
+    })
+  })
+
+  describe('sendExportResponse', () => {
+    it('sends an export_response JSON message with requestId and data', () => {
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.OPEN
+      backend.sendExportResponse('exp-7', 'data:image/png;base64,abc')
+      expect(ws.send).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(ws.send.mock.calls[0][0])).toEqual({
+        type: 'export_response',
+        requestId: 'exp-7',
+        data: 'data:image/png;base64,abc',
+      })
+      backend.disconnect()
+    })
+  })
+
+  describe('client→server message serialization (Zod schema discipline)', () => {
+    it('sendClientReady payload matches clientReadyMessageSchema', async () => {
+      const { clientReadyMessageSchema } = await import('../../shared/ws-messages.js')
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.OPEN
+      backend.sendClientReady()
+      const parsed = clientReadyMessageSchema.safeParse(JSON.parse(ws.send.mock.calls[0][0]))
+      expect(parsed.success).toBe(true)
+      backend.disconnect()
+    })
+
+    it('sendViewportResponse payload matches viewportResponseMessageSchema', async () => {
+      const { viewportResponseMessageSchema } = await import('../../shared/ws-messages.js')
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.OPEN
+      backend.sendViewportResponse('vp-req')
+      const parsed = viewportResponseMessageSchema.safeParse(JSON.parse(ws.send.mock.calls[0][0]))
+      expect(parsed.success).toBe(true)
+      backend.disconnect()
+    })
+
+    it('sendExportResponse payload matches exportResponseMessageSchema', async () => {
+      const { exportResponseMessageSchema } = await import('../../shared/ws-messages.js')
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.OPEN
+      backend.sendExportResponse('ex-req', 'data:image/png;base64,xyz')
+      const parsed = exportResponseMessageSchema.safeParse(JSON.parse(ws.send.mock.calls[0][0]))
+      expect(parsed.success).toBe(true)
+      backend.disconnect()
     })
   })
 
