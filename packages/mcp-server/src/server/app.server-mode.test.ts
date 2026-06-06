@@ -835,4 +835,26 @@ describe('app — server-mode composition', () => {
     expect(asText).not.toContain('secret-internal')
     expect(asText).not.toContain('token=abc123')
   })
+
+  it('server-mode does NOT add CORS or Access-Control-Allow-Private-Network headers on /api/*', async () => {
+    const app = createApp(makeServerModeOptions(['canvas:read', 'canvas:write']))
+
+    const getRes = await app.request('/api/runtime/ping', {
+      headers: {
+        Authorization: BEARER,
+        Origin: 'http://localhost:5173',
+      },
+    })
+    expect(getRes.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    expect(getRes.headers.get('Access-Control-Allow-Private-Network')).toBeNull()
+
+    const optionsRes = await app.request('/api/runtime/ping', {
+      method: 'OPTIONS',
+      headers: {
+        Authorization: BEARER,
+        Origin: 'http://localhost:5173',
+      },
+    })
+    expect(optionsRes.headers.get('Access-Control-Allow-Private-Network')).toBeNull()
+  })
 })

@@ -34,6 +34,7 @@ import {
   type McpHttpAuthStrategy,
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
+import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
 import type { AuthScope } from './security/auth-strategy.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
@@ -367,6 +368,12 @@ export function createApp(options: AppOptions) {
   if (options.authMode === 'server-mode') {
     app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
   } else {
+    // In local-daemon mode, allow cross-origin loopback requests (e.g. apps/web
+    // dev server on localhost:5173 → daemon on 127.0.0.1:3099).
+    // The CORS middleware is applied BEFORE the mutation-auth guard so that
+    // OPTIONS preflights short-circuit to 204 without needing a bearer token,
+    // while non-OPTIONS methods fall through to the auth chain unchanged.
+    app.use('/api/*', createApiLoopbackCorsMiddleware())
     app.use('/api/*', createDaemonMutationAuthMiddleware(token))
   }
 
@@ -836,6 +843,9 @@ export function createApp(options: AppOptions) {
       // Details: https://html.spec.whatwg.org/multipage/scripting.html#restrictions-for-contents-of-script-elements
       const runtimeConfigJson = JSON.stringify({
         daemonToken: token ?? null,
+        // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the
+        // value is always a loopback origin, even when the daemon binds 0.0.0.0.
+        daemonBaseUrl: `http://127.0.0.1:${options.getStatus().port}`,
       }).replace(/</g, '\\u003c')
       const runtimeConfigScript = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
       const withRuntimeConfig = html.includes('</head>')

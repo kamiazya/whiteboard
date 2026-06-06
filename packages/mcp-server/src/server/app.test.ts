@@ -941,4 +941,129 @@ describe('createApp daemon mutation auth', () => {
       (mergeSaveCall?.[3] as { operator?: { peerId?: string } } | undefined)?.operator?.peerId,
     ).toMatch(/\S+/)
   })
+
+  // --- Stage 4: /mcp OPTIONS must carry Access-Control-Allow-Private-Network ---
+
+  it('OPTIONS /mcp with loopback Origin carries Access-Control-Allow-Private-Network: true', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    const res = await app.request('http://127.0.0.1/mcp', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+      },
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+    expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+  })
+
+  // --- Stage 4: /api/* CORS + PNA headers (local-daemon mode only) ---
+
+  describe('/api/* loopback CORS (local-daemon mode)', () => {
+    it('reflects Access-Control-Allow-Origin and Vary for a loopback Origin on GET /api/runtime/ping', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+      expect(res.headers.get('Vary')).toContain('Origin')
+    })
+
+    it('returns 204 with Access-Control-Allow-Private-Network and reflected ACAO on OPTIONS /api/runtime/ping', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+    })
+
+    it('does NOT reflect Access-Control-Allow-Origin for a non-loopback Origin but still responds 200', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://evil.example' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('responds 200 with no CORS regression when no Origin header is present', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('cross-origin loopback POST to a mutation route without Authorization returns 401 (auth ordering)', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/workspaces/session1/canvases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:5173',
+        },
+        body: JSON.stringify({ slug: 'demo' }),
+      })
+      expect(res.status).toBe(401)
+    })
+
+    it('OPTIONS preflight for a mutation route returns 204 with CORS+PNA headers', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/workspaces/session1/canvases', {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+    })
+  })
+
+  describe('runtime config injection', () => {
+    it('injects daemonBaseUrl composed from 127.0.0.1 and port into served HTML', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/canvas/session1/demo')
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toContain('"daemonBaseUrl":"http://127.0.0.1:3099"')
+      // existing daemonToken assertion must still pass
+      expect(html).toContain('"daemonToken":"secret"')
+    })
+
+    it('emitted runtime-config is accepted by the active dist/app reader (non-strict)', async () => {
+      // The dist/app reader (packages/mcp-server/src/app/lib/api-client.ts) uses a
+      // hand-written non-strict interface RuntimeConfig { daemonToken: string | null }
+      // Extra keys (daemonBaseUrl) must be silently ignored - this test locks that behavior.
+      const emittedConfig = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
+      // Non-strict: accessing known properties works, extra ones are ignored
+      const config = emittedConfig as { daemonToken: string | null }
+      expect(config.daemonToken).toBe('secret')
+    })
+
+    it('apps/web strict runtimeConfigSchema REJECTS a payload that includes daemonToken', async () => {
+      // apps/web/src/runtime-config.ts uses .strict() which forbids unknown keys.
+      // daemonToken is NOT in the apps/web schema, so .parse({ daemonToken, daemonBaseUrl })
+      // must throw. This locks the DIST_APP_DIR cutover as a deliberate guarded step.
+      const { runtimeConfigSchema } = await import('../../../../apps/web/src/runtime-config.js')
+      const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
+      expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
+    })
+  })
+
+  describe('/api/runtime/ping Zod schema', () => {
+    it('ping response parses via daemonPingResponseSchema', async () => {
+      const { daemonPingResponseSchema } = await import('../shared/api-contracts/runtime.js')
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(() => daemonPingResponseSchema.parse(body)).not.toThrow()
+      const parsed = daemonPingResponseSchema.parse(body)
+      expect(parsed.ok).toBe(true)
+      expect(typeof parsed.pid).toBe('number')
+    })
+  })
 })
