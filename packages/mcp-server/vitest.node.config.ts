@@ -11,6 +11,9 @@ export default mergeConfig(
         'src/server/**/*.test.ts',
         'src/shared/**/*.test.ts',
         'src/cli/**/*.test.ts',
+        // Local dev-tooling tests colocated with the scripts they cover
+        // (e.g. the ensure-http-dev-daemon SessionStart hook helper).
+        'scripts/**/*.test.ts',
       ],
       exclude: ['src/**/*.smoke.test.ts', 'src/**/*.distribution.test.ts'],
       environment: 'node',
