@@ -48,7 +48,7 @@ body:
     id: version
     attributes:
       label: Package version
-      description: Output of `npx @kamiazya/whiteboard-mcp --version` or the npm version you installed.
+      description: The `@kamiazya/whiteboard-mcp` version you are running (check your `package.json`, or run `npm ls @kamiazya/whiteboard-mcp`).
       placeholder: "e.g. 0.5.0"
     validations:
       required: true
