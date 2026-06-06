@@ -21,10 +21,14 @@ import { resolveDataDir, WHITEBOARD_ROOT, DATA_DIR } from './data-dir-secure.js'
 describe('data-dir contract: probe and create resolvers agree in steady state', () => {
   let tempHome: string
   let tempTmp: string
+  // Both resolvers take the same { homeDir, tmpDir } overrides so the test
+  // drives the real branch logic against temp dirs instead of the real $HOME.
+  let dirs: { homeDir: string; tmpDir: string }
 
   beforeEach(async () => {
     tempHome = await mkdtemp(join(tmpdir(), 'dd-contract-home-'))
     tempTmp = await mkdtemp(join(tmpdir(), 'dd-contract-tmp-'))
+    dirs = { homeDir: tempHome, tmpDir: tempTmp }
   })
 
   afterEach(async () => {
@@ -38,16 +42,10 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     await mkdir(homeWhiteboard)
 
     // Act: probe (no side-effects)
-    const probeResult = resolveDefaultDataDir(
-      {},
-      { checkWritable: undefined, homeDir: tempHome, tmpDir: tempTmp },
-    )
+    const probeResult = resolveDefaultDataDir({}, { ...dirs, checkWritable: undefined })
 
     // Act: create-side (may call mkdir, but dir already exists so it's idempotent)
-    const createResult = resolveDataDir(
-      {},
-      { homeDir: tempHome, tmpDir: tempTmp },
-    )
+    const createResult = resolveDataDir({}, dirs)
 
     // Assert: both agree
     expect(probeResult).toBe(homeWhiteboard)
@@ -62,20 +60,17 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     // Neither resolver should call canWriteDir / checkWritable for the override branch.
     let createSideCheckCalled = false
     const createResult = resolveDataDir(env, {
-      homeDir: tempHome,
-      tmpDir: tempTmp,
-      isWritableDir: (p) => {
+      ...dirs,
+      isWritableDir: () => {
         createSideCheckCalled = true
-        // real check — but we assert it is never reached for the override branch
-        return p === join(tempHome, '.whiteboard')
+        return true
       },
     })
 
     let probeSideCheckCalled = false
     const probeResult = resolveDefaultDataDir(env, {
-      homeDir: tempHome,
-      tmpDir: tempTmp,
-      checkWritable: (_p) => {
+      ...dirs,
+      checkWritable: () => {
         probeSideCheckCalled = true
         return true
       },
@@ -96,24 +91,15 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     const homeWhiteboard = join(tempHome, '.whiteboard')
 
     // The probe uses real filesystem check — ~/.whiteboard doesn't exist → falls to tmp
-    const probeBeforeCreate = resolveDefaultDataDir(
-      {},
-      { homeDir: tempHome, tmpDir: tempTmp },
-    )
+    const probeBeforeCreate = resolveDefaultDataDir({}, dirs)
     expect(probeBeforeCreate).toBe(join(tempTmp, '.whiteboard'))
 
     // The create-side resolver calls canWriteDir(homeCandidate) which does mkdirSync → home
-    const createResult = resolveDataDir(
-      {},
-      { homeDir: tempHome, tmpDir: tempTmp },
-    )
+    const createResult = resolveDataDir({}, dirs)
     expect(createResult).toBe(homeWhiteboard)
 
     // After the server creates the dir, re-probing finds it and now agrees with create
-    const probeAfterCreate = resolveDefaultDataDir(
-      {},
-      { homeDir: tempHome, tmpDir: tempTmp },
-    )
+    const probeAfterCreate = resolveDefaultDataDir({}, dirs)
     expect(probeAfterCreate).toBe(homeWhiteboard)
     expect(probeAfterCreate).toBe(createResult)
   })
@@ -128,12 +114,10 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     const result = resolveDataDir(
       {},
       {
-        homeDir: tempHome,
-        tmpDir: tempTmp,
-        // Home candidate: simulate not writable (mkdir fails)
+        ...dirs,
         isWritableDir: (p) => {
-          if (p === join(tempHome, '.whiteboard')) return false
-          // If canWriteDir is ever called for the tmp path, record it
+          // Home candidate: simulate not writable so the resolver falls back to tmp.
+          // Record if it is ever (wrongly) called on the tmp path.
           if (p === tmpWhiteboard) {
             mkdirCalledOnTmp = true
           }
@@ -152,15 +136,8 @@ describe('data-dir contract: probe and create resolvers agree in steady state', 
     const homeWhiteboard = join(tempHome, '.whiteboard')
     await writeFile(homeWhiteboard, 'not a directory')
 
-    const probeResult = resolveDefaultDataDir(
-      {},
-      { homeDir: tempHome, tmpDir: tempTmp },
-    )
-
-    const createResult = resolveDataDir(
-      {},
-      { homeDir: tempHome, tmpDir: tempTmp },
-    )
+    const probeResult = resolveDefaultDataDir({}, dirs)
+    const createResult = resolveDataDir({}, dirs)
 
     const expectedTmp = join(tempTmp, '.whiteboard')
     expect(probeResult).toBe(expectedTmp)
