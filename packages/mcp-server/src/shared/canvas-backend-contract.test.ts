@@ -16,11 +16,12 @@
  * package.json contract; the runtime import path is covered by the smoke
  * suite (pnpm smoke:e2e).
  */
-import { describe, it, expect, beforeAll } from 'vitest'
+
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { resolve, dirname } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { beforeAll, describe, expect, it } from 'vitest'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(__dirname, '../..')
@@ -35,15 +36,11 @@ beforeAll(() => {
   //
   // node_modules/.bin/tsc is a pnpm shell shim, not a JS module — invoke node
   // with the real TypeScript CLI entry point directly to avoid shell exec.
-  const tscJs = resolve(
-    packageRoot,
-    'node_modules/.bin/../typescript/bin/tsc',
-  )
-  const result = spawnSync(
-    'node',
-    [tscJs, '-p', resolve(packageRoot, 'tsconfig.server.json')],
-    { cwd: packageRoot, encoding: 'utf8' },
-  )
+  const tscJs = resolve(packageRoot, 'node_modules/.bin/../typescript/bin/tsc')
+  const result = spawnSync('node', [tscJs, '-p', resolve(packageRoot, 'tsconfig.server.json')], {
+    cwd: packageRoot,
+    encoding: 'utf8',
+  })
   if (result.status !== 0) {
     throw new Error(`tsc failed:\n${result.stderr}`)
   }
@@ -51,9 +48,9 @@ beforeAll(() => {
 
 describe('browser-contract subpath export', () => {
   it('package.json exports map includes ./browser-contract', () => {
-    const pkg = JSON.parse(
-      readFileSync(resolve(packageRoot, 'package.json'), 'utf8'),
-    ) as { exports?: Record<string, unknown> }
+    const pkg = JSON.parse(readFileSync(resolve(packageRoot, 'package.json'), 'utf8')) as {
+      exports?: Record<string, unknown>
+    }
     expect(pkg.exports?.['./browser-contract']).toBeDefined()
     const entry = pkg.exports?.['./browser-contract'] as Record<string, string>
     expect(entry.import).toMatch(/canvas-backend-contract\.js$/)

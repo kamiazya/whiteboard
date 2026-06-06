@@ -1,11 +1,11 @@
-import { fileURLToPath } from 'node:url'
 import { dirname, resolve, sep } from 'node:path'
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
+import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
-import wasm from 'vite-plugin-wasm'
-import topLevelAwait from 'vite-plugin-top-level-await'
+import react from '@vitejs/plugin-react'
+import { defineConfig } from 'vite'
 import { viteStaticCopy } from 'vite-plugin-static-copy'
+import topLevelAwait from 'vite-plugin-top-level-await'
+import wasm from 'vite-plugin-wasm'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -35,11 +35,9 @@ export default defineConfig({
           // full node_modules path prefix.
           // fast-glob (used by vite-plugin-static-copy) requires forward
           // slashes even on Windows; replace OS separators before appending.
-          src:
-            resolve(
-              __dirname,
-              'node_modules/@excalidraw/excalidraw/dist/prod/fonts',
-            ).replaceAll(sep, '/') + '/**/*',
+          src: `${resolve(__dirname, 'node_modules/@excalidraw/excalidraw/dist/prod/fonts')
+            .split(sep)
+            .join('/')}/**/*`,
           dest: 'fonts',
         },
       ],

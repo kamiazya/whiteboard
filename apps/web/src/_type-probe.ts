@@ -12,9 +12,19 @@
  *   against the z.infer-derived payload types.
  */
 
+// ── browser-contract types from the package subpath ──────────────────────────
+// Re-exporting the types proves they resolve; the declared consumers below
+// force tsc to compile against the z.infer-derived payload shapes.
+export type {
+  CanvasBackend,
+  CanvasBackendHandlers,
+  VersionCreatedPayload,
+} from '@kamiazya/whiteboard-mcp/browser-contract'
+
 // ── shadcn ui primitives ──────────────────────────────────────────────────────
 // Re-exporting the value imports both proves they resolve and satisfies
 // noUnusedLocals without a parallel declare/export block.
+export { AlertDialog, AlertDialogContent } from '@/components/ui/alert-dialog'
 export { Button } from '@/components/ui/button'
 export {
   Dialog,
@@ -22,7 +32,6 @@ export {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-export { AlertDialog, AlertDialogContent } from '@/components/ui/alert-dialog'
 export {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,15 +46,6 @@ export {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 export { cn } from '@/lib/utils'
-
-// ── browser-contract types from the package subpath ──────────────────────────
-// Re-exporting the types proves they resolve; the declared consumers below
-// force tsc to compile against the z.infer-derived payload shapes.
-export type {
-  CanvasBackend,
-  CanvasBackendHandlers,
-  VersionCreatedPayload,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 
 import type {
   CanvasBackend,
