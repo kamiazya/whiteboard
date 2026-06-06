@@ -54,8 +54,20 @@ function isPrivateOrLocalIpv6(hostname: string): boolean {
   if (normalized.startsWith('ff')) return true
   if (normalized.startsWith('2001:db8')) return true
   if (normalized.startsWith('::ffff:')) {
-    const mapped = parseIpv4(normalized.slice('::ffff:'.length))
-    return mapped !== null && isPrivateOrLocalIpv4(mapped)
+    const suffix = normalized.slice('::ffff:'.length)
+    // Dotted-decimal form (e.g. ::ffff:192.168.1.1)
+    const dotted = parseIpv4(suffix)
+    if (dotted !== null) return isPrivateOrLocalIpv4(dotted)
+    // Hex form produced by the WHATWG URL parser (e.g. ::ffff:c0a8:101)
+    const hexParts = suffix.split(':')
+    if (hexParts.length === 2) {
+      const hi = Number.parseInt(hexParts[0], 16)
+      const lo = Number.parseInt(hexParts[1], 16)
+      if (!Number.isNaN(hi) && !Number.isNaN(lo)) {
+        const octets = [(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff]
+        return isPrivateOrLocalIpv4(octets)
+      }
+    }
   }
   return false
 }
