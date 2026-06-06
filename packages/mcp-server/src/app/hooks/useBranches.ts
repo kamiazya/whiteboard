@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ZodError } from 'zod'
 import {
   type BranchMeta,
   type BranchStatsResponse,
@@ -83,6 +84,27 @@ async function requireOk(res: Response): Promise<Response> {
   throw err
 }
 
+// A schema mismatch on a 200 response means the server shipped a shape that
+// does not match the client's contract. Normalise into a structured error so
+// callers never receive a raw ZodError whose instanceof-Error check would
+// incorrectly signal a network / auth problem.
+function throwContractMismatch(parseErr: ZodError): never {
+  const err: BranchApiError = {
+    status: 200,
+    body: { error: 'contract_mismatch', issues: parseErr.issues },
+  }
+  throw err
+}
+
+function safeParse<T>(schema: { parse: (v: unknown) => T }, value: unknown): T {
+  try {
+    return schema.parse(value)
+  } catch (e) {
+    if (e instanceof ZodError) throwContractMismatch(e)
+    throw e
+  }
+}
+
 // Imperative API helpers independent from React.
 export function branchesApi(workspaceId: string, slug: string) {
   const urls = buildBranchUrls(workspaceId, slug)
@@ -99,17 +121,17 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify(args),
         }),
       )
-      return createBranchResponseSchema.parse(await res.json()).branch
+      return safeParse(createBranchResponseSchema, await res.json()).branch
     },
     async getStats(name: string): Promise<BranchStatsResponse> {
       const res = await requireOk(await apiFetch(urls.stats(name)))
-      return branchStatsResponseSchema.parse(await res.json())
+      return safeParse(branchStatsResponseSchema, await res.json())
     },
     async remove(name: string): Promise<DeleteBranchResponse> {
       const res = await requireOk(
         await apiFetch(urls.deleteBranch(name), { method: 'DELETE' }),
       )
-      return deleteBranchResponseSchema.parse(await res.json())
+      return safeParse(deleteBranchResponseSchema, await res.json())
     },
     async rename(oldName: string, newName: string): Promise<RenameBranchResponse> {
       const res = await requireOk(
@@ -119,7 +141,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify({ name: newName }),
         }),
       )
-      return renameBranchResponseSchema.parse(await res.json())
+      return safeParse(renameBranchResponseSchema, await res.json())
     },
     async setHead(branch: string): Promise<SetHeadResponse> {
       const res = await requireOk(
@@ -129,7 +151,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           body: JSON.stringify({ branch }),
         }),
       )
-      return setHeadResponseSchema.parse(await res.json())
+      return safeParse(setHeadResponseSchema, await res.json())
     },
     async merge(source: string, args: { into: string; dryRun?: boolean }): Promise<MergeResult> {
       const res = await requireOk(
@@ -142,7 +164,7 @@ export function branchesApi(workspaceId: string, slug: string) {
           }),
         }),
       )
-      return mergeResponseSchema.parse(await res.json())
+      return safeParse(mergeResponseSchema, await res.json())
     },
   }
 }
@@ -167,6 +189,11 @@ export function useBranches(workspaceId: string, slug: string): UseBranchesResul
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<BranchApiError | Error | null>(null)
   const apiRef = useRef(branchesApi(workspaceId, slug))
+  // Monotonically increasing counter. Each refetch call stamps its result with
+  // the counter value at dispatch time; the setter is a no-op when a newer
+  // fetch has already committed. This prevents a slower in-flight response
+  // from overwriting the result of a later refetch.
+  const fetchSeqRef = useRef(0)
 
   // Recreate the API wrapper whenever session or slug changes.
   useEffect(() => {
@@ -174,15 +201,18 @@ export function useBranches(workspaceId: string, slug: string): UseBranchesResul
   }, [workspaceId, slug])
 
   const refetch = useCallback(async () => {
+    const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
       const next = await apiRef.current.list()
+      if (seq !== fetchSeqRef.current) return
       setState(next)
       setError(null)
     } catch (err) {
+      if (seq !== fetchSeqRef.current) return
       setError(err as BranchApiError | Error)
     } finally {
-      setLoading(false)
+      if (seq === fetchSeqRef.current) setLoading(false)
     }
   }, [])
 

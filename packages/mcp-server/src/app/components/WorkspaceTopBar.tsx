@@ -409,10 +409,13 @@ export default function WorkspaceTopBar({
         navigate(`/canvas/${workspaceId}/${encodeURIComponent(target)}`)
         return
       }
-      const body = (await res.json().catch(() => ({}))) as { message?: string }
-      setNewCanvasError(body.message ?? `Failed (HTTP ${res.status}).`)
-    } catch (err) {
-      setNewCanvasError(err instanceof Error ? err.message : 'Network error.')
+      const body = (await res.json().catch(() => ({}))) as { title?: string }
+      // Use the Problem Details title when present; otherwise show a safe
+      // generic message. Never expose body.message or Error.message — those
+      // can contain server-side paths or credentials (P-HTTP-005).
+      setNewCanvasError(typeof body.title === 'string' && body.title ? body.title : 'Failed to create canvas.')
+    } catch {
+      setNewCanvasError('Failed to create canvas.')
     } finally {
       setNewCanvasBusy(false)
     }
@@ -553,6 +556,7 @@ export default function WorkspaceTopBar({
             </div>
             <div className="sticky bottom-0 z-10 border-t bg-popover">
               <DropdownMenuItem
+                data-testid="new-canvas-menu-item"
                 onSelect={openNewCanvas}
                 className="gap-2 rounded-none font-medium"
               >
