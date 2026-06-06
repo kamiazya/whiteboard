@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // Direct invocation requires tsx:
-//   node --import tsx/esm scripts/mcp-smoke.mjs
+//   node --import tsx/esm scripts/smoke/mcp-smoke.mjs
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const root = resolve(__dirname, '..')
+const root = resolve(__dirname, '../..')
 const entry = resolve(root, 'src/server/mcp/index.ts')
 
 try {

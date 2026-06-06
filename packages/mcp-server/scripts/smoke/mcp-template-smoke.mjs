@@ -10,7 +10,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const root = resolve(__dirname, '..')
+const root = resolve(__dirname, '../..')
 
 const dataDir = mkdtempSync(join(tmpdir(), 'tpl-smoke-'))
 process.env.WHITEBOARD_DATA_DIR = dataDir

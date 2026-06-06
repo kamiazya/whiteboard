@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PACKAGE_ROOT = resolve(__dirname, '..')
+const PACKAGE_ROOT = resolve(__dirname, '../..')
 const REPO_ROOT = resolve(PACKAGE_ROOT, '../..')
 const OUT_DIR = join(PACKAGE_ROOT, 'tmp', 'publish-dry-run')
 const DOCKERFILE = 'Dockerfile.server'

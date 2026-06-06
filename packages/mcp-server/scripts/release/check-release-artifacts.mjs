@@ -32,7 +32,7 @@ import { dirname, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PACKAGE_ROOT = resolve(__dirname, '..')
+const PACKAGE_ROOT = resolve(__dirname, '../..')
 const PACKAGE_JSON_PATH = resolve(PACKAGE_ROOT, 'package.json')
 const SHEBANG = '#!/usr/bin/env node'
 

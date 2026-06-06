@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Generates a CycloneDX SBOM for @kamiazya/whiteboard-mcp (production deps only).
-// Called from workspace root: node packages/mcp-server/scripts/generate-npm-sbom.mjs
+// Called from workspace root: node packages/mcp-server/scripts/release/generate-npm-sbom.mjs
 //
 // Tool choice: @cyclonedx/cyclonedx-npm (workspace devDependency, lockfile-pinned)
 //   - Pure Node.js; no binary installation required in CI.
@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PACKAGE_ROOT = resolve(__dirname, '..')
+const PACKAGE_ROOT = resolve(__dirname, '../..')
 const WORKSPACE_ROOT = resolve(PACKAGE_ROOT, '..', '..')
 const OUT_DIR = join(PACKAGE_ROOT, '_artifacts')
 const SBOM_FILE = join(OUT_DIR, 'npm-sbom.cdx.json')

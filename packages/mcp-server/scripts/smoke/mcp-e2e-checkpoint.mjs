@@ -19,13 +19,13 @@
 // are correct because the no_client error is returned immediately.
 //
 // This does not consume API quota, so it is safe in CI. For real LLM-driven
-// execution, use scripts/mcp-claude-cli-smoke.mjs.
+// execution, use scripts/smoke/mcp-claude-cli-smoke.mjs.
 
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const root = resolve(__dirname, '..')
+const root = resolve(__dirname, '../..')
 const entryArg = process.argv.find((arg) => arg.startsWith('--entry='))
 const entry = resolve(root, entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts')
 

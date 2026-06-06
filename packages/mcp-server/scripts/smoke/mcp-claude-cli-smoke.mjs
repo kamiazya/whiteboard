@@ -12,9 +12,9 @@
 //
 // Notes:
 // This consumes API quota, so it does not run in CI. Manual use:
-//   node scripts/mcp-claude-cli-smoke.mjs
+//   node scripts/smoke/mcp-claude-cli-smoke.mjs
 // For a lightweight version that does not consume quota and talks directly to
-// JSON-RPC stdio, use scripts/mcp-e2e-smoke.mjs.
+// JSON-RPC stdio, use scripts/smoke/mcp-e2e-smoke.mjs.
 
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -23,7 +23,7 @@ import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const root = resolve(__dirname, '..')
+const root = resolve(__dirname, '../..')
 const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-claude-smoke-'))
 const mcpConfigPath = join(tmpDataDir, 'mcp.json')
 

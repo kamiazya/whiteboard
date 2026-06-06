@@ -27,7 +27,7 @@ const READY_POLL_INTERVAL_MS = 200
 // refuse to claim success.
 const DEV_BEARER_TOKEN = 'whiteboard-dev'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..')
+const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..', '..')
 const LOG_DIR = join(REPO_ROOT, 'tmp', 'logs')
 const LOG_PATH = join(LOG_DIR, 'mcp-http-dev.log')
 const QUIET = process.argv.includes('--quiet')

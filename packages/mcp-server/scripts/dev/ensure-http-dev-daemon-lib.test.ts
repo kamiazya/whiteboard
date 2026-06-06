@@ -5,8 +5,8 @@ import { waitForAuthenticatedMcp } from './ensure-http-dev-daemon-lib.mjs'
 
 describe('HTTP dev daemon startup', () => {
   it('uses the current Codex hooks feature flag', async () => {
-    // .codex/config.toml lives at the repo root (../../../ from packages/mcp-server/scripts).
-    const config = await readFile(resolve(import.meta.dirname, '../../../.codex/config.toml'), 'utf8')
+    // .codex/config.toml lives at the repo root (../../../../ from packages/mcp-server/scripts/dev).
+    const config = await readFile(resolve(import.meta.dirname, '../../../../.codex/config.toml'), 'utf8')
 
     expect(config).toMatch(/^\s*hooks\s*=\s*true\s*$/m)
     expect(config).not.toMatch(/^\s*codex_hooks\s*=/m)

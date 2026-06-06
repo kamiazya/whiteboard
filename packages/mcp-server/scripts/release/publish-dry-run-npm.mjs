@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PACKAGE_ROOT = resolve(__dirname, '..')
+const PACKAGE_ROOT = resolve(__dirname, '../..')
 const OUT_DIR = join(PACKAGE_ROOT, 'tmp', 'publish-dry-run')
 
 function fail(step) {
@@ -66,7 +66,7 @@ const checksumHex = createHash('sha512').update(tarballBytes).digest('hex')
 writeFileSync(join(OUT_DIR, 'npm-tarball.sha512'), `${checksumHex}  ${tarballName}\n`)
 
 // Step 3: SBOM reference — real generation runs in publish-production.yml via
-// `pnpm generate:sbom:npm` (packages/mcp-server/scripts/generate-npm-sbom.mjs).
+// `pnpm generate:sbom:npm` (packages/mcp-server/scripts/release/generate-npm-sbom.mjs).
 // Dry-run intentionally skips SBOM generation: it does not build the artifact,
 // so there is nothing to attach a SBOM to. The placeholder records the policy.
 const sbomPlaceholder = {

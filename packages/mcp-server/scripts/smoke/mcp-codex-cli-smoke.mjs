@@ -14,7 +14,7 @@
 //
 // Notes:
 // - This consumes OpenAI API quota, so it does not run in CI. Manual use:
-//     node scripts/mcp-codex-cli-smoke.mjs
+//     node scripts/smoke/mcp-codex-cli-smoke.mjs
 // - When run inside the Codex sandbox it may fail because it cannot write to
 //   ~/.codex/sessions. If that happens, run it outside the sandbox.
 // - Set KEEP_SMOKE_TMP=1 to keep the temp directory instead of deleting it.
@@ -26,7 +26,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const root = resolve(__dirname, '..')
+const root = resolve(__dirname, '../..')
 const repoRoot = resolve(root, '../..')
 const keepTmp = process.env.KEEP_SMOKE_TMP === '1'
 const tmpRoot = mkdtempSync(join(tmpdir(), 'whiteboard-codex-smoke-'))
@@ -64,7 +64,7 @@ const configOverride = [
   'enabled=true,',
   'transport="stdio",',
   'command="node",',
-  `args=["${join(root, 'scripts/mcp-dev-launch.mjs')}"],`,
+  `args=["${join(root, 'scripts/dev/mcp-dev-launch.mjs')}"],`,
   `env={WHITEBOARD_DATA_DIR="${tmpDataDir}",WHITEBOARD_DEV="1"}`,
   '}',
 ].join('')
