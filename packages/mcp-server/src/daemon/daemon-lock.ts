@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { DATA_DIR } from '../server/config.js'
+import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { isPidAlive } from './daemon-registry.js'
 
 const DAEMON_LOCK_DIRNAME = 'daemon.lock'

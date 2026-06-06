@@ -1,7 +1,7 @@
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { platform } from 'node:os'
 import { join } from 'node:path'
-import { DATA_DIR } from '../server/config.js'
+import { DATA_DIR } from '../shared/data-dir-secure.js'
 
 export interface DaemonRecord {
   pid: number
