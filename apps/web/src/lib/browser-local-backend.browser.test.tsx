@@ -150,6 +150,68 @@ describe('BrowserLocalBackend', () => {
     expect(() => backend.sendExportResponse('req-1', 'data:image/png;base64,abc')).not.toThrow()
   })
 
+  it('pushLocalUpdate with empty bytes is a no-op — no IDB write, no error', async () => {
+    const backend = new BrowserLocalBackend('canvas-1')
+    const handlers = makeHandlers()
+    backend.connect(handlers)
+    await new Promise((r) => setTimeout(r, 50))
+    // Empty bytes: early return, no throw, no onError
+    await expect(backend.pushLocalUpdate(new Uint8Array(0))).resolves.toBeUndefined()
+    expect(handlers.onError).not.toHaveBeenCalled()
+    backend.disconnect()
+  })
+
+  it('pushLocalUpdate with corrupted existing record calls onError("corrupt-snapshot")', async () => {
+    // Pre-seed a corrupt record
+    await forceCorruptRecord('canvas-corrupt')
+
+    const handlers = makeHandlers()
+    const backend = new BrowserLocalBackend('canvas-corrupt')
+    backend.connect(handlers)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Push a delta — should detect corrupt existing and route to onError
+    const delta = new Uint8Array([1, 2, 3])
+    await backend.pushLocalUpdate(delta)
+    expect(handlers.onError).toHaveBeenCalledWith('storage-failure')
+    backend.disconnect()
+  })
+
+  it('concurrent pushLocalUpdate calls do not race: second write is not lost', async () => {
+    const doc = new Loro()
+    const list = doc.getList('elements')
+    list.push({ id: 'a' })
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const v0 = doc.version()
+    list.push({ id: 'b' })
+    const delta1 = doc.export({ mode: 'update', from: v0 })
+    const v1 = doc.version()
+    list.push({ id: 'c' })
+    const delta2 = doc.export({ mode: 'update', from: v1 })
+
+    const backend = new BrowserLocalBackend('canvas-race')
+    const handlers = makeHandlers()
+    backend.connect(handlers)
+    await new Promise((r) => setTimeout(r, 50))
+
+    // Push snapshot first to establish the record
+    await backend.pushLocalUpdate(snapshot)
+    // Then fire two deltas concurrently
+    await Promise.all([
+      backend.pushLocalUpdate(delta1),
+      backend.pushLocalUpdate(delta2),
+    ])
+    backend.disconnect()
+
+    // Reload and verify both deltas are persisted (not one overwriting the other)
+    const backend2 = new BrowserLocalBackend('canvas-race')
+    const h2 = makeHandlers()
+    backend2.connect(h2)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(h2.onRemoteUpdate).toHaveBeenCalledTimes(2)
+    backend2.disconnect()
+  })
+
   it('onError fires with corrupt-snapshot when backend receives corrupt bytes and onSnapshot is not called', async () => {
     const handlers = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-1')

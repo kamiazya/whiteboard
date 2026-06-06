@@ -56,6 +56,10 @@ export class BrowserLocalBackend implements CanvasBackend {
       if (existing.kind === 'not-found') {
         // First write: save as snapshot.
         await this.store.save(this.canvasId, bytes)
+      } else if (existing.kind === 'corrupted') {
+        // Existing record is corrupt; appending would silently discard the delta.
+        // Surface the failure so the UI persistence indicator shows the error state.
+        this.handlers?.onError?.('storage-failure')
       } else {
         // Subsequent writes: append as delta.
         await this.store.appendDelta(this.canvasId, bytes)

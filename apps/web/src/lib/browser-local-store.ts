@@ -70,7 +70,10 @@ export class MemoryStore implements BrowserLocalStore {
 }
 
 const DB_NAME = 'whiteboard'
-const DB_VERSION = 1
+// Both stores (legacy JSON canvases and Loro CRDT loroCanvases) share the same
+// IndexedDB database. Opening at v1 after a v2 upgrade causes a VersionError, so
+// this opener must stay in sync with loro-store.ts which opens at DB_VERSION 2.
+const DB_VERSION = 2
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -79,6 +82,7 @@ function openDb(): Promise<IDBDatabase> {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
       if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
