@@ -2,16 +2,14 @@ import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { exportToBlob, CaptureUpdateAction, restoreElements } from '@excalidraw/excalidraw'
 import { commitAfterUpload } from '../lib/commit-pipeline.js'
-import { apiFetch } from '../lib/api-client.js'
 import { resolveParentedElements } from '../../shared/resolve-parented-elements.js'
 import {
   applyRestoreComplete,
-  buildWhiteboardWsProtocols,
-  buildWhiteboardWsUrl,
   flushPendingExportRequests,
   handleIncomingExportRequest,
 } from './useWhiteboardSync.helpers.js'
-import { parseServerTextMessage } from './useWhiteboardSync.text-message.js'
+import { DaemonBackend } from '../lib/daemon-backend.js'
+import type { CanvasBackend } from '../lib/canvas-backend.js'
 import type {
   ExportRequestMessage,
   VersionCreatedPayload,
@@ -66,6 +64,8 @@ export interface UseWhiteboardSyncOptions {
   onFileUploadFailed?: () => void
   // Called after a successful file upload, allowing callers to clear a previous error.
   onFileUploadSucceeded?: () => void
+  // Injected backend for testing or alternative transport. Defaults to DaemonBackend.
+  backend?: CanvasBackend
 }
 
 export function applyHydratedSceneToApi(args: {
@@ -89,7 +89,6 @@ export function useWhiteboardSync(
   options: UseWhiteboardSyncOptions = {},
 ) {
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
   const docRef = useRef<LoroDoc | null>(null)
   const undoManagerRef = useRef<UndoManager | null>(null)
   const [apiReady, setApiReady] = useState(false)
@@ -118,25 +117,9 @@ export function useWhiteboardSync(
   // Never reset back to 0; monotonic increments prevent collisions with in-flight work from older canvases.
   const applyGenerationRef = useRef(0)
 
-  function notifyClientReady(): void {
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN || !excalidrawAPIRef.current) return
-    ws.send(JSON.stringify({ type: 'client_ready' }))
-  }
-
-  // Excalidraw API callback.
-  const onApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
-    excalidrawAPIRef.current = api
-    setApiReady(true)
-    notifyClientReady()
-    void flushPendingExportRequests({
-      api,
-      pending: pendingExportRequestsRef.current,
-      send: (message) => wsRef.current?.send(message),
-      exportToBlobFn: exportToBlob,
-      blobToBase64Fn: blobToBase64,
-    })
-  }, [])
+  // Stable backend ref — avoids reconnecting on every render if the caller
+  // passes a new backend object identity each time (e.g. an inline `new DaemonBackend()`).
+  const backendRef = useRef<CanvasBackend | null>(null)
 
   // Apply the current Loro-derived scene into Excalidraw, including image file hydration.
   async function applyLoroToExcalidraw(doc: LoroDoc) {
@@ -166,12 +149,12 @@ export function useWhiteboardSync(
       )
       .map((el) => el.fileId!)
 
-    // Fetch missing files in parallel. Individual failures are ignored.
+    // Fetch missing files in parallel via the backend. Individual failures are ignored.
+    const backend = backendRef.current
     await Promise.allSettled(
       missingIds.map(async (fileId) => {
-        const res = await apiFetch(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`)
-        if (!res.ok) return
-        const blob = await res.blob()
+        const blob = backend ? await backend.getFile(fileId) : null
+        if (!blob) return
         const dataURL = await blobToBase64(blob)
         filesCacheRef.current[fileId] = {
           id: fileId as FileId,
@@ -205,210 +188,202 @@ export function useWhiteboardSync(
     applyGenerationRef.current += 1 // never reset this back to 0
   }, [workspaceId, slug])
 
-  // WebSocket connection plus Loro initialization.
+  // Backend connect/disconnect lifecycle.
   // Reconnect with exponential backoff (500ms -> 8s) when ws.onclose fires.
   // This covers suspend, temporary network drops, and daemon restarts so the browser does not stay open
   // with a dead websocket and immediate no_client export failures.
   useEffect(() => {
-    let cancelled = false
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let attempt = 0
-    const daemonToken = window.__WHITEBOARD_RUNTIME_CONFIG__?.daemonToken ?? null
+    const backend: CanvasBackend =
+      options.backend ??
+      new DaemonBackend(workspaceId, slug, window.location.href)
+    backendRef.current = backend
 
-    const connect = () => {
-      if (cancelled) return
-      const ws = new WebSocket(
-        buildWhiteboardWsUrl(window.location.href, workspaceId, slug),
-        buildWhiteboardWsProtocols(daemonToken),
-      )
-      // Required: without this, binary frames arrive as Blob and the ArrayBuffer check fails.
-      ws.binaryType = 'arraybuffer'
-      wsRef.current = ws
-      ws.onopen = () => {
-        attempt = 0
-        notifyClientReady()
-      }
-      ws.onclose = () => {
-        if (cancelled) return
-        // 500ms, 1s, 2s, 4s, 8s, 8s, ... capped at 8s.
-        const delay = Math.min(8000, 500 * 2 ** attempt)
-        attempt += 1
-        reconnectTimer = setTimeout(connect, delay)
-      }
-      ws.onerror = () => {
-          // Browsers usually also fire close here, but force it just in case so reconnect logic runs.
-        try {
-          ws.close()
-        } catch {
-          /* ignore */
-        }
-      }
+    function notifyClientReady(): void {
+      if (!excalidrawAPIRef.current) return
+      backend.sendClientReady()
+    }
 
-      ws.onmessage = async (event) => {
-      if (event.data instanceof ArrayBuffer) {
-        const bytes = new Uint8Array(event.data)
+    backend.connect({
+      onSnapshot(bytes) {
+        const doc = LoroDoc.fromSnapshot(bytes)
+        docRef.current = doc
+        undoManagerRef.current = new UndoManager(doc, { mergeInterval: 500 })
 
-        if (!docRef.current) {
-          // First binary message: initialize LoroDoc from the snapshot.
-          const doc = LoroDoc.fromSnapshot(bytes)
-          docRef.current = doc
-          undoManagerRef.current = new UndoManager(doc, { mergeInterval: 500 })
+        // Send local Loro updates back through the backend.
+        doc.subscribeLocalUpdates((update) => {
+          backend.pushLocalUpdate(update)
+        })
 
-          // Send local Loro updates back through the websocket.
-          doc.subscribeLocalUpdates((update) => {
-            wsRef.current?.send(update.slice())
-          })
-
-          // Update Excalidraw when remote imports land.
-          doc.subscribe((e) => {
-            if (e.by === 'import') {
-              applyLoroToExcalidraw(doc)
-            }
-            // Emit doc_changed for both local and remote edits so useDirtyState can track dirty state.
-            // Skip the initial snapshot checkout because that state is still pristine.
-            if (e.by === 'local' || e.by === 'import') {
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(
-                  new CustomEvent('excalidraw:doc_changed', {
-                    detail: { workspaceId, slug },
-                  }),
-                )
-              }
-            }
-          })
-
-          // Always try to apply the first snapshot immediately.
-          // Gating this behind apiReady caused a stale-closure bug where the canvas stayed visually empty.
-          // If the API is not ready yet, updateScene is simply a no-op and the later apiReady effect reapplies.
-          applyLoroToExcalidraw(doc)
-        } else {
-          // Incremental update.
-          docRef.current.import(bytes)
-          // applyLoroToExcalidraw runs from the doc.subscribe "import" handler above.
-        }
-      } else if (typeof event.data === 'string') {
-        const msg = parseServerTextMessage(event.data)
-        if (!msg) return
-        if (msg.type === 'version_created' && msg.version) {
-          // When the server creates an auto-version, let the caller generate and upload the thumbnail.
-          // This hook stays focused on websocket coordination.
-          onVersionCreatedRef.current?.(msg.version)
-          // Any new version, auto or manual, marks the document clean for useDirtyState.
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('excalidraw:version_saved', {
-                detail: { workspaceId, slug },
-              }),
-            )
+        // Update Excalidraw when remote imports land.
+        doc.subscribe((e) => {
+          if (e.by === 'import') {
+            applyLoroToExcalidraw(doc)
           }
-          return
-        }
-        if (msg.type === 'restore_started') {
-          setRestoreInProgress(true)
-          setRestoreLabel(msg.label ?? null)
-          return
-        }
-        if (msg.type === 'restore_complete') {
-          applyRestoreComplete({
-            setRestoreInProgress,
-            setRestoreLabel,
-            clearLocalUndo: () => undoManagerRef.current?.clear(),
-          })
-          return
-        }
-        if (msg.type === 'head_changed') {
-          // HEAD switch signal:
-          // - emit the CustomEvent that useBranches listens to
-          // - keep useBranches as the source of truth for current HEAD UI
-          // - scene content already follows through the regular Loro broadcast path
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(
-              new CustomEvent('excalidraw:head_changed', {
-                detail: { workspaceId, slug, head: msg.head },
-              }),
-            )
+          // Emit doc_changed for both local and remote edits so useDirtyState can track dirty state.
+          // Skip the initial snapshot checkout because that state is still pristine.
+          if (e.by === 'local' || e.by === 'import') {
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent('excalidraw:doc_changed', {
+                  detail: { workspaceId, slug },
+                }),
+              )
+            }
           }
-          return
+        })
+
+        // Always try to apply the first snapshot immediately.
+        // Gating this behind apiReady caused a stale-closure bug where the canvas stayed visually empty.
+        // If the API is not ready yet, updateScene is simply a no-op and the later apiReady effect reapplies.
+        applyLoroToExcalidraw(doc)
+      },
+
+      onRemoteUpdate(bytes) {
+        // Incremental update; applyLoroToExcalidraw runs from the doc.subscribe "import" handler above.
+        docRef.current?.import(bytes)
+      },
+
+      onVersionCreated(payload) {
+        onVersionCreatedRef.current?.(payload)
+        // Any new version, auto or manual, marks the document clean for useDirtyState.
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('excalidraw:version_saved', {
+              detail: { workspaceId, slug },
+            }),
+          )
         }
-        if (msg.type === 'viewport_request') {
-          const api = excalidrawAPIRef.current
-          // Reply with an ACK even when the API is not ready so callers treat this as a soft miss, not a timeout.
-          if (api) {
-            const mode = msg.mode ?? 'fit'
-            if (mode === 'fit') {
-              const all = api.getSceneElements()
-              // If elementIds are provided, fit only those. Otherwise use the full scene.
-              const target =
-                msg.elementIds !== undefined
-                  ? all.filter((el) => msg.elementIds!.includes(el.id))
-                  : all
-              // fitToContent also adjusts zoom.
-              // Skip empty targets because some implementations mis-handle zoom for empty arrays.
-              if (target.length > 0) {
-                api.scrollToContent(target, {
-                  fitToContent: true,
-                  animate: msg.animate ?? true,
-                })
-              }
-            } else if (mode === 'move') {
-              const appState = api.getAppState()
-              // AppState.zoom.value is a branded NormalizedZoomValue and AppState itself is readonly,
-              // so rebuild a mutable object before writing plain numeric values into it.
-              type MutableAppState = {
-                -readonly [K in keyof typeof appState]: (typeof appState)[K]
-              }
-              const merged: MutableAppState = { ...appState }
-              if (msg.scrollX !== undefined) merged.scrollX = msg.scrollX
-              if (msg.scrollY !== undefined) merged.scrollY = msg.scrollY
-              if (msg.zoom !== undefined) {
-                merged.zoom = {
-                  value: msg.zoom as unknown as typeof appState.zoom.value,
-                }
-              }
-              api.updateScene({
-                appState: merged,
-                captureUpdate: CaptureUpdateAction.NEVER,
+      },
+
+      onRestoreStarted(payload) {
+        setRestoreInProgress(true)
+        setRestoreLabel(payload.label ?? null)
+      },
+
+      onRestoreComplete() {
+        applyRestoreComplete({
+          setRestoreInProgress,
+          setRestoreLabel,
+          clearLocalUndo: () => undoManagerRef.current?.clear(),
+        })
+      },
+
+      onHeadChanged(payload) {
+        // HEAD switch signal:
+        // - emit the CustomEvent that useBranches listens to
+        // - keep useBranches as the source of truth for current HEAD UI
+        // - scene content already follows through the regular Loro broadcast path
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(
+            new CustomEvent('excalidraw:head_changed', {
+              detail: { workspaceId, slug, head: payload.head },
+            }),
+          )
+        }
+      },
+
+      onViewportRequest(payload) {
+        const api = excalidrawAPIRef.current
+        // Reply with an ACK even when the API is not ready so callers treat this as a soft miss, not a timeout.
+        // Note: the actual viewport_response send is handled by DaemonBackend on the message-closure socket.
+        if (api) {
+          const mode = payload.mode ?? 'fit'
+          if (mode === 'fit') {
+            const all = api.getSceneElements()
+            // If elementIds are provided, fit only those. Otherwise use the full scene.
+            const target =
+              payload.elementIds !== undefined
+                ? all.filter((el) => payload.elementIds!.includes(el.id))
+                : all
+            // fitToContent also adjusts zoom.
+            // Skip empty targets because some implementations mis-handle zoom for empty arrays.
+            if (target.length > 0) {
+              api.scrollToContent(target, {
+                fitToContent: true,
+                animate: payload.animate ?? true,
               })
             }
+          } else if (mode === 'move') {
+            const appState = api.getAppState()
+            // AppState.zoom.value is a branded NormalizedZoomValue and AppState itself is readonly,
+            // so rebuild a mutable object before writing plain numeric values into it.
+            type MutableAppState = {
+              -readonly [K in keyof typeof appState]: (typeof appState)[K]
+            }
+            const merged: MutableAppState = { ...appState }
+            if (payload.scrollX !== undefined) merged.scrollX = payload.scrollX
+            if (payload.scrollY !== undefined) merged.scrollY = payload.scrollY
+            if (payload.zoom !== undefined) {
+              merged.zoom = {
+                value: payload.zoom as unknown as typeof appState.zoom.value,
+              }
+            }
+            api.updateScene({
+              appState: merged,
+              captureUpdate: CaptureUpdateAction.NEVER,
+            })
           }
-          ws.send(
-            JSON.stringify({ type: 'viewport_response', requestId: msg.requestId }),
-          )
-          return
         }
-        if (msg.type === 'export_request') {
-          await handleIncomingExportRequest(
-            msg as ExportRequestMessage,
-            {
-              api: excalidrawAPIRef.current,
-              pending: pendingExportRequestsRef.current,
-              send: (message) => ws.send(message),
-              exportToBlobFn: exportToBlob,
-              blobToBase64Fn: blobToBase64,
-            },
-          )
-        }
-      }
-    }
-    }
+      },
 
-    connect()
+      async onExportRequest(payload) {
+        await handleIncomingExportRequest(
+          // Cast to ExportRequestMessage: backend strips the 'type' discriminant field,
+          // but handleIncomingExportRequest only uses the non-type fields at runtime.
+          // The payload shape is identical; the 'type' field is not accessed inside the helper.
+          { ...payload, type: 'export_request' } as ExportRequestMessage,
+          {
+            api: excalidrawAPIRef.current,
+            pending: pendingExportRequestsRef.current,
+            send: (message) => backend.sendExportResponse(
+              JSON.parse(message).requestId,
+              JSON.parse(message).data,
+            ),
+            exportToBlobFn: exportToBlob,
+            blobToBase64Fn: blobToBase64,
+          },
+        )
+      },
+    })
+
+    notifyClientReady()
 
     return () => {
-      cancelled = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      wsRef.current?.close()
+      backend.disconnect()
+      backendRef.current = null
     }
   }, [workspaceId, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Excalidraw API callback.
+  const onApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
+    excalidrawAPIRef.current = api
+    setApiReady(true)
+    const backend = backendRef.current
+    if (backend) backend.sendClientReady()
+    void flushPendingExportRequests({
+      api,
+      pending: pendingExportRequestsRef.current,
+      send: (message) => {
+        const parsed = JSON.parse(message) as { requestId: string; data: string }
+        backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
+      },
+      exportToBlobFn: exportToBlob,
+      blobToBase64Fn: blobToBase64,
+    })
+  }, [])
 
   // Reapply the current document once the Excalidraw API becomes ready.
   useEffect(() => {
     if (!apiReady || !docRef.current) return
-    notifyClientReady()
+    const backend = backendRef.current
+    if (backend) backend.sendClientReady()
     void flushPendingExportRequests({
       api: excalidrawAPIRef.current,
       pending: pendingExportRequestsRef.current,
-      send: (message) => wsRef.current?.send(message),
+      send: (message) => {
+        const parsed = JSON.parse(message) as { requestId: string; data: string }
+        backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
+      },
       exportToBlobFn: exportToBlob,
       blobToBase64Fn: blobToBase64,
     })
