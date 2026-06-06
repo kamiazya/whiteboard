@@ -118,6 +118,10 @@ This repo ships its local AI-orchestrated dev flow under `.claude/` (Claude Code
 - **Never `cd` away from the repo root while a workflow is running.** Workflows compose child workflows with a repo-root-relative `scriptPath` (e.g. `.claude/workflows/review.workflow.mjs`) resolved against the session cwd; a mid-run `cd` breaks composition. Pass absolute paths to shell commands / use `git -C <dir>` instead.
 - **Reload the session before relying on a newly-authored custom agent.** A new `.claude/agents/foo.md` is not registered as an `agentType` until the session reloads; a workflow calling `agent({agentType:'foo'})` before then fails.
 
+## Architecture decisions
+
+Significant technical decisions are recorded as Architecture Decision Records (ADRs) under [`docs/contributing/adr/`](docs/contributing/adr/). Read them before proposing a change that touches architecture, cross-cutting contracts, or transport choices — they explain the why behind non-obvious constraints.
+
 ## Security
 
 Do **not** open public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md).
