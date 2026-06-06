@@ -1,10 +1,4 @@
-import {
-  context,
-  type Context,
-  propagation,
-  trace,
-  type Tracer,
-} from '@opentelemetry/api'
+import { context, type Context, propagation, trace, type Tracer } from '@opentelemetry/api'
 import { W3CTraceContextPropagator } from '@opentelemetry/core'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getLogger } from '../log.js'
@@ -50,7 +44,7 @@ export const MCP_ATTR = {
 // so we do not depend on @opentelemetry/sdk-trace-base directly. Each span
 // is a JSON line; a downstream collector or `jq` can stitch them into
 // timelines without an OTLP backend.
-class StderrSpanExporter {
+export class StderrSpanExporter {
   // The shape `tracing` exposes here matches @opentelemetry/sdk-trace-base.
   // We accept it as opaque to keep the dynamic import boundary clean.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -106,6 +100,8 @@ interface InitTracingOptions {
 
 interface TracingHandle {
   shutdown(): Promise<void>
+  /** Removes the process signal listeners registered during init. */
+  removeSignalListeners(): void
 }
 
 let activeHandle: TracingHandle | null = null
@@ -164,29 +160,36 @@ export async function initTracing(options: InitTracingOptions = {}): Promise<Tra
     })
     sdk.start()
 
-    const handle: TracingHandle = {
-      async shutdown(): Promise<void> {
-        await sdk.shutdown()
-      },
-    }
-    activeHandle = handle
-
     // Flush spans on shutdown signals so dev runs see complete traces.
+    // Keep references to each listener so shutdownTracing() can remove them
+    // and prevent accumulation across repeated init/shutdown cycles.
     const flushOnExit = async () => {
       try {
-        await handle.shutdown()
+        await sdk.shutdown()
       } catch (err) {
         getLogger('tracing').warning({ err }, 'shutdown failed')
       }
     }
-    process.once('SIGTERM', () => void flushOnExit())
-    process.once('SIGINT', () => void flushOnExit())
-    process.once('beforeExit', () => void flushOnExit())
+    const onSIGTERM = () => void flushOnExit()
+    const onSIGINT = () => void flushOnExit()
+    const onBeforeExit = () => void flushOnExit()
+    process.once('SIGTERM', onSIGTERM)
+    process.once('SIGINT', onSIGINT)
+    process.once('beforeExit', onBeforeExit)
 
-    getLogger('tracing').info(
-      { role, otlp: !!traceExporter },
-      'tracing initialised',
-    )
+    const handle: TracingHandle = {
+      async shutdown(): Promise<void> {
+        await sdk.shutdown()
+      },
+      removeSignalListeners(): void {
+        process.off('SIGTERM', onSIGTERM)
+        process.off('SIGINT', onSIGINT)
+        process.off('beforeExit', onBeforeExit)
+      },
+    }
+    activeHandle = handle
+
+    getLogger('tracing').info({ role, otlp: !!traceExporter }, 'tracing initialised')
     return handle
   } catch (err) {
     getLogger('tracing').warning({ err }, 'initTracing failed; tracing disabled')
@@ -198,6 +201,7 @@ export async function shutdownTracing(): Promise<void> {
   const h = activeHandle
   if (!h) return
   activeHandle = null
+  h.removeSignalListeners()
   await h.shutdown()
 }
 
