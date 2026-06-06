@@ -335,10 +335,7 @@ export function useWhiteboardSync(
           {
             api: excalidrawAPIRef.current,
             pending: pendingExportRequestsRef.current,
-            send: (message) => backend.sendExportResponse(
-              JSON.parse(message).requestId,
-              JSON.parse(message).data,
-            ),
+            send: sendExportResponseMessage,
             exportToBlobFn: exportToBlob,
             blobToBase64Fn: blobToBase64,
           },
@@ -355,35 +352,35 @@ export function useWhiteboardSync(
   }, [workspaceId, slug]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Excalidraw API callback.
+  // Bridge flushPendingExportRequests' string-message `send` contract to the
+  // backend's typed sendExportResponse. The helper hands us a JSON string; we
+  // parse it once and forward the fields.
+  const sendExportResponseMessage = useCallback((message: string): void => {
+    const parsed = JSON.parse(message) as { requestId: string; data: string }
+    backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
+  }, [])
+
   const onApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
     excalidrawAPIRef.current = api
     setApiReady(true)
-    const backend = backendRef.current
-    if (backend) backend.sendClientReady()
+    backendRef.current?.sendClientReady()
     void flushPendingExportRequests({
       api,
       pending: pendingExportRequestsRef.current,
-      send: (message) => {
-        const parsed = JSON.parse(message) as { requestId: string; data: string }
-        backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
-      },
+      send: sendExportResponseMessage,
       exportToBlobFn: exportToBlob,
       blobToBase64Fn: blobToBase64,
     })
-  }, [])
+  }, [sendExportResponseMessage])
 
   // Reapply the current document once the Excalidraw API becomes ready.
   useEffect(() => {
     if (!apiReady || !docRef.current) return
-    const backend = backendRef.current
-    if (backend) backend.sendClientReady()
+    backendRef.current?.sendClientReady()
     void flushPendingExportRequests({
       api: excalidrawAPIRef.current,
       pending: pendingExportRequestsRef.current,
-      send: (message) => {
-        const parsed = JSON.parse(message) as { requestId: string; data: string }
-        backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
-      },
+      send: sendExportResponseMessage,
       exportToBlobFn: exportToBlob,
       blobToBase64Fn: blobToBase64,
     })
