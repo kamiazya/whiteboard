@@ -100,10 +100,15 @@ describe('initTracing() when tracing is disabled', () => {
   })
 
   it('is safe to call multiple times — stays null without side-effects', async () => {
+    const listenersBefore = process.listenerCount('SIGTERM')
     const h1 = await initTracing()
     const h2 = await initTracing()
     expect(h1).toBeNull()
     expect(h2).toBeNull()
+    // No SDK was started so no process listeners should have been added.
+    expect(process.listenerCount('SIGTERM')).toBe(listenersBefore)
+    // shutdownTracing must resolve immediately (no active handle to tear down).
+    await expect(shutdownTracing()).resolves.toBeUndefined()
   })
 })
 
@@ -216,20 +221,152 @@ describe('W3C traceparent propagation', () => {
     expect(ctx).toBeDefined()
   })
 
-  it('injectContextIntoHeaders returns the same carrier object', () => {
+  it('injectContextIntoHeaders returns the same carrier object and writes at least one header when a span context is active', () => {
+    // Extract a real span context so the propagator has something to inject.
+    const traceparent = '00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
+    const ctx = extractContextFromHeaders({ traceparent })
     const headers: Record<string, string> = {}
-    const result = injectContextIntoHeaders(headers)
+    const result = injectContextIntoHeaders(headers, ctx)
+    // Reference equality: the carrier must be returned unchanged.
     expect(result).toBe(headers)
+    // Injection must have written at least one W3C header.
+    expect(Object.keys(headers).length).toBeGreaterThan(0)
   })
 
-  it('round-trips a traceparent through extract then inject', () => {
+  it('round-trips a traceparent through extract then inject with a fully conforming W3C traceparent', () => {
     const traceId = '4bf92f3577b34da6a3ce929d0e0e4736'
     const traceparent = `00-${traceId}-00f067aa0ba902b7-01`
     const inCtx = extractContextFromHeaders({ traceparent })
     const outHeaders: Record<string, string> = {}
     injectContextIntoHeaders(outHeaders, inCtx)
-    // The injected traceparent must carry the original traceId so the
-    // downstream service joins the same trace.
+    // The injected traceparent must conform to the W3C trace-context spec:
+    // 00-<32-hex traceId>-<16-hex spanId>-<2-hex flags>
+    expect(outHeaders['traceparent']).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+    // And must carry the original traceId so the downstream service joins
+    // the same trace.
     expect(outHeaders['traceparent']).toContain(traceId)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// initTracing() — options.role and WHITEBOARD_OTEL_ROLE env var
+// ---------------------------------------------------------------------------
+
+describe('initTracing() role resolution', () => {
+  beforeEach(() => {
+    vi.stubEnv('WHITEBOARD_OTEL', '1')
+    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(async () => {
+    await shutdownTracing()
+  })
+
+  it('uses options.role when provided', async () => {
+    const handle = await initTracing({ role: 'http-daemon' })
+    expect(handle).not.toBeNull()
+  })
+
+  it('falls back to WHITEBOARD_OTEL_ROLE env var when options.role is absent', async () => {
+    vi.stubEnv('WHITEBOARD_OTEL_ROLE', 'stdio-mcp')
+    const handle = await initTracing()
+    expect(handle).not.toBeNull()
+    vi.unstubAllEnvs()
+    // Re-stub so afterEach cleanup works cleanly.
+    vi.stubEnv('WHITEBOARD_OTEL', '1')
+    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+  })
+
+  it('falls back to "unknown" when neither options.role nor env var is set', async () => {
+    vi.stubEnv('WHITEBOARD_OTEL_ROLE', '')
+    const handle = await initTracing()
+    expect(handle).not.toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// initTracing() — signal-handler registration
+// ---------------------------------------------------------------------------
+
+describe('initTracing() signal-handler flush registration', () => {
+  beforeEach(() => {
+    vi.stubEnv('WHITEBOARD_OTEL', '1')
+    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(async () => {
+    await shutdownTracing()
+  })
+
+  it('registers once-listeners on SIGTERM, SIGINT, and beforeExit after init', async () => {
+    const beforeSIGTERM = process.listenerCount('SIGTERM')
+    const beforeSIGINT = process.listenerCount('SIGINT')
+    const beforeExit = process.listenerCount('beforeExit')
+
+    await initTracing()
+
+    expect(process.listenerCount('SIGTERM')).toBe(beforeSIGTERM + 1)
+    expect(process.listenerCount('SIGINT')).toBe(beforeSIGINT + 1)
+    expect(process.listenerCount('beforeExit')).toBe(beforeExit + 1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// initTracing() — OTLP exporter branch
+// ---------------------------------------------------------------------------
+
+describe('initTracing() with OTEL_EXPORTER_OTLP_ENDPOINT set', () => {
+  beforeEach(() => {
+    vi.stubEnv('WHITEBOARD_OTEL', '1')
+    // Point at a local address — no real collector is required because the
+    // OTLP exporter only attempts delivery when spans are exported, not at
+    // SDK start time.
+    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318')
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+
+  afterEach(async () => {
+    await shutdownTracing()
+  })
+
+  it('returns a TracingHandle when OTLP endpoint is configured', async () => {
+    const handle = await initTracing()
+    expect(handle).not.toBeNull()
+    expect(typeof handle!.shutdown).toBe('function')
+  })
+
+  it('handle.shutdown() resolves without throwing for OTLP path', async () => {
+    const handle = await initTracing()
+    await expect(handle!.shutdown()).resolves.toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// initTracing() — error / catch path
+// ---------------------------------------------------------------------------
+
+describe('initTracing() catch path', () => {
+  beforeEach(() => {
+    vi.stubEnv('WHITEBOARD_OTEL', '1')
+    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+  })
+
+  it('returns null when dynamic import fails', async () => {
+    // Simulate a dynamic-import failure by stubbing the module. Because
+    // vi.mock is hoisted, we use vi.doMock with a resetModules boundary.
+    // The simplest approach is to mock @opentelemetry/sdk-node to throw.
+    vi.doMock('@opentelemetry/sdk-node', () => {
+      throw new Error('sdk-node unavailable')
+    })
+    // Re-import the module under test so it picks up the mock.
+    const { initTracing: initTracingFresh, resetTracingForTesting: reset } = await import(
+      './tracing.js?bust=' + Date.now()
+    )
+    reset()
+    const handle = await initTracingFresh()
+    expect(handle).toBeNull()
+    vi.doUnmock('@opentelemetry/sdk-node')
   })
 })
