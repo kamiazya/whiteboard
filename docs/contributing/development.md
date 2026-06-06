@@ -92,7 +92,7 @@ Opening this repo in Claude Code or Codex auto-overrides the published `npx` con
 | File | Launch target | Role |
 |---|---|---|
 | `.mcp.json` | `npx -y @kamiazya/whiteboard-mcp@latest` | Published `stdio` config. The Codex plugin (`./.codex-plugin/plugin.json`) references it via `"mcpServers": "./.mcp.json"`, and it is bundled into the release tarball. |
-| `mcpServers.whiteboard` in `.claude/settings.json` | `node ./packages/mcp-server/scripts/mcp-dev-launch.mjs` (`WHITEBOARD_DEV=1`) | Claude Code project-scope dev override. Project scope takes precedence over `.mcp.json`. |
+| `mcpServers.whiteboard` in `.claude/settings.json` | `node ./packages/mcp-server/scripts/dev/mcp-dev-launch.mjs` (`WHITEBOARD_DEV=1`) | Claude Code project-scope dev override. Project scope takes precedence over `.mcp.json`. |
 | `[mcp_servers.whiteboard]` in `.codex/config.toml` | same as above | Codex repo-layer dev override. Codex merges layers `system < user < cwd < tree < repo < runtime`, with later layers winning. |
 
 The Claude plugin (`.claude-plugin/plugin.json`) carries `mcpServers` inline. Keep it in sync with `.mcp.json`. The Codex plugin (`.codex-plugin/plugin.json`) uses `./`-relative paths. Update both manifests and the actual file layout together.

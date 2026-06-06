@@ -185,7 +185,7 @@ pnpm mcp:http:dev
 # 2. Open a new Claude Code session (or run /mcp reconnect if your client supports it)
 ```
 
-The repo-local `SessionStart` hook (`packages/mcp-server/scripts/ensure-http-dev-daemon.mjs`)
+The repo-local `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`)
 probes port 3099 and auto-spawns the daemon when a session opens, so in normal use this
 situation should not arise. If the hook is disabled or the project is not yet trusted, start
 the daemon manually before opening the session.

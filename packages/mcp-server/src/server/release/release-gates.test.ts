@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 // surface (CODEOWNERS, package.json bin map, build chmod, prepublish
 // gate) drifted out of sync with the documented release flow. The
 // runtime artifact check (shebang / executable bit) lives in
-// scripts/check-release-artifacts.mjs and is invoked by `pnpm
+// scripts/release/check-release-artifacts.mjs and is invoked by `pnpm
 // check:release-artifacts` + `prepublishOnly`.
 
 const __dirname = dirname(fileURLToPath(import.meta.url))

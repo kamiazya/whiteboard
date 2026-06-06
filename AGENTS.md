@@ -97,7 +97,7 @@ The repo ships HTTP-mode overrides for both clients:
 
 Both Claude Code (`.claude/settings.json`) and Codex
 (`.codex/config.toml`) wire a `SessionStart` hook to
-`packages/mcp-server/scripts/ensure-http-dev-daemon.mjs`. The hook
+`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`. The hook
 probes port 3099 and, if nothing is listening, spawns `pnpm mcp:http:dev`
 detached so the first MCP request can connect immediately. It is
 idempotent — if our authenticated daemon is already up it exits
@@ -140,7 +140,7 @@ Concrete rules when adding or editing an MCP tool:
 
 - Declare each tool's `outputSchema` (and `inputSchema`) once. Tools are registered through `registerToolWithAnnotations`, which is generic over `O extends z.ZodTypeAny | undefined` and constrains the handler's return to `Promise<ToolHandlerReturn<O>>`. Never widen `outputSchema` to `unknown` or cast around the type binding to silence the compiler.
 - Annotate the matching `tools/*.ts` `execute` return type as `Promise<z.infer<typeof xxxOutputSchema>>` (or import the inferred type from the schema). A separately-written TypeScript interface alongside a Zod schema is the recipe that shipped the `create_frame` `assignedMembers: number` vs `string[]` bug — use `z.infer<>` instead.
-- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/mcp-e2e-smoke.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
+- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/smoke/mcp-e2e-smoke.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
 - When you fix a schema-vs-runtime drift, also commit the test or smoke step that would have caught it. Mutation-check the regression: revert the production fix, confirm `pnpm build` (compile-time guard) **or** `pnpm smoke:e2e` (runtime guard) fails, then restore.
 
 The same discipline applies elsewhere where a schema and a runtime payload travel separately:

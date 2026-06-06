@@ -59,7 +59,7 @@ pnpm typecheck
 pnpm smoke:e2e
 ```
 
-`scripts/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and verifies at least the following.
+`scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and verifies at least the following.
 
 - `canvas_create`
 - `annotate`
@@ -96,4 +96,4 @@ This consumes quota. Use it only when you need to confirm that the LLM can call 
 - After server/daemon changes, start from the `daemon:dev` path and try verification without restarting Claude
 - If you touched MCP schema or registration, explicitly state that a restart is required
 - In general, progress through `test -> typecheck -> smoke:e2e`, stopping on failures
-- When you add a new tool, add one case to `scripts/mcp-e2e-smoke.mjs` when feasible
+- When you add a new tool, add one case to `scripts/smoke/mcp-e2e-smoke.mjs` when feasible

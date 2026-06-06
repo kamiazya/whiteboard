@@ -135,7 +135,7 @@ publish or signing gate:
 
 ## What the npm SBOM hardening slice implements
 
-- `packages/mcp-server/scripts/generate-npm-sbom.mjs` generates a CycloneDX JSON SBOM
+- `packages/mcp-server/scripts/release/generate-npm-sbom.mjs` generates a CycloneDX JSON SBOM
   from a `pnpm deploy --legacy --prod` output, so dependency versions are resolved from
   `pnpm-lock.yaml` rather than re-resolved from semver ranges.
 - `pnpm check:release-candidate` runs `pnpm generate:sbom:npm` before `pnpm test`, so

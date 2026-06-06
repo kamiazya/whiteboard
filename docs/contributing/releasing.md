@@ -140,7 +140,7 @@ lockfile-pinned at v4.x):
   Never emits: SBOM contents, dependency names, package paths, registry auth,
   OIDC material, or full build logs.
 
-- **Script**: `packages/mcp-server/scripts/generate-npm-sbom.mjs`
+- **Script**: `packages/mcp-server/scripts/release/generate-npm-sbom.mjs`
   (called via root script `pnpm generate:sbom:npm`)
 
 - **When it runs in CI**: `pnpm check:release-candidate` (used in the `publish-mcp`

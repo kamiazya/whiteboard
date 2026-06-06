@@ -186,7 +186,7 @@ describe('runbook (docs/contributing/releasing.md) keyword drift', () => {
 // ── generate-npm-sbom.mjs non-leak contract ───────────────────────────────────
 
 describe('generate-npm-sbom.mjs non-leak contract', () => {
-  const script = () => readFile('packages/mcp-server/scripts/generate-npm-sbom.mjs')
+  const script = () => readFile('packages/mcp-server/scripts/release/generate-npm-sbom.mjs')
 
   it('script does not contain Authorization header string', () => {
     expect(script()).not.toContain('Authorization')

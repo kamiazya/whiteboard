@@ -271,14 +271,14 @@ These scripts require a running Claude or Codex CLI and consume API quota. Not i
 
 ### CLI wrapper scripts
 
-The `scripts/mcp-*.mjs` files are secondary entry points that delegate to the same shared TypeScript implementations used by the Vitest tests. Prefer `pnpm smoke:*` / `pnpm test:*` for day-to-day use. If you invoke the wrappers directly, they require tsx:
+The `scripts/smoke/mcp-*.mjs` files are secondary entry points that delegate to the same shared TypeScript implementations used by the Vitest tests. Prefer `pnpm smoke:*` / `pnpm test:*` for day-to-day use. If you invoke the wrappers directly, they require tsx:
 
 ```bash
-node --import tsx/esm scripts/mcp-smoke.mjs
-node --import tsx/esm scripts/mcp-e2e-checkpoint.mjs
-node --import tsx/esm scripts/mcp-packed-tarball-smoke.mjs
-node --import tsx/esm scripts/mcp-codex-config-smoke.mjs
-tsx scripts/mcp-template-smoke.mjs
+node --import tsx/esm scripts/smoke/mcp-smoke.mjs
+node --import tsx/esm scripts/smoke/mcp-e2e-checkpoint.mjs
+node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs
+node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs
+tsx scripts/smoke/mcp-template-smoke.mjs
 ```
 
 ### MCP Smoke Coverage Registry
