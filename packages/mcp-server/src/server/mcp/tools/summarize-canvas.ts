@@ -1,28 +1,14 @@
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 
-// Extract the key canvas fields Claude (via MCP) needs to reason about state.
-// Returning every field wastes tokens and includes noisy data like image dataURLs,
-// so this keeps only a minimal identification and geometry set.
-const SUMMARY_KEYS = [
-  'id',
-  'type',
-  'x',
-  'y',
-  'width',
-  'height',
-  'angle',
-  'fileId',
-  'text',
-  'strokeColor',
-  'backgroundColor',
-  'isDeleted',
-] as const
-
 // Single source of truth for the canvas_inspect contract. The registered MCP
 // outputSchema, the summarizeCanvas return type, and the tool execute return type
 // all derive from this one Zod schema via z.infer, so a one-sided change fails to
 // compile instead of shipping schema-vs-runtime drift (the create_frame bug class).
+//
+// The schema also drives which fields summarizeCanvas copies: returning every
+// canvas field wastes tokens and includes noisy data like image dataURLs, so the
+// summary keeps only this minimal identification and geometry set.
 const elementSummarySchema = z.object({
   id: z.string(),
   type: z.string(),
@@ -48,6 +34,9 @@ export const canvasInspectOutputSchema = z.object({
 export type ElementSummary = z.infer<typeof elementSummarySchema>
 export type CanvasSummary = z.infer<typeof canvasInspectOutputSchema>
 
+// Field allowlist derived from the schema so it can never drift from the contract.
+const SUMMARY_KEYS = Object.keys(elementSummarySchema.shape) as (keyof ElementSummary)[]
+
 // Character limit for text previews. Long box_with_label bodies can otherwise
 // bloat the MCP response, so previews are truncated to 80 characters plus an ellipsis.
 const TEXT_PREVIEW_LIMIT = 80
@@ -64,12 +53,11 @@ export function summarizeCanvas(doc: LoroDoc): CanvasSummary {
   const elements: ElementSummary[] = raw.map((el) => {
     const summary: Record<string, unknown> = {}
     for (const key of SUMMARY_KEYS) {
-      if (el[key] !== undefined) {
-        summary[key] =
-          key === 'text' && typeof el[key] === 'string' ? previewText(el[key] as string) : el[key]
-      }
+      const value = el[key]
+      if (value === undefined) continue
+      summary[key] = key === 'text' && typeof value === 'string' ? previewText(value) : value
     }
-    return summary as unknown as ElementSummary
+    return summary as ElementSummary
   })
   const elementCount = elements.filter((e) => !e.isDeleted).length
   return { elementCount, elements }
