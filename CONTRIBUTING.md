@@ -6,8 +6,9 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
-cd whiteboard
+cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
 pnpm install
+pnpm exec playwright install --with-deps chromium   # required for the browser test projects (mcp-browser / web-browser)
 pnpm test         # all tests (mcp-node + mcp-jsdom + mcp-browser + mcp-smoke + apps/web + web-browser)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
