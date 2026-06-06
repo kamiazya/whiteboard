@@ -78,30 +78,71 @@ describe('DaemonBackend', () => {
     })
   })
 
+  function makeHandlers(overrides: Partial<Parameters<InstanceType<typeof DaemonBackend>['connect']>[0]> = {}): Parameters<InstanceType<typeof DaemonBackend>['connect']>[0] {
+    return {
+      onSnapshot: vi.fn(),
+      onRemoteUpdate: vi.fn(),
+      onVersionCreated: vi.fn(),
+      onRestoreStarted: vi.fn(),
+      onRestoreComplete: vi.fn(),
+      onHeadChanged: vi.fn(),
+      onViewportRequest: vi.fn(),
+      onExportRequest: vi.fn(),
+      onConnected: vi.fn(),
+      ...overrides,
+    }
+  }
+
   describe('connection lifecycle', () => {
     it('creates one WebSocket on connect()', () => {
       const backend = makeBackend()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers())
       expect(FakeWebSocket.instances).toHaveLength(1)
       backend.disconnect()
     })
 
     it('disconnects cleanly', () => {
       const backend = makeBackend()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers())
       const ws = FakeWebSocket.instances[0]
       backend.disconnect()
       expect(ws.close).toHaveBeenCalledTimes(1)
+    })
+
+    it('calls onConnected on first open', () => {
+      const onConnected = vi.fn()
+      const backend = makeBackend()
+      backend.connect(makeHandlers({ onConnected }))
+      FakeWebSocket.instances[0].onopen?.(new Event('open'))
+      expect(onConnected).toHaveBeenCalledTimes(1)
+      backend.disconnect()
+    })
+
+    it('calls onConnected again on reconnect so the hook can re-send client_ready', async () => {
+      const onConnected = vi.fn()
+      const backend = makeBackend()
+      backend.connect(makeHandlers({ onConnected }))
+
+      // Open -> first onConnected
+      FakeWebSocket.instances[0].onopen?.(new Event('open'))
+      expect(onConnected).toHaveBeenCalledTimes(1)
+
+      // Close triggers backoff reconnect
+      FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
+      await vi.advanceTimersByTimeAsync(500)
+      expect(FakeWebSocket.instances).toHaveLength(2)
+
+      // New socket opens -> second onConnected
+      FakeWebSocket.instances[1].onopen?.(new Event('open'))
+      expect(onConnected).toHaveBeenCalledTimes(2)
+      backend.disconnect()
     })
   })
 
   describe('exponential backoff schedule', () => {
     it('reconnects at 500ms after the first close', async () => {
       const backend = makeBackend()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers())
       // Force close without opening
       FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
       expect(FakeWebSocket.instances).toHaveLength(1)
@@ -112,8 +153,7 @@ describe('DaemonBackend', () => {
 
     it('doubles delay on each consecutive close: 500, 1000, 2000, 4000, 8000, caps at 8000', async () => {
       const backend = makeBackend()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers())
 
       const expectedDelays = [500, 1000, 2000, 4000, 8000, 8000]
       for (const delay of expectedDelays) {
@@ -129,8 +169,7 @@ describe('DaemonBackend', () => {
 
     it('resets backoff to 500ms after onopen', async () => {
       const backend = makeBackend()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers())
 
       // First close -> 500ms
       FakeWebSocket.instances[0].onclose?.(new Event('close') as CloseEvent)
@@ -158,8 +197,7 @@ describe('DaemonBackend', () => {
       const backend = makeBackend()
       const onSnapshot = vi.fn()
       const onRemoteUpdate = vi.fn()
-      const handlers = { onSnapshot, onRemoteUpdate, onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
 
       const ws = FakeWebSocket.instances[0]
       const bytes = new Uint8Array([1, 2, 3])
@@ -175,8 +213,7 @@ describe('DaemonBackend', () => {
       const backend = makeBackend()
       const onSnapshot = vi.fn()
       const onRemoteUpdate = vi.fn()
-      const handlers = { onSnapshot, onRemoteUpdate, onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
 
       const ws = FakeWebSocket.instances[0]
       const first = new Uint8Array([1])
@@ -196,8 +233,7 @@ describe('DaemonBackend', () => {
       const backend = makeBackend()
       const onSnapshot = vi.fn()
       const onRemoteUpdate = vi.fn()
-      const handlers = { onSnapshot, onRemoteUpdate, onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
 
       const ws0 = FakeWebSocket.instances[0]
       ws0.onmessage?.(new MessageEvent('message', { data: new Uint8Array([1]).buffer }))
@@ -219,8 +255,7 @@ describe('DaemonBackend', () => {
   describe('pushLocalUpdate', () => {
     it('sends bytes through the current websocket', () => {
       const backend = makeBackend()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers())
 
       const ws = FakeWebSocket.instances[0]
       ws.readyState = FakeWebSocket.OPEN
@@ -236,8 +271,7 @@ describe('DaemonBackend', () => {
     it('dispatches version_created to onVersionCreated', () => {
       const backend = makeBackend()
       const onVersionCreated = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated, onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onVersionCreated }))
       const ws = FakeWebSocket.instances[0]
 
       const msg = { type: 'version_created', version: { id: 'v1', slug: 'sl', createdAt: '2024-01-01', elementCount: 1, auto: true, hasThumbnail: false } }
@@ -251,8 +285,7 @@ describe('DaemonBackend', () => {
     it('dispatches restore_started to onRestoreStarted', () => {
       const backend = makeBackend()
       const onRestoreStarted = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted, onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onRestoreStarted }))
       const ws = FakeWebSocket.instances[0]
 
       ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'restore_started', label: 'Restoring v1' }) }))
@@ -263,8 +296,7 @@ describe('DaemonBackend', () => {
     it('dispatches restore_complete to onRestoreComplete', () => {
       const backend = makeBackend()
       const onRestoreComplete = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete, onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onRestoreComplete }))
       const ws = FakeWebSocket.instances[0]
 
       ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'restore_complete' }) }))
@@ -275,8 +307,7 @@ describe('DaemonBackend', () => {
     it('dispatches head_changed to onHeadChanged', () => {
       const backend = makeBackend()
       const onHeadChanged = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged, onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onHeadChanged }))
       const ws = FakeWebSocket.instances[0]
 
       ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'head_changed', head: 'main' }) }))
@@ -287,8 +318,7 @@ describe('DaemonBackend', () => {
     it('dispatches viewport_request to onViewportRequest and ACKs via ws.send', () => {
       const backend = makeBackend()
       const onViewportRequest = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest, onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onViewportRequest }))
       const ws = FakeWebSocket.instances[0]
       ws.readyState = FakeWebSocket.OPEN
 
@@ -303,8 +333,7 @@ describe('DaemonBackend', () => {
     it('dispatches export_request to onExportRequest', () => {
       const backend = makeBackend()
       const onExportRequest = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated: vi.fn(), onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onExportRequest }))
       const ws = FakeWebSocket.instances[0]
 
       const msg = { type: 'export_request', requestId: 'exp-1' }
@@ -317,8 +346,7 @@ describe('DaemonBackend', () => {
     it('drops malformed JSON without calling any callback', () => {
       const backend = makeBackend()
       const onVersionCreated = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated, onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onVersionCreated }))
       const ws = FakeWebSocket.instances[0]
 
       ws.onmessage?.(new MessageEvent('message', { data: 'not json{{{' }))
@@ -329,8 +357,7 @@ describe('DaemonBackend', () => {
     it('drops schema-mismatch messages without calling any callback', () => {
       const backend = makeBackend()
       const onVersionCreated = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated, onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onVersionCreated }))
       const ws = FakeWebSocket.instances[0]
 
       ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'unknown_type', value: 42 }) }))
@@ -387,8 +414,7 @@ describe('DaemonBackend', () => {
     it('onVersionCreated receives payload shaped by z.infer<typeof versionCreatedPayloadSchema>', () => {
       const backend = makeBackend()
       const onVersionCreated = vi.fn()
-      const handlers = { onSnapshot: vi.fn(), onRemoteUpdate: vi.fn(), onVersionCreated, onRestoreStarted: vi.fn(), onRestoreComplete: vi.fn(), onHeadChanged: vi.fn(), onViewportRequest: vi.fn(), onExportRequest: vi.fn() }
-      backend.connect(handlers)
+      backend.connect(makeHandlers({ onVersionCreated }))
       const ws = FakeWebSocket.instances[0]
 
       // Payload with optional operator field omitted — must match z.infer shape.

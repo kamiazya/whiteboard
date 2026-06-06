@@ -148,4 +148,57 @@ describe('commitAfterUpload', () => {
       expect.objectContaining({ method: 'PUT' }),
     )
   })
+
+  // uploadFn injection — verifies Finding #3 fix (injected backend.putFile routing).
+
+  it('calls the provided uploadFn instead of the internal uploadFiles when uploadFn is given', async () => {
+    const uploadFn = vi.fn(
+      async (_entries: [string, BinaryFileData][], onSuccess: (id: string) => void) => {
+        onSuccess('file-c')
+      },
+    )
+
+    const doc = new LoroDoc()
+    const onSuccess = vi.fn()
+    const entries: [string, BinaryFileData][] = [['file-c', makeFd()]]
+
+    await commitAfterUpload(entries, doc, [makeElement('e1')], 'sess', 'canv', onSuccess, uploadFn)
+
+    // uploadFn must be called; fetch (which uploadFiles uses) must NOT be called.
+    expect(uploadFn).toHaveBeenCalledTimes(1)
+    expect(uploadFn).toHaveBeenCalledWith(entries, expect.any(Function))
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+    // onSuccess is wired through the uploadFn call.
+    expect(onSuccess).toHaveBeenCalledWith('file-c')
+  })
+
+  it('commits after the uploadFn resolves', async () => {
+    const uploadFn = vi.fn(async (_entries: [string, BinaryFileData][], onSuccess: (id: string) => void) => {
+      onSuccess('file-d')
+    })
+
+    const doc = new LoroDoc()
+    const entries: [string, BinaryFileData][] = [['file-d', makeFd()]]
+
+    await commitAfterUpload(entries, doc, [makeElement('e1')], 'sess', 'canv', vi.fn(), uploadFn)
+
+    const elems = doc.getMovableList('elements').toJSON() as { id: string }[]
+    expect(elems).toHaveLength(1)
+    expect(elems[0].id).toBe('e1')
+  })
+
+  it('does not commit when the uploadFn rejects', async () => {
+    const uploadFn = vi.fn(async () => {
+      throw new Error('upload failed')
+    })
+
+    const doc = new LoroDoc()
+    const entries: [string, BinaryFileData][] = [['file-e', makeFd()]]
+
+    await expect(
+      commitAfterUpload(entries, doc, [makeElement('e1')], 'sess', 'canv', vi.fn(), uploadFn),
+    ).rejects.toThrow('upload failed')
+
+    expect(doc.getMovableList('elements').toJSON() as unknown[]).toHaveLength(0)
+  })
 })

@@ -47,6 +47,14 @@ export interface CanvasBackendHandlers {
   onViewportRequest: (payload: Omit<ViewportRequestPayload, 'type'>) => void
   /** Server requests a PNG export from this connected client. */
   onExportRequest: (payload: Omit<ExportRequestPayload, 'type'>) => void
+  /**
+   * Transport (re)connected. Called on every successful open — both the initial
+   * connection and every subsequent reconnect after a close/error cycle.
+   * The hook uses this to re-send client_ready when the Excalidraw API is
+   * already available, so the server adds the reconnected socket to readyConnections
+   * and can replay cached viewport requests.
+   */
+  onConnected: () => void
 }
 
 // ── CanvasBackend interface ───────────────────────────────────────────────────

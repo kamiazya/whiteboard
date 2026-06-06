@@ -12,3 +12,16 @@ export function buildWhiteboardWsProtocols(
     `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${daemonToken}`,
   ]
 }
+
+export function buildWhiteboardWsUrl(
+  locationHref: string,
+  workspaceId: string,
+  slug: string,
+): string {
+  const url = new URL(locationHref)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  url.pathname = `/ws/${workspaceId}/${encodeURIComponent(slug)}`
+  url.search = ''
+  url.hash = ''
+  return url.toString()
+}

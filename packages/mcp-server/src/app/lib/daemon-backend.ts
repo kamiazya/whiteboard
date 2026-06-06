@@ -20,8 +20,8 @@ import { uploadFiles } from './upload-files.js'
 import {
   buildWhiteboardWsUrl,
   buildWhiteboardWsProtocols,
-} from '../hooks/useWhiteboardSync.helpers.js'
-import { parseServerTextMessage } from '../hooks/useWhiteboardSync.text-message.js'
+} from '../../shared/ws-protocol.js'
+import { parseServerTextMessage } from './ws-text-message.js'
 import type { CanvasBackend, CanvasBackendHandlers } from './canvas-backend.js'
 import type { BinaryFileData } from '@excalidraw/excalidraw/types'
 
@@ -114,6 +114,7 @@ export class DaemonBackend implements CanvasBackend {
 
     ws.onopen = () => {
       this.attempt = 0
+      handlers.onConnected()
     }
 
     ws.onclose = () => {

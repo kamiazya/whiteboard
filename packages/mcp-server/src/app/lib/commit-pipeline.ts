@@ -4,6 +4,12 @@ import type { BinaryFileData } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import { uploadFiles } from './upload-files.js'
 
+/** Upload function signature compatible with both uploadFiles and CanvasBackend.putFile. */
+export type UploadFilesFn = (
+  newEntries: [string, BinaryFileData][],
+  onFileSuccess: (fileId: string) => void,
+) => Promise<void>
+
 function valuesEqual(left: unknown, right: unknown): boolean {
   if (left === right) return true
   if (Array.isArray(left) && Array.isArray(right)) {
@@ -100,8 +106,12 @@ export function recordLocalOps(doc: LoroDoc, nextElements: ExcalidrawElement[]) 
  * commit into the wrong canvas.
  *
  * - no new files: commit immediately
- * - new files present: commit after `uploadFiles` finishes
+ * - new files present: commit after upload finishes
  * - upload failure: reject and skip the commit
+ *
+ * Pass `uploadFn` to route uploads through a CanvasBackend.putFile implementation.
+ * When omitted, falls back to the daemon HTTP uploadFiles function so the call
+ * site signature for existing tests is unchanged.
  */
 export async function commitAfterUpload(
   newEntries: [string, BinaryFileData][],
@@ -110,9 +120,14 @@ export async function commitAfterUpload(
   workspaceId: string,
   slug: string,
   onFileSuccess: (fileId: string) => void,
+  uploadFn?: UploadFilesFn,
 ): Promise<void> {
   if (newEntries.length > 0) {
-    await uploadFiles(newEntries, workspaceId, slug, onFileSuccess)
+    if (uploadFn) {
+      await uploadFn(newEntries, onFileSuccess)
+    } else {
+      await uploadFiles(newEntries, workspaceId, slug, onFileSuccess)
+    }
   }
   if (!recordLocalOps(doc, elements)) {
     return

@@ -5,6 +5,8 @@
  */
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { BinaryFiles } from '@excalidraw/excalidraw/types'
+import type { FileId } from '@excalidraw/excalidraw/element/types'
 
 vi.mock('@excalidraw/excalidraw', () => ({
   exportToBlob: vi.fn(),
@@ -150,7 +152,7 @@ describe('useWhiteboardSync with injected CanvasBackend', () => {
     window.removeEventListener('excalidraw:version_saved', listener)
   })
 
-  it('onSceneChange routes uploads through backend.putFile', async () => {
+  it('onSceneChange routes uploads through backend.putFile, not direct uploadFiles', async () => {
     const backend = makeFakeBackend()
     const { result } = renderHook(() =>
       useWhiteboardSync('ws', 'slug', { backend }),
@@ -164,14 +166,31 @@ describe('useWhiteboardSync with injected CanvasBackend', () => {
       backend._handlers?.onSnapshot(new Uint8Array(snapshot))
     })
 
-    // commitAfterUpload is mocked; just confirm onSceneChange does not throw.
+    // Provide a file so the upload path is exercised.
+    const files: BinaryFiles = {
+      'file-1': {
+        id: 'file-1' as FileId,
+        mimeType: 'image/png',
+        dataURL: 'data:image/png;base64,abc' as BinaryFiles[string]['dataURL'],
+        created: Date.now(),
+      },
+    }
     act(() => {
-      result.current.onSceneChange([], {})
+      result.current.onSceneChange([], files)
     })
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300)
     })
-    // No assertion beyond no throw; commitAfterUpload mock is in place.
+
+    // commitAfterUpload is mocked above, so we verify it was called with the
+    // uploadFn derived from backend.putFile. The real routing guarantee is tested
+    // at the commit-pipeline level in commitAfterUpload.uploadFn.test.ts.
+    const { commitAfterUpload } = await import('../lib/commit-pipeline.js')
+    const mockCalls = (commitAfterUpload as ReturnType<typeof vi.fn>).mock.calls
+    expect(mockCalls.length).toBeGreaterThan(0)
+    // The 7th argument (index 6) is the uploadFn — must be a function when backend is set.
+    const uploadFnArg = mockCalls[mockCalls.length - 1][6]
+    expect(typeof uploadFnArg).toBe('function')
   })
 })

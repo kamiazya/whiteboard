@@ -204,6 +204,14 @@ export function useWhiteboardSync(
     }
 
     backend.connect({
+      onConnected() {
+        // Called on every (re)connect. Re-send client_ready so the server adds
+        // this socket to readyConnections and can replay cached viewport requests.
+        // The initial connect path also calls notifyClientReady() below, so this
+        // is harmless on the first open and essential on every subsequent reconnect.
+        notifyClientReady()
+      },
+
       onSnapshot(bytes) {
         const doc = LoroDoc.fromSnapshot(bytes)
         docRef.current = doc
@@ -407,6 +415,14 @@ export function useWhiteboardSync(
 
       // commitAfterUpload commits immediately when there are no new files, otherwise waits for uploads.
       // On upload failure it rejects and skips the commit.
+      // backend.putFile is used when a backend is injected so alternative transports
+      // (e.g. tests, BrowserLocalBackend) can persist files without going through the
+      // daemon HTTP layer directly.
+      const backend = backendRef.current
+      const uploadFn = backend
+        ? (entries: [string, import('@excalidraw/excalidraw/types').BinaryFileData][], onSuccess: (id: string) => void) =>
+            backend.putFile(entries, onSuccess)
+        : undefined
       commitAfterUpload(
         newEntries,
         doc, // pass the invocation-time captured reference
@@ -414,6 +430,7 @@ export function useWhiteboardSync(
         workspaceId,
         slug,
         (fileId) => uploadedFileIdsRef.current.add(fileId),
+        uploadFn,
       ).then(() => {
         if (newEntries.length > 0) onFileUploadSucceededRef.current?.()
       }).catch((err: unknown) => {

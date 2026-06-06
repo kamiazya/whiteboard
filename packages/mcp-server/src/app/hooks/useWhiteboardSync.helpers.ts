@@ -1,7 +1,7 @@
 import type { BinaryFiles } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { ExportRequestMessage } from '../../shared/ws-messages.js'
-import { buildWhiteboardWsProtocols } from '../../shared/ws-protocol.js'
+import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from '../../shared/ws-protocol.js'
 
 type ExportApi = {
   getSceneElements: () => readonly ExcalidrawElement[]
@@ -28,20 +28,7 @@ export interface RestoreCompleteDeps {
   clearLocalUndo: () => void
 }
 
-export { buildWhiteboardWsProtocols }
-
-export function buildWhiteboardWsUrl(
-  locationHref: string,
-  workspaceId: string,
-  slug: string,
-): string {
-  const url = new URL(locationHref)
-  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-  url.pathname = `/ws/${workspaceId}/${encodeURIComponent(slug)}`
-  url.search = ''
-  url.hash = ''
-  return url.toString()
-}
+export { buildWhiteboardWsProtocols, buildWhiteboardWsUrl }
 
 export function applyRestoreComplete({
   setRestoreInProgress,
