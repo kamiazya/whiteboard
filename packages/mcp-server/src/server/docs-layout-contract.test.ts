@@ -3,8 +3,8 @@
 // They assert the canonical paths after the docs reorganisation and guard
 // against stale links back to the old paths.
 
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, resolve, join } from 'node:path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
@@ -50,7 +50,9 @@ describe('docs layout contract', () => {
   })
 
   it('docs/contributing/architecture/wire-protocol.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/architecture/wire-protocol.md'))).toBe(true)
+    expect(existsSync(resolve(repoRoot, 'docs/contributing/architecture/wire-protocol.md'))).toBe(
+      true,
+    )
   })
 
   it('docs/reference/templates.md exists at the new path', () => {
@@ -123,20 +125,31 @@ describe('docs layout contract', () => {
   })
 
   // No stale refs to any of the 11 old stub paths anywhere in docs/, README.md,
-  // CONTRIBUTING.md, or AGENTS.md. The portless link was updated to the new path.
+  // CONTRIBUTING.md, or AGENTS.md. Catches the absolute-style docs/<name>.md
+  // and traversal forms like ../../docs/<name>.md. Plain ../<name>.md is not
+  // flagged here because its resolution is depth-dependent; those are caught
+  // by the "stub does not exist" tests above.
   it('no stale refs to moved doc paths remain across all docs and root files', () => {
     const docsDir = resolve(repoRoot, 'docs')
     const docFiles = existsSync(docsDir) ? walkMd(docsDir, repoRoot) : []
     const rootFiles = ['README.md', 'CONTRIBUTING.md', 'AGENTS.md']
     const filesToCheck = [...docFiles, ...rootFiles]
 
+    // Matches references that unambiguously point to the old root-level stubs
+    // at docs/<name>.md — both the literal path and relative forms like
+    // ../../docs/<name>.md. A plain ../<name>.md is omitted because its
+    // resolution depends on the linking file's depth; such links are validated
+    // by the "stub does not exist" tests above instead.
     const oldPathPattern =
-      /docs\/(architecture|templates|pages-deploy-mvp|wire-protocol|testing|docker-server|configuration|observability|security-model|mcp-debugging|development)\.md/g
+      /(?:(?:\.\.\/)*|\/)docs\/(architecture|templates|pages-deploy-mvp|wire-protocol|testing|docker-server|configuration|observability|security-model|mcp-debugging|development)\.md/g
 
     for (const relPath of filesToCheck) {
       if (!existsSync(resolve(repoRoot, relPath))) continue
       const matches = readText(relPath).match(oldPathPattern)
-      expect(matches, `${relPath} still contains stale path refs: ${matches?.join(', ')}`).toBeNull()
+      expect(
+        matches,
+        `${relPath} still contains stale path refs: ${matches?.join(', ')}`,
+      ).toBeNull()
     }
   })
 
@@ -150,15 +163,21 @@ describe('docs layout contract', () => {
   })
 
   it('docs/contributing/adr/0001-apps-web-canonical-frontend.md exists', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/adr/0001-apps-web-canonical-frontend.md'))).toBe(true)
+    expect(
+      existsSync(resolve(repoRoot, 'docs/contributing/adr/0001-apps-web-canonical-frontend.md')),
+    ).toBe(true)
   })
 
   it('docs/contributing/adr/0002-browser-to-daemon-transport.md exists', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/adr/0002-browser-to-daemon-transport.md'))).toBe(true)
+    expect(
+      existsSync(resolve(repoRoot, 'docs/contributing/adr/0002-browser-to-daemon-transport.md')),
+    ).toBe(true)
   })
 
   it('docs/contributing/adr/0003-track-claude-dev-flow-tooling.md exists', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/contributing/adr/0003-track-claude-dev-flow-tooling.md'))).toBe(true)
+    expect(
+      existsSync(resolve(repoRoot, 'docs/contributing/adr/0003-track-claude-dev-flow-tooling.md')),
+    ).toBe(true)
   })
 
   // docs/contributing/README.md must point to adr/ and must not imply ADRs live under architecture/.
@@ -170,7 +189,7 @@ describe('docs layout contract', () => {
   it('docs/contributing/README.md architecture/ bullet does not claim ADRs live there', () => {
     const content = readText('docs/contributing/README.md')
     // Find the architecture/ bullet line and assert it does not contain 'ADRs'
-    const archLine = content.split('\n').find(line => line.includes('**architecture/**'))
+    const archLine = content.split('\n').find((line) => line.includes('**architecture/**'))
     expect(archLine).toBeDefined()
     expect(archLine).not.toContain('ADRs')
   })
