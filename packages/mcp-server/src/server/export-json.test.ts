@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { exportCanvasJsonDoc } from './export-json.js'
+import { captureLogsForTests } from './log.js'
 
 function buildDocWithRect(): LoroDoc {
   const doc = new LoroDoc()
@@ -157,5 +158,56 @@ describe('exportCanvasJsonDoc with outputPath', () => {
 
     expect(result.filePath).toContain(join(tempDir, 'sid-fallback', 'exports'))
     expect(result.filePath.endsWith('.excalidraw')).toBe(true)
+  })
+
+  it('drops corrupt elements, logs exactly one warning per bad row, and exports only valid elements', async () => {
+    // Build a doc with one valid rect + one corrupt row (missing id).
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    const validMap = list.insertContainer(0, new LoroMap())
+    validMap.set('id', 'rect-valid')
+    validMap.set('type', 'rectangle')
+    validMap.set('x', 10)
+    validMap.set('y', 20)
+    validMap.set('width', 100)
+    validMap.set('height', 50)
+    // Corrupt row: missing 'id' field
+    const corruptMap = list.insertContainer(1, new LoroMap())
+    corruptMap.set('x', 5)
+    corruptMap.set('y', 5)
+    corruptMap.set('width', 30)
+    corruptMap.set('height', 30)
+    doc.commit()
+
+    const outputPath = join(tempDir, 'sid', 'exports', 'corrupt-test.excalidraw')
+    const capture = captureLogsForTests('warning')
+    let result: { filePath: string; elementCount: number }
+    try {
+      result = await exportCanvasJsonDoc({
+        workspaceId: 'sid',
+        slug: 'canvas-corrupt',
+        doc,
+        dataDir: tempDir,
+        outputPath,
+      })
+    } finally {
+      capture.restore()
+    }
+
+    // Only the valid element should be exported.
+    expect(result!.elementCount).toBe(1)
+
+    // The exported file should be valid excalidraw JSON with no NaN coords.
+    const written = JSON.parse(await readFile(outputPath, 'utf-8'))
+    expect(written.type).toBe('excalidraw')
+    expect(written.elements).toHaveLength(1)
+    expect(written.elements[0].id).toBe('rect-valid')
+    const el = written.elements[0]
+    expect(Number.isNaN(el.x)).toBe(false)
+    expect(Number.isNaN(el.y)).toBe(false)
+
+    // Exactly one warning record for the dropped corrupt row.
+    const warnings = capture.records.filter((r) => r.level === 'warning' && r.scope === 'export-json')
+    expect(warnings).toHaveLength(1)
   })
 })

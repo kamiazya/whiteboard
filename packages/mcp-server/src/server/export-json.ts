@@ -2,11 +2,10 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { LoroDoc } from 'loro-crdt'
 import { DATA_DIR } from './config.js'
+import { getLogger } from './log.js'
 import { validateOutputPath } from './output-path.js'
-import {
-  resolveParentedElements,
-  type ParentedElement,
-} from '../shared/resolve-parented-elements.js'
+import { resolveParentedElements } from '../shared/resolve-parented-elements.js'
+import { validateLoroRawElements } from '../shared/loro-raw-element.js'
 
 // Re-exported so existing route imports (`import { ..., OutputPathError } from
 // './export-json.js'`) keep compiling without churn.
@@ -30,12 +29,16 @@ function normalizeExportElements(
   includeCustomFields: boolean,
 ): Array<Record<string, unknown>> {
   if (includeCustomFields) {
+    // includeCustomFields returns raw rows without resolveParentedElements by design;
+    // this branch is intentionally unvalidated (raw passthrough).
     return rawElements
   }
+  const log = getLogger('export-json')
+  const validated = validateLoroRawElements(rawElements, ({ index, error }) => {
+    log.warning('dropped corrupt element', { index, reason: error.issues[0]?.message })
+  })
   return stripTemplateInstanceId(
-    resolveParentedElements(
-      rawElements as unknown as ParentedElement[],
-    ) as unknown as Array<Record<string, unknown>>,
+    resolveParentedElements(validated) as unknown as Array<Record<string, unknown>>,
   )
 }
 
