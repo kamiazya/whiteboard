@@ -35,7 +35,7 @@ function normalizeExportElements(
   }
   const log = getLogger('export-json')
   const validated = validateLoroRawElements(rawElements, ({ index, error }) => {
-    log.warning('dropped corrupt element', { index, reason: error.issues[0]?.message })
+    log.warning({ index, reason: error.issues[0]?.message }, 'dropped corrupt element')
   })
   return stripTemplateInstanceId(
     resolveParentedElements(validated) as unknown as Array<Record<string, unknown>>,

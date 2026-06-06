@@ -90,6 +90,7 @@ function isForbiddenNodeBuiltin(specifier: string): boolean {
 const ALLOWED_SHARED_EXACT = new Set([
   'canvas-backend-contract.js', // transport/callback seam — types + Zod re-exports only, no Node APIs
   'external-url-policy.js', // pure URL validation, no Node APIs
+  'loro-raw-element.js', // Zod schema for Loro-stored element shape — zod-only, no Node APIs
   'resolve-parented-elements.js', // pure data transformation
   'ws-messages.js', // WebSocket protocol types/constants
   'ws-protocol.js', // WebSocket protocol helpers

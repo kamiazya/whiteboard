@@ -3,6 +3,7 @@ import { LoroDoc, UndoManager } from 'loro-crdt'
 import { exportToBlob, CaptureUpdateAction, restoreElements } from '@excalidraw/excalidraw'
 import { commitAfterUpload, type UploadFilesFn } from '../lib/commit-pipeline.js'
 import { resolveParentedElements } from '../../shared/resolve-parented-elements.js'
+import { validateLoroRawElements } from '../../shared/loro-raw-element.js'
 import {
   applyRestoreComplete,
   flushPendingExportRequests,
@@ -131,13 +132,18 @@ export function useWhiteboardSync(
     // Dual-read legacy support:
     // older canvases stored "elements" in a LoroList, while current code writes to MovableList.
     // If MovableList is empty, fall back to List so legacy data still loads.
-    const movable = doc.getMovableList('elements').toJSON() as ExcalidrawElement[]
-    const rawElements: ExcalidrawElement[] = movable.length > 0
+    const movable = doc.getMovableList('elements').toJSON()
+    const chosenRaw: unknown[] = movable.length > 0
       ? movable
-      : (doc.getList('elements').toJSON() as ExcalidrawElement[])
-    const elements = resolveParentedElements(
-      rawElements as unknown as Parameters<typeof resolveParentedElements>[0],
-    ) as unknown as ExcalidrawElement[]
+      : doc.getList('elements').toJSON()
+    // Validate each row against the expected Loro element shape before layout
+    // resolution. Invalid rows are dropped and logged via console.warn (the
+    // browser-side logging idiom for this module) rather than reaching
+    // resolveParentedElements with missing required fields.
+    const validated = validateLoroRawElements(chosenRaw, ({ index, error }) => {
+      console.warn('[whiteboard] dropped corrupt Loro element at index', index, error.issues)
+    })
+    const elements = resolveParentedElements(validated) as unknown as ExcalidrawElement[]
 
     // Collect fileIds that are still missing from the local cache.
     const missingIds = elements

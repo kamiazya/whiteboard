@@ -28,10 +28,8 @@ export type LoroRawElement = z.infer<typeof loroRawElementSchema>
  *
  * Each row is validated independently with safeParse — a single bad row does
  * not abort the whole array (graceful degradation, not total failure).
- * The caller supplies onDropped to handle logging in their own idiom:
- *   - server callers: getLogger(...).warning(...)
- *   - browser callers: console.warn(...)
- * This keeps server-only imports out of the browser bundle.
+ * The caller supplies onDropped to handle logging in their own idiom,
+ * keeping server-only logger imports out of the browser bundle.
  */
 export function validateLoroRawElements(
   raw: unknown[],
