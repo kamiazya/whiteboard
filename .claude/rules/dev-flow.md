@@ -14,6 +14,8 @@ Small change? Skip planning and go straight to `dev-loop`. Periodic product chec
 
 **When you run out of scope-disjoint dev work, run `audit-triage` to fill the idle capacity** — it generates the next wave of concrete, scope-tagged work (file its survivors into Tasks/tmp-issues, then fan those out). Idle orchestration time is wasted time; keep either real dev lanes or an audit in flight.
 
+**Scope-disjointness is the *correctness* constraint; API capacity is the *throughput* one.** A dev-loop fans out ~10–30 subagents, so a handful of concurrent lanes can saturate the model API. Watch for strain signals — workflows going red in `/workflows`, the Bash safety classifier reporting "temporarily unavailable", or a subagent result that truncates mid-sentence (terminal API death before it committed). When they appear, **`TaskStop` the lowest-value lanes** (test-only audit lanes are the cheapest to re-run) to drop the concurrent agent count, let the API recover, and resume the throttled items later. Practical steady state on this machine is ~3–4 concurrent dev-loops, not unbounded. A lane killed mid-run may not have committed — re-run it (from a fresh worktree or the same one) and verify the branch tip before folding.
+
 ## Workflows (`.claude/workflows/*.workflow.mjs`)
 
 Launch via `Workflow({scriptPath})` — they are NOT name-registered. `args` arrives as a JSON **string** → `JSON.parse` it (see `workflow-authoring` skill). Composition nesting is one level (dev-loop → review only).
