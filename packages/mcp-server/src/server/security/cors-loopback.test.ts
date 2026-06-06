@@ -92,4 +92,11 @@ describe('appendVary', () => {
       'Accept, Content-Type, Origin',
     )
   })
+
+  it('does not duplicate a token that is already present with different casing', () => {
+    // HTTP Vary field names are case-insensitive per RFC 7231 §7.1.4.
+    expect(appendVary('accept, origin', 'Origin')).toBe('accept, origin')
+    expect(appendVary('Accept, Origin', 'origin')).toBe('Accept, Origin')
+    expect(appendVary('ORIGIN', 'Origin')).toBe('ORIGIN')
+  })
 })

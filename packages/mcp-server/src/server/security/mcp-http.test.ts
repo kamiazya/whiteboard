@@ -27,6 +27,14 @@ describe('MCP HTTP security', () => {
       expect(isAllowedMcpHttpOrigin('https://evil.example', '127.0.0.1:3099')).toBe(false)
       expect(isAllowedMcpHttpOrigin('null', '127.0.0.1:3099')).toBe(false)
     })
+
+    it('allows requests with IPv6 loopback Host header', () => {
+      // RFC 7230 §2.7.1 / WHATWG URL: the Host header for IPv6 uses brackets
+      // e.g. "[::1]:3099". normalizeHostname must strip brackets before
+      // isLoopbackHostname can match the bare "::1" address.
+      expect(isAllowedMcpHttpOrigin(undefined, '[::1]:3099')).toBe(true)
+      expect(isAllowedMcpHttpOrigin('http://[::1]:6274', '[::1]:3099')).toBe(true)
+    })
   })
 
   describe('requiresMcpHttpAuth', () => {

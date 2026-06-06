@@ -10,7 +10,14 @@ function normalizeMethod(method: string): string {
 function normalizeHostname(value: string | undefined): string | null {
   if (!value) return null
   try {
-    return new URL(`http://${value}`).hostname
+    const hostname = new URL(`http://${value}`).hostname
+    // URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets
+    // so isLoopbackHostname can match against the bare address "::1".
+    // See WHATWG URL spec §4.1 (host serializing).
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      return hostname.slice(1, -1)
+    }
+    return hostname
   } catch {
     return null
   }

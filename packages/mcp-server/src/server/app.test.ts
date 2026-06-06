@@ -942,8 +942,6 @@ describe('createApp daemon mutation auth', () => {
     ).toMatch(/\S+/)
   })
 
-  // --- Stage 4: /mcp OPTIONS must carry Access-Control-Allow-Private-Network ---
-
   it('OPTIONS /mcp with loopback Origin carries Access-Control-Allow-Private-Network: true', async () => {
     const app = createApp(createRuntimeOptions('secret'))
     const res = await app.request('http://127.0.0.1/mcp', {
@@ -956,8 +954,6 @@ describe('createApp daemon mutation auth', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
     expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
   })
-
-  // --- Stage 4: /api/* CORS + PNA headers (local-daemon mode only) ---
 
   describe('/api/* loopback CORS (local-daemon mode)', () => {
     it('reflects Access-Control-Allow-Origin and Vary for a loopback Origin on GET /api/runtime/ping', async () => {

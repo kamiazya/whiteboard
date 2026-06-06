@@ -30,21 +30,27 @@ export function appendVary(value: string | null, token: string): string {
     .split(',')
     .map((part) => part.trim())
     .filter((part) => part.length > 0)
-  return parts.includes(token) ? parts.join(', ') : [...parts, token].join(', ')
+  const tokenLower = token.toLowerCase()
+  return parts.some((p) => p.toLowerCase() === tokenLower)
+    ? parts.join(', ')
+    : [...parts, token].join(', ')
 }
 
 /**
  * Middleware for /api/* routes in local-daemon mode.
  *
- * For loopback Origins (localhost, 127.0.0.1, ::1):
- *   - Reflects Access-Control-Allow-Origin and Vary: Origin on all responses.
- *   - On OPTIONS: adds Access-Control-Allow-Private-Network: true and returns
- *     204 immediately (the only early return — non-OPTIONS falls through to the
- *     downstream auth chain so mutation routes are never bypassed).
+ * OPTIONS requests always return 204 immediately regardless of origin — no
+ * CORS headers are emitted for non-loopback origins, and the downstream auth
+ * chain is never reached for OPTIONS.
  *
- * For non-loopback Origins or no Origin header: no CORS headers emitted and
- * the request is still forwarded (same-origin and daemon-served-page callers
- * must not be broken by a 403).
+ * For loopback Origins (localhost, 127.0.0.1, ::1) on non-OPTIONS requests:
+ *   - Reflects Access-Control-Allow-Origin and Vary: Origin.
+ *   - Falls through to the downstream auth chain so mutation routes are never
+ *     bypassed.
+ *
+ * For non-loopback Origins or no Origin header on non-OPTIONS requests: no
+ * CORS headers emitted and the request is forwarded (same-origin and
+ * daemon-served-page callers must not be broken by a 403).
  *
  * Never applied in server-mode (the caller guards this).
  */
