@@ -99,6 +99,25 @@ npm pack --dry-run   # verify the tarball includes dist/, skills/, package READM
 
 The PR title becomes the squash-merge commit message that release-please reads. Use a Conventional Commit title (`fix:`, `feat(scope):`, `chore:`, …). CI rejects tool prefixes such as `[codex] ...`. Release-please PRs follow the same rule (`chore(main): release X.Y.Z`, `chore(main): release mcp-server X.Y.Z`) — the `v` prefix only applies to the resulting tag (`include-v-in-tag: true`), not the commit / PR title.
 
+## AI dev-flow tooling (`.claude/`)
+
+This repo ships its local AI-orchestrated dev flow under `.claude/` (Claude Code workflows, agents, skills, rules, and the `new-worktree` helper). It is optional — you can develop without it — but it is tracked so the flow is shared and reviewable.
+
+**Tracked** (shared): `.claude/workflows/`, `.claude/agents/`, `.claude/skills/`, `.claude/rules/`, `.claude/scripts/`, and `.claude/settings.json`.
+**Local-only** (gitignored, never commit): `.claude/settings.local.json` (your personal hooks/env), `.claude/worktrees/` (ephemeral full worktrees with `node_modules`, recreated per run), `.claude/**/*.log`, and `CLAUDE.local.md`.
+
+### First-clone setup
+
+1. `pnpm install` (required before anything else — the dev daemon and tests need the workspace installed).
+2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which probes `http://127.0.0.1:3099` and, if nothing is listening, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to bind. So the hardcoded `http://127.0.0.1:3099/mcp` endpoint is normally up by the time the first MCP request fires.
+3. **If the daemon is not up** — hooks disabled, project not trusted yet, a fresh clone where step 1 has not run, or port 3099 already taken — Claude Code simply shows a connection error for the `whiteboard` MCP server. This is **not fatal**: ordinary development (tests, build, lint) is unaffected. Start it manually with `pnpm mcp:http:dev` in another terminal.
+4. The `Authorization: Bearer whiteboard-dev` in `.claude/settings.json` is a **non-secret, well-known local-dev constant** that authenticates only to the loopback daemon — it grants nothing on any other machine. To use a different value, override the header in your gitignored `.claude/settings.local.json`.
+
+### Discipline (if you author/run workflows)
+
+- **Never `cd` away from the repo root while a workflow is running.** Workflows compose child workflows with a repo-root-relative `scriptPath` (e.g. `.claude/workflows/review.workflow.mjs`) resolved against the session cwd; a mid-run `cd` breaks composition. Pass absolute paths to shell commands / use `git -C <dir>` instead.
+- **Reload the session before relying on a newly-authored custom agent.** A new `.claude/agents/foo.md` is not registered as an `agentType` until the session reloads; a workflow calling `agent({agentType:'foo'})` before then fails.
+
 ## Security
 
 Do **not** open public issues for security vulnerabilities. See [SECURITY.md](SECURITY.md).
