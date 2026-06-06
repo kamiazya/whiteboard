@@ -232,6 +232,57 @@ describe('snapshotReceived state machine', () => {
   })
 })
 
+// ── onerror → force-close → reconnect ───────────────────────────────────────
+
+describe('onerror triggers reconnect', () => {
+  it('creates a new socket after onerror even when the browser omits the close event', async () => {
+    // Some browsers fire onerror without a subsequent close event.
+    // The onerror handler calls ws.close() to guarantee the onclose path runs,
+    // which schedules the backoff timer and eventually opens a new socket.
+    const backend = makeBackend()
+    backend.connect(makeHandlers())
+
+    const firstSocket = FakeWebSocket.instances[0]
+
+    // Simulate an error without a close event following it.
+    // FakeWebSocket.close() fires onclose, so call onerror directly and
+    // then manually advance state without triggering onclose separately.
+    firstSocket.onerror?.(new Event('error'))
+
+    // onerror calls ws.close(), which on FakeWebSocket triggers onclose and
+    // schedules the reconnect timer.
+    expect(FakeWebSocket.instances).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(500)
+    expect(FakeWebSocket.instances).toHaveLength(2)
+
+    backend.disconnect()
+  })
+})
+
+// ── binaryType invariant ──────────────────────────────────────────────────────
+
+describe('binaryType invariant', () => {
+  it('sets binaryType to arraybuffer on every newly created socket', async () => {
+    // Without binaryType = 'arraybuffer', binary frames arrive as Blob and the
+    // ArrayBuffer instanceof check in the message handler silently fails,
+    // breaking snapshot and remote-update delivery.
+    const backend = makeBackend()
+    backend.connect(makeHandlers())
+
+    expect(lastSocket().binaryType).toBe('arraybuffer')
+
+    // Verify the invariant holds on a reconnected socket too.
+    triggerClose(FakeWebSocket.instances[0])
+    await vi.advanceTimersByTimeAsync(500)
+    expect(FakeWebSocket.instances).toHaveLength(2)
+
+    expect(lastSocket().binaryType).toBe('arraybuffer')
+
+    backend.disconnect()
+  })
+})
+
 // ── disconnect() halts the reconnect loop ────────────────────────────────────
 
 describe('disconnect() cancels the reconnect loop', () => {
