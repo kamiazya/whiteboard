@@ -212,27 +212,103 @@ describe('BrowserLocalBackend', () => {
     backend2.disconnect()
   })
 
-  it('onError fires with corrupt-snapshot when backend receives corrupt bytes and onSnapshot is not called', async () => {
-    const handlers = makeHandlers()
-    const backend = new BrowserLocalBackend('canvas-1')
-    backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 50))
+  it('onError fires with unsupported-version for unknown-v record and onSnapshot is not called', async () => {
+    // forceCorruptRecord writes { v: 99, garbage: true } — unknown version
+    await forceCorruptRecord('canvas-v99')
 
-    // Force a corrupt snapshot into IDB directly
-    await forceCorruptRecord('canvas-1')
-    backend.disconnect()
-
-    const backend2 = new BrowserLocalBackend('canvas-1')
     const h2 = makeHandlers()
+    const backend2 = new BrowserLocalBackend('canvas-v99')
     backend2.connect(h2)
     await new Promise((r) => setTimeout(r, 50))
 
-    // Corrupt record → onError, not onSnapshot
-    expect(h2.onError).toHaveBeenCalledWith('corrupt-snapshot')
+    expect(h2.onError).toHaveBeenCalledWith('unsupported-version')
     expect(h2.onSnapshot).not.toHaveBeenCalled()
     backend2.disconnect()
   })
+
+  it('onError fires with corrupt-snapshot for v:1 envelope with invalid Loro bytes', async () => {
+    await forceInvalidLoroRecord('canvas-bad-bytes')
+
+    const h = makeHandlers()
+    const backend = new BrowserLocalBackend('canvas-bad-bytes')
+    backend.connect(h)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(h.onError).toHaveBeenCalledWith('corrupt-snapshot')
+    expect(h.onSnapshot).not.toHaveBeenCalled()
+    backend.disconnect()
+  })
+
+  it('onError fires with corrupt-delta for valid snapshot but invalid delta bytes', async () => {
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'a' })
+    const snapshot = doc.export({ mode: 'snapshot' })
+
+    await forceRecordWithBadDelta('canvas-bad-delta', snapshot)
+
+    const h = makeHandlers()
+    const backend = new BrowserLocalBackend('canvas-bad-delta')
+    backend.connect(h)
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(h.onError).toHaveBeenCalledWith('corrupt-delta')
+    expect(h.onSnapshot).not.toHaveBeenCalled()
+    backend.disconnect()
+  })
 })
+
+async function forceInvalidLoroRecord(canvasId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', 2)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction('loroCanvases', 'readwrite')
+      // v:1 envelope but snapshot bytes are not valid Loro data
+      tx.objectStore('loroCanvases').put(
+        { v: 1, snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]), updatedAt: new Date().toISOString() },
+        canvasId,
+      )
+      tx.oncomplete = () => { db.close(); resolve() }
+      tx.onerror = () => { db.close(); reject(tx.error) }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function forceRecordWithBadDelta(canvasId: string, snapshot: Uint8Array): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', 2)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction('loroCanvases', 'readwrite')
+      // Valid snapshot but invalid delta bytes
+      tx.objectStore('loroCanvases').put(
+        {
+          v: 1,
+          snapshot,
+          deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])],
+          updatedAt: new Date().toISOString(),
+        },
+        canvasId,
+      )
+      tx.oncomplete = () => { db.close(); resolve() }
+      tx.onerror = () => { db.close(); reject(tx.error) }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
 
 async function forceCorruptRecord(canvasId: string): Promise<void> {
   return new Promise((resolve, reject) => {

@@ -16,12 +16,20 @@ import { LoroStore } from './loro-store.js'
  *
  * Error signaling: failures route to handlers.onError (optional, defaults
  * to a no-op) with a typed reason string. No unhandled rejections.
+ *
+ * TOCTOU safety: all writes are serialized through a per-instance promise
+ * chain (_writeQueue) so concurrent pushLocalUpdate calls cannot interleave
+ * the read-then-write logic at the BrowserLocalBackend level. LoroStore
+ * further serializes the read-modify-write inside a single IDB readwrite
+ * transaction for appendDelta.
  */
 export class BrowserLocalBackend implements CanvasBackend {
   private readonly canvasId: string
   private readonly store: LoroStore
   private handlers: CanvasBackendHandlers | null = null
   private disconnected = false
+  /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
+  private _writeQueue: Promise<void> = Promise.resolve()
 
   constructor(canvasId: string, store?: LoroStore) {
     this.canvasId = canvasId
@@ -48,21 +56,29 @@ export class BrowserLocalBackend implements CanvasBackend {
    * Accept a local Loro update. The first call after connect() is treated
    * as the canonical snapshot (full export); subsequent calls are deltas.
    * Both are persisted so a reload can replay snapshot then deltas in order.
+   *
+   * Writes are chained onto _writeQueue so two concurrent calls apply in
+   * order with no lost update.
    */
-  async pushLocalUpdate(bytes: Uint8Array): Promise<void> {
-    if (bytes.length === 0) return
+  pushLocalUpdate(bytes: Uint8Array): Promise<void> {
+    if (bytes.length === 0) return Promise.resolve()
+    this._writeQueue = this._writeQueue.then(() => this._doWrite(bytes))
+    return this._writeQueue
+  }
+
+  private async _doWrite(bytes: Uint8Array): Promise<void> {
     try {
       const existing = await this.store.load(this.canvasId)
       if (existing.kind === 'not-found') {
         // First write: save as snapshot.
         await this.store.save(this.canvasId, bytes)
-      } else if (existing.kind === 'corrupted') {
-        // Existing record is corrupt; appending would silently discard the delta.
-        // Surface the failure so the UI persistence indicator shows the error state.
-        this.handlers?.onError?.('storage-failure')
-      } else {
+      } else if (existing.kind === 'ok') {
         // Subsequent writes: append as delta.
         await this.store.appendDelta(this.canvasId, bytes)
+      } else {
+        // Existing record is corrupt or version-mismatch; appending would
+        // silently discard the delta. Surface the failure.
+        this.handlers?.onError?.('storage-failure')
       }
     } catch {
       this.handlers?.onError?.('storage-failure')
@@ -121,15 +137,27 @@ export class BrowserLocalBackend implements CanvasBackend {
       return
     }
 
-    if (result.kind === 'corrupted') {
+    if (result.kind === 'corrupt-snapshot') {
       handlers.onError?.('corrupt-snapshot')
       return
     }
 
-    // Deliver the persisted snapshot.
+    if (result.kind === 'corrupt-delta') {
+      handlers.onError?.('corrupt-delta')
+      return
+    }
+
+    if (result.kind === 'unsupported-version') {
+      handlers.onError?.('unsupported-version')
+      return
+    }
+
+    // Deliver the persisted snapshot. Bytes were deep-validated in LoroStore.load()
+    // so doc.import() in the hook will not throw for valid records.
     handlers.onSnapshot(result.snapshot)
 
-    // Replay incremental deltas as onRemoteUpdate.
+    // Replay incremental deltas as onRemoteUpdate. Each delta was deep-validated
+    // in LoroStore.load() so the hook's doc.import() will not throw.
     for (const delta of result.deltas ?? []) {
       if (this.disconnected || this.handlers !== handlers) return
       handlers.onRemoteUpdate(delta)

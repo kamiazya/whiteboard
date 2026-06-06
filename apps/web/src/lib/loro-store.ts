@@ -1,3 +1,4 @@
+import { Loro } from 'loro-crdt'
 import { z } from 'zod'
 
 /**
@@ -7,7 +8,7 @@ import { z } from 'zod'
  *
  * v: envelope format version (literal 1). Bump this when the envelope shape
  *    changes in a backward-incompatible way; old records will be rejected as
- *    'corrupted' and the caller is responsible for recovery.
+ *    'corrupt-snapshot' and the caller is responsible for recovery.
  */
 // z.custom pins the inferred type to Uint8Array<ArrayBuffer> (matching lib:ES2020+DOM),
 // which is narrower than the z.instanceof(Uint8Array) result (Uint8Array<ArrayBufferLike>).
@@ -25,7 +26,9 @@ export type LoroRecordEnvelope = z.infer<typeof loroRecordEnvelopeSchema>
 export type LoroLoadResult =
   | { kind: 'ok'; snapshot: Uint8Array; deltas?: Uint8Array[] }
   | { kind: 'not-found' }
-  | { kind: 'corrupted' }
+  | { kind: 'corrupt-snapshot' }
+  | { kind: 'corrupt-delta' }
+  | { kind: 'unsupported-version' }
 
 const DB_NAME = 'whiteboard'
 /**
@@ -50,9 +53,27 @@ function openDb(): Promise<IDBDatabase> {
 }
 
 /**
+ * Try importing bytes into a throwaway LoroDoc to confirm they are valid Loro
+ * bytes (snapshot or update). Returns false if the import throws.
+ */
+function isValidLoroBytes(bytes: Uint8Array): boolean {
+  try {
+    const probe = new Loro()
+    probe.import(bytes)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * LoroStore: persists Loro CRDT snapshot+delta records in the 'loroCanvases'
  * IndexedDB object store (DB v2). Isolated from the v1 'canvases' JSON store
  * so legacy records are never misread as Loro bytes.
+ *
+ * load() deep-validates bytes by importing them into a throwaway LoroDoc so
+ * structurally-valid envelopes carrying invalid CRDT bytes are caught here
+ * rather than surfacing as throws inside the hook's onSnapshot/onRemoteUpdate.
  */
 export class LoroStore {
   async load(canvasId: string): Promise<LoroLoadResult> {
@@ -67,23 +88,46 @@ export class LoroStore {
         }
         const parsed = loroRecordEnvelopeSchema.safeParse(req.result)
         if (!parsed.success) {
-          resolve({ kind: 'corrupted' })
+          // Zod envelope parse failed — envelope version unknown or structurally wrong.
+          // Distinguish a version mismatch (v field present but not 1) from a fully
+          // mangled record so callers can surface the right error to the user.
+          const raw = req.result as Record<string, unknown>
+          if (typeof raw.v === 'number' && raw.v !== 1) {
+            resolve({ kind: 'unsupported-version' })
+          } else {
+            resolve({ kind: 'corrupt-snapshot' })
+          }
           return
         }
+
+        // Deep-validate snapshot bytes by importing into a throwaway LoroDoc.
+        if (!isValidLoroBytes(parsed.data.snapshot)) {
+          resolve({ kind: 'corrupt-snapshot' })
+          return
+        }
+
+        // Deep-validate each delta in order; report the first bad one.
+        for (const delta of parsed.data.deltas ?? []) {
+          if (!isValidLoroBytes(delta)) {
+            resolve({ kind: 'corrupt-delta' })
+            return
+          }
+        }
+
         resolve({
           kind: 'ok',
           snapshot: parsed.data.snapshot,
           deltas: parsed.data.deltas,
         })
       }
-      // req.onerror fires when the get request itself fails; close db and resolve as corrupted
+      // req.onerror fires when the get request itself fails; close db and resolve
       // so the IDB connection is not leaked. Prevent the error from propagating to tx.onerror.
-      req.onerror = (e) => { e.preventDefault(); db.close(); resolve({ kind: 'corrupted' }) }
+      req.onerror = (e) => { e.preventDefault(); db.close(); resolve({ kind: 'corrupt-snapshot' }) }
       // tx.onerror/tx.onabort fire when the transaction errors before req completes
       // (e.g. quota exceeded, database closing mid-read). Without these the promise
       // never settles and loadAndDeliver stalls permanently.
-      tx.onerror = () => { db.close(); resolve({ kind: 'corrupted' }) }
-      tx.onabort = () => { db.close(); resolve({ kind: 'corrupted' }) }
+      tx.onerror = () => { db.close(); resolve({ kind: 'corrupt-snapshot' }) }
+      tx.onabort = () => { db.close(); resolve({ kind: 'corrupt-snapshot' }) }
       tx.oncomplete = () => db.close()
     })
   }
@@ -105,7 +149,10 @@ export class LoroStore {
 
   /**
    * Append an incremental Loro update to the delta log for a canvas.
-   * Reads the current record, appends the delta, and writes back atomically.
+   * The entire read-modify-write runs inside a single readwrite transaction so
+   * concurrent calls cannot interleave: IDB serializes transactions on the same
+   * store, which prevents the TOCTOU window where two concurrent callers both
+   * read 'not-found' and the second clobbers the first.
    * If no record exists yet, this is a no-op (snapshot must be saved first).
    */
   async appendDelta(canvasId: string, delta: Uint8Array): Promise<void> {

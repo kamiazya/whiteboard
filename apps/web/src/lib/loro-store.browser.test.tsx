@@ -110,15 +110,48 @@ describe('LoroStore (real IndexedDB)', () => {
     }
   })
 
-  it('corrupt record in IDB returns corrupted', async () => {
-    // Manually write a bad record into the loroCanvases store
+  it('structurally-corrupt record in IDB (unknown v) returns corrupt-snapshot', async () => {
     const db = await openLoroDb()
     await writeRaw(db, 'loroCanvases', 'bad-canvas', { v: 99, garbage: true })
     db.close()
 
     const store = new LoroStore()
     const result = await store.load('bad-canvas')
-    expect(result.kind).toBe('corrupted')
+    expect(result.kind).toBe('unsupported-version')
+  })
+
+  it('structurally-valid envelope with invalid Loro snapshot bytes returns corrupt-snapshot', async () => {
+    const db = await openLoroDb()
+    // v:1 envelope with bytes that are NOT valid Loro data
+    await writeRaw(db, 'loroCanvases', 'bad-bytes-canvas', {
+      v: 1,
+      snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]),
+      updatedAt: new Date().toISOString(),
+    })
+    db.close()
+
+    const store = new LoroStore()
+    const result = await store.load('bad-bytes-canvas')
+    expect(result.kind).toBe('corrupt-snapshot')
+  })
+
+  it('structurally-valid envelope with valid snapshot but invalid delta bytes returns corrupt-delta', async () => {
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'a' })
+    const snapshot = doc.export({ mode: 'snapshot' })
+
+    const db = await openLoroDb()
+    await writeRaw(db, 'loroCanvases', 'bad-delta-canvas', {
+      v: 1,
+      snapshot,
+      deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])],
+      updatedAt: new Date().toISOString(),
+    })
+    db.close()
+
+    const store = new LoroStore()
+    const result = await store.load('bad-delta-canvas')
+    expect(result.kind).toBe('corrupt-delta')
   })
 
   it('legacy v1 JSON record in canvases store is not-found for LoroStore', async () => {
