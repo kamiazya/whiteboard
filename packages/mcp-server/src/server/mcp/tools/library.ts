@@ -3,6 +3,10 @@ import { nanoid } from 'nanoid'
 import { LoroMap } from 'loro-crdt'
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
+import {
+  type UserLibraryMetadataManifest,
+  userLibraryMetadataManifestSchema,
+} from '../../../shared/api-contracts/libraries.js'
 import { validateExternalUrl } from '../../validators.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
@@ -72,11 +76,6 @@ export const userLibraryRemoveOutputSchema = z.object({
   remaining: z.array(z.string()),
 })
 
-import {
-  type UserLibraryMetadataManifest,
-  userLibraryMetadataManifestSchema,
-} from '../../../shared/api-contracts/libraries.js'
-
 export { userLibraryMetadataManifestSchema, type UserLibraryMetadataManifest }
 
 // MCP tools for working with libraries.excalidraw.com-compatible .excalidrawlib
@@ -144,11 +143,6 @@ function normalizeLibraryPayload(raw: unknown, label: string): LibraryItemV2[] {
   const v1 = libraryPayloadV1Schema.safeParse(raw)
   if (v1.success) return v1.data.library.map((elements) => ({ elements }))
 
-  // Surface the version field in the error when present to help diagnosis.
-  const version =
-    raw !== null && typeof raw === 'object' && 'version' in raw
-      ? (raw as { version: unknown }).version
-      : undefined
   if (
     raw === null ||
     typeof raw !== 'object' ||
@@ -156,6 +150,8 @@ function normalizeLibraryPayload(raw: unknown, label: string): LibraryItemV2[] {
   ) {
     throw new Error(`Not an .excalidrawlib payload: ${label}`)
   }
+  // Surface the version field in the error when present to help diagnosis.
+  const version = 'version' in raw ? (raw as { version: unknown }).version : undefined
   throw new Error(`Unsupported or malformed .excalidrawlib payload (version ${version}): ${label}`)
 }
 
@@ -396,7 +392,7 @@ export function libraryListItemsTool() {
     ): Promise<z.infer<typeof libraryListItemsOutputSchema>> => {
       const items = await loadLibrarySource(args, client)
       return {
-        source: args.libraryUrl ?? args.libraryPath ?? `user:${args.userLibraryName}`,
+        source: sourceLabel(args),
         itemCount: items.length,
         items: items.map((item, index) => ({
           index,
