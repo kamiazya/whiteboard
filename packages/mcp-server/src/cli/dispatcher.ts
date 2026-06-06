@@ -4,9 +4,10 @@
 // the entrypoint's argv parse + `process.exit` chain.
 //
 // Output contract:
-//   stdout  -> exactly one JSON object terminated by '\n', EXCEPT
-//              for `logs` which emits JSONL (one redacted JSON entry
-//              per line, trailing newline)
+//   stdout  -> exactly one JSON object terminated by '\n', EXCEPT:
+//              - `--version` / `-v` emits a bare semver string (not JSON)
+//              - `logs` emits JSONL (one redacted JSON entry per line,
+//                trailing newline)
 //   stderr  -> diagnostics / usage / errors only
 //
 // `run` is dispatched via a dynamic import so the read-only commands
@@ -32,7 +33,8 @@ import { parseServerRestoreArgs } from './server-restore-args.js'
 import { parseServerRunArgs } from './server-run-args.js'
 import { parseServerSupportBundleArgs } from './server-support-bundle-args.js'
 
-export const USAGE = `whiteboard mcp
+export const USAGE = `whiteboard --version | -v
+whiteboard mcp
 whiteboard daemon status         --json [--data-dir=<path>]
 whiteboard daemon doctor         --json [--data-dir=<path>]
 whiteboard daemon stop           --json [--data-dir=<path>]

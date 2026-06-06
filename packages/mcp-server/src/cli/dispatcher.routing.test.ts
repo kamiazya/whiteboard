@@ -468,9 +468,23 @@ describe('dispatcher routing: --version flag', () => {
     expect(stdout).toMatch(/^\d+\.\d+\.\d+\n$/)
   })
 
+  it('writes nothing to stderr for --version in mid-position', async () => {
+    const { stderr } = await captureStdio(() => main(['daemon', '--version']))
+    expect(stderr).toBe('')
+  })
+
   it('returns exit 0 for -v in mid-position (e.g. server -v)', async () => {
     const { result: exitCode, stdout } = await captureStdio(() => main(['server', '-v']))
     expect(exitCode).toBe(0)
     expect(stdout).toMatch(/^\d+\.\d+\.\d+\n$/)
+  })
+
+  it('writes nothing to stderr for -v in mid-position', async () => {
+    const { stderr } = await captureStdio(() => main(['server', '-v']))
+    expect(stderr).toBe('')
+  })
+
+  it('USAGE documents --version / -v', () => {
+    expect(USAGE).toMatch(/--version/)
   })
 })
