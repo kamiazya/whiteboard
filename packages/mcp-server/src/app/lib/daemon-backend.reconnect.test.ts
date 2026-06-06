@@ -76,6 +76,10 @@ function deliverFrame(socket: FakeWebSocket, byte: number): void {
   socket.onmessage?.(new MessageEvent('message', { data: new Uint8Array([byte]).buffer }))
 }
 
+function deliverText(socket: FakeWebSocket, payload: unknown): void {
+  socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(payload) }))
+}
+
 // ── Setup / teardown ─────────────────────────────────────────────────────────
 
 let originalWebSocket: typeof WebSocket
