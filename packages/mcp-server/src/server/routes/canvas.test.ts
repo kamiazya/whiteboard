@@ -1212,7 +1212,7 @@ describe('createAutoVersionTrigger', () => {
       60_000,
     )
 
-    // First call: below-threshold (nothing saved yet) → should save.
+    // First call: no prior save recorded → now - 0 >= intervalMs is always true → should save.
     const first = await trigger('session1', 'canvas-a', doc)
     expect(first).toEqual(entry)
     expect(save).toHaveBeenCalledTimes(1)
