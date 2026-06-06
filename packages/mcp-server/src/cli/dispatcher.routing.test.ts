@@ -81,6 +81,7 @@ const daemonDoctorModule = await import('./daemon-doctor.js')
 const daemonStopModule = await import('./daemon-stop.js')
 const daemonLogsModule = await import('./daemon-logs.js')
 const daemonSupportBundleModule = await import('./daemon-support-bundle.js')
+const daemonRunModule = await import('./daemon-run.js')
 const serverStatusModule = await import('./server-status.js')
 const serverStopModule = await import('./server-stop.js')
 const serverDoctorModule = await import('./server-doctor.js')
@@ -115,17 +116,21 @@ function captureStdio<T>(
     })
 }
 
+// MCP dispatch never resolves on the happy path (StdioServerTransport keeps the
+// process alive), so MCP-path tests fire-and-forget `main` and yield one timer
+// tick to let the synchronous routing branch reach the handler.
+function tick(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 20))
+}
+
 // ---------------------------------------------------------------------------
 // no-arg → MCP stdio path
-// MCP dispatch never resolves on the happy path (StdioServerTransport keeps
-// the process alive). Use fire-and-forget + a timer tick to assert routing
-// without hanging the test suite.
 // ---------------------------------------------------------------------------
 describe('dispatcher routing: no-arg → MCP stdio', () => {
   it('invokes the MCP handler when argv is empty', async () => {
     vi.mocked(mcpModule.main).mockClear()
     void main([])
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await tick()
     expect(vi.mocked(mcpModule.main)).toHaveBeenCalledOnce()
   })
 })
@@ -137,7 +142,7 @@ describe('dispatcher routing: whiteboard mcp', () => {
   it('invokes the MCP handler for `mcp` with no further args', async () => {
     vi.mocked(mcpModule.main).mockClear()
     void main(['mcp'])
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await tick()
     expect(vi.mocked(mcpModule.main)).toHaveBeenCalledOnce()
   })
 
@@ -226,7 +231,6 @@ describe('dispatcher routing: whiteboard daemon support-bundle', () => {
 
 describe('dispatcher routing: whiteboard daemon run', () => {
   it('routes to runDaemonRun (refused case exits 1)', async () => {
-    const daemonRunModule = await import('./daemon-run.js')
     vi.mocked(daemonRunModule.runDaemonRun).mockClear()
     const { result: exitCode, stderr } = await captureStdio(() =>
       main(['daemon', 'run', '--json']),
