@@ -33,7 +33,7 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { saveVersionResponseSchema } from '../../shared/api-contracts/canvas.js'
+import { saveVersionResponseSchema, problemDetailsErrorSchema } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 import VersionTimeline from './VersionTimeline.js'
 import { CanvasThumb } from './CanvasThumb.js'
@@ -409,11 +409,12 @@ export default function WorkspaceTopBar({
         navigate(`/canvas/${workspaceId}/${encodeURIComponent(target)}`)
         return
       }
-      const body = (await res.json().catch(() => ({}))) as { title?: string }
+      const parsed = problemDetailsErrorSchema.safeParse(await res.json().catch(() => ({})))
       // Use the Problem Details title when present; otherwise show a safe
       // generic message. Never expose body.message or Error.message — those
       // can contain server-side paths or credentials (P-HTTP-005).
-      setNewCanvasError(typeof body.title === 'string' && body.title ? body.title : 'Failed to create canvas.')
+      const title = parsed.success ? parsed.data.title : undefined
+      setNewCanvasError(title ? title : 'Failed to create canvas.')
     } catch {
       setNewCanvasError('Failed to create canvas.')
     } finally {

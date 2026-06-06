@@ -75,6 +75,12 @@ export const saveVersionResponseSchema = z.object({
   version: versionEntrySchema,
 })
 
+// RFC 7807 / RFC 9457 Problem Details error response. Only the fields the UI
+// needs to surface a human-readable error string without leaking server internals.
+export const problemDetailsErrorSchema = z.object({
+  title: z.string().optional(),
+})
+
 // Workspace + canvas listings consumed by IndexPage to render the
 // "open workspaces" grid.
 export const workspaceSummarySchema = z.object({
@@ -108,3 +114,4 @@ export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>
 export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>
 export type CanvasSummary = z.infer<typeof canvasSummarySchema>
 export type ListCanvasesResponse = z.infer<typeof listCanvasesResponseSchema>
+export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>

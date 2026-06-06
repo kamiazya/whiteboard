@@ -147,6 +147,26 @@ describe('WorkspaceTopBar — new canvas error rendering (P-HTTP-005)', () => {
     expect(screen.queryByText('Failed to create canvas.')).toBeNull()
   })
 
+  it('shows fallback when Problem Details title is a non-string (Zod parse guard)', async () => {
+    vi.mocked(apiFetch).mockImplementation(async (url) => {
+      if (String(url).includes('/names')) return mkNamesOk()
+      // title is a number — invalid per problemDetailsErrorSchema; cast would let it through
+      return new Response(
+        JSON.stringify({ title: 42 }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      )
+    })
+
+    renderBar()
+    await openNewCanvasDialog()
+    await submitSlug('any-slug')
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to create canvas.')).toBeTruthy()
+    })
+    expect(screen.queryByText('42')).toBeNull()
+  })
+
   it('shows the slug validation error inline without making a fetch request', async () => {
     renderBar()
     await openNewCanvasDialog()
