@@ -198,6 +198,72 @@ describe('WorkspaceTopBar browser mode', () => {
     })
   })
 
+  it('new-canvas dialog: shows Problem Details title on 409 and shows fallback on missing title', async () => {
+    let callCount = 0
+    // Override the beforeEach fetch stub for this test only.
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      if (url.includes('/canvases') && init?.method === 'POST') {
+        callCount++
+        if (callCount === 1) {
+          // First POST → 409 Problem Details with title
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ title: 'Canvas "design/foo" already exists' }),
+              { status: 409, headers: { 'Content-Type': 'application/json' } },
+            ),
+          )
+        }
+        // Second POST → 500 without title → fallback message
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ error: 'internal' }),
+            { status: 500, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderTopBar()
+
+    // The canvas switcher trigger renders the slug as separate spans for prefix/leaf
+    // when a "/" is present ("design" + "/" + "login-flow"). Wait for the leaf span
+    // to appear, then walk up to the enclosing button.
+    await waitFor(() => expect(screen.getByText('login-flow')).toBeTruthy())
+    const switcherLeaf = screen.getByText('login-flow')
+    const switcher = switcherLeaf.closest('button')!
+    expect(switcher).toBeTruthy()
+    // pointerDown triggers Radix's open handler; pointerUp on the menu item selects it.
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    await waitFor(() => screen.getByTestId('new-canvas-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-canvas-menu-item'))
+    await waitFor(() => screen.getByRole('dialog'))
+
+    // Submit a slug — first call returns 409 with Problem Details title.
+    const input = screen.getByPlaceholderText('e.g. design/login-flow')
+    fireEvent.change(input, { target: { value: 'design/foo' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Canvas "design/foo" already exists')).toBeTruthy()
+    })
+    // Dialog must still be open after an error.
+    expect(screen.getByRole('dialog')).toBeTruthy()
+
+    // Second submit — 500 without title → fallback.
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+    await waitFor(() => {
+      expect(screen.getByText('Failed to create canvas.')).toBeTruthy()
+    })
+    // Sensitive server internals must never be exposed.
+    expect(screen.queryByText(/internal/i)).toBeNull()
+  })
+
   it('does not dispatch excalidraw:version_saved when POST /versions returns invalid schema', async () => {
     // The default beforeEach mock returns { ok: true } for POST /versions,
     // which does not match saveVersionResponseSchema (missing version.id, branchName, etc.).

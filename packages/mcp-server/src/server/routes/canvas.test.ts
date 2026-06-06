@@ -107,6 +107,49 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     const json = (await res.json()) as { title?: string }
     expect(typeof json.title).toBe('string')
   })
+
+  it('returns 400 with Problem Details title when body is not JSON', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'not-json',
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+  })
+
+  it('returns 400 with Problem Details title when body has no slug field', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'oops' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+  })
+
+  it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/bad.workspace/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'test' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as Record<string, unknown>
+    // Must have a Problem Details title, not the legacy { error, message } shape.
+    expect(typeof json.title).toBe('string')
+    expect(json.title as string).toBeTruthy()
+    // Must NOT carry the old shape keys.
+    expect(json).not.toHaveProperty('error')
+    expect(json).not.toHaveProperty('message')
+  })
 })
 
 describe('GET /api/workspaces/:workspaceId/canvases', () => {

@@ -208,7 +208,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
+      if (body) return c.json({ title: body.message }, 400)
       throw err
     }
     const raw = await c.req.json().catch(() => null)
@@ -236,8 +236,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       if (err instanceof ConflictError) {
         return c.json({ title: `Canvas "${slug}" already exists` }, 409)
       }
-      const title = err instanceof Error ? err.message : 'Failed to create canvas'
-      return c.json({ title }, 400)
+      getLogger('canvas').error({ err: err as Error }, 'saveCanvas failed unexpectedly')
+      return c.json({ title: 'Failed to create canvas.' }, 500)
     }
   })
 
