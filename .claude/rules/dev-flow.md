@@ -27,6 +27,8 @@ Launch via `Workflow({scriptPath})` — they are NOT name-registered. `args` arr
 - **plan-initiative**: expert panel → synthesize sliced plan → gate → visualize on the local whiteboard. Returns `openQuestions` for the main session to ask via AskUserQuestion.
 - **consult-adversarial**: answer a hard question/decision, then refute it (skeptic panel) before trusting it — accept iff nothing survives, else focused follow-up, bounded. Feeds plan-initiative / dev-loop; surfaces to human if unresolved.
 - **investigate**: lightweight read-only — fan out one investigator per concern dimension → synthesize a go/no-go + required-before-adopting steps. For "is it safe to commit/track X" / portability / hygiene / policy questions. Callable from the **main session** or from **plan-initiative** (`args.investigateQuestions`); NOT from dev-loop/review (already at the 1-level nesting limit). Defaults its investigator to `Explore` (override `args.investigatorAgent`).
+- **audit-triage**: standing whole-codebase health audit (see the always-on note above) — fills idle capacity and feeds the next wave.
+- **ci-triage**: triage the **post-push** automated-review surface of a PR (GitHub Actions CI failures, CodeRabbit, AccessLint, CodeQL, Dependabot) → deduped task/issue backlog. The cloud-side complement to the local `lefthook` pre-push gate. `args:{pr}`. See the `ci-triage` skill (verified check surface + gh commands + the WIP-skips-CodeRabbit gotcha). Watch checks live with the `Monitor` tool.
 
 ## Phase agents (`agentType`)
 
@@ -49,4 +51,8 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 ## Skills (load for detail)
 
-`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `docs-sync`, `whiteboard-mcp-smoke`.
+`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `docs-sync`, `whiteboard-mcp-smoke`, `audit-triage`, `ci-triage`.
+
+## Gates: local + cloud
+
+The integrator's push is guarded on two sides. **Local (pre-push, `lefthook`)**: `pnpm -r typecheck` + `pnpm test --project mcp-node` + `pnpm lint:noconsole` run before the commit leaves the machine (pre-commit only formats staged files, to not slow the dev-loop's worktree commits). **Cloud (post-push)**: GitHub Actions CI (`verify`) + CodeRabbit + AccessLint + WIP + CodeQL/Dependabot — monitor with the `Monitor` tool and triage with the `ci-triage` workflow/skill into Tasks/tmp-issues. Hooks are a net, not the gate — CI is authoritative; `LEFTHOOK=0` / `--no-verify` bypass when justified.
