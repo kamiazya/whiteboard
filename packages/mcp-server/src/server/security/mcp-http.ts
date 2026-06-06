@@ -1,28 +1,16 @@
 import type { MiddlewareHandler } from 'hono'
 
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
+import { appendVary, isLoopbackHostname, normalizeOriginHostname } from './cors-loopback.js'
 
 function normalizeMethod(method: string): string {
   return method.toUpperCase()
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
 }
 
 function normalizeHostname(value: string | undefined): string | null {
   if (!value) return null
   try {
     return new URL(`http://${value}`).hostname
-  } catch {
-    return null
-  }
-}
-
-function normalizeOriginHostname(originHeader: string | undefined): string | null {
-  if (!originHeader) return null
-  try {
-    return new URL(originHeader).hostname
   } catch {
     return null
   }
@@ -36,15 +24,6 @@ function getRequestHost(c: Parameters<MiddlewareHandler>[0]): string | undefined
   } catch {
     return undefined
   }
-}
-
-function appendVary(value: string | null, token: string): string {
-  if (!value || value.length === 0) return token
-  const parts = value
-    .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-  return parts.includes(token) ? parts.join(', ') : [...parts, token].join(', ')
 }
 
 function mcpHttpError(status: number, message: string, headers?: Headers): Response {
@@ -96,6 +75,11 @@ export function createMcpHttpOriginMiddleware(): MiddlewareHandler {
     }
 
     if (normalizeMethod(c.req.method) === 'OPTIONS') {
+      if (origin) {
+        // Local Network Access preflight header — required by Chrome for
+        // private-network → loopback requests regardless of PNA spec state.
+        c.res.headers.set('Access-Control-Allow-Private-Network', 'true')
+      }
       return new Response(null, { status: 204, headers: c.res.headers })
     }
 
