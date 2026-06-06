@@ -65,6 +65,10 @@ describe('publish contract', () => {
         types: './dist/server/mcp/index.d.ts',
         import: './dist/server/mcp/index.js',
       },
+      './browser-contract': {
+        types: './dist/shared/canvas-backend-contract.d.ts',
+        import: './dist/shared/canvas-backend-contract.js',
+      },
       './package.json': './package.json',
     })
     expect(mcpPackage.homepage).toBeTruthy()
