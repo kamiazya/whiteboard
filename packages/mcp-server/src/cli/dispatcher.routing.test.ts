@@ -326,6 +326,39 @@ describe('dispatcher routing: whiteboard server backup', () => {
     expect(vi.mocked(serverBackupModule.runServerBackup)).toHaveBeenCalledOnce()
   })
 
+  it('exits 1 and writes to stderr when server is running', async () => {
+    vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
+      kind: 'running-server',
+    })
+    const { result: exitCode, stderr } = await captureStdio(() =>
+      main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
+    )
+    expect(exitCode).toBe(1)
+    expect(stderr).toMatch(/backup refused: server is running/)
+  })
+
+  it('exits 1 and writes to stderr when output path is invalid', async () => {
+    vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
+      kind: 'invalid-output-path',
+    })
+    const { result: exitCode, stderr } = await captureStdio(() =>
+      main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
+    )
+    expect(exitCode).toBe(1)
+    expect(stderr).toMatch(/backup refused: output path is not an empty directory/)
+  })
+
+  it('exits 1 and writes to stderr on error outcome', async () => {
+    vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
+      kind: 'error',
+    })
+    const { result: exitCode, stderr } = await captureStdio(() =>
+      main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
+    )
+    expect(exitCode).toBe(1)
+    expect(stderr).toMatch(/backup failed/)
+  })
+
   it('USAGE includes `whiteboard server backup`', () => {
     expect(USAGE).toMatch(/whiteboard server backup/)
   })
