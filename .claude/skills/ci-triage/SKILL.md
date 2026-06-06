@@ -54,6 +54,25 @@ PushNotification when a check flips to `fail` — that changes what the integrat
 
 Per finding: blocking/CI → fix now; real but not blocking → `TaskCreate` (track=task) or `tmp/issues/<slug>.md` (backlog) per the `ticketing` skill; noise → dismiss (resolve the CodeRabbit thread with a one-line why). Don't refile what's already a Task/issue.
 
-## WIP gotcha
+## CodeRabbit: on-demand trigger + rate-limit re-queue
 
-This PR (#56) is titled `…(WIP)`, so CodeRabbit shows **"Review skipped"** and the WIP check blocks merge. To get the full automated review + unblock merge, the integrator removes `WIP`/`(WIP)` from the PR title (or marks it ready) — a deliberate human step, not automatic.
+CodeRabbit does **not** auto-review a **Draft** PR or a PR whose title contains `WIP`/`(WIP)` (it posts "Review skipped"). Two consequences:
+
+- **Monitoring**: the `WIP` GitHub-App check stays *pending forever* while the title says WIP, so a "wait until all checks settle" monitor never exits. Prefer a **Draft PR** for merge-blocking (Draft blocks merge natively) and keep the title WIP-free, so every check settles cleanly.
+- **Triggering CodeRabbit on a Draft**: it must be invoked explicitly with a PR comment:
+  ```bash
+  gh pr comment <PR> --body "@coderabbitai review"        # review the latest changes
+  # other commands: "@coderabbitai full review" (re-review everything),
+  #   "@coderabbitai pause" / "resume", "@coderabbitai resolve" (resolve its threads),
+  #   "@coderabbitai configuration"
+  ```
+
+**Strategic timing (free OSS tier = strict rate limits).** Do NOT trigger on every commit. Trigger at meaningful points: a milestone batch landed + green, just before requesting human review, or after a large fold. One review per accumulated batch, not per push.
+
+**Rate-limit → re-queue at the stated recovery time.** When rate-limited, CodeRabbit replies with a comment saying when it will reset (e.g. "rate limit … try again in N minutes" / a timestamp). Flow:
+1. Trigger `@coderabbitai review`.
+2. Watch for CodeRabbit's response (the `Monitor` tool polling `gh api repos/{o}/{r}/issues/<PR>/comments` for the latest `coderabbitai[bot]` comment).
+3. If the response is a **rate-limit** message, parse the reset time and `ScheduleWakeup({ delaySeconds: <until reset + small buffer> })` — on wake, re-post `@coderabbitai review`. Loop until it actually reviews (cap the retries).
+4. If it **starts reviewing**, let it finish, then triage its comments via this skill / the `ci-triage` workflow.
+
+Bypass note: removing a PR from Draft (`gh pr ready <PR>`) is a deliberate human step (it signals "ready for human review/merge") — don't auto-undraft.
