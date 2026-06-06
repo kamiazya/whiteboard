@@ -1,4 +1,5 @@
 import type { LoroDoc } from 'loro-crdt'
+import { z } from 'zod'
 
 // Extract the key canvas fields Claude (via MCP) needs to reason about state.
 // Returning every field wastes tokens and includes noisy data like image dataURLs,
@@ -18,27 +19,34 @@ const SUMMARY_KEYS = [
   'isDeleted',
 ] as const
 
-export interface ElementSummary {
-  id: string
-  type: string
-  x?: number
-  y?: number
-  width?: number
-  height?: number
-  angle?: number
-  fileId?: string
-  text?: string
-  strokeColor?: string
-  backgroundColor?: string
-  isDeleted?: boolean
-}
+// Single source of truth for the canvas_inspect contract. The registered MCP
+// outputSchema, the summarizeCanvas return type, and the tool execute return type
+// all derive from this one Zod schema via z.infer, so a one-sided change fails to
+// compile instead of shipping schema-vs-runtime drift (the create_frame bug class).
+const elementSummarySchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  x: z.number().optional(),
+  y: z.number().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  angle: z.number().optional(),
+  fileId: z.string().optional(),
+  text: z.string().optional(),
+  strokeColor: z.string().optional(),
+  backgroundColor: z.string().optional(),
+  isDeleted: z.boolean().optional(),
+})
 
-export interface CanvasSummary {
+export const canvasInspectOutputSchema = z.object({
   // Number of live elements (isDeleted !== true). Useful for estimating scope.
-  elementCount: number
+  elementCount: z.number(),
   // Elements in LoroList insertion order, including tombstones for history context.
-  elements: ElementSummary[]
-}
+  elements: z.array(elementSummarySchema),
+})
+
+export type ElementSummary = z.infer<typeof elementSummarySchema>
+export type CanvasSummary = z.infer<typeof canvasInspectOutputSchema>
 
 // Character limit for text previews. Long box_with_label bodies can otherwise
 // bloat the MCP response, so previews are truncated to 80 characters plus an ellipsis.
@@ -57,7 +65,8 @@ export function summarizeCanvas(doc: LoroDoc): CanvasSummary {
     const summary: Record<string, unknown> = {}
     for (const key of SUMMARY_KEYS) {
       if (el[key] !== undefined) {
-        summary[key] = key === 'text' && typeof el[key] === 'string' ? previewText(el[key] as string) : el[key]
+        summary[key] =
+          key === 'text' && typeof el[key] === 'string' ? previewText(el[key] as string) : el[key]
       }
     }
     return summary as unknown as ElementSummary

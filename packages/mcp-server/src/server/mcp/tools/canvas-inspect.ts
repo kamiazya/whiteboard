@@ -1,28 +1,10 @@
 import { LoroDoc } from 'loro-crdt'
-import { z } from 'zod'
+import type { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
-import { summarizeCanvas, type CanvasSummary } from './summarize-canvas.js'
+import { type canvasInspectOutputSchema, summarizeCanvas } from './summarize-canvas.js'
 
-export const canvasInspectOutputSchema = z.object({
-  elementCount: z.number(),
-  elements: z.array(
-    z.object({
-      id: z.string(),
-      type: z.string(),
-      x: z.number().optional(),
-      y: z.number().optional(),
-      width: z.number().optional(),
-      height: z.number().optional(),
-      angle: z.number().optional(),
-      fileId: z.string().optional(),
-      text: z.string().optional(),
-      strokeColor: z.string().optional(),
-      backgroundColor: z.string().optional(),
-      isDeleted: z.boolean().optional(),
-    }),
-  ),
-})
+export { canvasInspectOutputSchema } from './summarize-canvas.js'
 
 export function canvasInspectTool() {
   return {
@@ -36,7 +18,10 @@ export function canvasInspectTool() {
       },
       required: ['canvasId'],
     },
-    execute: async (args: { canvasId: string }, client: DaemonClient): Promise<CanvasSummary> => {
+    execute: async (
+      args: { canvasId: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof canvasInspectOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const res = await client.request(
         `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/snapshot`,
