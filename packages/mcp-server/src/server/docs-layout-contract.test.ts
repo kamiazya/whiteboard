@@ -1,12 +1,11 @@
 // Contract tests for the Diataxis docs IA.
 //
-// These tests assert the NEW canonical paths after the docs reorganisation and
-// act as a regression guard against regressions (stale links back to old paths).
+// They assert the canonical paths after the docs reorganisation and guard
+// against stale links back to the old paths.
 //
-// Stub files with "# Moved" headers at the old paths are intentionally KEPT
-// as permanent redirects for external-link stability; the link-audit check
-// EXCLUDES those stub files (and docs/portless-local-dev.md, which is held
-// pending a separate decision) so they do not false-positive.
+// Stub files with "# Moved" headers at the old paths are intentionally kept as
+// permanent redirects for external-link stability, so the link-audit only
+// scans the curated index files below — never the stubs themselves.
 
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -79,21 +78,9 @@ describe('docs layout contract', () => {
     expect(existsSync(resolve(repoRoot, '.github/ISSUE_TEMPLATE/feature_request.yml'))).toBe(true)
   })
 
-  // S9 — link-audit: old paths must NOT appear in docs/** + key root files
-  // EXCEPT inside the "# Moved" stub files themselves and portless-local-dev.md
-  it('no stale refs to moved doc paths remain outside redirect stubs', () => {
-    const stubFiles = new Set([
-      'docs/configuration.md',
-      'docs/docker-server.md',
-      'docs/observability.md',
-      'docs/architecture.md',
-      'docs/security-model.md',
-      'docs/wire-protocol.md',
-      'docs/templates.md',
-      // portless-local-dev.md is held at docs root pending a separate decision
-      'docs/portless-local-dev.md',
-    ])
-
+  // S9 — link-audit: moved doc paths must NOT appear in the curated index files.
+  // The "# Moved" redirect stubs are excluded by construction (they are not listed here).
+  it('no stale refs to moved doc paths remain in curated index files', () => {
     const filesToCheck = [
       'README.md',
       'CONTRIBUTING.md',
@@ -106,20 +93,12 @@ describe('docs layout contract', () => {
     ]
 
     const oldPathPattern =
-      /docs\/(configuration|docker-server|observability|architecture|security-model|wire-protocol|templates)\.md/
+      /docs\/(configuration|docker-server|observability|architecture|security-model|wire-protocol|templates)\.md/g
 
     for (const relPath of filesToCheck) {
-      const absPath = resolve(repoRoot, relPath)
-      if (!existsSync(absPath)) continue
-      const content = readText(relPath)
-      const matches = content.match(new RegExp(oldPathPattern.source, 'g'))
-      if (matches) {
-        // Check whether any match is a redirect stub marker
-        const isStub = stubFiles.has(relPath)
-        if (!isStub) {
-          expect(matches, `${relPath} still contains stale path refs: ${matches.join(', ')}`).toBeNull()
-        }
-      }
+      if (!existsSync(resolve(repoRoot, relPath))) continue
+      const matches = readText(relPath).match(oldPathPattern)
+      expect(matches, `${relPath} still contains stale path refs: ${matches?.join(', ')}`).toBeNull()
     }
   })
 })
