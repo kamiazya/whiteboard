@@ -372,4 +372,4 @@ Does **not**:
 - Pages security headers / CSP: `apps/web/public/_headers`.
 - Web dev server config (no `server` block → ignores Portless `PORT`/`HOST`):
   `apps/web/vite.config.ts`.
-- Pages deploy contract & portless roadmap note: `docs/pages-deploy-mvp.md`.
+- Pages deploy contract: `docs/contributing/deployment/cloudflare-pages.md`.
