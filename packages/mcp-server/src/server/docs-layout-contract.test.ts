@@ -21,47 +21,38 @@ function readText(relPath: string): string {
 }
 
 describe('docs layout contract', () => {
-  // S1 — configuration moved to reference/
   it('docs/reference/configuration.md exists at the new path', () => {
     expect(existsSync(resolve(repoRoot, 'docs/reference/configuration.md'))).toBe(true)
   })
 
-  // S2 — docker-server moved to how-to/
   it('docs/how-to/self-host-with-docker.md exists at the new path', () => {
     expect(existsSync(resolve(repoRoot, 'docs/how-to/self-host-with-docker.md'))).toBe(true)
   })
 
-  // S3 — observability moved to contributing/
   it('docs/contributing/observability.md exists at the new path', () => {
     expect(existsSync(resolve(repoRoot, 'docs/contributing/observability.md'))).toBe(true)
   })
 
-  // S4 — architecture moved to explanation/
   it('docs/explanation/architecture.md exists at the new path', () => {
     expect(existsSync(resolve(repoRoot, 'docs/explanation/architecture.md'))).toBe(true)
   })
 
-  // S5 — security-model moved to explanation/
   it('docs/explanation/security-model.md exists at the new path', () => {
     expect(existsSync(resolve(repoRoot, 'docs/explanation/security-model.md'))).toBe(true)
   })
 
-  // S6 — wire-protocol moved to contributing/architecture/
   it('docs/contributing/architecture/wire-protocol.md exists at the new path', () => {
     expect(existsSync(resolve(repoRoot, 'docs/contributing/architecture/wire-protocol.md'))).toBe(true)
   })
 
-  // S7 — templates moved to reference/
   it('docs/reference/templates.md exists at the new path', () => {
     expect(existsSync(resolve(repoRoot, 'docs/reference/templates.md'))).toBe(true)
   })
 
-  // S0 — review-checklist English translation exists in contributing/
   it('docs/contributing/review-checklist.md exists', () => {
     expect(existsSync(resolve(repoRoot, 'docs/contributing/review-checklist.md'))).toBe(true)
   })
 
-  // S8 — OSS root files exist
   it('CODE_OF_CONDUCT.md exists at repo root', () => {
     expect(existsSync(resolve(repoRoot, 'CODE_OF_CONDUCT.md'))).toBe(true)
   })
@@ -78,8 +69,8 @@ describe('docs layout contract', () => {
     expect(existsSync(resolve(repoRoot, '.github/ISSUE_TEMPLATE/feature_request.yml'))).toBe(true)
   })
 
-  // S9 — link-audit: moved doc paths must NOT appear in the curated index files.
-  // The "# Moved" redirect stubs are excluded by construction (they are not listed here).
+  // Moved doc paths must not appear in the curated index files.
+  // The "# Moved" redirect stubs at the old paths are intentionally excluded from this check.
   it('no stale refs to moved doc paths remain in curated index files', () => {
     const filesToCheck = [
       'README.md',
