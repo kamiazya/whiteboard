@@ -17,7 +17,7 @@
     "whiteboard": {
       "type": "http",
       "url": "http://127.0.0.1:3099/mcp",
-      "_comment_auth": "'whiteboard-dev' is a NON-SECRET, well-known local-dev constant (also defined in the dev daemon launcher and test fixtures). It authenticates only to the loopback 127.0.0.1:3099 dev daemon and grants nothing on any other machine — safe to commit. See CONTRIBUTING.md. To use a different value, override this header in your gitignored .claude/settings.local.json.",
+      "_comment_auth": "'whiteboard-dev' is a NON-SECRET, well-known local-dev constant (also defined in the dev daemon launcher and test fixtures). It authenticates only to the loopback 127.0.0.1:3099 dev daemon and grants nothing on any other machine — safe to commit. See CONTRIBUTING.md.",
       "headers": {
         "Authorization": "Bearer whiteboard-dev"
       }

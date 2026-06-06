@@ -28,7 +28,7 @@ The migration proceeds in stages so each stage ships as a working increment:
 - `apps/web` can be deployed as a static site (Cloudflare Pages, any CDN) and works offline via `BrowserLocalBackend`.
 - The daemon is simplified to backend-only concerns; its `src/app` UI is removed after migration.
 - Stages 1–5 are non-trivial; the daemon UI remains live until Stage 2 completes.
-- The `CanvasBackend` interface becomes a Zod-guarded contract (no hand-written parallel type).
+- The `CanvasBackend` interface is an intentionally hand-written behavioral seam (methods and callbacks) for in-process use; it is not a JSON shape that crosses a process boundary. The payload field types it references are derived from `z.infer<>` in `ws-messages.ts` per the Zod-schema discipline, so there is no parallel re-declaration of those shapes.
 - Excalidraw enters the `apps/web` bundle; the bundle size must stay within the project's performance budget.
 
 ## Alternatives considered
