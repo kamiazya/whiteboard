@@ -285,6 +285,29 @@ describe('DaemonBackend', () => {
       expect(onRemoteUpdate).toHaveBeenCalledTimes(2)
       backend.disconnect()
     })
+
+    it('routes the first frame after disconnect()+reconnect back to onSnapshot', () => {
+      // disconnect() resets snapshot routing, so re-connecting (a fresh canvas mount that
+      // reuses the backend) treats its initial frame as a snapshot again, not an import.
+      const backend = makeBackend()
+      const onSnapshot = vi.fn()
+      const onRemoteUpdate = vi.fn()
+      backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
+      FakeWebSocket.instances[0].onmessage?.(
+        new MessageEvent('message', { data: new Uint8Array([1]).buffer }),
+      )
+      expect(onSnapshot).toHaveBeenCalledTimes(1)
+
+      backend.disconnect()
+      backend.connect(makeHandlers({ onSnapshot, onRemoteUpdate }))
+      const wsNew = FakeWebSocket.instances[FakeWebSocket.instances.length - 1]
+      wsNew.onmessage?.(new MessageEvent('message', { data: new Uint8Array([2]).buffer }))
+
+      // First frame of the new connection is a snapshot again; not an import.
+      expect(onSnapshot).toHaveBeenCalledTimes(2)
+      expect(onRemoteUpdate).not.toHaveBeenCalled()
+      backend.disconnect()
+    })
   })
 
   describe('pushLocalUpdate', () => {

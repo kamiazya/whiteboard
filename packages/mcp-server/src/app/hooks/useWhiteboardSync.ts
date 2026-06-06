@@ -357,7 +357,10 @@ export function useWhiteboardSync(
       backend.disconnect()
       backendRef.current = null
     }
-  }, [workspaceId, slug]) // eslint-disable-line react-hooks/exhaustive-deps
+    // Re-run when the canvas (workspaceId/slug) changes OR an injected backend is swapped.
+    // options.backend is undefined in production (a fresh DaemonBackend is created above), so this
+    // stays stable there; a caller that passes its own backend must pass a stable/memoized instance.
+  }, [workspaceId, slug, options.backend]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Excalidraw API callback.
   // Bridge flushPendingExportRequests' string-message `send` contract to the
