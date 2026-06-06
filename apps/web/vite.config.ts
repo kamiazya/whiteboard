@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, sep } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -33,10 +33,13 @@ export default defineConfig({
           // The glob pattern starts after the fonts/ directory so the
           // dest only contains the font family subdirectories, not the
           // full node_modules path prefix.
-          src: resolve(
-            __dirname,
-            'node_modules/@excalidraw/excalidraw/dist/prod/fonts',
-          ) + '/**/*',
+          // fast-glob (used by vite-plugin-static-copy) requires forward
+          // slashes even on Windows; replace OS separators before appending.
+          src:
+            resolve(
+              __dirname,
+              'node_modules/@excalidraw/excalidraw/dist/prod/fonts',
+            ).replaceAll(sep, '/') + '/**/*',
           dest: 'fonts',
         },
       ],
