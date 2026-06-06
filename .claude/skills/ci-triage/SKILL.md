@@ -38,6 +38,15 @@ done
 
 PushNotification when a check flips to `fail` — that changes what the integrator does next.
 
+**Caveat (Draft PRs): the `WIP` check stays `pending` forever while the PR is a Draft** — the WIP app flags Drafts as work-in-progress regardless of the title (removing `(WIP)` from the title is NOT enough; only `gh pr ready <PR>` settles it). `AccessLint` can also linger on Drafts. So a "wait until ALL checks settle" loop never exits on a Draft. **Watch the gating check (`verify`) specifically instead:**
+```bash
+while true; do
+  b=$(gh pr checks <PR> --json name,bucket --jq '.[]|select(.name=="verify")|.bucket' 2>/dev/null)
+  [ -n "$b" ] && [ "$b" != "pending" ] && { echo "verify: $b"; break; }
+  sleep 60
+done
+```
+
 ## Triage (the `ci-triage` workflow)
 
 `Workflow({ scriptPath: '.claude/workflows/ci-triage.workflow.mjs', args: { pr: 56 } })` gathers failed-check logs + CodeRabbit/AccessLint comments, triages each source (real vs noise, severity), adversarially verifies the load-bearing ones, and returns a deduped backlog. Read-only — the integrator files the survivors.
@@ -66,6 +75,8 @@ CodeRabbit does **not** auto-review a **Draft** PR or a PR whose title contains 
   #   "@coderabbitai pause" / "resume", "@coderabbitai resolve" (resolve its threads),
   #   "@coderabbitai configuration"
   ```
+
+**`@coderabbitai review` is INCREMENTAL** — it does not re-review commits CodeRabbit already reviewed, so on an already-reviewed PR it just replies "✅ Review finished" with no new findings (verified on #56). For a real pass over accumulated work, use **`@coderabbitai full review`**. (Plain `review` is also stated to apply "only when automatic reviews are paused".)
 
 **Strategic timing (free OSS tier = strict rate limits).** Do NOT trigger on every commit. Trigger at meaningful points: a milestone batch landed + green, just before requesting human review, or after a large fold. One review per accumulated batch, not per push.
 
