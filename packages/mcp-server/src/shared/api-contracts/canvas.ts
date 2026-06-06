@@ -81,6 +81,11 @@ export const problemDetailsErrorSchema = z.object({
   title: z.string().optional(),
 })
 
+// POST /api/workspaces/:workspaceId/canvases — success body.
+export const createCanvasResponseSchema = z.object({
+  slug: z.string(),
+})
+
 // Workspace + canvas listings consumed by IndexPage to render the
 // "open workspaces" grid.
 export const workspaceSummarySchema = z.object({
@@ -115,3 +120,4 @@ export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema
 export type CanvasSummary = z.infer<typeof canvasSummarySchema>
 export type ListCanvasesResponse = z.infer<typeof listCanvasesResponseSchema>
 export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>
+export type CreateCanvasResponse = z.infer<typeof createCanvasResponseSchema>

@@ -5,6 +5,7 @@ import { LoroDoc as LoroDocCtor, LoroMap } from 'loro-crdt'
 import type { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import {
+  type CreateCanvasResponse,
   type ListCanvasesResponse,
   type ListVersionsResponse,
   type ListWorkspacesResponse,
@@ -212,30 +213,31 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
     const raw = await c.req.json().catch(() => null)
     if (raw === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+      return c.json({ title: 'JSON body required' }, 400)
     }
     const parsed = createCanvasRequestSchema.safeParse(raw)
     if (!parsed.success) {
-      return c.json({ error: 'invalid_body', message: 'slug is required' }, 400)
+      return c.json({ title: 'slug is required' }, 400)
     }
     const slug = parsed.data.slug
     try {
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
+      if (body) return c.json({ title: body.message }, 400)
       throw err
     }
     try {
       const doc = new LoroDocCtor()
       await saveCanvas(workspaceId, slug, doc, { overwrite: false })
-      return c.json({ slug })
+      const response: CreateCanvasResponse = { slug }
+      return c.json(response)
     } catch (err) {
       if (err instanceof ConflictError) {
-        return c.json({ error: 'conflict', message: err.message }, 409)
+        return c.json({ title: `Canvas "${slug}" already exists` }, 409)
       }
-      const message = err instanceof Error ? err.message : 'save failed'
-      return c.json({ error: 'invalid_slug', message }, 400)
+      const title = err instanceof Error ? err.message : 'Failed to create canvas'
+      return c.json({ title }, 400)
     }
   })
 

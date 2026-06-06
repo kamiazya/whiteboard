@@ -53,6 +53,62 @@ describe('GET /api/workspaces', () => {
   })
 })
 
+describe('POST /api/workspaces/:workspaceId/canvases', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
+    clearCache()
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+  })
+
+  it('returns { slug } on success', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'new-canvas' }),
+    })
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as unknown
+    expect(json).toEqual({ slug: 'new-canvas' })
+  })
+
+  it('returns 409 with Problem Details title on duplicate slug', async () => {
+    const app = createCanvasRouter()
+    // Create once to seed the conflict.
+    await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'existing' }),
+    })
+    // Second creation must return Problem Details with a title field.
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'existing' }),
+    })
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+  })
+
+  it('returns 400 with Problem Details title on invalid slug', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'bad slug!' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+  })
+})
+
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
