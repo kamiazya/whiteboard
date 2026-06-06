@@ -99,6 +99,9 @@ const libraryElementSchema = z.object({
   width: z.number(),
   height: z.number(),
   boundElements: z.array(boundElementRefSchema).nullish(),
+  // .passthrough() retains arbitrary Excalidraw-proprietary fields (strokeStyle,
+  // roughness, strokeColor, etc.) that vary by element type; strict enumeration
+  // would reject valid real-world payloads fetched from external library URLs.
 }).passthrough()
 
 const libraryItemV2Schema = z.object({
