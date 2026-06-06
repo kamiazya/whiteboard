@@ -5,7 +5,7 @@ This server is currently designed for local use first.
 ## Trust boundary
 
 - The daemon binds to `127.0.0.1` (not `localhost`) by default, restricting access to the loopback interface.
-- Mutating HTTP routes (`POST`, `PUT`, `DELETE` under `/api/*`) are protected with a local Bearer token when configured. Read-only `GET /api/*` routes are unauthenticated by design — they serve canvas metadata to the local browser without requiring credentials.
+- HTTP routes under `/api/*` apply auth in two layers. First, a global middleware protects all mutation methods (`POST`, `PUT`, `PATCH`, `DELETE`) under `/api/*` except `/api/runtime/*`, which has its own per-router middleware. Second, `/api/runtime/*` routes — including read-only endpoints such as `GET /api/runtime/status` and `GET /api/runtime/storage` — require a Bearer token for every request except `/api/runtime/ping`, which is an unauthenticated liveness probe. Canvas and workspace `GET` routes outside `/api/runtime/` are unauthenticated in local-daemon mode and serve canvas metadata to the local browser without requiring credentials.
 - The `/mcp` HTTP transport applies token checks and restricts the `Origin` header to loopback addresses (`127.0.0.1`, `::1`, or `localhost`).
 - The packaged `stdio` MCP path does not use OAuth. Trust comes from the local process that launches the server.
 
