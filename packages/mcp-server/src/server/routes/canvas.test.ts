@@ -96,6 +96,23 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     expect(json.title!.length).toBeGreaterThan(0)
   })
 
+  it('returns 500 with Problem Details title when saveCanvas fails unexpectedly', async () => {
+    // Block the canvas blob directory with a file so saveCanvas throws a
+    // non-ConflictError, exercising the catch-all 500 branch (mutation-check
+    // guard for the 400 -> 500 change).
+    await mkdir(join(tempDir, 'blobs', 'ws1'), { recursive: true })
+    await writeFile(join(tempDir, 'blobs', 'ws1', 'canvas'), 'not-a-directory')
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'new-canvas' }),
+    })
+    expect(res.status).toBe(500)
+    const json = (await res.json()) as { title?: string }
+    expect(json.title).toBe('Failed to create canvas.')
+  })
+
   it('returns 400 with Problem Details title on invalid slug', async () => {
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/ws1/canvases', {
