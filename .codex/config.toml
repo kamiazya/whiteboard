@@ -25,7 +25,7 @@
 # Official spec: https://github.com/openai/codex/blob/main/docs/config.md
 
 [features]
-codex_hooks = true
+hooks = true
 
 [[hooks.SessionStart]]
 matcher = "*"
@@ -34,7 +34,7 @@ matcher = "*"
 type = "command"
 command = 'node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/ensure-http-dev-daemon.mjs" --quiet'
 # `ensure-http-dev-daemon.mjs` waits up to 30s for `pnpm mcp:http:dev` to
-# bind on cold checkouts (tsx + happy-dom + canvas + resvg startup), so
+# accept authenticated MCP requests on cold checkouts, so
 # the hook timeout must be at least that long — otherwise the hook is
 # killed mid-wait, the daemon is still warming up, and the first MCP
 # connection races a not-yet-listening port.

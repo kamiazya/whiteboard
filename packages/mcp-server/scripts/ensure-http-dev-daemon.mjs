@@ -7,10 +7,11 @@
 // use it exits without doing anything.
 
 import { spawn } from 'node:child_process'
-import { createConnection, createServer } from 'node:net'
+import { createServer } from 'node:net'
 import { mkdir, open } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { waitForAuthenticatedMcp } from './ensure-http-dev-daemon-lib.mjs'
 
 const PORT = 3099
 const HOST = '127.0.0.1'
@@ -45,22 +46,6 @@ function probe(port) {
     })
     tester.once('listening', () => tester.close(() => resolveProbe('free')))
     tester.listen(port, HOST)
-  })
-}
-
-// Open a TCP connection to (HOST, port) once. Used to probe whether the
-// spawned daemon has finished binding — `createServer().listen` would
-// race against the child for the port, so use connect() instead.
-function tcpConnectOnce(port) {
-  return new Promise((resolveProbe) => {
-    const sock = createConnection({ host: HOST, port })
-    const cleanup = (outcome) => {
-      sock.removeAllListeners()
-      sock.destroy()
-      resolveProbe(outcome)
-    }
-    sock.once('connect', () => cleanup('listening'))
-    sock.once('error', () => cleanup('refused'))
   })
 }
 
@@ -155,31 +140,25 @@ await logFile.close()
 // hook return. Without this, an MCP client started right after the hook
 // can race the daemon's bind and see ECONNREFUSED while the script
 // reports success.
-const startedAt = Date.now()
 let exitedEarly = false
 let exitCode = null
 child.once('exit', (code) => {
   exitedEarly = true
   exitCode = code
 })
-let ready = false
-while (Date.now() - startedAt < READY_TIMEOUT_MS) {
-  if (exitedEarly) {
-    console.error(
-      `[ensure-http-dev-daemon] ${pnpmCmd} mcp:http:dev exited before binding (code ${exitCode}) — see ${LOG_PATH}`,
-    )
-    process.exit(1)
-  }
-  const result = await tcpConnectOnce(PORT)
-  if (result === 'listening') {
-    ready = true
-    break
-  }
-  await new Promise((r) => setTimeout(r, READY_POLL_INTERVAL_MS))
-}
+const ready = await waitForAuthenticatedMcp({
+  // A concurrent hook can win the bind race and make our child exit. Keep
+  // probing until timeout because that competing process may still become the
+  // healthy daemon this session needs.
+  probe: probeAuthenticatedMcpDaemon,
+  sleep: (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
+  timeoutMs: READY_TIMEOUT_MS,
+  pollIntervalMs: READY_POLL_INTERVAL_MS,
+})
 if (!ready) {
+  const detail = exitedEarly ? `; spawned process exited with code ${exitCode}` : ''
   console.error(
-    `[ensure-http-dev-daemon] timed out waiting for http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms — see ${LOG_PATH}`,
+    `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}`,
   )
   process.exit(1)
 }
