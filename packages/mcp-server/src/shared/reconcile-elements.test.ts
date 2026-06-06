@@ -21,6 +21,10 @@ function snapshot(doc: LoroDoc): El[] {
   return doc.getMovableList('elements').toJSON() as El[]
 }
 
+function byId(elements: El[]): Record<string, El> {
+  return Object.fromEntries(elements.map((el) => [el.id as string, el]))
+}
+
 describe('reconcileElementsOnDoc', () => {
   describe('branch 1: element present in both current and past', () => {
     it('updates a changed field to match the past value', () => {
@@ -93,10 +97,9 @@ describe('reconcileElementsOnDoc', () => {
       reconcileElementsOnDoc(current, past)
       current.commit()
 
-      const els = snapshot(current)
-      const byId = Object.fromEntries(els.map((e) => [e.id as string, e]))
-      expect(byId['extra']?.isDeleted).toBe(true)
-      expect(byId['shared']?.isDeleted).toBeUndefined()
+      const els = byId(snapshot(current))
+      expect(els['extra']?.isDeleted).toBe(true)
+      expect(els['shared']?.isDeleted).toBeUndefined()
     })
   })
 
@@ -158,12 +161,11 @@ describe('reconcileElementsOnDoc', () => {
       reconcileElementsOnDoc(current, past)
       current.commit()
 
-      const els = snapshot(current)
-      const byId = Object.fromEntries(els.map((e) => [e.id as string, e]))
+      const els = byId(snapshot(current))
 
-      expect(byId['both']?.fill).toBe('green')
-      expect(byId['currentOnly']?.isDeleted).toBe(true)
-      expect(byId['pastOnly']?.content).toBe('hi')
+      expect(els['both']?.fill).toBe('green')
+      expect(els['currentOnly']?.isDeleted).toBe(true)
+      expect(els['pastOnly']?.content).toBe('hi')
     })
   })
 })
