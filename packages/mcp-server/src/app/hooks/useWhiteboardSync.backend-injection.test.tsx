@@ -185,7 +185,7 @@ describe('useWhiteboardSync with injected CanvasBackend', () => {
 
     // commitAfterUpload is mocked above, so we verify it was called with the
     // uploadFn derived from backend.putFile. The real routing guarantee is tested
-    // at the commit-pipeline level in commitAfterUpload.uploadFn.test.ts.
+    // at the commit-pipeline level in commit-pipeline.test.ts.
     const { commitAfterUpload } = await import('../lib/commit-pipeline.js')
     const mockCalls = (commitAfterUpload as ReturnType<typeof vi.fn>).mock.calls
     expect(mockCalls.length).toBeGreaterThan(0)
