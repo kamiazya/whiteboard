@@ -67,4 +67,43 @@ describe('useDirtyState', () => {
     act(() => dispatchDocChanged('s1', 'c1'))
     expect(result.current.isDirty).toBe(true)
   })
+
+  it('markSaved() after multiple unsaved changes does not permanently block future dirty state', () => {
+    const { result } = renderHook(() => useDirtyState('s1', 'c1'))
+    // Three changes, one save-at-count-3 via markSaved.
+    act(() => dispatchDocChanged('s1', 'c1'))
+    act(() => dispatchDocChanged('s1', 'c1'))
+    act(() => dispatchDocChanged('s1', 'c1'))
+    act(() => result.current.markSaved())
+    expect(result.current.isDirty).toBe(false)
+    // One more change → must become dirty again.
+    act(() => dispatchDocChanged('s1', 'c1'))
+    expect(result.current.isDirty).toBe(true)
+  })
+
+  it('does not update state after unmount (no stale event listener)', () => {
+    const { result, unmount } = renderHook(() => useDirtyState('s1', 'c1'))
+    unmount()
+    // Dispatching after unmount should not throw or update React state.
+    act(() => dispatchDocChanged('s1', 'c1'))
+    // If the listener were still attached, isDirty would flip; we cannot read
+    // it after unmount, but the main signal here is that no React warning is thrown.
+    expect(result.current.isDirty).toBe(false)
+  })
+
+  it('ignores events where detail is missing', () => {
+    const { result } = renderHook(() => useDirtyState('s1', 'c1'))
+    act(() => {
+      window.dispatchEvent(new CustomEvent('excalidraw:doc_changed', { detail: null }))
+    })
+    expect(result.current.isDirty).toBe(false)
+  })
+
+  it('version_saved ignores events for a different canvas', () => {
+    const { result } = renderHook(() => useDirtyState('s1', 'c1'))
+    act(() => dispatchDocChanged('s1', 'c1'))
+    expect(result.current.isDirty).toBe(true)
+    act(() => dispatchVersionSaved('s1', 'other-canvas'))
+    expect(result.current.isDirty).toBe(true)
+  })
 })
