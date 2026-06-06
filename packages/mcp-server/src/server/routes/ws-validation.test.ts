@@ -99,4 +99,39 @@ describe('parseWsClientTextMessage', () => {
       cap.restore()
     }
   })
+
+  it('logs a distinct message for malformed JSON vs schema violations', async () => {
+    const { captureLogsForTests } = await import('../log.js')
+    const cap = captureLogsForTests('debug')
+    try {
+      // Non-parseable text → 'ignored invalid client message: malformed JSON'
+      parseWsClientTextMessage('{not-json')
+      // Valid JSON but wrong shape → 'ignored invalid client message'
+      parseWsClientTextMessage('{"type":"export_response","requestId":"r"}')
+
+      expect(cap.records).toHaveLength(2)
+      expect(cap.records[0]!.msg).toBe('ignored invalid client message: malformed JSON')
+      expect(cap.records[1]!.msg).toBe('ignored invalid client message')
+    } finally {
+      cap.restore()
+    }
+  })
+
+  it('rejects an object with no type field', () => {
+    expect(parseWsClientTextMessage('{}')).toBeNull()
+    expect(parseWsClientTextMessage('{"requestId":"r-1"}')).toBeNull()
+  })
+
+  it('rejects ws_trace with missing traceparent field', () => {
+    expect(parseWsClientTextMessage('{"type":"ws_trace"}')).toBeNull()
+    expect(parseWsClientTextMessage('{"type":"ws_trace","tracestate":"vendor=abc"}')).toBeNull()
+  })
+
+  it('rejects export_response with missing requestId', () => {
+    expect(parseWsClientTextMessage('{"type":"export_response","data":"data:image/png;base64,abc"}')).toBeNull()
+  })
+
+  it('rejects export_response with both requestId and data missing', () => {
+    expect(parseWsClientTextMessage('{"type":"export_response"}')).toBeNull()
+  })
 })
