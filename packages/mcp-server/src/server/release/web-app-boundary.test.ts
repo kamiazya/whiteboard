@@ -88,10 +88,11 @@ function isForbiddenNodeBuiltin(specifier: string): boolean {
 // Any src/shared/* import NOT matching this list is a boundary violation.
 // Add new entries here only after confirming the module contains no Node-only APIs.
 const ALLOWED_SHARED_EXACT = new Set([
-  'external-url-policy.js',       // pure URL validation, no Node APIs
+  'canvas-backend-contract.js', // transport/callback seam — types + Zod re-exports only, no Node APIs
+  'external-url-policy.js', // pure URL validation, no Node APIs
   'resolve-parented-elements.js', // pure data transformation
-  'ws-messages.js',               // WebSocket protocol types/constants
-  'ws-protocol.js',               // WebSocket protocol helpers
+  'ws-messages.js', // WebSocket protocol types/constants
+  'ws-protocol.js', // WebSocket protocol helpers
 ])
 
 // test-utils/* is intentionally excluded here — it is handled separately below
@@ -208,6 +209,7 @@ describe('src/shared allowlist', () => {
   })
 
   it('explicitly listed browser-safe helpers are allowed', () => {
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/canvas-backend-contract.js')).toBeNull()
     expect(forbiddenResolvedPath(fakeAppFile, '../../shared/external-url-policy.js')).toBeNull()
     expect(
       forbiddenResolvedPath(fakeAppFile, '../../shared/resolve-parented-elements.js'),

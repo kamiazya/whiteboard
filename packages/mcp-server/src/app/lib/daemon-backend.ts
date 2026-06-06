@@ -20,20 +20,16 @@
  * Replacing the LoroDoc on reconnect would destroy local unsynced edits and
  * UndoManager history.
  */
-import { apiFetch } from './api-client.js'
-import { uploadFiles } from './upload-files.js'
-import {
-  buildWhiteboardWsUrl,
-  buildWhiteboardWsProtocols,
-} from '../../shared/ws-protocol.js'
-import { parseServerTextMessage } from './ws-text-message.js'
 import {
   clientReadyMessageSchema,
   exportResponseMessageSchema,
   viewportResponseMessageSchema,
 } from '../../shared/ws-messages.js'
-import type { CanvasBackend, CanvasBackendHandlers } from './canvas-backend.js'
-import type { BinaryFileData } from '@excalidraw/excalidraw/types'
+import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from '../../shared/ws-protocol.js'
+import { apiFetch } from './api-client.js'
+import type { BinaryFileDataLike, CanvasBackend, CanvasBackendHandlers } from './canvas-backend.js'
+import { uploadFiles } from './upload-files.js'
+import { parseServerTextMessage } from './ws-text-message.js'
 
 export class DaemonBackend implements CanvasBackend {
   private readonly workspaceId: string
@@ -89,7 +85,7 @@ export class DaemonBackend implements CanvasBackend {
   }
 
   async putFile(
-    newEntries: [string, BinaryFileData][],
+    newEntries: [string, BinaryFileDataLike][],
     onFileSuccess: (fileId: string) => void,
   ): Promise<void> {
     await uploadFiles(newEntries, this.workspaceId, this.slug, onFileSuccess)
