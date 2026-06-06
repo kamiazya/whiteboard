@@ -76,7 +76,8 @@ export class DaemonBackend implements CanvasBackend {
   }
 
   pushLocalUpdate(bytes: Uint8Array): void {
-    this.ws?.send(bytes.slice())
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
+    this.ws.send(bytes.slice())
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
@@ -102,12 +103,13 @@ export class DaemonBackend implements CanvasBackend {
   }
 
   sendExportResponse(requestId: string, data: string): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return
     const msg = exportResponseMessageSchema.parse({
       type: 'export_response',
       requestId,
       data,
     })
-    this.ws?.send(JSON.stringify(msg))
+    this.ws.send(JSON.stringify(msg))
   }
 
   private openSocket(handlers: CanvasBackendHandlers): void {

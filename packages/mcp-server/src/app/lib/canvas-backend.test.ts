@@ -93,6 +93,31 @@ describe('DaemonBackend', () => {
     }
   }
 
+  describe('onerror force-close', () => {
+    it('calls ws.close() when onerror fires', () => {
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      ws.onerror?.(new Event('error'))
+      expect(ws.close).toHaveBeenCalledTimes(1)
+      backend.disconnect()
+    })
+
+    it('triggers reconnect after onerror (via the subsequent onclose)', async () => {
+      // FakeWebSocket.close() calls onclose automatically, so onerror → close()
+      // → onclose → reconnect timer.
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      expect(FakeWebSocket.instances).toHaveLength(1)
+
+      FakeWebSocket.instances[0].onerror?.(new Event('error'))
+      await vi.advanceTimersByTimeAsync(500)
+
+      expect(FakeWebSocket.instances).toHaveLength(2)
+      backend.disconnect()
+    })
+  })
+
   describe('connection lifecycle', () => {
     it('creates one WebSocket on connect()', () => {
       const backend = makeBackend()
@@ -263,7 +288,7 @@ describe('DaemonBackend', () => {
   })
 
   describe('pushLocalUpdate', () => {
-    it('sends bytes through the current websocket', () => {
+    it('sends bytes through the current websocket when OPEN', () => {
       const backend = makeBackend()
       backend.connect(makeHandlers())
 
@@ -273,6 +298,22 @@ describe('DaemonBackend', () => {
       backend.pushLocalUpdate(bytes)
 
       expect(ws.send).toHaveBeenCalledTimes(1)
+      backend.disconnect()
+    })
+
+    it('does not send when the socket is not OPEN (e.g. CONNECTING after reconnect)', () => {
+      // subscribeLocalUpdates can fire between ws.onclose replacing this.ws
+      // with a newly-created CONNECTING socket and that socket reaching OPEN.
+      // Sending on CONNECTING throws InvalidStateError; the guard must prevent that.
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+
+      const ws = FakeWebSocket.instances[0]
+      ws.readyState = FakeWebSocket.CONNECTING
+      const bytes = new Uint8Array([10, 20, 30])
+      backend.pushLocalUpdate(bytes)
+
+      expect(ws.send).not.toHaveBeenCalled()
       backend.disconnect()
     })
   })
@@ -450,6 +491,20 @@ describe('DaemonBackend', () => {
         requestId: 'exp-7',
         data: 'data:image/png;base64,abc',
       })
+      backend.disconnect()
+    })
+
+    it('does not send when the socket is not OPEN (e.g. CONNECTING after reconnect)', () => {
+      // The export flow is async — a reconnect during exportToBlob replaces
+      // this.ws with a CONNECTING socket. Sending on CONNECTING throws
+      // InvalidStateError in browsers; the guard must prevent that.
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+      const ws = FakeWebSocket.instances[0]
+      // Simulate the socket being in CONNECTING state (e.g. mid-reconnect).
+      ws.readyState = FakeWebSocket.CONNECTING
+      backend.sendExportResponse('exp-8', 'data:image/png;base64,xyz')
+      expect(ws.send).not.toHaveBeenCalled()
       backend.disconnect()
     })
   })
