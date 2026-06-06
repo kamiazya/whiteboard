@@ -88,19 +88,17 @@ async function requireOk(res: Response): Promise<Response> {
 // does not match the client's contract. Normalise into a structured error so
 // callers never receive a raw ZodError whose instanceof-Error check would
 // incorrectly signal a network / auth problem.
-function throwContractMismatch(parseErr: ZodError): never {
-  const err: BranchApiError = {
-    status: 200,
-    body: { error: 'contract_mismatch', issues: parseErr.issues },
-  }
-  throw err
-}
-
 function safeParse<T>(schema: { parse: (v: unknown) => T }, value: unknown): T {
   try {
     return schema.parse(value)
   } catch (e) {
-    if (e instanceof ZodError) throwContractMismatch(e)
+    if (e instanceof ZodError) {
+      const err: BranchApiError = {
+        status: 200,
+        body: { error: 'contract_mismatch', issues: e.issues },
+      }
+      throw err
+    }
     throw e
   }
 }
