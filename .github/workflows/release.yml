@@ -167,7 +167,16 @@ jobs:
 
       - name: Publish to npm
         # Assumes OIDC Trusted Publisher is configured (no NPM_TOKEN required).
-        run: npm publish --access public --provenance
+        # `pnpm pack` first so the `catalog:` protocol in package.json is replaced
+        # with concrete version ranges inside the tarball — npm itself cannot
+        # resolve `catalog:` and would otherwise publish a broken manifest. npm
+        # then publishes that pre-resolved tarball, preserving npm's OIDC Trusted
+        # Publisher + provenance flow (pnpm publish does not perform the npm OIDC
+        # token exchange, so we keep npm as the publisher).
+        run: |
+          set -eu
+          TARBALL=$(pnpm pack | tail -1)
+          npm publish "$TARBALL" --access public --provenance
 
   docker-publish-sign:
     needs: release-please
