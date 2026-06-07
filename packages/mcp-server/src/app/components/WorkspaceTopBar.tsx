@@ -33,7 +33,10 @@ import {
 } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { saveVersionResponseSchema, problemDetailsErrorSchema } from '../../shared/api-contracts/canvas.js'
+import {
+  saveVersionResponseSchema,
+  problemDetailsErrorSchema,
+} from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 import VersionTimeline from './VersionTimeline.js'
 import { CanvasThumb } from './CanvasThumb.js'
@@ -80,18 +83,12 @@ function CanvasItem({
   return (
     <DropdownMenuItem
       onSelect={onNavigate}
-      className={cn(
-        'group flex items-center gap-2',
-        active && 'bg-accent',
-      )}
+      className={cn('group flex items-center gap-2', active && 'bg-accent')}
     >
       <CanvasThumb workspaceId={workspaceId} slug={canvas.slug} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span
-          className={cn(
-            'truncate text-sm',
-            active ? 'font-semibold text-primary' : 'font-medium',
-          )}
+          className={cn('truncate text-sm', active ? 'font-semibold text-primary' : 'font-medium')}
         >
           {leafLabel}
         </span>
@@ -112,9 +109,7 @@ function CanvasItem({
         }}
         className={cn(
           'shrink-0 rounded p-1 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground transition-opacity',
-          pinned
-            ? 'opacity-100'
-            : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
+          pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
         )}
       >
         <Pin className={cn('size-3.5', pinned && 'fill-current')} />
@@ -170,8 +165,7 @@ export default function WorkspaceTopBar({
   // way of automation (e.g. Playwright workflows).
   const { isDirty } = useDirtyState(workspaceId, slug)
   const [saving, setSaving] = useState(false)
-  const isMac =
-    typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
   const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
   // Shared save flow: POST /versions, then upload a thumbnail if available.
@@ -190,8 +184,16 @@ export default function WorkspaceTopBar({
           },
         )
         if (!res.ok) return false
-        // Manual save can bypass the server's version_created websocket path, so dispatch
-        // version_saved optimistically right after POST succeeds. A later WS event becomes a no-op.
+        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+        if (!parsed.success) {
+          console.error(
+            '[workspace-top-bar] POST /versions response did not match schema:',
+            parsed.error,
+          )
+          return false
+        }
+        // Dispatch only after schema validation confirms the server response is well-formed.
+        // Manual save can bypass the server's version_created websocket path; a later WS event becomes a no-op.
         if (typeof window !== 'undefined') {
           window.dispatchEvent(
             new CustomEvent('excalidraw:version_saved', {
@@ -199,8 +201,7 @@ export default function WorkspaceTopBar({
             }),
           )
         }
-        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-        const id = parsed.success ? parsed.data.version.id : undefined
+        const id = parsed.data.version.id
         if (id && getThumbnailBlob) {
           try {
             const blob = await getThumbnailBlob()
@@ -328,9 +329,7 @@ export default function WorkspaceTopBar({
   const pinnedSet = useMemo(() => new Set(names.pinned), [names.pinned])
   const pinnedCanvases = useMemo(() => {
     const bySlug = new Map(filteredCanvases.map((c) => [c.slug, c]))
-    return names.pinned
-      .map((s) => bySlug.get(s))
-      .filter((c): c is CanvasInfo => !!c)
+    return names.pinned.map((s) => bySlug.get(s)).filter((c): c is CanvasInfo => !!c)
   }, [filteredCanvases, names.pinned])
 
   // Group by slug prefix (the first segment). Canvases without "/" stay in the ungrouped bucket.
@@ -530,8 +529,7 @@ export default function WorkspaceTopBar({
                           </DropdownMenuLabel>
                         )}
                         {items.map((c) => {
-                          const leafSlug =
-                            group === '' ? c.slug : c.slug.slice(group.length + 1)
+                          const leafSlug = group === '' ? c.slug : c.slug.slice(group.length + 1)
                           return (
                             <CanvasItem
                               key={c.slug}
@@ -643,9 +641,7 @@ export default function WorkspaceTopBar({
           </TooltipTrigger>
           <TooltipContent>Version history</TooltipContent>
         </Tooltip>
-        {onToggleTheme && theme && (
-          <ThemeToggleButton theme={theme} onChange={onToggleTheme} />
-        )}
+        {onToggleTheme && theme && <ThemeToggleButton theme={theme} onChange={onToggleTheme} />}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -687,9 +683,7 @@ export default function WorkspaceTopBar({
             placeholder="e.g. design/login-flow"
             maxLength={120}
           />
-          {newCanvasError && (
-            <div className="text-xs text-destructive">{newCanvasError}</div>
-          )}
+          {newCanvasError && <div className="text-xs text-destructive">{newCanvasError}</div>}
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewCanvasOpen(false)}>
               Cancel
@@ -708,11 +702,7 @@ export default function WorkspaceTopBar({
           className="absolute right-3 top-[calc(100%+6px)] z-40 w-[340px] overflow-hidden rounded-lg border bg-background shadow-lg"
         >
           <div className="flex h-[480px] min-h-0 flex-col">
-            <VersionTimeline
-              workspaceId={workspaceId}
-              slug={slug}
-              onRestored={onRestored}
-            />
+            <VersionTimeline workspaceId={workspaceId} slug={slug} onRestored={onRestored} />
           </div>
         </div>
       )}

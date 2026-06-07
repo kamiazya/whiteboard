@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { withTempDataDir } from './routes/_test-helpers.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
@@ -8,14 +8,14 @@ import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-let tempDir: string
+const tmp = withTempDataDir('whiteboard-app-test-')
 
 vi.mock('./config.js', () => ({
   get DATA_DIR() {
-    return join(tempDir, 'data')
+    return join(tmp.dir, 'data')
   },
   get DIST_APP_DIR() {
-    return join(tempDir, 'dist')
+    return join(tmp.dir, 'dist')
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
@@ -72,14 +72,13 @@ describe('createApp daemon mutation auth', () => {
   const originalFetch = globalThis.fetch
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-app-test-'))
-    await mkdir(join(tempDir, 'dist'), { recursive: true })
-    await mkdir(join(tempDir, 'data'), { recursive: true })
+    await mkdir(join(tmp.dir, 'dist'), { recursive: true })
+    await mkdir(join(tmp.dir, 'data'), { recursive: true })
     process.env.WHITEBOARD_DEBUG = '1'
     clearCache()
     clearWorkspaceIdCache()
     await writeFile(
-      join(tempDir, 'dist', 'index.html'),
+      join(tmp.dir, 'dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>Whiteboard</title></head><body><div id="root"></div></body></html>',
     )
   })
@@ -96,7 +95,6 @@ describe('createApp daemon mutation auth', () => {
     } else {
       process.env.WHITEBOARD_DEBUG = originalWhiteboardDebug
     }
-    await rm(tempDir, { recursive: true, force: true })
     clearCache()
     clearWorkspaceIdCache()
   })
@@ -708,7 +706,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('handles concurrent /mcp initialize requests without racing the workspace marker file', async () => {
     const app = createApp(createRuntimeOptions())
-    const dataDir = join(tempDir, 'data')
+    const dataDir = join(tmp.dir, 'data')
 
     const sendInitialize = async (id: number): Promise<Response> =>
       app.request('http://127.0.0.1/mcp', {

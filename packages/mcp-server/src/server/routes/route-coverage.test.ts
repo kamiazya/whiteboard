@@ -20,6 +20,7 @@ function listRouteSourceFiles(): string[] {
     .filter((name) => name.endsWith('.ts'))
     .filter((name) => !name.endsWith('.test.ts'))
     .filter((name) => !name.endsWith('.d.ts'))
+    .filter((name) => !name.startsWith('_')) // `_`-prefixed files are test support, not route surface
     .sort()
 }
 
@@ -27,12 +28,8 @@ describe('routes coverage', () => {
   it('every route source file has a sibling .test.ts', () => {
     const sources = listRouteSourceFiles()
     expect(sources.length).toBeGreaterThan(0)
-    const testFiles = new Set(
-      readdirSync(here).filter((name) => name.endsWith('.test.ts')),
-    )
-    const missing = sources.filter(
-      (src) => !testFiles.has(src.replace(/\.ts$/, '.test.ts')),
-    )
+    const testFiles = new Set(readdirSync(here).filter((name) => name.endsWith('.test.ts')))
+    const missing = sources.filter((src) => !testFiles.has(src.replace(/\.ts$/, '.test.ts')))
     expect(
       missing,
       `add a sibling .test.ts for: ${missing.map((f) => join('routes', f)).join(', ')}`,

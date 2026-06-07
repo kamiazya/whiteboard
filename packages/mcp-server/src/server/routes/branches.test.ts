@@ -1,14 +1,13 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { withTempDataDir } from './_test-helpers.js'
 import { Hono } from 'hono'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-let tempDir: string
+const tmp = withTempDataDir('branches-route-test-')
 
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
-    return tempDir
+    return tmp.dir
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
@@ -52,13 +51,6 @@ function makeApp(
 }
 
 describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
-  })
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it('creates a new branch and returns 201 with the branch', async () => {
     const app = makeApp()
     const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -220,13 +212,6 @@ describe('POST /api/workspaces/:sid/canvases/:slug/branches', () => {
 })
 
 describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
-  })
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it('returns main as the only branch with head="main" in the initial lazy-default state', async () => {
     const app = makeApp()
     const res = await app.request('/api/workspaces/s1/canvases/canvas-a/branches')
@@ -260,13 +245,6 @@ describe('GET /api/workspaces/:sid/canvases/:slug/branches', () => {
 })
 
 describe('GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
-  })
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it('returns unmergedCommits from the injected countVersionsOnBranch', async () => {
     const countVersionsOnBranch = vi
       .fn<(sid: string, slug: string, branch: string) => Promise<number>>()
@@ -335,13 +313,6 @@ describe('GET /api/workspaces/:sid/canvases/:slug/branches/:name/stats', () => {
 })
 
 describe('DELETE /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
-  })
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it('deletes an existing non-HEAD branch with 200', async () => {
     const app = makeApp()
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -471,13 +442,6 @@ describe('DELETE /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
 })
 
 describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
-  })
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it('switches to an existing branch and returns 200 with head and previousHead', async () => {
     const app = makeApp()
     await app.request('/api/workspaces/s1/canvases/canvas-a/branches', {
@@ -752,13 +716,6 @@ describe('PUT /api/workspaces/:sid/canvases/:slug/head', () => {
 })
 
 describe('PATCH /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
-  })
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it('renames an existing branch and returns 200 with branch and renamedVersionCount', async () => {
     const renameInVersions = vi
       .fn<(sid: string, slug: string, oldName: string, newName: string) => Promise<number>>()
@@ -904,13 +861,6 @@ describe('PATCH /api/workspaces/:sid/canvases/:slug/branches/:name', () => {
 })
 
 describe('POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'branches-route-test-'))
-  })
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
   it('calls performMerge with dryRun=true and returns preview + badges without changing tips', async () => {
     const performMerge = vi
       .fn<

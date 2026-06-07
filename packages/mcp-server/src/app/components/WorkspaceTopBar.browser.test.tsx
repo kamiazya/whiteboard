@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import '../index.css'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
+import type { SaveVersionResponse } from '../../shared/api-contracts/canvas.js'
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
 
@@ -39,6 +40,26 @@ function mkBranchesResponse(): Response {
   )
 }
 
+function mkSaveVersionResponse(): Response {
+  const body: SaveVersionResponse = {
+    version: {
+      id: 'v-saved-001',
+      slug: 'design/login-flow',
+      createdAt: new Date('2026-06-07T10:00:00Z').toISOString(),
+      elementCount: 42,
+      label: '',
+      auto: false,
+      hasThumbnail: false,
+      branchName: 'main',
+      operator: { kind: 'human', peerId: 'peer-test', displayName: 'Tester' },
+    },
+  }
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 function mkVersionsResponse(count = 24): Response {
   const versions = Array.from({ length: count }, (_, index) => ({
     id: `v-${index}`,
@@ -56,10 +77,10 @@ function mkVersionsResponse(count = 24): Response {
     },
   }))
 
-  return new Response(
-    JSON.stringify({ versions }),
-    { status: 200, headers: { 'Content-Type': 'application/json' } },
-  )
+  return new Response(JSON.stringify({ versions }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
 }
 
 function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
@@ -83,7 +104,8 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
 
 beforeEach(() => {
   const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const url =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
     if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
     if (url.includes('/versions') && url.endsWith('/restore')) {
@@ -202,7 +224,8 @@ describe('WorkspaceTopBar browser mode', () => {
     let callCount = 0
     // Override the beforeEach fetch stub for this test only.
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
@@ -211,18 +234,18 @@ describe('WorkspaceTopBar browser mode', () => {
         if (callCount === 1) {
           // First POST → 409 Problem Details with title
           return Promise.resolve(
-            new Response(
-              JSON.stringify({ title: 'Canvas "design/foo" already exists' }),
-              { status: 409, headers: { 'Content-Type': 'application/json' } },
-            ),
+            new Response(JSON.stringify({ title: 'Canvas "design/foo" already exists' }), {
+              status: 409,
+              headers: { 'Content-Type': 'application/json' },
+            }),
           )
         }
         // Second POST → 500 without title → fallback message
         return Promise.resolve(
-          new Response(
-            JSON.stringify({ error: 'internal' }),
-            { status: 500, headers: { 'Content-Type': 'application/json' } },
-          ),
+          new Response(JSON.stringify({ error: 'internal' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' },
+          }),
         )
       }
       return Promise.resolve(new Response('{}', { status: 200 }))
@@ -269,21 +292,142 @@ describe('WorkspaceTopBar browser mode', () => {
     // which does not match saveVersionResponseSchema (missing version.id, branchName, etc.).
     const versionSavedFired = vi.fn()
     window.addEventListener('excalidraw:version_saved', versionSavedFired)
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     renderTopBar()
 
     // Ctrl+S triggers saveVersion(''); fire on window (capture listener)
     fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
 
-    // Wait for saveVersion to complete: it logs console.error on schema mismatch
+    // Wait until the fetch mock has been called for the POST /versions request.
+    // This is the observable boundary that confirms saveVersion has finished its
+    // round-trip — independent of whether the implementation logs to console,
+    // getLogger, or swallows the error silently.
     await waitFor(() => {
-      expect(consoleErrorSpy).toHaveBeenCalled()
+      const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/versions'),
+        expect.objectContaining({ method: 'POST' }),
+      )
     })
+
+    // Give the microtask queue one turn so any Promise continuations after the
+    // fetch resolve can settle before we assert the event was not dispatched.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0))
 
     expect(versionSavedFired).not.toHaveBeenCalled()
 
     window.removeEventListener('excalidraw:version_saved', versionSavedFired)
-    consoleErrorSpy.mockRestore()
+  })
+
+  it('dispatches excalidraw:version_saved when POST /versions returns a schema-conforming response', async () => {
+    // Override the beforeEach stub so POST /versions returns a valid saveVersionResponseSchema body.
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions') && url.endsWith('/restore')) {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      if (url.includes('/versions') && init?.method === 'POST') {
+        return Promise.resolve(mkSaveVersionResponse())
+      }
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const versionSavedFired = vi.fn()
+    window.addEventListener('excalidraw:version_saved', versionSavedFired)
+
+    renderTopBar()
+
+    // Ctrl+S triggers saveVersion(''); fire on window with capture listener.
+    fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+
+    // Wait for the event to be dispatched after the successful fetch + schema parse.
+    await waitFor(() => {
+      expect(versionSavedFired).toHaveBeenCalledTimes(1)
+    })
+
+    window.removeEventListener('excalidraw:version_saved', versionSavedFired)
+  })
+
+  it('issues PUT /versions/:id/thumbnail after a valid save when getThumbnailBlob returns a Blob', async () => {
+    const thumbnailBlob = new Blob(['fake-png'], { type: 'image/png' })
+    const getThumbnailBlob = vi.fn().mockResolvedValue(thumbnailBlob)
+
+    const thumbnailPutCalls: string[] = []
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions') && url.endsWith('/restore')) {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      if (url.includes('/versions') && init?.method === 'PUT') {
+        thumbnailPutCalls.push(url)
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      if (url.includes('/versions') && init?.method === 'POST') {
+        return Promise.resolve(mkSaveVersionResponse())
+      }
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    renderTopBar({ getThumbnailBlob })
+
+    fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+
+    // Wait for the thumbnail PUT to be issued using the version id from the response.
+    await waitFor(() => {
+      expect(thumbnailPutCalls).toHaveLength(1)
+      expect(thumbnailPutCalls[0]).toContain('/versions/v-saved-001/thumbnail')
+    })
+
+    expect(getThumbnailBlob).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not throw when thumbnail upload fails after a valid save', async () => {
+    const getThumbnailBlob = vi
+      .fn()
+      .mockResolvedValue(new Blob(['fake-png'], { type: 'image/png' }))
+
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions') && url.endsWith('/restore')) {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      if (url.includes('/versions') && init?.method === 'PUT') {
+        // Simulate a network failure on thumbnail upload.
+        return Promise.reject(new Error('upload failed'))
+      }
+      if (url.includes('/versions') && init?.method === 'POST') {
+        return Promise.resolve(mkSaveVersionResponse())
+      }
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const versionSavedFired = vi.fn()
+    window.addEventListener('excalidraw:version_saved', versionSavedFired)
+
+    renderTopBar({ getThumbnailBlob })
+
+    fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+
+    // The version_saved event must still fire even when the thumbnail upload rejects.
+    await waitFor(() => {
+      expect(versionSavedFired).toHaveBeenCalledTimes(1)
+    })
+
+    window.removeEventListener('excalidraw:version_saved', versionSavedFired)
   })
 })

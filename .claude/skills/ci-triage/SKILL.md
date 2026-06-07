@@ -16,7 +16,7 @@ description: Monitor and triage the POST-PUSH automated-review surface for the w
 | **AccessLint** | accessibility review app | its check + PR review comments |
 | **WIP** | blocks merge while the title says WIP | `gh pr checks` shows it pending; remove `WIP`/`(WIP)` from the title to release it + un-skip CodeRabbit |
 | **CodeQL** | security code-scanning (may be unconfigured — `code-scanning/alerts` → 404 "no analysis") | `gh api repos/{owner}/{repo}/code-scanning/alerts` (needs `security_events`/admin scope) |
-| **Dependabot** | dependency vulns (currently 33 on the default branch) | the Security tab; `gh api .../dependabot/alerts` (scope-gated) |
+| **Dependabot** | dependency-bump PRs + security alerts | **handled by its own flow** — the `dependabot-triage` workflow + `dependabot-review` skill (semver×ecosystem classify, conflict-cascade-safe merge, `pnpm audit --prod` gate). Don't triage it here. |
 
 Note: some security APIs need `gh auth refresh -s security_events` (or admin) — if a fetch 404s on scope, skip that source and note it rather than failing the triage.
 
@@ -57,7 +57,7 @@ done
 - **CodeRabbit** → high recall, variable precision. Treat each comment as a CANDIDATE: keep correctness/security/contract points; drop style nits already covered by Biome and "consider"-grade suggestions that don't apply. Verify against the actual code before filing (it hallucinates context).
 - **AccessLint** → real a11y findings on UI diffs; keep, file under the touched component.
 - **CodeQL** → security; treat HIGH+ as task-track, verify the data-flow is real (not a sanitized path).
-- **Dependabot** → see `tmp/issues/dependabot-vulns-default-branch.md`; bump critical/high first.
+- **Dependabot** → not triaged here; use the `dependabot-triage` workflow + `dependabot-review` skill (PRs + alerts, security-first, `pnpm audit --prod` gate).
 
 ## Filing (integrator)
 

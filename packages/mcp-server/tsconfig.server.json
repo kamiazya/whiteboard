@@ -19,6 +19,7 @@
     "src/server/**/*.test.mjs",
     "src/server/**/*.smoke-impl.ts",
     "src/server/**/*.distribution-impl.ts",
+    "src/server/**/_test-*.ts",
     "src/shared/**/*.test.ts",
     "src/cli/**/*.test.ts"
   ]

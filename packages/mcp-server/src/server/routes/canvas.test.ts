@@ -1,14 +1,15 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir, userInfo } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { userInfo } from 'node:os'
 import { join } from 'node:path'
+import { withTempDataDir } from './_test-helpers.js'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-let tempDir: string
+const tmp = withTempDataDir('whiteboard-routes-test-')
 
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
-    return tempDir
+    return tmp.dir
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
@@ -30,13 +31,10 @@ const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createCanvasRouter, createAutoVersionTrigger } = await import('./canvas.js')
 
 describe('GET /api/workspaces', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
+  beforeEach(() => {
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -54,13 +52,10 @@ describe('GET /api/workspaces', () => {
 })
 
 describe('POST /api/workspaces/:workspaceId/canvases', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
+  beforeEach(() => {
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -100,8 +95,8 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
     // Block the canvas blob directory with a file so saveCanvas throws a
     // non-ConflictError, exercising the catch-all 500 branch (mutation-check
     // guard for the 400 -> 500 change).
-    await mkdir(join(tempDir, 'blobs', 'ws1'), { recursive: true })
-    await writeFile(join(tempDir, 'blobs', 'ws1', 'canvas'), 'not-a-directory')
+    await mkdir(join(tmp.dir, 'blobs', 'ws1'), { recursive: true })
+    await writeFile(join(tmp.dir, 'blobs', 'ws1', 'canvas'), 'not-a-directory')
     const app = createCanvasRouter()
     const res = await app.request('/api/workspaces/ws1/canvases', {
       method: 'POST',
@@ -171,13 +166,10 @@ describe('POST /api/workspaces/:workspaceId/canvases', () => {
 
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -206,13 +198,10 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
 
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'workspace1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'workspace1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -230,13 +219,10 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
 
 describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -286,27 +272,24 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   }
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
     const { getDb } = await import('../store/db/index.js')
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    const db = await getDb(tempDir)
+    const db = await getDb(tmp.dir)
     const row = await db
       .selectFrom('canvases')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    const blobPath = join(tmp.dir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
@@ -350,13 +333,10 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
     }
   }
 
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
+  beforeEach(() => {
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -438,13 +418,10 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
 
 describe('POST /api/canvas/:workspaceId/:slug/update', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -481,13 +458,10 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
 // Version API coverage: auto-save on update, list, manual save, and restore.
 describe('versions API', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -847,7 +821,7 @@ describe('versions API', () => {
   })
 
   it('returns structured 500 for a broken thumbnail file on GET /thumbnail', async () => {
-    await mkdir(join(tempDir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
+    await mkdir(join(tmp.dir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
       recursive: true,
     })
 
@@ -938,7 +912,7 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'session1', 'exports', 'explicit', 'out.excalidraw')
+    const outputPath = join(tmp.dir, 'session1', 'exports', 'explicit', 'out.excalidraw')
     const app = createCanvasRouter()
     const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
       method: 'POST',
@@ -970,8 +944,8 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'session1', 'exports', 'existing.excalidraw')
-    await mkdir(join(tempDir, 'session1', 'exports'), { recursive: true })
+    const outputPath = join(tmp.dir, 'session1', 'exports', 'existing.excalidraw')
+    await mkdir(join(tmp.dir, 'session1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const app = createCanvasRouter()
@@ -993,8 +967,8 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'session1', 'exports', 'replace-me.excalidraw')
-    await mkdir(join(tempDir, 'session1', 'exports'), { recursive: true })
+    const outputPath = join(tmp.dir, 'session1', 'exports', 'replace-me.excalidraw')
+    await mkdir(join(tmp.dir, 'session1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const app = createCanvasRouter()
@@ -1241,13 +1215,10 @@ describe('createAutoVersionTrigger', () => {
 
 describe('auto-version corruption handling', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
