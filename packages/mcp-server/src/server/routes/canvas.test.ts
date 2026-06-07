@@ -1010,6 +1010,12 @@ describe('versions API', () => {
 })
 
 describe('createAutoVersionTrigger', () => {
+  // One test in this block pins the clock with fake timers; always restore real timers
+  // after each test so a failed assertion can't leak a frozen clock into later tests.
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('retries on the next edit without consuming the throttle window when save fails', async () => {
     const doc = new LoroDoc()
     const entry = {
