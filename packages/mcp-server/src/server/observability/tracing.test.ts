@@ -428,7 +428,11 @@ describe('flushOnExit — signal-handler body', () => {
 
     await emitBeforeExitAndSettle()
 
-    // The once-listener removed itself — the afterEach cleans up the handle.
+    expect(shutdownSpy).toHaveBeenCalledOnce()
+
+    // The listener was registered with process.once — a second beforeExit
+    // must not invoke shutdown again, catching an accidental once→on regression.
+    await emitBeforeExitAndSettle()
     expect(shutdownSpy).toHaveBeenCalledOnce()
   })
 
@@ -437,29 +441,33 @@ describe('flushOnExit — signal-handler body', () => {
     mockSdkAndEnableTracing(shutdownSpy)
 
     // Capture log records to assert the warning is emitted via getLogger.
+    // Always restore in finally so the elevated level and capture destination
+    // cannot leak into subsequent tests when an earlier assertion throws.
     const { captureLogsForTests } = await import('../log.js')
     const capture = captureLogsForTests('warning')
 
-    const { initTracing: init, resetTracingForTesting: reset } = await import(
-      './tracing.js?flush-catch=' + Date.now()
-    )
-    reset()
-    flushTestHandle = await init()
-    expect(flushTestHandle).not.toBeNull()
+    try {
+      const { initTracing: init, resetTracingForTesting: reset } = await import(
+        './tracing.js?flush-catch=' + Date.now()
+      )
+      reset()
+      flushTestHandle = await init()
+      expect(flushTestHandle).not.toBeNull()
 
-    await emitBeforeExitAndSettle()
+      await emitBeforeExitAndSettle()
 
-    capture.restore()
+      // sdk.shutdown() was called (and rejected).
+      expect(shutdownSpy).toHaveBeenCalledOnce()
 
-    // sdk.shutdown() was called (and rejected).
-    expect(shutdownSpy).toHaveBeenCalledOnce()
-
-    // The rejection must be swallowed — no unhandled rejection reaches the
-    // test — and the catch branch must warn via getLogger('tracing').
-    const warnings = capture.records.filter(
-      (r) => r.level === 'warning' && r.msg === 'shutdown failed',
-    )
-    expect(warnings).toHaveLength(1)
+      // The rejection must be swallowed — no unhandled rejection reaches the
+      // test — and the catch branch must warn via getLogger('tracing').
+      const warnings = capture.records.filter(
+        (r) => r.level === 'warning' && r.msg === 'shutdown failed',
+      )
+      expect(warnings).toHaveLength(1)
+    } finally {
+      capture.restore()
+    }
   })
 })
 
