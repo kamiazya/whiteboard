@@ -17,7 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     # Safety net: this job has historically hung indefinitely on the Playwright
     # browser download (no per-step bound), wasting a 6h runner slot. Cap it.
-    timeout-minutes: 45
+    # 60 covers the cold-cache worst case (bounded Playwright retries + the full
+    # test/smoke/build suite); a warm cache makes the Playwright step ~1 min.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -35,10 +37,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Cache the browser binaries against the Playwright version so the slow CDN
-      # download (the step that has hung the job) is skipped on a cache hit. OS
-      # deps are NOT cacheable, so they still run via `install-deps` on a hit.
+      # Install Playwright's Chromium into a DEDICATED, cache-owned directory
+      # (PLAYWRIGHT_BROWSERS_PATH) instead of the default ~/.cache/ms-playwright.
+      # The GitHub runner pre-seeds the default path with its own browser build;
+      # installing over it triggers a "Removing unused browser" + re-download that
+      # then hangs after the download completes (observed: download reaches 100%,
+      # then ~6 min of silence until the timeout). A clean dedicated path avoids
+      # that conflict and is what we cache against the Playwright version so warm
+      # runs skip the download entirely. PLAYWRIGHT_BROWSERS_PATH is written to
+      # $GITHUB_ENV so the later test/smoke steps resolve the same browser.
       # See https://playwright.dev/docs/ci#caching-browsers
+      - name: Set Playwright browsers path
+        run: echo "PLAYWRIGHT_BROWSERS_PATH=${HOME}/.pw-browsers" >> "$GITHUB_ENV"
+
       - name: Resolve Playwright version
         id: pw
         run: |
@@ -48,7 +59,7 @@ jobs:
         id: pw-cache
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
-          path: ~/.cache/ms-playwright
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
           key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}-
@@ -57,10 +68,10 @@ jobs:
         # Both workspaces pin the same Playwright version, so one install covers
         # every browser-mode test project — no need to run apt+download twice.
         # On a cache hit only the (uncacheable) OS deps are installed; on a miss
-        # the browser is downloaded too. The download can stall indefinitely on
-        # the CDN, so bound each attempt with `timeout` and retry — a transient
-        # stall recovers instead of hanging the job until the runner limit.
-        timeout-minutes: 20
+        # the browser is downloaded too. The download can stall on the CDN, so
+        # bound each attempt with `timeout` and retry — a transient stall recovers
+        # instead of hanging the job until the runner limit.
+        timeout-minutes: 25
         env:
           PW_CACHE_HIT: ${{ steps.pw-cache.outputs.cache-hit }}
         run: |
@@ -70,14 +81,14 @@ jobs:
           else
             args="install --with-deps chromium"
           fi
-          for attempt in 1 2 3; do
-            if timeout 360 pnpm --filter @kamiazya/whiteboard-mcp exec playwright ${args}; then
+          for attempt in 1 2 3 4; do
+            if timeout 420 pnpm --filter @kamiazya/whiteboard-mcp exec playwright ${args}; then
               exit 0
             fi
             echo "::warning::Playwright setup attempt ${attempt} stalled or failed; retrying" >&2
-            sleep 10
+            sleep 15
           done
-          echo "::error::Playwright setup failed after 3 attempts" >&2
+          echo "::error::Playwright setup failed after 4 attempts" >&2
           exit 1
 
       - name: Audit (high+ vulnerabilities, prod deps only)
