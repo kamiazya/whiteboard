@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import {
+  type InstalledLibrariesResponse,
   type ListUserLibrariesResponse,
   type RemoveUserLibraryResponse,
   type SaveUserLibraryResponse,
@@ -67,7 +68,7 @@ export function createLibrariesRouter() {
       throw err
     }
     try {
-      const libs = await loadInstalledLibraries(workspaceId)
+      const libs: InstalledLibrariesResponse = await loadInstalledLibraries(workspaceId)
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -85,9 +86,7 @@ export function createLibrariesRouter() {
       if (body) return c.json(body, 400)
       throw err
     }
-    const parsed = addInstalledLibraryRequestSchema.safeParse(
-      await c.req.json().catch(() => ({})),
-    )
+    const parsed = addInstalledLibraryRequestSchema.safeParse(await c.req.json().catch(() => ({})))
     if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'url (string) is required' }, 400)
     }
@@ -99,7 +98,10 @@ export function createLibrariesRouter() {
       throw err
     }
     try {
-      const libs = await addInstalledLibrary(workspaceId, parsed.data.url)
+      const libs: InstalledLibrariesResponse = await addInstalledLibrary(
+        workspaceId,
+        parsed.data.url,
+      )
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)
@@ -124,7 +126,10 @@ export function createLibrariesRouter() {
       return c.json({ error: 'invalid_body', message: 'url (string) is required' }, 400)
     }
     try {
-      const libs = await removeInstalledLibrary(workspaceId, parsed.data.url)
+      const libs: InstalledLibrariesResponse = await removeInstalledLibrary(
+        workspaceId,
+        parsed.data.url,
+      )
       return c.json(libs)
     } catch (err) {
       const issue = handleCorruptStoredData(err)

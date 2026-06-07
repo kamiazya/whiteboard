@@ -3,14 +3,13 @@ import { validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { type InstalledLibrariesResponse } from '../../shared/api-contracts/libraries.js'
 
 // Persist the list of installed .excalidrawlib URLs per workspace, backed by
 // the installed_libraries table. URLs are returned in installation order via
 // installedAt to keep the UI display order stable.
 
-export interface InstalledLibraries {
-  urls: string[]
-}
+export type { InstalledLibrariesResponse }
 
 async function dbReady() {
   await prepareDataDir(DATA_DIR)
@@ -19,7 +18,7 @@ async function dbReady() {
 
 export async function loadInstalledLibraries(
   workspaceId: string,
-): Promise<InstalledLibraries> {
+): Promise<InstalledLibrariesResponse> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   const rows = await db
@@ -33,7 +32,7 @@ export async function loadInstalledLibraries(
 
 export async function saveInstalledLibraries(
   workspaceId: string,
-  libs: InstalledLibraries,
+  libs: InstalledLibrariesResponse,
 ): Promise<void> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
@@ -59,7 +58,7 @@ export async function saveInstalledLibraries(
 export async function addInstalledLibrary(
   workspaceId: string,
   url: string,
-): Promise<InstalledLibraries> {
+): Promise<InstalledLibrariesResponse> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   await upsertWorkspaceRow(db, workspaceId)
@@ -74,7 +73,7 @@ export async function addInstalledLibrary(
 export async function removeInstalledLibrary(
   workspaceId: string,
   url: string,
-): Promise<InstalledLibraries> {
+): Promise<InstalledLibrariesResponse> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
   await db
