@@ -15,6 +15,9 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    # Safety net: this job has historically hung indefinitely on the Playwright
+    # browser download (no per-step bound), wasting a 6h runner slot. Cap it.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -33,9 +36,24 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
+        # Both workspaces pin the same Playwright version, so one install populates
+        # the shared ~/.cache/ms-playwright (and the shared OS deps) for every
+        # browser-mode test project — no need to run the apt+download twice.
+        # The browser download can stall indefinitely on the CDN; bound each
+        # attempt with `timeout` and retry so a transient stall recovers instead of
+        # hanging the whole job until the runner limit.
+        timeout-minutes: 20
         run: |
-          pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
-          pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium
+          set -eu
+          for attempt in 1 2 3; do
+            if timeout 360 pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "::warning::Playwright install attempt ${attempt} stalled or failed; retrying" >&2
+            sleep 10
+          done
+          echo "::error::Playwright install failed after 3 attempts" >&2
+          exit 1
 
       - name: Audit (high+ vulnerabilities, prod deps only)
         # Gate on CVEs that affect published artifacts so they are caught at PR time.
