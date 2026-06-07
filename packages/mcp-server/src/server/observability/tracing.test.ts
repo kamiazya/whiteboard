@@ -403,7 +403,14 @@ describe('flushOnExit — signal-handler body', () => {
     await new Promise((r) => setTimeout(r, 0))
   }
 
+  let flushTestHandle: Awaited<ReturnType<typeof import('./tracing.js').initTracing>> = null
+
   afterEach(() => {
+    // Always remove signal listeners regardless of assertion outcome to prevent
+    // SIGTERM/SIGINT listeners registered by a fresh module import from
+    // leaking into subsequent tests.
+    flushTestHandle?.removeSignalListeners()
+    flushTestHandle = null
     vi.doUnmock('@opentelemetry/sdk-node')
     vi.restoreAllMocks()
   })
@@ -416,15 +423,13 @@ describe('flushOnExit — signal-handler body', () => {
       './tracing.js?flush-body=' + Date.now()
     )
     reset()
-    const handle = await init()
-    expect(handle).not.toBeNull()
+    flushTestHandle = await init()
+    expect(flushTestHandle).not.toBeNull()
 
     await emitBeforeExitAndSettle()
 
+    // The once-listener removed itself — the afterEach cleans up the handle.
     expect(shutdownSpy).toHaveBeenCalledOnce()
-
-    // The once-listener removed itself — clean up without a double-shutdown.
-    handle!.removeSignalListeners()
   })
 
   it('flushOnExit swallows a shutdown rejection and logs a warning — never throws', async () => {
@@ -439,8 +444,8 @@ describe('flushOnExit — signal-handler body', () => {
       './tracing.js?flush-catch=' + Date.now()
     )
     reset()
-    const handle = await init()
-    expect(handle).not.toBeNull()
+    flushTestHandle = await init()
+    expect(flushTestHandle).not.toBeNull()
 
     await emitBeforeExitAndSettle()
 
@@ -455,8 +460,6 @@ describe('flushOnExit — signal-handler body', () => {
       (r) => r.level === 'warning' && r.msg === 'shutdown failed',
     )
     expect(warnings).toHaveLength(1)
-
-    handle!.removeSignalListeners()
   })
 })
 
