@@ -109,6 +109,13 @@ while (true) {
     { label: `review:${round}`, phase: 'Review', schema: REVIEW_SCHEMA },
   )
 
+  // The review agent can return null (terminal API error / session limit). Don't crash the
+  // workflow — surface for human review instead of dereferencing a null verdict.
+  if (!review) {
+    log(`round ${round}: review agent returned no result (likely an API/session limit) — surfacing for human`)
+    return { accepted: false, rounds: round, answer: current, history, unresolved: { reason: 'review-agent-returned-null' }, needsHumanGate: true }
+  }
+
   const claims = (review.claimsToVerify || []).slice(0, PANEL)
   const skeptics = claims.map((c, i) => () =>
     agent(
