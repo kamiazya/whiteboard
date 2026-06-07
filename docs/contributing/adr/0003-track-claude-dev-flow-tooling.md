@@ -10,7 +10,7 @@ A deep investigation (6-dimension fan-out, 42 risks identified) confirmed:
 
 - The repo is public OSS with external collaborators; portability fixes are mandatory, not optional.
 - The workflow sandbox has no `import.meta` / `__dirname` / `process.cwd` / fs at composition time. The only portable scriptPath mechanism for a shared repo is **repo-root-relative paths** (e.g. `.claude/workflows/review.workflow.mjs`) combined with the discipline of never `cd`-ing away from the repo root while a workflow is running.
-- Several absolute `/Users/<user>/...` scriptPaths existed in `dev-loop.workflow.mjs` and `plan-initiative.workflow.mjs` and had to be made relative before tracking.
+- Several absolute home-directory scriptPaths (e.g. `/Users/<user>/...`) existed in `dev-loop.workflow.mjs` and `plan-initiative.workflow.mjs` and had to be made relative before tracking.
 - `.claude/settings.json` contains `Authorization: Bearer whiteboard-dev`. This is a **non-secret, well-known loopback-only dev constant** (also present in `ensure-http-dev-daemon.mjs` and test fixtures) that grants nothing off-machine. The original plan was to extract it to the gitignored `settings.local.json`, but Claude Code's settings schema rejects `mcpServers` in `settings.local.json` (validation throws). The token was therefore kept in tracked `settings.json` with a `_comment_auth` field documenting it as non-secret.
 
 ## Decision
@@ -45,4 +45,4 @@ The `CONTRIBUTING.md` "AI dev-flow tooling" section documents: tracked-vs-ignore
 
 **Extract Bearer token to settings.local.json** — Cleaner separation of personal vs shared config. Rejected: Claude Code's settings schema does not allow `mcpServers` in `settings.local.json`; the validation rejects it. The token remained in tracked `settings.json` with explicit documentation of its non-secret nature.
 
-**Absolute scriptPaths** — Simpler for the original author's machine. Rejected: breaks for any contributor whose home directory is not `/Users/<user>`; incompatible with a public repo.
+**Absolute scriptPaths** — Simpler for the original author's machine. Rejected: breaks for any contributor whose home directory differs from the original author's; incompatible with a public repo.

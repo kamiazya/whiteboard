@@ -166,3 +166,6 @@ CLAUDE.local.md
 # One-off development notes (not intended for public repo)
 branches-state.md
 snapshot-post-reload.md
+
+# Personal Codex agmsg hook (machine/user-specific absolute paths; like .claude/settings.local.json)
+.codex/hooks.json
