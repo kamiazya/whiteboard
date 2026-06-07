@@ -486,5 +486,8 @@ describe('dispatcher routing: --version flag', () => {
 
   it('USAGE documents --version / -v', () => {
     expect(USAGE).toMatch(/--version/)
+    // Pin the short alias too — without this, dropping `-v` from USAGE would
+    // silently pass even though the runtime alias keeps working.
+    expect(USAGE).toMatch(/-v\b/)
   })
 })
