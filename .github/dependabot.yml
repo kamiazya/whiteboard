@@ -51,6 +51,11 @@ updates:
         update-types:
           - minor
           - patch
+    # Supply-chain hardening: wait 7 days after a release before opening a PR, so a
+    # compromised fresh publish is caught/yanked before it reaches a PR. Mirrors the
+    # pnpm `minimumReleaseAge: 10080` (7 days) gate in pnpm-workspace.yaml.
+    cooldown:
+      default-days: 7
     # Major bumps stay in separate PRs and require human review
     # Security updates always arrive as independent PRs regardless of groups (Dependabot behavior)
 
@@ -63,3 +68,5 @@ updates:
     labels:
       - dependencies
       - github-actions
+    cooldown:
+      default-days: 7
