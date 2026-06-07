@@ -26,7 +26,11 @@ describe('pre-merge CI workflow', () => {
 
     expect(workflow).toContain('pnpm check:pr-title -- "${{ github.event.pull_request.title }}"')
     expect(workflow).toContain('pnpm install --frozen-lockfile')
-    expect(workflow).toContain('pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium')
+    // Playwright chromium is installed (cache-miss branch downloads with OS deps);
+    // the browser binaries are cached against the Playwright version to avoid the
+    // slow CDN download that has hung this job.
+    expect(workflow).toContain('install --with-deps chromium')
+    expect(workflow).toContain('actions/cache@')
     expect(workflow).toContain('pnpm intent:validate')
     expect(workflow).toContain('pnpm typecheck')
     expect(workflow).toContain('pnpm test')

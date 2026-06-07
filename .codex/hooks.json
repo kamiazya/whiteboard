@@ -1,1 +1,0 @@
-{"hooks":{"Stop":[{"matcher":"","hooks":[{"type":"command","command":"'/Users/<user>/.agents/skills/agmsg/scripts/check-inbox.sh' 'codex' '/Users/<user>/ghq/github.com/kamiazya/whiteboard'"}]}]}}

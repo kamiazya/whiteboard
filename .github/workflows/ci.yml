@@ -35,24 +35,49 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Cache the browser binaries against the Playwright version so the slow CDN
+      # download (the step that has hung the job) is skipped on a cache hit. OS
+      # deps are NOT cacheable, so they still run via `install-deps` on a hit.
+      # See https://playwright.dev/docs/ci#caching-browsers
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          echo "version=$(pnpm --filter @kamiazya/whiteboard-mcp exec playwright --version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}-
+
       - name: Install Playwright Chromium
-        # Both workspaces pin the same Playwright version, so one install populates
-        # the shared ~/.cache/ms-playwright (and the shared OS deps) for every
-        # browser-mode test project — no need to run the apt+download twice.
-        # The browser download can stall indefinitely on the CDN; bound each
-        # attempt with `timeout` and retry so a transient stall recovers instead of
-        # hanging the whole job until the runner limit.
+        # Both workspaces pin the same Playwright version, so one install covers
+        # every browser-mode test project — no need to run apt+download twice.
+        # On a cache hit only the (uncacheable) OS deps are installed; on a miss
+        # the browser is downloaded too. The download can stall indefinitely on
+        # the CDN, so bound each attempt with `timeout` and retry — a transient
+        # stall recovers instead of hanging the job until the runner limit.
         timeout-minutes: 20
+        env:
+          PW_CACHE_HIT: ${{ steps.pw-cache.outputs.cache-hit }}
         run: |
           set -eu
+          if [ "${PW_CACHE_HIT}" = "true" ]; then
+            args="install-deps chromium"
+          else
+            args="install --with-deps chromium"
+          fi
           for attempt in 1 2 3; do
-            if timeout 360 pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium; then
+            if timeout 360 pnpm --filter @kamiazya/whiteboard-mcp exec playwright ${args}; then
               exit 0
             fi
-            echo "::warning::Playwright install attempt ${attempt} stalled or failed; retrying" >&2
+            echo "::warning::Playwright setup attempt ${attempt} stalled or failed; retrying" >&2
             sleep 10
           done
-          echo "::error::Playwright install failed after 3 attempts" >&2
+          echo "::error::Playwright setup failed after 3 attempts" >&2
           exit 1
 
       - name: Audit (high+ vulnerabilities, prod deps only)
