@@ -1,8 +1,23 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
-import {
-  parseWsClientTextMessage,
-  parseWsTargetFromRequestUrl,
-} from './ws-validation.js'
+import { captureLogsForTests, type LogRecord } from '../log.js'
+import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
+
+// Run `body` with a fresh log capture, always restoring the root level after.
+function withCapturedLogs(body: (records: LogRecord[]) => void): void {
+  const cap = captureLogsForTests('debug')
+  try {
+    body(cap.records)
+  } finally {
+    cap.restore()
+  }
+}
+
+function expectAllWsWarnings(records: LogRecord[]): void {
+  for (const record of records) {
+    expect(record.level).toBe('warning')
+    expect(record.scope).toBe('ws')
+  }
+}
 
 describe('parseWsTargetFromRequestUrl', () => {
   it('accepts validated workspaceId and encoded slug', () => {
@@ -29,6 +44,12 @@ describe('parseWsTargetFromRequestUrl', () => {
       /Invalid websocket path/,
     )
   })
+
+  it('rejects undefined rawUrl (raw TCP upgrade with no URL header)', () => {
+    expect(() => parseWsTargetFromRequestUrl(undefined, '127.0.0.1:3099')).toThrow(
+      /Invalid websocket path/,
+    )
+  })
 })
 
 describe('parseWsClientTextMessage', () => {
@@ -38,9 +59,10 @@ describe('parseWsClientTextMessage', () => {
 
   it('accepts a well-formed ws_trace message so the server can parent the next binary span', () => {
     const tp = '00-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01'
-    expect(
-      parseWsClientTextMessage(`{"type":"ws_trace","traceparent":"${tp}"}`),
-    ).toEqual({ type: 'ws_trace', traceparent: tp })
+    expect(parseWsClientTextMessage(`{"type":"ws_trace","traceparent":"${tp}"}`)).toEqual({
+      type: 'ws_trace',
+      traceparent: tp,
+    })
     expect(
       parseWsClientTextMessage(
         `{"type":"ws_trace","traceparent":"${tp}","tracestate":"vendor=abc"}`,
@@ -72,49 +94,36 @@ describe('parseWsClientTextMessage', () => {
       requestId: 'req-1',
       data: 'data:image/png;base64,abc',
     })
-    expect(
-      parseWsClientTextMessage('{"type":"viewport_response","requestId":"req-2"}'),
-    ).toEqual({
+    expect(parseWsClientTextMessage('{"type":"viewport_response","requestId":"req-2"}')).toEqual({
       type: 'viewport_response',
       requestId: 'req-2',
     })
   })
 
-  it('returns null and warns for malformed or unknown messages', async () => {
-    const { captureLogsForTests } = await import('../log.js')
-    const cap = captureLogsForTests('debug')
-    try {
+  it('returns null and warns for malformed or unknown messages', () => {
+    withCapturedLogs((records) => {
       expect(parseWsClientTextMessage('{')).toBeNull()
       expect(parseWsClientTextMessage('[]')).toBeNull()
       expect(parseWsClientTextMessage('{"type":"unknown"}')).toBeNull()
       expect(parseWsClientTextMessage('{"type":"export_response","requestId":"req-1"}')).toBeNull()
       expect(parseWsClientTextMessage('{"type":"viewport_response"}')).toBeNull()
 
-      expect(cap.records).toHaveLength(5)
-      for (const record of cap.records) {
-        expect(record.level).toBe('warning')
-        expect(record.scope).toBe('ws')
-      }
-    } finally {
-      cap.restore()
-    }
+      expect(records).toHaveLength(5)
+      expectAllWsWarnings(records)
+    })
   })
 
-  it('logs a distinct message for malformed JSON vs schema violations', async () => {
-    const { captureLogsForTests } = await import('../log.js')
-    const cap = captureLogsForTests('debug')
-    try {
+  it('logs a distinct message for malformed JSON vs schema violations', () => {
+    withCapturedLogs((records) => {
       // Non-parseable text → 'ignored invalid client message: malformed JSON'
       parseWsClientTextMessage('{not-json')
       // Valid JSON but wrong shape → 'ignored invalid client message'
       parseWsClientTextMessage('{"type":"export_response","requestId":"r"}')
 
-      expect(cap.records).toHaveLength(2)
-      expect(cap.records[0]!.msg).toBe('ignored invalid client message: malformed JSON')
-      expect(cap.records[1]!.msg).toBe('ignored invalid client message')
-    } finally {
-      cap.restore()
-    }
+      expect(records).toHaveLength(2)
+      expect(records[0]!.msg).toBe('ignored invalid client message: malformed JSON')
+      expect(records[1]!.msg).toBe('ignored invalid client message')
+    })
   })
 
   it('rejects an object with no type field', () => {
@@ -128,10 +137,77 @@ describe('parseWsClientTextMessage', () => {
   })
 
   it('rejects export_response with missing requestId', () => {
-    expect(parseWsClientTextMessage('{"type":"export_response","data":"data:image/png;base64,abc"}')).toBeNull()
+    expect(
+      parseWsClientTextMessage('{"type":"export_response","data":"data:image/png;base64,abc"}'),
+    ).toBeNull()
   })
 
   it('rejects export_response with both requestId and data missing', () => {
     expect(parseWsClientTextMessage('{"type":"export_response"}')).toBeNull()
+  })
+
+  it('rejects JSON primitives that are not objects (number, boolean, null)', () => {
+    expect(parseWsClientTextMessage('42')).toBeNull()
+    expect(parseWsClientTextMessage('true')).toBeNull()
+    expect(parseWsClientTextMessage('"client_ready"')).toBeNull()
+    expect(parseWsClientTextMessage('null')).toBeNull()
+  })
+
+  it('rejects empty string', () => {
+    expect(parseWsClientTextMessage('')).toBeNull()
+  })
+
+  it('rejects messages where a required string field has the wrong type', () => {
+    // requestId must be a string; a number should be rejected
+    expect(
+      parseWsClientTextMessage(
+        '{"type":"export_response","requestId":123,"data":"data:image/png;base64,abc"}',
+      ),
+    ).toBeNull()
+    expect(parseWsClientTextMessage('{"type":"viewport_response","requestId":null}')).toBeNull()
+  })
+
+  it('rejects ws_trace whose traceparent is the wrong type', () => {
+    expect(parseWsClientTextMessage('{"type":"ws_trace","traceparent":42}')).toBeNull()
+    expect(parseWsClientTextMessage('{"type":"ws_trace","traceparent":null}')).toBeNull()
+  })
+
+  it('rejects ws_trace where the version byte is not 00', () => {
+    // The W3C spec reserves 00 as the only valid version; ff is explicitly
+    // invalid per the trace-context spec section 2.2.
+    expect(
+      parseWsClientTextMessage(
+        '{"type":"ws_trace","traceparent":"ff-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"}',
+      ),
+    ).toBeNull()
+    expect(
+      parseWsClientTextMessage(
+        '{"type":"ws_trace","traceparent":"01-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbb-01"}',
+      ),
+    ).toBeNull()
+  })
+
+  it('rejects export_response where data field has wrong type', () => {
+    expect(
+      parseWsClientTextMessage('{"type":"export_response","requestId":"req-1","data":123}'),
+    ).toBeNull()
+    expect(
+      parseWsClientTextMessage('{"type":"export_response","requestId":"req-1","data":null}'),
+    ).toBeNull()
+  })
+
+  it('logs a warning for every rejected primitive and wrong-type payload', () => {
+    withCapturedLogs((records) => {
+      parseWsClientTextMessage('42')
+      parseWsClientTextMessage('true')
+      parseWsClientTextMessage('null')
+      parseWsClientTextMessage('')
+      parseWsClientTextMessage(
+        '{"type":"export_response","requestId":123,"data":"data:image/png;base64,x"}',
+      )
+
+      expect(records).toHaveLength(5)
+      expectAllWsWarnings(records)
+    })
   })
 })
