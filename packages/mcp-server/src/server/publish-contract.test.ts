@@ -103,7 +103,11 @@ describe('publish contract', () => {
     expect(releaseWorkflow).toContain(
       'pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium',
     )
-    expect(releaseWorkflow).toContain('npm publish --access public --provenance')
+    // Published via `npm publish <tarball>` (keeps npm's OIDC + provenance), where the
+    // tarball comes from `pnpm pack` so the catalog: protocol is resolved to concrete
+    // version ranges first — npm cannot resolve catalog: and would ship a broken manifest.
+    expect(releaseWorkflow).toContain('npm publish "$TARBALL" --access public --provenance')
+    expect(releaseWorkflow).toContain('TARBALL=$(pnpm pack | tail -1)')
     // OIDC trusted publisher requires id-token: write permission and npm >= 11.5.1.
     // Node 24 ships with npm 11.x; relying on the bundled npm avoids the
     // `npm i -g npm@latest` self-upgrade bug.

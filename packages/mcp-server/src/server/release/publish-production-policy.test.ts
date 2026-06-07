@@ -121,11 +121,15 @@ describe('release.yml publish-mcp job policy (npm)', () => {
   })
 
   it('job is gated by mcp_release_created', () => {
-    expect(npmSection(), 'npm publish job must check mcp_release_created').toContain('mcp_release_created')
+    expect(npmSection(), 'npm publish job must check mcp_release_created').toContain(
+      'mcp_release_created',
+    )
   })
 
   it('job is gated by force_publish_tag', () => {
-    expect(npmSection(), 'npm publish job must check force_publish_tag').toContain('force_publish_tag')
+    expect(npmSection(), 'npm publish job must check force_publish_tag').toContain(
+      'force_publish_tag',
+    )
   })
 
   it('job uses npm publish with --provenance flag', () => {
@@ -179,16 +183,22 @@ describe('release.yml publish-mcp SBOM policy', () => {
     const section = npmSection()
     // generate:sbom:npm runs inside pnpm check:release-candidate (package.json), not inline in the job.
     const releaseGateIdx = section.indexOf('check:release-candidate')
-    const publishIdx = section.indexOf('run: npm publish')
-    expect(releaseGateIdx, 'check:release-candidate must be referenced in npm job').toBeGreaterThanOrEqual(0)
+    const publishIdx = section.indexOf('npm publish "$TARBALL"')
+    expect(
+      releaseGateIdx,
+      'check:release-candidate must be referenced in npm job',
+    ).toBeGreaterThanOrEqual(0)
     expect(publishIdx, 'run: npm publish must be present').toBeGreaterThanOrEqual(0)
-    expect(releaseGateIdx, 'check:release-candidate (containing generate:sbom:npm) must precede npm publish').toBeLessThan(publishIdx)
+    expect(
+      releaseGateIdx,
+      'check:release-candidate (containing generate:sbom:npm) must precede npm publish',
+    ).toBeLessThan(publishIdx)
   })
 
   it('upload-artifact step appears before npm publish', () => {
     const section = npmSection()
     const uploadIdx = section.indexOf('upload-artifact')
-    const publishIdx = section.indexOf('run: npm publish')
+    const publishIdx = section.indexOf('npm publish "$TARBALL"')
     expect(uploadIdx, 'SBOM upload must precede npm publish').toBeLessThan(publishIdx)
   })
 
@@ -208,15 +218,18 @@ describe('release.yml publish-mcp SBOM policy', () => {
 // ── release.yml docker-publish-sign job ──────────────────────────────────────
 
 describe('release.yml docker-publish-sign job policy', () => {
-  const dockerSection = () =>
-    jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
+  const dockerSection = () => jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
 
   it('job is gated by mcp_release_created', () => {
-    expect(dockerSection(), 'docker publish job must check mcp_release_created').toContain('mcp_release_created')
+    expect(dockerSection(), 'docker publish job must check mcp_release_created').toContain(
+      'mcp_release_created',
+    )
   })
 
   it('job is gated by force_publish_tag', () => {
-    expect(dockerSection(), 'docker publish job must check force_publish_tag').toContain('force_publish_tag')
+    expect(dockerSection(), 'docker publish job must check force_publish_tag').toContain(
+      'force_publish_tag',
+    )
   })
 
   it('job has id-token: write', () => {
@@ -255,8 +268,7 @@ describe('release.yml docker-publish-sign job policy', () => {
 })
 
 describe('release.yml docker-publish-sign tag validation', () => {
-  const dockerSection = () =>
-    jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
+  const dockerSection = () => jobSection(readWorkflow(RELEASE_WORKFLOW), 'docker-publish-sign')
 
   it('tag validation checks mcp-server-v<semver> shape before checkout', () => {
     const section = dockerSection()

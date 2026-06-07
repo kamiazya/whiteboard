@@ -86,7 +86,10 @@ describe('npm SBOM step drift (release.yml publish-mcp job)', () => {
     const script: string = pkg.scripts['check:release-candidate']
     const sbomIdx = script.indexOf('generate:sbom:npm')
     const testIdx = script.indexOf('pnpm test')
-    expect(sbomIdx, 'generate:sbom:npm must appear in check:release-candidate').toBeGreaterThanOrEqual(0)
+    expect(
+      sbomIdx,
+      'generate:sbom:npm must appear in check:release-candidate',
+    ).toBeGreaterThanOrEqual(0)
     expect(testIdx, 'pnpm test must appear in check:release-candidate').toBeGreaterThanOrEqual(0)
     expect(sbomIdx, 'generate:sbom:npm must precede pnpm test').toBeLessThan(testIdx)
   })
@@ -95,16 +98,21 @@ describe('npm SBOM step drift (release.yml publish-mcp job)', () => {
     const section = npmSection()
     const releaseGateIdx = section.indexOf('check:release-candidate')
     // Use `run: npm publish` to avoid matching the job `name:` field.
-    const publishIdx = section.indexOf('run: npm publish')
-    expect(releaseGateIdx, 'check:release-candidate must be present in npm job').toBeGreaterThanOrEqual(0)
+    const publishIdx = section.indexOf('npm publish "$TARBALL"')
+    expect(
+      releaseGateIdx,
+      'check:release-candidate must be present in npm job',
+    ).toBeGreaterThanOrEqual(0)
     expect(publishIdx, 'run: npm publish must be present').toBeGreaterThanOrEqual(0)
-    expect(releaseGateIdx, 'check:release-candidate must precede npm publish').toBeLessThan(publishIdx)
+    expect(releaseGateIdx, 'check:release-candidate must precede npm publish').toBeLessThan(
+      publishIdx,
+    )
   })
 
   it('npm job upload-artifact appears before npm publish', () => {
     const section = npmSection()
     const uploadIdx = section.indexOf('upload-artifact')
-    const publishIdx = section.indexOf('run: npm publish')
+    const publishIdx = section.indexOf('npm publish "$TARBALL"')
     expect(uploadIdx, 'SBOM upload must precede npm publish').toBeLessThan(publishIdx)
   })
 
@@ -208,10 +216,13 @@ describe('generate-npm-sbom.mjs non-leak contract', () => {
     const src = script()
     // The exact stdio array must be ['ignore', 'pipe', 'pipe'] so the tool's
     // stdout (dep names, SBOM content) and stderr are captured, not relayed.
-    expect(src, "spawnSync must use ['ignore', 'pipe', 'pipe'] to capture all output")
-      .toContain("['ignore', 'pipe', 'pipe']")
-    expect(src, "no stdio slot must use 'inherit' (would forward dep content to logs)")
-      .not.toContain("'inherit'")
+    expect(src, "spawnSync must use ['ignore', 'pipe', 'pipe'] to capture all output").toContain(
+      "['ignore', 'pipe', 'pipe']",
+    )
+    expect(
+      src,
+      "no stdio slot must use 'inherit' (would forward dep content to logs)",
+    ).not.toContain("'inherit'")
   })
 
   it('script does not write raw tool output to process.stdout', () => {
@@ -278,16 +289,16 @@ describe('generated SBOM content regression', () => {
   it.runIf(sbomExists)('generated SBOM contains no known dev-only packages', () => {
     const purls = loadSbomPurls()
     const devOnlyPatterns = [
-      'pkg:npm/vitest@',           // vitest core
-      '%40vitest/',                // @vitest/* scoped
-      'pkg:npm/jsdom@',            // jsdom
-      'pkg:npm/fast-check@',       // fast-check core
-      '%40fast-check/',            // @fast-check/* scoped
-      '%40excalidraw/',            // @excalidraw/* (bundled into dist, not a prod dep)
-      '%40stryker-mutator/',       // @stryker-mutator/* mutation testing
-      'pkg:npm/playwright@',       // playwright core
-      '%40playwright/',            // @playwright/* scoped
-      '%40testing-library/',       // @testing-library/* scoped
+      'pkg:npm/vitest@', // vitest core
+      '%40vitest/', // @vitest/* scoped
+      'pkg:npm/jsdom@', // jsdom
+      'pkg:npm/fast-check@', // fast-check core
+      '%40fast-check/', // @fast-check/* scoped
+      '%40excalidraw/', // @excalidraw/* (bundled into dist, not a prod dep)
+      '%40stryker-mutator/', // @stryker-mutator/* mutation testing
+      'pkg:npm/playwright@', // playwright core
+      '%40playwright/', // @playwright/* scoped
+      '%40testing-library/', // @testing-library/* scoped
     ]
     for (const pattern of devOnlyPatterns) {
       const matches = purls.filter((p) => p.includes(pattern))
@@ -297,12 +308,7 @@ describe('generated SBOM content regression', () => {
 
   it.runIf(sbomExists)('generated SBOM contains expected production packages', () => {
     const purls = loadSbomPurls()
-    const prodPatterns = [
-      'pkg:npm/hono@',
-      'pkg:npm/jose@',
-      'pkg:npm/zod@',
-      'pkg:npm/nanoid@',
-    ]
+    const prodPatterns = ['pkg:npm/hono@', 'pkg:npm/jose@', 'pkg:npm/zod@', 'pkg:npm/nanoid@']
     for (const pattern of prodPatterns) {
       expect(
         purls.some((p) => p.includes(pattern)),
@@ -315,9 +321,7 @@ describe('generated SBOM content regression', () => {
 // ── validateSbomSummary PBT ───────────────────────────────────────────────────
 
 describe('validateSbomSummary PBT', () => {
-  const nonEmptyStr = fc
-    .string({ minLength: 1, maxLength: 64 })
-    .filter((s) => s.trim().length > 0)
+  const nonEmptyStr = fc.string({ minLength: 1, maxLength: 64 }).filter((s) => s.trim().length > 0)
   const posInt = fc.integer({ min: 1, max: 10_000_000 })
 
   fcTest.prop(
