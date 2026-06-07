@@ -373,9 +373,35 @@ describe('initTracing() with OTEL_EXPORTER_OTLP_ENDPOINT set', () => {
 // ---------------------------------------------------------------------------
 
 describe('flushOnExit — signal-handler body', () => {
-  // Each test in this block uses vi.doMock to control the NodeSDK instance
-  // so sdk.shutdown() is observable. A fresh module import per test is
-  // required because vi.doMock only affects subsequent dynamic imports.
+  // Mocks NodeSDK so sdk.shutdown() is observable (vi.doMock only affects
+  // subsequent dynamic imports) and stubs the env so tracing is enabled. The
+  // caller imports a fresh copy of the module under test afterwards — the
+  // import specifier must stay a static literal so Vite's dynamic-import
+  // analyzer can resolve it.
+  function mockSdkAndEnableTracing(shutdownSpy: ReturnType<typeof vi.fn>): void {
+    vi.doMock('@opentelemetry/sdk-node', async () => {
+      const actual =
+        await vi.importActual<typeof import('@opentelemetry/sdk-node')>('@opentelemetry/sdk-node')
+      return {
+        ...actual,
+        NodeSDK: class MockNodeSDK {
+          start() {}
+          shutdown = shutdownSpy
+        },
+      }
+    })
+
+    vi.stubEnv('WHITEBOARD_OTEL', '1')
+    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  }
+
+  // beforeExit fires the registered once-listener; wait a macrotask for the
+  // async flushOnExit body to settle.
+  async function emitBeforeExitAndSettle(): Promise<void> {
+    process.emit('beforeExit', 0)
+    await new Promise((r) => setTimeout(r, 0))
+  }
 
   afterEach(() => {
     vi.doUnmock('@opentelemetry/sdk-node')
@@ -384,34 +410,16 @@ describe('flushOnExit — signal-handler body', () => {
 
   it('emitting beforeExit calls sdk.shutdown() once', async () => {
     const shutdownSpy = vi.fn().mockResolvedValue(undefined)
-    vi.doMock('@opentelemetry/sdk-node', async () => {
-      const actual =
-        await vi.importActual<typeof import('@opentelemetry/sdk-node')>('@opentelemetry/sdk-node')
-      return {
-        ...actual,
-        NodeSDK: class MockNodeSDK {
-          start() {}
-          shutdown = shutdownSpy
-        },
-      }
-    })
-
-    vi.stubEnv('WHITEBOARD_OTEL', '1')
-    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    mockSdkAndEnableTracing(shutdownSpy)
 
     const { initTracing: init, resetTracingForTesting: reset } = await import(
       './tracing.js?flush-body=' + Date.now()
     )
     reset()
-
     const handle = await init()
     expect(handle).not.toBeNull()
 
-    // beforeExit fires the registered once-listener; emit synchronously
-    // then wait a microtask for the async flushOnExit body to settle.
-    process.emit('beforeExit', 0)
-    await new Promise((r) => setTimeout(r, 0))
+    await emitBeforeExitAndSettle()
 
     expect(shutdownSpy).toHaveBeenCalledOnce()
 
@@ -420,23 +428,8 @@ describe('flushOnExit — signal-handler body', () => {
   })
 
   it('flushOnExit swallows a shutdown rejection and logs a warning — never throws', async () => {
-    const shutdownError = new Error('sdk shutdown boom')
-    const shutdownSpy = vi.fn().mockRejectedValue(shutdownError)
-    vi.doMock('@opentelemetry/sdk-node', async () => {
-      const actual =
-        await vi.importActual<typeof import('@opentelemetry/sdk-node')>('@opentelemetry/sdk-node')
-      return {
-        ...actual,
-        NodeSDK: class MockNodeSDK {
-          start() {}
-          shutdown = shutdownSpy
-        },
-      }
-    })
-
-    vi.stubEnv('WHITEBOARD_OTEL', '1')
-    vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', '')
-    vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const shutdownSpy = vi.fn().mockRejectedValue(new Error('sdk shutdown boom'))
+    mockSdkAndEnableTracing(shutdownSpy)
 
     // Capture log records to assert the warning is emitted via getLogger.
     const { captureLogsForTests } = await import('../log.js')
@@ -446,21 +439,18 @@ describe('flushOnExit — signal-handler body', () => {
       './tracing.js?flush-catch=' + Date.now()
     )
     reset()
-
     const handle = await init()
     expect(handle).not.toBeNull()
 
-    // Fire the signal-listener and wait for the async catch branch to complete.
-    process.emit('beforeExit', 0)
-    await new Promise((r) => setTimeout(r, 0))
+    await emitBeforeExitAndSettle()
 
     capture.restore()
 
     // sdk.shutdown() was called (and rejected).
     expect(shutdownSpy).toHaveBeenCalledOnce()
 
-    // The error must be swallowed — no unhandled rejection reaches the test.
-    // The catch branch must emit a warning record via getLogger('tracing').
+    // The rejection must be swallowed — no unhandled rejection reaches the
+    // test — and the catch branch must warn via getLogger('tracing').
     const warnings = capture.records.filter(
       (r) => r.level === 'warning' && r.msg === 'shutdown failed',
     )
