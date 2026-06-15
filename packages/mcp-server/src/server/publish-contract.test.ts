@@ -72,7 +72,22 @@ describe('publish contract', () => {
     })
     expect(mcpPackage.main).toBe('./dist/server/mcp/index.js')
     expect(mcpPackage.types).toBe('./dist/server/mcp/index.d.ts')
+    // Workspace exports: browser-contract types point to source so typecheck works
+    // before the build step (CI runs typecheck before build).
     expect(mcpPackage.exports).toEqual({
+      '.': {
+        types: './dist/server/mcp/index.d.ts',
+        import: './dist/server/mcp/index.js',
+      },
+      './browser-contract': {
+        types: './src/shared/canvas-backend-contract.ts',
+        import: './dist/shared/canvas-backend-contract.js',
+      },
+      './package.json': './package.json',
+    })
+    // publishConfig.exports is the shape pnpm substitutes on npm publish,
+    // so npm consumers get the compiled .d.ts declarations.
+    expect(mcpPackage.publishConfig.exports).toEqual({
       '.': {
         types: './dist/server/mcp/index.d.ts',
         import: './dist/server/mcp/index.js',

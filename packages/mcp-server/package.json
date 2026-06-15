@@ -55,7 +55,18 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/server/mcp/index.d.ts",
+        "import": "./dist/server/mcp/index.js"
+      },
+      "./browser-contract": {
+        "types": "./dist/shared/canvas-backend-contract.d.ts",
+        "import": "./dist/shared/canvas-backend-contract.js"
+      },
+      "./package.json": "./package.json"
+    }
   },
   "homepage": "https://github.com/kamiazya/whiteboard/tree/main/packages/mcp-server#readme",
   "bugs": {

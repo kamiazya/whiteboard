@@ -54,7 +54,7 @@ describe('browser-contract subpath export', () => {
     expect(pkg.exports?.['./browser-contract']).toBeDefined()
     const entry = pkg.exports?.['./browser-contract'] as Record<string, string>
     expect(entry.import).toMatch(/canvas-backend-contract\.js$/)
-    expect(entry.types).toMatch(/canvas-backend-contract\.d\.ts$/)
+    expect(entry.types).toMatch(/canvas-backend-contract\.(d\.)?ts$/)
   })
 
   it('dist/shared/canvas-backend-contract.{js,d.ts} exist', () => {
