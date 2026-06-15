@@ -9,12 +9,10 @@ import {
   flushPendingExportRequests,
   handleIncomingExportRequest,
 } from './useWhiteboardSync.helpers.js'
+import { getAppLogger } from '../lib/app-logger.js'
 import { DaemonBackend } from '../lib/daemon-backend.js'
 import type { CanvasBackend } from '../lib/canvas-backend.js'
-import type {
-  ExportRequestMessage,
-  VersionCreatedPayload,
-} from '../../shared/ws-messages.js'
+import type { ExportRequestMessage, VersionCreatedPayload } from '../../shared/ws-messages.js'
 import type {
   ExcalidrawImperativeAPI,
   BinaryFileData,
@@ -26,6 +24,8 @@ import type {
   ExcalidrawImageElement,
   FileId,
 } from '@excalidraw/excalidraw/element/types'
+
+const log = getAppLogger('whiteboard')
 
 // Small debounce helper with no external dependency.
 function debounce<T extends (...args: Parameters<T>) => void>(
@@ -133,15 +133,13 @@ export function useWhiteboardSync(
     // older canvases stored "elements" in a LoroList, while current code writes to MovableList.
     // If MovableList is empty, fall back to List so legacy data still loads.
     const movable = doc.getMovableList('elements').toJSON()
-    const chosenRaw: unknown[] = movable.length > 0
-      ? movable
-      : doc.getList('elements').toJSON()
+    const chosenRaw: unknown[] = movable.length > 0 ? movable : doc.getList('elements').toJSON()
     // Validate each row against the expected Loro element shape before layout
     // resolution. Invalid rows are dropped and logged via console.warn (the
     // browser-side logging idiom for this module) rather than reaching
     // resolveParentedElements with missing required fields.
     const validated = validateLoroRawElements(chosenRaw, ({ index, error }) => {
-      console.warn('[whiteboard] dropped corrupt Loro element at index', index, error.issues)
+      log.warn('dropped corrupt Loro element at index', index, error.issues)
     })
     const elements = resolveParentedElements(validated) as unknown as ExcalidrawElement[]
 
@@ -200,8 +198,7 @@ export function useWhiteboardSync(
   // with a dead websocket and immediate no_client export failures.
   useEffect(() => {
     const backend: CanvasBackend =
-      options.backend ??
-      new DaemonBackend(workspaceId, slug, window.location.href)
+      options.backend ?? new DaemonBackend(workspaceId, slug, window.location.href)
     backendRef.current = backend
 
     function notifyClientReady(): void {
@@ -382,18 +379,21 @@ export function useWhiteboardSync(
     backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
   }, [])
 
-  const onApiReady = useCallback((api: ExcalidrawImperativeAPI) => {
-    excalidrawAPIRef.current = api
-    setApiReady(true)
-    backendRef.current?.sendClientReady()
-    void flushPendingExportRequests({
-      api,
-      pending: pendingExportRequestsRef.current,
-      send: sendExportResponseMessage,
-      exportToBlobFn: exportToBlob,
-      blobToBase64Fn: blobToBase64,
-    })
-  }, [sendExportResponseMessage])
+  const onApiReady = useCallback(
+    (api: ExcalidrawImperativeAPI) => {
+      excalidrawAPIRef.current = api
+      setApiReady(true)
+      backendRef.current?.sendClientReady()
+      void flushPendingExportRequests({
+        api,
+        pending: pendingExportRequestsRef.current,
+        send: sendExportResponseMessage,
+        exportToBlobFn: exportToBlob,
+        blobToBase64Fn: blobToBase64,
+      })
+    },
+    [sendExportResponseMessage],
+  )
 
   // Reapply the current document once the Excalidraw API becomes ready.
   useEffect(() => {
@@ -444,12 +444,14 @@ export function useWhiteboardSync(
         slug,
         (fileId) => uploadedFileIdsRef.current.add(fileId),
         uploadFn,
-      ).then(() => {
-        if (newEntries.length > 0) onFileUploadSucceededRef.current?.()
-      }).catch((err: unknown) => {
-        console.error('[whiteboard] file upload failed, commit skipped:', err)
-        onFileUploadFailedRef.current?.()
-      })
+      )
+        .then(() => {
+          if (newEntries.length > 0) onFileUploadSucceededRef.current?.()
+        })
+        .catch((err: unknown) => {
+          log.error('file upload failed, commit skipped:', err)
+          onFileUploadFailedRef.current?.()
+        })
     }, 300)
     // canvasKey already encodes workspaceId/slug, but listing both keeps the
     // exhaustive-deps rule honest with the closure's captured values.
@@ -545,11 +547,9 @@ export function useWhiteboardSync(
     window.addEventListener('pointerdown', onPointerDown, { capture: true })
     return () => {
       window.removeEventListener('keydown', onKeyDown, { capture: true } as EventListenerOptions)
-      window.removeEventListener(
-        'pointerdown',
-        onPointerDown,
-        { capture: true } as EventListenerOptions,
-      )
+      window.removeEventListener('pointerdown', onPointerDown, {
+        capture: true,
+      } as EventListenerOptions)
     }
   }, [loroUndo, loroRedo])
 

@@ -1,4 +1,7 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react'
+import { getAppLogger } from '../lib/app-logger.js'
+
+const log = getAppLogger('whiteboard')
 
 // React error boundary for the whiteboard surface.
 // Keep the app recoverable instead of letting an Excalidraw, Loro, or routing error blank the whole root.
@@ -22,9 +25,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
-    // Best-effort observability. There is no daemon reporting path yet.
-    // eslint-disable-next-line no-console
-    console.error('[whiteboard] ErrorBoundary caught:', error, info.componentStack)
+    log.error('ErrorBoundary caught:', error, info.componentStack)
   }
 
   reset = (): void => {

@@ -43,6 +43,7 @@ import { CanvasThumb } from './CanvasThumb.js'
 import { HeaderBranchChip } from './HeaderBranchChip.js'
 import { HeaderSaveDot } from './HeaderSaveDot.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
+import { getAppLogger } from '../lib/app-logger.js'
 
 interface CanvasInfo {
   slug: string
@@ -148,6 +149,7 @@ export default function WorkspaceTopBar({
   onEnterFullscreen,
   getThumbnailBlob,
 }: Props) {
+  const log = getAppLogger('workspace-top-bar')
   const navigate = useNavigate()
   const [names, setNames] = useState<WorkspaceNames>({ canvases: {}, pinned: [] })
   const [renamingCanvas, setRenamingCanvas] = useState(false)
@@ -186,10 +188,7 @@ export default function WorkspaceTopBar({
         if (!res.ok) return false
         const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
         if (!parsed.success) {
-          console.error(
-            '[workspace-top-bar] POST /versions response did not match schema:',
-            parsed.error,
-          )
+          log.error('POST /versions response did not match schema:', parsed.error)
           return false
         }
         // Dispatch only after schema validation confirms the server response is well-formed.
@@ -216,7 +215,7 @@ export default function WorkspaceTopBar({
               )
             }
           } catch (err) {
-            console.error('[workspace-top-bar] manual-save thumbnail upload failed:', err)
+            log.error('manual-save thumbnail upload failed:', err)
           }
         }
         return true

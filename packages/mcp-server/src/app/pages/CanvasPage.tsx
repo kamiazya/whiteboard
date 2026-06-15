@@ -19,8 +19,11 @@ import {
 } from '../lib/library-url.js'
 import { normalizeLibraryPayload } from '../lib/library-payload.js'
 import { apiFetch } from '../lib/api-client.js'
+import { getAppLogger } from '../lib/app-logger.js'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+
+const log = getAppLogger('canvas-page')
 
 export default function CanvasPage() {
   const params = useParams<{ workspaceId: string; '*': string }>()
@@ -95,31 +98,32 @@ export default function CanvasPage() {
 
   // apiRef is assigned in handleApiReady, so it is null immediately after mount.
   // onVersionCreated is read through a ref inside the hook, so recreating it on each render is fine.
-  const { onApiReady, onSceneChange, clearLocalUndo, restoreInProgress, restoreLabel } = useWhiteboardSync(workspaceId, slug, {
-    onFileUploadFailed: () => setFileUploadError(true),
-    onFileUploadSucceeded: () => setFileUploadError(false),
-    onVersionCreated: async (v) => {
-      // Only generate thumbnails for auto-save. Manual save already uploads one from the header flow.
-      if (!v.auto) return
-      try {
-        const blob = await getThumbnailBlob()
-        if (!blob) return
-        await apiFetch(
-          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`,
-          {
-            method: 'PUT',
-            headers: { 'Content-Type': 'image/png' },
-            body: blob,
-            signal: ensureThumbnailAbort().signal,
-          },
-        )
-      } catch (err) {
-        if (err instanceof DOMException && err.name === 'AbortError') return
-        // A thumbnail upload failure does not invalidate the version itself.
-        console.error('[canvas-page] auto-version thumbnail upload failed:', err)
-      }
-    },
-  })
+  const { onApiReady, onSceneChange, clearLocalUndo, restoreInProgress, restoreLabel } =
+    useWhiteboardSync(workspaceId, slug, {
+      onFileUploadFailed: () => setFileUploadError(true),
+      onFileUploadSucceeded: () => setFileUploadError(false),
+      onVersionCreated: async (v) => {
+        // Only generate thumbnails for auto-save. Manual save already uploads one from the header flow.
+        if (!v.auto) return
+        try {
+          const blob = await getThumbnailBlob()
+          if (!blob) return
+          await apiFetch(
+            `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`,
+            {
+              method: 'PUT',
+              headers: { 'Content-Type': 'image/png' },
+              body: blob,
+              signal: ensureThumbnailAbort().signal,
+            },
+          )
+        } catch (err) {
+          if (err instanceof DOMException && err.name === 'AbortError') return
+          // A thumbnail upload failure does not invalidate the version itself.
+          log.error('auto-version thumbnail upload failed:', err)
+        }
+      },
+    })
   // CanvasPage also keeps a reference to the Excalidraw API for library import work.
   // useWhiteboardSync stores the same API in its own ref on purpose because the responsibilities differ.
   const handleApiReady = (api: ExcalidrawImperativeAPI) => {
@@ -165,24 +169,26 @@ export default function CanvasPage() {
         if (safeUrl === null) return false
         const res = await fetch(safeUrl, { signal: controller.signal })
         if (!res.ok) {
-          console.error('[library] fetch failed', res.status, safeUrl)
+          log.error('library fetch failed', res.status, safeUrl)
           return false
         }
         const raw = (await res.json()) as unknown
         const libraryItems = normalizeLibraryPayload(raw)
         if (libraryItems.length === 0) {
-          console.warn('[library] no importable items in', safeUrl)
+          log.warn('library no importable items in', safeUrl)
           return false
         }
         await api.updateLibrary({
-          libraryItems: libraryItems as Parameters<ExcalidrawImperativeAPI['updateLibrary']>[0]['libraryItems'],
+          libraryItems: libraryItems as Parameters<
+            ExcalidrawImperativeAPI['updateLibrary']
+          >[0]['libraryItems'],
           openLibraryMenu: openMenu,
           merge: true,
         })
         return true
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return false
-        console.error('[library] import failed', err)
+        log.error('library import failed', err)
         return false
       }
     }
@@ -198,7 +204,9 @@ export default function CanvasPage() {
 
       // 1) Restore server-registered libraries without opening the library panel.
       try {
-        const res = await apiFetch(`/api/workspaces/${workspaceId}/libraries`, { signal: controller.signal })
+        const res = await apiFetch(`/api/workspaces/${workspaceId}/libraries`, {
+          signal: controller.signal,
+        })
         if (res.ok) {
           const { urls } = (await res.json()) as { urls: string[] }
           for (const url of getInstalledLibraryUrls(urls)) {
@@ -229,7 +237,7 @@ export default function CanvasPage() {
           })
         } catch (err) {
           if (err instanceof DOMException && err.name === 'AbortError') return
-          console.error('[library] register failed', err)
+          log.error('library register failed', err)
         }
       }
     }
@@ -263,9 +271,7 @@ export default function CanvasPage() {
       const target = e.target as HTMLElement | null
       const typing =
         !!target &&
-        (target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable)
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
       if (typing) return
       if (e.key === 'Escape' && isFullscreen) {
         setIsFullscreen(false)
@@ -309,10 +315,16 @@ export default function CanvasPage() {
           key={`${workspaceId}/${slug}`}
           excalidrawAPI={handleApiReady}
           theme={resolvedTheme}
-          libraryReturnUrl={typeof window !== 'undefined' ? window.location.origin + window.location.pathname : undefined}
-          onChange={(elements: readonly ExcalidrawElement[], _appState: AppState, files: BinaryFiles) =>
-            onSceneChange?.([...elements], files)
+          libraryReturnUrl={
+            typeof window !== 'undefined'
+              ? window.location.origin + window.location.pathname
+              : undefined
           }
+          onChange={(
+            elements: readonly ExcalidrawElement[],
+            _appState: AppState,
+            files: BinaryFiles,
+          ) => onSceneChange?.([...elements], files)}
         />
         {isFullscreen && (
           <Button
