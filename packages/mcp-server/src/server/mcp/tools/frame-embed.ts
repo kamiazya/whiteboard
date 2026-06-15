@@ -30,6 +30,13 @@ export const updateFrameMembersOutputSchema = z.object({
 // render as iframes, while unsupported domains remain as canvas elements until validated.
 
 const MAX_MEMBER_IDS = 500
+const MAX_FRAME_NAME_LENGTH = 30
+
+function truncateFrameName(name: string | null | undefined): string | null {
+  if (name == null) return null
+  if (name.length <= MAX_FRAME_NAME_LENGTH) return name
+  return name.slice(0, MAX_FRAME_NAME_LENGTH - 1) + '…'
+}
 
 // Shared Excalidraw base fields for frame and embeddable elements. Kept local so
 // annotation-specific fields do not leak into this shape.
@@ -70,7 +77,7 @@ function createBaseFields(args: {
     seed: Math.floor(Math.random() * 1_000_000),
     versionNonce: Math.floor(Math.random() * 1_000_000),
     version: 1,
-    ...(args.type === 'frame' ? { name: args.frameName ?? null } : {}),
+    ...(args.type === 'frame' ? { name: truncateFrameName(args.frameName) } : {}),
   }
 }
 
@@ -88,13 +95,23 @@ function writeElementToDoc(
 // When memberIds are provided, fit the frame to the children's bounding box with
 // padding. If nothing matches, fall back to the caller-supplied x/y/width/height.
 function fitFrameToMembers(
-  elements: Array<{ id: string; x: number; y: number; width: number; height: number; isDeleted?: boolean }>,
+  elements: Array<{
+    id: string
+    x: number
+    y: number
+    width: number
+    height: number
+    isDeleted?: boolean
+  }>,
   memberIds: string[],
   padding: number,
 ): { x: number; y: number; width: number; height: number } | null {
   const members = elements.filter((e) => memberIds.includes(e.id) && !e.isDeleted)
   if (members.length === 0) return null
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity
   for (const m of members) {
     minX = Math.min(minX, m.x)
     minY = Math.min(minY, m.y)
@@ -135,14 +152,21 @@ export function createFrameTool() {
         y: { type: 'number', description: 'Top. Ignored when memberIds auto-fits.' },
         width: { type: 'number', description: 'Default 600. Ignored when memberIds auto-fits.' },
         height: { type: 'number', description: 'Default 400. Ignored when memberIds auto-fits.' },
-        name: { type: 'string', description: 'Optional frame label shown above the frame.' },
+        name: {
+          type: 'string',
+          description:
+            'Optional frame label shown above the frame. Truncated to 30 characters to avoid overflowing the frame width.',
+        },
         memberIds: {
           type: 'array',
           items: { type: 'string' },
           description:
             'Optional existing element ids to wrap. Frame auto-fits their bounding box and assigns frameId to each. Max 500.',
         },
-        padding: { type: 'number', description: 'Padding around memberIds bounding box. Default 24.' },
+        padding: {
+          type: 'number',
+          description: 'Padding around memberIds bounding box. Default 24.',
+        },
       },
       required: ['canvasId'],
     },
@@ -164,9 +188,7 @@ export function createFrameTool() {
       }>
 
       const fitted =
-        memberIds.length > 0
-          ? fitFrameToMembers(elementsJson, memberIds, padding)
-          : null
+        memberIds.length > 0 ? fitFrameToMembers(elementsJson, memberIds, padding) : null
       const bounds = fitted ?? {
         x: args.x ?? 100,
         y: args.y ?? 100,
@@ -175,15 +197,18 @@ export function createFrameTool() {
       }
 
       const frameId = nanoid(16)
-      writeElementToDoc(doc, createBaseFields({
-        id: frameId,
-        type: 'frame',
-        x: bounds.x,
-        y: bounds.y,
-        width: bounds.width,
-        height: bounds.height,
-        frameName: args.name ?? null,
-      }))
+      writeElementToDoc(
+        doc,
+        createBaseFields({
+          id: frameId,
+          type: 'frame',
+          x: bounds.x,
+          y: bounds.y,
+          width: bounds.width,
+          height: bounds.height,
+          frameName: args.name ?? null,
+        }),
+      )
 
       // Reassign child frameId values with targeted LoroMap.set updates.
       const assignedMembers: string[] = []
@@ -200,7 +225,12 @@ export function createFrameTool() {
       }
 
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
 
       return { elementId: frameId, bounds, assignedMembers }
     },
@@ -250,18 +280,26 @@ export function createEmbedTool() {
       const prevVV = doc.version()
 
       const elementId = nanoid(16)
-      writeElementToDoc(doc, createBaseFields({
-        id: elementId,
-        type: 'embeddable',
-        x: args.x ?? 100,
-        y: args.y ?? 100,
-        width: args.width ?? 640,
-        height: args.height ?? 400,
-        link: args.url,
-      }))
+      writeElementToDoc(
+        doc,
+        createBaseFields({
+          id: elementId,
+          type: 'embeddable',
+          x: args.x ?? 100,
+          y: args.y ?? 100,
+          width: args.width ?? 640,
+          height: args.height ?? 400,
+          link: args.url,
+        }),
+      )
 
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
 
       return { elementId, url: args.url }
     },
@@ -285,7 +323,7 @@ export function updateFrameMembersTool() {
   return {
     name: 'update_frame_members',
     description:
-      "Add/remove elements from an existing frame without recreating it (frameId stays stable so export_png({frameId}) still targets the same group). All-or-nothing on missing ids. Recomputes frame x/y/width/height from the final member bbox plus padding.",
+      'Add/remove elements from an existing frame without recreating it (frameId stays stable so export_png({frameId}) still targets the same group). All-or-nothing on missing ids. Recomputes frame x/y/width/height from the final member bbox plus padding.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -294,7 +332,8 @@ export function updateFrameMembersTool() {
         add: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Element ids to include in the frame (their frameId will point to this frame).',
+          description:
+            'Element ids to include in the frame (their frameId will point to this frame).',
         },
         remove: {
           type: 'array',
@@ -308,7 +347,10 @@ export function updateFrameMembersTool() {
       },
       required: ['canvasId', 'frameId'],
     },
-    execute: async (args: UpdateFrameMembersArgs, client: DaemonClient): Promise<UpdateFrameMembersResult> => {
+    execute: async (
+      args: UpdateFrameMembersArgs,
+      client: DaemonClient,
+    ): Promise<UpdateFrameMembersResult> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const padding = args.padding ?? 24
       const add = args.add ?? []
@@ -378,7 +420,10 @@ export function updateFrameMembersTool() {
           height: frameMap.get('height') as number,
         }
       } else {
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity
         for (const m of members) {
           minX = Math.min(minX, m.x)
           minY = Math.min(minY, m.y)
