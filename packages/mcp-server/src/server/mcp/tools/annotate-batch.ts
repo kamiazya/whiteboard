@@ -121,7 +121,8 @@ export function annotateBatchTool() {
         canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
         dryRun: {
           type: 'boolean',
-          description: 'When true, computes placements/warnings without persisting the annotations.',
+          description:
+            'When true, computes placements/warnings without persisting the annotations.',
         },
         overlapThreshold: {
           type: 'number',
@@ -170,33 +171,40 @@ export function annotateBatchTool() {
                 properties: { x: { type: 'number' }, y: { type: 'number' } },
                 required: ['x', 'y'],
               },
-              row: { type: 'number', description: 'Grid row (0-indexed). Requires layout + col, mutually exclusive with target.' },
-              col: { type: 'number', description: 'Grid column (0-indexed). Requires layout + row, mutually exclusive with target.' },
-              rowSpan: { type: 'number', description: 'Grid row span. Default 1. When width/height are omitted, spanned track sizes are used.' },
-              colSpan: { type: 'number', description: 'Grid column span. Default 1. When width/height are omitted, spanned track sizes are used.' },
+              row: {
+                type: 'number',
+                description:
+                  'Grid row (0-indexed). Requires layout + col, mutually exclusive with target.',
+              },
+              col: {
+                type: 'number',
+                description:
+                  'Grid column (0-indexed). Requires layout + row, mutually exclusive with target.',
+              },
+              rowSpan: {
+                type: 'number',
+                description:
+                  'Grid row span. Default 1. When width/height are omitted, spanned track sizes are used.',
+              },
+              colSpan: {
+                type: 'number',
+                description:
+                  'Grid column span. Default 1. When width/height are omitted, spanned track sizes are used.',
+              },
               text: {
                 description:
                   'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width/cellW.',
-                oneOf: [
-                  { type: 'string' },
-                  { type: 'array', items: { type: 'string' } },
-                ],
+                oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
               },
               title: {
                 description:
                   'box_with_label/group only: title text. box_with_label renders it above the body inside the box; group renders it above the bounding rect.',
-                oneOf: [
-                  { type: 'string' },
-                  { type: 'array', items: { type: 'string' } },
-                ],
+                oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
               },
               subText: {
                 description:
                   'box_with_label only: caption rendered as a separate 14px text element. Placement controlled by subTextPosition. string for single line, string[] for multi-line.',
-                oneOf: [
-                  { type: 'string' },
-                  { type: 'array', items: { type: 'string' } },
-                ],
+                oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
               },
               subTextPosition: {
                 type: 'string',
@@ -227,8 +235,7 @@ export function annotateBatchTool() {
               },
               strokeWidth: {
                 type: 'number',
-                description:
-                  'Stroke line width. Default 2. Useful on arrow to emphasize flow.',
+                description: 'Stroke line width. Default 2. Useful on arrow to emphasize flow.',
               },
               fontFamily: {
                 type: 'number',
@@ -255,11 +262,13 @@ export function annotateBatchTool() {
               },
               startBoxId: {
                 type: 'string',
-                description: 'arrow only: element id whose rect is used to snap the start point to its nearest edge.',
+                description:
+                  'arrow only: element id whose rect is used to snap the start point to its nearest edge.',
               },
               endBoxId: {
                 type: 'string',
-                description: 'arrow only: element id whose rect is used to snap the end point to its nearest edge.',
+                description:
+                  'arrow only: element id whose rect is used to snap the end point to its nearest edge.',
               },
               label: {
                 type: 'string',
@@ -268,7 +277,8 @@ export function annotateBatchTool() {
               },
               labelOffset: {
                 type: 'number',
-                description: 'arrow.label only: perpendicular distance from the line to the label center (default 6).',
+                description:
+                  'arrow.label only: perpendicular distance from the line to the label center (default 6).',
               },
               labelSide: {
                 type: 'string',
@@ -330,7 +340,8 @@ export function annotateBatchTool() {
           }
         }
       }
-      const unknownPaletteKeys = unknownPaletteKeySet.size > 0 ? Array.from(unknownPaletteKeySet) : undefined
+      const unknownPaletteKeys =
+        unknownPaletteKeySet.size > 0 ? Array.from(unknownPaletteKeySet) : undefined
       const warnings: AnnotationWarning[] = []
       // Layer 1: resolve targets for items that need layout before touching the doc.
       // Fail fast before fetching a snapshot if layout resolution fails.
@@ -393,47 +404,57 @@ export function annotateBatchTool() {
             }
           }
         }
-        const { row: _r, col: _c, rowSpan: _rs, colSpan: _cs, name, startBoxName, endBoxName, ...rest } = item
+        const {
+          row: _r,
+          col: _c,
+          rowSpan: _rs,
+          colSpan: _cs,
+          name,
+          startBoxName,
+          endBoxName,
+          ...rest
+        } = item
         bindings.push({ name, startBoxName, endBoxName })
         return { ...rest, target, width, height, sessionPalette } as AnnotationSpec
       })
       // Layer 2: collect box_with_label overflow diagnostics without touching the doc.
       // decomposeBoxWithLabel returns [rect, text, diagnostics], so only diagnostics matter here.
       // Specs missing width/height/text are rejected later by appendAnnotationToDoc, so skip them here.
-      warnings.push(...resolvedSpecs.flatMap((spec, index) => {
-        if (spec.type !== 'box_with_label') return []
-        if (
-          (spec.text === undefined && spec.title === undefined) ||
-          spec.width === undefined ||
-          spec.height === undefined
-        ) {
+      warnings.push(
+        ...resolvedSpecs.flatMap((spec, index) => {
+          if (spec.type !== 'box_with_label') return []
+          if (
+            (spec.text === undefined && spec.title === undefined) ||
+            spec.width === undefined ||
+            (spec.height === undefined && spec.autoFit === false)
+          ) {
+            return []
+          }
+          const [, , diag] = decomposeBoxWithLabel({
+            target: spec.target,
+            width: spec.width,
+            height: spec.height ?? 0,
+            title: spec.title,
+            text: spec.text,
+            subText: spec.subText,
+            subTextPosition: spec.subTextPosition,
+            autoFit: spec.autoFit,
+            color: spec.color,
+            align: spec.align,
+          })
+          // Promote both overflow and auto-expand to warnings.
+          // autoExpandedBy reports how much autoFit stretched the box.
+          if (diag.overflow || (diag.autoExpandedBy ?? 0) > 0) {
+            return [{ index, ...diag }]
+          }
           return []
-        }
-        const [, , diag] = decomposeBoxWithLabel({
-          target: spec.target,
-          width: spec.width,
-          height: spec.height,
-          title: spec.title,
-          text: spec.text,
-          subText: spec.subText,
-          subTextPosition: spec.subTextPosition,
-          autoFit: spec.autoFit,
-          color: spec.color,
-          align: spec.align,
-        })
-        // Promote both overflow and auto-expand to warnings.
-        // autoExpandedBy reports how much autoFit stretched the box.
-        if (diag.overflow || (diag.autoExpandedBy ?? 0) > 0) {
-          return [{ index, ...diag }]
-        }
-        return []
-      }))
+        }),
+      )
 
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
-      const workingDoc = args.dryRun === true
-        ? LoroDoc.fromSnapshot(doc.export({ mode: 'snapshot' }))
-        : doc
+      const workingDoc =
+        args.dryRun === true ? LoroDoc.fromSnapshot(doc.export({ mode: 'snapshot' })) : doc
       // Layer 3: collect group missingMemberIds using the snapshot before any doc writes.
       // Continue even if every memberId is missing; appendAnnotationToDoc will skip rect creation.
       const elementsSnapshot = doc.getMovableList('elements').toJSON() as Array<{
@@ -495,17 +516,16 @@ export function annotateBatchTool() {
       if (args.groupAs) {
         applyAssignToGroup(workingDoc, args.groupAs, elementIds)
       }
-      const snapshotElements = workingDoc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+      const snapshotElements = workingDoc.getMovableList('elements').toJSON() as Array<
+        Record<string, unknown>
+      >
       const byElementId = new Map(
         snapshotElements
           .filter((element) => typeof element.id === 'string')
           .map((element) => [element.id as string, element]),
       )
       const placements = annotations.map((annotation, annotationIndex) => {
-        const anchorId =
-          annotation.rectId ??
-          annotation.elementId ??
-          annotation.arrowId
+        const anchorId = annotation.rectId ?? annotation.elementId ?? annotation.arrowId
         const element = anchorId ? byElementId.get(anchorId) : undefined
         return {
           annotationIndex,
@@ -559,7 +579,15 @@ export function annotateBatchTool() {
           message: `overlaps annotation${uniq.length === 1 ? '' : 's'} ${uniq.join(', ')} (IoU > ${overlapThreshold})`,
         })
       }
-      return { elementIds, annotations, warnings, ...(unknownPaletteKeys ? { unknownPaletteKeys } : {}), byName, placements, overlaps }
+      return {
+        elementIds,
+        annotations,
+        warnings,
+        ...(unknownPaletteKeys ? { unknownPaletteKeys } : {}),
+        byName,
+        placements,
+        overlaps,
+      }
     },
   }
 }

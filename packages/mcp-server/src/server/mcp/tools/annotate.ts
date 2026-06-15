@@ -139,7 +139,9 @@ function findRectForSnap(
   const el = elements.find((e) => e.id === id && !e.isDeleted)
   if (!el) return undefined
   if (el.type === 'text' && el.containerId) {
-    const container = elements.find((candidate) => candidate.id === el.containerId && !candidate.isDeleted)
+    const container = elements.find(
+      (candidate) => candidate.id === el.containerId && !candidate.isDeleted,
+    )
     if (container) {
       return {
         rect: { x: container.x, y: container.y, width: container.width, height: container.height },
@@ -168,7 +170,11 @@ function findElementMap(doc: LoroDoc, elementId: string): LoroMap | undefined {
 function appendSingleAnnotation(
   doc: LoroDoc,
   spec: AnnotationSpec & { type: AnnotationType },
-): { elementId: string; snappedStart: { x: number; y: number }; snappedEnd?: { x: number; y: number } } {
+): {
+  elementId: string
+  snappedStart: { x: number; y: number }
+  snappedEnd?: { x: number; y: number }
+} {
   const elements = doc.getMovableList('elements').toJSON() as ExcalidrawElement[]
   const resolved = resolveAnnotationPosition(
     { coords: spec.coords, imageId: spec.imageId, target: spec.target },
@@ -178,7 +184,11 @@ function appendSingleAnnotation(
   // Only text resolves anchor semantics. Other types keep target as top-left.
   const textAnchor =
     spec.type === 'text'
-      ? resolveTextPosition({ target: { x: anchorX, y: anchorY }, width: spec.width, align: spec.align })
+      ? resolveTextPosition({
+          target: { x: anchorX, y: anchorY },
+          width: spec.width,
+          align: spec.align,
+        })
       : null
   const actualX = textAnchor?.x ?? anchorX
   const actualY = textAnchor?.y ?? anchorY
@@ -439,15 +449,26 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
     return { type: spec.type, elementId }
   }
 
-  // box_with_label requires width/height plus at least title or text.
+  // box_with_label requires width plus at least title or text. height is only
+  // required when autoFit is explicitly disabled; when autoFit is on (the
+  // default), the box grows to fit the text so height=0 is a valid minimum.
   const hasText =
     spec.text !== undefined &&
     (Array.isArray(spec.text) ? spec.text.length > 0 : spec.text.length > 0)
   const hasTitle =
     spec.title !== undefined &&
     (Array.isArray(spec.title) ? spec.title.length > 0 : spec.title.length > 0)
-  if ((!hasText && !hasTitle) || spec.width === undefined || spec.height === undefined) {
-    throw new Error('box_with_label requires title or text, plus width and height')
+  const autoFitEnabled = spec.autoFit !== false
+  if (
+    (!hasText && !hasTitle) ||
+    spec.width === undefined ||
+    (spec.height === undefined && !autoFitEnabled)
+  ) {
+    throw new Error(
+      autoFitEnabled
+        ? 'box_with_label requires title or text, plus width'
+        : 'box_with_label requires title or text, plus width and height',
+    )
   }
 
   // Resolve relative/absolute coordinates first; decomposeBoxWithLabel expects absolute input.
@@ -459,7 +480,7 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   const [rectSpec, textSpec, , subTextSpec, titleSpec] = decomposeBoxWithLabel({
     target: absoluteTarget,
     width: spec.width,
-    height: spec.height,
+    height: spec.height ?? 0,
     title: spec.title,
     text: spec.text,
     subText: spec.subText,
@@ -557,11 +578,14 @@ export async function apiPostLoroUpdate(
   slug: string,
   update: Uint8Array,
 ): Promise<void> {
-  const res = await client.request(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/update`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: update,
-  })
+  const res = await client.request(
+    `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/update`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: update,
+    },
+  )
   if (!res.ok) throw new Error(`POST /update failed: ${res.status}`)
 }
 
@@ -569,7 +593,7 @@ export function annotateTool() {
   return {
     name: 'annotate',
     description:
-      'Add annotation (arrow, text, rectangle, highlight, box_with_label) to the whiteboard canvas. box_with_label is a composite of rectangle + centered text label (requires text, width, height). IMPORTANT: box_with_label does NOT auto-wrap long text; the caller must pre-split long lines by passing text as string[] (each element = 1 line) so the label fits within width.',
+      'Add annotation (arrow, text, rectangle, highlight, box_with_label) to the whiteboard canvas. box_with_label is a composite of rectangle + centered text label (requires text/title and width; height is optional and defaults to auto-fit). IMPORTANT: box_with_label does NOT auto-wrap long text; the caller must pre-split long lines by passing text as string[] (each element = 1 line) so the label fits within width.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -582,7 +606,8 @@ export function annotateTool() {
         },
         imageId: {
           type: 'string',
-          description: 'Element ID of the reference image (optional, only used when coords="relative")',
+          description:
+            'Element ID of the reference image (optional, only used when coords="relative")',
         },
         coords: {
           type: 'string',
@@ -603,26 +628,17 @@ export function annotateTool() {
         text: {
           description:
             'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width.',
-          oneOf: [
-            { type: 'string' },
-            { type: 'array', items: { type: 'string' } },
-          ],
+          oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
         },
         title: {
           description:
             'box_with_label/group only: title text. box_with_label places it above the body inside the rectangle; group places it above the bounding rect.',
-          oneOf: [
-            { type: 'string' },
-            { type: 'array', items: { type: 'string' } },
-          ],
+          oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
         },
         subText: {
           description:
             'box_with_label only: caption rendered as a separate 14px text element. Placement controlled by subTextPosition. string for single line, string[] for multi-line.',
-          oneOf: [
-            { type: 'string' },
-            { type: 'array', items: { type: 'string' } },
-          ],
+          oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
         },
         subTextPosition: {
           type: 'string',
@@ -638,12 +654,12 @@ export function annotateTool() {
         color: {
           type: 'string',
           description:
-            'Stroke color. Accepts hex (#rrggbb) or semantic key: primary / success / danger / warning / neutral / info (case-insensitive).',
+            'Stroke/text color. For box_with_label, this sets both the rectangle border AND the text color — they share the same value. Accepts hex (#rrggbb) or semantic key: primary / success / danger / warning / neutral / info (case-insensitive). CAUTION: semantic keys like "neutral" resolve to saturated/dark colors; pairing color:"neutral" with backgroundColor:"neutral" makes text invisible. For readable sticky notes use explicit hex: color:"#343a40" (dark text) + backgroundColor:"#f1f3f5" (light fill) + fillStyle:"solid".',
         },
         backgroundColor: {
           type: 'string',
           description:
-            'Fill color for rectangle / box_with_label / highlight / arrow. Hex (#rrggbb) or semantic key. Default: rectangle/box=transparent, highlight=strokeColor. Use with fillStyle=solid for a filled box.',
+            'Fill color for rectangle / box_with_label / highlight / arrow. Hex (#rrggbb) or semantic key. Default: rectangle/box=transparent, highlight=strokeColor. Use with fillStyle=solid for a filled box. See color description for readable text/background combinations.',
         },
         fillStyle: {
           type: 'string',
@@ -667,8 +683,16 @@ export function annotateTool() {
           description:
             'text only: explicit font size in px. Without this field, text defaults to 20px.',
         },
-        width: { type: 'number', description: 'Override width (rectangle/highlight/text; for arrow, use endTarget instead)' },
-        height: { type: 'number', description: 'Override height (rectangle/highlight/text; for arrow, use endTarget instead)' },
+        width: {
+          type: 'number',
+          description:
+            'Override width (rectangle/highlight/text; for arrow, use endTarget instead)',
+        },
+        height: {
+          type: 'number',
+          description:
+            'Override height. For box_with_label with autoFit=true (the default), height is the minimum — omit it to let the box grow to fit the text. Required only when autoFit=false. For rectangle/highlight/text, sets the element height directly.',
+        },
         align: {
           type: 'string',
           enum: ['left', 'center', 'right'],
@@ -677,7 +701,8 @@ export function annotateTool() {
         },
         endTarget: {
           type: 'object',
-          description: 'Arrow endpoint. Interpreted per coords (absolute px or relative 0-1 within reference image). target is start, endTarget is end.',
+          description:
+            'Arrow endpoint. Interpreted per coords (absolute px or relative 0-1 within reference image). target is start, endTarget is end.',
           properties: { x: { type: 'number' }, y: { type: 'number' } },
           required: ['x', 'y'],
         },
@@ -767,12 +792,12 @@ export function annotateTool() {
         args.type === 'box_with_label' &&
         (args.text !== undefined || args.title !== undefined) &&
         args.width !== undefined &&
-        args.height !== undefined
+        (args.height !== undefined || args.autoFit !== false)
       ) {
         const [, , diag] = decomposeBoxWithLabel({
           target: args.target ?? { x: 0, y: 0 },
           width: args.width,
-          height: args.height,
+          height: args.height ?? 0,
           title: args.title,
           text: args.text,
           subText: args.subText,
@@ -795,7 +820,12 @@ export function annotateTool() {
       const annotation = appendAnnotationToDoc(doc, spec)
       const elementIds = flattenAnnotationResult(annotation)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       // Preserve the legacy elementId/elementIds contract and add the structured
       // annotation result for callers that need internal composite ids.
       const unknownKeys = unknownPaletteKeys.length > 0 ? { unknownPaletteKeys } : {}

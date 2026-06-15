@@ -25,7 +25,10 @@ const elementSummarySchema = z.object({
 })
 
 export const canvasInspectOutputSchema = z.object({
-  // Number of live elements (isDeleted !== true). Useful for estimating scope.
+  // Number of live raw Excalidraw nodes (isDeleted !== true). Note: composite
+  // annotations like box_with_label decompose into multiple nodes (rect + text),
+  // so this count is higher than the number of logical annotate() calls. Use it
+  // for scope estimation, not for counting annotation operations.
   elementCount: z.number(),
   // Elements in LoroList insertion order, including tombstones for history context.
   elements: z.array(elementSummarySchema),

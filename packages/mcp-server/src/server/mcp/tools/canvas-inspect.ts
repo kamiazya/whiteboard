@@ -10,7 +10,7 @@ export function canvasInspectTool() {
   return {
     name: 'canvas_inspect',
     description:
-      'Inspect the current state of a whiteboard canvas. Returns element count and summaries (id, type, position, size, key attributes) so Claude can decide where to place annotations or verify prior operations.',
+      'Inspect the current state of a whiteboard canvas. Returns elementCount (raw Excalidraw node count — composite annotations like box_with_label expand to multiple nodes, so this is higher than the number of annotate() calls) and per-element summaries (id, type, position, size, key attributes) so Claude can decide where to place annotations or verify prior operations.',
     inputSchema: {
       type: 'object' as const,
       properties: {
