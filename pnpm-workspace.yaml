@@ -15,7 +15,7 @@ catalog:
   react-dom: "^19"
   # cross-process contract cores — one version everywhere
   zod: "^4"
-  loro-crdt: "^1.11.1"
+  loro-crdt: "1.11.1"
   # shared build/test tooling
   typescript: "^6.0.3"
   vite: "^8.0.10"
