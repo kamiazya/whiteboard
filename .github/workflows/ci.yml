@@ -116,7 +116,7 @@ jobs:
         run: pnpm publish:dry-run:npm
 
       - name: Upload npm dry-run artifacts
-        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee7ef5a6fab9f92b81 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: npm-tarball-dry-run-${{ github.run_id }}
           path: packages/mcp-server/tmp/publish-dry-run/
@@ -142,7 +142,7 @@ jobs:
         run: pnpm publish:dry-run:docker
 
       - name: Upload docker dry-run metadata
-        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee7ef5a6fab9f92b81 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: docker-image-dry-run-${{ github.run_id }}
           path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json
