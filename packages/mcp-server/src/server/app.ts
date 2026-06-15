@@ -167,7 +167,10 @@ function resolveServerModeApiScopes(method: string, path: string): readonly Auth
   }
 
   // Canvas write operations (update, export, export-json are POST but mutate state)
-  if (/^\/api\/canvas\/[^/]+\/[^/]+\/(update|export|export-json)$/.test(path) && method === 'POST') {
+  if (
+    /^\/api\/canvas\/[^/]+\/[^/]+\/(update|export|export-json)$/.test(path) &&
+    method === 'POST'
+  ) {
     return ['canvas:write']
   }
   if (path === '/api/import-migration-bundle') return ['canvas:write']
@@ -182,7 +185,9 @@ function resolveServerModeApiScopes(method: string, path: string): readonly Auth
   }
 
   // Version history, thumbnails, restore, compact (version-control operations on a canvas)
-  if (/^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/(versions|latest-thumbnail|compact)/.test(path)) {
+  if (
+    /^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/(versions|latest-thumbnail|compact)/.test(path)
+  ) {
     return isWrite ? ['versions:write'] : ['versions:read']
   }
 
@@ -308,7 +313,9 @@ function sanitizeServerModeStatus(
   const parsedUrl = new URL(publicBaseUrl)
   const derivedPort = parsedUrl.port
     ? parseInt(parsedUrl.port, 10)
-    : parsedUrl.protocol === 'https:' ? 443 : 80
+    : parsedUrl.protocol === 'https:'
+      ? 443
+      : 80
   return () => {
     const raw = getStatus()
     return {
@@ -349,6 +356,11 @@ export function createApp(options: AppOptions) {
     if (!plan.ok) throw new Error('invalid server-mode config')
     serverModeGetStatus = sanitizeServerModeStatus(options.getStatus, options.publicBaseUrl)
   }
+
+  // Tracing middleware first so the request span wraps every other
+  // middleware (auth, headers, route handler). When OTel is disabled the
+  // tracer is a no-op so the wrapping cost is negligible.
+  app.use('*', tracingMiddleware())
 
   // Tracing middleware first so the request span wraps every other
   // middleware (auth, headers, route handler). When OTel is disabled the
@@ -457,10 +469,7 @@ export function createApp(options: AppOptions) {
       const constructStartedAt = debug ? Date.now() : 0
       const server = await createExcalidrawMcpServer()
       if (debug) {
-        httpLog.info(
-          { durationMs: Date.now() - constructStartedAt },
-          'mcp-http:construct',
-        )
+        httpLog.info({ durationMs: Date.now() - constructStartedAt }, 'mcp-http:construct')
       }
       await server.connect(transport)
       response = await transport.handleRequest(c.req.raw, { parsedBody })
@@ -506,10 +515,7 @@ export function createApp(options: AppOptions) {
           }
         }
         if (debug) {
-          httpLog.info(
-            { durationMs: Date.now() - destructStartedAt },
-            'mcp-http:destruct',
-          )
+          httpLog.info({ durationMs: Date.now() - destructStartedAt }, 'mcp-http:destruct')
         }
       }
     }
@@ -543,13 +549,16 @@ export function createApp(options: AppOptions) {
   app.route('/', createStatusRouter())
   app.route('/', createLibrariesRouter())
   app.route('/', createPaletteRouter())
-  app.route('/', createRuntimeRouter({
-    token,
-    mcpAuth: mcpAuth ?? undefined,
-    touch: options.touch,
-    getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
-    shutdown: options.shutdown,
-  }))
+  app.route(
+    '/',
+    createRuntimeRouter({
+      token,
+      mcpAuth: mcpAuth ?? undefined,
+      touch: options.touch,
+      getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
+      shutdown: options.shutdown,
+    }),
+  )
   // Branches router: branch metadata plus checkout / broadcast integration.
   {
     const versionStore = sharedVersionStore

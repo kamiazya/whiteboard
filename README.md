@@ -45,7 +45,6 @@ You and your agent both reach the same Excalidraw canvas — they talk, the agen
   <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, Excalidraw drawing toolbar, live diagram synced from the agent in real time" width="780" />
 </p>
 
-
 ## Reach for whiteboard when…
 
 - **You're aligning with your agent on a design and text alone keeps drifting.** Sketch the request flow once, ask the agent to fill in the missing edges, point at the diagram instead of re-explaining.
