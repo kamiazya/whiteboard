@@ -30,7 +30,7 @@ describe('release smoke contract', () => {
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:tarball',
     )
     expect(mcpPackage.scripts['smoke:codex-config']).toBe(
-      'node scripts/smoke/mcp-codex-config-smoke.mjs',
+      'node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs',
     )
     expect(rootPackage.scripts['smoke:codex-config']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:codex-config',
