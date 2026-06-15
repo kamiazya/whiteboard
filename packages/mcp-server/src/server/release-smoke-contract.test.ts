@@ -14,10 +14,7 @@ function readJson(path: string): any {
 describe('release smoke contract', () => {
   const rootPackage = readJson(resolve(repoRoot, 'package.json'))
   const mcpPackage = readJson(resolve(repoRoot, 'packages/mcp-server/package.json'))
-  const releaseWorkflow = readFileSync(
-    resolve(repoRoot, '.github/workflows/release.yml'),
-    'utf-8',
-  )
+  const releaseWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/release.yml'), 'utf-8')
 
   it('defines a packaged-artifact smoke for the MCP package and root workspace', () => {
     expect(mcpPackage.scripts['smoke:packaged']).toBe(
@@ -27,7 +24,7 @@ describe('release smoke contract', () => {
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:packaged',
     )
     expect(mcpPackage.scripts['smoke:tarball']).toBe(
-      'node scripts/smoke/mcp-packed-tarball-smoke.mjs',
+      'node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs',
     )
     expect(rootPackage.scripts['smoke:tarball']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:tarball',
