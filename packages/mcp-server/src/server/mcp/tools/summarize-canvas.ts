@@ -25,11 +25,19 @@ const elementSummarySchema = z.object({
 })
 
 export const canvasInspectOutputSchema = z.object({
-  // Number of live raw Excalidraw nodes (isDeleted !== true). Note: composite
-  // annotations like box_with_label decompose into multiple nodes (rect + text),
-  // so this count is higher than the number of logical annotate() calls. Use it
-  // for scope estimation, not for counting annotation operations.
+  // Total slots in the LoroList, including deleted tombstones. Useful for
+  // understanding the full history footprint of the canvas.
+  nodeCount: z.number(),
+  // Number of live raw Excalidraw nodes (isDeleted !== true). Composite
+  // annotations like box_with_label expand into multiple nodes (e.g. rect + text),
+  // so this count is higher than the number of logical annotate() calls when
+  // composites are used. Equals logicalCount only when no composites are present.
   elementCount: z.number(),
+  // Stable alias for elementCount. Use this field when sanity-checking how many
+  // visible elements the canvas holds; the name makes the intent explicit.
+  // Note: composite annotations (box_with_label) still expand to multiple raw nodes
+  // each, so this will exceed the number of annotate() calls when composites are used.
+  logicalCount: z.number(),
   // Elements in LoroList insertion order, including tombstones for history context.
   elements: z.array(elementSummarySchema),
 })
@@ -53,6 +61,7 @@ function previewText(s: string): string {
 
 export function summarizeCanvas(doc: LoroDoc): CanvasSummary {
   const raw = doc.getMovableList('elements').toJSON() as Record<string, unknown>[]
+  const nodeCount = raw.length
   const elements: ElementSummary[] = raw.map((el) => {
     const summary: Record<string, unknown> = {}
     for (const key of SUMMARY_KEYS) {
@@ -63,5 +72,10 @@ export function summarizeCanvas(doc: LoroDoc): CanvasSummary {
     return summary as ElementSummary
   })
   const elementCount = elements.filter((e) => !e.isDeleted).length
-  return { elementCount, elements }
+  // logicalCount equals elementCount. Composite annotations like box_with_label
+  // expand into multiple raw nodes, so both counts exceed the number of annotate()
+  // calls when composites are used. The separate field exists so callers can be
+  // explicit about which count they are reading.
+  const logicalCount = elementCount
+  return { nodeCount, elementCount, logicalCount, elements }
 }
