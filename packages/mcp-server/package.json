@@ -31,7 +31,7 @@
       "import": "./dist/server/mcp/index.js"
     },
     "./browser-contract": {
-      "types": "./dist/shared/canvas-backend-contract.d.ts",
+      "types": "./src/shared/canvas-backend-contract.ts",
       "import": "./dist/shared/canvas-backend-contract.js"
     },
     "./package.json": "./package.json"
