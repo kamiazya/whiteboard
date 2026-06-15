@@ -3,6 +3,10 @@ import { nanoid } from 'nanoid'
 import { LoroMap } from 'loro-crdt'
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
+import {
+  type UserLibraryMetadataManifest,
+  userLibraryMetadataManifestSchema,
+} from '../../../shared/api-contracts/libraries.js'
 import { validateExternalUrl } from '../../validators.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
@@ -72,35 +76,54 @@ export const userLibraryRemoveOutputSchema = z.object({
   remaining: z.array(z.string()),
 })
 
-import {
-  type UserLibraryMetadataManifest,
-  userLibraryMetadataManifestSchema,
-} from '../../../shared/api-contracts/libraries.js'
-
 export { userLibraryMetadataManifestSchema, type UserLibraryMetadataManifest }
 
 // MCP tools for working with libraries.excalidraw.com-compatible .excalidrawlib
 // payloads. Supports v1 and v2, listing item metadata and inserting cloned items
 // onto the canvas with fresh ids and shifted coordinates.
 
-interface LibraryItemV2 {
-  id?: string
-  status?: string
-  name?: string
-  elements: LibraryElement[]
-}
+// Zod is the single source of truth for the .excalidrawlib wire format so that
+// attacker-controlled payloads fetched from external URLs are always validated
+// before use — never cast directly.
 
-interface LibraryPayloadV1 {
-  type: 'excalidrawlib'
-  version: 1
-  library: LibraryElement[][]
-}
+const boundElementRefSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+})
 
-interface LibraryPayloadV2 {
-  type: 'excalidrawlib'
-  version: 2
-  libraryItems: LibraryItemV2[]
-}
+const libraryElementSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+  boundElements: z.array(boundElementRefSchema).nullish(),
+  // .passthrough() retains arbitrary Excalidraw-proprietary fields (strokeStyle,
+  // roughness, strokeColor, etc.) that vary by element type; strict enumeration
+  // would reject valid real-world payloads fetched from external library URLs.
+}).passthrough()
+
+const libraryItemV2Schema = z.object({
+  id: z.string().optional(),
+  status: z.string().optional(),
+  name: z.string().optional(),
+  elements: z.array(libraryElementSchema),
+})
+
+export const libraryPayloadV1Schema = z.object({
+  type: z.literal('excalidrawlib'),
+  version: z.literal(1),
+  library: z.array(z.array(libraryElementSchema)),
+})
+
+export const libraryPayloadV2Schema = z.object({
+  type: z.literal('excalidrawlib'),
+  version: z.literal(2),
+  libraryItems: z.array(libraryItemV2Schema),
+})
+
+type LibraryItemV2 = z.infer<typeof libraryItemV2Schema>
 
 interface LibrarySourceArgs {
   libraryUrl?: string
@@ -123,17 +146,22 @@ interface LibraryInsertBatchArgs extends LibrarySourceArgs {
 }
 
 function normalizeLibraryPayload(raw: unknown, label: string): LibraryItemV2[] {
-  if ((raw as { type?: string }).type !== 'excalidrawlib') {
+  const v2 = libraryPayloadV2Schema.safeParse(raw)
+  if (v2.success) return v2.data.libraryItems
+
+  const v1 = libraryPayloadV1Schema.safeParse(raw)
+  if (v1.success) return v1.data.library.map((elements) => ({ elements }))
+
+  if (
+    raw === null ||
+    typeof raw !== 'object' ||
+    (raw as { type?: unknown }).type !== 'excalidrawlib'
+  ) {
     throw new Error(`Not an .excalidrawlib payload: ${label}`)
   }
-  const version = (raw as { version?: number }).version
-  if (version === 2 && Array.isArray((raw as LibraryPayloadV2).libraryItems)) {
-    return (raw as LibraryPayloadV2).libraryItems
-  }
-  if (version === 1 && Array.isArray((raw as LibraryPayloadV1).library)) {
-    return (raw as LibraryPayloadV1).library.map((elements) => ({ elements }))
-  }
-  throw new Error(`Unsupported .excalidrawlib version: ${version}`)
+  // Surface the version field in the error when present to help diagnosis.
+  const version = 'version' in raw ? (raw as { version: unknown }).version : undefined
+  throw new Error(`Unsupported or malformed .excalidrawlib payload (version ${version}): ${label}`)
 }
 
 async function fetchLibrary(url: string): Promise<LibraryItemV2[]> {
@@ -373,7 +401,7 @@ export function libraryListItemsTool() {
     ): Promise<z.infer<typeof libraryListItemsOutputSchema>> => {
       const items = await loadLibrarySource(args, client)
       return {
-        source: args.libraryUrl ?? args.libraryPath ?? `user:${args.userLibraryName}`,
+        source: sourceLabel(args),
         itemCount: items.length,
         items: items.map((item, index) => ({
           index,

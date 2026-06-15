@@ -17,10 +17,14 @@
     "whiteboard": {
       "type": "http",
       "url": "http://127.0.0.1:3099/mcp",
+      "_comment_auth": "'whiteboard-dev' is a NON-SECRET, well-known local-dev constant (also defined in the dev daemon launcher and test fixtures). It authenticates only to the loopback 127.0.0.1:3099 dev daemon and grants nothing on any other machine — safe to commit. See CONTRIBUTING.md.",
       "headers": {
         "Authorization": "Bearer whiteboard-dev"
       }
     }
+  },
+  "worktree": {
+    "baseRef": "head"
   },
   "hooks": {
     "SessionStart": [
@@ -29,7 +33,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node packages/mcp-server/scripts/ensure-http-dev-daemon.mjs --quiet",
+            "command": "node packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs --quiet",
             "_comment": "ensure-http-dev-daemon waits up to 30s for `pnpm mcp:http:dev` to bind on cold checkouts; keep this timeout above that so the hook is not killed mid-wait.",
             "timeout": 40
           }

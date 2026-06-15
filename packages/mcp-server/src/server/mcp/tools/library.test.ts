@@ -31,6 +31,8 @@ const {
   userLibraryMetadataGetTool,
   userLibraryMetadataSetTool,
   userLibraryMetadataDeleteTool,
+  libraryPayloadV1Schema,
+  libraryPayloadV2Schema,
 } = await import('./library.js')
 const client = {
   port: 3099,
@@ -81,6 +83,120 @@ function readUpdateElements(update: Uint8Array): Array<Record<string, unknown>> 
   doc.import(update)
   return doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
 }
+
+describe('libraryPayloadV1Schema / libraryPayloadV2Schema', () => {
+  it('accepts a valid v1 payload', () => {
+    const payload = {
+      type: 'excalidrawlib',
+      version: 1,
+      library: [
+        [{ id: 'el-1', type: 'rectangle', x: 0, y: 0, width: 100, height: 50 }],
+      ],
+    }
+    const result = libraryPayloadV1Schema.safeParse(payload)
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts a valid v2 payload', () => {
+    const payload = {
+      type: 'excalidrawlib',
+      version: 2,
+      libraryItems: [
+        {
+          id: 'item-1',
+          name: 'My shape',
+          status: 'published',
+          elements: [{ id: 'el-1', type: 'rectangle', x: 0, y: 0, width: 100, height: 50 }],
+        },
+      ],
+    }
+    const result = libraryPayloadV2Schema.safeParse(payload)
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a payload with wrong type field', () => {
+    const payload = { type: 'excalidraw', version: 1, library: [] }
+    const result = libraryPayloadV1Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a v1 payload with wrong version', () => {
+    const payload = { type: 'excalidrawlib', version: 2, library: [[]] }
+    const result = libraryPayloadV1Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a v2 payload missing libraryItems', () => {
+    const payload = { type: 'excalidrawlib', version: 2 }
+    const result = libraryPayloadV2Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a malformed payload (not an object)', () => {
+    const result = libraryPayloadV1Schema.safeParse('not-an-object')
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a v2 item where elements is not an array', () => {
+    const payload = {
+      type: 'excalidrawlib',
+      version: 2,
+      libraryItems: [{ elements: 'wrong' }],
+    }
+    const result = libraryPayloadV2Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a v2 element with a null entry in boundElements', () => {
+    // A null entry in boundElements bypasses the schema with passthrough() but
+    // crashes resolveLibraryItem when it tries to read be.id on the null value.
+    const payload = {
+      type: 'excalidrawlib',
+      version: 2,
+      libraryItems: [
+        {
+          elements: [
+            {
+              id: 'rect-1',
+              type: 'rectangle',
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              boundElements: [null],
+            },
+          ],
+        },
+      ],
+    }
+    const result = libraryPayloadV2Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a v2 element with a boundElements entry missing the id field', () => {
+    const payload = {
+      type: 'excalidrawlib',
+      version: 2,
+      libraryItems: [
+        {
+          elements: [
+            {
+              id: 'rect-1',
+              type: 'rectangle',
+              x: 0,
+              y: 0,
+              width: 100,
+              height: 50,
+              boundElements: [{ type: 'text' }],
+            },
+          ],
+        },
+      ],
+    }
+    const result = libraryPayloadV2Schema.safeParse(payload)
+    expect(result.success).toBe(false)
+  })
+})
 
 describe('session library tools', () => {
   let originalFetch: typeof globalThis.fetch

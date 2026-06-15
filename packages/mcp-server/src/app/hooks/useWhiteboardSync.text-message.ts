@@ -1,24 +1,5 @@
-import { type ServerTextMessage, serverTextMessageSchema } from '../../shared/ws-messages.js'
-
-export function parseServerTextMessage(
-  raw: string,
-  warn: (...args: unknown[]) => void = console.warn,
-): ServerTextMessage | null {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    warn('[whiteboard] ignored invalid server text message:', 'malformed JSON', raw)
-    return null
-  }
-  const result = serverTextMessageSchema.safeParse(parsed)
-  if (!result.success) {
-    warn(
-      '[whiteboard] ignored invalid server text message:',
-      result.error.issues[0]?.message ?? 'schema mismatch',
-      parsed,
-    )
-    return null
-  }
-  return result.data
-}
+// Re-export from lib so callers that import from this hooks-layer path continue to work.
+// The canonical implementation lives in lib/ws-text-message.ts, which is importable by
+// both lib-layer modules (daemon-backend.ts) and hooks-layer modules without inverting
+// the dependency direction.
+export { parseServerTextMessage } from '../lib/ws-text-message.js'

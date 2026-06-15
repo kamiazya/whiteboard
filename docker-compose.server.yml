@@ -1,0 +1,46 @@
+# docker-compose.server.yml
+#
+# Example Compose file for whiteboard server-mode.
+#
+# IMPORTANT: This container binds plain HTTP on port 3099. Always place a
+# TLS-terminating reverse proxy in front and set WHITEBOARD_SERVER_EXTERNAL_URL
+# to the public HTTPS address. Never expose port 3099 to untrusted networks.
+#
+# Usage:
+#   cp .env.server.example .env
+#   # Fill in the required values in .env
+#   docker compose -f docker-compose.server.yml up -d
+#
+# Required env vars (set in .env — see .env.server.example):
+#   WHITEBOARD_SERVER_EXTERNAL_URL, WHITEBOARD_SERVER_AUTH_STRATEGY,
+#   WHITEBOARD_SERVER_JWT_ISSUER, WHITEBOARD_SERVER_JWT_AUDIENCE,
+#   WHITEBOARD_SERVER_JWKS_URI, WHITEBOARD_SERVER_ALLOWED_ORIGINS
+
+services:
+  whiteboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    image: whiteboard-server:local
+    restart: unless-stopped
+    # Bind to loopback only. The reverse proxy (nginx, Caddy, Traefik, …)
+    # handles TLS termination and forwards to 127.0.0.1:3099.
+    ports:
+      - "127.0.0.1:3099:3099"
+    volumes:
+      - whiteboard_data:/data
+    env_file:
+      - .env
+    # Container filesystem is read-only; /data volume and /tmp tmpfs remain
+    # writable. This limits the impact of a compromised process.
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  whiteboard_data:
+    driver: local

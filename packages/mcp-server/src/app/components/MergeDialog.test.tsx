@@ -176,10 +176,10 @@ describe('MergeDialog', () => {
     expect(await screen.findByText(/\+3/)).toBeTruthy()
   })
 
-  it('shows the error message when runMerge fails', async () => {
+  it('shows a safe fallback copy when runMerge throws an Error (never exposes Error.message)', async () => {
     const runMerge = vi
       .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResult>>()
-      .mockRejectedValue(new Error('merge failed: oops'))
+      .mockRejectedValue(new Error('internal: token=secret-abc'))
     render(
       <MergeDialog
         open
@@ -189,6 +189,33 @@ describe('MergeDialog', () => {
         runMerge={runMerge}
       />,
     )
-    expect(await screen.findByText(/merge failed: oops/i)).toBeTruthy()
+    await screen.findByText(/preview failed/i)
+    // The raw Error.message must never reach the UI (P-HTTP-005).
+    expect(screen.queryByText(/secret-abc/i)).toBeNull()
+    expect(screen.queryByText(/internal:/i)).toBeNull()
+  })
+
+  it('shows body.title when runMerge rejects with a Problem Details error', async () => {
+    const err = {
+      status: 409,
+      body: {
+        type: 'https://example.com/problems/branch_conflict',
+        title: 'Branch already exists',
+        status: 409,
+      },
+    }
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResult>>()
+      .mockRejectedValue(err)
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    await screen.findByText(/branch already exists/i)
   })
 })

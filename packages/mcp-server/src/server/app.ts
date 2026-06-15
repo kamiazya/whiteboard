@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { Hono } from 'hono'
+import { Hono, type MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { detectMergeBadges } from '../shared/merge-engine.js'
@@ -19,7 +19,7 @@ import { createExportRouter, resolveExportRequest } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import { createLibrariesRouter } from './routes/libraries.js'
 import { createPaletteRouter } from './routes/palette.js'
-import { createRuntimeRouter, type RuntimeRouterOptions } from './routes/runtime.js'
+import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
 import {
@@ -31,8 +31,14 @@ import {
 import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
+  type McpHttpAuthStrategy,
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
+import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
+import type { AuthScope } from './security/auth-strategy.js'
+import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
+import { planServerModeAuth } from './security/server-mode-auth-plan.js'
+import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import {
   BranchNotFoundError,
   deleteBranch,
@@ -131,16 +137,230 @@ function checkoutCloneOrThrow(
   return clone
 }
 
+export interface LocalDaemonAppOptions {
+  authMode: 'local-daemon'
+  token?: string
+  mcpAuth?: McpHttpAuthStrategy
+  touch: () => void
+  getStatus: () => RuntimeStatusResponse
+  shutdown: () => Promise<void>
+}
+
+export interface ServerModeAppOptions {
+  authMode: 'server-mode'
+  publicBaseUrl: string
+  allowedOrigins: readonly string[]
+  authStrategy: AsyncAuthStrategy
+  touch: () => void
+  getStatus: () => RuntimeStatusResponse
+  shutdown: () => Promise<void>
+}
+
+export type AppOptions = LocalDaemonAppOptions | ServerModeAppOptions
+
+function resolveServerModeApiScopes(method: string, path: string): readonly AuthScope[] {
+  const isWrite = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
+
+  // File routes
+  if (/^\/api\/canvas\/[^/]+\/[^/]+\/file\//.test(path)) {
+    return method === 'PUT' ? ['files:write'] : ['files:read']
+  }
+
+  // Canvas write operations (update, export, export-json are POST but mutate state)
+  if (
+    /^\/api\/canvas\/[^/]+\/[^/]+\/(update|export|export-json)$/.test(path) &&
+    method === 'POST'
+  ) {
+    return ['canvas:write']
+  }
+  if (path === '/api/import-migration-bundle') return ['canvas:write']
+  // Catch-all for remaining /api/canvas/ routes. Honor the write/read split so a mutating
+  // POST (e.g. /viewport) is not authorized with only canvas:read; the specific write routes
+  // above (update/export/export-json) still take precedence.
+  if (path.startsWith('/api/canvas/')) return isWrite ? ['canvas:write'] : ['canvas:read']
+
+  // User library routes — writes mutate workspace-level shared library state
+  if (path.startsWith('/api/user-libraries')) {
+    return isWrite ? ['workspace:write'] : ['canvas:read']
+  }
+
+  // Version history, thumbnails, restore, compact (version-control operations on a canvas)
+  if (
+    /^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/(versions|latest-thumbnail|compact)/.test(path)
+  ) {
+    return isWrite ? ['versions:write'] : ['versions:read']
+  }
+
+  // Branch and checkpoint routes (version-control operations within a workspace)
+  if (/^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/branches/.test(path)) {
+    return isWrite ? ['versions:write'] : ['versions:read']
+  }
+  if (/^\/api\/workspaces\/[^/]+\/checkpoints$/.test(path)) {
+    return ['versions:write']
+  }
+
+  // Workspace routes — default write → workspace:write, read → workspace:read
+  if (path.startsWith('/api/workspaces')) {
+    return isWrite ? ['workspace:write'] : ['workspace:read']
+  }
+
+  if (path === '/api/runtime/touch' || path === '/api/runtime/shutdown') return ['runtime:admin']
+  if (path.startsWith('/api/runtime/')) return ['runtime:read']
+
+  return isWrite ? ['canvas:write'] : ['canvas:read']
+}
+
+function buildServerModeAuthFailResponse(decision: {
+  status: 401 | 403
+  code: string
+  wwwAuthenticate?: string
+}): Response {
+  const headers = new Headers({ 'content-type': 'application/json' })
+  if (decision.status === 401 && decision.wwwAuthenticate) {
+    headers.set('WWW-Authenticate', decision.wwwAuthenticate)
+  }
+  return new Response(JSON.stringify({ error: decision.code }), {
+    status: decision.status,
+    headers,
+  })
+}
+
+function createServerModeApiAuthMiddleware(authStrategy: AsyncAuthStrategy): MiddlewareHandler {
+  return async (c, next) => {
+    // Ping is a liveness probe available without credentials
+    if (c.req.path === '/api/runtime/ping') return next()
+    const method = c.req.method.toUpperCase()
+    const decision = await authStrategy.authorize({
+      method,
+      path: c.req.path,
+      authorizationHeader: c.req.header('authorization'),
+      requiredScopes: resolveServerModeApiScopes(method, c.req.path),
+    })
+    if (decision.ok) return next()
+    return buildServerModeAuthFailResponse(decision)
+  }
+}
+
+function createServerModeAsyncAuthMiddleware(
+  authStrategy: AsyncAuthStrategy,
+  requiredScopes: readonly AuthScope[],
+): MiddlewareHandler {
+  return async (c, next) => {
+    const decision = await authStrategy.authorize({
+      method: c.req.method,
+      path: c.req.path,
+      authorizationHeader: c.req.header('authorization'),
+      requiredScopes,
+    })
+    if (decision.ok) return next()
+    return buildServerModeAuthFailResponse(decision)
+  }
+}
+
+function createServerModeOriginMiddleware(allowedOrigins: readonly string[]): MiddlewareHandler {
+  const allowed = new Set(
+    allowedOrigins.map((o) => {
+      try {
+        return new URL(o).origin
+      } catch {
+        return o
+      }
+    }),
+  )
+  return async (c, next) => {
+    const origin = c.req.header('origin')
+    if (!origin) {
+      if (c.req.method.toUpperCase() === 'OPTIONS') return new Response(null, { status: 204 })
+      return next()
+    }
+    let normalized: string | null = null
+    try {
+      normalized = new URL(origin).origin
+    } catch {}
+    if (!normalized || !allowed.has(normalized)) {
+      return Response.json(
+        { jsonrpc: '2.0', error: { code: -32000, message: 'forbidden origin' }, id: null },
+        { status: 403 },
+      )
+    }
+    c.res.headers.set('Access-Control-Allow-Origin', origin)
+    c.res.headers.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
+    )
+    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+    c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
+    c.res.headers.set('Access-Control-Max-Age', '86400')
+    if (c.req.method.toUpperCase() === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: c.res.headers })
+    }
+    await next()
+    c.res.headers.set('Access-Control-Allow-Origin', origin)
+    c.res.headers.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
+    )
+    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+    c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
+    c.res.headers.set('Access-Control-Max-Age', '86400')
+  }
+}
+
+function sanitizeServerModeStatus(
+  getStatus: () => RuntimeStatusResponse,
+  publicBaseUrl: string,
+): () => RuntimeStatusResponse {
+  const parsedUrl = new URL(publicBaseUrl)
+  const derivedPort = parsedUrl.port
+    ? parseInt(parsedUrl.port, 10)
+    : parsedUrl.protocol === 'https:'
+      ? 443
+      : 80
+  return () => {
+    const raw = getStatus()
+    return {
+      ...raw,
+      host: '[server-managed]',
+      port: derivedPort,
+      baseUrl: publicBaseUrl,
+      storage: { ...raw.storage, dataDir: '[server-managed]' },
+      mcp: { ...raw.mcp, endpoint: `${publicBaseUrl}/mcp` },
+    }
+  }
+}
+
 setResolveExportFn(resolveExportRequest)
 setResolveViewportFn(resolveViewportRequest)
 
-export function createApp(runtimeOptions: RuntimeRouterOptions) {
+export function createApp(options: AppOptions) {
+  if (options.authMode === 'local-daemon' && 'authStrategy' in options) {
+    throw new Error('local-daemon mode must not receive authStrategy')
+  }
+
   const app = new Hono()
+
+  const token = options.authMode === 'local-daemon' ? options.token : undefined
   const mcpAuth =
-    runtimeOptions.mcpAuth ??
-    createLocalTokenMcpHttpAuthStrategy({
-      token: runtimeOptions.token,
+    options.authMode === 'local-daemon'
+      ? (options.mcpAuth ?? createLocalTokenMcpHttpAuthStrategy({ token: options.token }))
+      : undefined
+
+  let serverModeGetStatus: (() => RuntimeStatusResponse) | undefined
+  if (options.authMode === 'server-mode') {
+    const plan = planServerModeAuth({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: options.publicBaseUrl,
+      allowedOrigins: [...options.allowedOrigins],
     })
+    if (!plan.ok) throw new Error('invalid server-mode config')
+    serverModeGetStatus = sanitizeServerModeStatus(options.getStatus, options.publicBaseUrl)
+  }
+
+  // Tracing middleware first so the request span wraps every other
+  // middleware (auth, headers, route handler). When OTel is disabled the
+  // tracer is a no-op so the wrapping cost is negligible.
+  app.use('*', tracingMiddleware())
 
   // Tracing middleware first so the request span wraps every other
   // middleware (auth, headers, route handler). When OTel is disabled the
@@ -148,7 +368,7 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
   app.use('*', tracingMiddleware())
 
   app.use('*', async (_c, next) => {
-    runtimeOptions.touch()
+    options.touch()
     await next()
   })
 
@@ -157,31 +377,50 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
     setBaselineSecurityHeaders(c.res.headers)
   })
 
-  app.use('/api/*', createDaemonMutationAuthMiddleware(runtimeOptions.token))
+  if (options.authMode === 'server-mode') {
+    app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
+  } else {
+    // In local-daemon mode, allow cross-origin loopback requests (e.g. apps/web
+    // dev server on localhost:5173 → daemon on 127.0.0.1:3099).
+    // The CORS middleware is applied BEFORE the mutation-auth guard so that
+    // OPTIONS preflights short-circuit to 204 without needing a bearer token,
+    // while non-OPTIONS methods fall through to the auth chain unchanged.
+    app.use('/api/*', createApiLoopbackCorsMiddleware())
+    app.use('/api/*', createDaemonMutationAuthMiddleware(token))
+  }
 
-  app.get('/.well-known/oauth-protected-resource', (c) => {
-    const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
-    if (!metadata) {
-      return c.notFound()
-    }
-    return c.json(metadata)
-  })
-
-  app.get('/.well-known/oauth-protected-resource/mcp', (c) => {
-    const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
-    if (!metadata) {
-      return c.notFound()
-    }
-    return c.json(metadata)
-  })
+  if (mcpAuth) {
+    app.get('/.well-known/oauth-protected-resource', (c) => {
+      const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
+      if (!metadata) return c.notFound()
+      return c.json(metadata)
+    })
+    app.get('/.well-known/oauth-protected-resource/mcp', (c) => {
+      const metadata = buildMcpProtectedResourceMetadata(mcpAuth, c.req.url)
+      if (!metadata) return c.notFound()
+      return c.json(metadata)
+    })
+  }
 
   // /mcp middleware:
-  // - origin policy: allow only loopback host / loopback origin to prevent DNS rebinding
-  // - auth: require the daemon token even on local HTTP, matching the /api/* trust boundary
-  // - bodyLimit: prevent OOM from oversized JSON-RPC payloads; typical MCP requests are
-  //   tens of KB, so 4 MiB leaves comfortable headroom
-  app.use('/mcp', createMcpHttpOriginMiddleware())
-  app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth))
+  // - origin policy: server-mode checks allowedOrigins; local-daemon allows loopback only
+  // - auth: server-mode uses AsyncAuthStrategy with mcp:call scope; local-daemon uses daemon token
+  // - bodyLimit: prevent OOM from oversized JSON-RPC payloads (4 MiB)
+  if (options.authMode === 'server-mode') {
+    const serverModePlan = planServerModeAuth({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: options.publicBaseUrl,
+      allowedOrigins: [...options.allowedOrigins],
+    })
+    if (serverModePlan.ok && serverModePlan.kind === 'server-mode') {
+      app.use('/mcp', createServerModeOriginMiddleware(serverModePlan.allowedOrigins))
+    }
+    app.use('/mcp', createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call']))
+  } else {
+    app.use('/mcp', createMcpHttpOriginMiddleware())
+    app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
+  }
   app.use(
     '/mcp',
     bodyLimit({
@@ -230,10 +469,7 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
       const constructStartedAt = debug ? Date.now() : 0
       const server = await createExcalidrawMcpServer()
       if (debug) {
-        httpLog.info(
-          { durationMs: Date.now() - constructStartedAt },
-          'mcp-http:construct',
-        )
+        httpLog.info({ durationMs: Date.now() - constructStartedAt }, 'mcp-http:construct')
       }
       await server.connect(transport)
       response = await transport.handleRequest(c.req.raw, { parsedBody })
@@ -279,10 +515,7 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
           }
         }
         if (debug) {
-          httpLog.info(
-            { durationMs: Date.now() - destructStartedAt },
-            'mcp-http:destruct',
-          )
+          httpLog.info({ durationMs: Date.now() - destructStartedAt }, 'mcp-http:destruct')
         }
       }
     }
@@ -312,11 +545,20 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
   app.route('/', createFilesRouter({ versionStore: sharedVersionStore }))
   app.route('/', createExportRouter())
   app.route('/', createViewportRouter())
-  app.route('/', createDebugRouter({ token: runtimeOptions.token }))
+  app.route('/', createDebugRouter({ token }))
   app.route('/', createStatusRouter())
   app.route('/', createLibrariesRouter())
   app.route('/', createPaletteRouter())
-  app.route('/', createRuntimeRouter(runtimeOptions))
+  app.route(
+    '/',
+    createRuntimeRouter({
+      token,
+      mcpAuth: mcpAuth ?? undefined,
+      touch: options.touch,
+      getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
+      shutdown: options.shutdown,
+    }),
+  )
   // Branches router: branch metadata plus checkout / broadcast integration.
   {
     const versionStore = sharedVersionStore
@@ -609,7 +851,10 @@ export function createApp(runtimeOptions: RuntimeRouterOptions) {
       // dangerous, but this keeps runtime config safe if user-controlled values are added later.
       // Details: https://html.spec.whatwg.org/multipage/scripting.html#restrictions-for-contents-of-script-elements
       const runtimeConfigJson = JSON.stringify({
-        daemonToken: runtimeOptions.token ?? null,
+        daemonToken: token ?? null,
+        // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the
+        // value is always a loopback origin, even when the daemon binds 0.0.0.0.
+        daemonBaseUrl: `http://127.0.0.1:${options.getStatus().port}`,
       }).replace(/</g, '\\u003c')
       const runtimeConfigScript = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
       const withRuntimeConfig = html.includes('</head>')

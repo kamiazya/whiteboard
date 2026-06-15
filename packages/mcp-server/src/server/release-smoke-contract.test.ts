@@ -14,26 +14,23 @@ function readJson(path: string): any {
 describe('release smoke contract', () => {
   const rootPackage = readJson(resolve(repoRoot, 'package.json'))
   const mcpPackage = readJson(resolve(repoRoot, 'packages/mcp-server/package.json'))
-  const releaseWorkflow = readFileSync(
-    resolve(repoRoot, '.github/workflows/release.yml'),
-    'utf-8',
-  )
+  const releaseWorkflow = readFileSync(resolve(repoRoot, '.github/workflows/release.yml'), 'utf-8')
 
   it('defines a packaged-artifact smoke for the MCP package and root workspace', () => {
     expect(mcpPackage.scripts['smoke:packaged']).toBe(
-      'node scripts/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js',
+      'node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js',
     )
     expect(rootPackage.scripts['smoke:packaged']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:packaged',
     )
     expect(mcpPackage.scripts['smoke:tarball']).toBe(
-      'node scripts/mcp-packed-tarball-smoke.mjs',
+      'node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs',
     )
     expect(rootPackage.scripts['smoke:tarball']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:tarball',
     )
     expect(mcpPackage.scripts['smoke:codex-config']).toBe(
-      'node scripts/mcp-codex-config-smoke.mjs',
+      'node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs',
     )
     expect(rootPackage.scripts['smoke:codex-config']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp smoke:codex-config',

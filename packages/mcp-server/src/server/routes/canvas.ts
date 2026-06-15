@@ -5,6 +5,7 @@ import { LoroDoc as LoroDocCtor, LoroMap } from 'loro-crdt'
 import type { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import {
+  type CreateCanvasResponse,
   type ListCanvasesResponse,
   type ListVersionsResponse,
   type ListWorkspacesResponse,
@@ -49,15 +50,21 @@ import {
   validateSlug,
   validateVersionId,
 } from '../validators.js'
+import { isValidPngSignature } from './canvas-thumbnail.js'
+import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
 
 // WS broadcast function injected from ws.ts.
-type BroadcastFn = (workspaceId: string, slug: string, update: Uint8Array, excludeWs?: WebSocket) => void
+type BroadcastFn = (
+  workspaceId: string,
+  slug: string,
+  update: Uint8Array,
+  excludeWs?: WebSocket,
+) => void
 let broadcastLoroUpdate: BroadcastFn = () => {}
 
 export function setBroadcastFn(fn: BroadcastFn): void {
   broadcastLoroUpdate = fn
 }
-
 
 function defaultHumanDisplayName(): string {
   try {
@@ -80,6 +87,9 @@ export function createAutoVersionTrigger(
   // If omitted or null, keep the previous behavior and let VersionStore.save fall back to "main".
   getHeadBranch?: (workspaceId: string, slug: string) => Promise<string | null>,
 ): (workspaceId: string, slug: string, doc: LoroDoc) => Promise<VersionEntry | null> {
+  // Per-canvas last-save timestamps. In-place Map mutation is intentional: this is
+  // closure-private throttle state, never shared or observed, so the immutability
+  // rule (which guards shared/observable data) does not apply.
   const lastAt = new Map<string, number>()
   return async function triggerAutoVersion(workspaceId, slug, doc) {
     const key = `${workspaceId}/${slug}`
@@ -205,38 +215,38 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       validateWorkspaceId(workspaceId)
     } catch (err) {
       const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
+      if (body) return c.json({ title: body.message }, 400)
       throw err
     }
     const raw = await c.req.json().catch(() => null)
     if (raw === null) {
-      return c.json({ error: 'invalid_body', message: 'JSON body required' }, 400)
+      return c.json({ title: 'JSON body required' }, 400)
     }
     const parsed = createCanvasRequestSchema.safeParse(raw)
     if (!parsed.success) {
-      return c.json({ error: 'invalid_body', message: 'slug is required' }, 400)
+      return c.json({ title: 'slug is required' }, 400)
     }
     const slug = parsed.data.slug
     try {
       validateSlug(slug)
     } catch (err) {
       const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
+      if (body) return c.json({ title: body.message }, 400)
       throw err
     }
     try {
       const doc = new LoroDocCtor()
       await saveCanvas(workspaceId, slug, doc, { overwrite: false })
-      return c.json({ slug })
+      const response: CreateCanvasResponse = { slug }
+      return c.json(response)
     } catch (err) {
       if (err instanceof ConflictError) {
-        return c.json({ error: 'conflict', message: err.message }, 409)
+        return c.json({ title: `Canvas "${slug}" already exists` }, 409)
       }
-      const message = err instanceof Error ? err.message : 'save failed'
-      return c.json({ error: 'invalid_slug', message }, 400)
+      getLogger('canvas').error({ err: err as Error }, 'saveCanvas failed unexpectedly')
+      return c.json({ title: 'Failed to create canvas.' }, 500)
     }
   })
-
 
   // User-facing workspace / canvas names.
   // When unnamed, the UI falls back to session id / slug, so the API only returns stored values.
@@ -608,7 +618,9 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     }
     const includeCustomFields = body.includeCustomFields === true
     const outputPath =
-      typeof body.outputPath === 'string' && body.outputPath.length > 0 ? body.outputPath : undefined
+      typeof body.outputPath === 'string' && body.outputPath.length > 0
+        ? body.outputPath
+        : undefined
     const overwrite = body.overwrite === true
     const doc = await getDoc(workspaceId, slug)
     try {
@@ -624,8 +636,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       )
     } catch (err) {
       if (err instanceof OutputPathError) {
-        const status = err.code === 'output_exists' ? 409 : 400
-        return c.json({ error: err.code, message: err.message }, status)
+        const { status, body } = toCanvasOutputPathErrorBody(err)
+        return c.json(body, status)
       }
       throw err
     }
@@ -633,9 +645,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
 
   // PUT /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
   // Body is PNG binary from the browser exportToBlob result. Validate the PNG signature minimally.
-  app.put(
-    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
-    async (c) => {
+  app.put('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
     const { workspaceId, slug, id } = c.req.param()
     try {
       validateWorkspaceId(workspaceId)
@@ -647,14 +657,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       throw err
     }
     const bytes = new Uint8Array(await c.req.arrayBuffer())
-    // PNG signature: 89 50 4E 47 0D 0A 1A 0A
-    if (
-      bytes.length < 8 ||
-      bytes[0] !== 0x89 ||
-      bytes[1] !== 0x50 ||
-      bytes[2] !== 0x4e ||
-      bytes[3] !== 0x47
-    ) {
+    if (!isValidPngSignature(bytes)) {
       return c.json({ error: 'invalid_png' }, 400)
     }
     try {
@@ -668,9 +671,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
 
   // GET /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
   // Return the PNG with cache headers, or 404 if it has not been saved.
-  app.get(
-    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
-    async (c) => {
+  app.get('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
     const { workspaceId, slug, id } = c.req.param()
     try {
       validateWorkspaceId(workspaceId)
@@ -712,9 +713,14 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
     try {
       const versions = await versionStore.list(workspaceId, slug)
       const latestWithThumb = versions.find((v) => v.hasThumbnail)
-      if (!latestWithThumb) return c.json({ error: 'not_found' }, 404)
+      // No thumbnail yet is a normal state (e.g. a brand-new canvas). This
+      // endpoint backs CanvasThumb's <img src>, so a 404 would make the browser
+      // log "Failed to load resource: 404" as console noise. Return 204 No
+      // Content instead: a success status (no console error) whose empty body
+      // still trips the <img> onError handler → the FileText placeholder.
+      if (!latestWithThumb) return c.body(null, 204)
       const bytes = await versionStore.loadThumbnail(workspaceId, latestWithThumb.id)
-      if (!bytes) return c.json({ error: 'not_found' }, 404)
+      if (!bytes) return c.body(null, 204)
       return c.body(bytes.buffer as ArrayBuffer, 200, {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=300',
@@ -741,9 +747,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
   //      Writes the past doc as a brand-new canvas under `targetSlug` in the
   //      same workspace. The original canvas / live doc / WS clients are not
   //      touched. Replaces the deleted `checkpoint_restore` flow.
-  app.post(
-    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore',
-    async (c) => {
+  app.post('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore', async (c) => {
     const { workspaceId, slug, id } = c.req.param()
     try {
       validateWorkspaceId(workspaceId)

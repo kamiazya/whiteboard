@@ -39,10 +39,7 @@ import {
 } from './tools/library.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const SKILL_PATH = resolve(
-  __dirname,
-  '../../../../../skills/drawing-visuals/SKILL.md',
-)
+const SKILL_PATH = resolve(__dirname, '../../../../../skills/drawing-visuals/SKILL.md')
 // SKILL.md uses progressive disclosure and moves details into references/*.md,
 // so schema string matching also reads the reference notes.
 const SKILL_REFERENCE_PATHS = [
@@ -51,10 +48,10 @@ const SKILL_REFERENCE_PATHS = [
 const skillText = [SKILL_PATH, ...SKILL_REFERENCE_PATHS]
   .map((p) => readFileSync(p, 'utf-8'))
   .join('\n')
-// Statically load mcp/index.ts so the zod schema can be compared with the JSON
-// inputSchema. Task #60 showed that JSON schema fields could exist while zod
-// silently stripped them, so this test compares source-level key sets directly.
-const MCP_INDEX_PATH = resolve(__dirname, 'index.ts')
+// Statically load tool-registration.ts so the zod schema can be compared with
+// the JSON inputSchema. JSON schema fields could exist while zod silently
+// strips them, so this test compares source-level key sets directly.
+const MCP_INDEX_PATH = resolve(__dirname, 'tool-registration.ts')
 const mcpIndexText = readFileSync(MCP_INDEX_PATH, 'utf-8')
 
 // Materialize every tool factory and build a tool.name -> inputSchema lookup.
@@ -213,8 +210,8 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
   // 5. Arrow box-snap parameters.
   // startBoxId and endBoxId must exist in both annotate_batch and annotate.
   describe('arrow snap params', () => {
-    const batchAnnotations = toolByName.get('annotate_batch')!.inputSchema
-      .properties.annotations as { items: { properties: Record<string, unknown> } }
+    const batchAnnotations = toolByName.get('annotate_batch')!.inputSchema.properties
+      .annotations as { items: { properties: Record<string, unknown> } }
     const batchItems = batchAnnotations.items.properties
     const single = toolByName.get('annotate')!.inputSchema.properties
 
@@ -269,17 +266,18 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
 
   // 9. zod ↔ JSON inputSchema parity for annotate_batch.
   // Every key in annotate-batch.ts JSON schema must also exist in the inline
-  // zod shape in mcp/index.ts. Missing zod fields get stripped silently.
+  // zod shape in tool-registration.ts. Missing zod fields get stripped silently.
   describe('zod ↔ JSON inputSchema parity for annotate_batch', () => {
     const annotationsSchema = toolByName.get('annotate_batch')!.inputSchema.properties
       .annotations as { items: { properties: Record<string, unknown> } }
     const jsonKeys = Object.keys(annotationsSchema.items.properties)
 
-    // annotate_batch zod is declared inline in mcp/index.ts. Match `<key>: z.`
-    // in the source text. False positives are acceptable; missed keys are not.
+    // annotate_batch zod is declared inline in tool-registration.ts. Match
+    // `<key>: z.` in the source text (the formatter may wrap `z` onto its own
+    // line). False positives are acceptable; missed keys are not.
     for (const key of jsonKeys) {
       it(`defines annotate_batch.annotations[].${key} in the zod schema`, () => {
-        const pattern = new RegExp(`\\b${key}\\s*:\\s*z\\.`)
+        const pattern = new RegExp(`\\b${key}\\s*:\\s*z\\s*\\.`)
         expect(mcpIndexText).toMatch(pattern)
       })
     }

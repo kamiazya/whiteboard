@@ -60,6 +60,13 @@ describe('readPersistedTheme', () => {
     window.localStorage.removeItem(THEME_STORAGE_KEY)
     expect(readPersistedTheme()).toBe('system')
   })
+
+  it('falls back to "system" when an unrecognised value is stored', () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, 'auto')
+    expect(readPersistedTheme()).toBe('system')
+    window.localStorage.setItem(THEME_STORAGE_KEY, '')
+    expect(readPersistedTheme()).toBe('system')
+  })
 })
 
 describe('resolveTheme', () => {
@@ -133,5 +140,42 @@ describe('useThemeMode', () => {
     expect(document.documentElement.classList.contains('dark')).toBe(false)
     // Preference itself is unchanged — the user picked "system", not "light".
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe('system')
+  })
+
+  it('switching from explicit dark to system re-enables OS tracking', () => {
+    const mq = installMatchMediaMock('dark')
+    let api: ReturnType<typeof useThemeMode> | null = null
+    render(<Probe onState={(s) => { api = s }} />)
+
+    // Pin to explicit dark first.
+    act(() => api!.setTheme('dark'))
+    expect(api!.resolvedTheme).toBe('dark')
+
+    // Switch back to system — OS is dark so resolvedTheme stays dark.
+    act(() => api!.setTheme('system'))
+    expect(api!.theme).toBe('system')
+    expect(api!.resolvedTheme).toBe('dark')
+
+    // OS flips to light — system mode must follow.
+    act(() => mq.setSystem('light'))
+    expect(api!.resolvedTheme).toBe('light')
+    expect(document.documentElement.classList.contains('dark')).toBe(false)
+  })
+
+  it('switching away from system removes the OS-change listener', () => {
+    const mq = installMatchMediaMock('dark')
+    window.localStorage.setItem(THEME_STORAGE_KEY, 'system')
+    let api: ReturnType<typeof useThemeMode> | null = null
+    render(<Probe onState={(s) => { api = s }} />)
+
+    expect(api!.resolvedTheme).toBe('dark')
+
+    // Pin to light — the matchMedia listener should be removed.
+    act(() => api!.setTheme('light'))
+    expect(api!.resolvedTheme).toBe('light')
+
+    // OS flips to dark, but we are no longer in system mode — no change expected.
+    act(() => mq.setSystem('dark'))
+    expect(api!.resolvedTheme).toBe('light')
   })
 })

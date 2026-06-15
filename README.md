@@ -6,6 +6,29 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml/badge.svg)](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml)
 
+## Start here
+
+whiteboard is a **browser-first whiteboard that grows with you**: open a canvas in
+your browser, run it locally for durable private storage, and self-host it for a
+team when you're ready.
+
+**Try it in your browser** — no account; your canvas data stays in your own
+browser. <sub>*Browser-local: runs in your browser, data stays on your machine.*</sub>
+*[Get started →](docs/tutorials/getting-started.md) — runs locally from a checkout today.*
+
+### ▶ Draw with your AI agent
+
+The fastest way to get value today. Claude Code, Codex, or Gemini draw on the
+canvas alongside you over MCP. <sub>*Local daemon: a server on your own machine.*</sub>
+
+**→ [Get started: Quick install](#quick-install)**
+
+---
+
+**Self-host for your team** — run whiteboard as a shared server behind your own
+identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub>
+→ [Self-host with Docker](docs/how-to/self-host-with-docker.md)
+
 ## How whiteboard works
 
 You and your agent both reach the same Excalidraw canvas — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser over WebSocket.
@@ -61,6 +84,8 @@ This installs the MCP server **and** the bundled `/drawing-visuals`, `/coauthori
 claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest
 ```
 
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
+
 </details>
 
 ### Codex
@@ -83,6 +108,8 @@ Add to `~/.codex/config.toml`:
 command = "npx"
 args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 ```
+
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
 
 </details>
 
@@ -108,6 +135,8 @@ Add to `~/.gemini/settings.json`:
 }
 ```
 
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
+
 </details>
 
 ### Verify
@@ -116,7 +145,7 @@ In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The fi
 
 ## Bundled skills
 
-Three opinionated `SKILL.md` packs ship inside the npm package. The recommended **plugin install above wires them up automatically** — no manual linking. If you instead used `claude mcp add`, the Codex CLI snippet, or `npx`, link them yourself per [docs/development.md#bundled-skills-install](docs/development.md#bundled-skills-install).
+Three opinionated `SKILL.md` packs ship inside the npm package. The recommended **plugin install above wires them up automatically** — no manual linking. If you instead used `claude mcp add`, the Codex CLI snippet, or `npx`, link them yourself per [docs/contributing/development.md#bundled-skills-install](docs/contributing/development.md#bundled-skills-install).
 
 | Skill | When to use |
 |---|---|
@@ -147,13 +176,13 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 
 | Topic | Where |
 |---|---|
-| Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/development.md](docs/development.md) |
-| Environment variables, storage layout, Codex sandbox quirks | [docs/configuration.md](docs/configuration.md) |
-| Components, data flow, MCP tool surface, design boundaries | [docs/architecture.md](docs/architecture.md) |
-| Custom template fragment JSON format used by `template_insert` | [docs/templates.md](docs/templates.md) |
-| MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/mcp-debugging.md](docs/mcp-debugging.md) |
-| Token-gated local HTTP, daemon trust model | [docs/security-model.md](docs/security-model.md) |
-| WebSocket message shapes between daemon and browser | [docs/wire-protocol.md](docs/wire-protocol.md) |
+| Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/contributing/development.md](docs/contributing/development.md) |
+| Environment variables, storage layout, Codex sandbox quirks | [docs/reference/configuration.md](docs/reference/configuration.md) |
+| Components, data flow, MCP tool surface, design boundaries | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
+| Custom template fragment JSON format used by `template_insert` | [docs/reference/templates.md](docs/reference/templates.md) |
+| MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
+| Token-gated local HTTP, daemon trust model | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
+| WebSocket message shapes between daemon and browser | [docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md) |
 | Test layers, commit conventions, release process | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
 ## Limitations
@@ -161,7 +190,7 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 - Live drawing and PNG export require a Chromium browser tab connected over WebSocket.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
 
-See [docs/configuration.md](docs/configuration.md#codex-sandbox-constraints) for sandbox quirks.
+See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.
 
 ## License
 

@@ -1,0 +1,83 @@
+# syntax=docker/dockerfile:1.4
+#
+# Server-mode image for whiteboard.
+#
+# Runs `whiteboard server run --json` — the OAuth/JWT resource-server path.
+# This image does NOT run the local daemon (`whiteboard daemon run`) and
+# accepts no --token or WHITEBOARD_DAEMON_TOKEN; those belong to the
+# local-daemon path only.
+#
+# TLS termination: the container binds plain HTTP on WHITEBOARD_SERVER_PORT
+# (default 3099). Place a TLS-terminating reverse proxy (nginx, Caddy,
+# Traefik, …) in front and set WHITEBOARD_SERVER_EXTERNAL_URL to the public
+# HTTPS address. Never expose port 3099 directly to untrusted networks.
+#
+# Required runtime env (no defaults — fail-closed if missing):
+#   WHITEBOARD_SERVER_EXTERNAL_URL     https://whiteboard.example.com
+#   WHITEBOARD_SERVER_AUTH_STRATEGY    oauth-jwt
+#   WHITEBOARD_SERVER_JWT_ISSUER       https://idp.example.com
+#   WHITEBOARD_SERVER_JWT_AUDIENCE     https://whiteboard.example.com
+#   WHITEBOARD_SERVER_JWKS_URI         https://idp.example.com/.well-known/jwks.json
+#   WHITEBOARD_SERVER_ALLOWED_ORIGINS  https://whiteboard.example.com
+#
+# Persistent data: mount a volume at /data (WHITEBOARD_DATA_DIR default).
+
+
+# ── Stage 1: build ─────────────────────────────────────────────────────────
+FROM node:22-alpine AS build
+
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
+
+WORKDIR /workspace
+
+# Install dependencies before copying source (cache-friendly layer order).
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY packages/mcp-server/package.json packages/mcp-server/
+RUN pnpm install --frozen-lockfile
+
+# Compile TypeScript.
+COPY packages/mcp-server/ packages/mcp-server/
+RUN pnpm --filter @kamiazya/whiteboard-mcp build
+
+# Produce a self-contained production bundle (no devDependencies, no workspace
+# symlinks) suitable for copying into the runtime stage.
+# --legacy is required by pnpm v10+ when inject-workspace-packages is not set.
+RUN pnpm --filter @kamiazya/whiteboard-mcp deploy --legacy /deploy
+
+
+# ── Stage 2: runtime ───────────────────────────────────────────────────────
+FROM node:22-alpine AS runtime
+
+# Non-root application user (UID/GID 1001).
+RUN addgroup -S -g 1001 whiteboard \
+ && adduser  -S -u 1001 -G whiteboard -H whiteboard
+
+WORKDIR /app
+
+# Copy self-contained production bundle from the build stage.
+COPY --from=build /deploy .
+
+# Persistent data directory. Mount a volume here to survive container restarts.
+# The server writes its record file and SQLite database under this directory.
+RUN mkdir -p /data && chown whiteboard:whiteboard /data
+VOLUME /data
+
+# WHITEBOARD_DATA_DIR defaults to /data; override by passing a different value
+# at run time. WHITEBOARD_SERVER_PORT sets the bind port.
+# All WHITEBOARD_SERVER_* auth/config vars MUST be supplied at run time —
+# they are intentionally absent here so no credential is baked into the image.
+ENV WHITEBOARD_DATA_DIR=/data \
+    WHITEBOARD_SERVER_PORT=3099
+
+EXPOSE 3099
+
+# Healthcheck: poll /api/runtime/ping (public endpoint, response: {ok:true,pid}).
+# Uses the embedded Node.js binary so no extra tools are required.
+# Does NOT use `whiteboard server doctor` to avoid marking the container
+# unhealthy during transient IdP/JWKS outages that do not affect request serving.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get({hostname:'127.0.0.1',port:+(process.env.WHITEBOARD_SERVER_PORT||3099),path:'/api/runtime/ping'},function(r){var d='';r.on('data',function(c){d+=c});r.on('end',function(){try{process.exit(JSON.parse(d).ok===true?0:1)}catch(e){process.exit(1)}})}).on('error',function(){process.exit(1)})"
+
+USER whiteboard
+
+ENTRYPOINT ["node", "dist/cli/index.js", "server", "run", "--json"]

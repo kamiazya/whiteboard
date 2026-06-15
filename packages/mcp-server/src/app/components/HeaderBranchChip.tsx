@@ -30,6 +30,7 @@ import {
 import { Input } from './ui/input.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.js'
 import { cn } from '@/lib/utils'
+import { safeErrorCopy } from '../lib/error-copy.js'
 import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
 import { useBranches } from '../hooks/useBranches.js'
 import { MergeDialog } from './MergeDialog.js'
@@ -71,15 +72,6 @@ export function HeaderBranchChip({
 
   // Surface create/rename/delete failures through one shared inline error banner.
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const extractErrorMessage = (err: unknown, fallback: string): string => {
-    if (err instanceof Error) return err.message
-    if (err && typeof err === 'object') {
-      const obj = err as { body?: { message?: unknown; error?: unknown } }
-      if (typeof obj.body?.message === 'string') return obj.body.message
-      if (typeof obj.body?.error === 'string') return obj.body.error
-    }
-    return fallback
-  }
 
   // Create branch state for the inline dropdown form.
   const [createOpen, setCreateOpen] = useState(false)
@@ -93,7 +85,7 @@ export function HeaderBranchChip({
       setCreateOpen(false)
       setErrorMessage(null)
     } catch (err) {
-      setErrorMessage(extractErrorMessage(err, 'Failed to create branch'))
+      setErrorMessage(safeErrorCopy(err, 'Failed to create branch'))
     }
   }
 
@@ -115,7 +107,7 @@ export function HeaderBranchChip({
       setRenameOpen(false)
       setErrorMessage(null)
     } catch (err) {
-      setErrorMessage(extractErrorMessage(err, 'Failed to rename branch'))
+      setErrorMessage(safeErrorCopy(err, 'Failed to rename branch'))
     }
   }
 
@@ -194,7 +186,7 @@ export function HeaderBranchChip({
               key={b.name}
               onSelect={() => {
                 setHead(b.name).catch((err: unknown) => {
-                  setErrorMessage(extractErrorMessage(err, 'Failed to switch branch'))
+                  setErrorMessage(safeErrorCopy(err, 'Failed to switch branch'))
                 })
               }}
               className="gap-2"
@@ -399,7 +391,7 @@ export function HeaderBranchChip({
                   setErrorMessage(null)
                   setPendingDelete(null)
                 } catch (err) {
-                  setErrorMessage(extractErrorMessage(err, 'Failed to delete branch'))
+                  setErrorMessage(safeErrorCopy(err, 'Failed to delete branch'))
                   setPendingDelete(null)
                 } finally {
                   setDeleting(false)

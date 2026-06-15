@@ -169,7 +169,13 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
       if (v) return c.json(v.body, v.status)
       throw err
     }
-    const parsed = createBranchRequestSchema.safeParse(await c.req.json().catch(() => null))
+    let rawBody: unknown
+    try {
+      rawBody = await c.req.json()
+    } catch {
+      return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
+    }
+    const parsed = createBranchRequestSchema.safeParse(rawBody)
     if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'name is required' }, 400)
     }
@@ -479,7 +485,13 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     const oldValidation = validateBranchNameOrRespond(name)
     if (oldValidation) return c.json(oldValidation.body, oldValidation.status)
 
-    const parsed = renameBranchRequestSchema.safeParse(await c.req.json().catch(() => null))
+    let rawRenameBody: unknown
+    try {
+      rawRenameBody = await c.req.json()
+    } catch {
+      return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
+    }
+    const parsed = renameBranchRequestSchema.safeParse(rawRenameBody)
     if (!parsed.success) {
       return c.json({ error: 'invalid_body', message: 'name is required' }, 400)
     }

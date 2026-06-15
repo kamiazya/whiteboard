@@ -7,7 +7,10 @@ import { z } from 'zod'
 // shape and the on-disk shape stay in lockstep.
 
 // ── Installed libraries (URL list) ─────────────────────────────────────────
-export const installedLibrariesResponseSchema = z.array(z.string())
+// The route returns { urls: string[] } — an object, not a bare array — so
+// the client and store can extend the envelope in future without a breaking
+// wire-format change.
+export const installedLibrariesResponseSchema = z.object({ urls: z.array(z.string()) })
 
 export const addInstalledLibraryRequestSchema = z.object({
   url: z.string().min(1),

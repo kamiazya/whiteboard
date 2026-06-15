@@ -6,9 +6,10 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
-cd whiteboard
+cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
 pnpm install
-pnpm test         # unit tests (mcp-node + mcp-jsdom + mcp-browser)
+pnpm exec playwright install --with-deps chromium   # required for the browser test projects (mcp-browser / web-browser)
+pnpm test         # all tests (mcp-node + mcp-jsdom + mcp-browser + mcp-smoke + apps/web + web-browser)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```
@@ -44,7 +45,7 @@ Use [Conventional Commits](https://www.conventionalcommits.org/):
 Releases are automated by [release-please](https://github.com/googleapis/release-please) — merge the auto-generated `chore(main): release X.Y.Z` PR to publish.
 
 Keep published MCP wrapper configs on `@latest` unless you also update release-please sync rules. If you pin `@kamiazya/whiteboard-mcp@x.y.z` inside `.mcp.json` or plugin manifests, add the pinned fields to `release-please-config.json` `extra-files` at the same time.
-When upgrading `@modelcontextprotocol/sdk`, re-check the supported MCP protocol matrix in `docs/mcp-debugging.md` and the initialize negotiation tests.
+When upgrading `@modelcontextprotocol/sdk`, re-check the supported MCP protocol matrix in `docs/contributing/mcp-debugging.md` and the initialize negotiation tests.
 
 ## Lint
 
@@ -56,6 +57,15 @@ pnpm lint:fix    # apply auto-fixable changes
 ```
 
 This is not yet enforced as a hard CI gate because the existing codebase still has many warnings. The expectation is to improve it incrementally.
+
+## Git hooks
+
+[Lefthook](https://lefthook.dev) installs git hooks automatically on `pnpm install` (via the `prepare` script):
+
+- **pre-commit** (fast, non-blocking): formats the staged files with Biome and re-stages them. It deliberately does NOT run lint/typecheck/tests, so it never slows the many automated commits the dev flow makes.
+- **pre-push** (the gate): runs `pnpm -r typecheck`, `pnpm test --project mcp-node`, and `pnpm lint:noconsole` in parallel — mirroring CI so a broken build, failing test, or stray `console.*` in server code is caught before it leaves your machine.
+
+Hooks are a local safety net, **not** a replacement for CI (the authoritative gate). Bypass a run when you must with `LEFTHOOK=0 git …` or `git push --no-verify` (e.g. a docs-only push). If the hooks didn't install, run `pnpm lefthook install`.
 
 ## Pull request checklist
 
@@ -98,6 +108,29 @@ npm pack --dry-run   # verify the tarball includes dist/, skills/, package READM
 ### PR title rule
 
 The PR title becomes the squash-merge commit message that release-please reads. Use a Conventional Commit title (`fix:`, `feat(scope):`, `chore:`, …). CI rejects tool prefixes such as `[codex] ...`. Release-please PRs follow the same rule (`chore(main): release X.Y.Z`, `chore(main): release mcp-server X.Y.Z`) — the `v` prefix only applies to the resulting tag (`include-v-in-tag: true`), not the commit / PR title.
+
+## AI dev-flow tooling (`.claude/`)
+
+This repo ships its local AI-orchestrated dev flow under `.claude/` (Claude Code workflows, agents, skills, rules, and the `new-worktree` helper). It is optional — you can develop without it — but it is tracked so the flow is shared and reviewable.
+
+**Tracked** (shared): `.claude/workflows/`, `.claude/agents/`, `.claude/skills/`, `.claude/rules/`, `.claude/scripts/`, and `.claude/settings.json`.
+**Local-only** (gitignored, never commit): `.claude/settings.local.json` (your personal hooks/env), `.claude/worktrees/` (ephemeral full worktrees with `node_modules`, recreated per run), `.claude/**/*.log`, and `CLAUDE.local.md`.
+
+### First-clone setup
+
+1. `pnpm install` (required before anything else — the dev daemon and tests need the workspace installed).
+2. The MCP dev daemon is auto-started. `.claude/settings.json` wires a `SessionStart` hook to `ensure-http-dev-daemon.mjs`, which probes `http://127.0.0.1:3099` and, if nothing is listening, launches `pnpm mcp:http:dev` detached and waits up to ~30s for it to bind. So the hardcoded `http://127.0.0.1:3099/mcp` endpoint is normally up by the time the first MCP request fires.
+3. **If the daemon is not up** — hooks disabled, project not trusted yet, a fresh clone where step 1 has not run, or port 3099 already taken — Claude Code simply shows a connection error for the `whiteboard` MCP server. This is **not fatal**: ordinary development (tests, build, lint) is unaffected. Start it manually with `pnpm mcp:http:dev` in another terminal.
+4. The `Authorization: Bearer whiteboard-dev` in `.claude/settings.json` is a **non-secret, well-known local-dev constant** that authenticates only to the loopback daemon — it grants nothing on any other machine. To use a different value, override the header in your gitignored `.claude/settings.local.json`.
+
+### Discipline (if you author/run workflows)
+
+- **Never `cd` away from the repo root while a workflow is running.** Workflows compose child workflows with a repo-root-relative `scriptPath` (e.g. `.claude/workflows/review.workflow.mjs`) resolved against the session cwd; a mid-run `cd` breaks composition. Pass absolute paths to shell commands / use `git -C <dir>` instead.
+- **Reload the session before relying on a newly-authored custom agent.** A new `.claude/agents/foo.md` is not registered as an `agentType` until the session reloads; a workflow calling `agent({agentType:'foo'})` before then fails.
+
+## Architecture decisions
+
+Significant technical decisions are recorded as Architecture Decision Records (ADRs) under [`docs/contributing/adr/`](docs/contributing/adr/). Read them before proposing a change that touches architecture, cross-cutting contracts, or transport choices — they explain the why behind non-obvious constraints.
 
 ## Security
 

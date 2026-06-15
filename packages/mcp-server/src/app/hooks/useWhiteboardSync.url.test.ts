@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
+// Import from the canonical location so coverage targets the implementation file,
+// not the re-export shim.
 import {
   buildWhiteboardWsProtocols,
   buildWhiteboardWsUrl,
-} from './useWhiteboardSync.helpers.js'
+} from '../../shared/ws-protocol.js'
 
 describe('buildWhiteboardWsUrl', () => {
   it('preserves the current hostname and upgrades http to ws', () => {

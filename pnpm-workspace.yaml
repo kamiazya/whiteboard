@@ -1,2 +1,32 @@
 packages:
   - packages/*
+  - apps/*
+  - tools/*
+
+# Centralized dependency version management (catalog).
+# Deps shared across workspaces (packages/mcp-server + apps/web) are pinned ONCE
+# here and referenced as `catalog:` in each package.json, so the versions can never
+# drift apart. This is also the first line of defense against the pnpm "split
+# instance" hazard for React (two copies of react/react-dom would break Context).
+# Deps used by a single workspace stay inline in that package.json.
+catalog:
+  # react family — a single instance is mandatory (Provider/Consumer Context)
+  react: "^19"
+  react-dom: "^19"
+  # cross-process contract cores — one version everywhere
+  zod: "^4"
+  loro-crdt: "1.11.1"
+  # shared build/test tooling
+  typescript: "^6.0.3"
+  vite: "^8.0.10"
+  vitest: "^4.1.5"
+
+# Supply-chain hardening: only install package versions published at least 7 days
+# (10080 min) ago, so a compromised fresh release (npm account takeover / malicious
+# publish) cannot be pulled in before it is detected and yanked. Applies to all deps
+# including transitive. `--fix` will auto-add a security patch's minimum version to
+# minimumReleaseAgeExclude when one is needed before the window elapses.
+# Requires pnpm >= 10.16 (see packageManager in package.json).
+minimumReleaseAge: 10080
+minimumReleaseAgeIgnoreMissingTime: false
+minimumReleaseAgeStrict: true

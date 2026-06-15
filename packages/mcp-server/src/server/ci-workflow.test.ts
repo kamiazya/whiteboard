@@ -26,7 +26,9 @@ describe('pre-merge CI workflow', () => {
 
     expect(workflow).toContain('pnpm check:pr-title -- "${{ github.event.pull_request.title }}"')
     expect(workflow).toContain('pnpm install --frozen-lockfile')
-    expect(workflow).toContain('pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium')
+    // Chromium is prebaked in the official Playwright image; no install step needed.
+    expect(workflow).toContain('mcr.microsoft.com/playwright')
+    expect(workflow).toContain('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD')
     expect(workflow).toContain('pnpm intent:validate')
     expect(workflow).toContain('pnpm typecheck')
     expect(workflow).toContain('pnpm test')

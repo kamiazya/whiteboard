@@ -20,7 +20,7 @@ vi.mock('./daemon-lock.js', () => ({
   withDaemonStartupLock: withDaemonStartupLockMock,
 }))
 
-vi.mock('../server/config.js', () => ({
+vi.mock('../shared/data-dir-secure.js', () => ({
   DATA_DIR: '/tmp/excalidraw-data',
   WHITEBOARD_ROOT: '/repo/packages/mcp-server',
 }))

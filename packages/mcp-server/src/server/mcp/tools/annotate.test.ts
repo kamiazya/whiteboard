@@ -118,7 +118,9 @@ describe('annotate (single) warnings', () => {
     fetchMock.mockImplementation(async (url: string | URL) => {
       const u = url.toString()
       if (u.endsWith('/palette')) {
-        return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), { status: 200 })
+        return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), {
+          status: 200,
+        })
       }
       if (u.endsWith('/snapshot')) {
         const emptyDoc = new (await import('loro-crdt')).LoroDoc()
@@ -232,7 +234,8 @@ describe('annotate (single) structured result shape', () => {
     const snapshot = emptyDoc.export({ mode: 'snapshot' })
     fetchMock = vi.fn(async (url: string | URL) => {
       const u = url.toString()
-      if (u.endsWith('/palette')) return new Response(JSON.stringify({ palette: {} }), { status: 200 })
+      if (u.endsWith('/palette'))
+        return new Response(JSON.stringify({ palette: {} }), { status: 200 })
       if (u.endsWith('/snapshot')) return new Response(snapshot, { status: 200 })
       if (u.endsWith('/update')) return new Response(null, { status: 204 })
       throw new Error(`Unexpected fetch: ${u}`)
@@ -597,26 +600,41 @@ describe('arrow routing ignores bound text of start/end boxes', () => {
     const a = list.insertContainer(0, new LoroMap())
     a.set('id', 'A')
     a.set('type', 'rectangle')
-    a.set('x', 0); a.set('y', 0); a.set('width', 100); a.set('height', 100)
+    a.set('x', 0)
+    a.set('y', 0)
+    a.set('width', 100)
+    a.set('height', 100)
     const aLabel = list.insertContainer(1, new LoroMap())
     aLabel.set('id', 'A-label')
     aLabel.set('type', 'text')
-    aLabel.set('x', 0); aLabel.set('y', 0); aLabel.set('width', 100); aLabel.set('height', 100)
+    aLabel.set('x', 0)
+    aLabel.set('y', 0)
+    aLabel.set('width', 100)
+    aLabel.set('height', 100)
     aLabel.set('containerId', 'A')
     // middle obstacle C at (150, 150, 100, 100) -- blocks straight diagonal from A to B
     const c = list.insertContainer(2, new LoroMap())
     c.set('id', 'C')
     c.set('type', 'rectangle')
-    c.set('x', 150); c.set('y', 150); c.set('width', 100); c.set('height', 100)
+    c.set('x', 150)
+    c.set('y', 150)
+    c.set('width', 100)
+    c.set('height', 100)
     // end box B at (300, 300, 100, 100) with bound label
     const b = list.insertContainer(3, new LoroMap())
     b.set('id', 'B')
     b.set('type', 'rectangle')
-    b.set('x', 300); b.set('y', 300); b.set('width', 100); b.set('height', 100)
+    b.set('x', 300)
+    b.set('y', 300)
+    b.set('width', 100)
+    b.set('height', 100)
     const bLabel = list.insertContainer(4, new LoroMap())
     bLabel.set('id', 'B-label')
     bLabel.set('type', 'text')
-    bLabel.set('x', 300); bLabel.set('y', 300); bLabel.set('width', 100); bLabel.set('height', 100)
+    bLabel.set('x', 300)
+    bLabel.set('y', 300)
+    bLabel.set('width', 100)
+    bLabel.set('height', 100)
     bLabel.set('containerId', 'B')
     return doc
   }
@@ -645,16 +663,25 @@ describe('arrow routing ignores bound text of start/end boxes', () => {
     const a = list.insertContainer(0, new LoroMap())
     a.set('id', 'A')
     a.set('type', 'rectangle')
-    a.set('x', 0); a.set('y', 0); a.set('width', 100); a.set('height', 100)
+    a.set('x', 0)
+    a.set('y', 0)
+    a.set('width', 100)
+    a.set('height', 100)
     // B at (400, 400, 100, 100)
     const b = list.insertContainer(1, new LoroMap())
     b.set('id', 'B')
     b.set('type', 'rectangle')
-    b.set('x', 400); b.set('y', 400); b.set('width', 100); b.set('height', 100)
+    b.set('x', 400)
+    b.set('y', 400)
+    b.set('width', 100)
+    b.set('height', 100)
     const label = list.insertContainer(2, new LoroMap())
     label.set('id', 'arrow-label-1')
     label.set('type', 'text')
-    label.set('x', 200); label.set('y', 240); label.set('width', 120); label.set('height', 24)
+    label.set('x', 200)
+    label.set('y', 240)
+    label.set('width', 120)
+    label.set('height', 24)
     label.set('isArrowLabel', true)
 
     appendAnnotationToDoc(doc, {
@@ -671,7 +698,10 @@ describe('arrow routing ignores bound text of start/end boxes', () => {
     const lastPoint = arrow.points[arrow.points.length - 1]
     expect(typeof lastPoint[0]).toBe('number')
     expect(typeof lastPoint[1]).toBe('number')
-    expect(arrow.points).not.toEqual([[0, 0], [100, 0]])
+    expect(arrow.points).not.toEqual([
+      [0, 0],
+      [100, 0],
+    ])
   })
 
   it('case 96', async () => {
@@ -688,5 +718,42 @@ describe('arrow routing ignores bound text of start/end boxes', () => {
     const labelEl = els.find((e) => e.type === 'text' && e.text === 'my-edge')
     expect(labelEl).toBeDefined()
     expect(labelEl!.isArrowLabel).toBe(true)
+  })
+})
+
+describe('box_with_label — height optional with autoFit', () => {
+  it('succeeds without height when autoFit is on (default)', async () => {
+    const { appendAnnotationToDoc } = await import('./annotate.js')
+    const doc = new LoroDoc()
+    // height omitted — autoFit defaults to true so the box expands to fit the text
+    const result = appendAnnotationToDoc(doc, {
+      type: 'box_with_label',
+      coords: 'absolute',
+      target: { x: 0, y: 0 },
+      width: 200,
+      text: 'Auto-fit label',
+    })
+    expect(result.type).toBe('box_with_label')
+    expect(result.rectId).toBeDefined()
+    const els = doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+    const rect = els.find((e) => e.id === result.rectId) as { height: number } | undefined
+    expect(rect).toBeDefined()
+    // autoFit should have expanded the height beyond 0
+    expect(rect!.height).toBeGreaterThan(0)
+  })
+
+  it('throws when height is omitted and autoFit=false', async () => {
+    const { appendAnnotationToDoc } = await import('./annotate.js')
+    const doc = new LoroDoc()
+    expect(() =>
+      appendAnnotationToDoc(doc, {
+        type: 'box_with_label',
+        coords: 'absolute',
+        target: { x: 0, y: 0 },
+        width: 200,
+        text: 'label',
+        autoFit: false,
+      }),
+    ).toThrow('box_with_label requires title or text, plus width and height')
   })
 })

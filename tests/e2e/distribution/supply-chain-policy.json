@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "releaseGateMatrixRef": "tests/e2e/distribution/release-gate-matrix.json",
+  "artifacts": [
+    {
+      "id": "npm-tarball",
+      "description": "npm publish tarball (pnpm pack output for @kamiazya/whiteboard-mcp)",
+      "mvp": true,
+      "requiredMetadata": ["checksum", "provenance", "sbom"],
+      "signingStrategy": "npm-provenance",
+      "implementedNow": false,
+      "ciImplemented": true,
+      "ciJobId": "publish-mcp",
+      "ciWorkflow": ".github/workflows/release.yml",
+      "futureGateId": "publish:npm-provenance"
+    },
+    {
+      "id": "docker-image",
+      "description": "Server-mode Docker image (Dockerfile.server)",
+      "mvp": true,
+      "requiredMetadata": ["checksum", "provenance", "sbom"],
+      "signingStrategy": "keyless-cosign",
+      "implementedNow": false,
+      "ciImplemented": true,
+      "ciJobId": "docker-publish-sign",
+      "ciWorkflow": ".github/workflows/release.yml",
+      "futureGateId": "publish:docker-sign"
+    },
+    {
+      "id": "deno-binary",
+      "description": "Deno compile standalone binary (future binary distribution PoC)",
+      "mvp": false,
+      "requiredMetadata": [],
+      "signingStrategy": "deferred",
+      "implementedNow": false
+    },
+    {
+      "id": "homebrew-formula",
+      "description": "Homebrew formula distribution",
+      "mvp": false,
+      "requiredMetadata": [],
+      "signingStrategy": "deferred",
+      "implementedNow": false
+    },
+    {
+      "id": "standalone-binary",
+      "description": "Platform-specific standalone binary (Linux/macOS/Windows GitHub Release)",
+      "mvp": false,
+      "requiredMetadata": [],
+      "signingStrategy": "deferred",
+      "implementedNow": false
+    }
+  ],
+  "allowedSigningStrategies": [
+    "npm-provenance",
+    "keyless-cosign",
+    "deferred"
+  ],
+  "forbiddenSigningStrategies": [
+    "custom-crypto",
+    "bespoke-signing",
+    "hardcoded-key",
+    "self-signed-cert"
+  ]
+}

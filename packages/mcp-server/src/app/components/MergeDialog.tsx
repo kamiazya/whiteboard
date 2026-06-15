@@ -20,6 +20,7 @@ import {
 import { cn } from '@/lib/utils'
 import { listVersionsResponseSchema } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
+import { safeErrorCopy } from '../lib/error-copy.js'
 import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
 
 // Note: this originally tried to embed a read-only <Excalidraw> preview, but Excalidraw does not
@@ -196,8 +197,7 @@ export function MergeDialog({
       })
       .catch((err: unknown) => {
         if (cancelled) return
-        const msg = err instanceof Error ? err.message : JSON.stringify(err)
-        setError(msg)
+        setError(safeErrorCopy(err, 'Preview failed.'))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -280,8 +280,7 @@ export function MergeDialog({
       }
       onClose()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : JSON.stringify(err)
-      setError(msg)
+      setError(safeErrorCopy(err, 'Merge failed.'))
     } finally {
       setCommitting(false)
     }

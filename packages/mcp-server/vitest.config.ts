@@ -6,6 +6,7 @@ export default defineConfig({
       './vitest.node.config.ts',
       './vitest.jsdom.config.ts',
       './vitest.browser.config.ts',
+      './vitest.smoke.config.ts',
     ],
   },
 })

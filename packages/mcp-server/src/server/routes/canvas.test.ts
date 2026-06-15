@@ -1,14 +1,15 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir, userInfo } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { userInfo } from 'node:os'
 import { join } from 'node:path'
+import { withTempDataDir } from './_test-helpers.js'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-let tempDir: string
+const tmp = withTempDataDir('whiteboard-routes-test-')
 
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
-    return tempDir
+    return tmp.dir
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
@@ -30,13 +31,10 @@ const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createCanvasRouter, createAutoVersionTrigger } = await import('./canvas.js')
 
 describe('GET /api/workspaces', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
+  beforeEach(() => {
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -53,15 +51,125 @@ describe('GET /api/workspaces', () => {
   })
 })
 
-describe('GET /api/workspaces/:workspaceId/canvases', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+describe('POST /api/workspaces/:workspaceId/canvases', () => {
+  beforeEach(() => {
+    clearCache()
+  })
+  afterEach(() => {
     clearCache()
   })
 
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  it('returns { slug } on success', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'new-canvas' }),
+    })
+    expect(res.status).toBe(200)
+    const json = (await res.json()) as unknown
+    expect(json).toEqual({ slug: 'new-canvas' })
+  })
+
+  it('returns 409 with Problem Details title on duplicate slug', async () => {
+    const app = createCanvasRouter()
+    // Create once to seed the conflict.
+    await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'existing' }),
+    })
+    // Second creation must return Problem Details with a title field.
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'existing' }),
+    })
+    expect(res.status).toBe(409)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+  })
+
+  it('returns 500 with Problem Details title when saveCanvas fails unexpectedly', async () => {
+    // Block the canvas blob directory with a file so saveCanvas throws a
+    // non-ConflictError, exercising the catch-all 500 branch (mutation-check
+    // guard for the 400 -> 500 change).
+    await mkdir(join(tmp.dir, 'blobs', 'ws1'), { recursive: true })
+    await writeFile(join(tmp.dir, 'blobs', 'ws1', 'canvas'), 'not-a-directory')
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'new-canvas' }),
+    })
+    expect(res.status).toBe(500)
+    const json = (await res.json()) as { title?: string }
+    expect(json.title).toBe('Failed to create canvas.')
+  })
+
+  it('returns 400 with Problem Details title on invalid slug', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'bad slug!' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+  })
+
+  it('returns 400 with Problem Details title when body is not JSON', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'not-json',
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+  })
+
+  it('returns 400 with Problem Details title when body has no slug field', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/ws1/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'oops' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(typeof json.title).toBe('string')
+    expect(json.title!.length).toBeGreaterThan(0)
+  })
+
+  it('returns 400 with Problem Details { title } (not legacy { error, message }) on invalid workspaceId', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/workspaces/bad.workspace/canvases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug: 'test' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as Record<string, unknown>
+    // Must have a Problem Details title, not the legacy { error, message } shape.
+    expect(typeof json.title).toBe('string')
+    expect(json.title as string).toBeTruthy()
+    // Must NOT carry the old shape keys.
+    expect(json).not.toHaveProperty('error')
+    expect(json).not.toHaveProperty('message')
+  })
+})
+
+describe('GET /api/workspaces/:workspaceId/canvases', () => {
+  beforeEach(async () => {
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    clearCache()
+  })
+  afterEach(() => {
     clearCache()
   })
 
@@ -90,13 +198,10 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
 
 describe('GET /api/workspaces/:workspaceId/canvases', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'workspace1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'workspace1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -114,13 +219,10 @@ describe('GET /api/workspaces/:workspaceId/canvases', () => {
 
 describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -165,34 +267,29 @@ describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
       earliestFrontiers: vi.fn().mockResolvedValue([]),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
-      pruneSandwichedAutoVersions: vi
-        .fn()
-        .mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
+      pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
     const { getDb } = await import('../store/db/index.js')
     await saveCanvas('session1', 'canvas-a', new LoroDoc())
-    const db = await getDb(tempDir)
+    const db = await getDb(tmp.dir)
     const row = await db
       .selectFrom('canvases')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('slug', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
-    const blobPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
+    const blobPath = join(tmp.dir, 'blobs', 'session1', 'canvas', `${row.id}.loro`)
     await writeFile(blobPath, Buffer.from('not-a-loro-snapshot'))
 
     const app = createCanvasRouter({ versionStore: createVersionStoreMock() })
@@ -232,19 +329,14 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
       // VersionStore contract requires it. Returning a no-op result keeps
       // the mock fully type-compatible so a future route change that does
       // call this method here cannot trip on a missing key.
-      pruneSandwichedAutoVersions: vi
-        .fn()
-        .mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
+      pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
     }
   }
 
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
+  beforeEach(() => {
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -326,13 +418,10 @@ describe('POST /api/workspaces/:workspaceId/canvases/optimize-all', () => {
 
 describe('POST /api/canvas/:workspaceId/:slug/update', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -369,13 +458,10 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
 // Version API coverage: auto-save on update, list, manual save, and restore.
 describe('versions API', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 
@@ -698,8 +784,44 @@ describe('versions API', () => {
     expect(res.status).toBe(404)
   })
 
+  // GET /latest-thumbnail is consumed by CanvasThumb's <img src>. A 404 makes
+  // the browser log "Failed to load resource: 404" for every thumbnail-less
+  // canvas, which is console noise (the component already has an onError
+  // fallback). Returning 204 No Content is a success status, so no console
+  // error is logged, while the empty body still triggers <img> onError → the
+  // FileText placeholder.
+  it('returns 204 (not 404) from GET /latest-thumbnail when the canvas has no thumbnail', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/latest-thumbnail')
+    expect(res.status).toBe(204)
+    expect(await res.arrayBuffer()).toEqual(new ArrayBuffer(0))
+  })
+
+  it('returns 204 from GET /latest-thumbnail when metadata claims a thumbnail but the blob is gone', async () => {
+    // A version is listed as hasThumbnail=true but loadThumbnail resolves null
+    // (blob pruned/missing without throwing). This is the second 204 branch,
+    // distinct from "no thumbnailed version exists": the <img> still needs a
+    // success status to avoid 404 console noise.
+    const versionStore = {
+      save: vi.fn(),
+      load: vi.fn(),
+      list: vi.fn().mockResolvedValue([{ id: 'v1', hasThumbnail: true }]),
+      saveThumbnail: vi.fn(),
+      loadThumbnail: vi.fn().mockResolvedValue(null),
+      earliestFrontiers: vi.fn().mockResolvedValue([]),
+      getFrontiersBase64: vi.fn(),
+      renameBranchInVersions: vi.fn(),
+      pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
+    } as unknown as Parameters<typeof createCanvasRouter>[0]['versionStore']
+
+    const app = createCanvasRouter({ versionStore })
+    const res = await app.request('/api/workspaces/session1/canvases/canvas-a/latest-thumbnail')
+    expect(res.status).toBe(204)
+    expect(await res.arrayBuffer()).toEqual(new ArrayBuffer(0))
+  })
+
   it('returns structured 500 for a broken thumbnail file on GET /thumbnail', async () => {
-    await mkdir(join(tempDir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
+    await mkdir(join(tmp.dir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
       recursive: true,
     })
 
@@ -790,7 +912,7 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'explicit', 'out.excalidraw')
+    const outputPath = join(tmp.dir, 'session1', 'exports', 'explicit', 'out.excalidraw')
     const app = createCanvasRouter()
     const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
       method: 'POST',
@@ -822,7 +944,8 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'existing.excalidraw')
+    const outputPath = join(tmp.dir, 'session1', 'exports', 'existing.excalidraw')
+    await mkdir(join(tmp.dir, 'session1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const app = createCanvasRouter()
@@ -844,7 +967,8 @@ describe('versions API', () => {
     doc.commit()
     await saveCanvas('session1', 'canvas-a', doc)
 
-    const outputPath = join(tempDir, 'replace-me.excalidraw')
+    const outputPath = join(tmp.dir, 'session1', 'exports', 'replace-me.excalidraw')
+    await mkdir(join(tmp.dir, 'session1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
     const app = createCanvasRouter()
@@ -857,10 +981,15 @@ describe('versions API', () => {
     const body = (await res.json()) as { filePath: string }
     expect(body.filePath).toBe(outputPath)
   })
-
 })
 
 describe('createAutoVersionTrigger', () => {
+  // One test in this block pins the clock with fake timers; always restore real timers
+  // after each test so a failed assertion can't leak a frozen clock into later tests.
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('retries on the next edit without consuming the throttle window when save fails', async () => {
     const doc = new LoroDoc()
     const entry = {
@@ -1034,17 +1163,62 @@ describe('createAutoVersionTrigger', () => {
     await expect(trigger('session1', 'canvas-a', doc)).resolves.toEqual(entry)
     expect(save).toHaveBeenCalledTimes(2)
   })
+
+  it('throttles repeated calls within the interval window by tracking last-save time per canvas key', async () => {
+    // The trigger holds an ephemeral per-canvas timestamp registry (Map<key, number>).
+    // This test confirms the registry persists its state across calls within the same
+    // trigger instance so that the throttle window is correctly enforced.
+    //
+    // Pin the clock so both the "first call always fires" invariant and the
+    // "second call is throttled" assertion are grounded in an explicit time,
+    // not a wall-clock assumption.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+
+    const doc = new LoroDoc()
+    const entry = {
+      id: 'v1',
+      slug: 'canvas-a',
+      createdAt: '2026-04-23T00:00:00.000Z',
+      elementCount: 0,
+      auto: true,
+      hasThumbnail: false,
+    }
+    const save = vi.fn().mockResolvedValue(entry)
+    // Use a large interval so the second call (at the same pinned instant) always falls within the window.
+    const trigger = createAutoVersionTrigger(
+      {
+        save,
+        load: vi.fn(),
+        list: vi.fn(),
+        saveThumbnail: vi.fn(),
+        loadThumbnail: vi.fn(),
+        earliestFrontiers: vi.fn(),
+        getFrontiersBase64: vi.fn(),
+      },
+      60_000,
+    )
+
+    // First call: no prior save recorded → now - 0 >= intervalMs is true → should save.
+    const first = await trigger('session1', 'canvas-a', doc)
+    expect(first).toEqual(entry)
+    expect(save).toHaveBeenCalledTimes(1)
+
+    // Second call at the same pinned instant: within the 60s window → must return null.
+    const second = await trigger('session1', 'canvas-a', doc)
+    expect(second).toBeNull()
+    expect(save).toHaveBeenCalledTimes(1)
+
+    vi.useRealTimers()
+  })
 })
 
 describe('auto-version corruption handling', () => {
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-routes-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
   })
-
-  afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+  afterEach(() => {
     clearCache()
   })
 

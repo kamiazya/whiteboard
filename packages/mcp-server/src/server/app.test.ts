@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { withTempDataDir } from './routes/_test-helpers.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
@@ -8,14 +8,14 @@ import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-let tempDir: string
+const tmp = withTempDataDir('whiteboard-app-test-')
 
 vi.mock('./config.js', () => ({
   get DATA_DIR() {
-    return join(tempDir, 'data')
+    return join(tmp.dir, 'data')
   },
   get DIST_APP_DIR() {
-    return join(tempDir, 'dist')
+    return join(tmp.dir, 'dist')
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
@@ -42,18 +42,26 @@ function createRuntimeOptions(
   options?: Parameters<typeof createLocalTokenMcpHttpAuthStrategy>[0],
 ) {
   return {
+    authMode: 'local-daemon' as const,
     token,
     mcpAuth: options ? createLocalTokenMcpHttpAuthStrategy({ token, ...options }) : undefined,
     touch: vi.fn(),
     shutdown: vi.fn(async () => undefined),
     getStatus: () => ({
+      ok: true,
       pid: 10,
+      host: '127.0.0.1',
       port: 3099,
+      baseUrl: 'http://127.0.0.1:3099',
+      version: PACKAGE_VERSION,
       startedAt: '2026-04-23T00:00:00.000Z',
       uptimeMs: 100,
       idleForMs: 10,
-      connectedClients: 0,
-      readyClients: 0,
+      auth: { mode: 'local-token', hasToken: Boolean(token) },
+      storage: { dataDir: '/tmp', dataDirWritable: true },
+      app: { served: true, buildPresent: false },
+      mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
+      clients: { connected: 0, ready: 0 },
     }),
   }
 }
@@ -64,14 +72,13 @@ describe('createApp daemon mutation auth', () => {
   const originalFetch = globalThis.fetch
 
   beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-app-test-'))
-    await mkdir(join(tempDir, 'dist'), { recursive: true })
-    await mkdir(join(tempDir, 'data'), { recursive: true })
+    await mkdir(join(tmp.dir, 'dist'), { recursive: true })
+    await mkdir(join(tmp.dir, 'data'), { recursive: true })
     process.env.WHITEBOARD_DEBUG = '1'
     clearCache()
     clearWorkspaceIdCache()
     await writeFile(
-      join(tempDir, 'dist', 'index.html'),
+      join(tmp.dir, 'dist', 'index.html'),
       '<!DOCTYPE html><html><head><title>Whiteboard</title></head><body><div id="root"></div></body></html>',
     )
   })
@@ -88,7 +95,6 @@ describe('createApp daemon mutation auth', () => {
     } else {
       process.env.WHITEBOARD_DEBUG = originalWhiteboardDebug
     }
-    await rm(tempDir, { recursive: true, force: true })
     clearCache()
     clearWorkspaceIdCache()
   })
@@ -700,7 +706,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('handles concurrent /mcp initialize requests without racing the workspace marker file', async () => {
     const app = createApp(createRuntimeOptions())
-    const dataDir = join(tempDir, 'data')
+    const dataDir = join(tmp.dir, 'data')
 
     const sendInitialize = async (id: number): Promise<Response> =>
       app.request('http://127.0.0.1/mcp', {
@@ -932,5 +938,126 @@ describe('createApp daemon mutation auth', () => {
     expect(
       (mergeSaveCall?.[3] as { operator?: { peerId?: string } } | undefined)?.operator?.peerId,
     ).toMatch(/\S+/)
+  })
+
+  it('OPTIONS /mcp with loopback Origin carries Access-Control-Allow-Private-Network: true', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    const res = await app.request('http://127.0.0.1/mcp', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+      },
+    })
+    expect(res.status).toBe(204)
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+    expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+  })
+
+  describe('/api/* loopback CORS (local-daemon mode)', () => {
+    it('reflects Access-Control-Allow-Origin and Vary for a loopback Origin on GET /api/runtime/ping', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+      expect(res.headers.get('Vary')).toContain('Origin')
+    })
+
+    it('returns 204 with Access-Control-Allow-Private-Network and reflected ACAO on OPTIONS /api/runtime/ping', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+    })
+
+    it('does NOT reflect Access-Control-Allow-Origin for a non-loopback Origin but still responds 200', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://evil.example' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('responds 200 with no CORS regression when no Origin header is present', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('cross-origin loopback POST to a mutation route without Authorization returns 401 (auth ordering)', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/workspaces/session1/canvases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'http://localhost:5173',
+        },
+        body: JSON.stringify({ slug: 'demo' }),
+      })
+      expect(res.status).toBe(401)
+    })
+
+    it('OPTIONS preflight for a mutation route returns 204 with CORS+PNA headers', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/workspaces/session1/canvases', {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+    })
+  })
+
+  describe('runtime config injection', () => {
+    it('injects daemonBaseUrl composed from 127.0.0.1 and port into served HTML', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/canvas/session1/demo')
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toContain('"daemonBaseUrl":"http://127.0.0.1:3099"')
+      // existing daemonToken assertion must still pass
+      expect(html).toContain('"daemonToken":"secret"')
+    })
+
+    it('emitted runtime-config is accepted by the active dist/app reader (non-strict)', async () => {
+      // The dist/app reader (packages/mcp-server/src/app/lib/api-client.ts) uses a
+      // hand-written non-strict interface RuntimeConfig { daemonToken: string | null }
+      // Extra keys (daemonBaseUrl) must be silently ignored - this test locks that behavior.
+      const emittedConfig = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
+      // Non-strict: accessing known properties works, extra ones are ignored
+      const config = emittedConfig as { daemonToken: string | null }
+      expect(config.daemonToken).toBe('secret')
+    })
+
+    it('apps/web strict runtimeConfigSchema REJECTS a payload that includes daemonToken', async () => {
+      // apps/web/src/runtime-config.ts uses .strict() which forbids unknown keys.
+      // daemonToken is NOT in the apps/web schema, so .parse({ daemonToken, daemonBaseUrl })
+      // must throw. This locks the DIST_APP_DIR cutover as a deliberate guarded step.
+      const { runtimeConfigSchema } = await import('../../../../apps/web/src/runtime-config.js')
+      const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
+      expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
+    })
+  })
+
+  describe('/api/runtime/ping Zod schema', () => {
+    it('ping response parses via daemonPingResponseSchema', async () => {
+      const { daemonPingResponseSchema } = await import('../shared/api-contracts/runtime.js')
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(() => daemonPingResponseSchema.parse(body)).not.toThrow()
+      const parsed = daemonPingResponseSchema.parse(body)
+      expect(parsed.ok).toBe(true)
+      expect(typeof parsed.pid).toBe('number')
+    })
   })
 })

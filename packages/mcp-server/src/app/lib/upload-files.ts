@@ -1,4 +1,4 @@
-import type { BinaryFileData } from '@excalidraw/excalidraw/types'
+import type { BinaryFileDataLike } from '../../shared/canvas-backend-contract.js'
 import { apiFetch } from './api-client.js'
 
 /**
@@ -9,7 +9,7 @@ import { apiFetch } from './api-client.js'
  * reference files that failed to upload.
  */
 export async function uploadFiles(
-  newEntries: [string, BinaryFileData][],
+  newEntries: [string, BinaryFileDataLike][],
   workspaceId: string,
   slug: string,
   onSuccess: (fileId: string) => void,
@@ -18,11 +18,14 @@ export async function uploadFiles(
     newEntries.map(async ([fileId, fd]) => {
       const [, base64] = fd.dataURL.split(',')
       const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
-      const res = await apiFetch(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': fd.mimeType },
-        body: binary,
-      })
+      const res = await apiFetch(
+        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': fd.mimeType },
+          body: binary,
+        },
+      )
       if (!res.ok) {
         throw new Error(`PUT /file/${fileId} failed: ${res.status}`)
       }

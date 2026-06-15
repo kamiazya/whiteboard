@@ -144,15 +144,28 @@ vite.config.ts.timestamp-*
 
 tmp
 
+# Generated artifacts (SBOM, dry-run outputs) — not committed, uploaded via CI
+packages/mcp-server/_artifacts/
+
 # Playwright MCP runtime logs
 .playwright-mcp/
 
 # Vitest browser test attachments / traces
 .vitest-attachments/
 
-# Claude Code local settings (project settings.json は commit 対象)
+# Claude Code AI-dev-flow tooling. The shared tooling — .claude/workflows, agents,
+# skills, scripts, rules, and project settings.json — IS tracked. These stay local-only:
+#  - settings.local.json: personal hooks/env with absolute machine paths
+#  - worktrees/: ephemeral full git worktrees with node_modules (recreated per dev-loop run)
+#  - *.log: runtime logs
 .claude/settings.local.json
+.claude/worktrees/
+.claude/**/*.log
+CLAUDE.local.md
 
 # One-off development notes (not intended for public repo)
 branches-state.md
 snapshot-post-reload.md
+
+# Personal Codex agmsg hook (machine/user-specific absolute paths; like .claude/settings.local.json)
+.codex/hooks.json

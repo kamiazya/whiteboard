@@ -1,17 +1,27 @@
 // Regression test that ensures every registerTool call has a TOOL_PROFILES
 // annotations entry. This catches missing annotations when new tools are added.
 //
-// Verification strategy: read mcp/index.ts as text and compare
-// 1. TOOL_PROFILES key count (`<name>: { profile:` pattern)
-// 2. registerToolWithAnnotations call count
+// Verification strategy: read the source files that declare the profiles and
+// the registrations independently, then cross-check their counts.
+//
+// TOOL_PROFILES lives in tool-profiles.ts.
+// registerToolWithAnnotations calls live in tool-registration.ts.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const indexSource = readFileSync(resolve(__dirname, 'index.ts'), 'utf-8')
+
+function readSource(name: string): string {
+  const p = resolve(__dirname, name)
+  if (!existsSync(p)) throw new Error(`Expected source file not found: ${name}`)
+  return readFileSync(p, 'utf-8')
+}
+
+const profilesSrc = readSource('tool-profiles.ts')
+const registrationSrc = readSource('tool-registration.ts')
 
 function extractProfileKeys(src: string): string[] {
   const re = /^\s{2}([a-z_]+):\s*\{\s*profile:/gm
@@ -29,20 +39,20 @@ function countRegisterCalls(src: string): number {
 
 describe('MCP tool annotations coverage', () => {
   it('matches TOOL_PROFILES entry count to registerToolWithAnnotations call count', () => {
-    const profileKeys = extractProfileKeys(indexSource)
-    const callCount = countRegisterCalls(indexSource)
+    const profileKeys = extractProfileKeys(profilesSrc)
+    const callCount = countRegisterCalls(registrationSrc)
     expect(profileKeys.length).toBe(callCount)
     expect(profileKeys.length).toBeGreaterThan(20)
   })
 
   it('does not duplicate TOOL_PROFILES keys', () => {
-    const keys = extractProfileKeys(indexSource)
+    const keys = extractProfileKeys(profilesSrc)
     expect(new Set(keys).size).toBe(keys.length)
   })
 
   it('gives every TOOL_PROFILES entry a title', () => {
     const re = /^\s{2}[a-z_]+:\s*\{\s*profile:[^}]+\},/gm
-    const entries = indexSource.match(re) ?? []
+    const entries = profilesSrc.match(re) ?? []
     for (const entry of entries) {
       expect(entry).toMatch(/title:/)
     }

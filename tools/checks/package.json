@@ -1,0 +1,10 @@
+{
+  "name": "@whiteboard/checks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Private workspace tooling: orchestrates repo release/quality gates. Executor for selected release-gate-matrix tiers — not an npm artifact.",
+  "scripts": {
+    "pages-release": "node src/pages-release.mjs"
+  }
+}

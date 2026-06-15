@@ -12,6 +12,7 @@ Use this repo's standard development loop for every feature, bug fix, or refacto
 - Use `mcp-node` for pure functions, stores, routes, server behavior, and persistence logic.
 - Use `mcp-jsdom` for React components and hooks when browser layout and pointer behavior are not the core risk.
 - Use `mcp-browser` for popovers, dialogs, scroll, focus, keyboard, pointer behavior, restore flows, and other real browser interactions.
+- Use `web-browser` for `apps/web` tests that require real browser APIs not available in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`. File suffix: `.browser.test.tsx`.
 - Promote to E2E when the bug depends on real routes, server composition, websocket timing, persistence order, or multi-step page flows.
 
 Do not jump to broad E2E first if a smaller failing test can isolate the bug.
@@ -57,16 +58,16 @@ Do not stop at manual verification without preserving the scenario in automation
 
 ## Browser Mode And Trace
 
-`mcp-browser` is the default place for real browser regression tests inside this repo.
+`mcp-browser` is the default place for real browser regression tests in `packages/mcp-server`. Use `web-browser` for `apps/web` browser tests (IndexedDB, OPFS, etc.). `pnpm test:browser` runs both.
 
 Use:
 
 ```bash
-pnpm run test:browser
-pnpm run test:browser:trace
+pnpm run test:browser        # mcp-browser + web-browser
+pnpm run test:browser:trace  # same, with trace artifacts on failure
 ```
 
-- Failure traces are stored under `packages/mcp-server/tmp/vitest-traces`.
+- Failure traces are stored under `<package>/tmp/vitest-traces`.
 - Check traces before adding temporary debug code.
 - Remove temporary debug overlays, logging, and instrumentation before finishing.
 
@@ -87,7 +88,7 @@ pnpm mcp:debug:http
 - Use `stdio` MCP only for packaged-distribution checks or when specifically validating the standalone entrypoint behavior.
 - Prefer the official MCP Inspector for first-pass debugging before switching to client-specific debugging.
 - If request flow is unclear, restart with `MCP_HTTP_DEBUG=1 pnpm mcp:http:dev` and inspect the `[mcp-http:init]` / `[mcp-http]` logs.
-- Keep the detailed checklist in `docs/mcp-debugging.md` in sync with actual repo workflow.
+- Keep the detailed checklist in `docs/contributing/mcp-debugging.md` in sync with actual repo workflow.
 
 The repo ships HTTP-mode overrides for both clients:
 
@@ -96,7 +97,7 @@ The repo ships HTTP-mode overrides for both clients:
 
 Both Claude Code (`.claude/settings.json`) and Codex
 (`.codex/config.toml`) wire a `SessionStart` hook to
-`packages/mcp-server/scripts/ensure-http-dev-daemon.mjs`. The hook
+`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`. The hook
 probes port 3099 and, if nothing is listening, spawns `pnpm mcp:http:dev`
 detached so the first MCP request can connect immediately. It is
 idempotent — if our authenticated daemon is already up it exits
@@ -129,7 +130,7 @@ Preferred MCP debugging order:
 If the issue is client-specific:
 
 - Capture the mismatch between Inspector and the real client before changing server behavior.
-- Keep `docs/mcp-debugging.md` aligned with any new debugging workflow learned during the fix.
+- Keep `docs/contributing/mcp-debugging.md` aligned with any new debugging workflow learned during the fix.
 
 ## Zod Schema Discipline
 
@@ -139,7 +140,7 @@ Concrete rules when adding or editing an MCP tool:
 
 - Declare each tool's `outputSchema` (and `inputSchema`) once. Tools are registered through `registerToolWithAnnotations`, which is generic over `O extends z.ZodTypeAny | undefined` and constrains the handler's return to `Promise<ToolHandlerReturn<O>>`. Never widen `outputSchema` to `unknown` or cast around the type binding to silence the compiler.
 - Annotate the matching `tools/*.ts` `execute` return type as `Promise<z.infer<typeof xxxOutputSchema>>` (or import the inferred type from the schema). A separately-written TypeScript interface alongside a Zod schema is the recipe that shipped the `create_frame` `assignedMembers: number` vs `string[]` bug — use `z.infer<>` instead.
-- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/mcp-e2e-smoke.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
+- When you add a new tool, extend `pnpm smoke:e2e` (`scripts/smoke/mcp-e2e-smoke.mjs`) to call it at least once. The MCP SDK validates `structuredContent` against `outputSchema` at runtime, so the smoke is the last line of defense against drift the type system can't see.
 - When you fix a schema-vs-runtime drift, also commit the test or smoke step that would have caught it. Mutation-check the regression: revert the production fix, confirm `pnpm build` (compile-time guard) **or** `pnpm smoke:e2e` (runtime guard) fails, then restore.
 
 The same discipline applies elsewhere where a schema and a runtime payload travel separately:

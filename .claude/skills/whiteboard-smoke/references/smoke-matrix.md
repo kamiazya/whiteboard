@@ -16,19 +16,19 @@ This repo splits smoke tests into five kinds. Pick the **smallest one** that mat
 ## What Each Smoke Test Actually Runs
 
 - `pnpm smoke`
-  - `packages/mcp-server/scripts/mcp-smoke.mjs`
+  - `packages/mcp-server/scripts/smoke/mcp-smoke.mjs`
   - Verifies that the MCP server does not die immediately within 3 seconds
 - `pnpm smoke:e2e`
-  - `packages/mcp-server/scripts/mcp-e2e-smoke.mjs`
+  - `packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs`
   - Verifies canvas, version save/restore, and route wiring by calling stdio JSON-RPC directly
 - `pnpm smoke:template`
-  - `packages/mcp-server/scripts/mcp-template-smoke.mjs`
+  - `packages/mcp-server/scripts/smoke/mcp-template-smoke.mjs`
   - Calls the template tool directly, mocking fetch and validating behavior
 - `pnpm smoke:claude`
-  - `packages/mcp-server/scripts/mcp-claude-cli-smoke.mjs`
+  - `packages/mcp-server/scripts/smoke/mcp-claude-cli-smoke.mjs`
   - Verifies whether the Claude subprocess can reach checkpoint creation from a zero-context start
 - `pnpm smoke:codex`
-  - `packages/mcp-server/scripts/mcp-codex-cli-smoke.mjs`
+  - `packages/mcp-server/scripts/smoke/mcp-codex-cli-smoke.mjs`
   - Verifies whether the Codex subprocess returns schema-bound JSON and leaves canvas / checkpoint files in the tmp data dir
 
 ## Notes For Codex Smoke

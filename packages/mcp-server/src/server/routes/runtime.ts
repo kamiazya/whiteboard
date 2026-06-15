@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import { DATA_DIR } from '../config.js'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import type { RuntimeStatus } from '../http-server.js'
+import { daemonPingResponseSchema } from '../../shared/api-contracts/runtime.js'
 import { readLatestCompactedAt } from '../store/canvas-store.js'
 import { isAuthorized } from './auth.js'
 import { computeStorageReport } from './runtime-storage.js'
@@ -19,7 +20,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   const app = new Hono()
 
   app.get('/api/runtime/ping', (c) => {
-    return c.json({ ok: true, pid: process.pid })
+    return c.json(daemonPingResponseSchema.parse({ ok: true, pid: process.pid }))
   })
 
   app.use('/api/runtime/*', async (c, next) => {

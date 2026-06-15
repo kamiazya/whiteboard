@@ -30,10 +30,14 @@
       "types": "./dist/server/mcp/index.d.ts",
       "import": "./dist/server/mcp/index.js"
     },
+    "./browser-contract": {
+      "types": "./src/shared/canvas-backend-contract.ts",
+      "import": "./dist/shared/canvas-backend-contract.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
-    "whiteboard-mcp": "dist/server/mcp/index.js"
+    "whiteboard": "dist/cli/index.js"
   },
   "files": [
     "dist",
@@ -51,7 +55,18 @@
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/server/mcp/index.d.ts",
+        "import": "./dist/server/mcp/index.js"
+      },
+      "./browser-contract": {
+        "types": "./dist/shared/canvas-backend-contract.d.ts",
+        "import": "./dist/shared/canvas-backend-contract.js"
+      },
+      "./package.json": "./package.json"
+    }
   },
   "homepage": "https://github.com/kamiazya/whiteboard/tree/main/packages/mcp-server#readme",
   "bugs": {
@@ -63,6 +78,12 @@
     "directory": "packages/mcp-server"
   },
   "scripts": {
+    "publish:dry-run:npm": "node scripts/release/publish-dry-run-npm.mjs",
+    "publish:dry-run:docker": "node scripts/release/publish-dry-run-docker.mjs",
+    "generate:sbom:npm": "node scripts/release/generate-npm-sbom.mjs",
+    "smoke:docker": "node ../../tests/e2e/distribution/packaged-server-mode-docker-smoke.mjs",
+    "smoke:docker-backup-restore": "node ../../tests/e2e/distribution/packaged-server-mode-backup-restore-smoke.mjs",
+    "mutation:contracts": "stryker run",
     "mcp": "node --import tsx/esm src/server/mcp/index.ts",
     "mcp:http": "node dist/server/index.js --daemon --port=3099 --token=whiteboard-dev",
     "mcp:http:dev": "tsx watch src/server/index.ts --daemon --port=3099 --token=whiteboard-dev",
@@ -71,7 +92,7 @@
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
     "daemon": "node dist/server/index.js --daemon",
     "daemon:dev": "tsx watch src/server/index.ts --daemon",
-    "build:server": "tsc -p tsconfig.server.json && chmod +x dist/server/mcp/index.js",
+    "build:server": "tsc -p tsconfig.server.json && chmod +x dist/cli/index.js",
     "build:app": "vite build",
     "build": "pnpm build:server && pnpm build:app",
     "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
@@ -81,21 +102,24 @@
     "test:node": "vitest run --project mcp-node --project mcp-jsdom",
     "test:browser": "vitest run --project mcp-browser",
     "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
+    "test:smoke": "vitest run --project mcp-smoke",
+    "test:distribution": "pnpm build && vitest run --config vitest.distribution.config.ts",
     "docs:snapshots": "vitest run --config vitest.docs-snapshots.config.ts",
     "docs:snapshots:check": "pnpm docs:snapshots && pnpm docs:snapshots && git diff --exit-code -- ../../docs/assets/",
     "test:watch": "vitest --project mcp-node --project mcp-jsdom",
-    "check:pr-title": "node scripts/check-pr-title.mjs",
+    "check:pr-title": "node ../../tools/check-pr-title.mjs",
+    "check:release-artifacts": "node scripts/release/check-release-artifacts.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "smoke": "node scripts/mcp-smoke.mjs",
-    "smoke:e2e": "node scripts/mcp-e2e-smoke.mjs",
-    "smoke:packaged": "node scripts/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js",
-    "smoke:tarball": "node scripts/mcp-packed-tarball-smoke.mjs",
-    "smoke:codex-config": "node scripts/mcp-codex-config-smoke.mjs",
-    "smoke:template": "tsx scripts/mcp-template-smoke.mjs",
-    "smoke:claude": "node scripts/mcp-claude-cli-smoke.mjs",
-    "smoke:codex": "node scripts/mcp-codex-cli-smoke.mjs",
+    "smoke": "node scripts/smoke/mcp-smoke.mjs",
+    "smoke:e2e": "node scripts/smoke/mcp-e2e-smoke.mjs",
+    "smoke:packaged": "node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js",
+    "smoke:tarball": "node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs",
+    "smoke:codex-config": "node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs",
+    "smoke:template": "tsx scripts/smoke/mcp-template-smoke.mjs",
+    "smoke:claude": "node scripts/smoke/mcp-claude-cli-smoke.mjs",
+    "smoke:codex": "node scripts/smoke/mcp-codex-cli-smoke.mjs",
     "smoke:all": "pnpm smoke:e2e && pnpm smoke:template && pnpm smoke:claude",
-    "prepublishOnly": "test -x dist/server/mcp/index.js"
+    "prepublishOnly": "test -x dist/cli/index.js"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
@@ -108,12 +132,12 @@
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/context-zone": "^2.7.1",
     "@opentelemetry/core": "^2.7.1",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.216.0",
-    "@opentelemetry/instrumentation": "^0.216.0",
-    "@opentelemetry/instrumentation-fetch": "^0.216.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.217.0",
+    "@opentelemetry/instrumentation": "^0.217.0",
+    "@opentelemetry/instrumentation-fetch": "^0.217.0",
     "@opentelemetry/instrumentation-pino": "^0.62.0",
     "@opentelemetry/resources": "^2.7.1",
-    "@opentelemetry/sdk-node": "^0.216.0",
+    "@opentelemetry/sdk-node": "^0.217.0",
     "@opentelemetry/sdk-trace-base": "^2.7.1",
     "@opentelemetry/sdk-trace-web": "^2.7.1",
     "@opentelemetry/semantic-conventions": "^1.40.0",
@@ -121,16 +145,18 @@
     "happy-dom": "^20.9.0",
     "hono": "^4.12.15",
     "image-size": "^2",
+    "jose": "^6.2.2",
     "kysely": "^0.28.17",
-    "loro-crdt": "^1.11.1",
+    "loro-crdt": "catalog:",
     "nanoid": "^5.1.9",
     "open": "^11.0.0",
     "pino": "^10.3.1",
     "wawoff2": "^2.0.1",
     "ws": "^8",
-    "zod": "^4"
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@fast-check/vitest": "^0.4.1",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -156,18 +182,21 @@
     "libsql": "^0.5.29",
     "lucide-react": "^1.11.0",
     "playwright": "^1.59.1",
-    "react": "^19",
-    "react-dom": "^19",
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "react-router-dom": "^7.14.2",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
     "tw-animate-css": "^1.4.0",
-    "typescript": "^6.0.3",
-    "vite": "^8.0.10",
+    "typescript": "catalog:",
+    "vite": "catalog:",
     "vite-plugin-static-copy": "^4.1.0",
     "vite-plugin-top-level-await": "^1",
     "vite-plugin-wasm": "^3",
-    "vitest": "^4.1.5"
+    "vitest": "catalog:",
+    "fast-check": "^4.7.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1"
   }
 }
