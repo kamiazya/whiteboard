@@ -2,8 +2,8 @@
 # authoritative gate. Bypass a run with `LEFTHOOK=0 git ...` or `git commit/push --no-verify`.
 #
 # Design for this repo (pnpm monorepo, heavy git-worktree automation):
-#  - pre-commit stays FAST + NON-BLOCKING (format only) so it never disrupts the many
-#    automated worktree commits the dev-loop makes.
+#  - pre-commit: format (non-blocking, auto-fixed) + secretlint (BLOCKING — stops secret
+#    and absolute home-dir path leaks before they enter git history).
 #  - the real gate lives on pre-push, run only by the integrator who pushes — it mirrors
 #    CI so a broken build / failing test / typecheck error is caught before it leaves the machine.
 
@@ -14,6 +14,9 @@ pre-commit:
       glob: "*.{ts,tsx,js,jsx,mjs,cjs,json}"
       run: pnpm biome format --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
+    secretlint:
+      run: pnpm node_modules/.bin/secretlint --secretlintignore .secretlintignore {staged_files}
+      fail_text: "secretlint found secrets or personal paths in staged files — fix before committing"
 
 pre-push:
   parallel: true

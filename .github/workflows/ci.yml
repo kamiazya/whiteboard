@@ -58,6 +58,9 @@ jobs:
       - name: Validate skills
         run: pnpm intent:validate
 
+      - name: Secret scan (secretlint)
+        run: pnpm secretlint
+
       # Staged biome adoption: enforce the AGENTS.md "no console.* in server
       # runtime" rule in CI. Full biome check is not wired yet (the repo still
       # carries pre-existing format/organizeImports violations); this gate stops
