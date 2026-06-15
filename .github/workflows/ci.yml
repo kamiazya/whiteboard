@@ -37,16 +37,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # The GitHub-hosted runner pre-installs the Chromium build our pinned
-      # Playwright expects (revision v1217) at the default ~/.cache/ms-playwright.
-      # `playwright install` insists on "Removing unused browser" + re-downloading
-      # it, and that download stalls indefinitely at 100% on cdn.playwright.dev
-      # (reproduced across many runs — the transfer never finalizes), hanging the
-      # job. So install ONLY the (uncacheable) OS deps and use the pre-seeded
-      # browser — no browser download happens at all, which is also faster than a
-      # cache restore. If a future runner-image bump drifts the pre-installed
-      # Chromium away from our pinned Playwright, the browser-mode tests will fail
-      # to find a browser; reintroduce a working `playwright install` then.
+      # Cache Playwright's Chromium binary keyed by the lockfile so the browser
+      # is only re-downloaded when the Playwright version changes. OS-level deps
+      # (libglib2, libnss3, etc.) are not stored in ~/.cache/ms-playwright and
+      # must be installed on every run via install-deps regardless of cache state.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ hashFiles('**/pnpm-lock.yaml') }}
+
+      - name: Install Playwright browser (cache miss)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 10
+        run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install chromium
+
       - name: Install Playwright system deps
         timeout-minutes: 10
         run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install-deps chromium
