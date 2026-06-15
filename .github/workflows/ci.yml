@@ -15,11 +15,15 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    # Safety net: this job has historically hung indefinitely on the Playwright
-    # browser download (no per-step bound), wasting a 6h runner slot. Cap it.
-    # 60 covers the cold-cache worst case (bounded Playwright retries + the full
-    # test/smoke/build suite); a warm cache makes the Playwright step ~1 min.
+    # Run inside the official Playwright image so Chromium is prebaked at
+    # /ms-playwright — no download or extraction step needed. The image version
+    # must be kept in sync with the `playwright` version in pnpm-lock.yaml.
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-noble
     timeout-minutes: 60
+    env:
+      # Prevent postinstall from trying to fetch a browser; the image has it.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -36,26 +40,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # Cache Playwright's Chromium binary keyed by the lockfile so the browser
-      # is only re-downloaded when the Playwright version changes. OS-level deps
-      # (libglib2, libnss3, etc.) are not stored in ~/.cache/ms-playwright and
-      # must be installed on every run via install-deps regardless of cache state.
-      - name: Cache Playwright browsers
-        id: playwright-cache
-        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ hashFiles('**/pnpm-lock.yaml') }}
-
-      - name: Install Playwright browser (cache miss)
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 10
-        run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install chromium
-
-      - name: Install Playwright system deps
-        timeout-minutes: 10
-        run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install-deps chromium
 
       - name: Audit (high+ vulnerabilities, prod deps only)
         # Gate on CVEs that affect published artifacts so they are caught at PR time.
