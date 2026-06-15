@@ -99,16 +99,15 @@ function parseNonNegativeInt(raw: string): number | null {
   return n
 }
 
-export function parseServerModeEnvConfig(
-  env: NodeJS.ProcessEnv,
-): ServerModeEnvConfigResult {
+export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvConfigResult {
   // --- Required fields ---
 
   const externalUrl = (env[ENV_KEYS.EXTERNAL_URL] ?? '').trim()
   if (!externalUrl) return fail('server_mode_env.external_url_required', ENV_KEYS.EXTERNAL_URL)
 
   const authStrategyRaw = (env[ENV_KEYS.AUTH_STRATEGY] ?? '').trim()
-  if (!authStrategyRaw) return fail('server_mode_env.auth_strategy_required', ENV_KEYS.AUTH_STRATEGY)
+  if (!authStrategyRaw)
+    return fail('server_mode_env.auth_strategy_required', ENV_KEYS.AUTH_STRATEGY)
   if (authStrategyRaw !== 'oauth-jwt') {
     return fail('server_mode_env.unknown_auth_strategy', ENV_KEYS.AUTH_STRATEGY)
   }
@@ -120,7 +119,8 @@ export function parseServerModeEnvConfig(
   const jwtAudienceRaw = (env[ENV_KEYS.JWT_AUDIENCE] ?? '').trim()
   if (!jwtAudienceRaw) return fail('server_mode_env.jwt_audience_required', ENV_KEYS.JWT_AUDIENCE)
   const jwtAudience = splitComma(jwtAudienceRaw)
-  if (jwtAudience.length === 0) return fail('server_mode_env.jwt_audience_required', ENV_KEYS.JWT_AUDIENCE)
+  if (jwtAudience.length === 0)
+    return fail('server_mode_env.jwt_audience_required', ENV_KEYS.JWT_AUDIENCE)
 
   const jwksUri = (env[ENV_KEYS.JWKS_URI] ?? '').trim()
   if (!jwksUri) return fail('server_mode_env.jwks_uri_required', ENV_KEYS.JWKS_URI)
@@ -165,8 +165,7 @@ export function parseServerModeEnvConfig(
   const portRaw = env[ENV_KEYS.PORT]
   let port = 3099
   if (portRaw !== undefined) {
-    const trimmed = portRaw.trim()
-    const parsed = trimmed.length > 0 ? parsePort(trimmed) : null
+    const parsed = parsePort(portRaw)
     if (parsed === null) return fail('server_mode_env.port_out_of_range', ENV_KEYS.PORT)
     port = parsed
   }
