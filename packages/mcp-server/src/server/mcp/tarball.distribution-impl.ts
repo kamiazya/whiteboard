@@ -52,7 +52,10 @@ export async function runPackedTarballSmoke({
   try {
     const env = { ...process.env, npm_config_cache: npmCacheDir } as NodeJS.ProcessEnv
 
-    const packResult = spawnSync('npm', ['pack', '--json'], {
+    // pnpm pack resolves catalog: protocol entries to concrete versions before
+    // packing. npm pack would ship "loro-crdt: catalog:" verbatim, making the
+    // tarball uninstallable outside a pnpm workspace.
+    const packResult = spawnSync('pnpm', ['pack'], {
       cwd: packageRoot,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -62,17 +65,21 @@ export async function runPackedTarballSmoke({
       const stderr = (packResult.stderr as string)?.trim()
       const stdout = (packResult.stdout as string)?.trim()
       throw new Error(
-        `[tarball-smoke] npm pack exited with ${packResult.status ?? 'null'}${
+        `[tarball-smoke] pnpm pack exited with ${packResult.status ?? 'null'}${
           stderr ? `\n${stderr}` : stdout ? `\n${stdout}` : ''
         }`,
       )
     }
 
-    const packJson = JSON.parse(packResult.stdout as string) as Array<{ filename?: string }>
-    const packedTarball = packJson[0]?.filename
+    // pnpm pack prints the tarball path as the last non-empty line of stdout.
+    const packedTarball = (packResult.stdout as string)
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+      .pop()
     if (!packedTarball) {
       throw new Error(
-        `[tarball-smoke] npm pack --json did not return a filename: ${packResult.stdout as string}`,
+        `[tarball-smoke] pnpm pack did not return a filename: ${packResult.stdout as string}`,
       )
     }
 

@@ -113,7 +113,7 @@
     "smoke": "node scripts/smoke/mcp-smoke.mjs",
     "smoke:e2e": "node scripts/smoke/mcp-e2e-smoke.mjs",
     "smoke:packaged": "node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js",
-    "smoke:tarball": "node scripts/smoke/mcp-packed-tarball-smoke.mjs",
+    "smoke:tarball": "node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs",
     "smoke:codex-config": "node scripts/smoke/mcp-codex-config-smoke.mjs",
     "smoke:template": "tsx scripts/smoke/mcp-template-smoke.mjs",
     "smoke:claude": "node scripts/smoke/mcp-claude-cli-smoke.mjs",
