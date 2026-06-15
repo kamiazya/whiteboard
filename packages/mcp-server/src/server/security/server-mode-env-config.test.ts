@@ -621,7 +621,7 @@ describe('parseServerModeEnvConfig — PBT', () => {
       badPort: fc.oneof(
         fc.integer({ min: -1000, max: 0 }).map(String),
         fc.integer({ min: 65536, max: 100000 }).map(String),
-        fc.string({ minLength: 1, maxLength: 10 }).filter((s) => !/^\d+$/.test(s)),
+        fc.string({ minLength: 1, maxLength: 10 }).filter((s) => !/^\d+$/.test(s.trim())),
       ),
     },
     withDefaults(),
@@ -734,5 +734,4 @@ describe('parseServerModeEnvConfig — deterministic contract anchors', () => {
     if (!result.ok) return
     expect(result.config.jwtScopeClaim).toBe('scope')
   })
-
 })
