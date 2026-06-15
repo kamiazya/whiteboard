@@ -39,7 +39,7 @@ importers:
         version: 0.17.3
       '@libsql/kysely-libsql':
         specifier: ^0.4.1
-        version: 0.4.1(kysely@0.28.16)
+        version: 0.4.1(kysely@0.28.17)
       '@modelcontextprotocol/sdk':
         specifier: ~1.29.0
         version: 1.29.0(zod@4.4.2)
@@ -95,8 +95,8 @@ importers:
         specifier: ^2
         version: 2.0.2
       kysely:
-        specifier: ^0.28.16
-        version: 0.28.16
+        specifier: ^0.28.17
+        version: 0.28.17
       loro-crdt:
         specifier: ^1.11.1
         version: 1.11.1
@@ -3408,8 +3408,8 @@ packages:
   khroma@2.1.0:
     resolution: {integrity: sha512-Ls993zuzfayK269Svk9hzpeGUKob/sIgZzyHYdjQoAdQetRKpOLj+k/QQQ/6Qi0Yz65mlROrfd+Ev+1+7dz9Kw==}
 
-  kysely@0.28.16:
-    resolution: {integrity: sha512-3i5pmOiZvMDj00qhrIVbH0AnioVTx22DMP7Vn5At4yJO46iy+FM8Y/g61ltenLVSo3fiO8h8Q3QOFgf/gQ72ww==}
+  kysely@0.28.17:
+    resolution: {integrity: sha512-nbD8lB9EB3wNdMhOCdx5Li8DxnLbvKByylRLcJ1h+4SkrowVeECAyZlyiKMThF7xFdRz0jSQ2MoJr+wXux2y0Q==}
     engines: {node: '>=20.0.0'}
 
   langium@3.3.1:
@@ -4999,10 +4999,10 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@libsql/kysely-libsql@0.4.1(kysely@0.28.16)':
+  '@libsql/kysely-libsql@0.4.1(kysely@0.28.17)':
     dependencies:
       '@libsql/client': 0.8.1
-      kysely: 0.28.16
+      kysely: 0.28.17
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -7607,7 +7607,7 @@ snapshots:
 
   khroma@2.1.0: {}
 
-  kysely@0.28.16: {}
+  kysely@0.28.17: {}
 
   langium@3.3.1:
     dependencies:
