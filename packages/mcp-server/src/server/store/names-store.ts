@@ -3,6 +3,8 @@ import { validateSlug, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { upsertCanvasRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import type { WorkspaceNames } from '../../shared/api-contracts/canvas.js'
+export type { WorkspaceNames }
 
 // Workspace + canvas display names and pin order. Backed by:
 //   workspaces.displayName       -> WorkspaceNames.workspace
@@ -12,12 +14,6 @@ import { upsertCanvasRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 // loadWorkspaceNames returns an empty state for workspaces with no rows. The
 // previous filesystem implementation also returned an empty state when
 // .names.json was missing, so the contract is unchanged for callers.
-
-export interface WorkspaceNames {
-  workspace?: string
-  canvases: Record<string, string>
-  pinned: string[]
-}
 
 async function dbReady() {
   await prepareDataDir(DATA_DIR)
