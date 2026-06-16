@@ -400,24 +400,20 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   }
 
   if (spec.type !== 'box_with_label') {
+    const primitiveSpec = spec as AnnotationSpec & { type: AnnotationType }
     // For arrow specs, `text` is an alias for `label` (midpoint label text node).
-    // `label` takes precedence when both are supplied. We resolve the effective
-    // label here and pass `text: undefined` to appendSingleAnnotation so that
-    // buildAnnotationFields does not simultaneously write the inline arrow body
-    // label field (annotation-fields.ts line 114-116) alongside the midpoint
-    // text node created below.
+    // `label` takes precedence when both are supplied. Resolve the effective
+    // label here and pass `text: undefined` so buildAnnotationFields does not
+    // simultaneously write the inline arrow body label field alongside the
+    // midpoint text node created below.
     const arrowSpec =
       spec.type === 'arrow'
-        ? (() => {
-            const effectiveLabel =
-              spec.label ?? (Array.isArray(spec.text) ? spec.text.join('\n') : spec.text)
-            return {
-              ...(spec as AnnotationSpec & { type: AnnotationType }),
-              text: undefined,
-              label: effectiveLabel,
-            }
-          })()
-        : (spec as AnnotationSpec & { type: AnnotationType })
+        ? {
+            ...primitiveSpec,
+            text: undefined,
+            label: spec.label ?? (Array.isArray(spec.text) ? spec.text.join('\n') : spec.text),
+          }
+        : primitiveSpec
     const { elementId, snappedStart, snappedEnd } = appendSingleAnnotation(doc, arrowSpec)
     // When arrow.label is set, add a separate midpoint label text element.
     if (spec.type === 'arrow' && arrowSpec.label && snappedEnd) {
