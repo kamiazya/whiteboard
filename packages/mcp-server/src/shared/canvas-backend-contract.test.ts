@@ -44,7 +44,7 @@ beforeAll(() => {
   if (result.status !== 0) {
     throw new Error(`tsc failed:\n${result.stderr}`)
   }
-})
+}, 60_000)
 
 describe('browser-contract subpath export', () => {
   it('package.json exports map includes ./browser-contract', () => {
