@@ -23,6 +23,11 @@ export function runtimeConfigDevPlugin(): Plugin {
       // applies the same guard before inlining runtime config.
       const config = JSON.stringify({ daemonToken: token }).replace(/</g, '\\u003c')
       const script = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${config};</script>`
+      if (!html.includes('</head>')) {
+        throw new Error(
+          'vite-dev-token-plugin: missing </head> in index.html — runtime config script cannot be injected',
+        )
+      }
       return html.replace('</head>', `${script}</head>`)
     },
   }

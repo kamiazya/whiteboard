@@ -66,4 +66,15 @@ describe('runtimeConfigDevPlugin', () => {
     const plugin = runtimeConfigDevPlugin()
     expect((plugin as { apply?: string }).apply).toBe('serve')
   })
+
+  it('throws when </head> is absent so a misconfigured template surfaces immediately', async () => {
+    delete process.env.WHITEBOARD_TOKEN
+    const { runtimeConfigDevPlugin } = await import('./vite-dev-token-plugin.js')
+    const plugin = runtimeConfigDevPlugin()
+    expect(() =>
+      (plugin as { transformIndexHtml: (html: string) => string }).transformIndexHtml(
+        '<html><body>no head tag here</body></html>',
+      ),
+    ).toThrow(/missing.*<\/head>/i)
+  })
 })
