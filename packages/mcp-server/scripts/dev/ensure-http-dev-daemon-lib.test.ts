@@ -35,6 +35,28 @@ describe('HTTP dev daemon startup', () => {
     expect(probe).toHaveBeenCalledTimes(2)
     expect(sleep).toHaveBeenCalledWith(10)
   })
+
+  it('returns false when the timeout elapses before the daemon responds with "ours"', async () => {
+    // Simulate a clock that jumps past the timeout on the second now() call,
+    // so the while-loop guard fails before the probe can return 'ours'.
+    const probe = vi.fn().mockResolvedValue('unreachable')
+    const sleep = vi.fn().mockResolvedValue(undefined)
+
+    const result = await waitForAuthenticatedMcp({
+      probe,
+      sleep,
+      timeoutMs: 500,
+      pollIntervalMs: 10,
+      now: vi
+        .fn()
+        .mockReturnValueOnce(0) // startedAt
+        .mockReturnValueOnce(600), // first loop check: 600 >= 500, exits immediately
+    })
+
+    expect(result).toBe(false)
+    // The loop exits before any probe fires because now()-startedAt >= timeoutMs
+    expect(probe).not.toHaveBeenCalled()
+  })
 })
 
 describe('resolveDevBearerToken', () => {

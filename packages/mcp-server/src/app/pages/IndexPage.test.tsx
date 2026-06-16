@@ -3,15 +3,28 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import IndexPage from './IndexPage.js'
 
-// Minimal fetch stub that covers the workspace/canvas/storage calls IndexPage
-// makes on mount, plus a custom POST handler for NewCanvasDialog tests.
-function makeDefaultFetch(
-  postHandler?: (url: string) => Response | null,
-): (input: string | URL) => Promise<Response> {
-  return async (input: string | URL) => {
-    const url = input.toString()
-    if (typeof postHandler === 'function') {
-      const override = postHandler(url)
+vi.mock('../lib/api-client.js', () => ({ apiFetch: vi.fn() }))
+import { apiFetch } from '../lib/api-client.js'
+
+// Spy on useNavigate so we can assert navigate() was called with the right path
+// without needing a full router setup that handles route transitions in jsdom.
+const mockNavigate = vi.fn()
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  }
+})
+
+// Standard responses for the three mount-time fetches IndexPage makes.
+function makeDefaultApiFetch(
+  postHandler?: (url: string, init?: RequestInit) => Response | null,
+): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+  return async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(typeof input === 'string' || input instanceof URL ? input : input.url)
+    if (postHandler) {
+      const override = postHandler(url, init)
       if (override) return override
     }
     if (url === '/api/workspaces') {
@@ -44,7 +57,7 @@ function makeDefaultFetch(
         { status: 200 },
       )
     }
-    throw new Error(`unexpected fetch: ${url}`)
+    throw new Error(`unexpected apiFetch: ${url}`)
   }
 }
 
@@ -75,8 +88,8 @@ describe('IndexPage', () => {
   })
 
   it('renders canvases as a flat list and never names the workspace', async () => {
-    const fetchMock = vi.fn(async (input: string | URL) => {
-      const url = input.toString()
+    vi.mocked(apiFetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(typeof input === 'string' || input instanceof URL ? input : input.url)
       if (url === '/api/workspaces') {
         return new Response(
           JSON.stringify({
@@ -116,9 +129,8 @@ describe('IndexPage', () => {
           { status: 200 },
         )
       }
-      throw new Error(`unexpected fetch: ${url}`)
+      throw new Error(`unexpected apiFetch: ${url}`)
     })
-    vi.stubGlobal('fetch', fetchMock)
 
     const { container } = render(
       <MemoryRouter>
@@ -133,7 +145,11 @@ describe('IndexPage', () => {
     })
     // apiFetch attaches a Headers object even without a token so OTel
     // traceparent injection has somewhere to live; assert URL only.
-    const calledUrls = fetchMock.mock.calls.map((c: unknown[]) => c[0])
+    const calledUrls = vi
+      .mocked(apiFetch)
+      .mock.calls.map((c) =>
+        String(typeof c[0] === 'string' || c[0] instanceof URL ? c[0] : (c[0] as Request).url),
+      )
     expect(calledUrls).toContain('/api/workspaces')
     expect(calledUrls).toContain('/api/workspaces/ws_1/canvases')
     expect(calledUrls).toContain('/api/workspaces/ws_1/names')
@@ -151,24 +167,14 @@ describe('IndexPage NewCanvasDialog error handling', () => {
   })
 
   it('shows a daemon-auth hint (not the raw status code) when canvas creation returns 401', async () => {
-    const fetchMock = vi.fn(
-      makeDefaultFetch((url) => {
-        if (url.includes('/canvases') && url.includes('/ws_1/')) {
-          // Only intercept POST — GET canvases list returns normally above
-          return null
+    vi.mocked(apiFetch).mockImplementation(
+      makeDefaultApiFetch((url, init) => {
+        if (init?.method === 'POST' && url.includes('/canvases')) {
+          return new Response(null, { status: 401 })
         }
         return null
       }),
     )
-    // Override to intercept the POST
-    fetchMock.mockImplementation(async (input: string | URL, init?: RequestInit) => {
-      const url = input.toString()
-      if (init?.method === 'POST' && url.includes('/canvases')) {
-        return new Response(null, { status: 401 })
-      }
-      return makeDefaultFetch()(input)
-    })
-    vi.stubGlobal('fetch', fetchMock)
 
     render(
       <MemoryRouter>
@@ -192,14 +198,14 @@ describe('IndexPage NewCanvasDialog error handling', () => {
   })
 
   it('shows the generic "Create failed (N)." pattern for non-401 errors like 500', async () => {
-    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      const url = input.toString()
-      if (init?.method === 'POST' && url.includes('/canvases')) {
-        return new Response(null, { status: 500 })
-      }
-      return makeDefaultFetch()(input)
-    })
-    vi.stubGlobal('fetch', fetchMock)
+    vi.mocked(apiFetch).mockImplementation(
+      makeDefaultApiFetch((url, init) => {
+        if (init?.method === 'POST' && url.includes('/canvases')) {
+          return new Response(null, { status: 500 })
+        }
+        return null
+      }),
+    )
 
     render(
       <MemoryRouter>
@@ -223,17 +229,17 @@ describe('IndexPage NewCanvasDialog error handling', () => {
   })
 
   it('shows the Problem Details title when the server returns 409 with a valid title', async () => {
-    const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      const url = input.toString()
-      if (init?.method === 'POST' && url.includes('/canvases')) {
-        return new Response(
-          JSON.stringify({ title: 'Canvas slug already exists', type: 'about:blank' }),
-          { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
-        )
-      }
-      return makeDefaultFetch()(input)
-    })
-    vi.stubGlobal('fetch', fetchMock)
+    vi.mocked(apiFetch).mockImplementation(
+      makeDefaultApiFetch((url, init) => {
+        if (init?.method === 'POST' && url.includes('/canvases')) {
+          return new Response(
+            JSON.stringify({ title: 'Canvas slug already exists', type: 'about:blank' }),
+            { status: 409, headers: { 'Content-Type': 'application/problem+json' } },
+          )
+        }
+        return null
+      }),
+    )
 
     render(
       <MemoryRouter>
@@ -250,5 +256,52 @@ describe('IndexPage NewCanvasDialog error handling', () => {
       // The Problem Details title must surface verbatim
       expect(errorEl?.textContent).toContain('Canvas slug already exists')
     })
+  })
+
+  it('closes the dialog, resets the slug field, and navigates on a 2xx POST response', async () => {
+    mockNavigate.mockClear()
+    vi.mocked(apiFetch).mockImplementation(
+      makeDefaultApiFetch((url, init) => {
+        if (init?.method === 'POST' && url.includes('/canvases')) {
+          return new Response(JSON.stringify({ slug: 'test-canvas', workspaceId: 'ws_1' }), {
+            status: 201,
+          })
+        }
+        return null
+      }),
+    )
+
+    // Radix portals render into document.body. Using document.body as the React
+    // root ensures Radix Dialog's open/close state updates propagate correctly
+    // through the portal in jsdom.
+    render(
+      <MemoryRouter>
+        <IndexPage />
+      </MemoryRouter>,
+      { container: document.body },
+    )
+
+    await openNewCanvasDialog()
+
+    // Submit the form directly (fireEvent.submit triggers onSubmit reliably
+    // in jsdom regardless of pointer-event bubbling through Radix portals).
+    const form = document.getElementById('new-canvas-slug')?.closest('form')
+    if (!form) throw new Error('form not found')
+    fireEvent.submit(form)
+
+    // After a 2xx POST the handler calls onOpenChange(false) then onCreated
+    // which calls navigate('/canvas/...').
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith(expect.stringMatching(/^\/canvas\//))
+    })
+    expect(mockNavigate.mock.calls[0][0]).toContain('test-canvas')
+
+    // Dialog must close: onOpenChange(false) was called before navigate.
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).toBeNull()
+    })
+
+    // No error message visible
+    expect(screen.queryByText(/create failed/i)).toBeNull()
   })
 })

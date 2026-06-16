@@ -10,7 +10,8 @@ import { isDirectEntryPoint } from './entrypoint.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
-  return process.argv.find((arg) => arg.startsWith(`--${name}=`))?.split('=')[1] ?? fallback
+  const prefix = `--${name}=`
+  return process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length) ?? fallback
 }
 
 function hasFlag(name: string): boolean {
@@ -28,7 +29,14 @@ export function resolveToken(
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
 ): string | undefined {
-  return argv.find((arg) => arg.startsWith('--token='))?.split('=')[1] ?? env.WHITEBOARD_TOKEN
+  // Use the LAST --token= flag so that a caller appending an explicit token
+  // after a baked-in script default (e.g. pnpm mcp:http:dev already bakes in
+  // --token=whiteboard-dev) gets the override honoured without having to
+  // rewrite the entire argv array. slice() is used instead of split('=')[1]
+  // so that token values containing '=' are preserved in full.
+  const prefix = '--token='
+  const match = [...argv].reverse().find((arg) => arg.startsWith(prefix))
+  return match !== undefined ? match.slice(prefix.length) : env.WHITEBOARD_TOKEN
 }
 
 export { createApp } from './app.js'
