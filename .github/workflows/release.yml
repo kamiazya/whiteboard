@@ -251,7 +251,7 @@ jobs:
     # Deploy apps/web to Cloudflare Pages on every merge to main.
     # Skipped on workflow_dispatch (which is reserved for npm re-publish only).
     # Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets.
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && secrets.CLOUDFLARE_API_TOKEN != ''
     permissions:
       contents: read
     steps:
