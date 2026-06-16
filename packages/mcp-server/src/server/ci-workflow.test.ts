@@ -25,7 +25,8 @@ describe('pre-merge CI workflow', () => {
     const workflow = readFileSync(workflowPath, 'utf-8')
 
     // PR title is passed via env var to avoid shell injection from user-controlled input.
-    expect(workflow).toContain('PR_TITLE: ${{ github.event.pull_request.title }}')
+    // Use regex to stay resilient against minor YAML quoting / formatting changes.
+    expect(workflow).toMatch(/PR_TITLE:.*github\.event\.pull_request\.title/)
     expect(workflow).toContain('pnpm check:pr-title -- "$PR_TITLE"')
     expect(workflow).toContain('pnpm install --frozen-lockfile')
     // Chromium is prebaked in the official Playwright image; no install step needed.
