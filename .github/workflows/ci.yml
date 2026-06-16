@@ -156,9 +156,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # mcp-smoke starts the daemon as a child process; it needs the same
-      # container environment as the other E2E checks so daemon startup succeeds.
+      # mcp-smoke spawns the MCP stdio server which in turn calls ensureDaemon.
+      # Without WHITEBOARD_DEV=1, ensureDaemon tries dist/server/index.js which
+      # does not exist before build. WHITEBOARD_DEV=1 makes it use tsx against
+      # source instead, matching how pnpm smoke:e2e runs the same flow.
       - name: Test mcp-smoke
+        env:
+          WHITEBOARD_DEV: '1'
         run: pnpm exec vitest run --project=mcp-smoke
 
       - name: Stdio E2E smoke
