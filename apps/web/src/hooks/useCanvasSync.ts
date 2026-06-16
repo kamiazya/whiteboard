@@ -148,7 +148,9 @@ export function useCanvasSync(backend: CanvasBackend): UseCanvasSyncResult {
         undoManagerRef.current = new UndoManager(doc, { mergeInterval: 500 })
 
         doc.subscribeLocalUpdates((update) => {
-          backendRef.current.pushLocalUpdate(update)
+          void Promise.resolve(backendRef.current.pushLocalUpdate(update)).catch(() => {
+            setSyncStatus('error')
+          })
         })
 
         doc.subscribe((e) => {

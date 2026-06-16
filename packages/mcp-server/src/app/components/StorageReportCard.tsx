@@ -11,6 +11,11 @@ import {
 } from '@/components/ui/dialog'
 import { apiFetch } from '../lib/api-client.js'
 import { formatBytes } from '../lib/format-bytes.js'
+import {
+  storageReportPayloadSchema,
+  type StorageBucket,
+  type StorageReportPayload,
+} from '../../shared/api-contracts/canvas.js'
 
 interface UserLibraryRow {
   name: string
@@ -23,20 +28,6 @@ interface UserLibraryRow {
 // accumulating before the app applies caps, LRU, or category-specific cleanup.
 // Each category keeps a stable row hook and reserved action slot so future
 // Optimize / Cleanup controls can target the exact object they act on.
-
-interface StorageBucket {
-  bytes: number
-  files: number
-}
-
-interface StorageReportPayload {
-  totalBytes: number
-  fileCount: number
-  byCategory: Record<string, StorageBucket>
-  // Most-recent auto-Optimize timestamp across every canvas. Null when no
-  // canvas has been compacted yet — the UI shows "Never" in that case.
-  lastAutoCompactedAt?: number | null
-}
 
 interface CategoryDescriptor {
   key: string
@@ -121,7 +112,7 @@ export function StorageReportCard() {
         setError(`HTTP ${res.status}`)
         return
       }
-      const json = (await res.json()) as StorageReportPayload
+      const json = storageReportPayloadSchema.parse(await res.json())
       setReport(json)
       setUpdatedAt(Date.now())
     } catch (err) {
@@ -160,10 +151,9 @@ export function StorageReportCard() {
       }
       let savings = 0
       for (const { workspaceId } of workspaces) {
-        const res = await apiFetch(
-          `/api/workspaces/${workspaceId}/canvases/optimize-all`,
-          { method: 'POST' },
-        )
+        const res = await apiFetch(`/api/workspaces/${workspaceId}/canvases/optimize-all`, {
+          method: 'POST',
+        })
         if (!res.ok) continue
         const body = (await res.json()) as {
           totalBeforeBytes: number
@@ -272,10 +262,9 @@ export function StorageReportCard() {
       }
       let totalDeleted = 0
       for (const { workspaceId } of workspaces) {
-        const res = await apiFetch(
-          `/api/workspaces/${workspaceId}/versions/prune-sandwiched`,
-          { method: 'POST' },
-        )
+        const res = await apiFetch(`/api/workspaces/${workspaceId}/versions/prune-sandwiched`, {
+          method: 'POST',
+        })
         if (!res.ok) continue
         const body = (await res.json()) as { totalDeleted: number }
         totalDeleted += body.totalDeleted
@@ -312,17 +301,18 @@ export function StorageReportCard() {
       let purgedBytes = 0
       let purgedCount = 0
       for (const { workspaceId } of workspaces) {
-        const res = await apiFetch(
-          `/api/workspaces/${workspaceId}/files/purge-dangling`,
-          { method: 'POST' },
-        )
+        const res = await apiFetch(`/api/workspaces/${workspaceId}/files/purge-dangling`, {
+          method: 'POST',
+        })
         if (!res.ok) continue
         const body = (await res.json()) as { purgedCount: number; purgedBytes: number }
         purgedBytes += body.purgedBytes
         purgedCount += body.purgedCount
       }
       setCleanFilesStatus(
-        purgedCount > 0 ? `Removed ${purgedCount} (${formatBytes(purgedBytes)})` : 'Nothing to clean',
+        purgedCount > 0
+          ? `Removed ${purgedCount} (${formatBytes(purgedBytes)})`
+          : 'Nothing to clean',
       )
       void refresh()
     } catch {
@@ -333,8 +323,7 @@ export function StorageReportCard() {
     }
   }, [refresh])
 
-  const ageSeconds =
-    updatedAt === null ? null : Math.max(0, Math.floor((now - updatedAt) / 1000))
+  const ageSeconds = updatedAt === null ? null : Math.max(0, Math.floor((now - updatedAt) / 1000))
 
   return (
     <div className="space-y-4">
@@ -379,15 +368,9 @@ export function StorageReportCard() {
           const bucket = report?.byCategory[key] ?? { bytes: 0, files: 0 }
           const overCap = softCapBytes !== undefined && bucket.bytes > softCapBytes
           const nearCap =
-            !overCap &&
-            softCapBytes !== undefined &&
-            bucket.bytes > softCapBytes * 0.8
+            !overCap && softCapBytes !== undefined && bucket.bytes > softCapBytes * 0.8
           return (
-            <li
-              key={key}
-              data-storage-row={key}
-              className="flex items-center gap-3 px-4 py-3"
-            >
+            <li key={key} data-storage-row={key} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
                 <div className="text-sm font-medium truncate">{label}</div>
                 <div className="text-xs text-muted-foreground truncate">{description}</div>
@@ -426,12 +409,8 @@ export function StorageReportCard() {
                       disabled={optimizing}
                       aria-label="Optimize all canvases"
                     >
-                      <Sparkles
-                        className={optimizing ? 'size-3.5 animate-pulse' : 'size-3.5'}
-                      />
-                      <span className="text-xs">
-                        {optimizing ? 'Optimizing…' : 'Optimize'}
-                      </span>
+                      <Sparkles className={optimizing ? 'size-3.5 animate-pulse' : 'size-3.5'} />
+                      <span className="text-xs">{optimizing ? 'Optimizing…' : 'Optimize'}</span>
                     </Button>
                     <span className="text-[10px] text-muted-foreground">
                       {/* Prefer the freshest signal: a transient
@@ -440,10 +419,7 @@ export function StorageReportCard() {
                       {optimizeStatus ??
                         (report?.lastAutoCompactedAt
                           ? `Auto-optimised ${humanizeAge(
-                              Math.max(
-                                0,
-                                Math.floor((now - report.lastAutoCompactedAt) / 1000),
-                              ),
+                              Math.max(0, Math.floor((now - report.lastAutoCompactedAt) / 1000)),
                             )}`
                           : 'Never auto-optimised')}
                     </span>
@@ -459,12 +435,8 @@ export function StorageReportCard() {
                       disabled={pruningVersions}
                       aria-label="Cleanup sandwiched auto-versions"
                     >
-                      <Eraser
-                        className={pruningVersions ? 'size-3.5 animate-pulse' : 'size-3.5'}
-                      />
-                      <span className="text-xs">
-                        {pruningVersions ? 'Cleaning…' : 'Cleanup'}
-                      </span>
+                      <Eraser className={pruningVersions ? 'size-3.5 animate-pulse' : 'size-3.5'} />
+                      <span className="text-xs">{pruningVersions ? 'Cleaning…' : 'Cleanup'}</span>
                     </Button>
                     {pruneVersionsStatus && (
                       <span className="text-[10px] text-muted-foreground">
@@ -483,17 +455,11 @@ export function StorageReportCard() {
                       disabled={cleaningFiles}
                       aria-label="Clean up dangling files"
                     >
-                      <Eraser
-                        className={cleaningFiles ? 'size-3.5 animate-pulse' : 'size-3.5'}
-                      />
-                      <span className="text-xs">
-                        {cleaningFiles ? 'Cleaning…' : 'Cleanup'}
-                      </span>
+                      <Eraser className={cleaningFiles ? 'size-3.5 animate-pulse' : 'size-3.5'} />
+                      <span className="text-xs">{cleaningFiles ? 'Cleaning…' : 'Cleanup'}</span>
                     </Button>
                     {cleanFilesStatus && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {cleanFilesStatus}
-                      </span>
+                      <span className="text-[10px] text-muted-foreground">{cleanFilesStatus}</span>
                     )}
                   </>
                 )}
@@ -507,15 +473,11 @@ export function StorageReportCard() {
                       disabled={pruningLogs}
                       aria-label="Prune old daemon logs"
                     >
-                      <Eraser
-                        className={pruningLogs ? 'size-3.5 animate-pulse' : 'size-3.5'}
-                      />
+                      <Eraser className={pruningLogs ? 'size-3.5 animate-pulse' : 'size-3.5'} />
                       <span className="text-xs">{pruningLogs ? 'Pruning…' : 'Cleanup'}</span>
                     </Button>
                     {pruneLogsStatus && (
-                      <span className="text-[10px] text-muted-foreground">
-                        {pruneLogsStatus}
-                      </span>
+                      <span className="text-[10px] text-muted-foreground">{pruneLogsStatus}</span>
                     )}
                   </>
                 )}
@@ -551,10 +513,9 @@ export function StorageReportCard() {
           <DialogHeader>
             <DialogTitle>User libraries</DialogTitle>
             <DialogDescription>
-              Installed Excalidraw library packs. Removing a pack deletes
-              its <code>.excalidrawlib</code> file from disk and drops the
-              registry row — canvases that referenced it keep their
-              embedded copies of any item already inserted.
+              Installed Excalidraw library packs. Removing a pack deletes its{' '}
+              <code>.excalidrawlib</code> file from disk and drops the registry row — canvases that
+              referenced it keep their embedded copies of any item already inserted.
             </DialogDescription>
           </DialogHeader>
           {libsLoading ? (

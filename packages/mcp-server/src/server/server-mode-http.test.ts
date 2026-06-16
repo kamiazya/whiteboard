@@ -1,0 +1,94 @@
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { EventEmitter } from 'node:events'
+import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
+
+// vi.mock is hoisted above imports, so mutable state shared with the mocks
+// must be initialised with vi.hoisted() to avoid a temporal dead-zone error.
+const { mockServe, getLastServer } = vi.hoisted(() => {
+  type MockServer = EventEmitter & { listening: boolean; close: ReturnType<typeof vi.fn> }
+  let lastServer: MockServer | null = null
+
+  const mockServe = vi.fn(() => {
+    const emitter = new EventEmitter() as MockServer
+    emitter.listening = false
+    emitter.close = vi.fn((cb?: (err?: Error) => void) => {
+      cb?.()
+    })
+    lastServer = emitter
+    return emitter
+  })
+
+  return { mockServe, getLastServer: () => lastServer }
+})
+
+vi.mock('@hono/node-server', () => ({ serve: mockServe }))
+vi.mock('./app.js', () => ({ createApp: vi.fn(() => ({ fetch: vi.fn() })) }))
+
+import { startServerModeHttp } from './server-mode-http.js'
+
+function makeOptions() {
+  return {
+    host: '127.0.0.1',
+    port: 9001,
+    publicBaseUrl: 'http://127.0.0.1:9001',
+    allowedOrigins: [] as readonly string[],
+    authStrategy: {} as AsyncAuthStrategy,
+  }
+}
+
+describe('startServerModeHttp', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('resolves with port, host, startedAt, resolvedDataDir, and close on successful startup', async () => {
+    const options = makeOptions()
+    const startPromise = startServerModeHttp(options)
+    const server = getLastServer()!
+    setImmediate(() => server.emit('listening'))
+
+    const result = await startPromise
+
+    expect(result.port).toBe(options.port)
+    expect(result.host).toBe(options.host)
+    expect(result.startedAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+    expect(typeof result.resolvedDataDir).toBe('string')
+    expect(result.close).toBeTypeOf('function')
+  })
+
+  it('close() calls server.close() exactly once and resolves', async () => {
+    const options = makeOptions()
+    const startPromise = startServerModeHttp(options)
+    const server = getLastServer()!
+    setImmediate(() => server.emit('listening'))
+    const { close } = await startPromise
+
+    await close()
+
+    expect(server.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('close() is idempotent — subsequent calls do nothing', async () => {
+    const options = makeOptions()
+    const startPromise = startServerModeHttp(options)
+    const server = getLastServer()!
+    setImmediate(() => server.emit('listening'))
+    const { close } = await startPromise
+
+    await close()
+    await close()
+    await close()
+
+    expect(server.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects when the server emits an error before listening', async () => {
+    const options = makeOptions()
+    const startPromise = startServerModeHttp(options)
+    const server = getLastServer()!
+    const portError = Object.assign(new Error('EADDRINUSE'), { code: 'EADDRINUSE' })
+    setImmediate(() => server.emit('error', portError))
+
+    await expect(startPromise).rejects.toThrow('EADDRINUSE')
+  })
+})

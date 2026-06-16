@@ -3,10 +3,11 @@ import { z } from 'zod'
 // Schema for the element shape that resolveParentedElements reads from Loro storage.
 //
 // Required fields mirror what resolveParentedElements uses for layout computation.
-// Extra Excalidraw fields (type, strokeColor, angle, boundElements, …) pass through
-// via .catchall(z.unknown()) so the inferred type stays assignable to ParentedElement's
-// open [key: string]: unknown index signature. The catchall is deliberate looseness
-// on extra fields only — the required numeric/string fields above it remain strict.
+// Extra Excalidraw fields (type, strokeColor, angle, boundElements, …) are passed
+// through at runtime via .passthrough() — unknown keys are preserved in the output
+// without being typed. This avoids the [key: string]: unknown index signature that
+// .catchall(z.unknown()) would add, which in turn allows a direct single cast from
+// LoroRawElement[] to ExcalidrawElement[] / Record<string,unknown>[] at call sites.
 export const loroRawElementSchema = z
   .object({
     id: z.string(),
@@ -19,7 +20,7 @@ export const loroRawElementSchema = z
     relX: z.number().optional(),
     relY: z.number().optional(),
   })
-  .catchall(z.unknown())
+  .passthrough()
 
 export type LoroRawElement = z.infer<typeof loroRawElementSchema>
 

@@ -1,15 +1,18 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { z } from 'zod'
 import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { isPidAlive } from './daemon-registry.js'
 
 const DAEMON_LOCK_DIRNAME = 'daemon.lock'
 const DAEMON_LOCK_OWNER_FILENAME = 'owner.json'
 
-interface DaemonLockOwner {
-  pid: number
-  startedAt: string
-}
+const daemonLockOwnerSchema = z.object({
+  pid: z.number(),
+  startedAt: z.string(),
+})
+
+type DaemonLockOwner = z.infer<typeof daemonLockOwnerSchema>
 
 function getDaemonLockPath(dataDir: string): string {
   return join(dataDir, DAEMON_LOCK_DIRNAME)
@@ -17,15 +20,6 @@ function getDaemonLockPath(dataDir: string): string {
 
 function getDaemonLockOwnerPath(dataDir: string): string {
   return join(getDaemonLockPath(dataDir), DAEMON_LOCK_OWNER_FILENAME)
-}
-
-function isValidOwner(value: unknown): value is DaemonLockOwner {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    typeof (value as { pid?: unknown }).pid === 'number' &&
-    typeof (value as { startedAt?: unknown }).startedAt === 'string'
-  )
 }
 
 async function writeOwnerMetadata(dataDir: string): Promise<void> {
@@ -38,8 +32,9 @@ async function writeOwnerMetadata(dataDir: string): Promise<void> {
 
 async function loadOwnerMetadata(dataDir: string): Promise<DaemonLockOwner | null> {
   try {
-    const raw = JSON.parse(await readFile(getDaemonLockOwnerPath(dataDir), 'utf-8')) as unknown
-    return isValidOwner(raw) ? raw : null
+    const raw: unknown = JSON.parse(await readFile(getDaemonLockOwnerPath(dataDir), 'utf-8'))
+    const result = daemonLockOwnerSchema.safeParse(raw)
+    return result.success ? result.data : null
   } catch {
     return null
   }

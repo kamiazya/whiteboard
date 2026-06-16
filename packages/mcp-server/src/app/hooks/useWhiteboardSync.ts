@@ -141,7 +141,7 @@ export function useWhiteboardSync(
     const validated = validateLoroRawElements(chosenRaw, ({ index, error }) => {
       log.warn('dropped corrupt Loro element at index', index, error.issues)
     })
-    const elements = resolveParentedElements(validated) as unknown as ExcalidrawElement[]
+    const elements = resolveParentedElements(validated) as ExcalidrawElement[]
 
     // Collect fileIds that are still missing from the local cache.
     const missingIds = elements
