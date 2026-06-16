@@ -31,7 +31,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
 const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-e2e-'))
 const entryArg = process.argv.find((arg) => arg.startsWith('--entry='))
-const entry = resolve(root, entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts')
+const entry = resolve(
+  root,
+  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts',
+)
 const childArgs = entry.endsWith('.ts') ? ['--import', 'tsx/esm', entry] : [entry]
 
 const child = spawn('node', childArgs, {
@@ -160,6 +163,30 @@ async function main() {
   }
   console.log(`[e2e] annotate → rect`)
 
+  // Exercise annotate_batch with an arrow that uses text as a label alias.
+  // The SDK validates structuredContent against outputSchema at runtime, so
+  // any drift between the Zod schema and the actual payload surfaces here.
+  const batchArrow = await callTool('annotate_batch', {
+    canvasId: created.id,
+    annotations: [
+      {
+        type: 'arrow',
+        target: { x: 0, y: 0 },
+        endTarget: { x: 100, y: 0 },
+        coords: 'absolute',
+        text: 'smoke-label',
+      },
+    ],
+  })
+  if (!batchArrow.annotations?.[0]?.labelId) {
+    throw new Error(
+      `annotate_batch arrow with text alias did not produce labelId: ${JSON.stringify(batchArrow)}`,
+    )
+  }
+  console.log(
+    `[e2e] annotate_batch → arrow with text-as-label alias (labelId=${batchArrow.annotations[0].labelId})`,
+  )
+
   // Exercise create_frame so any drift between its zod outputSchema
   // (assignedMembers etc.) and the runtime payload trips the SDK's structured-
   // content validator at this layer instead of leaking out to MCP clients.
@@ -215,7 +242,8 @@ async function main() {
   console.log('[e2e] align_elements / distribute_elements → OK')
 
   const insBefore = await callTool('canvas_inspect', { canvasId: created.id })
-  if (insBefore.elementCount < 1) throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
+  if (insBefore.elementCount < 1)
+    throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
 
   // version_save labels the current state and returns a versionId. The
   // restore-as-new-canvas flow (formerly the checkpoint pair) is now
@@ -223,7 +251,9 @@ async function main() {
   const saved = await callTool('version_save', { canvasId: created.id, label: 'e2e' })
   if (!saved.versionId) throw new Error('version_save returned no id')
   if (saved.elementCount !== insBefore.elementCount) {
-    throw new Error(`element count mismatch: save=${saved.elementCount} inspect=${insBefore.elementCount}`)
+    throw new Error(
+      `element count mismatch: save=${saved.elementCount} inspect=${insBefore.elementCount}`,
+    )
   }
   console.log(`[e2e] version_save → ${saved.versionId} (${saved.elementCount} elems)`)
 
@@ -247,8 +277,11 @@ async function main() {
     )
   }
   const types = (insAfter.elements ?? []).map((e) => e.type)
-  if (!types.includes('rectangle')) throw new Error(`restored canvas missing rectangle: ${JSON.stringify(insAfter)}`)
-  console.log(`[e2e] canvas_inspect(restored) → ${insAfter.elementCount} elems, types=${types.join(',')}`)
+  if (!types.includes('rectangle'))
+    throw new Error(`restored canvas missing rectangle: ${JSON.stringify(insAfter)}`)
+  console.log(
+    `[e2e] canvas_inspect(restored) → ${insAfter.elementCount} elems, types=${types.join(',')}`,
+  )
 
   // Confirm overwrite behavior when the restore target already exists.
   await expectRejected(
@@ -325,9 +358,7 @@ async function main() {
   // .excalidraw.png file path back instead of a no_client rejection.
   const exportedPng = await callTool('export_png', { canvasId: created.id })
   if (!exportedPng.filePath || !exportedPng.filePath.endsWith('.excalidraw.png')) {
-    throw new Error(
-      `export_png returned unexpected shape: ${JSON.stringify(exportedPng)}`,
-    )
+    throw new Error(`export_png returned unexpected shape: ${JSON.stringify(exportedPng)}`)
   }
   console.log(`[e2e] export_png (headless) → ${exportedPng.filePath}`)
 
@@ -437,14 +468,20 @@ async function main() {
   }
   const body = JSON.parse(await readFile(exported.filePath, 'utf-8'))
   if (body.type !== 'excalidraw' || body.version !== 2) {
-    throw new Error(`exported JSON has wrong wrapper: ${JSON.stringify({ type: body.type, version: body.version })}`)
+    throw new Error(
+      `exported JSON has wrong wrapper: ${JSON.stringify({ type: body.type, version: body.version })}`,
+    )
   }
   if (!Array.isArray(body.elements) || body.elements.length !== exported.elementCount) {
-    throw new Error(`element count mismatch: body.elements=${body.elements?.length} elementCount=${exported.elementCount}`)
+    throw new Error(
+      `element count mismatch: body.elements=${body.elements?.length} elementCount=${exported.elementCount}`,
+    )
   }
   const rectInExport = body.elements.find((el) => el.type === 'rectangle')
   if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
-  console.log(`[e2e] canvas_export_json → ${body.elements.length} elems in standard JSON (type=${body.type}, v${body.version})`)
+  console.log(
+    `[e2e] canvas_export_json → ${body.elements.length} elems in standard JSON (type=${body.type}, v${body.version})`,
+  )
 
   // library_list_items via a local .excalidrawlib file: validates that the
   // schema-based normalizeLibraryPayload accepts a standard v2 payload and that
@@ -468,7 +505,9 @@ async function main() {
   if (libListed.itemCount !== 1 || libListed.items[0]?.name !== 'smoke rect') {
     throw new Error(`library_list_items returned unexpected shape: ${JSON.stringify(libListed)}`)
   }
-  console.log(`[e2e] library_list_items → itemCount=${libListed.itemCount} name=${libListed.items[0].name}`)
+  console.log(
+    `[e2e] library_list_items → itemCount=${libListed.itemCount} name=${libListed.items[0].name}`,
+  )
 
   console.log('\n[e2e] ALL OK')
 }

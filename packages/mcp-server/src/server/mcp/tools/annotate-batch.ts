@@ -193,7 +193,7 @@ export function annotateBatchTool() {
               },
               text: {
                 description:
-                  'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width/cellW.',
+                  'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width/cellW. For arrow type, text is an alias for label (midpoint label text node); label takes precedence when both are supplied.',
                 oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
               },
               title: {

@@ -721,6 +721,73 @@ describe('arrow routing ignores bound text of start/end boxes', () => {
   })
 })
 
+describe('arrow text-as-label alias (single tool)', () => {
+  it('case 342a — arrow + text produces midpoint labelId', async () => {
+    const { appendAnnotationToDoc } = await import('./annotate.js')
+    const doc = new LoroDoc()
+    const result = appendAnnotationToDoc(doc, {
+      type: 'arrow',
+      coords: 'absolute',
+      target: { x: 0, y: 0 },
+      endTarget: { x: 100, y: 0 },
+      text: 'gRPC · p50 2ms',
+    })
+    expect(result.type).toBe('arrow')
+    expect(result.arrowId).toBeDefined()
+    expect(result.labelId).toBeDefined()
+  })
+
+  it('case 342b — arrow + both text and label: label wins', async () => {
+    const { appendAnnotationToDoc } = await import('./annotate.js')
+    const doc = new LoroDoc()
+    const result = appendAnnotationToDoc(doc, {
+      type: 'arrow',
+      coords: 'absolute',
+      target: { x: 0, y: 0 },
+      endTarget: { x: 100, y: 0 },
+      text: 'alias-value',
+      label: 'explicit-value',
+    })
+    expect(result.type).toBe('arrow')
+    expect(result.labelId).toBeDefined()
+    // The label text node should carry 'explicit-value', not 'alias-value'
+    const els = doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+    const labelEl = els.find((e) => e.id === result.labelId)
+    expect((labelEl as { text?: string } | undefined)?.text).toBe('explicit-value')
+  })
+
+  it('case 342c — arrow + text as string[] produces midpoint labelId (joined)', async () => {
+    const { appendAnnotationToDoc } = await import('./annotate.js')
+    const doc = new LoroDoc()
+    const result = appendAnnotationToDoc(doc, {
+      type: 'arrow',
+      coords: 'absolute',
+      target: { x: 0, y: 0 },
+      endTarget: { x: 100, y: 0 },
+      text: ['line1', 'line2'],
+    })
+    expect(result.type).toBe('arrow')
+    expect(result.labelId).toBeDefined()
+    const els = doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+    const labelEl = els.find((e) => e.id === result.labelId)
+    expect((labelEl as { text?: string } | undefined)?.text).toBe('line1\nline2')
+  })
+
+  it('case 342d — arrow with neither text nor label: no labelId (no regression)', async () => {
+    const { appendAnnotationToDoc } = await import('./annotate.js')
+    const doc = new LoroDoc()
+    const result = appendAnnotationToDoc(doc, {
+      type: 'arrow',
+      coords: 'absolute',
+      target: { x: 0, y: 0 },
+      endTarget: { x: 100, y: 0 },
+    })
+    expect(result.type).toBe('arrow')
+    expect(result.arrowId).toBeDefined()
+    expect(result.labelId).toBeUndefined()
+  })
+})
+
 describe('box_with_label — height optional with autoFit', () => {
   it('succeeds without height when autoFit is on (default)', async () => {
     const { appendAnnotationToDoc } = await import('./annotate.js')
