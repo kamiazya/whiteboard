@@ -38,7 +38,7 @@ function normalizeExportElements(
     log.warning({ index, reason: error.issues[0]?.message }, 'dropped corrupt element')
   })
   return stripTemplateInstanceId(
-    resolveParentedElements(validated) as unknown as Array<Record<string, unknown>>,
+    resolveParentedElements(validated) as Array<Record<string, unknown>>,
   )
 }
 
@@ -70,13 +70,8 @@ export async function exportCanvasJsonDoc(args: {
   outputPath?: string
   overwrite?: boolean
 }): Promise<{ filePath: string; elementCount: number }> {
-  const rawElements = args.doc.getMovableList('elements').toJSON() as Array<
-    Record<string, unknown>
-  >
-  const elements = normalizeExportElements(
-    rawElements,
-    args.includeCustomFields === true,
-  )
+  const rawElements = args.doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+  const elements = normalizeExportElements(rawElements, args.includeCustomFields === true)
   const payload = {
     type: 'excalidraw',
     version: 2,
