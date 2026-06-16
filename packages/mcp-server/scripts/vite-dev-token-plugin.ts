@@ -5,8 +5,12 @@ import type { Plugin } from 'vite'
 // Authorization: Bearer <token> on every /api/* request.
 //
 // apply: 'serve' ensures Vite never includes this script in production builds.
-// The default token matches DEV_BEARER_TOKEN in ensure-http-dev-daemon.mjs;
-// set WHITEBOARD_TOKEN in the shell to override both consistently.
+//
+// WHITEBOARD_TOKEN must be set consistently for both this plugin (browser side)
+// and the daemon startup (server side). The mcp:http:dev script accepts
+// --token=<value>; ensure-http-dev-daemon.mjs reads the same env var so that
+// `export WHITEBOARD_TOKEN=<value> && pnpm dev` keeps the two in sync.
+// Without a consistent value the browser sends a token the daemon rejects (401).
 
 export function runtimeConfigDevPlugin(): Plugin {
   return {
@@ -14,7 +18,10 @@ export function runtimeConfigDevPlugin(): Plugin {
     apply: 'serve',
     transformIndexHtml(html: string): string {
       const token = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
-      const config = JSON.stringify({ daemonToken: token })
+      // Escape `<` so a token containing `</script>` cannot break out of the
+      // script tag and inject arbitrary markup. The production server path
+      // applies the same guard before inlining runtime config.
+      const config = JSON.stringify({ daemonToken: token }).replace(/</g, '\\u003c')
       const script = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${config};</script>`
       return html.replace('</head>', `${script}</head>`)
     },

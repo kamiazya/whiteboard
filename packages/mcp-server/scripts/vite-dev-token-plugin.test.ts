@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 
 // Nearest-layer test for the Vite dev-server plugin that injects
 // window.__WHITEBOARD_RUNTIME_CONFIG__ into the HTML served by `pnpm dev`.
@@ -9,6 +9,7 @@ describe('runtimeConfigDevPlugin', () => {
   const origEnv = process.env.WHITEBOARD_TOKEN
 
   afterEach(() => {
+    vi.resetModules()
     if (origEnv === undefined) {
       delete process.env.WHITEBOARD_TOKEN
     } else {
@@ -29,9 +30,14 @@ describe('runtimeConfigDevPlugin', () => {
     expect(result).toContain('<script>')
   })
 
-  it('reads WHITEBOARD_TOKEN env var when set', async () => {
+  it('reads WHITEBOARD_TOKEN env var when set (env is read inside transformIndexHtml at call time)', async () => {
+    // vi.resetModules() in afterEach ensures this import loads a fresh module
+    // execution, not a cached copy from the previous test. The env override
+    // is also read inside transformIndexHtml at invocation time (not at module
+    // load time), so the test would pass even without module reset — but the
+    // reset makes that guarantee explicit and future-proof against a refactor
+    // that moves the env read to module scope.
     process.env.WHITEBOARD_TOKEN = 'custom-token-xyz'
-    // Re-import to pick up env at call time (the function reads process.env at call time)
     const { runtimeConfigDevPlugin } = await import('./vite-dev-token-plugin.js')
     const plugin = runtimeConfigDevPlugin()
     const result = (plugin as { transformIndexHtml: (html: string) => string }).transformIndexHtml(
@@ -39,6 +45,20 @@ describe('runtimeConfigDevPlugin', () => {
     )
     expect(result).toContain('"custom-token-xyz"')
     expect(result).not.toContain('"whiteboard-dev"')
+  })
+
+  it('escapes `<` in the token so a </script>-containing value cannot break out of the script tag', async () => {
+    // A token value of `x</script><script>alert(1)` would terminate the
+    // injected script element prematurely without this guard. The production
+    // server path applies the same escape before inlining runtime config.
+    process.env.WHITEBOARD_TOKEN = 'x</script><script>alert(1)'
+    const { runtimeConfigDevPlugin } = await import('./vite-dev-token-plugin.js')
+    const plugin = runtimeConfigDevPlugin()
+    const result = (plugin as { transformIndexHtml: (html: string) => string }).transformIndexHtml(
+      '<html><head></head><body></body></html>',
+    )
+    expect(result).not.toContain('</script><script>')
+    expect(result).toContain('\\u003c/script>')
   })
 
   it('plugin has apply: "serve" so it does not run during production builds', async () => {

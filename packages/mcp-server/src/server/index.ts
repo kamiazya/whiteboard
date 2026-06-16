@@ -23,8 +23,14 @@ export { startHttpServer } from './http-server.js'
 async function main() {
   const port = parseInt(readArg('port', '3099') ?? '3099', 10)
   const host = readArg('host', '127.0.0.1') ?? '127.0.0.1'
-  const token = readArg('token')
-  const idleTimeoutMs = parseInt(readArg('idle-timeout-ms', `${15 * 60_000}`) ?? `${15 * 60_000}`, 10)
+  // --token=<value> takes precedence; fall back to WHITEBOARD_TOKEN so that
+  // `export WHITEBOARD_TOKEN=<value> && pnpm dev` syncs the daemon, the Vite
+  // plugin (browser), and the ensure-daemon probe without repeating the value.
+  const token = readArg('token') ?? process.env.WHITEBOARD_TOKEN
+  const idleTimeoutMs = parseInt(
+    readArg('idle-timeout-ms', `${15 * 60_000}`) ?? `${15 * 60_000}`,
+    10,
+  )
   const daemonMode = hasFlag('daemon')
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
   const mcpAuth = createLocalTokenMcpHttpAuthStrategy({

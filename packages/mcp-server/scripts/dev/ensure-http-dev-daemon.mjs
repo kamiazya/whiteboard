@@ -25,7 +25,11 @@ const READY_POLL_INTERVAL_MS = 200
 // (.claude/settings.json, .codex/config.toml) send. If a different daemon
 // (or a non-whiteboard service) is on the port we'll see 401 / 4xx and
 // refuse to claim success.
-const DEV_BEARER_TOKEN = 'whiteboard-dev'
+// Set WHITEBOARD_TOKEN in the shell to use a custom token consistently across
+// the browser (vite-dev-token-plugin.ts) and this probe. The daemon inherits
+// the same env var via `spawn(..., { env: process.env })`, so a single export
+// keeps all three in sync.
+const DEV_BEARER_TOKEN = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..', '..')
 const LOG_DIR = join(REPO_ROOT, 'tmp', 'logs')
