@@ -25,9 +25,7 @@ function runSecretlint(
   binPath = SECRETLINT_BIN,
 ): { exitCode: number; output: string } {
   if (!existsSync(binPath)) {
-    throw new Error(
-      'secretlint binary not found at node_modules/.bin/secretlint — run pnpm install',
-    )
+    throw new Error(`secretlint binary not found at ${binPath} — run pnpm install`)
   }
   const dir = mkdtempSync(join(tmpdir(), 'secretlint-test-'))
   const filePath = join(dir, filename)
@@ -60,7 +58,9 @@ describe('runSecretlint preflight guard', () => {
     // raw ENOENT from execFileSync).
     expect(() =>
       runSecretlint('hello world', 'test.md', '/nonexistent/__secretlint_sentinel__'),
-    ).toThrow('secretlint binary not found at node_modules/.bin/secretlint — run pnpm install')
+    ).toThrow(
+      'secretlint binary not found at /nonexistent/__secretlint_sentinel__ — run pnpm install',
+    )
   })
 })
 

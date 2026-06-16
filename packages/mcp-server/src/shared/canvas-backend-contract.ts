@@ -78,6 +78,12 @@ export interface CanvasBackendHandlers {
    */
   onConnected: () => void
   /**
+   * Optional: called when the server closes the WebSocket with code 1008
+   * (Policy Violation / auth failure). The backend will NOT retry — the caller
+   * should surface an error state so the user can re-authenticate.
+   */
+  onAuthError?: () => void
+  /**
    * Optional error callback for backend-level failures. Defaults to a no-op
    * so existing implementors (e.g. DaemonBackend) are source-compatible.
    * 'corrupt-snapshot': the persisted snapshot bytes are not valid Loro bytes.
@@ -86,7 +92,9 @@ export interface CanvasBackendHandlers {
    * 'storage-failure': IDB open, transaction, or write failed; or corrupt record
    *   detected during a pushLocalUpdate (delta would be lost).
    */
-  onError?: (reason: 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version' | 'storage-failure') => void
+  onError?: (
+    reason: 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version' | 'storage-failure',
+  ) => void
 }
 
 // ── CanvasBackend interface ───────────────────────────────────────────────────
