@@ -130,8 +130,15 @@ export class DaemonBackend implements CanvasBackend {
       handlers.onConnected()
     }
 
-    ws.onclose = () => {
+    ws.onclose = (event: CloseEvent) => {
       if (this.cancelled) return
+      // 1008 = Policy Violation: server rejected the connection due to auth failure.
+      // Stop the retry loop and surface the error; retrying with the same token
+      // would just produce another 1008 indefinitely.
+      if (event.code === 1008) {
+        handlers.onAuthError?.()
+        return
+      }
       // 500ms, 1s, 2s, 4s, 8s, 8s, … capped at 8s.
       const delay = Math.min(8000, 500 * 2 ** this.attempt)
       this.attempt += 1
