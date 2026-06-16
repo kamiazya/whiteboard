@@ -13,17 +13,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  check:
     runs-on: ubuntu-latest
-    # Run inside the official Playwright image so Chromium is prebaked at
-    # /ms-playwright — no download or extraction step needed. The image version
-    # must be kept in sync with the `playwright` version in pnpm-lock.yaml.
-    container:
-      image: mcr.microsoft.com/playwright:v1.59.1-noble
-    timeout-minutes: 60
-    env:
-      # Prevent postinstall from trying to fetch a browser; the image has it.
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -36,7 +28,9 @@ jobs:
 
       - name: Validate PR title
         if: ${{ github.event_name == 'pull_request' }}
-        run: pnpm check:pr-title -- "${{ github.event.pull_request.title }}"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: pnpm check:pr-title -- "$PR_TITLE"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -61,8 +55,127 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
+  test-unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Shard mcp-node (largest suite) across 2 parallel runners.
+      # --shard splits the collected spec list so each runner handles a disjoint half.
+      - name: Test mcp-node (shard ${{ matrix.shard }}/2)
+        run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
+
+  test-jsdom:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test mcp-jsdom
+        run: pnpm exec vitest run --project=mcp-jsdom
+
+      - name: Test web (jsdom)
+        run: pnpm --filter @kamiazya/whiteboard-web exec vitest run
+
+  test-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # mcp-smoke has maxWorkers:1 and 60 s timeouts; runs separately so it
+      # does not block the faster unit and jsdom shards.
+      - name: Test mcp-smoke
+        run: pnpm exec vitest run --project=mcp-smoke
+
+  test-browser:
+    runs-on: ubuntu-latest
+    # Run inside the official Playwright image so Chromium is prebaked at
+    # /ms-playwright — no download or extraction step needed. The image version
+    # must be kept in sync with the `playwright` version in pnpm-lock.yaml.
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-noble
+    timeout-minutes: 20
+    env:
+      # Prevent postinstall from trying to fetch a browser; the image has it.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Test mcp-browser
+        run: pnpm exec vitest run --project=mcp-browser
+
+      - name: Test web-browser
+        run: pnpm --filter @kamiazya/whiteboard-web exec vitest run --config vitest.browser.config.ts
+
+  verify:
+    needs: [check, test-unit, test-jsdom, test-smoke, test-browser]
+    runs-on: ubuntu-latest
+    # Run inside the official Playwright image so Chromium is prebaked at
+    # /ms-playwright — no download or extraction step needed. The image version
+    # must be kept in sync with the `playwright` version in pnpm-lock.yaml.
+    container:
+      image: mcr.microsoft.com/playwright:v1.59.1-noble
+    timeout-minutes: 30
+    env:
+      # Prevent postinstall from trying to fetch a browser; the image has it.
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Stdio E2E smoke
         env:
