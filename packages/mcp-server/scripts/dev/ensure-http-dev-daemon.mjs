@@ -11,7 +11,11 @@ import { createServer } from 'node:net'
 import { mkdir, open } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { waitForAuthenticatedMcp } from './ensure-http-dev-daemon-lib.mjs'
+import {
+  waitForAuthenticatedMcp,
+  resolveDevBearerToken,
+  buildMcpHttpDevSpawnArgs,
+} from './ensure-http-dev-daemon-lib.mjs'
 
 const PORT = 3099
 const HOST = '127.0.0.1'
@@ -25,7 +29,11 @@ const READY_POLL_INTERVAL_MS = 200
 // (.claude/settings.json, .codex/config.toml) send. If a different daemon
 // (or a non-whiteboard service) is on the port we'll see 401 / 4xx and
 // refuse to claim success.
-const DEV_BEARER_TOKEN = 'whiteboard-dev'
+// Set WHITEBOARD_TOKEN in the shell to use a custom token consistently across
+// the browser (vite-dev-token-plugin.ts) and this probe. When a custom value
+// is set the spawned daemon receives an explicit --token flag that overrides
+// the default baked into the pnpm script, keeping all three in sync.
+const DEV_BEARER_TOKEN = resolveDevBearerToken(process.env)
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..', '..')
 const LOG_DIR = join(REPO_ROOT, 'tmp', 'logs')
@@ -124,7 +132,7 @@ await mkdir(LOG_DIR, { recursive: true })
 const logFile = await open(LOG_PATH, 'a')
 const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
-const child = spawn(pnpmCmd, ['mcp:http:dev'], {
+const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN), {
   cwd: REPO_ROOT,
   detached: true,
   stdio: ['ignore', logFile.fd, logFile.fd],

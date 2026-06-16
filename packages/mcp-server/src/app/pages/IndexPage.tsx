@@ -28,6 +28,7 @@ import { formatBytes } from '../lib/format-bytes.js'
 import {
   listCanvasesResponseSchema,
   listWorkspacesResponseSchema,
+  problemDetailsErrorSchema,
 } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 
@@ -106,8 +107,7 @@ function filterCanvases(canvases: FlatCanvas[], search: string): FlatCanvas[] {
   const needle = search.trim().toLowerCase()
   if (!needle) return canvases
   return canvases.filter(
-    (c) =>
-      c.displayName.toLowerCase().includes(needle) || c.slug.toLowerCase().includes(needle),
+    (c) => c.displayName.toLowerCase().includes(needle) || c.slug.toLowerCase().includes(needle),
   )
 }
 
@@ -613,11 +613,19 @@ function NewCanvasDialog({
           body: JSON.stringify({ slug: value }),
         })
         if (!res.ok) {
-          // Surface the server's reason verbatim — the route already
-          // distinguishes invalid_slug vs. conflict, and reframing it here
-          // would just lose information.
-          const body = (await res.json().catch(() => null)) as { message?: string } | null
-          setErrorMsg(body?.message ?? `Create failed (${res.status}).`)
+          if (res.status === 401) {
+            // Authentication failure — the daemon requires a bearer token.
+            // Do not leak token values or internal ports; give actionable guidance.
+            setErrorMsg(
+              'Canvas creation failed — authentication required. Ensure the daemon is running and your session token is valid.',
+            )
+            return
+          }
+          // For all other errors, use the RFC 9457 Problem Details title when
+          // present; otherwise show a safe generic message (P-HTTP-005).
+          const parsed = problemDetailsErrorSchema.safeParse(await res.json().catch(() => ({})))
+          const title = parsed.success ? parsed.data.title : undefined
+          setErrorMsg(title ?? `Create failed (${res.status}).`)
           return
         }
         onOpenChange(false)
@@ -647,9 +655,8 @@ function NewCanvasDialog({
         <DialogHeader>
           <DialogTitle>New canvas</DialogTitle>
           <DialogDescription>
-            Slug becomes the canvas's URL identifier. Lowercase letters,
-            digits, and hyphens; <code>/</code> is allowed for grouping
-            (e.g. <code>design/login</code>).
+            Slug becomes the canvas's URL identifier. Lowercase letters, digits, and hyphens;{' '}
+            <code>/</code> is allowed for grouping (e.g. <code>design/login</code>).
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={submit} className="space-y-3">
@@ -665,9 +672,7 @@ function NewCanvasDialog({
               placeholder="design/login"
               disabled={submitting}
             />
-            {errorMsg && (
-              <p className="text-xs text-destructive">{errorMsg}</p>
-            )}
+            {errorMsg && <p className="text-xs text-destructive">{errorMsg}</p>}
           </div>
           <DialogFooter className="gap-2">
             <Button
