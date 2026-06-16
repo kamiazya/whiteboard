@@ -188,7 +188,12 @@ describe('annotate_batch', () => {
         {
           canvasId: 'sid/slug',
           annotations: [
-            { type: 'text', target: { x: 0, y: 0 }, text: 'very long text in a text element', coords: 'absolute' },
+            {
+              type: 'text',
+              target: { x: 0, y: 0 },
+              text: 'very long text in a text element',
+              coords: 'absolute',
+            },
             { type: 'rectangle', target: { x: 600, y: 600 }, coords: 'absolute' },
           ],
         },
@@ -341,9 +346,7 @@ describe('annotate_batch', () => {
       const res = await tool.execute(
         {
           canvasId: 'sid/slug',
-          annotations: [
-            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute' },
-          ],
+          annotations: [{ type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute' }],
         },
         client,
       )
@@ -601,7 +604,9 @@ describe('annotate_batch', () => {
       )
       const updateDoc = new LoroDoc()
       updateDoc.import(postedUpdate!)
-      const elements = updateDoc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+      const elements = updateDoc.getMovableList('elements').toJSON() as Array<
+        Record<string, unknown>
+      >
       const rect = elements.find((el) => el.type === 'rectangle')
       expect(rect).toMatchObject({
         x: 680,
@@ -641,7 +646,9 @@ describe('annotate_batch', () => {
       )
       const updateDoc = new LoroDoc()
       updateDoc.import(postedUpdate!)
-      const elements = updateDoc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+      const elements = updateDoc.getMovableList('elements').toJSON() as Array<
+        Record<string, unknown>
+      >
       const rect = elements.find((el) => el.type === 'rectangle')
       expect(rect).toMatchObject({
         x: 110,
@@ -664,17 +671,27 @@ describe('annotate_batch', () => {
           canvasId: 'sid/slug',
           dryRun: true,
           annotations: [
-            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', width: 120, height: 80 },
-            { type: 'rectangle', target: { x: 60, y: 20 }, coords: 'absolute', width: 120, height: 80 },
+            {
+              type: 'rectangle',
+              target: { x: 0, y: 0 },
+              coords: 'absolute',
+              width: 120,
+              height: 80,
+            },
+            {
+              type: 'rectangle',
+              target: { x: 60, y: 20 },
+              coords: 'absolute',
+              width: 120,
+              height: 80,
+            },
           ],
         } as never,
         client,
       )
       expect(postedUpdate).toBeNull()
       expect(res.placements).toHaveLength(2)
-      expect(res.overlaps).toEqual([
-        expect.objectContaining({ a: 0, b: 1 }),
-      ])
+      expect(res.overlaps).toEqual([expect.objectContaining({ a: 0, b: 1 })])
     })
   })
 
@@ -687,7 +704,12 @@ describe('annotate_batch', () => {
           canvasId: 'sid/slug',
           annotations: [
             { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
-            { type: 'rectangle', target: { x: 100, y: 0 }, coords: 'absolute', backgroundColor: 'role.server' },
+            {
+              type: 'rectangle',
+              target: { x: 100, y: 0 },
+              coords: 'absolute',
+              backgroundColor: 'role.server',
+            },
           ],
         },
         client,
@@ -704,7 +726,12 @@ describe('annotate_batch', () => {
           canvasId: 'sid/slug',
           annotations: [
             { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
-            { type: 'rectangle', target: { x: 100, y: 0 }, coords: 'absolute', color: 'role.client' },
+            {
+              type: 'rectangle',
+              target: { x: 100, y: 0 },
+              coords: 'absolute',
+              color: 'role.client',
+            },
           ],
         },
         client,
@@ -716,7 +743,9 @@ describe('annotate_batch', () => {
       fetchMock.mockImplementation(async (url: string | URL, init?: { body?: unknown }) => {
         const u = url.toString()
         if (u.endsWith('/palette')) {
-          return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), { status: 200 })
+          return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), {
+            status: 200,
+          })
         }
         if (u.endsWith('/snapshot')) {
           const emptyDoc = new LoroDoc()
@@ -740,6 +769,78 @@ describe('annotate_batch', () => {
         client,
       )
       expect(res.unknownPaletteKeys).toBeUndefined()
+    })
+  })
+
+  describe('arrow text as label alias', () => {
+    it('case 341 — text field on arrow is treated as label (creates midpoint labelId)', async () => {
+      const { annotateBatchTool } = await import('./annotate-batch.js')
+      const tool = annotateBatchTool()
+      const res = await tool.execute(
+        {
+          canvasId: 'sid/slug',
+          annotations: [
+            {
+              type: 'arrow',
+              target: { x: 0, y: 0 },
+              endTarget: { x: 100, y: 0 },
+              coords: 'absolute',
+              text: 'gRPC · p50 2ms',
+            },
+          ],
+        },
+        client,
+      )
+      expect(res.annotations).toHaveLength(1)
+      expect(res.annotations![0].type).toBe('arrow')
+      expect(res.annotations![0].arrowId).toBeDefined()
+      // text on arrow should produce a midpoint label element
+      expect(res.annotations![0].labelId).toBeDefined()
+      expect(res.elementIds).toHaveLength(2)
+    })
+
+    it('case 341b — arrow + both text and label: label wins over text alias', async () => {
+      const { annotateBatchTool } = await import('./annotate-batch.js')
+      const tool = annotateBatchTool()
+      const res = await tool.execute(
+        {
+          canvasId: 'sid/slug',
+          annotations: [
+            {
+              type: 'arrow',
+              target: { x: 0, y: 0 },
+              endTarget: { x: 100, y: 0 },
+              coords: 'absolute',
+              text: 'alias-value',
+              label: 'explicit-value',
+            },
+          ],
+        },
+        client,
+      )
+      expect(res.annotations![0].labelId).toBeDefined()
+    })
+
+    it('case 341c — arrow + text as string[] produces midpoint labelId', async () => {
+      const { annotateBatchTool } = await import('./annotate-batch.js')
+      const tool = annotateBatchTool()
+      const res = await tool.execute(
+        {
+          canvasId: 'sid/slug',
+          annotations: [
+            {
+              type: 'arrow',
+              target: { x: 0, y: 0 },
+              endTarget: { x: 100, y: 0 },
+              coords: 'absolute',
+              text: ['line1', 'line2'],
+            },
+          ],
+        },
+        client,
+      )
+      expect(res.annotations![0].labelId).toBeDefined()
+      expect(res.elementIds).toHaveLength(2)
     })
   })
 
