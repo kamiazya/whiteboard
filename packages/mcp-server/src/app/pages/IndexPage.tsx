@@ -29,8 +29,6 @@ import {
   listCanvasesResponseSchema,
   listWorkspacesResponseSchema,
   problemDetailsErrorSchema,
-  workspaceNamesSchema,
-  type WorkspaceNames,
 } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 
@@ -50,6 +48,14 @@ interface RawWorkspace {
 interface RawCanvas {
   slug: string
   updatedAt: string
+}
+
+interface WorkspaceNames {
+  workspace?: string
+  canvases: Record<string, string>
+  // Pinned slugs in user-defined order (per workspace). The same `pinned`
+  // array is what the canvas switcher in WorkspaceTopBar reads.
+  pinned?: string[]
 }
 
 interface FlatCanvas {
@@ -198,8 +204,8 @@ export default function IndexPage() {
               await canvasesRes.json(),
             )
             const names: WorkspaceNames = namesRes.ok
-              ? workspaceNamesSchema.parse(await namesRes.json())
-              : { canvases: {}, pinned: [] }
+              ? ((await namesRes.json()) as WorkspaceNames)
+              : { canvases: {} }
             const pinIndex = new Map<string, number>()
             ;(names.pinned ?? []).forEach((slug, i) => pinIndex.set(slug, i))
             return rawCanvases.map((c: RawCanvas) => {
@@ -243,7 +249,7 @@ export default function IndexPage() {
           },
         )
         if (!res.ok) return
-        const next = workspaceNamesSchema.parse(await res.json())
+        const next = (await res.json()) as WorkspaceNames
         const pinIndex = new Map<string, number>()
         ;(next.pinned ?? []).forEach((s, i) => pinIndex.set(s, i))
         setCanvases((prev) =>

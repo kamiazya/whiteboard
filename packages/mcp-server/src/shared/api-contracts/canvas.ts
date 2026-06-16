@@ -1,15 +1,10 @@
 import { z } from 'zod'
 
-// Request/response schemas for the canvas / workspace mutation endpoints.
-// Imported by routes/canvas.ts (validates incoming bodies) and by any client
-// that wants to construct request bodies or parse responses with type help.
-
-// GET /api/workspaces/:workspaceId/names — response body.
-export const workspaceNamesSchema = z.object({
-  workspace: z.string().optional(),
-  canvases: z.record(z.string(), z.string()),
-  pinned: z.array(z.string()),
-})
+// Request body schemas for the canvas / workspace mutation endpoints. Imported
+// by routes/canvas.ts (validates incoming bodies) and by any client that wants
+// to construct the request bodies with type help. Response shapes mostly come
+// from server stores (WorkspaceNames etc.) and are not redefined here to keep
+// the schema thin; only the wire-only request shapes belong here.
 
 export const createCanvasRequestSchema = z.object({
   slug: z.string().trim().min(1),
@@ -126,4 +121,3 @@ export type CanvasSummary = z.infer<typeof canvasSummarySchema>
 export type ListCanvasesResponse = z.infer<typeof listCanvasesResponseSchema>
 export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>
 export type CreateCanvasResponse = z.infer<typeof createCanvasResponseSchema>
-export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>

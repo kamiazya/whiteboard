@@ -36,8 +36,6 @@ import { cn } from '@/lib/utils'
 import {
   saveVersionResponseSchema,
   problemDetailsErrorSchema,
-  workspaceNamesSchema,
-  type WorkspaceNames,
 } from '../../shared/api-contracts/canvas.js'
 import { apiFetch } from '../lib/api-client.js'
 import VersionTimeline from './VersionTimeline.js'
@@ -53,6 +51,13 @@ interface CanvasInfo {
 }
 
 // CanvasThumb is shared with IndexPage; see ./CanvasThumb.tsx.
+
+interface WorkspaceNames {
+  workspace?: string
+  canvases: Record<string, string>
+  // Slugs pinned to the top of the canvas switcher. Array order is display order.
+  pinned: string[]
+}
 
 // Dropdown item with thumbnail, name, optional slug subtitle, and a pin toggle.
 // Keep the pin control on the right edge. Show it constantly when pinned, otherwise reveal it on hover.
@@ -248,7 +253,7 @@ export default function WorkspaceTopBar({
   const fetchNames = useCallback(async () => {
     try {
       const res = await apiFetch(`/api/workspaces/${workspaceId}/names`)
-      if (res.ok) setNames(workspaceNamesSchema.parse(await res.json()))
+      if (res.ok) setNames((await res.json()) as WorkspaceNames)
     } catch {
       /* best-effort */
     }
@@ -269,7 +274,7 @@ export default function WorkspaceTopBar({
           body: JSON.stringify({ name }),
         },
       )
-      if (res.ok) setNames(workspaceNamesSchema.parse(await res.json()))
+      if (res.ok) setNames((await res.json()) as WorkspaceNames)
     } catch {
       /* ignore */
     } finally {
@@ -296,7 +301,7 @@ export default function WorkspaceTopBar({
             body: JSON.stringify({ pinned }),
           },
         )
-        if (res.ok) setNames(workspaceNamesSchema.parse(await res.json()))
+        if (res.ok) setNames((await res.json()) as WorkspaceNames)
       } catch {
         /* Pin failures stay silent; the UX does not need explicit retry handling here. */
       }
