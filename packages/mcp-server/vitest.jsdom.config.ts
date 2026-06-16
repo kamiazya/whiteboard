@@ -15,6 +15,7 @@ export default mergeConfig(
         'src/app/**/*.docs-snapshot.test.tsx',
       ],
       environment: 'jsdom',
+      setupFiles: ['./src/app/test-jsdom-setup.ts'],
     },
   }),
 )
