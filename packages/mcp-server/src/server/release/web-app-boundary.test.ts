@@ -564,13 +564,13 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
 })
 
 // ── Cloudflare deploy secrets drift guard ─────────────────────────────────────
-// Production Cloudflare Pages deploy secrets are allowed only in release.yml
-// (the deploy-web job). All other workflow files and apps/web config files must
-// not embed these secrets — add to the allowlist below if a second deploy path
-// is introduced intentionally.
+// apps/web is deployed via Cloudflare Pages Git integration (not wrangler-action),
+// so Cloudflare production secrets must NOT appear in any workflow file or
+// apps/web config. If a second CI-driven deploy path is introduced intentionally,
+// add it to CF_SECRET_WORKFLOW_ALLOWLIST and add a positive assertion below.
 
 const CF_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] as const
-const CF_SECRET_WORKFLOW_ALLOWLIST = new Set(['release.yml'])
+const CF_SECRET_WORKFLOW_ALLOWLIST = new Set<string>()
 
 describe('apps/web Cloudflare deploy secrets guard', () => {
   const configFiles = [
@@ -597,7 +597,7 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     )
   })
 
-  it('only allowlisted workflow files deploy apps/web using Cloudflare production secrets', () => {
+  it('no workflow file deploys apps/web using Cloudflare production secrets', () => {
     const workflowsDir = resolve(REPO_ROOT, '.github/workflows')
     if (!existsSync(workflowsDir)) return
     const violations: string[] = []
@@ -613,20 +613,7 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     }
     expect(
       violations,
-      'Cloudflare production secrets found in a non-allowlisted workflow — add to CF_SECRET_WORKFLOW_ALLOWLIST if intentional',
+      'Cloudflare production secrets found in a workflow — deployment should use Cloudflare Pages Git integration instead',
     ).toEqual([])
-  })
-
-  it('release.yml deploy-web job uses Cloudflare secrets for apps/web deploy', () => {
-    const releaseYml = resolve(REPO_ROOT, '.github/workflows/release.yml')
-    if (!existsSync(releaseYml)) return
-    const content = readFileSync(releaseYml, 'utf-8')
-    expect(content, 'release.yml must contain deploy-web job').toContain('deploy-web:')
-    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_API_TOKEN').toContain(
-      'CLOUDFLARE_API_TOKEN',
-    )
-    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_ACCOUNT_ID').toContain(
-      'CLOUDFLARE_ACCOUNT_ID',
-    )
   })
 })
