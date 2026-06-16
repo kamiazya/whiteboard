@@ -1,11 +1,14 @@
 import { defineProject, mergeConfig } from 'vitest/config'
 import { playwright } from '@vitest/browser-playwright'
+import wasm from 'vite-plugin-wasm'
+import topLevelAwait from 'vite-plugin-top-level-await'
 import sharedConfig from './vitest.shared.js'
 import { resolveBrowserLaunchOptions } from './src/server/browser-test-config.js'
 
 export default mergeConfig(
   sharedConfig,
   defineProject({
+    plugins: [wasm(), topLevelAwait()],
     test: {
       name: 'mcp-browser',
       include: ['src/app/**/*.browser.test.tsx'],
