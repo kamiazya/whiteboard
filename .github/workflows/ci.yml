@@ -101,27 +101,6 @@ jobs:
       - name: Test web (jsdom)
         run: pnpm --filter @kamiazya/whiteboard-web exec vitest run
 
-  test-smoke:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
-
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version-file: .node-version
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # mcp-smoke has maxWorkers:1 and 60 s timeouts; runs separately so it
-      # does not block the faster unit and jsdom shards.
-      - name: Test mcp-smoke
-        run: pnpm exec vitest run --project=mcp-smoke
-
   test-browser:
     runs-on: ubuntu-latest
     # Run inside the official Playwright image so Chromium is prebaked at
@@ -153,7 +132,7 @@ jobs:
         run: pnpm --filter @kamiazya/whiteboard-web exec vitest run --config vitest.browser.config.ts
 
   verify:
-    needs: [check, test-unit, test-jsdom, test-smoke, test-browser]
+    needs: [check, test-unit, test-jsdom, test-browser]
     runs-on: ubuntu-latest
     # Run inside the official Playwright image so Chromium is prebaked at
     # /ms-playwright — no download or extraction step needed. The image version
@@ -176,6 +155,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # mcp-smoke starts the daemon as a child process; it needs the same
+      # container environment as the other E2E checks so daemon startup succeeds.
+      - name: Test mcp-smoke
+        run: pnpm exec vitest run --project=mcp-smoke
 
       - name: Stdio E2E smoke
         env:
