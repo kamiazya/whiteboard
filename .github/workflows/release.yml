@@ -40,6 +40,7 @@ jobs:
       mcp_tag_name: ${{ steps.release.outputs['packages/mcp-server--tag_name'] }}
       root_release_created: ${{ steps.release.outputs['--release_created'] }}
       root_tag_name: ${{ steps.release.outputs['--tag_name'] }}
+      releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
@@ -247,11 +248,13 @@ jobs:
         run: cosign sign --yes $IMAGE_REPO@$DIGEST
 
   deploy-web:
+    needs: release-please
     runs-on: ubuntu-latest
-    # Deploy apps/web to Cloudflare Pages on every merge to main.
-    # Skipped on workflow_dispatch (which is reserved for npm re-publish only).
+    # Deploy apps/web to Cloudflare Pages when a project release is created.
+    # Skipped when no release happened (e.g. mid-cycle pushes) or when
+    # Cloudflare secrets are not yet configured.
     # Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets.
-    if: github.event_name == 'push' && secrets.CLOUDFLARE_API_TOKEN != ''
+    if: needs.release-please.outputs.releases_created == 'true' && secrets.CLOUDFLARE_API_TOKEN != ''
     permissions:
       contents: read
     steps:
