@@ -201,7 +201,7 @@ export default function IndexPage() {
               ? workspaceNamesSchema.parse(await namesRes.json())
               : { canvases: {}, pinned: [] }
             const pinIndex = new Map<string, number>()
-            ;(names.pinned ?? []).forEach((slug, i) => pinIndex.set(slug, i))
+            names.pinned.forEach((slug, i) => pinIndex.set(slug, i))
             return rawCanvases.map((c: RawCanvas) => {
               const customName = names.canvases[c.slug]
               const pinOrder = pinIndex.get(c.slug)
@@ -245,7 +245,7 @@ export default function IndexPage() {
         if (!res.ok) return
         const next = workspaceNamesSchema.parse(await res.json())
         const pinIndex = new Map<string, number>()
-        ;(next.pinned ?? []).forEach((s, i) => pinIndex.set(s, i))
+        next.pinned.forEach((s, i) => pinIndex.set(s, i))
         setCanvases((prev) =>
           sortCanvases(
             prev.map((c) => {
