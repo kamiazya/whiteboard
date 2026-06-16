@@ -99,7 +99,7 @@ const ALLOWED_SHARED_EXACT = new Set([
 // test-utils/* is intentionally excluded here — it is handled separately below
 // and only allowed when fromFile is a test file.
 const ALLOWED_SHARED_DIR_PREFIXES = [
-  'api-contracts/',  // Zod schemas and DTO types — browser-safe by design
+  'api-contracts/', // Zod schemas and DTO types — browser-safe by design
 ]
 
 function isTestFile(filePath: string): boolean {
@@ -204,9 +204,7 @@ describe('src/shared allowlist', () => {
 
   it('api-contracts/* imports are allowed', () => {
     expect(forbiddenResolvedPath(fakeAppFile, '../../shared/api-contracts/canvas.js')).toBeNull()
-    expect(
-      forbiddenResolvedPath(fakeAppFile, '../../shared/api-contracts/branches.js'),
-    ).toBeNull()
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/api-contracts/branches.js')).toBeNull()
   })
 
   it('explicitly listed browser-safe helpers are allowed', () => {
@@ -221,9 +219,7 @@ describe('src/shared allowlist', () => {
 
   it('test-utils/* imports are allowed from test files', () => {
     const fakeTestFile = resolve(APP_SRC_DIR, 'lib/dummy.test.ts')
-    expect(
-      forbiddenResolvedPath(fakeTestFile, '../../shared/test-utils/fast-check.js'),
-    ).toBeNull()
+    expect(forbiddenResolvedPath(fakeTestFile, '../../shared/test-utils/fast-check.js')).toBeNull()
   })
 
   it('test-utils/* imports are denied from production source files', () => {
@@ -233,9 +229,7 @@ describe('src/shared allowlist', () => {
   })
 
   it('diagnostics/* imports are denied (Node-backed writers not browser-safe)', () => {
-    expect(
-      forbiddenResolvedPath(fakeAppFile, '../../shared/diagnostics/logger.js'),
-    ).not.toBeNull()
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/diagnostics/logger.js')).not.toBeNull()
   })
 
   it('arbitrary unlisted shared helpers are denied', () => {
@@ -252,7 +246,9 @@ describe('browser app import boundary: Node-only builtins', () => {
   const browserAppFiles = collectBrowserAppFiles()
 
   it('src/app contains TypeScript source files to scan', () => {
-    const appCount = browserAppFiles.filter(({ browserAppDir }) => browserAppDir === APP_SRC_DIR).length
+    const appCount = browserAppFiles.filter(
+      ({ browserAppDir }) => browserAppDir === APP_SRC_DIR,
+    ).length
     expect(appCount, 'src/app must contain TypeScript files').toBeGreaterThan(0)
   })
 
@@ -298,9 +294,11 @@ describe('browser app import boundary: server / cli / daemon / unallowed shared'
 
 describe('apps/web/src scan coverage', () => {
   it('apps/web/src is included in browser boundary scan when it exists', () => {
-    if (!existsSync(APPS_WEB_SRC_DIR)) return  // skeleton only — nothing to scan yet
+    if (!existsSync(APPS_WEB_SRC_DIR)) return // skeleton only — nothing to scan yet
     const webFiles = collectTsFiles(APPS_WEB_SRC_DIR)
-    const scanned = collectBrowserAppFiles().filter(({ browserAppDir }) => browserAppDir === APPS_WEB_SRC_DIR)
+    const scanned = collectBrowserAppFiles().filter(
+      ({ browserAppDir }) => browserAppDir === APPS_WEB_SRC_DIR,
+    )
     expect(scanned.length, 'all apps/web/src TypeScript files must be in the boundary scan').toBe(
       webFiles.length,
     )
@@ -325,7 +323,10 @@ describe('apps/web/src scan coverage', () => {
     // vite-env.d.ts is a hand-written Vite client type reference, not a tsc emit.
     const HAND_WRITTEN_DTS = new Set(['vite-env.d.ts'])
     const emitted: string[] = []
-    for (const entry of readdirSync(APPS_WEB_SRC_DIR, { withFileTypes: true, recursive: true } as Parameters<typeof readdirSync>[1])) {
+    for (const entry of readdirSync(APPS_WEB_SRC_DIR, {
+      withFileTypes: true,
+      recursive: true,
+    } as Parameters<typeof readdirSync>[1])) {
       if (typeof entry === 'object' && 'name' in entry) {
         const name = (entry as { name: string }).name
         if (/\.(js|d\.ts)$/.test(name) && !HAND_WRITTEN_DTS.has(name)) {
@@ -363,7 +364,10 @@ describe('allowed shared modules browser-safety', () => {
   }
 
   it('allowlisted shared modules exist on disk', () => {
-    expect(allowedSharedFiles().length, 'at least one allowed shared module must exist').toBeGreaterThan(0)
+    expect(
+      allowedSharedFiles().length,
+      'at least one allowed shared module must exist',
+    ).toBeGreaterThan(0)
   })
 
   it('no allowlisted shared module imports a Node-only builtin', () => {
@@ -473,9 +477,9 @@ describe('apps/web skeleton', () => {
   })
 
   it('apps/web package is private (must never be published to npm)', () => {
-    const appsWebPkg = JSON.parse(
-      readFileSync(resolve(appsWebDir, 'package.json'), 'utf-8'),
-    ) as { private?: boolean }
+    const appsWebPkg = JSON.parse(readFileSync(resolve(appsWebDir, 'package.json'), 'utf-8')) as {
+      private?: boolean
+    }
     expect(
       appsWebPkg.private,
       'apps/web/package.json must declare "private": true — it is a deploy target, not an npm artifact',
@@ -491,9 +495,9 @@ describe('apps/web skeleton', () => {
   })
 
   it('apps/web/package.json has scripts.build', () => {
-    const pkg = JSON.parse(
-      readFileSync(resolve(appsWebDir, 'package.json'), 'utf-8'),
-    ) as { scripts?: Record<string, string> }
+    const pkg = JSON.parse(readFileSync(resolve(appsWebDir, 'package.json'), 'utf-8')) as {
+      scripts?: Record<string, string>
+    }
     expect(
       pkg.scripts?.build,
       'apps/web/package.json must declare a "build" script so CI can build the hosted app',
@@ -501,9 +505,9 @@ describe('apps/web skeleton', () => {
   })
 
   it('apps/web/package.json has scripts.dev', () => {
-    const pkg = JSON.parse(
-      readFileSync(resolve(appsWebDir, 'package.json'), 'utf-8'),
-    ) as { scripts?: Record<string, string> }
+    const pkg = JSON.parse(readFileSync(resolve(appsWebDir, 'package.json'), 'utf-8')) as {
+      scripts?: Record<string, string>
+    }
     expect(
       pkg.scripts?.dev,
       'apps/web/package.json must declare a "dev" script for local development',
@@ -517,16 +521,18 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
   const wranglerPath = resolve(APPS_WEB_DIR, 'wrangler.toml')
 
   it('wrangler.toml exists in apps/web', () => {
-    expect(existsSync(wranglerPath), 'apps/web/wrangler.toml must exist — Pages project config').toBe(true)
+    expect(
+      existsSync(wranglerPath),
+      'apps/web/wrangler.toml must exist — Pages project config',
+    ).toBe(true)
   })
 
   it('pages_build_output_dir is "dist"', () => {
     if (!existsSync(wranglerPath)) return
     const content = readFileSync(wranglerPath, 'utf-8')
-    expect(
-      content,
-      'pages_build_output_dir must be "dist" to match Vite build output',
-    ).toMatch(/pages_build_output_dir\s*=\s*["']?dist["']?/)
+    expect(content, 'pages_build_output_dir must be "dist" to match Vite build output').toMatch(
+      /pages_build_output_dir\s*=\s*["']?dist["']?/,
+    )
   })
 
   it('project name matches provisional production origin slug "whiteboard"', () => {
@@ -558,11 +564,13 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
 })
 
 // ── Cloudflare deploy secrets drift guard ─────────────────────────────────────
-// Verifies that no production Cloudflare Pages deploy secrets have been
-// introduced in apps/web config or .github/workflows during this slice.
-// When a production deploy workflow is legitimately added, update this guard.
+// Production Cloudflare Pages deploy secrets are allowed only in release.yml
+// (the deploy-web job). All other workflow files and apps/web config files must
+// not embed these secrets — add to the allowlist below if a second deploy path
+// is introduced intentionally.
 
 const CF_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] as const
+const CF_SECRET_WORKFLOW_ALLOWLIST = new Set(['release.yml'])
 
 describe('apps/web Cloudflare deploy secrets guard', () => {
   const configFiles = [
@@ -570,7 +578,9 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     'vite.config.ts',
     'vitest.config.ts',
     'vitest.browser.config.ts',
-  ].map((f) => resolve(APPS_WEB_DIR, f)).filter(existsSync)
+  ]
+    .map((f) => resolve(APPS_WEB_DIR, f))
+    .filter(existsSync)
 
   it('apps/web config files contain no Cloudflare production secrets', () => {
     const violations: string[] = []
@@ -582,15 +592,18 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
         }
       }
     }
-    expect(violations, 'Cloudflare production secrets must not appear in apps/web config').toEqual([])
+    expect(violations, 'Cloudflare production secrets must not appear in apps/web config').toEqual(
+      [],
+    )
   })
 
-  it('no .github/workflows/ file deploys apps/web using Cloudflare production secrets', () => {
+  it('only allowlisted workflow files deploy apps/web using Cloudflare production secrets', () => {
     const workflowsDir = resolve(REPO_ROOT, '.github/workflows')
     if (!existsSync(workflowsDir)) return
     const violations: string[] = []
     for (const entry of readdirSync(workflowsDir, { withFileTypes: true })) {
       if (!entry.isFile() || !/\.(yml|yaml)$/.test(entry.name)) continue
+      if (CF_SECRET_WORKFLOW_ALLOWLIST.has(entry.name)) continue
       const content = readFileSync(resolve(workflowsDir, entry.name), 'utf-8')
       const touchesAppsWeb = content.includes('apps/web') || content.includes('whiteboard-web')
       const hasSecret = CF_SECRETS.some((s) => content.includes(s))
@@ -600,7 +613,20 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     }
     expect(
       violations,
-      'Production Cloudflare secrets found in a workflow targeting apps/web — not yet introduced in this slice',
+      'Cloudflare production secrets found in a non-allowlisted workflow — add to CF_SECRET_WORKFLOW_ALLOWLIST if intentional',
     ).toEqual([])
+  })
+
+  it('release.yml deploy-web job uses Cloudflare secrets for apps/web deploy', () => {
+    const releaseYml = resolve(REPO_ROOT, '.github/workflows/release.yml')
+    if (!existsSync(releaseYml)) return
+    const content = readFileSync(releaseYml, 'utf-8')
+    expect(content, 'release.yml must contain deploy-web job').toContain('deploy-web:')
+    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_API_TOKEN').toContain(
+      'CLOUDFLARE_API_TOKEN',
+    )
+    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_ACCOUNT_ID').toContain(
+      'CLOUDFLARE_ACCOUNT_ID',
+    )
   })
 })
