@@ -127,3 +127,19 @@ export type ListCanvasesResponse = z.infer<typeof listCanvasesResponseSchema>
 export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>
 export type CreateCanvasResponse = z.infer<typeof createCanvasResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>
+
+// GET /api/runtime/storage — response body.
+export const storageBucketSchema = z.object({
+  bytes: z.number(),
+  files: z.number(),
+})
+
+export const storageReportPayloadSchema = z.object({
+  totalBytes: z.number(),
+  fileCount: z.number(),
+  byCategory: z.record(z.string(), storageBucketSchema),
+  lastAutoCompactedAt: z.number().nullable().optional(),
+})
+
+export type StorageBucket = z.infer<typeof storageBucketSchema>
+export type StorageReportPayload = z.infer<typeof storageReportPayloadSchema>
