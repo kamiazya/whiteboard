@@ -24,14 +24,17 @@ describe('pre-merge CI workflow', () => {
   it('runs the publish-relevant quality gates before merge', () => {
     const workflow = readFileSync(workflowPath, 'utf-8')
 
-    expect(workflow).toContain('pnpm check:pr-title -- "${{ github.event.pull_request.title }}"')
+    // PR title is passed via env var to avoid shell injection from user-controlled input.
+    expect(workflow).toContain('PR_TITLE: ${{ github.event.pull_request.title }}')
+    expect(workflow).toContain('pnpm check:pr-title -- "$PR_TITLE"')
     expect(workflow).toContain('pnpm install --frozen-lockfile')
     // Chromium is prebaked in the official Playwright image; no install step needed.
     expect(workflow).toContain('mcr.microsoft.com/playwright')
     expect(workflow).toContain('PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD')
     expect(workflow).toContain('pnpm intent:validate')
     expect(workflow).toContain('pnpm typecheck')
-    expect(workflow).toContain('pnpm test')
+    // Tests run as parallel sharded jobs via vitest project filters.
+    expect(workflow).toContain('pnpm exec vitest run')
     expect(workflow).toContain('pnpm smoke:e2e')
     expect(workflow).toContain('pnpm build')
     expect(workflow).toContain('pnpm smoke:packaged')
