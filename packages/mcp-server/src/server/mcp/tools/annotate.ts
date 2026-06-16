@@ -400,12 +400,23 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   }
 
   if (spec.type !== 'box_with_label') {
-    const { elementId, snappedStart, snappedEnd } = appendSingleAnnotation(
-      doc,
-      spec as AnnotationSpec & { type: AnnotationType },
-    )
+    const primitiveSpec = spec as AnnotationSpec & { type: AnnotationType }
+    // For arrow specs, `text` is an alias for `label` (midpoint label text node).
+    // `label` takes precedence when both are supplied. Resolve the effective
+    // label here and pass `text: undefined` so buildAnnotationFields does not
+    // simultaneously write the inline arrow body label field alongside the
+    // midpoint text node created below.
+    const arrowSpec =
+      spec.type === 'arrow'
+        ? {
+            ...primitiveSpec,
+            text: undefined,
+            label: spec.label ?? (Array.isArray(spec.text) ? spec.text.join('\n') : spec.text),
+          }
+        : primitiveSpec
+    const { elementId, snappedStart, snappedEnd } = appendSingleAnnotation(doc, arrowSpec)
     // When arrow.label is set, add a separate midpoint label text element.
-    if (spec.type === 'arrow' && spec.label && snappedEnd) {
+    if (spec.type === 'arrow' && arrowSpec.label && snappedEnd) {
       // Avoid label collisions by increasing offset, flipping side, then trying
       // near-end positions. Exclude the arrow itself and tombstones.
       const currentElements = doc.getMovableList('elements').toJSON() as Array<ExcalidrawElement>
@@ -423,7 +434,7 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
       const labelPos = resolveArrowLabelPosition({
         start: snappedStart,
         end: snappedEnd,
-        text: spec.label,
+        text: arrowSpec.label,
         offset: spec.labelOffset,
         side: spec.labelSide,
         obstacles,
@@ -627,7 +638,7 @@ export function annotateTool() {
         },
         text: {
           description:
-            'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width.',
+            'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width. For arrow type, text is an alias for label (midpoint label text node); label takes precedence when both are supplied.',
           oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
         },
         title: {
