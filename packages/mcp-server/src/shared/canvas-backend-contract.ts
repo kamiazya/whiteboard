@@ -116,7 +116,7 @@ export interface CanvasBackend {
    * Send a local Loro update to the server (or persist locally).
    * Called from the hook's doc.subscribeLocalUpdates handler.
    */
-  pushLocalUpdate(bytes: Uint8Array): void
+  pushLocalUpdate(bytes: Uint8Array): void | Promise<void>
 
   /**
    * Fetch an image file by fileId. Returns the Blob on success, null on miss.
