@@ -83,6 +83,10 @@ describe('publish contract', () => {
         types: './src/shared/canvas-backend-contract.ts',
         import: './dist/shared/canvas-backend-contract.js',
       },
+      './browser-shared': {
+        types: './src/shared/browser-shared-index.ts',
+        import: './dist/shared/browser-shared-index.js',
+      },
       './package.json': './package.json',
     })
     // publishConfig.exports is the shape pnpm substitutes on npm publish,
@@ -95,6 +99,10 @@ describe('publish contract', () => {
       './browser-contract': {
         types: './dist/shared/canvas-backend-contract.d.ts',
         import: './dist/shared/canvas-backend-contract.js',
+      },
+      './browser-shared': {
+        types: './dist/shared/browser-shared-index.d.ts',
+        import: './dist/shared/browser-shared-index.js',
       },
       './package.json': './package.json',
     })
