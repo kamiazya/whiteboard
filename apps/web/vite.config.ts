@@ -14,6 +14,11 @@ export default defineConfig({
     alias: {
       // Standard shadcn alias rooted at apps/web/src.
       '@': resolve(__dirname, 'src'),
+      // Resolve browser-shared from source so `pnpm dev` works before `pnpm build`.
+      '@kamiazya/whiteboard-mcp/browser-shared': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/browser-shared-index.ts',
+      ),
     },
   },
   build: {
