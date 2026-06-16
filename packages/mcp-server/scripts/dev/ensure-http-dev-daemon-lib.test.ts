@@ -1,12 +1,19 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { waitForAuthenticatedMcp } from './ensure-http-dev-daemon-lib.mjs'
+import {
+  waitForAuthenticatedMcp,
+  resolveDevBearerToken,
+  buildMcpHttpDevSpawnArgs,
+} from './ensure-http-dev-daemon-lib.mjs'
 
 describe('HTTP dev daemon startup', () => {
   it('uses the current Codex hooks feature flag', async () => {
     // .codex/config.toml lives at the repo root (../../../../ from packages/mcp-server/scripts/dev).
-    const config = await readFile(resolve(import.meta.dirname, '../../../../.codex/config.toml'), 'utf8')
+    const config = await readFile(
+      resolve(import.meta.dirname, '../../../../.codex/config.toml'),
+      'utf8',
+    )
 
     expect(config).toMatch(/^\s*hooks\s*=\s*true\s*$/m)
     expect(config).not.toMatch(/^\s*codex_hooks\s*=/m)
@@ -27,5 +34,32 @@ describe('HTTP dev daemon startup', () => {
     expect(result).toBe(true)
     expect(probe).toHaveBeenCalledTimes(2)
     expect(sleep).toHaveBeenCalledWith(10)
+  })
+})
+
+describe('resolveDevBearerToken', () => {
+  it('returns the env var value when WHITEBOARD_TOKEN is set', () => {
+    expect(resolveDevBearerToken({ WHITEBOARD_TOKEN: 'my-custom-token' })).toBe('my-custom-token')
+  })
+
+  it('returns the hardcoded default when WHITEBOARD_TOKEN is absent', () => {
+    expect(resolveDevBearerToken({})).toBe('whiteboard-dev')
+  })
+
+  it('returns the hardcoded default when WHITEBOARD_TOKEN is undefined', () => {
+    expect(resolveDevBearerToken({ WHITEBOARD_TOKEN: undefined })).toBe('whiteboard-dev')
+  })
+})
+
+describe('buildMcpHttpDevSpawnArgs', () => {
+  it('injects --token when token differs from the package-script default', () => {
+    const args = buildMcpHttpDevSpawnArgs('my-custom-token')
+    expect(args).toContain('--token=my-custom-token')
+  })
+
+  it('does NOT inject --token when token is the package-script default', () => {
+    // pnpm mcp:http:dev already passes --token=whiteboard-dev; no duplication needed
+    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev')
+    expect(args.some((a) => a.startsWith('--token='))).toBe(false)
   })
 })
