@@ -17,16 +17,27 @@ function hasFlag(name: string): boolean {
   return process.argv.includes(`--${name}`)
 }
 
+/**
+ * Resolves the bearer token from CLI args then env.
+ * --token=<value> takes precedence so packaged scripts that bake in a
+ * default value work predictably; WHITEBOARD_TOKEN lets all three
+ * processes (daemon, Vite plugin, ensure-daemon probe) stay in sync
+ * from a single shell export.
+ */
+export function resolveToken(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+): string | undefined {
+  return argv.find((arg) => arg.startsWith('--token='))?.split('=')[1] ?? env.WHITEBOARD_TOKEN
+}
+
 export { createApp } from './app.js'
 export { startHttpServer } from './http-server.js'
 
 async function main() {
   const port = parseInt(readArg('port', '3099') ?? '3099', 10)
   const host = readArg('host', '127.0.0.1') ?? '127.0.0.1'
-  // --token=<value> takes precedence; fall back to WHITEBOARD_TOKEN so that
-  // `export WHITEBOARD_TOKEN=<value> && pnpm dev` syncs the daemon, the Vite
-  // plugin (browser), and the ensure-daemon probe without repeating the value.
-  const token = readArg('token') ?? process.env.WHITEBOARD_TOKEN
+  const token = resolveToken(process.argv, process.env)
   const idleTimeoutMs = parseInt(
     readArg('idle-timeout-ms', `${15 * 60_000}`) ?? `${15 * 60_000}`,
     10,
