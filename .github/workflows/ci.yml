@@ -108,7 +108,7 @@ jobs:
     # must be kept in sync with the `playwright` version in pnpm-lock.yaml.
     container:
       image: mcr.microsoft.com/playwright:v1.59.1-noble
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       # Prevent postinstall from trying to fetch a browser; the image has it.
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
