@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  appendVary,
-  isLoopbackHostname,
-  normalizeOriginHostname,
-} from './cors-loopback.js'
+import { appendVary, isLoopbackHostname, normalizeOriginHostname } from './cors-loopback.js'
 
 describe('isLoopbackHostname', () => {
   it('recognises localhost', () => {
@@ -24,6 +20,23 @@ describe('isLoopbackHostname', () => {
 
   it('rejects an empty string', () => {
     expect(isLoopbackHostname('')).toBe(false)
+  })
+
+  // Security-boundary: callers must normalise before this check.
+  it('rejects [::1] — brackets must be stripped by normalizeOriginHostname first', () => {
+    expect(isLoopbackHostname('[::1]')).toBe(false)
+  })
+
+  it('rejects 127.0.0.2 (not a loopback address)', () => {
+    expect(isLoopbackHostname('127.0.0.2')).toBe(false)
+  })
+
+  it('rejects localhost:3099 (host+port is not a bare hostname)', () => {
+    expect(isLoopbackHostname('localhost:3099')).toBe(false)
+  })
+
+  it('rejects LOCALHOST (case-sensitive match only)', () => {
+    expect(isLoopbackHostname('LOCALHOST')).toBe(false)
   })
 })
 
@@ -88,9 +101,7 @@ describe('appendVary', () => {
   })
 
   it('trims whitespace from parts', () => {
-    expect(appendVary('Accept , Content-Type', 'Origin')).toBe(
-      'Accept, Content-Type, Origin',
-    )
+    expect(appendVary('Accept , Content-Type', 'Origin')).toBe('Accept, Content-Type, Origin')
   })
 
   it('does not duplicate a token that is already present with different casing', () => {

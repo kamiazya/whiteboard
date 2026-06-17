@@ -108,7 +108,11 @@ describe('IndexPage', () => {
       }
       if (url === '/api/workspaces/ws_1/names') {
         return new Response(
-          JSON.stringify({ workspace: 'Main workspace', canvases: { 'canvas-a': 'Login flow' } }),
+          JSON.stringify({
+            workspace: 'Main workspace',
+            canvases: { 'canvas-a': 'Login flow' },
+            pinned: [],
+          }),
           { status: 200 },
         )
       }

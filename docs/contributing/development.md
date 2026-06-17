@@ -4,7 +4,7 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
 
 ## Prerequisites
 
-- Node.js 20+ and `pnpm`
+- Node.js 22+ (24 recommended — matches `.node-version`) and `pnpm`
 - A Chromium that Playwright can drive (installed automatically below)
 
 ```bash
@@ -69,6 +69,8 @@ pnpm mcp:http:dev
 ```
 
 The daemon listens on `http://127.0.0.1:3099/mcp`.
+
+> **Auto-start:** The repo's `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`) probes port 3099 and spawns the daemon automatically when Claude Code or Codex opens the repo. If the daemon does not start automatically (hooks disabled, project not yet trusted, or port 3099 already in use by another process), run `pnpm mcp:http:dev` manually in a separate terminal before making MCP calls.
 
 **Codex** — set in `~/.codex/config.toml`:
 
