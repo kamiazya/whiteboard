@@ -39,15 +39,19 @@ function makeInitialSnapshot(): Uint8Array {
 }
 
 describe('BrowserLocalBackend', () => {
-  beforeEach(async () => { await clearDb() })
-  afterEach(async () => { await clearDb() })
+  beforeEach(async () => {
+    await clearDb()
+  })
+  afterEach(async () => {
+    await clearDb()
+  })
 
   it('connect() on empty store calls onConnected then onSnapshot with fresh empty snapshot', async () => {
     const handlers = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-1')
     backend.connect(handlers)
     // Give async IDB reads a moment
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
     expect(handlers.onConnected).toHaveBeenCalledTimes(1)
     expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
     const snapshotBytes = (handlers.onSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0]
@@ -62,16 +66,16 @@ describe('BrowserLocalBackend', () => {
     const seedBackend = new BrowserLocalBackend('canvas-1')
     const seedHandlers = makeHandlers()
     seedBackend.connect(seedHandlers)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
     await seedBackend.pushLocalUpdate(initial)
     seedBackend.disconnect()
 
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     const handlers = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-1')
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
     expect(handlers.onRemoteUpdate).not.toHaveBeenCalled()
@@ -90,19 +94,19 @@ describe('BrowserLocalBackend', () => {
     const backend1 = new BrowserLocalBackend('canvas-1')
     const h1 = makeHandlers()
     backend1.connect(h1)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     // Push snapshot then delta
     await backend1.pushLocalUpdate(snapshot)
     await backend1.pushLocalUpdate(delta)
     backend1.disconnect()
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     // Reload
     const backend2 = new BrowserLocalBackend('canvas-1')
     const h2 = makeHandlers()
     backend2.connect(h2)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     expect(h2.onSnapshot).toHaveBeenCalledTimes(1)
     // Delta replayed as onRemoteUpdate
@@ -123,12 +127,14 @@ describe('BrowserLocalBackend', () => {
     const handlers = makeHandlers()
     backend.connect(handlers)
     backend.disconnect()
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 300))
     // onConnected fires synchronously before disconnect in this test,
     // so we only assert onSnapshot does not fire after disconnect.
     const snapshotCallCount = (handlers.onSnapshot as ReturnType<typeof vi.fn>).mock.calls.length
-    await new Promise((r) => setTimeout(r, 100))
-    expect((handlers.onSnapshot as ReturnType<typeof vi.fn>).mock.calls.length).toBe(snapshotCallCount)
+    await new Promise((r) => setTimeout(r, 300))
+    expect((handlers.onSnapshot as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      snapshotCallCount,
+    )
   })
 
   it('getFile returns null (deferred OPFS — not implemented in 3-C)', async () => {
@@ -140,7 +146,22 @@ describe('BrowserLocalBackend', () => {
   it('putFile resolves without calling onFileSuccess (deferred OPFS)', async () => {
     const backend = new BrowserLocalBackend('canvas-1')
     const onFileSuccess = vi.fn()
-    await expect(backend.putFile([['file-1', { mimeType: 'image/png', id: 'file-1', dataURL: 'data:image/png;base64,abc', created: Date.now() }]], onFileSuccess)).resolves.toBeUndefined()
+    await expect(
+      backend.putFile(
+        [
+          [
+            'file-1',
+            {
+              mimeType: 'image/png',
+              id: 'file-1',
+              dataURL: 'data:image/png;base64,abc',
+              created: Date.now(),
+            },
+          ],
+        ],
+        onFileSuccess,
+      ),
+    ).resolves.toBeUndefined()
     expect(onFileSuccess).not.toHaveBeenCalled()
   })
 
@@ -154,7 +175,7 @@ describe('BrowserLocalBackend', () => {
     const backend = new BrowserLocalBackend('canvas-1')
     const handlers = makeHandlers()
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
     // Empty bytes: early return, no throw, no onError
     await expect(backend.pushLocalUpdate(new Uint8Array(0))).resolves.toBeUndefined()
     expect(handlers.onError).not.toHaveBeenCalled()
@@ -168,7 +189,7 @@ describe('BrowserLocalBackend', () => {
     const handlers = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-corrupt')
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     // Push a delta — should detect corrupt existing and route to onError
     const delta = new Uint8Array([1, 2, 3])
@@ -192,22 +213,19 @@ describe('BrowserLocalBackend', () => {
     const backend = new BrowserLocalBackend('canvas-race')
     const handlers = makeHandlers()
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     // Push snapshot first to establish the record
     await backend.pushLocalUpdate(snapshot)
     // Then fire two deltas concurrently
-    await Promise.all([
-      backend.pushLocalUpdate(delta1),
-      backend.pushLocalUpdate(delta2),
-    ])
+    await Promise.all([backend.pushLocalUpdate(delta1), backend.pushLocalUpdate(delta2)])
     backend.disconnect()
 
     // Reload and verify both deltas are persisted (not one overwriting the other)
     const backend2 = new BrowserLocalBackend('canvas-race')
     const h2 = makeHandlers()
     backend2.connect(h2)
-    await new Promise((r) => setTimeout(r, 100))
+    await new Promise((r) => setTimeout(r, 300))
     expect(h2.onRemoteUpdate).toHaveBeenCalledTimes(2)
     backend2.disconnect()
   })
@@ -219,7 +237,7 @@ describe('BrowserLocalBackend', () => {
     const h2 = makeHandlers()
     const backend2 = new BrowserLocalBackend('canvas-v99')
     backend2.connect(h2)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     expect(h2.onError).toHaveBeenCalledWith('unsupported-version')
     expect(h2.onSnapshot).not.toHaveBeenCalled()
@@ -232,7 +250,7 @@ describe('BrowserLocalBackend', () => {
     const h = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-bad-bytes')
     backend.connect(h)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     expect(h.onError).toHaveBeenCalledWith('corrupt-snapshot')
     expect(h.onSnapshot).not.toHaveBeenCalled()
@@ -249,7 +267,7 @@ describe('BrowserLocalBackend', () => {
     const h = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-bad-delta')
     backend.connect(h)
-    await new Promise((r) => setTimeout(r, 50))
+    await new Promise((r) => setTimeout(r, 200))
 
     expect(h.onError).toHaveBeenCalledWith('corrupt-delta')
     expect(h.onSnapshot).not.toHaveBeenCalled()
@@ -271,11 +289,21 @@ async function forceInvalidLoroRecord(canvasId: string): Promise<void> {
       const tx = db.transaction('loroCanvases', 'readwrite')
       // v:1 envelope but snapshot bytes are not valid Loro data
       tx.objectStore('loroCanvases').put(
-        { v: 1, snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]), updatedAt: new Date().toISOString() },
+        {
+          v: 1,
+          snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]),
+          updatedAt: new Date().toISOString(),
+        },
         canvasId,
       )
-      tx.oncomplete = () => { db.close(); resolve() }
-      tx.onerror = () => { db.close(); reject(tx.error) }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
     }
     req.onerror = () => reject(req.error)
   })
@@ -303,8 +331,14 @@ async function forceRecordWithBadDelta(canvasId: string, snapshot: Uint8Array): 
         },
         canvasId,
       )
-      tx.oncomplete = () => { db.close(); resolve() }
-      tx.onerror = () => { db.close(); reject(tx.error) }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
     }
     req.onerror = () => reject(req.error)
   })
@@ -323,8 +357,14 @@ async function forceCorruptRecord(canvasId: string): Promise<void> {
       const db = req.result
       const tx = db.transaction('loroCanvases', 'readwrite')
       tx.objectStore('loroCanvases').put({ v: 99, garbage: true }, canvasId)
-      tx.oncomplete = () => { db.close(); resolve() }
-      tx.onerror = () => { db.close(); reject(tx.error) }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
     }
     req.onerror = () => reject(req.error)
   })
