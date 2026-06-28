@@ -121,8 +121,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Get Playwright version
+        id: pw-version
+        run: echo "version=$(pnpm --filter @kamiazya/whiteboard-mcp exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw-version.outputs.version }}
+
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install chromium
+        working-directory: packages/mcp-server
+
+      - name: Install Playwright system dependencies
+        run: pnpm exec playwright install-deps chromium
         working-directory: packages/mcp-server
 
       # Cache the Vite dep optimizer output so subsequent runs with the same
