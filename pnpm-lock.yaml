@@ -13,8 +13,8 @@ catalogs:
       specifier: ^4.1.8
       version: 4.1.9
     loro-crdt:
-      specifier: 1.11.1
-      version: 1.11.1
+      specifier: 1.13.5
+      version: 1.13.5
     react:
       specifier: ^19
       version: 19.2.5
@@ -116,7 +116,7 @@ importers:
         version: 2.1.1
       loro-crdt:
         specifier: 'catalog:'
-        version: 1.11.1
+        version: 1.13.5
       lucide-react:
         specifier: ^1.11.0
         version: 1.11.0(react@19.2.5)
@@ -261,7 +261,7 @@ importers:
         version: 0.28.17
       loro-crdt:
         specifier: 'catalog:'
-        version: 1.11.1
+        version: 1.13.5
       nanoid:
         specifier: ^5.1.9
         version: 5.1.9
@@ -4579,8 +4579,8 @@ packages:
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
-  loro-crdt@1.11.1:
-    resolution: {integrity: sha512-R+Ksyy2FPYoOfJAkVY6BqGk11AtlgWZ1B91V/G7TaQxitxuvUvMd1URhO33LYfFUIT2CSn0Nikl+bbRZ2RGuZg==}
+  loro-crdt@1.13.5:
+    resolution: {integrity: sha512-U6L88EbSdv8TeFcXyKew0BySRJnOCPsgU8p38PhzGjQlfD8TC1pLRk1J7X5OYecr8Z9ijD1J13JEf+qIvw3ztg==}
 
   lru-cache@10.4.3:
     resolution: {integrity: sha512-JNAzZcXrCt42VGLuYz0zfAzDfAvJWW6AfYlDBQyDV5DClI2m5sAmK+OIO7s59XfsRsWHp02jAJrRadPRGTt6SQ==}
@@ -10229,7 +10229,7 @@ snapshots:
 
   long@5.3.2: {}
 
-  loro-crdt@1.11.1: {}
+  loro-crdt@1.13.5: {}
 
   lru-cache@10.4.3:
     optional: true
