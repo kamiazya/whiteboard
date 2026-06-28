@@ -29,7 +29,7 @@ describe('pre-merge CI workflow', () => {
     expect(workflow).toMatch(/PR_TITLE:.*github\.event\.pull_request\.title/)
     expect(workflow).toContain('pnpm check:pr-title -- "$PR_TITLE"')
     expect(workflow).toContain('pnpm install --frozen-lockfile')
-    expect(workflow).toContain('playwright install')
+    expect(workflow).toContain('WHITEBOARD_CHROME_PATH')
     expect(workflow).toContain('pnpm intent:validate')
     expect(workflow).toContain('pnpm typecheck')
     // Tests run as parallel sharded jobs via vitest project filters.

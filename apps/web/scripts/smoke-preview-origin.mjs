@@ -55,7 +55,12 @@ if (!existsSync(DIST)) {
 }
 
 const { server, port } = await startServer()
-const browser = await chromium.launch({ headless: true })
+const browser = await chromium.launch({
+  headless: true,
+  ...(process.env.WHITEBOARD_CHROME_PATH && {
+    executablePath: process.env.WHITEBOARD_CHROME_PATH,
+  }),
+})
 let failed = false
 
 try {
@@ -78,7 +83,11 @@ try {
   if (count > 0) {
     console.log('  pass  App renders data-provider="invalid-config" for preview publicOrigin')
   } else {
-    const provider = await page.locator('main').first().getAttribute('data-provider').catch(() => '(no main)')
+    const provider = await page
+      .locator('main')
+      .first()
+      .getAttribute('data-provider')
+      .catch(() => '(no main)')
     console.error(`  FAIL  expected data-provider="invalid-config", got: ${provider}`)
     failed = true
   }

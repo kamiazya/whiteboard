@@ -5,6 +5,7 @@ import react from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
 import wasm from 'vite-plugin-wasm'
 import topLevelAwait from 'vite-plugin-top-level-await'
+import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -33,7 +34,9 @@ export default defineConfig({
         snapshots: true,
       },
       viewport: { width: 1280, height: 900 },
-      provider: playwright(),
+      provider: playwright({
+        launchOptions: resolveBrowserLaunchOptions(process.env),
+      }),
       instances: [{ browser: 'chromium' }],
     },
   },
