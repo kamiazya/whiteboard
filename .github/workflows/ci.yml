@@ -103,15 +103,11 @@ jobs:
 
   test-browser:
     runs-on: ubuntu-latest
-    # Run inside the official Playwright image so Chromium is prebaked at
-    # /ms-playwright — no download or extraction step needed. The image version
-    # must be kept in sync with the `playwright` version in pnpm-lock.yaml.
-    container:
-      image: mcr.microsoft.com/playwright:v1.59.1-noble
-    timeout-minutes: 30
-    env:
-      # Prevent postinstall from trying to fetch a browser; the image has it.
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    # Run directly on ubuntu-latest (no Docker container). Using a container image
+    # triggers Docker's default seccomp profile which blocks syscalls that Vite 8's
+    # Rolldown-based dep optimizer needs at init time, causing a 30-minute hang.
+    # The ubuntu-latest runner has no seccomp restrictions so Rolldown works normally.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -125,16 +121,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # Vite 8 uses Rolldown (Rust/NAPI) as its dep optimizer. On cold pnpm cache
-      # the Linux native binding (@rolldown/binding-linux-x64-gnu) hangs indefinitely
-      # in this container, likely due to a seccomp/capabilities restriction blocking
-      # a syscall the native module needs at init time. Removing the native binding
-      # makes Rolldown fall back to its WASM binding (@rolldown/binding-wasm32-wasi)
-      # which runs without native syscall requirements.
-      - name: Remove Rolldown Linux native binding (force WASM fallback)
-        run: |
-          find . -path '*/node_modules/@rolldown/binding-linux-x64-gnu' -type d \
-            -exec rm -rf {} + 2>/dev/null || true
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
 
       # Cache the Vite dep optimizer output so subsequent runs with the same
       # lockfile skip bundling entirely (fastest path).
