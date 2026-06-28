@@ -244,7 +244,7 @@ importers:
         specifier: ^20.9.0
         version: 20.9.0
       hono:
-        specifier: ^4.12.25
+        specifier: ^4.12.26
         version: 4.12.26
       image-size:
         specifier: ^2
