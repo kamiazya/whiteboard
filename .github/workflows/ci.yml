@@ -122,10 +122,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Diagnose native bindings
+        run: |
+          echo "--- Rolldown binding ---"
+          timeout 30 node -e "try { require('@rolldown/binding-linux-x64-gnu'); console.log('OK') } catch(e) { console.log('FAIL:', e.message) }" || echo "TIMEOUT: Rolldown binding load hung"
+          echo "--- SWC binding ---"
+          timeout 30 node -e "try { require('@swc/core'); console.log('OK') } catch(e) { console.log('FAIL:', e.message) }" || echo "TIMEOUT: SWC binding load hung"
+          echo "--- Chrome ---"
+          google-chrome-stable --version || echo "Chrome not found"
+        working-directory: packages/mcp-server
+
       - name: Test mcp-browser
+        timeout-minutes: 5
+        env:
+          DEBUG: vite:deps,vite:config
         run: pnpm exec vitest run --project=mcp-browser
 
       - name: Test web-browser
+        timeout-minutes: 5
         run: pnpm --filter @kamiazya/whiteboard-web exec vitest run --config vitest.browser.config.ts
 
   verify:
