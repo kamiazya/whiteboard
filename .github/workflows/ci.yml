@@ -133,10 +133,10 @@ jobs:
         working-directory: packages/mcp-server
 
       - name: Test mcp-browser
-        timeout-minutes: 5
+        timeout-minutes: 3
         env:
-          DEBUG: vite:deps,vite:config
-        run: pnpm exec vitest run --project=mcp-browser
+          DEBUG: vite:*,vitest:*
+        run: pnpm exec vitest run --project=mcp-browser --reporter=verbose
 
       - name: Test web-browser
         timeout-minutes: 5
