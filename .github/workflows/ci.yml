@@ -125,6 +125,27 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # When the pnpm store cache is cold (lockfile changed → cache miss), pnpm
+      # falls back from hardlinks to copies because the global store sits on a
+      # different FS mount from the workspace in the container. Copies can lose
+      # the execute bit under the container's umask, causing Vite's dep optimizer
+      # to hang indefinitely waiting for an esbuild subprocess that can never
+      # start. Restoring +x here avoids the 30-minute timeout.
+      - name: Ensure esbuild binary is executable
+        run: |
+          find . -path '*/@esbuild/linux-x64/bin/esbuild' -type f -exec chmod +x {} \; 2>/dev/null || true
+
+      # Cache the optimizer output so Vite skips bundling on subsequent runs with
+      # the same lockfile. Cache miss (lockfile change) still runs the optimizer,
+      # but the chmod step above ensures esbuild is executable on first cold run.
+      - name: Cache Vite dep optimizer output
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            packages/mcp-server/node_modules/.vite
+            apps/web/node_modules/.vite
+          key: vite-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Test mcp-browser
         run: pnpm exec vitest run --project=mcp-browser
 
