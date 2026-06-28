@@ -20,6 +20,8 @@ catalog:
   typescript: "^6.0.3"
   vite: "^8.0.10"
   vitest: "^4.1.5"
+  "@vitest/browser-playwright": "^4.1.5"
+  "@vitest/coverage-v8": "^4.1.5"
 
 # Supply-chain hardening: only install package versions published at least 7 days
 # (10080 min) ago, so a compromised fresh release (npm account takeover / malicious

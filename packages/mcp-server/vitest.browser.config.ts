@@ -19,6 +19,7 @@ export default mergeConfig(
       browser: {
         enabled: true,
         headless: true,
+        connectTimeout: 120_000,
         screenshotFailures: false,
         trace: {
           mode: 'retain-on-failure',
