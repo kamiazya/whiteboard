@@ -195,7 +195,7 @@
     "playwright": "^1.59.1",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-router-dom": "^7.14.2",
+    "react-router-dom": "^7.15.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",
