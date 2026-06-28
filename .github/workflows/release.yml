@@ -253,8 +253,10 @@ jobs:
     # Deploy apps/web to Cloudflare Pages when a project release is created.
     # Skipped when no release happened (e.g. mid-cycle pushes).
     # The Deploy step skips itself when Cloudflare secrets are not yet configured.
-    # Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets.
+    # Secrets are scoped to the production-web environment (tag-protected in repo settings).
+    # Requires CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the production-web environment.
     if: needs.release-please.outputs.releases_created == 'true'
+    environment: production-web
     permissions:
       contents: read
     env:
