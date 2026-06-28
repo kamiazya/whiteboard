@@ -138,7 +138,7 @@ jobs:
       # separately so it is not killed by the timeout.
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: timeout 120 packages/mcp-server/node_modules/.bin/playwright install chromium || true
+        run: timeout 300 packages/mcp-server/node_modules/.bin/playwright install chromium || true
 
       - name: Install Playwright system dependencies
         run: packages/mcp-server/node_modules/.bin/playwright install-deps chromium
@@ -189,7 +189,7 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.playwright-cache-verify.outputs.cache-hit != 'true'
-        run: timeout 120 packages/mcp-server/node_modules/.bin/playwright install chromium || true
+        run: timeout 300 packages/mcp-server/node_modules/.bin/playwright install chromium || true
 
       - name: Install Playwright system dependencies
         run: packages/mcp-server/node_modules/.bin/playwright install-deps chromium
