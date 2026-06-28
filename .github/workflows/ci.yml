@@ -125,19 +125,19 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # When the pnpm store cache is cold (lockfile changed → cache miss), pnpm
-      # falls back from hardlinks to copies because the global store sits on a
-      # different FS mount from the workspace in the container. Copies can lose
-      # the execute bit under the container's umask, causing Vite's dep optimizer
-      # to hang indefinitely waiting for an esbuild subprocess that can never
-      # start. Restoring +x here avoids the 30-minute timeout.
-      - name: Ensure esbuild binary is executable
+      # Vite 8 uses Rolldown (Rust/NAPI) as its dep optimizer. On cold pnpm cache
+      # the Linux native binding (@rolldown/binding-linux-x64-gnu) hangs indefinitely
+      # in this container, likely due to a seccomp/capabilities restriction blocking
+      # a syscall the native module needs at init time. Removing the native binding
+      # makes Rolldown fall back to its WASM binding (@rolldown/binding-wasm32-wasi)
+      # which runs without native syscall requirements.
+      - name: Remove Rolldown Linux native binding (force WASM fallback)
         run: |
-          find . -path '*/@esbuild/linux-x64/bin/esbuild' -type f -exec chmod +x {} \; 2>/dev/null || true
+          find . -path '*/node_modules/@rolldown/binding-linux-x64-gnu' -type d \
+            -exec rm -rf {} + 2>/dev/null || true
 
-      # Cache the optimizer output so Vite skips bundling on subsequent runs with
-      # the same lockfile. Cache miss (lockfile change) still runs the optimizer,
-      # but the chmod step above ensures esbuild is executable on first cold run.
+      # Cache the Vite dep optimizer output so subsequent runs with the same
+      # lockfile skip bundling entirely (fastest path).
       - name: Cache Vite dep optimizer output
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:

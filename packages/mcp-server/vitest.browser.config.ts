@@ -5,16 +5,8 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import sharedConfig from './vitest.shared.js'
 import { resolveBrowserLaunchOptions } from './src/server/browser-test-config.js'
 
-// Strip optimizeDeps.include from shared before merging. Vite 8's Rolldown-based
-// dep optimizer hangs indefinitely in the Playwright container on cold pnpm cache
-// (lockfile change → cache miss → copies instead of hardlinks). React 19, Radix UI,
-// and react-router-dom 7 all ship as ESM, so pre-bundling is not required.
-// noDiscovery prevents auto-scanning; empty include means nothing to pre-bundle.
-const { optimizeDeps: _omit, ...sharedWithoutOptimize } = sharedConfig
-const baseConfig = { ...sharedWithoutOptimize, optimizeDeps: { noDiscovery: true } }
-
 export default mergeConfig(
-  baseConfig,
+  sharedConfig,
   defineProject({
     plugins: [wasm(), topLevelAwait()],
     test: {
