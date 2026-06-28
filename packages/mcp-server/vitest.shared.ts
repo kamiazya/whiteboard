@@ -5,7 +5,6 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vitest/config'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
 export default defineConfig({
   root: __dirname,
   plugins: [react(), tailwindcss()],
@@ -15,7 +14,13 @@ export default defineConfig({
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './tmp/coverage',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['**/*.test.*', '**/*.smoke-impl.ts', '**/*.distribution-impl.ts', 'src/app/components/ui/**', 'dist/**'],
+      exclude: [
+        '**/*.test.*',
+        '**/*.smoke-impl.ts',
+        '**/*.distribution-impl.ts',
+        'src/app/components/ui/**',
+        'dist/**',
+      ],
     },
   },
   optimizeDeps: {

@@ -30,3 +30,13 @@ catalog:
 minimumReleaseAge: 10080
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
+
+# pnpm v11 blocks all build scripts by default (security-by-default).
+# esbuild's postinstall (install.js) must run: it writes the absolute path of the
+# @esbuild/linux-x64 native binary into lib/main.js. Without this, the JS API
+# cannot locate the binary and Vite's dep optimizer hangs indefinitely when the
+# pnpm store cache is cold (lockfile change → cache miss → fresh install).
+# With a warm pnpm store cache the previously-written path survives in cached
+# files, which is why warm cache runs succeed even with the postinstall blocked.
+onlyBuiltDependencies:
+  - esbuild
