@@ -63,7 +63,7 @@
     "@cyclonedx/cyclonedx-npm": "^4",
     "@secretlint/secretlint-rule-pattern": "13.0.2",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.2",
-    "@tanstack/intent": "^0.0.29",
+    "@tanstack/intent": "^0.0.40",
     "lefthook": "^2.1.9",
     "secretlint": "13.0.2",
     "vitest": "catalog:"
