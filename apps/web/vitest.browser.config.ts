@@ -8,8 +8,13 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
+const isCI = !!process.env.CI
 
 export default defineConfig({
+  optimizeDeps: {
+    noDiscovery: isCI,
+    include: isCI ? [] : undefined,
+  },
   resolve: {
     alias: {
       // Resolve browser-shared from source so tests run before `pnpm build`.

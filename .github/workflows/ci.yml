@@ -103,11 +103,9 @@ jobs:
 
   test-browser:
     runs-on: ubuntu-latest
-    # Run directly on ubuntu-latest (no Docker container) and use the
-    # pre-installed Google Chrome. This avoids two CI pitfalls:
-    # 1. Docker's seccomp profile blocks Rolldown's native binding init.
-    # 2. playwright install chromium hangs indefinitely on GH runners
-    #    after downloading the headless shell binary.
+    # Run on bare ubuntu-latest with the pre-installed system Chrome.
+    # Rolldown's dep optimizer hangs on GH Actions Linux runners, so the
+    # vitest configs set optimizeDeps.noDiscovery=true when CI=true.
     timeout-minutes: 15
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
@@ -123,16 +121,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # Cache the Vite dep optimizer output so subsequent runs with the same
-      # lockfile skip bundling entirely (fastest path).
-      - name: Cache Vite dep optimizer output
-        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: |
-            packages/mcp-server/node_modules/.vite
-            apps/web/node_modules/.vite
-          key: vite-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Test mcp-browser
         run: pnpm exec vitest run --project=mcp-browser
