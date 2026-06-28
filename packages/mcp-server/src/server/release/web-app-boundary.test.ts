@@ -622,15 +622,18 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     if (!existsSync(releaseYml)) return
     const content = readFileSync(releaseYml, 'utf-8')
     expect(content, 'release.yml must contain deploy-web job').toContain('deploy-web:')
-    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_API_TOKEN').toContain(
+    // Extract just the deploy-web job block so assertions are scoped to that job only.
+    const deployWebMatch = content.match(/  deploy-web:[\s\S]*?(?=\n  [\w][\w-]*:|$)/)
+    const deployWebSection = deployWebMatch ? deployWebMatch[0] : ''
+    expect(deployWebSection, 'deploy-web job must reference CLOUDFLARE_API_TOKEN').toContain(
       'CLOUDFLARE_API_TOKEN',
     )
-    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_ACCOUNT_ID').toContain(
+    expect(deployWebSection, 'deploy-web job must reference CLOUDFLARE_ACCOUNT_ID').toContain(
       'CLOUDFLARE_ACCOUNT_ID',
     )
     expect(
-      content,
-      'release.yml deploy-web must use production-web environment (secrets scoped to tag-protected env)',
+      deployWebSection,
+      'deploy-web job must declare environment: production-web (secrets scoped to tag-protected env)',
     ).toContain('environment: production-web')
   })
 })
