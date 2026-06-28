@@ -151,7 +151,7 @@
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@resvg/resvg-js": "^2.6.2",
     "happy-dom": "^20.9.0",
-    "hono": "^4.12.15",
+    "hono": "^4.12.26",
     "image-size": "^2",
     "jose": "^6.2.2",
     "kysely": "^0.28.17",
@@ -172,6 +172,8 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@tailwindcss/vite": "^4",
     "@tanstack/intent": "^0.0.29",
     "@testing-library/dom": "^10.4.1",
@@ -186,6 +188,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "concurrently": "^9",
+    "fast-check": "^4.7.0",
     "jsdom": "^29.0.2",
     "libsql": "^0.5.29",
     "lucide-react": "^1.11.0",
@@ -202,9 +205,6 @@
     "vite-plugin-static-copy": "^4.1.0",
     "vite-plugin-top-level-await": "^1",
     "vite-plugin-wasm": "^3",
-    "vitest": "catalog:",
-    "fast-check": "^4.7.0",
-    "@stryker-mutator/core": "^9.6.1",
-    "@stryker-mutator/vitest-runner": "^9.6.1"
+    "vitest": "catalog:"
   }
 }
