@@ -18,22 +18,11 @@ export default defineConfig({
       ),
     },
   },
-  plugins: [
-    react(),
-    wasm(),
-    topLevelAwait(),
-    {
-      name: 'no-dep-optimizer',
-      configResolved(config) {
-        // Vite 8's Rolldown-based dep optimizer hangs indefinitely in the Playwright
-        // container when the pnpm store cache is cold (lockfile change → cache miss →
-        // fresh copies instead of hardlinks). React 19 ships as ESM and doesn't need
-        // CJS-to-ESM pre-bundling, so disabling optimization is safe for browser tests.
-        config.optimizeDeps.include = []
-        config.optimizeDeps.noDiscovery = true
-      },
-    },
-  ],
+  // Vite 8's Rolldown-based dep optimizer hangs indefinitely in the Playwright
+  // container on cold pnpm cache. React 19 ships as ESM, so pre-bundling is not
+  // required. noDiscovery prevents auto-scanning for deps to bundle.
+  optimizeDeps: { noDiscovery: true },
+  plugins: [react(), wasm(), topLevelAwait()],
   test: {
     name: 'web-browser',
     include: ['src/**/*.browser.test.tsx'],
