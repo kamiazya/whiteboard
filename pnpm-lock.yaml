@@ -55,8 +55,8 @@ importers:
         specifier: ^2.0.0
         version: 2.4.13
       '@cyclonedx/cyclonedx-npm':
-        specifier: ^4
-        version: 4.2.1
+        specifier: ^5
+        version: 5.0.0
       '@secretlint/secretlint-rule-pattern':
         specifier: 13.0.2
         version: 13.0.2
@@ -768,8 +768,8 @@ packages:
       xmlbuilder2:
         optional: true
 
-  '@cyclonedx/cyclonedx-npm@4.2.1':
-    resolution: {integrity: sha512-SOA/96sf0wsgUYCRtFkLFm6WoFhG+q1BxdC84hPSn9J3xWlH1e7OnTPJT+WNUzTqzX1nSm5JhjRX4krozu2X+g==}
+  '@cyclonedx/cyclonedx-npm@5.0.0':
+    resolution: {integrity: sha512-pEz/pqYJHQ0ZvY5xFJa+GQ5AjNL7JOEJCXCHymvKo2N1VnzKE1ROpkumduJt8a0DukQjQfBGRXouGQ9xqJtJaQ==}
     engines: {node: '>=20.18.0', npm: '>=9'}
     hasBin: true
 
@@ -6311,28 +6311,28 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@cyclonedx/cyclonedx-library@10.0.0(ajv-formats-draft2019@1.6.1(ajv@8.18.0))(ajv-formats@3.0.1(ajv@8.18.0))(ajv@8.18.0)(libxmljs2@0.37.0)(packageurl-js@2.0.1)(spdx-expression-parse@4.0.0)(xmlbuilder2@4.0.3)':
+  '@cyclonedx/cyclonedx-library@10.0.0(ajv-formats-draft2019@1.6.1(ajv@8.20.0))(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(libxmljs2@0.37.0)(packageurl-js@2.0.1)(spdx-expression-parse@4.0.0)(xmlbuilder2@4.0.3)':
     optionalDependencies:
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      ajv-formats-draft2019: 1.6.1(ajv@8.18.0)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      ajv-formats-draft2019: 1.6.1(ajv@8.20.0)
       libxmljs2: 0.37.0
       packageurl-js: 2.0.1
       spdx-expression-parse: 4.0.0
       xmlbuilder2: 4.0.3
 
-  '@cyclonedx/cyclonedx-npm@4.2.1':
+  '@cyclonedx/cyclonedx-npm@5.0.0':
     dependencies:
-      '@cyclonedx/cyclonedx-library': 10.0.0(ajv-formats-draft2019@1.6.1(ajv@8.18.0))(ajv-formats@3.0.1(ajv@8.18.0))(ajv@8.18.0)(libxmljs2@0.37.0)(packageurl-js@2.0.1)(spdx-expression-parse@4.0.0)(xmlbuilder2@4.0.3)
+      '@cyclonedx/cyclonedx-library': 10.0.0(ajv-formats-draft2019@1.6.1(ajv@8.20.0))(ajv-formats@3.0.1(ajv@8.20.0))(ajv@8.20.0)(libxmljs2@0.37.0)(packageurl-js@2.0.1)(spdx-expression-parse@4.0.0)(xmlbuilder2@4.0.3)
       commander: 14.0.3
       normalize-package-data: 8.0.0
       packageurl-js: 2.0.1
       spdx-expression-parse: 4.0.0
       xmlbuilder2: 4.0.3
     optionalDependencies:
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      ajv-formats-draft2019: 1.6.1(ajv@8.18.0)
+      ajv: 8.20.0
+      ajv-formats: 3.0.1(ajv@8.20.0)
+      ajv-formats-draft2019: 1.6.1(ajv@8.20.0)
       libxmljs2: 0.37.0
     transitivePeerDependencies:
       - supports-color
@@ -8898,9 +8898,9 @@ snapshots:
   agent-base@7.1.4:
     optional: true
 
-  ajv-formats-draft2019@1.6.1(ajv@8.18.0):
+  ajv-formats-draft2019@1.6.1(ajv@8.20.0):
     dependencies:
-      ajv: 8.18.0
+      ajv: 8.20.0
       punycode: 2.3.1
       schemes: 1.4.0
       smtp-address-parser: 1.1.0
@@ -8910,6 +8910,11 @@ snapshots:
   ajv-formats@3.0.1(ajv@8.18.0):
     optionalDependencies:
       ajv: 8.18.0
+
+  ajv-formats@3.0.1(ajv@8.20.0):
+    optionalDependencies:
+      ajv: 8.20.0
+    optional: true
 
   ajv@8.18.0:
     dependencies:
@@ -10538,7 +10543,7 @@ snapshots:
       proc-log: 5.0.0
       semver: 7.7.4
       tar: 7.5.15
-      tinyglobby: 0.2.16
+      tinyglobby: 0.2.17
       which: 5.0.0
     transitivePeerDependencies:
       - supports-color
