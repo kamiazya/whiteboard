@@ -123,6 +123,7 @@ jobs:
 
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
+        working-directory: packages/mcp-server
 
       # Cache the Vite dep optimizer output so subsequent runs with the same
       # lockfile skip bundling entirely (fastest path).
