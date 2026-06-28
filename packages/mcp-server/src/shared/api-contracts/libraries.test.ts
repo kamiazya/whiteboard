@@ -244,10 +244,8 @@ describe('saveUserLibraryRequestSchema', () => {
     expect(result).toEqual(valid)
   })
 
-  it('accepts undefined content (z.unknown() accepts undefined — content presence is a runtime concern)', () => {
-    // z.unknown() accepts any value including undefined, so a missing key is valid
-    // at the schema level. The route handler validates the payload at a higher level.
-    expect(saveUserLibraryRequestSchema.safeParse({}).success).toBe(true)
+  it('rejects missing content (z.unknown() requires the key to be present)', () => {
+    expect(saveUserLibraryRequestSchema.safeParse({}).success).toBe(false)
   })
 })
 

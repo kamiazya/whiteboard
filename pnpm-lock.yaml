@@ -30,9 +30,6 @@ catalogs:
     vitest:
       specifier: ^4.1.8
       version: 4.1.9
-    zod:
-      specifier: ^4
-      version: 4.3.6
 
 overrides:
   lodash-es@<4.18.0: ^4.18.0
@@ -133,8 +130,8 @@ importers:
         specifier: ^1.4.0
         version: 1.4.0
       zod:
-        specifier: 'catalog:'
-        version: 4.3.6
+        specifier: 4.4.2
+        version: 4.4.2
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4
@@ -201,7 +198,7 @@ importers:
         version: 0.4.1(kysely@0.28.17)
       '@modelcontextprotocol/sdk':
         specifier: ~1.29.0
-        version: 1.29.0(zod@4.3.6)
+        version: 1.29.0(zod@4.4.2)
       '@napi-rs/canvas':
         specifier: ^0.1.100
         version: 0.1.100
@@ -278,8 +275,8 @@ importers:
         specifier: ^8.21.0
         version: 8.21.0
       zod:
-        specifier: 'catalog:'
-        version: 4.3.6
+        specifier: 4.4.2
+        version: 4.4.2
     devDependencies:
       '@fast-check/vitest':
         specifier: ^0.4.1
@@ -5921,8 +5918,8 @@ packages:
     peerDependencies:
       zod: ^3.25.28 || ^4
 
-  zod@4.3.6:
-    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+  zod@4.4.2:
+    resolution: {integrity: sha512-IynmDyxsEsb9RKzO3J9+4SxXnl2FTFSzNBaKKaMV6tsSk0rw9gYw9gs+JFCq/qk2LCZ78KDwyj+Z289TijSkUw==}
 
   zone.js@0.16.1:
     resolution: {integrity: sha512-dpvY17vxYIW3+bNrP0ClUlaiY0CiIRK3tnoLaGoQsQcY9/I/NpzIWQ7tQNhbV7LacQMpCII6wVzuL3tuWOyfuA==}
@@ -6877,7 +6874,7 @@ snapshots:
     dependencies:
       langium: 4.2.2
 
-  '@modelcontextprotocol/sdk@1.29.0(zod@4.3.6)':
+  '@modelcontextprotocol/sdk@1.29.0(zod@4.4.2)':
     dependencies:
       '@hono/node-server': 1.19.13(hono@4.12.26)
       ajv: 8.18.0
@@ -6894,8 +6891,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 4.3.6
-      zod-to-json-schema: 3.25.2(zod@4.3.6)
+      zod: 4.4.2
+      zod-to-json-schema: 3.25.2(zod@4.4.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -10459,7 +10456,7 @@ snapshots:
 
   mutation-server-protocol@0.4.1:
     dependencies:
-      zod: 4.3.6
+      zod: 4.4.2
 
   mutation-testing-elements@3.7.3: {}
 
@@ -11746,11 +11743,11 @@ snapshots:
 
   yoctocolors@2.1.2: {}
 
-  zod-to-json-schema@3.25.2(zod@4.3.6):
+  zod-to-json-schema@3.25.2(zod@4.4.2):
     dependencies:
-      zod: 4.3.6
+      zod: 4.4.2
 
-  zod@4.3.6: {}
+  zod@4.4.2: {}
 
   zone.js@0.16.1: {}
 
