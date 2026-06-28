@@ -104,8 +104,6 @@ jobs:
   test-browser:
     runs-on: ubuntu-latest
     # Run on bare ubuntu-latest with the pre-installed system Chrome.
-    # Rolldown's dep optimizer hangs on GH Actions Linux runners, so the
-    # vitest configs set optimizeDeps.noDiscovery=true when CI=true.
     timeout-minutes: 15
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
