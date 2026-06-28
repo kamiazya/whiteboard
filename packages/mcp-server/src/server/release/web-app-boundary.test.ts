@@ -628,5 +628,9 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     expect(content, 'release.yml deploy-web must reference CLOUDFLARE_ACCOUNT_ID').toContain(
       'CLOUDFLARE_ACCOUNT_ID',
     )
+    expect(
+      content,
+      'release.yml deploy-web must use production-web environment (secrets scoped to tag-protected env)',
+    ).toContain('environment: production-web')
   })
 })
