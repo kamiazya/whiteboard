@@ -36,16 +36,13 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
     req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
+      const db = req.result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
       if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
       if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
 
-      if (event.oldVersion < 3) {
-        const tx = (event.target as IDBOpenDBRequest).transaction
-        // tx is always non-null inside onupgradeneeded; narrowed for TS.
-        if (tx) stripLegacySceneField(tx)
-      }
+      // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.
+      if (event.oldVersion < 3 && req.transaction) stripLegacySceneField(req.transaction)
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)

@@ -18,6 +18,10 @@ export interface BrowserLocalCanvasController {
   startFresh(): Promise<void>
 }
 
+function createUntitledSnapshot(id: string): CanvasSnapshot {
+  return { id, name: 'untitled', updatedAt: new Date().toISOString() }
+}
+
 export function useBrowserLocalCanvasController(
   store: BrowserLocalStore,
 ): BrowserLocalCanvasController {
@@ -73,11 +77,7 @@ export function useBrowserLocalCanvasController(
 
       if (id === null) {
         id = storeRef.current.generateId()
-        const newSnapshot: CanvasSnapshot = {
-          id,
-          name: 'untitled',
-          updatedAt: new Date().toISOString(),
-        }
+        const newSnapshot = createUntitledSnapshot(id)
         await storeRef.current.setDefaultCanvasId(id)
         await storeRef.current.save(newSnapshot)
         if (!cancelled) setSnapshot(newSnapshot)
@@ -173,11 +173,7 @@ export function useBrowserLocalCanvasController(
   const startFresh = useCallback(async () => {
     setCleanupError(null)
     const id = storeRef.current.generateId()
-    const fresh: CanvasSnapshot = {
-      id,
-      name: 'untitled',
-      updatedAt: new Date().toISOString(),
-    }
+    const fresh = createUntitledSnapshot(id)
     try {
       // Save the new canvas BEFORE repointing the default id, so a failed write never
       // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).
