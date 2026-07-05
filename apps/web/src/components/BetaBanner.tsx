@@ -3,11 +3,14 @@ import type { UserSettingsStore } from '../lib/user-settings-store.js'
 
 interface BetaBannerProps {
   store: UserSettingsStore
+  // The persistence claim differs per backend (browser-only vs daemon-backed),
+  // so the caller supplies the copy instead of this banner guessing it.
+  message: string
 }
 
 // Thin top banner, not fixed-positioned, so it stays clear of
 // BackendConfigChip's bottom-right fixed overlay in App.tsx.
-export function BetaBanner({ store }: BetaBannerProps) {
+export function BetaBanner({ store, message }: BetaBannerProps) {
   const [dismissedAt, setDismissedAt] = useState(() => store.load().storage.dismissedBetaBannerAt)
 
   if (dismissedAt !== undefined) return null
@@ -26,7 +29,7 @@ export function BetaBanner({ store }: BetaBannerProps) {
       data-testid="beta-banner"
       className="flex items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
     >
-      <span>Beta preview — your data is stored only in this browser.</span>
+      <span>{message}</span>
       <button
         type="button"
         onClick={handleDismiss}

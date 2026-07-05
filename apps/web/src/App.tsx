@@ -60,7 +60,10 @@ export function App({ providerState }: AppProps) {
   if (state.kind === 'local-daemon') {
     return (
       <main data-provider="local-daemon" data-status="placeholder">
-        <BetaBanner store={_userSettingsStore} />
+        <BetaBanner
+          store={_userSettingsStore}
+          message="Beta preview — features may be incomplete."
+        />
         <BackendConfigChip state={state} />
         <h1>Whiteboard</h1>
       </main>
@@ -69,7 +72,10 @@ export function App({ providerState }: AppProps) {
 
   return (
     <>
-      <BetaBanner store={_userSettingsStore} />
+      <BetaBanner
+        store={_userSettingsStore}
+        message="Beta preview — your data is stored only in this browser."
+      />
       <BackendConfigChip state={state} />
       <BrowserLocalCanvasPage store={_browserLocalStore} />
     </>

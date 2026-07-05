@@ -63,17 +63,23 @@ describe('App beta banner', () => {
     localStorage.clear()
   })
 
-  it('shows the beta banner for browser-local and local-daemon states', () => {
+  it('shows the browser-only persistence copy for the browser-local state', () => {
     render(<App providerState={BROWSER_LOCAL_STATE} />)
     expect(
       screen.getByText('Beta preview — your data is stored only in this browser.'),
     ).toBeTruthy()
   })
 
-  it('does not show the beta banner on the invalid-config error page', () => {
-    render(<App providerState={INVALID_CONFIG_STATE} />)
+  it('shows daemon-neutral copy for the local-daemon state (no browser-only claim)', () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    expect(screen.getByText('Beta preview — features may be incomplete.')).toBeTruthy()
     expect(
       screen.queryByText('Beta preview — your data is stored only in this browser.'),
     ).toBeNull()
+  })
+
+  it('does not show the beta banner on the invalid-config error page', () => {
+    render(<App providerState={INVALID_CONFIG_STATE} />)
+    expect(screen.queryByText(/Beta preview/)).toBeNull()
   })
 })
