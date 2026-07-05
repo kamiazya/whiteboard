@@ -4,6 +4,17 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
+import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
+
+// createCanvas seeds an empty Loro doc; the real LoroStore touches IndexedDB,
+// which jsdom does not implement. A fake keeps these page-level tests scoped
+// to the switcher/create UI wiring, matching the controller test's own fake.
+class FakeLoroStore implements LoroStoreLike {
+  async save(): Promise<void> {}
+  createEmptySnapshot(): Uint8Array {
+    return new Uint8Array([1, 2, 3])
+  }
+}
 
 // Excalidraw requires a real browser (roughjs native bindings). Mock it in jsdom.
 vi.mock('@excalidraw/excalidraw', () => ({
@@ -284,5 +295,66 @@ describe('BrowserLocalCanvasPage', () => {
       render(<BrowserLocalCanvasPage store={store} />)
     })
     expect(screen.queryByRole('button', { name: /add rectangle/i })).toBeNull()
+  })
+
+  it('lists all canvases in the switcher and marks the current one selected', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    })
+    const switcher = screen.getByRole('combobox', { name: /canvases/i })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    expect((switcher as HTMLSelectElement).value).toBe('c1')
+    const options = screen.getAllByRole('option')
+    expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(
+      expect.arrayContaining(['c1', 'c2']),
+    )
+    // Accessible name must not collide with Delete or the title textbox.
+    expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: /canvas title/i })).toBeTruthy()
+  })
+
+  it('switching the switcher selection calls switchCanvas exactly once', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    const switcher = screen.getByRole('combobox', { name: /canvases/i })
+    await act(async () => {
+      fireEvent.change(switcher, { target: { value: 'c2' } })
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Other canvas')
+    expect(await store.getDefaultCanvasId()).toBe('c2')
+  })
+
+  it('New canvas button creates and switches to a fresh untitled canvas', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    })
+    const newBtn = screen.getByRole('button', { name: /new canvas/i })
+    await act(async () => {
+      newBtn.click()
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+    const newId = await store.getDefaultCanvasId()
+    expect(newId).not.toBe('c1')
+    const list = await store.listCanvases()
+    expect(list.map((c) => c.id)).toEqual(expect.arrayContaining(['c1', newId]))
   })
 })

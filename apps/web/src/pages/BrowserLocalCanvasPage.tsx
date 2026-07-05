@@ -1,18 +1,24 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasTitle } from '../components/canvas-title/CanvasTitle.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-local-page-state.js'
 import {
   type BrowserLocalPersistenceState,
+  type LoroStoreLike,
   useBrowserLocalCanvasController,
 } from './use-browser-local-canvas-controller.js'
 
 interface BrowserLocalCanvasPageProps {
   store: BrowserLocalStore
+  // Injectable so tests can avoid the real LoroStore's IndexedDB dependency
+  // (jsdom does not implement IndexedDB); production callers rely on the
+  // controller hook's own default.
+  loro?: LoroStoreLike
 }
 
 // Map the persistence state machine to user-facing copy. `degraded` carries its
@@ -30,7 +36,7 @@ function persistenceLabel(status: BrowserLocalPersistenceState): string {
   }
 }
 
-export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
+export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPageProps) {
   const {
     snapshot,
     persistence,
@@ -39,9 +45,31 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
     triggerCleanup,
     startFresh,
     renameCanvas,
-  } = useBrowserLocalCanvasController(store)
+    listCanvases,
+    createCanvas,
+    switchCanvas,
+  } = useBrowserLocalCanvasController(store, loro)
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
+
+  // Enumeration is a Promise, not reactive state — refresh whenever the
+  // current canvas identity or its own updatedAt changes (covers switch,
+  // create-then-switch, and edits to the current row reflecting in the list).
+  // The generation guard drops a stale resolution that would otherwise
+  // clobber a newer refresh triggered by a fast switch.
+  const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
+  const listGenerationRef = useRef(0)
+  const currentId = pageState.kind === 'editing' ? pageState.snapshot.id : null
+  const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
+  useEffect(() => {
+    if (currentId === null) return
+    const generation = ++listGenerationRef.current
+    void listCanvases().then((list) => {
+      if (generation !== listGenerationRef.current) return
+      setCanvases(list)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentId, currentUpdatedAt])
 
   // Stable backend instance keyed on the canvas id from the loaded snapshot.
   // useMemo avoids re-connecting on re-renders when id is unchanged.
@@ -124,6 +152,30 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
             {cleanupError}
           </div>
         )}
+        <select
+          aria-label="Canvases"
+          value={pageState.snapshot.id}
+          onChange={(event) => {
+            const id = event.target.value
+            if (id !== pageState.snapshot.id) void switchCanvas(id)
+          }}
+          className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
+        >
+          {canvases.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => {
+            void createCanvas().then((created) => switchCanvas(created.id))
+          }}
+          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+        >
+          New canvas
+        </button>
         <button
           type="button"
           onClick={() => void triggerCleanup()}
