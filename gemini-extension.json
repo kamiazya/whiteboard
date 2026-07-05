@@ -1,6 +1,6 @@
 {
   "name": "whiteboard",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Collaborative Excalidraw canvas for Gemini CLI. Runs a live whiteboard in your browser and exposes MCP tools so Gemini can draw, annotate, and refine diagrams alongside you.",
   "mcpServers": {
     "whiteboard": {
