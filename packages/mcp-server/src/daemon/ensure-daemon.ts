@@ -4,7 +4,12 @@ import { join } from 'node:path'
 import { nanoid } from 'nanoid'
 import { WHITEBOARD_ROOT, DATA_DIR } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { loadDaemonRecord, deleteDaemonRecord, isPidAlive, type DaemonRecord } from './daemon-registry.js'
+import {
+  loadDaemonRecord,
+  deleteDaemonRecord,
+  isPidAlive,
+  type DaemonRecord,
+} from './daemon-registry.js'
 import { withDaemonStartupLock } from './daemon-lock.js'
 import { purgeOldDaemonLogs } from './log-rotation.js'
 
@@ -66,7 +71,9 @@ async function findAvailablePort(start = 3099): Promise<number> {
     })
     server.on('error', (error: NodeJS.ErrnoException) => {
       if (error.code === 'EADDRINUSE') {
-        void findAvailablePort(start + 1).then(resolve).catch(reject)
+        void findAvailablePort(start + 1)
+          .then(resolve)
+          .catch(reject)
         return
       }
       reject(
@@ -97,7 +104,13 @@ function buildDaemonSpawnArgs(options: {
   if (env.WHITEBOARD_DEV === '1') {
     return {
       command: 'node',
-      args: ['--watch', '--import', 'tsx/esm', join(WHITEBOARD_ROOT, 'src/server/index.ts'), ...baseArgs],
+      args: [
+        '--watch',
+        '--import',
+        'tsx/esm',
+        join(WHITEBOARD_ROOT, 'src/server/index.ts'),
+        ...baseArgs,
+      ],
     }
   }
 
@@ -116,6 +129,20 @@ async function pingDaemon(port: number, host: string): Promise<boolean> {
   }
 }
 
+// Packaged daemon cold-start (native modules, WASM, first-run migrations) can
+// exceed the 10s default on slow CI runners. WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS
+// lets such environments wait longer; an explicit option always wins, and
+// invalid values fall back to the default.
+export function resolveStartupTimeoutMs(env: NodeJS.ProcessEnv, override?: number): number {
+  if (override !== undefined) return override
+  const raw = env.WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS
+  if (raw !== undefined && /^\d+$/.test(raw)) {
+    const parsed = Number(raw)
+    if (parsed > 0) return parsed
+  }
+  return 10_000
+}
+
 async function waitForDaemon(port: number, host: string, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
@@ -130,7 +157,7 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
   const env = options.env ?? process.env
   const host = options.host ?? '127.0.0.1'
   const idleTimeoutMs = options.idleTimeoutMs ?? 15 * 60_000
-  const startupTimeoutMs = options.startupTimeoutMs ?? 10_000
+  const startupTimeoutMs = resolveStartupTimeoutMs(env, options.startupTimeoutMs)
   if (
     options.startPort !== undefined &&
     (!Number.isInteger(options.startPort) || options.startPort < 0 || options.startPort > 65535)
@@ -139,7 +166,7 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
   }
   const existing = await loadDaemonRecord(dataDir)
 
-  if (existing && isPidAlive(existing.pid) && await pingDaemon(existing.port, host)) {
+  if (existing && isPidAlive(existing.pid) && (await pingDaemon(existing.port, host))) {
     return {
       ...existing,
       baseUrl: `http://${host}:${existing.port}`,
@@ -150,7 +177,7 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
     dataDir,
     async () => {
       const fresh = await loadDaemonRecord(dataDir)
-      if (fresh && isPidAlive(fresh.pid) && await pingDaemon(fresh.port, host)) {
+      if (fresh && isPidAlive(fresh.pid) && (await pingDaemon(fresh.port, host))) {
         return {
           ...fresh,
           baseUrl: `http://${host}:${fresh.port}`,
@@ -159,7 +186,7 @@ export async function ensureDaemon(options: EnsureDaemonOptions = {}): Promise<E
 
       await deleteDaemonRecord(dataDir)
 
-      const port = options.startPort ?? await findAvailablePort(3099)
+      const port = options.startPort ?? (await findAvailablePort(3099))
       const token = nanoid(32)
       const { command, args } = buildDaemonSpawnArgs({
         env,

@@ -59,6 +59,10 @@ jobs:
     permissions:
       contents: read
       id-token: write  # npm provenance (OIDC) for signed publish on npm v9.5+
+    env:
+      # Packaged daemon cold-start exceeds the 10s default on CI runners
+      # (smoke:tarball "Daemon startup timeout" broke the v0.0.9 publish).
+      WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS: '60000'
     defaults:
       run:
         working-directory: packages/mcp-server
@@ -191,6 +195,10 @@ jobs:
       contents: read
       id-token: write   # cosign keyless signing (OIDC)
       packages: write   # GHCR push
+    env:
+      # Packaged daemon cold-start exceeds the 10s default on CI runners
+      # (smoke:tarball "Daemon startup timeout" broke the v0.0.9 publish).
+      WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS: '60000'
     steps:
       - name: Validate tag shape
         env:
