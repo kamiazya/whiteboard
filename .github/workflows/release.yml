@@ -64,6 +64,9 @@ jobs:
         working-directory: packages/mcp-server
     steps:
       - name: Validate tag shape
+        # Runs before checkout: the job-default working-directory does not exist yet,
+        # so this step must override it or bash fails to start.
+        working-directory: .
         env:
           TAG: ${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
         run: |
