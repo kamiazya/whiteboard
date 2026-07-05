@@ -1,9 +1,28 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
-import { MemoryStore } from '../lib/browser-local-store.js'
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { useBrowserLocalCanvasController } from './use-browser-local-canvas-controller.js'
+import { MemoryStore } from '../lib/browser-local-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import {
+  type LoroStoreLike,
+  useBrowserLocalCanvasController,
+} from './use-browser-local-canvas-controller.js'
+
+class FakeLoroStore implements LoroStoreLike {
+  saved: Array<{ id: string; bytes: Uint8Array }> = []
+  shouldThrow = false
+
+  async save(id: string, bytes: Uint8Array): Promise<void> {
+    if (this.shouldThrow) throw new Error('loro save failed')
+    this.saved.push({ id, bytes })
+  }
+
+  createEmptySnapshot(): Uint8Array {
+    // Fake in-memory bytes — the fake never touches real loro-crdt, matching
+    // the isolation LoroStoreLike is meant to provide to this test file.
+    return new Uint8Array([1, 2, 3])
+  }
+}
 
 const snap: CanvasSnapshot = {
   id: 'c1',
@@ -83,6 +102,7 @@ describe('useBrowserLocalCanvasController', () => {
       load: base.load.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
       save: async () => {
         throw new Error('IndexedDB: secret-key=abc123 transaction aborted')
       },
@@ -130,6 +150,7 @@ describe('useBrowserLocalCanvasController', () => {
       load: base.load.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
       save: async (s) => {
         if (shouldFailSave) throw new Error('secret-credential-xyz leaked error')
         return base.save(s)
@@ -178,6 +199,7 @@ describe('useBrowserLocalCanvasController', () => {
       load: base.load.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
       save: async (s) => {
         if (shouldFailSave) throw new Error('disk full')
         return base.save(s)
@@ -211,6 +233,7 @@ describe('useBrowserLocalCanvasController', () => {
       setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
       load: base.load.bind(base),
       generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
       save: base.save.bind(base),
       del: async () => ({ deleted: false, reason: 'pointer-mismatch' }),
     }
@@ -272,6 +295,7 @@ describe('useBrowserLocalCanvasController', () => {
       del: base.del.bind(base),
       removeCanvas: base.removeCanvas.bind(base),
       generateId: () => 'fresh-1',
+      listCanvases: async () => [],
       setDefaultCanvasId: async () => {
         throw new Error('IndexedDB: meta write aborted')
       },
@@ -416,5 +440,383 @@ describe('useBrowserLocalCanvasController', () => {
     })
     expect(result.current.snapshot?.updatedAt).not.toBe(snap.updatedAt)
     expect(result.current.persistence.kind).toBe('saved')
+  })
+
+  describe('multi-canvas: listCanvases / createCanvas / switchCanvas', () => {
+    it('listCanvases reflects the auto-created canvas on first mount', async () => {
+      const store = new MemoryStore()
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+      const list = await result.current.listCanvases()
+      expect(list).toHaveLength(1)
+      expect(list[0].id).toBe(result.current.snapshot?.id)
+    })
+
+    it('createCanvas returns a fresh snapshot, persists metadata, writes an empty Loro doc, and does not change current snapshot', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+      const currentBefore = result.current.snapshot
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      expect(created).toBeDefined()
+      expect(created?.id).not.toBe('c1')
+      expect(created?.name).toBe('Second canvas')
+      expect(result.current.snapshot).toEqual(currentBefore)
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+
+      const persisted = await store.load(created!.id)
+      expect(persisted).toEqual({ kind: 'ok', snapshot: created })
+      expect(loro.saved.some((s) => s.id === created!.id)).toBe(true)
+    })
+
+    it('createCanvas defaults the name to "untitled" when none is given', async () => {
+      const store = new MemoryStore()
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas()
+      })
+      expect(created?.name).toBe('untitled')
+    })
+
+    it('createCanvas rolls back the metadata row when the Loro write fails', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      loro.shouldThrow = true
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let thrown: unknown
+      await act(async () => {
+        try {
+          await result.current.createCanvas('Doomed')
+        } catch (err) {
+          thrown = err
+        }
+      })
+      expect(thrown).toBeDefined()
+
+      const list = await store.listCanvases()
+      expect(list).toHaveLength(1)
+      expect(list[0].id).toBe('c1')
+    })
+
+    it('listCanvases includes canvases created via createCanvas', async () => {
+      const store = new MemoryStore()
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+      await act(async () => {
+        await result.current.createCanvas('Second canvas')
+      })
+      const list = await result.current.listCanvases()
+      expect(list).toHaveLength(2)
+    })
+
+    it('switchCanvas flushes a pending edit on the current canvas, then sets the target as current and updates the default pointer', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      act(() => {
+        result.current.renameCanvas('Renamed before switch')
+      })
+
+      await act(async () => {
+        await result.current.switchCanvas(created!.id)
+      })
+
+      expect(result.current.snapshot?.id).toBe(created!.id)
+      expect(await store.getDefaultCanvasId()).toBe(created!.id)
+
+      const flushed = await store.load('c1')
+      expect(flushed).toEqual({
+        kind: 'ok',
+        snapshot: { ...snap, name: 'Renamed before switch', updatedAt: expect.any(String) },
+      })
+    })
+
+    it('switchCanvas to an unknown id degrades persistence with feedback and leaves current snapshot untouched', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+      const before = result.current.snapshot
+
+      await act(async () => {
+        await result.current.switchCanvas('does-not-exist')
+      })
+
+      // A missing/corrupted target record must surface the same way a failed
+      // load does — silently doing nothing leaves the user with no explanation.
+      expect(result.current.persistence.kind).toBe('degraded')
+      expect(result.current.snapshot).toEqual(before)
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+    })
+
+    it('switchCanvas clears a stale degraded banner from the previous canvas on a successful switch', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      // Leave a stale degraded banner behind, as a prior failed switch would.
+      await act(async () => {
+        await result.current.switchCanvas('does-not-exist')
+      })
+      expect(result.current.persistence.kind).toBe('degraded')
+
+      await act(async () => {
+        await result.current.switchCanvas(created!.id)
+      })
+
+      expect(result.current.persistence.kind).toBe('saved')
+      expect(result.current.snapshot?.id).toBe(created!.id)
+    })
+
+    it('switchCanvas degrades persistence instead of rejecting when load() throws', async () => {
+      const base = new MemoryStore()
+      await base.setDefaultCanvasId('c1')
+      await base.save(snap)
+      const throwingStore: BrowserLocalStore = {
+        getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+        setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+        save: base.save.bind(base),
+        del: base.del.bind(base),
+        generateId: base.generateId.bind(base),
+        listCanvases: base.listCanvases.bind(base),
+        load: async (id: string) => {
+          if (id === 'boom') throw new Error('IndexedDB: read aborted')
+          return base.load(id)
+        },
+      }
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(throwingStore, loro))
+      await act(async () => {})
+
+      await act(async () => {
+        await result.current.switchCanvas('boom')
+      })
+
+      expect(result.current.persistence.kind).toBe('degraded')
+      // Current snapshot and default pointer must stay untouched by the failed switch.
+      expect(result.current.snapshot).toEqual(snap)
+      expect(await throwingStore.getDefaultCanvasId()).toBe('c1')
+    })
+
+    it('switchCanvas degrades persistence instead of rejecting when setDefaultCanvasId() throws', async () => {
+      const base = new MemoryStore()
+      await base.setDefaultCanvasId('c1')
+      await base.save(snap)
+      const throwingStore: BrowserLocalStore = {
+        getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+        setDefaultCanvasId: async () => {
+          throw new Error('IndexedDB: meta write aborted')
+        },
+        save: base.save.bind(base),
+        del: base.del.bind(base),
+        generateId: base.generateId.bind(base),
+        listCanvases: base.listCanvases.bind(base),
+        load: base.load.bind(base),
+      }
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(throwingStore, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      await act(async () => {
+        await result.current.switchCanvas(created!.id)
+      })
+
+      expect(result.current.persistence.kind).toBe('degraded')
+      expect(result.current.snapshot).toEqual(snap)
+      expect(await base.getDefaultCanvasId()).toBe('c1')
+    })
+
+    it('switchCanvas waits for an in-flight fire-and-forget rename flush before switching, and aborts the switch if that flush fails', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      // Intercept the next save() (the one renameCanvas's fire-and-forget
+      // flushSave triggers) so the test controls exactly when it settles.
+      let rejectFirstSave!: (err: unknown) => void
+      let firstSaveStarted = false
+      const originalSave = store.save.bind(store)
+      let interceptNext = true
+      store.save = (s: CanvasSnapshot) => {
+        if (interceptNext) {
+          interceptNext = false
+          firstSaveStarted = true
+          return new Promise<void>((_resolve, reject) => {
+            rejectFirstSave = reject
+          })
+        }
+        return originalSave(s)
+      }
+
+      // Fire-and-forget flush, exactly like renameCanvas triggers internally.
+      act(() => {
+        result.current.renameCanvas('Renamed before switch')
+      })
+      expect(firstSaveStarted).toBe(true)
+
+      let switchSettled = false
+      const switchPromise = result.current.switchCanvas(created!.id).then(() => {
+        switchSettled = true
+      })
+
+      // Let pending microtasks run without resolving the intercepted save —
+      // switchCanvas must still be waiting on it, not racing past it.
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(switchSettled).toBe(false)
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+
+      await act(async () => {
+        rejectFirstSave(new Error('save failed'))
+        await switchPromise
+      })
+
+      expect(switchSettled).toBe(true)
+      expect(result.current.persistence.kind).toBe('degraded')
+      // The failed flush must abort the switch: default pointer stays on the
+      // original canvas instead of silently losing the rename.
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+      expect(result.current.snapshot?.id).toBe('c1')
+    })
+
+    it('two concurrent flush waiters both observe the second save that starts once the first settles', async () => {
+      // Regression: flushSave used to check pendingSnapshotRef only once right
+      // after awaiting the prior save. If two callers were waiting on that
+      // same prior save, the first to resume could consume pendingSnapshotRef
+      // and kick off a second save while the other observed an already-null
+      // pendingSnapshotRef and returned true before the second save settled.
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      // Intercept store.save so the test controls exactly when each of the
+      // two successive saves (first rename, then second rename) settles.
+      const originalSave = store.save.bind(store)
+      let resolveFirstSave!: () => void
+      let resolveSecondSave!: () => void
+      let saveCallCount = 0
+      store.save = (s: CanvasSnapshot) => {
+        saveCallCount += 1
+        if (saveCallCount === 1) {
+          return new Promise<void>((resolve) => {
+            resolveFirstSave = () => {
+              originalSave(s).then(resolve)
+            }
+          })
+        }
+        if (saveCallCount === 2) {
+          return new Promise<void>((resolve) => {
+            resolveSecondSave = () => {
+              originalSave(s).then(resolve)
+            }
+          })
+        }
+        return originalSave(s)
+      }
+
+      // First rename starts save #1 (fire-and-forget, exactly like the real hook).
+      act(() => {
+        result.current.renameCanvas('First rename')
+      })
+      expect(saveCallCount).toBe(1)
+
+      // Second rename queues a new pending snapshot and starts a second
+      // flush waiter that awaits the still-in-flight save #1.
+      act(() => {
+        result.current.renameCanvas('Second rename')
+      })
+
+      // A concurrent switchCanvas call is a third waiter on the same save #1.
+      let switchSettled = false
+      const switchPromise = result.current.switchCanvas(created!.id).then(() => {
+        switchSettled = true
+      })
+
+      // Settle save #1. This lets save #2 (carrying "Second rename") start.
+      await act(async () => {
+        resolveFirstSave()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(saveCallCount).toBe(2)
+      // switchCanvas must still be waiting — save #2 has not settled yet.
+      expect(switchSettled).toBe(false)
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+
+      // Now let save #2 settle and confirm switchCanvas only proceeds after it does.
+      await act(async () => {
+        resolveSecondSave()
+        await switchPromise
+      })
+      expect(switchSettled).toBe(true)
+      expect(result.current.persistence.kind).toBe('saved')
+      expect(result.current.snapshot?.id).toBe(created!.id)
+      expect(await store.getDefaultCanvasId()).toBe(created!.id)
+      const flushed = await store.load('c1')
+      expect(flushed).toEqual({
+        kind: 'ok',
+        snapshot: { ...snap, name: 'Second rename', updatedAt: expect.any(String) },
+      })
+    })
   })
 })

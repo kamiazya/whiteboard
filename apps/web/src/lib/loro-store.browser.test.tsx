@@ -69,6 +69,22 @@ describe('LoroStore (real IndexedDB)', () => {
     expect(result).toEqual({ kind: 'not-found' })
   })
 
+  it('createEmptySnapshot returns bytes that import into a fresh Loro doc without throwing', () => {
+    const store = new LoroStore()
+    const bytes = store.createEmptySnapshot()
+    expect(bytes).toBeInstanceOf(Uint8Array)
+    const doc = new Loro()
+    expect(() => doc.import(bytes)).not.toThrow()
+    expect(doc.getList('elements').length).toBe(0)
+  })
+
+  it('createEmptySnapshot bytes round-trip through save/load', async () => {
+    const store = new LoroStore()
+    await store.save('empty-canvas', store.createEmptySnapshot())
+    const result = await store.load('empty-canvas')
+    expect(result.kind).toBe('ok')
+  })
+
   it('save then load returns ok with the snapshot bytes', async () => {
     const store = new LoroStore()
     const snapshot = makeSnapshot([{ id: 'a', type: 'rect' }])
