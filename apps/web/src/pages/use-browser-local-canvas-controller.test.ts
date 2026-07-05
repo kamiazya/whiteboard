@@ -449,6 +449,44 @@ describe('useBrowserLocalCanvasController', () => {
     }
   })
 
+  it('renameCanvas before the initial load resolves is a safe no-op', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
+    // No awaited act() yet — the async load hasn't populated snapshotRef/pendingSnapshotRef.
+    expect(result.current.snapshot).toBeNull()
+    act(() => {
+      result.current.renameCanvas('Too early')
+    })
+    expect(result.current.snapshot).toBeNull()
+    expect(result.current.persistence.kind).toBe('saved')
+    // Let the load finish and confirm the store was never touched by the no-op call.
+    await act(async () => {})
+    const loadResult = await store.load('c1')
+    expect(loadResult.kind).toBe('ok')
+    if (loadResult.kind === 'ok') {
+      expect(loadResult.snapshot.name).toBe(snap.name)
+    }
+  })
+
+  it('renameCanvas after cleanup cleared the snapshot is a safe no-op', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
+    await act(async () => {})
+    await act(async () => {
+      await result.current.triggerCleanup()
+    })
+    expect(result.current.snapshot).toBeNull()
+    act(() => {
+      result.current.renameCanvas('After cleanup')
+    })
+    expect(result.current.snapshot).toBeNull()
+    expect(await store.getDefaultCanvasId()).toBeNull()
+  })
+
   it('renameCanvas refreshes updatedAt and transitions persistence to saved', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
