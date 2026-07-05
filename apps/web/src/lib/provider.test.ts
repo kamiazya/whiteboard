@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_RUNTIME_CONFIG } from '../runtime-config.js'
-import { resolveHostedProviderStateFromRaw, resolveProviderState, resolveProviderStateFromRaw } from './provider.js'
+import {
+  resolveHostedProviderStateFromRaw,
+  resolveProviderState,
+  resolveProviderStateFromRaw,
+} from './provider.js'
 
 describe('resolveProviderState', () => {
   it('returns browser-local when daemonBaseUrl is absent', () => {
@@ -8,7 +12,9 @@ describe('resolveProviderState', () => {
   })
 
   it('returns local-daemon only when daemonBaseUrl is present', () => {
-    expect(resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe('local-daemon')
+    expect(resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe(
+      'local-daemon',
+    )
   })
 
   it('local-daemon state carries daemonBaseUrl', () => {
@@ -56,7 +62,9 @@ describe('resolveProviderStateFromRaw', () => {
   })
 
   it('valid daemonBaseUrl returns local-daemon state', () => {
-    expect(resolveProviderStateFromRaw({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe('local-daemon')
+    expect(resolveProviderStateFromRaw({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe(
+      'local-daemon',
+    )
   })
 
   it('invalid URL returns invalid-config state', () => {
@@ -106,12 +114,16 @@ describe('resolveHostedProviderStateFromRaw', () => {
   })
 
   it('production publicOrigin with no daemon returns browser-local', () => {
-    const state = resolveHostedProviderStateFromRaw({ publicOrigin: 'https://whiteboard.pages.dev' })
+    const state = resolveHostedProviderStateFromRaw({
+      publicOrigin: 'https://kamiazya-whiteboard.pages.dev',
+    })
     expect(state.kind).toBe('browser-local')
   })
 
   it('preview publicOrigin returns invalid-config', () => {
-    const state = resolveHostedProviderStateFromRaw({ publicOrigin: 'https://abc123.whiteboard.pages.dev' })
+    const state = resolveHostedProviderStateFromRaw({
+      publicOrigin: 'https://abc123.kamiazya-whiteboard.pages.dev',
+    })
     expect(state.kind).toBe('invalid-config')
   })
 
@@ -122,7 +134,7 @@ describe('resolveHostedProviderStateFromRaw', () => {
 
   it('invalid-config message does not expose the rejected publicOrigin value', () => {
     const state = resolveHostedProviderStateFromRaw({
-      publicOrigin: 'https://secret.whiteboard.pages.dev',
+      publicOrigin: 'https://secret.kamiazya-whiteboard.pages.dev',
     })
     expect(state.kind).toBe('invalid-config')
     if (state.kind === 'invalid-config') {
@@ -134,12 +146,15 @@ describe('resolveHostedProviderStateFromRaw', () => {
   // browserOrigin guard: preview browser origin is rejected even with no runtime config,
   // so a Cloudflare Pages preview deploy cannot silently enter browser-local mode.
   it('preview browserOrigin returns invalid-config even with empty runtime config', () => {
-    const state = resolveHostedProviderStateFromRaw({}, 'https://abc123.whiteboard.pages.dev')
+    const state = resolveHostedProviderStateFromRaw(
+      {},
+      'https://abc123.kamiazya-whiteboard.pages.dev',
+    )
     expect(state.kind).toBe('invalid-config')
   })
 
   it('production browserOrigin with empty runtime config returns browser-local', () => {
-    const state = resolveHostedProviderStateFromRaw({}, 'https://whiteboard.pages.dev')
+    const state = resolveHostedProviderStateFromRaw({}, 'https://kamiazya-whiteboard.pages.dev')
     expect(state.kind).toBe('browser-local')
   })
 
@@ -149,7 +164,10 @@ describe('resolveHostedProviderStateFromRaw', () => {
   })
 
   it('invalid-config from preview browserOrigin does not expose the origin value', () => {
-    const state = resolveHostedProviderStateFromRaw({}, 'https://secret-hash.whiteboard.pages.dev')
+    const state = resolveHostedProviderStateFromRaw(
+      {},
+      'https://secret-hash.kamiazya-whiteboard.pages.dev',
+    )
     expect(state.kind).toBe('invalid-config')
     if (state.kind === 'invalid-config') {
       expect(state.message).not.toContain('secret-hash')

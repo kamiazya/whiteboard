@@ -285,4 +285,4 @@ jobs:
           apiToken: ${{ env.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ env.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/web
-          command: pages deploy dist --project-name=whiteboard
+          command: pages deploy dist --project-name=kamiazya-whiteboard
