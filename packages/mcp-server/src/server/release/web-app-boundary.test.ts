@@ -535,13 +535,13 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
     )
   })
 
-  it('project name matches provisional production origin slug "whiteboard"', () => {
+  it('project name matches production origin slug "kamiazya-whiteboard"', () => {
     if (!existsSync(wranglerPath)) return
     const content = readFileSync(wranglerPath, 'utf-8')
     expect(
       content,
-      'wrangler.toml name must be "whiteboard" — matches https://whiteboard.pages.dev',
-    ).toMatch(/\bname\s*=\s*["']whiteboard["']/)
+      'wrangler.toml name must be "kamiazya-whiteboard" — matches https://kamiazya-whiteboard.pages.dev',
+    ).toMatch(/\bname\s*=\s*["']kamiazya-whiteboard["']/)
   })
 
   it('wrangler.toml does not contain account_id or Cloudflare production secrets', () => {
@@ -556,10 +556,10 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
   it('wrangler.toml does not hardcode preview origins in any allowed origin list', () => {
     if (!existsSync(wranglerPath)) return
     const content = readFileSync(wranglerPath, 'utf-8')
-    // Wildcard globs (*.whiteboard.pages.dev) and concrete preview subdomains are both preview origins.
-    expect(content).not.toMatch(/\*\.whiteboard\.pages\.dev/)
+    // Wildcard globs (*.kamiazya-whiteboard.pages.dev) and concrete preview subdomains are both preview origins.
+    expect(content).not.toMatch(/\*\.kamiazya-whiteboard\.pages\.dev/)
     expect(content).not.toMatch(/\*\.pages\.dev/)
-    expect(content).not.toMatch(/[a-z0-9-]+\.whiteboard\.pages\.dev/)
+    expect(content).not.toMatch(/[a-z0-9-]+\.kamiazya-whiteboard\.pages\.dev/)
   })
 })
 
@@ -622,11 +622,18 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     if (!existsSync(releaseYml)) return
     const content = readFileSync(releaseYml, 'utf-8')
     expect(content, 'release.yml must contain deploy-web job').toContain('deploy-web:')
-    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_API_TOKEN').toContain(
+    // Extract just the deploy-web job block so assertions are scoped to that job only.
+    const deployWebMatch = content.match(/  deploy-web:[\s\S]*?(?=\n  [\w][\w-]*:|$)/)
+    const deployWebSection = deployWebMatch ? deployWebMatch[0] : ''
+    expect(deployWebSection, 'deploy-web job must reference CLOUDFLARE_API_TOKEN').toContain(
       'CLOUDFLARE_API_TOKEN',
     )
-    expect(content, 'release.yml deploy-web must reference CLOUDFLARE_ACCOUNT_ID').toContain(
+    expect(deployWebSection, 'deploy-web job must reference CLOUDFLARE_ACCOUNT_ID').toContain(
       'CLOUDFLARE_ACCOUNT_ID',
     )
+    expect(
+      deployWebSection,
+      'deploy-web job must declare environment: production-web (secrets scoped to tag-protected env)',
+    ).toContain('environment: production-web')
   })
 })

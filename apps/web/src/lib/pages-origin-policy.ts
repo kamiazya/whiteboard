@@ -1,8 +1,8 @@
 // Provisional production origin for the hosted app.
 // Update to the confirmed canonical domain once it is assigned.
-export const PROVISIONAL_PRODUCTION_ORIGIN = 'https://whiteboard.pages.dev' as const
+export const PROVISIONAL_PRODUCTION_ORIGIN = 'https://kamiazya-whiteboard.pages.dev' as const
 
-const PAGES_DOMAIN = 'whiteboard.pages.dev'
+const PAGES_DOMAIN = 'kamiazya-whiteboard.pages.dev'
 
 // Classification of an origin candidate against the Cloudflare Pages hosting policy.
 // 'production'             — exact provisional production origin; accepted.

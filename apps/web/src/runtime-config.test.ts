@@ -31,7 +31,9 @@ describe('runtimeConfigSchema', () => {
   })
 
   it('rejects publicOrigin with a query string', () => {
-    expect(() => resolveRuntimeConfig({ publicOrigin: 'https://app.example.com?token=x' })).toThrow()
+    expect(() =>
+      resolveRuntimeConfig({ publicOrigin: 'https://app.example.com?token=x' }),
+    ).toThrow()
   })
 
   it('rejects publicOrigin with a fragment', () => {
@@ -47,7 +49,9 @@ describe('runtimeConfigSchema', () => {
   })
 
   it('rejects unknown keys (credential-bearing config is fail-closed)', () => {
-    expect(() => resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099', token: 'secret' })).toThrow()
+    expect(() =>
+      resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099', token: 'secret' }),
+    ).toThrow()
   })
 
   it('rejects config with Authorization key', () => {
@@ -74,20 +78,20 @@ describe('resolveHostedRuntimeConfig', () => {
   })
 
   it('accepts production pages.dev publicOrigin', () => {
-    const config = resolveHostedRuntimeConfig({ publicOrigin: 'https://whiteboard.pages.dev' })
-    expect(config.publicOrigin).toBe('https://whiteboard.pages.dev')
+    const config = resolveHostedRuntimeConfig({
+      publicOrigin: 'https://kamiazya-whiteboard.pages.dev',
+    })
+    expect(config.publicOrigin).toBe('https://kamiazya-whiteboard.pages.dev')
   })
 
   it('rejects preview origin as publicOrigin', () => {
     expect(() =>
-      resolveHostedRuntimeConfig({ publicOrigin: 'https://abc123.whiteboard.pages.dev' }),
+      resolveHostedRuntimeConfig({ publicOrigin: 'https://abc123.kamiazya-whiteboard.pages.dev' }),
     ).toThrow()
   })
 
   it('rejects localhost as publicOrigin', () => {
-    expect(() =>
-      resolveHostedRuntimeConfig({ publicOrigin: 'https://localhost:5173' }),
-    ).toThrow()
+    expect(() => resolveHostedRuntimeConfig({ publicOrigin: 'https://localhost:5173' })).toThrow()
   })
 
   it('rejects custom domain as publicOrigin (deferred)', () => {
@@ -99,7 +103,9 @@ describe('resolveHostedRuntimeConfig', () => {
   it('error message is a safe generic copy — does not expose raw publicOrigin value', () => {
     let message = ''
     try {
-      resolveHostedRuntimeConfig({ publicOrigin: 'https://secret-preview.whiteboard.pages.dev' })
+      resolveHostedRuntimeConfig({
+        publicOrigin: 'https://secret-preview.kamiazya-whiteboard.pages.dev',
+      })
     } catch (e) {
       message = e instanceof Error ? e.message : String(e)
     }
@@ -112,17 +118,19 @@ describe('runtimeConfigSchema + pages origin policy cross-reference', () => {
   it('preview origin passes structural bare-origin schema', () => {
     // The schema validates shape only (bare origin, https, no wildcards).
     // A preview deploy URL is structurally valid but must NOT be used as publicOrigin.
-    const config = resolveRuntimeConfig({ publicOrigin: 'https://abc123.whiteboard.pages.dev' })
-    expect(config.publicOrigin).toBe('https://abc123.whiteboard.pages.dev')
+    const config = resolveRuntimeConfig({
+      publicOrigin: 'https://abc123.kamiazya-whiteboard.pages.dev',
+    })
+    expect(config.publicOrigin).toBe('https://abc123.kamiazya-whiteboard.pages.dev')
   })
 
   it('preview origin is rejected by isProductionPagesOrigin', () => {
-    expect(isProductionPagesOrigin('https://abc123.whiteboard.pages.dev')).toBe(false)
+    expect(isProductionPagesOrigin('https://abc123.kamiazya-whiteboard.pages.dev')).toBe(false)
   })
 
   it('production origin passes both schema and pages policy', () => {
-    const config = resolveRuntimeConfig({ publicOrigin: 'https://whiteboard.pages.dev' })
-    expect(config.publicOrigin).toBe('https://whiteboard.pages.dev')
-    expect(isProductionPagesOrigin('https://whiteboard.pages.dev')).toBe(true)
+    const config = resolveRuntimeConfig({ publicOrigin: 'https://kamiazya-whiteboard.pages.dev' })
+    expect(config.publicOrigin).toBe('https://kamiazya-whiteboard.pages.dev')
+    expect(isProductionPagesOrigin('https://kamiazya-whiteboard.pages.dev')).toBe(true)
   })
 })

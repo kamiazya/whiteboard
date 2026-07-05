@@ -7,25 +7,25 @@ import {
 
 describe('PROVISIONAL_PRODUCTION_ORIGIN', () => {
   it('is the provisional pages.dev production origin', () => {
-    expect(PROVISIONAL_PRODUCTION_ORIGIN).toBe('https://whiteboard.pages.dev')
+    expect(PROVISIONAL_PRODUCTION_ORIGIN).toBe('https://kamiazya-whiteboard.pages.dev')
   })
 })
 
 describe('classifyPagesOrigin', () => {
   it('classifies the provisional production origin as production', () => {
-    expect(classifyPagesOrigin('https://whiteboard.pages.dev')).toBe('production')
+    expect(classifyPagesOrigin('https://kamiazya-whiteboard.pages.dev')).toBe('production')
   })
 
   it('classifies a preview subdomain as preview', () => {
-    expect(classifyPagesOrigin('https://abc123.whiteboard.pages.dev')).toBe('preview')
+    expect(classifyPagesOrigin('https://abc123.kamiazya-whiteboard.pages.dev')).toBe('preview')
   })
 
   it('classifies an arbitrary hash subdomain as preview', () => {
-    expect(classifyPagesOrigin('https://evil-hash.whiteboard.pages.dev')).toBe('preview')
+    expect(classifyPagesOrigin('https://evil-hash.kamiazya-whiteboard.pages.dev')).toBe('preview')
   })
 
   it('classifies http origin as insecure', () => {
-    expect(classifyPagesOrigin('http://whiteboard.pages.dev')).toBe('insecure')
+    expect(classifyPagesOrigin('http://kamiazya-whiteboard.pages.dev')).toBe('insecure')
   })
 
   it('classifies http localhost as insecure (not localhost) since insecure takes precedence', () => {
@@ -42,19 +42,25 @@ describe('classifyPagesOrigin', () => {
   })
 
   it('classifies origin with path as non-bare-origin', () => {
-    expect(classifyPagesOrigin('https://whiteboard.pages.dev/path')).toBe('non-bare-origin')
+    expect(classifyPagesOrigin('https://kamiazya-whiteboard.pages.dev/path')).toBe(
+      'non-bare-origin',
+    )
   })
 
   it('classifies origin with query string as non-bare-origin', () => {
-    expect(classifyPagesOrigin('https://whiteboard.pages.dev?q=1')).toBe('non-bare-origin')
+    expect(classifyPagesOrigin('https://kamiazya-whiteboard.pages.dev?q=1')).toBe('non-bare-origin')
   })
 
   it('classifies origin with fragment as non-bare-origin', () => {
-    expect(classifyPagesOrigin('https://whiteboard.pages.dev#hash')).toBe('non-bare-origin')
+    expect(classifyPagesOrigin('https://kamiazya-whiteboard.pages.dev#hash')).toBe(
+      'non-bare-origin',
+    )
   })
 
   it('classifies origin with credentials as non-bare-origin', () => {
-    expect(classifyPagesOrigin('https://user:pass@whiteboard.pages.dev')).toBe('non-bare-origin')
+    expect(classifyPagesOrigin('https://user:pass@kamiazya-whiteboard.pages.dev')).toBe(
+      'non-bare-origin',
+    )
   })
 
   it('classifies wildcard hostname as non-bare-origin', () => {
@@ -80,11 +86,11 @@ describe('classifyPagesOrigin', () => {
 
 describe('isProductionPagesOrigin', () => {
   it('returns true for provisional production origin', () => {
-    expect(isProductionPagesOrigin('https://whiteboard.pages.dev')).toBe(true)
+    expect(isProductionPagesOrigin('https://kamiazya-whiteboard.pages.dev')).toBe(true)
   })
 
   it('returns false for preview origin', () => {
-    expect(isProductionPagesOrigin('https://abc123.whiteboard.pages.dev')).toBe(false)
+    expect(isProductionPagesOrigin('https://abc123.kamiazya-whiteboard.pages.dev')).toBe(false)
   })
 
   it('returns false for localhost', () => {
@@ -92,7 +98,7 @@ describe('isProductionPagesOrigin', () => {
   })
 
   it('returns false for insecure origin', () => {
-    expect(isProductionPagesOrigin('http://whiteboard.pages.dev')).toBe(false)
+    expect(isProductionPagesOrigin('http://kamiazya-whiteboard.pages.dev')).toBe(false)
   })
 })
 
