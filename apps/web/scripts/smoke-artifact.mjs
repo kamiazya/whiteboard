@@ -44,6 +44,15 @@ console.log('\n[smoke-artifact] dist/ structure')
 assert(existsSync(DIST), 'dist/ directory exists')
 assert(existsSync(resolve(DIST, 'index.html')), 'dist/index.html exists')
 
+// Self-hosted Excalidraw fonts: Excalidraw resolves
+// `${EXCALIDRAW_ASSET_PATH}fonts/<Family>/…` and the CSP blocks the esm.sh
+// fallback, so the fonts must land at dist/fonts/<Family>/ exactly.
+assert(existsSync(resolve(DIST, 'fonts/Excalifont')), 'dist/fonts/Excalifont/ exists (self-hosted)')
+assert(
+  !existsSync(resolve(DIST, 'fonts/node_modules')),
+  'dist/fonts has no node_modules path prefix (copy structure regression)',
+)
+
 // ── _headers copied ───────────────────────────────────────────────────────────
 console.log('\n[smoke-artifact] _headers')
 const headers = readDist('_headers')
