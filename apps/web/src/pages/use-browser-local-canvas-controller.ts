@@ -162,6 +162,11 @@ export function useBrowserLocalCanvasController(
         updatedAt: new Date().toISOString(),
       }
       pendingSnapshotRef.current = updated
+      // Also advance snapshotRef synchronously: it is the fallback merge base
+      // (read above when pendingSnapshotRef is null after a flush clears it), so
+      // leaving it stale until the next render could let a follow-up edit merge
+      // onto a pre-rename base.
+      snapshotRef.current = updated
       setSnapshot(updated)
       setPersistenceRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt ?? null }))
       void flushSave()

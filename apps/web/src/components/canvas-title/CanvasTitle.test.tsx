@@ -11,6 +11,25 @@ describe('CanvasTitle', () => {
     expect(input.value).toBe('My canvas')
   })
 
+  it('shows the normalized "untitled" in the field after committing an empty title', () => {
+    render(<CanvasTitle value="My canvas" onRename={vi.fn()} />)
+    const input = screen.getByRole('textbox', { name: /canvas title/i }) as HTMLInputElement
+    fireEvent.change(input, { target: { value: '   ' } })
+    fireEvent.blur(input)
+    // The input must not stay blank while the canvas is actually named 'untitled'.
+    expect(input.value).toBe('untitled')
+  })
+
+  it('does not clobber in-progress typing when the value prop changes (async load)', () => {
+    // The snapshot loads asynchronously and can push a new `value` while the user
+    // is mid-edit; the draft must win until the user commits.
+    const { rerender } = render(<CanvasTitle value="" onRename={vi.fn()} />)
+    const input = screen.getByRole('textbox', { name: /canvas title/i }) as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'Typing in progress' } })
+    rerender(<CanvasTitle value="untitled" onRename={vi.fn()} />)
+    expect(input.value).toBe('Typing in progress')
+  })
+
   it('typing then pressing Enter commits the rename with the typed value', () => {
     const onRename = vi.fn()
     render(<CanvasTitle value="My canvas" onRename={onRename} />)

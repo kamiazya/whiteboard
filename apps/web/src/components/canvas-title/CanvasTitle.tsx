@@ -14,12 +14,10 @@ function stopPropagation(event: KeyboardEvent<HTMLInputElement>): void {
 }
 
 export function CanvasTitle({ value, onRename }: CanvasTitleProps) {
-  // Initialized once from the incoming value. CanvasTitle is remounted
-  // whenever the underlying canvas identity changes (load-degraded /
-  // cleanup-completed / startFresh all unmount this component), so there is
-  // no live external-rename case that requires re-syncing draft from a
-  // changed `value` prop while mounted — Escape below covers the only
-  // in-place revert this component needs.
+  // Initialized once from the incoming value; CanvasTitle is remounted whenever
+  // the canvas identity changes, so no live external-rename re-sync is needed.
+  // (A useEffect syncing draft←value would clobber the user's in-progress typing
+  // when the snapshot loads asynchronously and pushes a new `value`.)
   const [draft, setDraft] = useState(value)
   // Escape reverts without committing; the ensuing blur() call must not also
   // fire the blur-commit handler, so suppress exactly the next blur.
@@ -31,6 +29,10 @@ export function CanvasTitle({ value, onRename }: CanvasTitleProps) {
       return
     }
     const normalized = draft.trim() || 'untitled'
+    // Reflect the normalization back into the field so an empty/whitespace commit
+    // shows 'untitled' instead of leaving the input blank while the canvas is
+    // actually named 'untitled'.
+    setDraft(normalized)
     onRename(normalized)
   }
 
