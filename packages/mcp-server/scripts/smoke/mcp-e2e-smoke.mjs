@@ -81,6 +81,13 @@ child.stdout.on('data', (chunk) => {
   }
 })
 
+// The first tools/call spawns the daemon, so its latency includes the full
+// daemon cold-start. CI runners exceed the 20s default; the env override lets
+// release jobs wait longer without slowing local runs.
+const RPC_TIMEOUT_MS = /^\d+$/.test(process.env.WHITEBOARD_SMOKE_RPC_TIMEOUT_MS ?? '')
+  ? Number(process.env.WHITEBOARD_SMOKE_RPC_TIMEOUT_MS)
+  : 20_000
+
 let nextId = 1
 function rpc(method, params) {
   const id = nextId++
@@ -93,7 +100,7 @@ function rpc(method, params) {
         pending.delete(id)
         reject(new Error(`RPC ${method} (#${id}) timed out`))
       }
-    }, 20_000)
+    }, RPC_TIMEOUT_MS)
   })
 }
 

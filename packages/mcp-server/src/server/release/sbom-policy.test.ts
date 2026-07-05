@@ -444,7 +444,22 @@ describe('release.yml publish job step ordering hazards', () => {
         section,
         `${jobId} must set WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS for slow CI cold starts`,
       ).toContain('WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS')
+      expect(
+        section,
+        `${jobId} must set WHITEBOARD_SMOKE_RPC_TIMEOUT_MS for slow CI cold starts`,
+      ).toContain('WHITEBOARD_SMOKE_RPC_TIMEOUT_MS')
     }
+  })
+
+  it('e2e smoke honours WHITEBOARD_SMOKE_RPC_TIMEOUT_MS (first tools/call includes daemon spawn)', () => {
+    // The packaged tarball smoke's first tools/call spawns the daemon; under CI
+    // cold-start the hardcoded RPC deadline expired ("RPC tools/call timed out")
+    // even after the daemon-startup timeout itself was extended.
+    const smoke = readFile('packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs')
+    expect(
+      smoke,
+      'mcp-e2e-smoke.mjs must read WHITEBOARD_SMOKE_RPC_TIMEOUT_MS instead of hardcoding the RPC deadline',
+    ).toContain('WHITEBOARD_SMOKE_RPC_TIMEOUT_MS')
   })
 })
 
