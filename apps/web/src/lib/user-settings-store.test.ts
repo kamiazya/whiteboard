@@ -91,6 +91,43 @@ describe('createUserSettingsStore', () => {
   })
 })
 
+describe('createUserSettingsStore — beta banner dismissal', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('persists dismissedBetaBannerAt via update() and survives a fresh instance (reload simulation)', () => {
+    const store = createUserSettingsStore()
+    store.update((current) => ({
+      ...current,
+      storage: { ...current.storage, dismissedBetaBannerAt: '2026-07-05T00:00:00.000Z' },
+    }))
+
+    expect(createUserSettingsStore().load().storage.dismissedBetaBannerAt).toBe(
+      '2026-07-05T00:00:00.000Z',
+    )
+  })
+
+  it('preserves a pre-beta-banner payload (no dismissedBetaBannerAt) — adding an optional field is backward-compatible', () => {
+    // A settings payload written before dismissedBetaBannerAt existed must keep
+    // loading intact: adding an optional field must NOT bump the key/version and
+    // must NOT discard the user's existing settings.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { preferredProvider: 'local-daemon', lastBrowserLocalCanvasId: 'abc' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    const store = createUserSettingsStore()
+    expect(store.load().storage.preferredProvider).toBe('local-daemon')
+    expect(store.load().storage.lastBrowserLocalCanvasId).toBe('abc')
+    expect(store.load().storage.dismissedBetaBannerAt).toBeUndefined()
+  })
+})
+
 describe('createUserSettingsStore — blocked storage (SecurityError)', () => {
   // Browsers can throw from localStorage access itself when storage is blocked
   // by privacy settings. The store's contract is "never throws".

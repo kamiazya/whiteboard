@@ -1,11 +1,11 @@
 import { z } from 'zod'
 
-// Namespaced + version-suffixed so a future schema bump can migrate without
-// colliding with the V1 key still read by older tabs during a rollout.
-// Because the schemas below are `.strict()`, ANY field addition or change MUST
-// bump both this key suffix and the `version` literal: an older tab would
-// safeParse-fail on a newer payload, fall back to defaults, and then clobber
-// the newer fields if both versions shared one key.
+// Namespaced + version-suffixed. Adding a NEW OPTIONAL field is backward- and
+// forward-compatible under `.strict()` (old payloads simply lack it; old tabs
+// safeParse-fail on it only transiently), so it does NOT bump the key/version —
+// bumping would discard every existing user's stored settings. Bump BOTH this
+// suffix and the `version` literal only for a BREAKING change (removing a
+// field, changing a type, or making a field required).
 export const STORAGE_KEY = 'whiteboard:user-settings:v1'
 
 // localStorage access itself can throw (SecurityError when the browser blocks
@@ -44,6 +44,7 @@ const storageSettingsSchema = z
     lastBrowserLocalCanvasId: z.string().optional(),
     localDaemonBaseUrl: z.string().optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
+    dismissedBetaBannerAt: z.string().optional(),
   })
   .strict()
 
