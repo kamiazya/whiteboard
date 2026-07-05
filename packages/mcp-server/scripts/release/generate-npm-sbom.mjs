@@ -52,7 +52,11 @@ function safeHint(result) {
 // Ensure output directory exists; clean up any previous temp dir.
 // pnpm deploy creates TMP_DIR itself — do not mkdir it here.
 mkdirSync(OUT_DIR, { recursive: true })
-try { rmSync(TMP_DIR, { recursive: true, force: true }) } catch { /* ok */ }
+try {
+  rmSync(TMP_DIR, { recursive: true, force: true })
+} catch {
+  /* ok */
+}
 
 // Deploy production-only dependencies into an isolated temp directory.
 // pnpm deploy reads pnpm-lock.yaml from the workspace root so dependency
@@ -62,8 +66,12 @@ try { rmSync(TMP_DIR, { recursive: true, force: true }) } catch { /* ok */ }
 const deployResult = spawnSync(
   'pnpm',
   [
-    '--filter', '@kamiazya/whiteboard-mcp',
-    'deploy', '--legacy', '--prod', '--ignore-scripts',
+    '--filter',
+    '@kamiazya/whiteboard-mcp',
+    'deploy',
+    '--legacy',
+    '--prod',
+    '--ignore-scripts',
     TMP_DIR,
   ],
   {
@@ -81,6 +89,17 @@ if (deployResult.status !== 0 || deployResult.error) {
 // Use the lockfile-pinned binary from the workspace.
 const cyclonedxBin = resolve(WORKSPACE_ROOT, 'node_modules', '.bin', 'cyclonedx-npm')
 
+// Strip package-manager lifecycle env before invoking cyclonedx-npm.
+// Under `pnpm run`, npm_execpath points at pnpm's own CLI; cyclonedx-npm uses
+// npm_execpath to locate "npm", so it would silently run `pnpm ls` instead of
+// `npm ls` and die with an option-parse error (exit 254, empty stdout).
+const cleanEnv = { ...process.env }
+for (const key of Object.keys(cleanEnv)) {
+  if (key === 'npm_execpath' || key.startsWith('npm_config_') || key.startsWith('npm_lifecycle_')) {
+    delete cleanEnv[key]
+  }
+}
+
 // Generate the SBOM from the isolated production deploy.
 // --ignore-npm-errors: npm ls reports ELSPROBLEMS for devDependencies listed
 //   in package.json but absent from node_modules (deployed prod-only).
@@ -90,15 +109,19 @@ const sbomResult = spawnSync(
   cyclonedxBin,
   [
     '--ignore-npm-errors',
-    '--output-format', 'JSON',
-    '--output-file', SBOM_FILE,
-    '--output-reproducible',  // omit timestamps for deterministic output
-    '--spec-version', '1.4',  // CycloneDX 1.4 — stable spec
+    '--output-format',
+    'JSON',
+    '--output-file',
+    SBOM_FILE,
+    '--output-reproducible', // omit timestamps for deterministic output
+    '--spec-version',
+    '1.4', // CycloneDX 1.4 — stable spec
   ],
   {
     cwd: TMP_DIR,
+    env: cleanEnv,
     encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe'],  // never relay tool output to our stdout
+    stdio: ['ignore', 'pipe', 'pipe'], // never relay tool output to our stdout
   },
 )
 
