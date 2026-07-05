@@ -161,7 +161,16 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
         {/* Visually-hidden heading landmark: the editable control below is the
             visible title, but the page keeps a real <h1> for accessibility trees. */}
         <h1 className="sr-only">{pageState.snapshot.name}</h1>
-        <CanvasTitle value={pageState.snapshot.name} onRename={renameCanvas} />
+        {/* Key by canvas id so switching canvases remounts the title editor and
+            reseeds its draft from the new canvas's name. CanvasTitle deliberately
+            does not resync its draft from a changed `value` (that would clobber
+            in-progress typing during async load), so without this key the field
+            would keep showing the previous canvas's name after a switch. */}
+        <CanvasTitle
+          key={pageState.snapshot.id}
+          value={pageState.snapshot.name}
+          onRename={renameCanvas}
+        />
         <span className="text-xs text-muted-foreground">
           {persistenceLabel(pageState.persistence)}
         </span>

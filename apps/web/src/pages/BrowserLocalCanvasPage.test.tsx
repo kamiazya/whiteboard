@@ -342,16 +342,27 @@ describe('BrowserLocalCanvasPage', () => {
   it('New canvas button creates and switches to a fresh untitled canvas', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
-    await store.save(snap)
+    // A distinctly-named current canvas so the switch to the new 'untitled' one
+    // is observable in the editable title field, not just the heading.
+    await store.save({ id: 'c1', name: 'Diagram A', updatedAt: '2026-05-24T00:00:00.000Z' })
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
     })
+    expect((screen.getByRole('textbox', { name: /canvas title/i }) as HTMLInputElement).value).toBe(
+      'Diagram A',
+    )
+
     const newBtn = screen.getByRole('button', { name: /new canvas/i })
     await act(async () => {
       newBtn.click()
       await vi.runAllTimersAsync()
     })
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+    // The editable title field must reflect the new canvas, not keep showing the
+    // previous canvas's name — CanvasTitle is remounted by canvas id on switch.
+    expect((screen.getByRole('textbox', { name: /canvas title/i }) as HTMLInputElement).value).toBe(
+      'untitled',
+    )
     const newId = await store.getDefaultCanvasId()
     expect(newId).not.toBe('c1')
     const list = await store.listCanvases()
