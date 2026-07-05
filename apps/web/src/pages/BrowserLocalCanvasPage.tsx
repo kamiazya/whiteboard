@@ -59,21 +59,21 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
   const listGenerationRef = useRef(0)
-  const currentId = pageState.kind === 'editing' ? pageState.snapshot.id : null
+  // Stable canvas id from the loaded snapshot; null while not yet loaded.
+  const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
   useEffect(() => {
-    if (currentId === null) return
+    if (canvasId === null) return
     const generation = ++listGenerationRef.current
     void listCanvases().then((list) => {
       if (generation !== listGenerationRef.current) return
       setCanvases(list)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentId, currentUpdatedAt])
+  }, [canvasId, currentUpdatedAt])
 
-  // Stable backend instance keyed on the canvas id from the loaded snapshot.
-  // useMemo avoids re-connecting on re-renders when id is unchanged.
-  const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
+  // Stable backend instance keyed on the canvas id. useMemo avoids
+  // re-connecting on re-renders when id is unchanged.
   const backend = useMemo(
     () => (canvasId != null ? new BrowserLocalBackend(canvasId) : null),
     // Re-create backend only when canvasId changes; a null id means not-yet-loaded.
