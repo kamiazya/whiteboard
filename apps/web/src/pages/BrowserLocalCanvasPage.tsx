@@ -6,10 +6,28 @@ import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { derivePageState } from './browser-local-page-state.js'
-import { useBrowserLocalCanvasController } from './use-browser-local-canvas-controller.js'
+import {
+  type BrowserLocalPersistenceState,
+  useBrowserLocalCanvasController,
+} from './use-browser-local-canvas-controller.js'
 
 interface BrowserLocalCanvasPageProps {
   store: BrowserLocalStore
+}
+
+// Map the persistence state machine to user-facing copy. `degraded` carries its
+// own message; the other states are not shown as raw enum tokens.
+function persistenceLabel(status: BrowserLocalPersistenceState): string {
+  switch (status.kind) {
+    case 'saved':
+      return 'Saved'
+    case 'saving':
+      return 'Saving…'
+    case 'pending':
+      return 'Unsaved changes'
+    case 'degraded':
+      return status.message
+  }
 }
 
 export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
@@ -89,18 +107,6 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
     )
   }
 
-  // Map the persistence state machine to user-facing copy. `degraded` carries its own
-  // message; the other states are not shown as raw enum tokens.
-  const status = pageState.persistence
-  const persistenceLabel =
-    status.kind === 'saved'
-      ? 'Saved'
-      : status.kind === 'saving'
-        ? 'Saving…'
-        : status.kind === 'pending'
-          ? 'Unsaved changes'
-          : status.message
-
   return (
     // h-dvh makes the page own its viewport height: without it the flex chain
     // has no sized ancestor and the editor area collapses to 0px.
@@ -110,7 +116,9 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
             visible title, but the page keeps a real <h1> for accessibility trees. */}
         <h1 className="sr-only">{pageState.snapshot.name}</h1>
         <CanvasTitle value={pageState.snapshot.name} onRename={renameCanvas} />
-        <span className="text-xs text-muted-foreground">{persistenceLabel}</span>
+        <span className="text-xs text-muted-foreground">
+          {persistenceLabel(pageState.persistence)}
+        </span>
         {cleanupError && (
           <div role="alert" aria-live="assertive" className="text-xs text-destructive">
             {cleanupError}
