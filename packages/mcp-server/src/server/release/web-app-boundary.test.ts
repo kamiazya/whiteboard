@@ -618,8 +618,10 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
   })
 
   it('release.yml deploy-web job uses Cloudflare secrets for apps/web deploy', () => {
+    // No silent skip: unlike wrangler.toml (guarded by its own existence test above),
+    // release.yml has no dedicated existence assertion — a missing file must fail here.
     const releaseYml = resolve(REPO_ROOT, '.github/workflows/release.yml')
-    if (!existsSync(releaseYml)) return
+    expect(existsSync(releaseYml), 'release.yml must exist').toBe(true)
     const content = readFileSync(releaseYml, 'utf-8')
     expect(content, 'release.yml must contain deploy-web job').toContain('deploy-web:')
     // Extract just the deploy-web job block so assertions are scoped to that job only.
@@ -635,5 +637,28 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
       deployWebSection,
       'deploy-web job must declare environment: production-web (secrets scoped to tag-protected env)',
     ).toContain('environment: production-web')
+  })
+
+  it('deploy-web avoids the wrangler-action npm-install fallback (catalog: is pnpm-only)', () => {
+    // wrangler-action falls back to `npm i wrangler@4` inside workingDirectory when
+    // wrangler is not already installed. npm cannot parse pnpm's catalog: protocol in
+    // apps/web/package.json (EUNSUPPORTEDPROTOCOL), so both halves must hold:
+    // the action must use pnpm, and wrangler must be preinstalled via devDependencies.
+    const releaseYml = resolve(REPO_ROOT, '.github/workflows/release.yml')
+    expect(existsSync(releaseYml), 'release.yml must exist').toBe(true)
+    const content = readFileSync(releaseYml, 'utf-8')
+    const deployWebMatch = content.match(/  deploy-web:[\s\S]*?(?=\n  [\w][\w-]*:|$)/)
+    const deployWebSection = deployWebMatch ? deployWebMatch[0] : ''
+    expect(deployWebSection, 'deploy-web wrangler-action must set packageManager: pnpm').toContain(
+      'packageManager: pnpm',
+    )
+
+    const appsWebPkg = JSON.parse(readFileSync(resolve(APPS_WEB_DIR, 'package.json'), 'utf-8')) as {
+      devDependencies?: Record<string, string>
+    }
+    expect(
+      appsWebPkg.devDependencies?.wrangler,
+      'apps/web must declare wrangler as a devDependency so wrangler-action skips its npm install',
+    ).toBeTruthy()
   })
 })
