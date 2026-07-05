@@ -14,6 +14,7 @@ export interface BrowserLocalCanvasController {
   cleanupCompleted: boolean
   cleanupError: string | null
   updateScene(elements: unknown[]): void
+  renameCanvas(name: string): void
   triggerCleanup(): Promise<void>
   startFresh(): Promise<void>
 }
@@ -38,6 +39,8 @@ export function useBrowserLocalCanvasController(
   setPersistenceRef.current = setPersistence
   const persistenceRef = useRef(persistence)
   persistenceRef.current = persistence
+  const snapshotRef = useRef(snapshot)
+  snapshotRef.current = snapshot
   const pendingSnapshotRef = useRef<CanvasSnapshot | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -121,23 +124,50 @@ export function useBrowserLocalCanvasController(
     }
   }, []) // store identity is stable; storeRef tracks current value
 
-  const updateScene = useCallback((elements: unknown[]) => {
-    setSnapshot((prev) => {
-      if (prev === null) return prev
+  const updateScene = useCallback(
+    (elements: unknown[]) => {
+      setSnapshot((prev) => {
+        if (prev === null) return prev
+        const updated: CanvasSnapshot = {
+          ...prev,
+          scene: { elements },
+          updatedAt: new Date().toISOString(),
+        }
+        pendingSnapshotRef.current = updated
+        return updated
+      })
+      setPersistenceRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt ?? null }))
+      if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = setTimeout(() => {
+        void flushSave()
+      }, DEBOUNCE_MS)
+    },
+    [flushSave],
+  )
+
+  // Discrete edit — flush immediately instead of the scene debounce so a rename
+  // never lingers as "Unsaved changes" and survives a fast reload.
+  const renameCanvas = useCallback(
+    (name: string) => {
+      // Merge with the freshest pending snapshot (e.g. a concurrent updateScene)
+      // instead of committed state, so neither edit clobbers the other. Computed
+      // from refs (not a setState updater) so pendingSnapshotRef is guaranteed
+      // current before the immediate flushSave below reads it.
+      const base = pendingSnapshotRef.current ?? snapshotRef.current
+      if (base === null) return
+      const normalized = name.trim() || 'untitled'
       const updated: CanvasSnapshot = {
-        ...prev,
-        scene: { elements },
+        ...base,
+        name: normalized,
         updatedAt: new Date().toISOString(),
       }
       pendingSnapshotRef.current = updated
-      return updated
-    })
-    setPersistenceRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt ?? null }))
-    if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
+      setSnapshot(updated)
+      setPersistenceRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt ?? null }))
       void flushSave()
-    }, DEBOUNCE_MS)
-  }, [flushSave])
+    },
+    [flushSave],
+  )
 
   const triggerCleanup = useCallback(async () => {
     setCleanupError(null)
@@ -156,7 +186,7 @@ export function useBrowserLocalCanvasController(
     if (id === null) return
     try {
       const result = await storeRef.current.del(id)
-      if (!result.deleted) return  // pointer-mismatch or not-found: silent no-op
+      if (!result.deleted) return // pointer-mismatch or not-found: silent no-op
       setSnapshot(null)
       setCleanupCompleted(true)
     } catch {
@@ -220,5 +250,14 @@ export function useBrowserLocalCanvasController(
     }
   }, [])
 
-  return { snapshot, persistence, cleanupCompleted, cleanupError, updateScene, triggerCleanup, startFresh }
+  return {
+    snapshot,
+    persistence,
+    cleanupCompleted,
+    cleanupError,
+    updateScene,
+    renameCanvas,
+    triggerCleanup,
+    startFresh,
+  }
 }

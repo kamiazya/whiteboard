@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act, cleanup } from '@testing-library/react'
+import { render, screen, act, cleanup, fireEvent } from '@testing-library/react'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
@@ -235,6 +235,42 @@ describe('BrowserLocalCanvasPage', () => {
     })
     expect(fetchSpy).not.toHaveBeenCalled()
     fetchSpy.mockRestore()
+  })
+
+  it('keeps a heading landmark and a distinct title textbox after adding the editable title', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('untitled')
+    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    expect(titleInput).toBeTruthy()
+    // Distinct from the Delete button's accessible name.
+    expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy()
+  })
+
+  it('renaming via the title control updates the heading and flushes a save', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
+    await act(async () => {
+      fireEvent.blur(titleInput)
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
+    const loadResult = await store.load('c1')
+    expect(loadResult.kind).toBe('ok')
+    if (loadResult.kind === 'ok') {
+      expect(loadResult.snapshot.name).toBe('Renamed canvas')
+    }
   })
 
   it('does not render an "Add rectangle" button — scene writes flow through Excalidraw onChange', async () => {
