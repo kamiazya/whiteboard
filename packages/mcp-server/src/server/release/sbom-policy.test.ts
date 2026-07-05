@@ -451,15 +451,23 @@ describe('release.yml publish job step ordering hazards', () => {
     }
   })
 
-  it('e2e smoke honours WHITEBOARD_SMOKE_RPC_TIMEOUT_MS (first tools/call includes daemon spawn)', () => {
-    // The packaged tarball smoke's first tools/call spawns the daemon; under CI
-    // cold-start the hardcoded RPC deadline expired ("RPC tools/call timed out")
-    // even after the daemon-startup timeout itself was extended.
-    const smoke = readFile('packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs')
-    expect(
-      smoke,
-      'mcp-e2e-smoke.mjs must read WHITEBOARD_SMOKE_RPC_TIMEOUT_MS instead of hardcoding the RPC deadline',
-    ).toContain('WHITEBOARD_SMOKE_RPC_TIMEOUT_MS')
+  it('every smoke RPC path honours WHITEBOARD_SMOKE_RPC_TIMEOUT_MS (first tools/call includes daemon spawn)', () => {
+    // Each smoke that RPCs a freshly-spawned daemon has its own rpc() with a
+    // deadline; under CI cold-start a hardcoded 20s expired ("RPC tools/call
+    // timed out") even after the daemon-startup timeout was extended. Both the
+    // standalone smoke:e2e AND the packaged tarball smoke (which runs through
+    // mcp-e2e-checkpoint.smoke-impl.ts, NOT mcp-e2e-smoke.mjs) must read the
+    // override — the tarball path being missed is exactly what broke v0.0.10/11.
+    const rpcSmokeFiles = [
+      'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs',
+      'packages/mcp-server/src/server/mcp/mcp-e2e-checkpoint.smoke-impl.ts',
+    ]
+    for (const rel of rpcSmokeFiles) {
+      expect(
+        readFile(rel),
+        `${rel} must read WHITEBOARD_SMOKE_RPC_TIMEOUT_MS instead of hardcoding the RPC deadline`,
+      ).toContain('WHITEBOARD_SMOKE_RPC_TIMEOUT_MS')
+    }
   })
 })
 
