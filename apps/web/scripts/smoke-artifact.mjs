@@ -72,11 +72,16 @@ if (headers !== null) {
   assert(csp.includes("base-uri 'none'"), "CSP: base-uri 'none'")
   assert(csp.includes("object-src 'none'"), "CSP: object-src 'none'")
   assert(csp.includes("script-src 'self'"), "CSP: script-src 'self'")
+  // loro-crdt is WASM; without 'wasm-unsafe-eval' the app dies at bootstrap (blank page).
+  assert(
+    /script-src[^;]*'wasm-unsafe-eval'/.test(csp),
+    "CSP: 'wasm-unsafe-eval' for loro-crdt WASM",
+  )
 
   // No wildcard sources that would defeat the CSP
-  assert(!csp.includes("script-src *"), 'CSP: no wildcard script-src')
-  assert(!csp.includes("default-src *"), 'CSP: no wildcard default-src')
-  assert(!csp.includes("connect-src *"), 'CSP: no wildcard connect-src')
+  assert(!csp.includes('script-src *'), 'CSP: no wildcard script-src')
+  assert(!csp.includes('default-src *'), 'CSP: no wildcard default-src')
+  assert(!csp.includes('connect-src *'), 'CSP: no wildcard connect-src')
   assert(!csp.match(/script-src[^;]*'unsafe-eval'/), "CSP: no 'unsafe-eval' in script-src")
 }
 

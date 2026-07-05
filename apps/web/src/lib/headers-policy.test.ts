@@ -40,6 +40,22 @@ describe('Content-Security-Policy directives', () => {
     expect(extractCsp(headersContent)).toContain("frame-ancestors 'none'")
   })
 
+  it("script-src allows WebAssembly compilation via 'wasm-unsafe-eval'", () => {
+    // loro-crdt ships as a WebAssembly module. Under script-src 'self' the browser
+    // rejects WebAssembly.Module() (CompileError) and the app renders a blank page.
+    // 'wasm-unsafe-eval' permits WASM compilation WITHOUT allowing JS eval().
+    const csp = extractCsp(headersContent)
+    expect(csp).toMatch(/script-src[^;]*'wasm-unsafe-eval'/)
+  })
+
+  it("script-src does not contain full 'unsafe-eval'", () => {
+    // 'wasm-unsafe-eval' is the narrow carve-out; plain 'unsafe-eval' (JS eval)
+    // must never be introduced. The leading quote in the pattern prevents a
+    // false match against 'wasm-unsafe-eval'.
+    const csp = extractCsp(headersContent)
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-eval'/)
+  })
+
   it('connect-src does not contain bare wildcard *', () => {
     const csp = extractCsp(headersContent)
     const connectSrcMatch = /connect-src\s+([^;]*)/.exec(csp)
