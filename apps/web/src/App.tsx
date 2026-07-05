@@ -16,12 +16,17 @@ interface AppProps {
 }
 
 interface BackendConfigChipProps {
-  state: ProviderState
+  // invalid-config renders its own error page and never shows the chip;
+  // excluding it here lets the compiler prove that instead of a silent
+  // 'Browser only' fallback.
+  state: Exclude<ProviderState, { kind: 'invalid-config' }>
 }
 
 // Reports the configured storage backend only — this reflects runtime
 // config, not a live connection/detection probe. Do not claim 'Connected'
 // or 'Daemon unavailable' here; that needs an actual live probe.
+// Fixed-positioned overlay: the canvas page owns the full viewport (h-dvh),
+// so an in-flow sibling would push it down and create a page scrollbar.
 function BackendConfigChip({ state }: BackendConfigChipProps) {
   const label =
     state.kind === 'local-daemon'
@@ -31,7 +36,7 @@ function BackendConfigChip({ state }: BackendConfigChipProps) {
   return (
     <div
       data-testid="backend-config-chip"
-      className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground"
+      className="fixed right-2 bottom-2 z-50 flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground shadow-sm"
     >
       {label}
     </div>
