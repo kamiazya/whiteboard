@@ -85,6 +85,12 @@ export class IndexedDBStore implements BrowserLocalStore {
         resolve()
       }
       tx.onerror = () => reject(tx.error)
+      // Without onabort a mid-write abort (e.g. QuotaExceeded) leaves the promise
+      // unsettled — the caller's await would hang forever.
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('transaction aborted'))
+      }
     })
   }
 
@@ -116,6 +122,10 @@ export class IndexedDBStore implements BrowserLocalStore {
         resolve()
       }
       tx.onerror = () => reject(tx.error)
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('transaction aborted'))
+      }
     })
   }
 
@@ -173,6 +183,10 @@ export class IndexedDBStore implements BrowserLocalStore {
       tx.onerror = () => {
         db.close()
         reject(tx.error)
+      }
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('transaction aborted'))
       }
     })
   }

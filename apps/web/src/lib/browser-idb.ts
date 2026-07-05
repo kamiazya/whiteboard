@@ -23,9 +23,11 @@ function stripLegacySceneField(tx: IDBTransaction): void {
   cursorReq.onsuccess = () => {
     const cursor = cursorReq.result
     if (!cursor) return
-    const value = cursor.value as Record<string, unknown>
-    if ('scene' in value) {
-      const { scene: _scene, ...metadataOnly } = value
+    const value = cursor.value as unknown
+    // Guard the `in` check: a corrupt/non-object row would otherwise throw a
+    // TypeError, aborting the upgrade transaction and bricking the DB open.
+    if (typeof value === 'object' && value !== null && 'scene' in value) {
+      const { scene: _scene, ...metadataOnly } = value as Record<string, unknown>
       cursor.update(metadataOnly)
     }
     cursor.continue()
@@ -41,8 +43,12 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
       if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
 
+      // oldVersion === 0 is a fresh install (empty 'canvases' store), so the
+      // scene-strip is a pure no-op there — only run it for a real v1/v2 upgrade.
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.
-      if (event.oldVersion < 3 && req.transaction) stripLegacySceneField(req.transaction)
+      if (event.oldVersion > 0 && event.oldVersion < 3 && req.transaction) {
+        stripLegacySceneField(req.transaction)
+      }
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)

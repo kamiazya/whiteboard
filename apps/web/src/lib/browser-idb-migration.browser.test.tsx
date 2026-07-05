@@ -135,6 +135,39 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
   })
 
+  it('upgrades without aborting when a legacy canvases row is a non-object (corrupt data)', async () => {
+    // A null / non-object row must not throw a TypeError from `'scene' in value`
+    // inside the upgrade cursor — that would abort the transaction and brick the
+    // DB open for the user.
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('whiteboard', 2)
+      req.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result
+        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+        if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+        if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      }
+      req.onsuccess = () => {
+        const db = req.result
+        const tx = db.transaction('canvases', 'readwrite')
+        // A corrupt non-object value stored under a key.
+        tx.objectStore('canvases').put(null, 'corrupt-row')
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      req.onerror = () => reject(req.error)
+    })
+
+    // Opening through the shared opener at v3 must complete (guard prevents the
+    // `in` TypeError from aborting the upgrade).
+    const db = await openWhiteboardDb()
+    expect(db.version).toBe(DB_VERSION)
+    db.close()
+  })
+
   it('mutation-check: reverting DB_VERSION to 2 makes the seeded v2 fixture fail to strip scene', async () => {
     // This test documents the guard rather than actually reverting production
     // code (that is done manually per the zod-schema-discipline mutation-check

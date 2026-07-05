@@ -139,6 +139,10 @@ export class LoroStore {
         db.close()
         reject(tx.error)
       }
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('transaction aborted'))
+      }
     })
   }
 
