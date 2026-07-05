@@ -357,4 +357,158 @@ describe('BrowserLocalCanvasPage', () => {
     const list = await store.listCanvases()
     expect(list.map((c) => c.id)).toEqual(expect.arrayContaining(['c1', newId]))
   })
+
+  it('surfaces an error and stays on the current canvas when creating a new canvas fails', async () => {
+    const base = new MemoryStore()
+    await base.setDefaultCanvasId('c1')
+    await base.save(snap)
+    // Fail the metadata save that createCanvas performs first, so createCanvas()
+    // rejects before ever calling switchCanvas.
+    let failNextSave = false
+    const failingCreateStore: BrowserLocalStore = {
+      getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      load: base.load.bind(base),
+      save: async (s) => {
+        if (failNextSave) throw new Error('idb write failed')
+        return base.save(s)
+      },
+      del: base.del.bind(base),
+      generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
+    }
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={failingCreateStore} loro={new FakeLoroStore()} />)
+    })
+    failNextSave = true
+    const newBtn = screen.getByRole('button', { name: /new canvas/i })
+    await act(async () => {
+      newBtn.click()
+      await vi.runAllTimersAsync()
+    })
+    // The rejection from createCanvas() must be caught and surfaced, not left
+    // as an unhandled promise rejection with the UI silently doing nothing.
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Could not create a new canvas. Please try again.',
+    )
+    // The current canvas is untouched — no switch happened.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+    expect(await failingCreateStore.getDefaultCanvasId()).toBe('c1')
+  })
+
+  it('keeps the switcher value matching a real option immediately after creating a canvas, before the list refresh resolves', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    // Defer listCanvases so the option-list refresh has not resolved yet
+    // by the time we inspect the DOM right after create+switch.
+    const listCalls: Array<() => void> = []
+    const deferredStore: BrowserLocalStore = {
+      getDefaultCanvasId: store.getDefaultCanvasId.bind(store),
+      setDefaultCanvasId: store.setDefaultCanvasId.bind(store),
+      load: store.load.bind(store),
+      save: store.save.bind(store),
+      del: store.del.bind(store),
+      generateId: store.generateId.bind(store),
+      listCanvases: () =>
+        new Promise((resolve) => {
+          listCalls.push(() => resolve(store.listCanvases()))
+        }),
+    }
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={deferredStore} loro={new FakeLoroStore()} />)
+    })
+    // Resolve the initial-mount list refresh so the switcher already has options.
+    await act(async () => {
+      listCalls.shift()?.()
+      await vi.runAllTimersAsync()
+    })
+
+    const newBtn = screen.getByRole('button', { name: /new canvas/i })
+    await act(async () => {
+      newBtn.click()
+      await vi.runAllTimersAsync()
+    })
+
+    // The post-create/switch listCanvases() call is now pending (unresolved),
+    // so `canvases` still holds the pre-create list — but the select's value
+    // must still match one of its own options.
+    const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
+    const optionValues = Array.from(switcher.options).map((o) => o.value)
+    expect(optionValues).toContain(switcher.value)
+
+    // Let the pending refresh resolve too, so no dangling timers/promises leak.
+    await act(async () => {
+      listCalls.shift()?.()
+      await vi.runAllTimersAsync()
+    })
+  })
+
+  it('drops a stale listCanvases resolution that would otherwise clobber a newer refresh from a fast switch', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+
+    const resolvers: Array<(list: CanvasSnapshot[]) => void> = []
+    const controllableStore: BrowserLocalStore = {
+      getDefaultCanvasId: store.getDefaultCanvasId.bind(store),
+      setDefaultCanvasId: store.setDefaultCanvasId.bind(store),
+      load: store.load.bind(store),
+      save: store.save.bind(store),
+      del: store.del.bind(store),
+      generateId: store.generateId.bind(store),
+      listCanvases: () => new Promise((resolve) => resolvers.push(resolve)),
+    }
+
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={controllableStore} loro={new FakeLoroStore()} />)
+    })
+    // Resolve the initial mount's list refresh (generation 1) with both
+    // canvases, so the switcher has real options to switch between.
+    await act(async () => {
+      resolvers[0]!([
+        snap,
+        { id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' },
+      ])
+      await vi.runAllTimersAsync()
+    })
+
+    const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
+    // Fast switch: c1 -> c2 -> c1. Each switch bumps the list-refresh
+    // generation but its listCanvases() call is left pending (deferred),
+    // so two stale refreshes (generation 2 for c2, generation 3 for c1) end
+    // up in flight at once.
+    await act(async () => {
+      fireEvent.change(switcher, { target: { value: 'c2' } })
+      await vi.runAllTimersAsync()
+    })
+    await act(async () => {
+      fireEvent.change(switcher, { target: { value: 'c1' } })
+      await vi.runAllTimersAsync()
+    })
+    expect(resolvers.length).toBe(3)
+
+    // Resolve generation 3 (fresh, matches the final c1 state) BEFORE
+    // generation 2 (stale, superseded) — the out-of-order case the
+    // generation guard exists to handle.
+    const freshList: CanvasSnapshot[] = [
+      { id: 'c1', name: 'untitled (fresh)', updatedAt: '2026-05-26T00:00:00.000Z' },
+    ]
+    const staleList: CanvasSnapshot[] = [
+      { id: 'c2', name: 'Other canvas (stale)', updatedAt: '2026-05-25T00:00:00.000Z' },
+    ]
+    await act(async () => {
+      resolvers[2]!(freshList)
+      await vi.runAllTimersAsync()
+    })
+    await act(async () => {
+      resolvers[1]!(staleList)
+      await vi.runAllTimersAsync()
+    })
+
+    // The stale (generation 2) resolution must not clobber the fresh one.
+    const optionNames = screen.getAllByRole('option').map((o) => o.textContent)
+    expect(optionNames).toEqual(['untitled (fresh)'])
+  })
 })

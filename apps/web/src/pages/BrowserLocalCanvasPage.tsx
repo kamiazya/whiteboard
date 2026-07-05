@@ -58,6 +58,9 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
   // The generation guard drops a stale resolution that would otherwise
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
+  // Surfaces a failed "New canvas" click — mirrors cleanupError so a create
+  // failure is visible instead of leaving the button a silent no-op.
+  const [createError, setCreateError] = useState<string | null>(null)
   const listGenerationRef = useRef(0)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
@@ -65,10 +68,16 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
   useEffect(() => {
     if (canvasId === null) return
     const generation = ++listGenerationRef.current
-    void listCanvases().then((list) => {
-      if (generation !== listGenerationRef.current) return
-      setCanvases(list)
-    })
+    listCanvases()
+      .then((list) => {
+        if (generation !== listGenerationRef.current) return
+        setCanvases(list)
+      })
+      .catch((err: unknown) => {
+        // A stale/failed list refresh must not surface as an unhandled
+        // rejection; the switcher just keeps showing its last-known list.
+        console.error('listCanvases failed', err)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, currentUpdatedAt])
 
@@ -85,6 +94,15 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
   const { setExcalidrawAPI, onChange } = useCanvasSync(backend)
+
+  // The option list refreshes asynchronously (see the effect above) while the
+  // selected id changes synchronously on switch/create. Synthesize a
+  // fallback option for the gap between those two so the controlled
+  // <select>'s value always matches one of its own options.
+  const switcherOptions =
+    pageState.kind === 'editing' && !canvases.some((c) => c.id === pageState.snapshot.id)
+      ? [...canvases, pageState.snapshot]
+      : canvases
 
   if (pageState.kind === 'load-degraded') {
     return (
@@ -152,6 +170,11 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
             {cleanupError}
           </div>
         )}
+        {createError && (
+          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
+            {createError}
+          </div>
+        )}
         <select
           aria-label="Canvases"
           value={pageState.snapshot.id}
@@ -161,7 +184,7 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
           }}
           className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
         >
-          {canvases.map((c) => (
+          {switcherOptions.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
@@ -170,7 +193,12 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
         <button
           type="button"
           onClick={() => {
-            void createCanvas().then((created) => switchCanvas(created.id))
+            setCreateError(null)
+            createCanvas()
+              .then((created) => switchCanvas(created.id))
+              .catch(() => {
+                setCreateError('Could not create a new canvas. Please try again.')
+              })
           }}
           className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
         >
