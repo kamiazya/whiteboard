@@ -68,8 +68,9 @@ const CATEGORIES: CategoryDescriptor[] = [
 const MIN_REFRESH_MS = 400
 
 // How long a transient action status ("Saved 2 KiB", "Nothing to prune")
-// lingers on its row before clearing.
-const STATUS_CLEAR_MS = 3000
+// lingers on its row before clearing. Exported so tests can size their
+// unmount-during-pending-timer waits without duplicating the constant.
+export const STATUS_CLEAR_MS = 3000
 
 // Coarse-grained interval. We do not need second-by-second updates because
 // the humanized string only changes at 30s / 1m / 1h boundaries; a 30s
