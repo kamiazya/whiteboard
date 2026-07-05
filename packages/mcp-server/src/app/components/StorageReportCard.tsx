@@ -67,6 +67,10 @@ const CATEGORIES: CategoryDescriptor[] = [
 // otherwise on a fast network the click is invisible.
 const MIN_REFRESH_MS = 400
 
+// How long a transient action status ("Saved 2 KiB", "Nothing to prune")
+// lingers on its row before clearing.
+const STATUS_CLEAR_MS = 3000
+
 // Coarse-grained interval. We do not need second-by-second updates because
 // the humanized string only changes at 30s / 1m / 1h boundaries; a 30s
 // re-render is enough to keep the display fresh without flickering.
@@ -109,6 +113,14 @@ export function StorageReportCard() {
     return () => {
       mountedRef.current = false
     }
+  }, [])
+
+  // Clear a transient action status after STATUS_CLEAR_MS, skipping the
+  // setState if the component unmounted while the timer was pending.
+  const scheduleStatusClear = useCallback((clear: () => void) => {
+    window.setTimeout(() => {
+      if (mountedRef.current) clear()
+    }, STATUS_CLEAR_MS)
   }, [])
 
   // Coarse tick so the "Updated …" / "Auto-optimised …" lines stay live
@@ -193,12 +205,10 @@ export function StorageReportCard() {
     } finally {
       if (mountedRef.current) {
         setOptimizing(false)
-        window.setTimeout(() => {
-          if (mountedRef.current) setOptimizeStatus(null)
-        }, 3000)
+        scheduleStatusClear(() => setOptimizeStatus(null))
       }
     }
-  }, [refresh])
+  }, [refresh, scheduleStatusClear])
 
   // User libraries management dialog. Surfaces installed libraries with
   // per-pack size and item count, plus a per-row Remove that maps to the
@@ -276,12 +286,10 @@ export function StorageReportCard() {
     } finally {
       if (mountedRef.current) {
         setPruningLogs(false)
-        window.setTimeout(() => {
-          if (mountedRef.current) setPruneLogsStatus(null)
-        }, 3000)
+        scheduleStatusClear(() => setPruneLogsStatus(null))
       }
     }
-  }, [refresh])
+  }, [refresh, scheduleStatusClear])
 
   // Sandwiched auto-version prune. Manual versions are explicit user
   // save-points; autos between any two manuals add no rollback value and
@@ -320,12 +328,10 @@ export function StorageReportCard() {
     } finally {
       if (mountedRef.current) {
         setPruningVersions(false)
-        window.setTimeout(() => {
-          if (mountedRef.current) setPruneVersionsStatus(null)
-        }, 3000)
+        scheduleStatusClear(() => setPruneVersionsStatus(null))
       }
     }
-  }, [refresh])
+  }, [refresh, scheduleStatusClear])
 
   // Dangling-files cleanup. Same workspace-iterating pattern as Optimize
   // all — call the per-workspace purge endpoint, sum the freed bytes, and
@@ -368,12 +374,10 @@ export function StorageReportCard() {
     } finally {
       if (mountedRef.current) {
         setCleaningFiles(false)
-        window.setTimeout(() => {
-          if (mountedRef.current) setCleanFilesStatus(null)
-        }, 3000)
+        scheduleStatusClear(() => setCleanFilesStatus(null))
       }
     }
-  }, [refresh])
+  }, [refresh, scheduleStatusClear])
 
   const ageSeconds = updatedAt === null ? null : Math.max(0, Math.floor((now - updatedAt) / 1000))
 
