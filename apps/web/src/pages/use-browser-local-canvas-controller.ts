@@ -1,4 +1,3 @@
-import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -6,9 +5,10 @@ import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 
 // Narrow surface used by the controller to seed a new canvas's Loro doc.
 // Injectable so node/jsdom tests can supply an in-memory fake instead of
-// touching real IndexedDB.
+// touching real IndexedDB or the loro-crdt library directly.
 export interface LoroStoreLike {
   save(canvasId: string, snapshot: Uint8Array): Promise<void>
+  createEmptySnapshot(): Uint8Array
 }
 
 export type BrowserLocalPersistenceState =
@@ -256,7 +256,7 @@ export function useBrowserLocalCanvasController(
     // orphan metadata row with no backing Loro doc.
     await storeRef.current.save(fresh)
     try {
-      await loroRef.current.save(id, new Loro().export({ mode: 'snapshot' }))
+      await loroRef.current.save(id, loroRef.current.createEmptySnapshot())
     } catch (err) {
       try {
         await storeRef.current.removeCanvas?.(id)

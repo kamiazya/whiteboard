@@ -16,6 +16,12 @@ class FakeLoroStore implements LoroStoreLike {
     if (this.shouldThrow) throw new Error('loro save failed')
     this.saved.push({ id, bytes })
   }
+
+  createEmptySnapshot(): Uint8Array {
+    // Fake in-memory bytes — the fake never touches real loro-crdt, matching
+    // the isolation LoroStoreLike is meant to provide to this test file.
+    return new Uint8Array([1, 2, 3])
+  }
 }
 
 const snap: CanvasSnapshot = {

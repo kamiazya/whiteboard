@@ -55,6 +55,16 @@ function isValidLoroBytes(bytes: Uint8Array): boolean {
  * rather than surfacing as throws inside the hook's onSnapshot/onRemoteUpdate.
  */
 export class LoroStore {
+  /**
+   * Bytes for a brand-new, empty Loro document snapshot. Callers that only
+   * need to seed a fresh canvas (e.g. the page-layer create-canvas flow) use
+   * this instead of importing `loro-crdt` themselves, keeping CRDT-library
+   * knowledge (the `{ mode: 'snapshot' }` export API) confined to this file.
+   */
+  createEmptySnapshot(): Uint8Array {
+    return new Loro().export({ mode: 'snapshot' })
+  }
+
   async load(canvasId: string): Promise<LoroLoadResult> {
     const db = await openWhiteboardDb()
     return new Promise((resolve) => {
