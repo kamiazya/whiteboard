@@ -2,7 +2,38 @@ import { z } from 'zod'
 
 // Namespaced + version-suffixed so a future schema bump can migrate without
 // colliding with the V1 key still read by older tabs during a rollout.
+// Because the schemas below are `.strict()`, ANY field addition or change MUST
+// bump both this key suffix and the `version` literal: an older tab would
+// safeParse-fail on a newer payload, fall back to defaults, and then clobber
+// the newer fields if both versions shared one key.
 export const STORAGE_KEY = 'whiteboard:user-settings:v1'
+
+// localStorage access itself can throw (SecurityError when the browser blocks
+// storage via privacy settings or embedded contexts). The store's contract is
+// "never throws" — treat a throwing storage like an empty one.
+function safeGetItem(key: string): string | null {
+  try {
+    return localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeSetItem(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // Contract: never throws; an unwritable storage degrades to in-memory-only.
+  }
+}
+
+function safeRemoveItem(key: string): void {
+  try {
+    localStorage.removeItem(key)
+  } catch {
+    // Contract: never throws.
+  }
+}
 
 // `.strict()` at every level is the enforcement point for "no daemon/cloud
 // token in UserSettings": an unknown key (e.g. a token-shaped field) makes
@@ -67,7 +98,7 @@ export interface UserSettingsStore {
 
 export function createUserSettingsStore(): UserSettingsStore {
   function load(): UserSettings {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = safeGetItem(STORAGE_KEY)
     if (raw === null) return defaultUserSettings()
 
     let parsedJson: unknown
@@ -84,7 +115,7 @@ export function createUserSettingsStore(): UserSettingsStore {
   function save(next: UserSettings): void {
     const result = userSettingsSchema.safeParse(next)
     if (!result.success) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(result.data))
+    safeSetItem(STORAGE_KEY, JSON.stringify(result.data))
   }
 
   function update(fn: (current: UserSettings) => UserSettings): void {
@@ -92,7 +123,7 @@ export function createUserSettingsStore(): UserSettingsStore {
   }
 
   function reset(): void {
-    localStorage.removeItem(STORAGE_KEY)
+    safeRemoveItem(STORAGE_KEY)
   }
 
   return { load, save, update, reset }

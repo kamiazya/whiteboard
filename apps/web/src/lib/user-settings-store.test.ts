@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createUserSettingsStore, defaultUserSettings, STORAGE_KEY } from './user-settings-store.js'
 
 describe('createUserSettingsStore', () => {
@@ -88,5 +88,37 @@ describe('createUserSettingsStore', () => {
     )
 
     expect(createUserSettingsStore().load()).toEqual(defaultUserSettings())
+  })
+})
+
+describe('createUserSettingsStore — blocked storage (SecurityError)', () => {
+  // Browsers can throw from localStorage access itself when storage is blocked
+  // by privacy settings. The store's contract is "never throws".
+  it('load() returns defaults when localStorage.getItem throws', () => {
+    const spy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+    try {
+      expect(createUserSettingsStore().load()).toEqual(defaultUserSettings())
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('save() and reset() do not throw when localStorage writes throw', () => {
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+    const removeSpy = vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+    try {
+      const store = createUserSettingsStore()
+      expect(() => store.save(defaultUserSettings())).not.toThrow()
+      expect(() => store.reset()).not.toThrow()
+    } finally {
+      setSpy.mockRestore()
+      removeSpy.mockRestore()
+    }
   })
 })
