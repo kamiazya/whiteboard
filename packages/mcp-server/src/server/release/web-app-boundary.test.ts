@@ -618,8 +618,10 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
   })
 
   it('release.yml deploy-web job uses Cloudflare secrets for apps/web deploy', () => {
+    // No silent skip: unlike wrangler.toml (guarded by its own existence test above),
+    // release.yml has no dedicated existence assertion — a missing file must fail here.
     const releaseYml = resolve(REPO_ROOT, '.github/workflows/release.yml')
-    if (!existsSync(releaseYml)) return
+    expect(existsSync(releaseYml), 'release.yml must exist').toBe(true)
     const content = readFileSync(releaseYml, 'utf-8')
     expect(content, 'release.yml must contain deploy-web job').toContain('deploy-web:')
     // Extract just the deploy-web job block so assertions are scoped to that job only.
@@ -643,7 +645,7 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     // apps/web/package.json (EUNSUPPORTEDPROTOCOL), so both halves must hold:
     // the action must use pnpm, and wrangler must be preinstalled via devDependencies.
     const releaseYml = resolve(REPO_ROOT, '.github/workflows/release.yml')
-    if (!existsSync(releaseYml)) return
+    expect(existsSync(releaseYml), 'release.yml must exist').toBe(true)
     const content = readFileSync(releaseYml, 'utf-8')
     const deployWebMatch = content.match(/  deploy-web:[\s\S]*?(?=\n  [\w][\w-]*:|$)/)
     const deployWebSection = deployWebMatch ? deployWebMatch[0] : ''
