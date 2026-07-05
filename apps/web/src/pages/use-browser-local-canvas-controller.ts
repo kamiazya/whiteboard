@@ -30,8 +30,8 @@ export interface BrowserLocalCanvasController {
   switchCanvas(id: string): Promise<void>
 }
 
-function createUntitledSnapshot(id: string): CanvasSnapshot {
-  return { id, name: 'untitled', updatedAt: new Date().toISOString() }
+function createCanvasSnapshot(id: string, name?: string): CanvasSnapshot {
+  return { id, name: name?.trim() || 'untitled', updatedAt: new Date().toISOString() }
 }
 
 export function useBrowserLocalCanvasController(
@@ -92,7 +92,7 @@ export function useBrowserLocalCanvasController(
 
       if (id === null) {
         id = storeRef.current.generateId()
-        const newSnapshot = createUntitledSnapshot(id)
+        const newSnapshot = createCanvasSnapshot(id)
         await storeRef.current.setDefaultCanvasId(id)
         await storeRef.current.save(newSnapshot)
         if (!cancelled) setSnapshot(newSnapshot)
@@ -188,7 +188,7 @@ export function useBrowserLocalCanvasController(
   const startFresh = useCallback(async () => {
     setCleanupError(null)
     const id = storeRef.current.generateId()
-    const fresh = createUntitledSnapshot(id)
+    const fresh = createCanvasSnapshot(id)
     try {
       // Save the new canvas BEFORE repointing the default id, so a failed write never
       // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).
@@ -235,11 +235,7 @@ export function useBrowserLocalCanvasController(
 
   const createCanvas = useCallback(async (name?: string): Promise<CanvasSnapshot> => {
     const id = storeRef.current.generateId()
-    const fresh: CanvasSnapshot = {
-      id,
-      name: name?.trim() || 'untitled',
-      updatedAt: new Date().toISOString(),
-    }
+    const fresh = createCanvasSnapshot(id, name)
     // Metadata first, then the Loro doc: if the Loro write fails, the
     // metadata row is rolled back so a failed create never leaves an
     // orphan metadata row with no backing Loro doc.
