@@ -1,7 +1,7 @@
 /**
  * Builds a MigrationBundle from browser-local canvas snapshots so a user can
  * export their data and import it into a daemon-backed workspace (or another
- * browser-local instance). Pure function — no UI wiring here (see S-M).
+ * browser-local instance). Pure function — no UI wiring here.
  */
 import type { MigrationBundle } from '@kamiazya/whiteboard-mcp/migration-bundle'
 
