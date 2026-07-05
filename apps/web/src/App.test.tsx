@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
 import type { ProviderState } from './lib/provider.js'
 
@@ -55,5 +55,25 @@ describe('App backend configuration chip', () => {
     render(<App providerState={INVALID_CONFIG_STATE} />)
     expect(screen.queryByText('Browser only')).toBeNull()
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
+  })
+})
+
+describe('App beta banner', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('shows the beta banner for browser-local and local-daemon states', () => {
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(
+      screen.getByText('Beta preview — your data is stored only in this browser.'),
+    ).toBeTruthy()
+  })
+
+  it('does not show the beta banner on the invalid-config error page', () => {
+    render(<App providerState={INVALID_CONFIG_STATE} />)
+    expect(
+      screen.queryByText('Beta preview — your data is stored only in this browser.'),
+    ).toBeNull()
   })
 })

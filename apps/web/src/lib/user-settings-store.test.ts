@@ -91,6 +91,35 @@ describe('createUserSettingsStore', () => {
   })
 })
 
+describe('createUserSettingsStore — beta banner dismissal', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  it('persists dismissedBetaBannerAt via update() and survives a fresh instance (reload simulation)', () => {
+    const store = createUserSettingsStore()
+    store.update((current) => ({
+      ...current,
+      storage: { ...current.storage, dismissedBetaBannerAt: '2026-07-05T00:00:00.000Z' },
+    }))
+
+    expect(createUserSettingsStore().load().storage.dismissedBetaBannerAt).toBe(
+      '2026-07-05T00:00:00.000Z',
+    )
+  })
+
+  it('falls back to defaults when a stale v1-shaped payload is read under the current key', () => {
+    // Simulates an old tab that never bumped past the pre-beta-banner schema:
+    // the version literal changed, so this must safeParse-fail, not silently merge.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 1, storage: {}, migration: {}, capabilities: {} }),
+    )
+    const store = createUserSettingsStore()
+    expect(store.load()).toEqual(defaultUserSettings())
+  })
+})
+
 describe('createUserSettingsStore — blocked storage (SecurityError)', () => {
   // Browsers can throw from localStorage access itself when storage is blocked
   // by privacy settings. The store's contract is "never throws".

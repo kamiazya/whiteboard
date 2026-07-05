@@ -1,8 +1,11 @@
-import { resolveHostedProviderStateFromRaw, type ProviderState } from './lib/provider.js'
+import { BetaBanner } from './components/BetaBanner.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
+import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
+import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { BrowserLocalCanvasPage } from './pages/BrowserLocalCanvasPage.js'
 
 const _browserLocalStore = new IndexedDBStore()
+const _userSettingsStore = createUserSettingsStore()
 
 const _defaultProviderState: ProviderState = resolveHostedProviderStateFromRaw(
   typeof window !== 'undefined'
@@ -57,6 +60,7 @@ export function App({ providerState }: AppProps) {
   if (state.kind === 'local-daemon') {
     return (
       <main data-provider="local-daemon" data-status="placeholder">
+        <BetaBanner store={_userSettingsStore} />
         <BackendConfigChip state={state} />
         <h1>Whiteboard</h1>
       </main>
@@ -65,6 +69,7 @@ export function App({ providerState }: AppProps) {
 
   return (
     <>
+      <BetaBanner store={_userSettingsStore} />
       <BackendConfigChip state={state} />
       <BrowserLocalCanvasPage store={_browserLocalStore} />
     </>

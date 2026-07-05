@@ -6,7 +6,7 @@ import { z } from 'zod'
 // bump both this key suffix and the `version` literal: an older tab would
 // safeParse-fail on a newer payload, fall back to defaults, and then clobber
 // the newer fields if both versions shared one key.
-export const STORAGE_KEY = 'whiteboard:user-settings:v1'
+export const STORAGE_KEY = 'whiteboard:user-settings:v2'
 
 // localStorage access itself can throw (SecurityError when the browser blocks
 // storage via privacy settings or embedded contexts). The store's contract is
@@ -44,6 +44,7 @@ const storageSettingsSchema = z
     lastBrowserLocalCanvasId: z.string().optional(),
     localDaemonBaseUrl: z.string().optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
+    dismissedBetaBannerAt: z.string().optional(),
   })
   .strict()
 
@@ -71,7 +72,7 @@ const capabilitySettingsSchema = z
 
 const userSettingsSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     storage: storageSettingsSchema,
     migration: migrationSettingsSchema,
     capabilities: capabilitySettingsSchema,
@@ -82,7 +83,7 @@ export type UserSettings = z.infer<typeof userSettingsSchema>
 
 export function defaultUserSettings(): UserSettings {
   return {
-    version: 1,
+    version: 2,
     storage: {},
     migration: {},
     capabilities: {},
