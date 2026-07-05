@@ -37,12 +37,8 @@ function debounce<T extends (...args: Parameters<T>) => void>(
   const debounced = (...args: Parameters<T>) => {
     if (timer) clearTimeout(timer)
     pending = () => fn(...args)
-    timer = setTimeout(() => {
-      const run = pending
-      timer = null
-      pending = null
-      run?.()
-    }, ms)
+    // The trailing edge is just a flush fired by the timer.
+    timer = setTimeout(() => debounced.flush(), ms)
   }
   debounced.cancel = () => {
     if (timer) clearTimeout(timer)
