@@ -70,14 +70,20 @@ export function App({ providerState }: AppProps) {
     )
   }
 
+  // Own the viewport as a flex column so the in-flow banner sits ABOVE the
+  // canvas instead of pushing the h-dvh canvas page past the viewport (which
+  // would add a page scrollbar). The canvas fills the remaining height; the
+  // wrapper clips the canvas page's own h-dvh to that remaining space.
   return (
-    <>
+    <div className="flex h-dvh flex-col">
       <BetaBanner
         store={_userSettingsStore}
         message="Beta preview — your data is stored only in this browser."
       />
       <BackendConfigChip state={state} />
-      <BrowserLocalCanvasPage store={_browserLocalStore} />
-    </>
+      <div className="min-h-0 flex-1 overflow-hidden">
+        <BrowserLocalCanvasPage store={_browserLocalStore} />
+      </div>
+    </div>
   )
 }

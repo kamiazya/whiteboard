@@ -27,7 +27,7 @@ export function BetaBanner({ store, message }: BetaBannerProps) {
   return (
     <div
       data-testid="beta-banner"
-      className="flex items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
+      className="flex shrink-0 items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
     >
       <span>{message}</span>
       <button

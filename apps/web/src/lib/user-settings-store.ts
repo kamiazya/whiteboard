@@ -1,12 +1,12 @@
 import { z } from 'zod'
 
-// Namespaced + version-suffixed so a future schema bump can migrate without
-// colliding with the V1 key still read by older tabs during a rollout.
-// Because the schemas below are `.strict()`, ANY field addition or change MUST
-// bump both this key suffix and the `version` literal: an older tab would
-// safeParse-fail on a newer payload, fall back to defaults, and then clobber
-// the newer fields if both versions shared one key.
-export const STORAGE_KEY = 'whiteboard:user-settings:v2'
+// Namespaced + version-suffixed. Adding a NEW OPTIONAL field is backward- and
+// forward-compatible under `.strict()` (old payloads simply lack it; old tabs
+// safeParse-fail on it only transiently), so it does NOT bump the key/version —
+// bumping would discard every existing user's stored settings. Bump BOTH this
+// suffix and the `version` literal only for a BREAKING change (removing a
+// field, changing a type, or making a field required).
+export const STORAGE_KEY = 'whiteboard:user-settings:v1'
 
 // localStorage access itself can throw (SecurityError when the browser blocks
 // storage via privacy settings or embedded contexts). The store's contract is
@@ -72,7 +72,7 @@ const capabilitySettingsSchema = z
 
 const userSettingsSchema = z
   .object({
-    version: z.literal(2),
+    version: z.literal(1),
     storage: storageSettingsSchema,
     migration: migrationSettingsSchema,
     capabilities: capabilitySettingsSchema,
@@ -83,7 +83,7 @@ export type UserSettings = z.infer<typeof userSettingsSchema>
 
 export function defaultUserSettings(): UserSettings {
   return {
-    version: 2,
+    version: 1,
     storage: {},
     migration: {},
     capabilities: {},

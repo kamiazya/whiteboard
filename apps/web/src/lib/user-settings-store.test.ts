@@ -108,15 +108,23 @@ describe('createUserSettingsStore — beta banner dismissal', () => {
     )
   })
 
-  it('falls back to defaults when a stale v1-shaped payload is read under the current key', () => {
-    // Simulates an old tab that never bumped past the pre-beta-banner schema:
-    // the version literal changed, so this must safeParse-fail, not silently merge.
+  it('preserves a pre-beta-banner payload (no dismissedBetaBannerAt) — adding an optional field is backward-compatible', () => {
+    // A settings payload written before dismissedBetaBannerAt existed must keep
+    // loading intact: adding an optional field must NOT bump the key/version and
+    // must NOT discard the user's existing settings.
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ version: 1, storage: {}, migration: {}, capabilities: {} }),
+      JSON.stringify({
+        version: 1,
+        storage: { preferredProvider: 'local-daemon', lastBrowserLocalCanvasId: 'abc' },
+        migration: {},
+        capabilities: {},
+      }),
     )
     const store = createUserSettingsStore()
-    expect(store.load()).toEqual(defaultUserSettings())
+    expect(store.load().storage.preferredProvider).toBe('local-daemon')
+    expect(store.load().storage.lastBrowserLocalCanvasId).toBe('abc')
+    expect(store.load().storage.dismissedBetaBannerAt).toBeUndefined()
   })
 })
 
