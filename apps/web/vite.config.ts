@@ -1,6 +1,5 @@
-import { cpSync, existsSync } from 'node:fs'
-import { createReadStream } from 'node:fs'
-import { dirname, extname, join, normalize, resolve } from 'node:path'
+import { cpSync, createReadStream, statSync } from 'node:fs'
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -36,8 +35,19 @@ function excalidrawFontsPlugin(): Plugin {
       server.middlewares.use('/fonts', (req, res, next) => {
         const relPath = normalize(decodeURIComponent(req.url ?? '')).replace(/^([/\\])+/, '')
         const filePath = join(EXCALIDRAW_FONTS_DIR, relPath)
-        // join+normalize keeps traversal inside the fonts dir; double-check anyway.
-        if (!filePath.startsWith(EXCALIDRAW_FONTS_DIR) || !existsSync(filePath)) {
+        // Terminate the base with a separator: a bare prefix check would accept
+        // sibling directories (e.g. fonts-backup). Serve regular files only so a
+        // directory request cannot reach createReadStream (EISDIR crash).
+        const safeBase = EXCALIDRAW_FONTS_DIR.endsWith(sep)
+          ? EXCALIDRAW_FONTS_DIR
+          : EXCALIDRAW_FONTS_DIR + sep
+        let isFile = false
+        try {
+          isFile = filePath.startsWith(safeBase) && statSync(filePath).isFile()
+        } catch {
+          // missing file → fall through to next()
+        }
+        if (!isFile) {
           next()
           return
         }
@@ -45,7 +55,14 @@ function excalidrawFontsPlugin(): Plugin {
           'Content-Type',
           extname(filePath) === '.woff2' ? 'font/woff2' : 'application/octet-stream',
         )
-        createReadStream(filePath).pipe(res)
+        const stream = createReadStream(filePath)
+        stream.on('error', () => {
+          // Without this, a read error crashes the dev server via an
+          // unhandled 'error' event on the stream.
+          if (!res.headersSent) res.statusCode = 500
+          res.end()
+        })
+        stream.pipe(res)
       })
     },
   }
