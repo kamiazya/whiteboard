@@ -78,6 +78,10 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/browser-shared-index.ts',
       ),
+      '@kamiazya/whiteboard-mcp/migration-bundle': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/migration-bundle.ts',
+      ),
     },
   },
   build: {
