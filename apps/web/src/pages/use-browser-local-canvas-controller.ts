@@ -67,35 +67,49 @@ export function useBrowserLocalCanvasController(
   // Returns true if there was nothing to flush or the flush succeeded.
   // Returns false if a pending save failed — callers that depend on data
   // integrity (e.g. triggerCleanup, switchCanvas) must abort when this returns false.
+  //
+  // Loops instead of awaiting the in-flight save once: two concurrent callers
+  // both awaiting the same prior save wake up in the same microtask batch, and
+  // the first to resume can consume pendingSnapshotRef and start the next save
+  // before the second checks it. Looping back after every await re-reads
+  // savePromiseRef/pendingSnapshotRef so the second caller picks up and awaits
+  // that newly-started save instead of returning true while it is still
+  // in flight.
   const flushSave = useCallback(async (): Promise<boolean> => {
-    if (savePromiseRef.current !== null) {
-      const priorOk = await savePromiseRef.current
-      if (!priorOk) return false
-    }
-    const snap = pendingSnapshotRef.current
-    if (snap === null) return true
-    pendingSnapshotRef.current = null
-    setPersistenceRef.current((p) => ({ kind: 'saving', lastSavedAt: p.lastSavedAt ?? null }))
-    const promise = (async (): Promise<boolean> => {
-      try {
-        await storeRef.current.save(snap)
-        setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
-        return true
-      } catch {
-        // Generic safe copy — do not expose raw IndexedDB error
-        setPersistenceRef.current((p) => ({
-          kind: 'degraded',
-          reason: 'save-failed',
-          message: 'Changes could not be saved.',
-          lastSavedAt: p.lastSavedAt ?? null,
-        }))
-        return false
-      } finally {
-        savePromiseRef.current = null
+    for (;;) {
+      if (savePromiseRef.current !== null) {
+        const priorOk = await savePromiseRef.current
+        if (!priorOk) return false
+        continue
       }
-    })()
-    savePromiseRef.current = promise
-    return promise
+      const snap = pendingSnapshotRef.current
+      if (snap === null) return true
+      pendingSnapshotRef.current = null
+      setPersistenceRef.current((p) => ({ kind: 'saving', lastSavedAt: p.lastSavedAt ?? null }))
+      const promise = (async (): Promise<boolean> => {
+        try {
+          await storeRef.current.save(snap)
+          setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
+          return true
+        } catch {
+          // Generic safe copy — do not expose raw IndexedDB error
+          setPersistenceRef.current((p) => ({
+            kind: 'degraded',
+            reason: 'save-failed',
+            message: 'Changes could not be saved.',
+            lastSavedAt: p.lastSavedAt ?? null,
+          }))
+          return false
+        } finally {
+          savePromiseRef.current = null
+        }
+      })()
+      savePromiseRef.current = promise
+      const ok = await promise
+      if (!ok) return false
+      // Loop again: another edit may have queued a new pending snapshot
+      // while this save was in flight.
+    }
   }, [])
 
   useEffect(() => {

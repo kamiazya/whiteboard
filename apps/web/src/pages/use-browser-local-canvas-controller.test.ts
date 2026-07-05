@@ -699,5 +699,94 @@ describe('useBrowserLocalCanvasController', () => {
       expect(await store.getDefaultCanvasId()).toBe('c1')
       expect(result.current.snapshot?.id).toBe('c1')
     })
+
+    it('two concurrent flush waiters both observe the second save that starts once the first settles', async () => {
+      // Regression: flushSave used to check pendingSnapshotRef only once right
+      // after awaiting the prior save. If two callers were waiting on that
+      // same prior save, the first to resume could consume pendingSnapshotRef
+      // and kick off a second save while the other observed an already-null
+      // pendingSnapshotRef and returned true before the second save settled.
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      // Intercept store.save so the test controls exactly when each of the
+      // two successive saves (first rename, then second rename) settles.
+      const originalSave = store.save.bind(store)
+      let resolveFirstSave!: () => void
+      let resolveSecondSave!: () => void
+      let saveCallCount = 0
+      store.save = (s: CanvasSnapshot) => {
+        saveCallCount += 1
+        if (saveCallCount === 1) {
+          return new Promise<void>((resolve) => {
+            resolveFirstSave = () => {
+              originalSave(s).then(resolve)
+            }
+          })
+        }
+        if (saveCallCount === 2) {
+          return new Promise<void>((resolve) => {
+            resolveSecondSave = () => {
+              originalSave(s).then(resolve)
+            }
+          })
+        }
+        return originalSave(s)
+      }
+
+      // First rename starts save #1 (fire-and-forget, exactly like the real hook).
+      act(() => {
+        result.current.renameCanvas('First rename')
+      })
+      expect(saveCallCount).toBe(1)
+
+      // Second rename queues a new pending snapshot and starts a second
+      // flush waiter that awaits the still-in-flight save #1.
+      act(() => {
+        result.current.renameCanvas('Second rename')
+      })
+
+      // A concurrent switchCanvas call is a third waiter on the same save #1.
+      let switchSettled = false
+      const switchPromise = result.current.switchCanvas(created!.id).then(() => {
+        switchSettled = true
+      })
+
+      // Settle save #1. This lets save #2 (carrying "Second rename") start.
+      await act(async () => {
+        resolveFirstSave()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(saveCallCount).toBe(2)
+      // switchCanvas must still be waiting — save #2 has not settled yet.
+      expect(switchSettled).toBe(false)
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+
+      // Now let save #2 settle and confirm switchCanvas only proceeds after it does.
+      await act(async () => {
+        resolveSecondSave()
+        await switchPromise
+      })
+      expect(switchSettled).toBe(true)
+      expect(result.current.persistence.kind).toBe('saved')
+      expect(result.current.snapshot?.id).toBe(created!.id)
+      expect(await store.getDefaultCanvasId()).toBe(created!.id)
+      const flushed = await store.load('c1')
+      expect(flushed).toEqual({
+        kind: 'ok',
+        snapshot: { ...snap, name: 'Second rename', updatedAt: expect.any(String) },
+      })
+    })
   })
 })
