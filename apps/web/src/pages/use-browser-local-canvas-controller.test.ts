@@ -557,7 +557,7 @@ describe('useBrowserLocalCanvasController', () => {
       })
     })
 
-    it('switchCanvas to an unknown id is a safe no-op', async () => {
+    it('switchCanvas to an unknown id degrades persistence with feedback and leaves current snapshot untouched', async () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
@@ -570,8 +570,38 @@ describe('useBrowserLocalCanvasController', () => {
         await result.current.switchCanvas('does-not-exist')
       })
 
+      // A missing/corrupted target record must surface the same way a failed
+      // load does — silently doing nothing leaves the user with no explanation.
+      expect(result.current.persistence.kind).toBe('degraded')
       expect(result.current.snapshot).toEqual(before)
       expect(await store.getDefaultCanvasId()).toBe('c1')
+    })
+
+    it('switchCanvas clears a stale degraded banner from the previous canvas on a successful switch', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      // Leave a stale degraded banner behind, as a prior failed switch would.
+      await act(async () => {
+        await result.current.switchCanvas('does-not-exist')
+      })
+      expect(result.current.persistence.kind).toBe('degraded')
+
+      await act(async () => {
+        await result.current.switchCanvas(created!.id)
+      })
+
+      expect(result.current.persistence.kind).toBe('saved')
+      expect(result.current.snapshot?.id).toBe(created!.id)
     })
 
     it('switchCanvas degrades persistence instead of rejecting when load() throws', async () => {

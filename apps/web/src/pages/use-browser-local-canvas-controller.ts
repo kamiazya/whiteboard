@@ -290,10 +290,26 @@ export function useBrowserLocalCanvasController(
       if (!flushed) return
       try {
         const result = await storeRef.current.load(id)
-        if (result.kind !== 'ok') return // unknown id: safe no-op, current snapshot untouched
+        if (result.kind !== 'ok') {
+          // Target record is missing or unreadable: surface it the same way the
+          // initial-mount load does, instead of leaving the user with no feedback
+          // for why the switch silently did nothing. Current snapshot and default
+          // pointer are left untouched — the still-current canvas view is not corrupted.
+          setPersistenceRef.current((p) => ({
+            kind: 'degraded',
+            reason: 'switch-failed',
+            message: 'The canvas could not be switched.',
+            lastSavedAt: p.lastSavedAt ?? null,
+          }))
+          return
+        }
         await storeRef.current.setDefaultCanvasId(id)
         snapshotRef.current = result.snapshot
         setSnapshot(result.snapshot)
+        // Clear any stale degraded banner left over from the previous canvas —
+        // a successful switch to a freshly-loaded, in-sync canvas should not keep
+        // showing an error from before the switch.
+        setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
       } catch {
         // Generic safe copy — do not expose raw IndexedDB error. Current
         // snapshot and default pointer are left untouched: a failed switch
