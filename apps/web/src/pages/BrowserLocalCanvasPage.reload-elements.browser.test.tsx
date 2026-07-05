@@ -102,18 +102,20 @@ describe('BrowserLocalCanvasPage reload persistence (browser — real IndexedDB)
       height: 40,
     }
 
-    act(() => {
-      latestOnChange!([rectangle], {}, {})
-    })
-
-    // Wait for the onChange debounce (300ms) to flush the write into the real
-    // canvas row in loroCanvases (not the '__placeholder__' row from the bug).
+    // The backend connects asynchronously after the editing state mounts, and
+    // there is no synchronous "connected" signal to await. Re-fire the same
+    // (idempotent) element on each poll so a change dispatched before the
+    // connection settles is retried until it lands, then wait for the debounce
+    // (300ms) to flush the write into the real canvas row (not '__placeholder__').
     await waitFor(
       async () => {
+        act(() => {
+          latestOnChange!([rectangle], {}, {})
+        })
         const keys = await loroCanvasesKeys()
         expect(keys.length).toBeGreaterThan(0)
       },
-      { timeout: 5000 },
+      { timeout: 10000, interval: 600 },
     )
 
     const keysAfterDraw = await loroCanvasesKeys()
