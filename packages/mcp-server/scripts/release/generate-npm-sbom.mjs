@@ -93,9 +93,16 @@ const cyclonedxBin = resolve(WORKSPACE_ROOT, 'node_modules', '.bin', 'cyclonedx-
 // Under `pnpm run`, npm_execpath points at pnpm's own CLI; cyclonedx-npm uses
 // npm_execpath to locate "npm", so it would silently run `pnpm ls` instead of
 // `npm ls` and die with an option-parse error (exit 254, empty stdout).
+// Compare case-insensitively: Windows env var keys are case-insensitive and
+// may surface with different casing than the lowercase names pnpm sets.
 const cleanEnv = { ...process.env }
 for (const key of Object.keys(cleanEnv)) {
-  if (key === 'npm_execpath' || key.startsWith('npm_config_') || key.startsWith('npm_lifecycle_')) {
+  const lowerKey = key.toLowerCase()
+  if (
+    lowerKey === 'npm_execpath' ||
+    lowerKey.startsWith('npm_config_') ||
+    lowerKey.startsWith('npm_lifecycle_')
+  ) {
     delete cleanEnv[key]
   }
 }

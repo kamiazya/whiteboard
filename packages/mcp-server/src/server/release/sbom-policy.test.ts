@@ -415,12 +415,17 @@ describe('release.yml publish job step ordering hazards', () => {
     const checkoutIdx = publishMcp.indexOf('actions/checkout@')
     expect(checkoutIdx, 'publish-mcp must have a checkout step').toBeGreaterThan(-1)
     const preCheckout = publishMcp.slice(0, checkoutIdx)
-    // Every `run:` step before checkout needs an explicit working-directory override.
-    const runSteps = preCheckout.match(/^      - name: .*$/gm) ?? []
+    // Every `run:` step before checkout needs an explicit working-directory
+    // override. Assert PER STEP — matching against the whole pre-checkout block
+    // would let one compliant step mask another step's missing override.
+    const steps = preCheckout.split(/^      - /m).slice(1)
+    const runSteps = steps.filter((step) => /^\s*run:/m.test(step))
+    expect(runSteps.length, 'expected at least one pre-checkout run step').toBeGreaterThan(0)
     for (const step of runSteps) {
+      const stepName = step.match(/name:\s*(.*)/)?.[1] ?? step.slice(0, 40)
       expect(
-        preCheckout,
-        `pre-checkout step "${step.trim()}" must set working-directory: . (job default dir does not exist yet)`,
+        step,
+        `pre-checkout step "${stepName.trim()}" must set working-directory: . (job default dir does not exist yet)`,
       ).toMatch(/working-directory:\s*\.\s*$/m)
     }
   })
