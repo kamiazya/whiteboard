@@ -44,6 +44,15 @@ console.log('\n[smoke-artifact] dist/ structure')
 assert(existsSync(DIST), 'dist/ directory exists')
 assert(existsSync(resolve(DIST, 'index.html')), 'dist/index.html exists')
 
+// Self-hosted Excalidraw fonts: Excalidraw resolves
+// `${EXCALIDRAW_ASSET_PATH}fonts/<Family>/…` and the CSP blocks the esm.sh
+// fallback, so the fonts must land at dist/fonts/<Family>/ exactly.
+assert(existsSync(resolve(DIST, 'fonts/Excalifont')), 'dist/fonts/Excalifont/ exists (self-hosted)')
+assert(
+  !existsSync(resolve(DIST, 'fonts/node_modules')),
+  'dist/fonts has no node_modules path prefix (copy structure regression)',
+)
+
 // ── _headers copied ───────────────────────────────────────────────────────────
 console.log('\n[smoke-artifact] _headers')
 const headers = readDist('_headers')
@@ -72,11 +81,16 @@ if (headers !== null) {
   assert(csp.includes("base-uri 'none'"), "CSP: base-uri 'none'")
   assert(csp.includes("object-src 'none'"), "CSP: object-src 'none'")
   assert(csp.includes("script-src 'self'"), "CSP: script-src 'self'")
+  // loro-crdt is WASM; without 'wasm-unsafe-eval' the app dies at bootstrap (blank page).
+  assert(
+    /script-src[^;]*'wasm-unsafe-eval'/.test(csp),
+    "CSP: 'wasm-unsafe-eval' for loro-crdt WASM",
+  )
 
   // No wildcard sources that would defeat the CSP
-  assert(!csp.includes("script-src *"), 'CSP: no wildcard script-src')
-  assert(!csp.includes("default-src *"), 'CSP: no wildcard default-src')
-  assert(!csp.includes("connect-src *"), 'CSP: no wildcard connect-src')
+  assert(!csp.includes('script-src *'), 'CSP: no wildcard script-src')
+  assert(!csp.includes('default-src *'), 'CSP: no wildcard default-src')
+  assert(!csp.includes('connect-src *'), 'CSP: no wildcard connect-src')
   assert(!csp.match(/script-src[^;]*'unsafe-eval'/), "CSP: no 'unsafe-eval' in script-src")
 }
 

@@ -47,7 +47,6 @@
     "tailwindcss": "^4",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vite-plugin-static-copy": "^4.1.1",
     "vite-plugin-top-level-await": "^1",
     "vite-plugin-wasm": "^3",
     "vitest": "catalog:",
