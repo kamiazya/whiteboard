@@ -1,12 +1,6 @@
-import { z } from 'zod'
+import { openWhiteboardDb } from './browser-idb.js'
+import { canvasSnapshotSchema } from './whiteboard-client.js'
 import type { CanvasSnapshot } from './whiteboard-client.js'
-
-const canvasSnapshotSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  scene: z.object({ elements: z.array(z.unknown()) }),
-  updatedAt: z.string(),
-})
 
 export type LoadResult =
   | { kind: 'ok'; snapshot: CanvasSnapshot }
@@ -69,29 +63,9 @@ export class MemoryStore implements BrowserLocalStore {
   }
 }
 
-const DB_NAME = 'whiteboard'
-// Both stores (legacy JSON canvases and Loro CRDT loroCanvases) share the same
-// IndexedDB database. Opening at v1 after a v2 upgrade causes a VersionError, so
-// this opener must stay in sync with loro-store.ts which opens at DB_VERSION 2.
-const DB_VERSION = 2
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
-      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
 export class IndexedDBStore implements BrowserLocalStore {
   async getDefaultCanvasId(): Promise<string | null> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readonly')
       const req = tx.objectStore('meta').get('defaultCanvasId')
@@ -102,22 +76,28 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async setDefaultCanvasId(id: string): Promise<void> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readwrite')
       tx.objectStore('meta').put(id, 'defaultCanvasId')
-      tx.oncomplete = () => { db.close(); resolve() }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
       tx.onerror = () => reject(tx.error)
     })
   }
 
   async load(id: string): Promise<LoadResult> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve) => {
       const tx = db.transaction('canvases', 'readonly')
       const req = tx.objectStore('canvases').get(id)
       req.onsuccess = () => {
-        if (req.result === undefined) { resolve({ kind: 'not-found' }); return }
+        if (req.result === undefined) {
+          resolve({ kind: 'not-found' })
+          return
+        }
         const parsed = canvasSnapshotSchema.safeParse(req.result)
         resolve(parsed.success ? { kind: 'ok', snapshot: parsed.data } : { kind: 'corrupted' })
       }
@@ -127,17 +107,20 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async save(snapshot: CanvasSnapshot): Promise<void> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('canvases', 'readwrite')
       tx.objectStore('canvases').put(snapshot, snapshot.id)
-      tx.oncomplete = () => { db.close(); resolve() }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
       tx.onerror = () => reject(tx.error)
     })
   }
 
   async del(expectedId: string): Promise<DeleteResult> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction(['meta', 'canvases'], 'readwrite')
       const metaStore = tx.objectStore('meta')
@@ -160,7 +143,10 @@ export class IndexedDBStore implements BrowserLocalStore {
         metaStore.delete('defaultCanvasId')
         canvasStore.delete(expectedId)
       }
-      tx.oncomplete = () => { db.close(); resolve({ deleted: true }) }
+      tx.oncomplete = () => {
+        db.close()
+        resolve({ deleted: true })
+      }
       tx.onabort = () => {
         db.close()
         // earlyResult is set only when our code calls tx.abort() (pointer-mismatch / not-found).
@@ -168,17 +154,26 @@ export class IndexedDBStore implements BrowserLocalStore {
         if (earlyResult !== null) resolve(earlyResult)
         else reject(tx.error ?? new DOMException('Transaction aborted unexpectedly', 'AbortError'))
       }
-      tx.onerror = () => { db.close(); reject(tx.error) }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
     })
   }
 
   async removeCanvas(id: string): Promise<void> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('canvases', 'readwrite')
       tx.objectStore('canvases').delete(id)
-      tx.oncomplete = () => { db.close(); resolve() }
-      tx.onerror = () => { db.close(); reject(tx.error) }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
     })
   }
 

@@ -6,7 +6,6 @@ import type { BrowserLocalPersistenceState } from './use-browser-local-canvas-co
 const snapshot: CanvasSnapshot = {
   id: 'canvas-A',
   name: 'untitled',
-  scene: { elements: [] },
   updatedAt: '2026-05-04T00:00:00.000Z',
 }
 
@@ -30,18 +29,21 @@ describe('derivePageState', () => {
     // Defence-in-depth — the controller never sets cleanupCompleted
     // while persistence is degraded (cleanup runs from the editor),
     // but if both flags somehow flipped on, the safer banner wins.
-    expect(derivePageState({ snapshot: null, persistence: degraded, cleanupCompleted: true }))
-      .toEqual({ kind: 'load-degraded', message: 'Save failed.' })
+    expect(
+      derivePageState({ snapshot: null, persistence: degraded, cleanupCompleted: true }),
+    ).toEqual({ kind: 'load-degraded', message: 'Save failed.' })
   })
 
   it('snapshot=null + cleanupCompleted=true (and persistence not degraded) → cleanup-completed', () => {
-    expect(derivePageState({ snapshot: null, persistence: saved, cleanupCompleted: true }))
-      .toEqual({ kind: 'cleanup-completed' })
+    expect(derivePageState({ snapshot: null, persistence: saved, cleanupCompleted: true })).toEqual(
+      { kind: 'cleanup-completed' },
+    )
   })
 
   it('snapshot=null + cleanupCompleted=false + persistence not degraded → loading', () => {
-    expect(derivePageState({ snapshot: null, persistence: saved, cleanupCompleted: false }))
-      .toEqual({ kind: 'loading' })
+    expect(
+      derivePageState({ snapshot: null, persistence: saved, cleanupCompleted: false }),
+    ).toEqual({ kind: 'loading' })
   })
 
   it('snapshot present → editing (regardless of persistence kind), and the persistence flows through unchanged', () => {
