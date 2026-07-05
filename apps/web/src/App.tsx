@@ -15,10 +15,14 @@ interface AppProps {
   providerState?: ProviderState
 }
 
+interface BackendConfigChipProps {
+  state: ProviderState
+}
+
 // Reports the configured storage backend only — this reflects runtime
 // config, not a live connection/detection probe. Do not claim 'Connected'
 // or 'Daemon unavailable' here; that needs an actual live probe.
-function BackendConfigChip({ state }: { state: ProviderState }) {
+function BackendConfigChip({ state }: BackendConfigChipProps) {
   const label =
     state.kind === 'local-daemon'
       ? `Configured for local daemon at ${state.daemonBaseUrl}`
