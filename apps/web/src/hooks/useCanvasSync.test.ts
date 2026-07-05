@@ -189,7 +189,11 @@ describe('useCanvasSync', () => {
     expect(backend._ctrl.disconnectCalled).toBe(true)
   })
 
-  it('does not push after unmount when debounce timer fires', async () => {
+  // Deliberate behavior change (flush-on-teardown): a pending debounced scene
+  // edit is now flushed synchronously during teardown cleanup instead of
+  // being cancelled and lost. React runs the same cleanup path for a real
+  // unmount and a backend switch, so unmount also flushes.
+  it('flushes a pending debounced write to the backend on unmount instead of dropping it', async () => {
     const backend = makeFakeBackend()
     const api = makeApiStub()
 
@@ -204,22 +208,58 @@ describe('useCanvasSync', () => {
       await vi.runAllTimersAsync()
     })
 
+    const callsBeforeChange = backend._ctrl.pushLocalUpdateCalls.length
+
     const fakeEl = { type: 'rectangle', id: 'el-2', x: 0, y: 0, width: 50, height: 50 }
     act(() => {
       result.current.onChange([fakeEl as never], {} as never, {})
     })
 
+    // No push yet — the 300ms debounce has not elapsed.
+    expect(backend._ctrl.pushLocalUpdateCalls.length).toBe(callsBeforeChange)
+
     unmount()
 
-    const callsAtUnmount = backend._ctrl.pushLocalUpdateCalls.length
+    // The pending edit must have been flushed and persisted during teardown,
+    // not silently dropped by the unmount cleanup.
+    expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(callsBeforeChange)
+  })
 
-    // Fire the debounce that was queued before unmount.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(400)
+  it('flushes a pending debounced scene edit to the outgoing backend A when switching to backend B before the debounce elapses', async () => {
+    const backendA = makeFakeBackend()
+    const backendB = makeFakeBackend()
+    const api = makeApiStub()
+
+    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      initialProps: { backend: backendA as CanvasBackend },
     })
 
-    // Push count must not increase after unmount.
-    expect(backend._ctrl.pushLocalUpdateCalls.length).toBe(callsAtUnmount)
+    act(() => {
+      result.current.setExcalidrawAPI(api as never)
+    })
+
+    await act(async () => {
+      backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+      await vi.runAllTimersAsync()
+    })
+
+    const aCallsBefore = backendA._ctrl.pushLocalUpdateCalls.length
+
+    // Queue a scene edit against A, then switch to B before the 300ms
+    // debounce elapses — the classic "draw then immediately switch" flow.
+    const fakeEl = { type: 'rectangle', id: 'el-flush', x: 0, y: 0, width: 20, height: 20 }
+    act(() => {
+      result.current.onChange([fakeEl as never], {} as never, {})
+    })
+
+    act(() => {
+      rerender({ backend: backendB })
+    })
+
+    // The pending edit must have landed on A during teardown — never dropped,
+    // and never routed to B.
+    expect(backendA._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(aCallsBefore)
+    expect(backendB._ctrl.pushLocalUpdateCalls.length).toBe(0)
   })
 
   it('does not connect when backend is null, and onChange is a safe no-op', () => {
@@ -323,7 +363,11 @@ describe('useCanvasSync', () => {
     expect(backendB._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(bCallsBefore)
   })
 
-  it('drops a pending debounced file upload scheduled against a since-superseded backend, even if its cancellation is lost to a timing race', async () => {
+  // Deliberate behavior change (flush-on-teardown): a pending debounced file
+  // upload scheduled against A is no longer dropped when A is superseded by
+  // B before the debounce elapses — it is flushed to A during teardown. The
+  // invariant that must never regress is that it is never routed to B.
+  it('flushes a pending debounced file upload to A (never B) when A is superseded before the debounce elapses, even if cancellation is lost to a timing race', async () => {
     const backendA = makeFakeBackend()
     const backendB = makeFakeBackend()
     const api = makeApiStub()
@@ -349,11 +393,13 @@ describe('useCanvasSync', () => {
       result.current.onChange([fakeEl as never], {} as never, { 'file-x': fakeFile as never })
     })
 
-    // Simulate the real-browser race the finding describes: the passive
-    // effect's own `onSceneChange.cancel()` call races the already-elapsing
-    // timer and loses, so A's pending flush survives the switch to B. Stub
-    // out clearTimeout for the duration of the switch so `.cancel()` becomes
-    // a no-op without touching any of this hook's own logic.
+    // Simulate the real-browser race the finding describes: stub out
+    // clearTimeout for the duration of the switch so a raw `.cancel()` call
+    // would become a no-op. The teardown now uses `.flush()` instead, which
+    // runs the pending call synchronously and clears its own internal
+    // pending state regardless of whether the underlying timer was actually
+    // cleared, so the queued upload lands on A exactly once even under this
+    // race.
     const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {})
     rerender({ backend: backendB })
     clearTimeoutSpy.mockRestore()
@@ -364,14 +410,15 @@ describe('useCanvasSync', () => {
       await vi.advanceTimersByTimeAsync(0)
     })
 
-    // Fire A's un-cancelled timer.
+    // Fire A's un-cancelled underlying timer (a no-op by now: flush already
+    // cleared its own pending state during teardown).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(400)
     })
 
-    // The queued change was scheduled against A's connection; once
-    // superseded it must be dropped entirely rather than uploaded to B.
-    expect(backendA._ctrl.putFileCalls.length).toBe(0)
+    // The queued change was scheduled against A's connection: it must land
+    // on A exactly once via the teardown flush, and never on B.
+    expect(backendA._ctrl.putFileCalls.length).toBe(1)
     expect(backendB._ctrl.putFileCalls.length).toBe(0)
   })
 
@@ -454,7 +501,12 @@ describe('useCanvasSync', () => {
 
     // Backend B fails to connect: fires onError synchronously instead of onConnected.
     const failingBackend: CanvasBackend & { _ctrl: FakeBackendControl } = {
-      _ctrl: { handlers: null, disconnectCalled: false, pushLocalUpdateCalls: [], putFileCalls: [] },
+      _ctrl: {
+        handlers: null,
+        disconnectCalled: false,
+        pushLocalUpdateCalls: [],
+        putFileCalls: [],
+      },
       connect(handlers) {
         handlers.onError?.('storage-failure')
       },

@@ -78,13 +78,21 @@ async function persistedElementIds(canvasId: string): Promise<string[]> {
       const getReq = tx.objectStore('loroCanvases').get(canvasId)
       getReq.onsuccess = () => {
         db.close()
-        const envelope = getReq.result as { snapshot: Uint8Array } | undefined
+        const envelope = getReq.result as
+          | { snapshot: Uint8Array; deltas?: Uint8Array[] }
+          | undefined
         if (!envelope) {
           resolve([])
           return
         }
         const doc = new Loro()
         doc.import(envelope.snapshot)
+        // Replay deltas recorded after the initial snapshot — a canvas that
+        // received more than one write (e.g. a flushed edit on top of a
+        // warmup write) is stored as snapshot + deltas, not a single snapshot.
+        for (const delta of envelope.deltas ?? []) {
+          doc.import(delta)
+        }
         // onSceneChange writes into the MovableList container; fall back to the
         // plain List for a doc that has never had a live scene write.
         const movable = doc.getMovableList('elements').toJSON() as Array<{ id: string }>
@@ -193,5 +201,94 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     )
 
     expect(await loroCanvasesKeys()).not.toContain('__placeholder__')
+  })
+
+  it('persists an edit made immediately (within the 300ms debounce window) before switching to a new canvas', async () => {
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+      timeout: 5000,
+    })
+    await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
+
+    const idA = await waitFor(
+      () => {
+        const heading = screen.getByRole('heading', { level: 1 })
+        expect(heading).toBeTruthy()
+        const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
+        expect(switcher.value).not.toBe('')
+        return switcher.value
+      },
+      { timeout: 5000 },
+    )
+
+    const warmupRect = {
+      id: 'multi-canvas-warmup-a',
+      type: 'rectangle',
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+    }
+
+    // Warm up so the backend connection for A is confirmed live before we
+    // exercise the race — re-fire until the write lands in loroCanvases (the
+    // backend connects asynchronously with no sync signal).
+    await waitFor(
+      async () => {
+        act(() => {
+          latestOnChange!([warmupRect], {}, {})
+        })
+        const keys = await loroCanvasesKeys()
+        expect(keys).toContain(idA)
+      },
+      { timeout: 10000, interval: 600 },
+    )
+
+    const lateRect = {
+      id: 'multi-canvas-late-edit-a',
+      type: 'rectangle',
+      x: 30,
+      y: 30,
+      width: 15,
+      height: 15,
+    }
+
+    // Fire the late edit and, WITHOUT waiting for the 300ms debounce to
+    // elapse, immediately create+switch to a fresh canvas B. The pending
+    // debounced write for A must be flushed to A during the backend
+    // teardown rather than cancelled and lost.
+    act(() => {
+      latestOnChange!([warmupRect, lateRect], {}, {})
+    })
+
+    const newBtn = screen.getByRole('button', { name: /new canvas/i })
+    await act(async () => {
+      newBtn.click()
+    })
+
+    const idB = await waitFor(
+      () => {
+        const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
+        expect(switcher.value).not.toBe(idA)
+        return switcher.value
+      },
+      { timeout: 5000 },
+    )
+    expect(idB).not.toBe(idA)
+
+    // The late edit must have landed on A — verified by decoding straight
+    // from IndexedDB, independent of the mock Excalidraw's render timing.
+    // The flushed write reaches IDB asynchronously (via the backend's write
+    // queue), so this must be polled, never asserted immediately.
+    await waitFor(
+      async () => {
+        const ids = await persistedElementIds(idA)
+        expect(ids).toContain('multi-canvas-late-edit-a')
+      },
+      { timeout: 5000 },
+    )
+
+    // Never leaked into B.
+    expect(await persistedElementIds(idB)).not.toContain('multi-canvas-late-edit-a')
   })
 })
