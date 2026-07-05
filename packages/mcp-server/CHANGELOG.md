@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.9](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.8...mcp-server-v0.0.9) (2026-07-05)
+
+
+### Bug Fixes
+
+* **ci:** unbreak publish jobs — validate-step cwd and SBOM generation under pnpm ([#100](https://github.com/kamiazya/whiteboard/issues/100)) ([617eeb9](https://github.com/kamiazya/whiteboard/commit/617eeb92fca5fd1f22b54fcc72eaf03d5b245a5a))
+* **web:** address AI review follow-ups from [#100](https://github.com/kamiazya/whiteboard/issues/100) and [#102](https://github.com/kamiazya/whiteboard/issues/102) ([#103](https://github.com/kamiazya/whiteboard/issues/103)) ([583c618](https://github.com/kamiazya/whiteboard/commit/583c618506a5bcb510c0c5056c6bd7f968e1c0ec))
+
 ## [0.0.8](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.7...mcp-server-v0.0.8) (2026-07-05)
 
 
