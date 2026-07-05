@@ -51,6 +51,32 @@ jobs:
           # GITHUB_TOKEN-driven actions cannot trigger workflows on other workflows.
           token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
 
+  # Fast-forward the `stable` branch to the root (plugin) release tag.
+  # Git-based plugin consumers (Claude Code marketplace source ref, Codex
+  # `@stable` marketplaces) resolve `stable`, so plugin content ships on
+  # release-PR merge instead of on every push to main.
+  advance-stable:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.root_release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Fast-forward stable to the release tag
+        env:
+          TAG: ${{ needs.release-please.outputs.root_tag_name }}
+        run: |
+          set -euo pipefail
+          git fetch origin "refs/tags/${TAG}:refs/tags/${TAG}" --no-tags || true
+          git rev-parse --verify "refs/tags/${TAG}^{commit}" >/dev/null
+          # No force flag: a non-fast-forward means history was rewritten — fail loudly.
+          git push origin "refs/tags/${TAG}^{commit}:refs/heads/stable"
+
   publish-mcp:
     needs: release-please
     if: ${{ needs.release-please.outputs.mcp_release_created == 'true' || inputs.force_publish_tag != '' }}
