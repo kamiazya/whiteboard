@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
-    "loro-crdt": "catalog:",
     "@excalidraw/utils": "0.1.3-test32",
     "@kamiazya/whiteboard-mcp": "workspace:*",
     "@radix-ui/react-alert-dialog": "^1.1.17",
@@ -28,6 +27,7 @@
     "@radix-ui/react-tooltip": "^1.2.10",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "loro-crdt": "catalog:",
     "lucide-react": "^1.11.0",
     "react": "catalog:",
     "react-dom": "catalog:",
@@ -50,6 +50,7 @@
     "vite-plugin-static-copy": "^4.1.1",
     "vite-plugin-top-level-await": "^1",
     "vite-plugin-wasm": "^3",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "wrangler": "^4.105.0"
   }
 }
