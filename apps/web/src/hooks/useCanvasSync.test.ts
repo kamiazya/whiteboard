@@ -5,13 +5,14 @@
  * that are not available in jsdom. The hook's sync contract is tested via
  * a fake CanvasBackend and a minimal ExcalidrawImperativeAPI stub.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
-import { LoroDoc } from 'loro-crdt'
+
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
+import { act, renderHook } from '@testing-library/react'
+import { LoroDoc } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Mock excalidraw before importing the hook — restoreElements must return its input unchanged.
 vi.mock('@excalidraw/excalidraw', () => ({
@@ -190,5 +191,120 @@ describe('useCanvasSync', () => {
 
     // Push count must not increase after unmount.
     expect(backend._ctrl.pushLocalUpdateCalls.length).toBe(callsAtUnmount)
+  })
+
+  it('does not connect when backend is null, and onChange is a safe no-op', () => {
+    const { result } = renderHook(({ backend }) => useCanvasSync(backend), {
+      initialProps: { backend: null as CanvasBackend | null },
+    })
+
+    expect(result.current.syncStatus).toBe('idle')
+    // Calling onChange with no backend must not throw.
+    expect(() => result.current.onChange([], {} as never, {})).not.toThrow()
+  })
+
+  it('connects when backend changes from null to a real backend', () => {
+    const backend = makeFakeBackend()
+    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      initialProps: { backend: null as CanvasBackend | null },
+    })
+
+    expect(result.current.syncStatus).toBe('idle')
+
+    rerender({ backend })
+
+    expect(backend._ctrl.handlers).not.toBeNull()
+    expect(result.current.syncStatus).toBe('connected')
+  })
+
+  it('reconnects to a new backend when the backend prop changes, disconnecting the old one', async () => {
+    const backendA = makeFakeBackend()
+    const backendB = makeFakeBackend()
+    const api = makeApiStub()
+
+    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      initialProps: { backend: backendA as CanvasBackend },
+    })
+
+    act(() => {
+      result.current.setExcalidrawAPI(api as never)
+    })
+
+    await act(async () => {
+      backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+      await vi.runAllTimersAsync()
+    })
+
+    // Switch to backend B.
+    rerender({ backend: backendB })
+
+    expect(backendA._ctrl.disconnectCalled).toBe(true)
+    expect(backendB._ctrl.handlers).not.toBeNull()
+
+    await act(async () => {
+      backendB._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+      await vi.runAllTimersAsync()
+    })
+
+    const aCallsBefore = backendA._ctrl.pushLocalUpdateCalls.length
+    const bCallsBefore = backendB._ctrl.pushLocalUpdateCalls.length
+
+    const fakeEl = { type: 'rectangle', id: 'el-3', x: 0, y: 0, width: 10, height: 10 }
+    act(() => {
+      result.current.onChange([fakeEl as never], {} as never, {})
+    })
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400)
+    })
+
+    // Writes after the switch reach B only, never A.
+    expect(backendA._ctrl.pushLocalUpdateCalls.length).toBe(aCallsBefore)
+    expect(backendB._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(bCallsBefore)
+  })
+
+  it('sets syncStatus to "error" and does not resurrect A when switching to a backend whose connect fails', () => {
+    const backendA = makeFakeBackend()
+    const api = makeApiStub()
+
+    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      initialProps: { backend: backendA as CanvasBackend },
+    })
+
+    act(() => {
+      result.current.setExcalidrawAPI(api as never)
+    })
+
+    expect(result.current.syncStatus).toBe('connected')
+
+    // Backend B fails to connect: fires onError synchronously instead of onConnected.
+    const failingBackend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+      _ctrl: { handlers: null, disconnectCalled: false, pushLocalUpdateCalls: [] },
+      connect(handlers) {
+        handlers.onError?.('storage-failure')
+      },
+      disconnect() {},
+      pushLocalUpdate: () => Promise.resolve(),
+      getFile: async () => null,
+      putFile: async () => {},
+      sendClientReady: () => {},
+      sendExportResponse: () => {},
+    }
+
+    act(() => {
+      rerender({ backend: failingBackend })
+    })
+
+    expect(backendA._ctrl.disconnectCalled).toBe(true)
+    expect(result.current.syncStatus).toBe('error')
+
+    // Subsequent switch to a healthy backend still connects cleanly.
+    const backendC = makeFakeBackend()
+    act(() => {
+      rerender({ backend: backendC })
+    })
+
+    expect(backendC._ctrl.handlers).not.toBeNull()
+    expect(result.current.syncStatus).toBe('connected')
   })
 })

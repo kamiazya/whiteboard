@@ -1,11 +1,11 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
-import { derivePageState } from './browser-local-page-state.js'
-import { useBrowserLocalCanvasController } from './use-browser-local-canvas-controller.js'
+import { useMemo } from 'react'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { useMemo } from 'react'
+import { derivePageState } from './browser-local-page-state.js'
+import { useBrowserLocalCanvasController } from './use-browser-local-canvas-controller.js'
 
 interface BrowserLocalCanvasPageProps {
   store: BrowserLocalStore
@@ -27,10 +27,10 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
     [canvasId],
   )
 
-  const { setExcalidrawAPI, onChange } = useCanvasSync(
-    // Pass a no-op backend when not yet loaded; the hook will reconnect when a real one arrives.
-    backend ?? new BrowserLocalBackend('__placeholder__'),
-  )
+  // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
+  // whenever the backend identity changes, so the not-yet-loaded state is
+  // represented as null instead of a throwaway placeholder canvas id.
+  const { setExcalidrawAPI, onChange } = useCanvasSync(backend)
 
   if (pageState.kind === 'load-degraded') {
     return (

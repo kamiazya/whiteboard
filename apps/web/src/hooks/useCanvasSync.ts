@@ -1,18 +1,20 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
-import type { Value } from 'loro-crdt'
-import { restoreElements, CaptureUpdateAction } from '@excalidraw/excalidraw'
-import { resolveParentedElements } from '@kamiazya/whiteboard-mcp/browser-shared'
-import { validateLoroRawElements } from '@kamiazya/whiteboard-mcp/browser-shared'
-import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
+import { CaptureUpdateAction, restoreElements } from '@excalidraw/excalidraw'
+import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types'
 import type {
-  ExcalidrawImperativeAPI,
+  AppState,
   BinaryFileData,
   BinaryFiles,
   DataURL,
+  ExcalidrawImperativeAPI,
 } from '@excalidraw/excalidraw/types'
-import type { AppState } from '@excalidraw/excalidraw/types'
-import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types'
+import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
+import {
+  resolveParentedElements,
+  validateLoroRawElements,
+} from '@kamiazya/whiteboard-mcp/browser-shared'
+import type { Value } from 'loro-crdt'
+import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 export type SyncStatus = 'idle' | 'connected' | 'error'
 
@@ -54,9 +56,18 @@ function blobToBase64(blob: Blob): Promise<string> {
 /**
  * useCanvasSync — browser-local port of useWhiteboardSync.
  *
- * Accepts a CanvasBackend (e.g. BrowserLocalBackend), drives a LoroDoc from
- * onSnapshot/onRemoteUpdate, hydrates Excalidraw via applyLoroToExcalidraw,
- * and writes scene changes back via a debounced onSceneChange → backend.pushLocalUpdate.
+ * Accepts a CanvasBackend (e.g. BrowserLocalBackend) or null when no backend
+ * is available yet (e.g. the initial snapshot is still loading). A null
+ * backend never connects: syncStatus stays 'idle' and onChange is a no-op.
+ * When the backend identity changes — including null-to-backend and
+ * backend-to-backend — the previous connection is fully torn down
+ * (disconnect + per-connection state reset) before the new one connects.
+ * This is the mechanism a future browser-local → daemon in-place migration
+ * rides on: swapping the CanvasBackend prop is the whole contract.
+ *
+ * Drives a LoroDoc from onSnapshot/onRemoteUpdate, hydrates Excalidraw via
+ * applyLoroToExcalidraw, and writes scene changes back via a debounced
+ * onSceneChange → backend.pushLocalUpdate.
  *
  * Daemon-specific callbacks (onVersionCreated, onRestoreStarted, onRestoreComplete,
  * onHeadChanged, onViewportRequest, onExportRequest) are wired as no-ops to satisfy
@@ -64,24 +75,33 @@ function blobToBase64(blob: Blob): Promise<string> {
  *
  * applyGenerationRef is never reset to 0 — only ever incremented — to avoid
  * stale-async collisions when the hook is reused across canvas remounts.
+ *
+ * connectionGenerationRef + the per-effect `disposed` flag guard every
+ * callback bound to a specific connection: once a connection is torn down
+ * (disconnected, or superseded by a backend switch), its callbacks become
+ * inert instead of routing pushes/errors to whatever backend is live now.
  */
-export function useCanvasSync(backend: CanvasBackend): UseCanvasSyncResult {
+export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResult {
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const docRef = useRef<LoroDoc | null>(null)
   const undoManagerRef = useRef<UndoManager | null>(null)
   const filesCacheRef = useRef<Record<string, BinaryFileData>>({})
   const uploadedFileIdsRef = useRef<Set<string>>(new Set())
-  const backendRef = useRef<CanvasBackend>(backend)
+  const backendRef = useRef<CanvasBackend | null>(backend)
   backendRef.current = backend
 
   // Monotonic — never reset to 0 to prevent stale async work from a prior mount
   // landing in the current doc after a fast remount.
   const applyGenerationRef = useRef(0)
 
+  // Monotonic — bumped on every (re)connect (including a switch to null) so
+  // a connection's own callbacks can detect they have been superseded.
+  const connectionGenerationRef = useRef(0)
+
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [apiReady, setApiReady] = useState(false)
 
-  async function applyLoroToExcalidraw(doc: LoroDoc) {
+  async function applyLoroToExcalidraw(doc: LoroDoc, bk: CanvasBackend) {
     const generation = ++applyGenerationRef.current
 
     const movable = doc.getMovableList('elements').toJSON()
@@ -99,7 +119,6 @@ export function useCanvasSync(backend: CanvasBackend): UseCanvasSyncResult {
       )
       .map((el) => (el as { fileId: string }).fileId)
 
-    const bk = backendRef.current
     await Promise.allSettled(
       missingIds.map(async (fileId) => {
         const blob = await bk.getFile(fileId)
@@ -127,42 +146,125 @@ export function useCanvasSync(backend: CanvasBackend): UseCanvasSyncResult {
     })
   }
 
-  // Backend connect/disconnect lifecycle.
+  // Debounced scene change → commit to Loro → pushLocalUpdate via subscribeLocalUpdates.
+  // Declared before the connect effect below so that effect can cancel a
+  // pending flush on every (re)connect, not only on unmount.
+  const onSceneChange = useMemo(() => {
+    return debounce((elements: readonly ExcalidrawElement[], files: BinaryFiles) => {
+      const doc = docRef.current
+      if (!doc) return
+
+      const newEntries = Object.entries(files).filter(
+        ([fileId, fd]) => fd && !uploadedFileIdsRef.current.has(fileId),
+      ) as [string, BinaryFileData][]
+
+      const bk = backendRef.current
+
+      if (bk && newEntries.length > 0) {
+        void bk.putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
+      }
+
+      // Write elements into the Loro MovableList using field-by-field set operations,
+      // then commit so subscribeLocalUpdates fires and routes bytes to backend.pushLocalUpdate.
+      const list = doc.getMovableList('elements')
+      const current = list.toJSON() as ExcalidrawElement[]
+      const currentIds = new Set(current.map((e: ExcalidrawElement) => e.id))
+
+      // Append newly added elements.
+      for (const el of elements) {
+        if (!currentIds.has(el.id)) {
+          const map = list.insertContainer(list.length, new LoroMap())
+          for (const [k, v] of Object.entries(el)) {
+            if (v !== undefined) map.set(k, v as Value)
+          }
+        }
+      }
+
+      // Update or tombstone existing elements.
+      const nextById = new Map(elements.map((e) => [e.id, e]))
+      for (let i = 0; i < list.length; i++) {
+        const item = list.get(i)
+        if (!(item instanceof LoroMap)) continue
+        const id = item.get('id') as string
+        const next = nextById.get(id)
+        if (!next) {
+          item.set('isDeleted', true)
+        } else {
+          for (const [k, v] of Object.entries(next)) {
+            if (v !== undefined) item.set(k, v as Value)
+          }
+        }
+      }
+
+      doc.commit()
+    }, 300)
+  }, [])
+
+  // Backend connect/disconnect lifecycle. Depends on `backend` identity so a
+  // prop swap (including to/from null) tears down the previous connection —
+  // via this effect's own cleanup running before the next run's body — and
+  // establishes a fresh one instead of connecting once to whatever backend
+  // was first passed in.
   useEffect(() => {
+    let disposed = false
+    const myGeneration = ++connectionGenerationRef.current
+
     docRef.current = null
     undoManagerRef.current = null
     filesCacheRef.current = {}
     uploadedFileIdsRef.current = new Set()
     applyGenerationRef.current += 1
+    onSceneChange.cancel()
 
-    const bk = backendRef.current
+    if (backend === null) {
+      setSyncStatus('idle')
+      return
+    }
+
+    const bk = backend
+
+    function isStale(): boolean {
+      return disposed || connectionGenerationRef.current !== myGeneration
+    }
 
     bk.connect({
       onConnected() {
+        if (isStale()) return
         setSyncStatus('connected')
       },
 
       onSnapshot(bytes) {
-        const doc = LoroDoc.fromSnapshot(bytes)
+        if (isStale()) return
+        // Persisted "snapshot" bytes are whatever pushLocalUpdate's first
+        // subscribeLocalUpdates payload happened to be — which is Loro
+        // update-format, not doc.export({ mode: 'snapshot' }) format.
+        // LoroDoc.fromSnapshot() only accepts true snapshot bytes and throws
+        // on update bytes; doc.import() accepts either format, so a fresh
+        // doc + import() is the only reconstruction that works for both.
+        const doc = new LoroDoc()
+        doc.import(bytes)
         docRef.current = doc
         undoManagerRef.current = new UndoManager(doc, { mergeInterval: 500 })
 
         doc.subscribeLocalUpdates((update) => {
-          void Promise.resolve(backendRef.current.pushLocalUpdate(update)).catch(() => {
+          if (isStale()) return
+          void Promise.resolve(bk.pushLocalUpdate(update)).catch(() => {
+            if (isStale()) return
             setSyncStatus('error')
           })
         })
 
         doc.subscribe((e) => {
-          if (e.by === 'import') {
-            void applyLoroToExcalidraw(doc)
+          if (e.by === 'import' && !isStale()) {
+            void applyLoroToExcalidraw(doc, bk)
           }
         })
 
-        void applyLoroToExcalidraw(doc)
+        void applyLoroToExcalidraw(doc, bk)
       },
 
       onRemoteUpdate(bytes) {
+        if (isStale()) return
         docRef.current?.import(bytes)
       },
 
@@ -175,19 +277,22 @@ export function useCanvasSync(backend: CanvasBackend): UseCanvasSyncResult {
       onExportRequest: async () => {},
 
       onError: () => {
+        if (isStale()) return
         setSyncStatus('error')
       },
     })
 
     return () => {
+      disposed = true
       bk.disconnect()
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [backend]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Reapply the current document once the Excalidraw API becomes ready.
   useEffect(() => {
-    if (!apiReady || !docRef.current) return
-    void applyLoroToExcalidraw(docRef.current)
+    const bk = backendRef.current
+    if (!apiReady || !docRef.current || !bk) return
+    void applyLoroToExcalidraw(docRef.current, bk)
   }, [apiReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const setExcalidrawAPI = useCallback((api: ExcalidrawImperativeAPI) => {
@@ -198,20 +303,22 @@ export function useCanvasSync(backend: CanvasBackend): UseCanvasSyncResult {
   const loroUndo = useCallback(() => {
     const um = undoManagerRef.current
     const doc = docRef.current
-    if (!um || !doc) return false
+    const bk = backendRef.current
+    if (!um || !doc || !bk) return false
     if (!um.canUndo()) return false
     um.undo()
-    void applyLoroToExcalidraw(doc)
+    void applyLoroToExcalidraw(doc, bk)
     return true
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loroRedo = useCallback(() => {
     const um = undoManagerRef.current
     const doc = docRef.current
-    if (!um || !doc) return false
+    const bk = backendRef.current
+    if (!um || !doc || !bk) return false
     if (!um.canRedo()) return false
     um.redo()
-    void applyLoroToExcalidraw(doc)
+    void applyLoroToExcalidraw(doc, bk)
     return true
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -269,58 +376,6 @@ export function useCanvasSync(backend: CanvasBackend): UseCanvasSyncResult {
       } as EventListenerOptions)
     }
   }, [loroUndo, loroRedo])
-
-  // Debounced scene change → commit to Loro → pushLocalUpdate via subscribeLocalUpdates.
-  const onSceneChange = useMemo(() => {
-    return debounce((elements: readonly ExcalidrawElement[], files: BinaryFiles) => {
-      const doc = docRef.current
-      if (!doc) return
-
-      const newEntries = Object.entries(files).filter(
-        ([fileId, fd]) => fd && !uploadedFileIdsRef.current.has(fileId),
-      ) as [string, BinaryFileData][]
-
-      const bk = backendRef.current
-
-      if (newEntries.length > 0) {
-        void bk.putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
-      }
-
-      // Write elements into the Loro MovableList using field-by-field set operations,
-      // then commit so subscribeLocalUpdates fires and routes bytes to backend.pushLocalUpdate.
-      const list = doc.getMovableList('elements')
-      const current = list.toJSON() as ExcalidrawElement[]
-      const currentIds = new Set(current.map((e: ExcalidrawElement) => e.id))
-
-      // Append newly added elements.
-      for (const el of elements) {
-        if (!currentIds.has(el.id)) {
-          const map = list.insertContainer(list.length, new LoroMap())
-          for (const [k, v] of Object.entries(el)) {
-            if (v !== undefined) map.set(k, v as Value)
-          }
-        }
-      }
-
-      // Update or tombstone existing elements.
-      const nextById = new Map(elements.map((e) => [e.id, e]))
-      for (let i = 0; i < list.length; i++) {
-        const item = list.get(i)
-        if (!(item instanceof LoroMap)) continue
-        const id = item.get('id') as string
-        const next = nextById.get(id)
-        if (!next) {
-          item.set('isDeleted', true)
-        } else {
-          for (const [k, v] of Object.entries(next)) {
-            if (v !== undefined) item.set(k, v as Value)
-          }
-        }
-      }
-
-      doc.commit()
-    }, 300)
-  }, [])
 
   // Cancel debounce on unmount to prevent post-unmount Loro writes.
   useEffect(() => {
