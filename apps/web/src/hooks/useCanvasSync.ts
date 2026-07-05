@@ -179,7 +179,14 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
         ) as [string, BinaryFileData][]
 
         if (newEntries.length > 0) {
-          void bk.putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
+          // A file-upload failure is non-fatal (elements persist via the Loro
+          // commit below on a separate path); catch so it never surfaces as an
+          // unhandled promise rejection.
+          bk.putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId)).catch(
+            (err: unknown) => {
+              console.error('putFile failed', err)
+            },
+          )
         }
 
         // Write elements into the Loro MovableList using field-by-field set operations,
