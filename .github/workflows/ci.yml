@@ -171,6 +171,15 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # dry-run-npm reuses this dist instead of rebuilding from scratch.
+      - name: Upload mcp-server dist
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mcp-server-dist-${{ github.run_id }}
+          path: packages/mcp-server/dist/
+          if-no-files-found: error
+          retention-days: 1
+
       - name: Web app artifact smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:artifact
 
@@ -205,8 +214,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build
-        run: pnpm build
+      # Reuse the dist already built and verified by the `verify` job instead
+      # of rebuilding from scratch.
+      - name: Download mcp-server dist
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mcp-server-dist-${{ github.run_id }}
+          path: packages/mcp-server/dist/
 
       - name: npm publish dry-run
         run: pnpm publish:dry-run:npm
@@ -233,6 +247,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # docker-container driver is required for the GHA cache backend used by
+      # publish-dry-run-docker.mjs; the default docker driver can't export it.
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Docker build dry-run
         run: pnpm publish:dry-run:docker

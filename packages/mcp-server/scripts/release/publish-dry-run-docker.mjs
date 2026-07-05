@@ -27,9 +27,7 @@ const dockerCheck = spawnSync('docker', ['info'], {
   stdio: ['ignore', 'ignore', 'ignore'],
 })
 if (dockerCheck.status !== 0 || dockerCheck.error) {
-  process.stderr.write(
-    '[publish-dry-run:docker] Docker daemon not available; skipping dry-run.\n',
-  )
+  process.stderr.write('[publish-dry-run:docker] Docker daemon not available; skipping dry-run.\n')
   process.exit(0)
 }
 
@@ -37,15 +35,35 @@ mkdirSync(OUT_DIR, { recursive: true })
 
 // Step 1: docker build (no push). Build logs go to the pipe but are not
 // forwarded to stdout — only the safe JSON summary is printed.
-const buildResult = spawnSync(
-  'docker',
-  ['build', '-f', DOCKERFILE, '-t', IMAGE_TAG, '--progress=plain', '.'],
-  {
-    cwd: REPO_ROOT,
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  },
-)
+//
+// In GitHub Actions, build through buildx with the GHA cache backend so the
+// dependency-install and compile layers survive between runs (the plain
+// `docker build` engine and the ACTIONS_CACHE_URL credentials it needs are
+// only available inside a runner, not on a local dev machine).
+const isGitHubActions = process.env.GITHUB_ACTIONS === 'true'
+const buildArgs = isGitHubActions
+  ? [
+      'buildx',
+      'build',
+      '--cache-from',
+      'type=gha',
+      '--cache-to',
+      'type=gha,mode=max',
+      '--load',
+      '-f',
+      DOCKERFILE,
+      '-t',
+      IMAGE_TAG,
+      '--progress=plain',
+      '.',
+    ]
+  : ['build', '-f', DOCKERFILE, '-t', IMAGE_TAG, '--progress=plain', '.']
+
+const buildResult = spawnSync('docker', buildArgs, {
+  cwd: REPO_ROOT,
+  encoding: 'utf-8',
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
 
 if (buildResult.status !== 0 || buildResult.error) {
   fail('docker build')
@@ -53,15 +71,11 @@ if (buildResult.status !== 0 || buildResult.error) {
 
 // Step 2: capture locally-built image ID (sha256 digest of the image config).
 // RepoDigests are only populated after a registry push; use .Id for local builds.
-const inspectResult = spawnSync(
-  'docker',
-  ['image', 'inspect', IMAGE_TAG, '--format', '{{.Id}}'],
-  {
-    cwd: REPO_ROOT,
-    encoding: 'utf-8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  },
-)
+const inspectResult = spawnSync('docker', ['image', 'inspect', IMAGE_TAG, '--format', '{{.Id}}'], {
+  cwd: REPO_ROOT,
+  encoding: 'utf-8',
+  stdio: ['ignore', 'pipe', 'pipe'],
+})
 
 if (inspectResult.status !== 0 || inspectResult.error) {
   fail('docker image inspect')
