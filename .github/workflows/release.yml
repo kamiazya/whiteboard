@@ -63,6 +63,9 @@ jobs:
       # Packaged daemon cold-start exceeds the 10s default on CI runners
       # (smoke:tarball "Daemon startup timeout" broke the v0.0.9 publish).
       WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS: '60000'
+      # The smoke's first tools/call includes that same daemon spawn, so its
+      # RPC deadline needs headroom too ("RPC tools/call timed out", v0.0.10).
+      WHITEBOARD_SMOKE_RPC_TIMEOUT_MS: '90000'
     defaults:
       run:
         working-directory: packages/mcp-server
@@ -199,6 +202,9 @@ jobs:
       # Packaged daemon cold-start exceeds the 10s default on CI runners
       # (smoke:tarball "Daemon startup timeout" broke the v0.0.9 publish).
       WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS: '60000'
+      # The smoke's first tools/call includes that same daemon spawn, so its
+      # RPC deadline needs headroom too ("RPC tools/call timed out", v0.0.10).
+      WHITEBOARD_SMOKE_RPC_TIMEOUT_MS: '90000'
     steps:
       - name: Validate tag shape
         env:
