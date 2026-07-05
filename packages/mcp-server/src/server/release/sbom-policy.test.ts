@@ -294,7 +294,9 @@ describe('generated SBOM content regression', () => {
       'pkg:npm/jsdom@', // jsdom
       'pkg:npm/fast-check@', // fast-check core
       '%40fast-check/', // @fast-check/* scoped
-      '%40excalidraw/', // @excalidraw/* (bundled into dist, not a prod dep)
+      // @excalidraw/* is intentionally NOT listed: @excalidraw/utils is a runtime
+      // dependency of the server-side headless export, so it (and its transitive
+      // @excalidraw/* deps) legitimately appear in the production SBOM.
       '%40stryker-mutator/', // @stryker-mutator/* mutation testing
       'pkg:npm/playwright@', // playwright core
       '%40playwright/', // @playwright/* scoped
@@ -308,7 +310,13 @@ describe('generated SBOM content regression', () => {
 
   it.runIf(sbomExists)('generated SBOM contains expected production packages', () => {
     const purls = loadSbomPurls()
-    const prodPatterns = ['pkg:npm/hono@', 'pkg:npm/jose@', 'pkg:npm/zod@', 'pkg:npm/nanoid@']
+    const prodPatterns = [
+      'pkg:npm/hono@',
+      'pkg:npm/jose@',
+      'pkg:npm/zod@',
+      'pkg:npm/nanoid@',
+      '%40excalidraw/utils@', // runtime dep of server-side headless export
+    ]
     for (const pattern of prodPatterns) {
       expect(
         purls.some((p) => p.includes(pattern)),
@@ -392,5 +400,57 @@ describe('validateSbomSummary PBT', () => {
     withDefaults(),
   )('non-object summary always fails validation', (summary) => {
     expect(validateSbomSummary(summary).ok).toBe(false)
+  })
+})
+
+describe('release.yml publish job step ordering hazards', () => {
+  it('publish-mcp pre-checkout steps must not inherit the packages/mcp-server default cwd', () => {
+    // publish-mcp sets defaults.run.working-directory: packages/mcp-server, but that
+    // directory only exists after actions/checkout runs. Any run step placed before
+    // checkout (e.g. Validate tag shape) must override with working-directory: .
+    // or bash fails to start ("No such file or directory") — broke the v0.0.8 release.
+    const releaseYml = readFile('.github/workflows/release.yml')
+    const publishMcp = jobSection(releaseYml, 'publish-mcp', 'docker-publish-sign')
+    expect(publishMcp, 'publish-mcp job must exist in release.yml').not.toBe('')
+    const checkoutIdx = publishMcp.indexOf('actions/checkout@')
+    expect(checkoutIdx, 'publish-mcp must have a checkout step').toBeGreaterThan(-1)
+    const preCheckout = publishMcp.slice(0, checkoutIdx)
+    // Every `run:` step before checkout needs an explicit working-directory override.
+    const runSteps = preCheckout.match(/^      - name: .*$/gm) ?? []
+    for (const step of runSteps) {
+      expect(
+        preCheckout,
+        `pre-checkout step "${step.trim()}" must set working-directory: . (job default dir does not exist yet)`,
+      ).toMatch(/working-directory:\s*\.\s*$/m)
+    }
+  })
+})
+
+describe('generate-npm-sbom.mjs pnpm-run environment', () => {
+  it('strips package-manager lifecycle env before spawning cyclonedx-npm', () => {
+    // Under `pnpm run`, npm_execpath points at pnpm's CLI. cyclonedx-npm resolves
+    // "npm" through npm_execpath, so without sanitization it runs `pnpm ls` and
+    // fails (exit 254). The script must spawn cyclonedx-npm with a cleaned env.
+    const script = readFile('packages/mcp-server/scripts/release/generate-npm-sbom.mjs')
+    expect(script, 'script must strip npm_execpath from the spawn env').toContain('npm_execpath')
+    expect(script, 'cyclonedx spawn must use the sanitized env').toMatch(/env:\s*cleanEnv/)
+  })
+})
+
+describe('cyclonedx-npm version policy', () => {
+  it('stays on v4 until the v5 --ignore-npm-errors regression is fixed', () => {
+    // @cyclonedx/cyclonedx-npm@5.0.0 treats npm ls ELSPROBLEMS as fatal even with
+    // --ignore-npm-errors, so SBOM generation fails on the pnpm-deployed prod tree
+    // (devDependencies are intentionally absent there). v4 honours the flag.
+    // Remove this pin guard once an upstream release honours --ignore-npm-errors again.
+    const rootPkg = JSON.parse(readFile('package.json')) as {
+      devDependencies?: Record<string, string>
+    }
+    const version = rootPkg.devDependencies?.['@cyclonedx/cyclonedx-npm']
+    expect(version, '@cyclonedx/cyclonedx-npm must be a root devDependency').toBeTruthy()
+    expect(
+      version,
+      'must stay on ^4.x — v5.0.0 --ignore-npm-errors regression breaks generate:sbom:npm',
+    ).toMatch(/^\^?4\./)
   })
 })
