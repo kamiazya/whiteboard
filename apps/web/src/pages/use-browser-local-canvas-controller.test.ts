@@ -567,5 +567,131 @@ describe('useBrowserLocalCanvasController', () => {
       expect(result.current.snapshot).toEqual(before)
       expect(await store.getDefaultCanvasId()).toBe('c1')
     })
+
+    it('switchCanvas degrades persistence instead of rejecting when load() throws', async () => {
+      const base = new MemoryStore()
+      await base.setDefaultCanvasId('c1')
+      await base.save(snap)
+      const throwingStore: BrowserLocalStore = {
+        getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+        setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+        save: base.save.bind(base),
+        del: base.del.bind(base),
+        generateId: base.generateId.bind(base),
+        listCanvases: base.listCanvases.bind(base),
+        load: async (id: string) => {
+          if (id === 'boom') throw new Error('IndexedDB: read aborted')
+          return base.load(id)
+        },
+      }
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(throwingStore, loro))
+      await act(async () => {})
+
+      await act(async () => {
+        await result.current.switchCanvas('boom')
+      })
+
+      expect(result.current.persistence.kind).toBe('degraded')
+      // Current snapshot and default pointer must stay untouched by the failed switch.
+      expect(result.current.snapshot).toEqual(snap)
+      expect(await throwingStore.getDefaultCanvasId()).toBe('c1')
+    })
+
+    it('switchCanvas degrades persistence instead of rejecting when setDefaultCanvasId() throws', async () => {
+      const base = new MemoryStore()
+      await base.setDefaultCanvasId('c1')
+      await base.save(snap)
+      const throwingStore: BrowserLocalStore = {
+        getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+        setDefaultCanvasId: async () => {
+          throw new Error('IndexedDB: meta write aborted')
+        },
+        save: base.save.bind(base),
+        del: base.del.bind(base),
+        generateId: base.generateId.bind(base),
+        listCanvases: base.listCanvases.bind(base),
+        load: base.load.bind(base),
+      }
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(throwingStore, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      await act(async () => {
+        await result.current.switchCanvas(created!.id)
+      })
+
+      expect(result.current.persistence.kind).toBe('degraded')
+      expect(result.current.snapshot).toEqual(snap)
+      expect(await base.getDefaultCanvasId()).toBe('c1')
+    })
+
+    it('switchCanvas waits for an in-flight fire-and-forget rename flush before switching, and aborts the switch if that flush fails', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let created: CanvasSnapshot | undefined
+      await act(async () => {
+        created = await result.current.createCanvas('Second canvas')
+      })
+
+      // Intercept the next save() (the one renameCanvas's fire-and-forget
+      // flushSave triggers) so the test controls exactly when it settles.
+      let rejectFirstSave!: (err: unknown) => void
+      let firstSaveStarted = false
+      const originalSave = store.save.bind(store)
+      let interceptNext = true
+      store.save = (s: CanvasSnapshot) => {
+        if (interceptNext) {
+          interceptNext = false
+          firstSaveStarted = true
+          return new Promise<void>((_resolve, reject) => {
+            rejectFirstSave = reject
+          })
+        }
+        return originalSave(s)
+      }
+
+      // Fire-and-forget flush, exactly like renameCanvas triggers internally.
+      act(() => {
+        result.current.renameCanvas('Renamed before switch')
+      })
+      expect(firstSaveStarted).toBe(true)
+
+      let switchSettled = false
+      const switchPromise = result.current.switchCanvas(created!.id).then(() => {
+        switchSettled = true
+      })
+
+      // Let pending microtasks run without resolving the intercepted save —
+      // switchCanvas must still be waiting on it, not racing past it.
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(switchSettled).toBe(false)
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+
+      await act(async () => {
+        rejectFirstSave(new Error('save failed'))
+        await switchPromise
+      })
+
+      expect(switchSettled).toBe(true)
+      expect(result.current.persistence.kind).toBe('degraded')
+      // The failed flush must abort the switch: default pointer stays on the
+      // original canvas instead of silently losing the rename.
+      expect(await store.getDefaultCanvasId()).toBe('c1')
+      expect(result.current.snapshot?.id).toBe('c1')
+    })
   })
 })

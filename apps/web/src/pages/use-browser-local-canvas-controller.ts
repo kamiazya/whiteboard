@@ -58,29 +58,44 @@ export function useBrowserLocalCanvasController(
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
   const pendingSnapshotRef = useRef<CanvasSnapshot | null>(null)
+  // Tracks the currently in-flight flush so overlapping callers (renameCanvas's
+  // fire-and-forget flush racing with switchCanvas's own awaited flush) serialize
+  // on the real outcome instead of the second caller observing an already-cleared
+  // pendingSnapshotRef and returning true before the first save actually settles.
+  const savePromiseRef = useRef<Promise<boolean> | null>(null)
 
   // Returns true if there was nothing to flush or the flush succeeded.
   // Returns false if a pending save failed — callers that depend on data
-  // integrity (e.g. triggerCleanup) must abort when this returns false.
+  // integrity (e.g. triggerCleanup, switchCanvas) must abort when this returns false.
   const flushSave = useCallback(async (): Promise<boolean> => {
+    if (savePromiseRef.current !== null) {
+      const priorOk = await savePromiseRef.current
+      if (!priorOk) return false
+    }
     const snap = pendingSnapshotRef.current
     if (snap === null) return true
     pendingSnapshotRef.current = null
     setPersistenceRef.current((p) => ({ kind: 'saving', lastSavedAt: p.lastSavedAt ?? null }))
-    try {
-      await storeRef.current.save(snap)
-      setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
-      return true
-    } catch {
-      // Generic safe copy — do not expose raw IndexedDB error
-      setPersistenceRef.current((p) => ({
-        kind: 'degraded',
-        reason: 'save-failed',
-        message: 'Changes could not be saved.',
-        lastSavedAt: p.lastSavedAt ?? null,
-      }))
-      return false
-    }
+    const promise = (async (): Promise<boolean> => {
+      try {
+        await storeRef.current.save(snap)
+        setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
+        return true
+      } catch {
+        // Generic safe copy — do not expose raw IndexedDB error
+        setPersistenceRef.current((p) => ({
+          kind: 'degraded',
+          reason: 'save-failed',
+          message: 'Changes could not be saved.',
+          lastSavedAt: p.lastSavedAt ?? null,
+        }))
+        return false
+      } finally {
+        savePromiseRef.current = null
+      }
+    })()
+    savePromiseRef.current = promise
+    return promise
   }, [])
 
   useEffect(() => {
@@ -259,11 +274,23 @@ export function useBrowserLocalCanvasController(
       // from it, so a fast switch never drops an in-flight rename.
       const flushed = await flushSave()
       if (!flushed) return
-      const result = await storeRef.current.load(id)
-      if (result.kind !== 'ok') return // unknown id: safe no-op, current snapshot untouched
-      await storeRef.current.setDefaultCanvasId(id)
-      snapshotRef.current = result.snapshot
-      setSnapshot(result.snapshot)
+      try {
+        const result = await storeRef.current.load(id)
+        if (result.kind !== 'ok') return // unknown id: safe no-op, current snapshot untouched
+        await storeRef.current.setDefaultCanvasId(id)
+        snapshotRef.current = result.snapshot
+        setSnapshot(result.snapshot)
+      } catch {
+        // Generic safe copy — do not expose raw IndexedDB error. Current
+        // snapshot and default pointer are left untouched: a failed switch
+        // must not corrupt the still-current canvas view.
+        setPersistenceRef.current((p) => ({
+          kind: 'degraded',
+          reason: 'switch-failed',
+          message: 'The canvas could not be switched.',
+          lastSavedAt: p.lastSavedAt ?? null,
+        }))
+      }
     },
     [flushSave],
   )
