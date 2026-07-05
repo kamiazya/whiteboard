@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+// Real app styles so layout assertions measure the shipped geometry.
+import '../index.css'
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
@@ -25,6 +27,20 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
       timeout: 5000,
     })
+  })
+
+  it('layout: excalidraw container fills the viewport below the header', async () => {
+    // An unsized height chain collapses the container to 0px and the whiteboard
+    // becomes invisible. The page must own its viewport height so the editor
+    // area gets real geometry.
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+      timeout: 5000,
+    })
+    const container = screen.getByTestId('excalidraw-container')
+    // Viewport is 1280x900; the editor area must occupy most of it.
+    expect(container.clientHeight).toBeGreaterThan(300)
+    expect(container.clientWidth).toBeGreaterThan(600)
   })
 
   it('cleanup: delete canvas shows cleanup-completed', async () => {

@@ -34,9 +34,17 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
 
   if (pageState.kind === 'load-degraded') {
     return (
-      <div role="alert" aria-live="assertive">
-        <p>{pageState.message}</p>
-        <button type="button" onClick={() => void startFresh()}>
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+      >
+        <p className="max-w-md text-sm text-destructive">{pageState.message}</p>
+        <button
+          type="button"
+          onClick={() => void startFresh()}
+          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+        >
           Start fresh
         </button>
       </div>
@@ -45,9 +53,16 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
 
   if (pageState.kind === 'cleanup-completed') {
     return (
-      <div data-testid="cleanup-completed">
-        <p>Canvas removed.</p>
-        <button type="button" onClick={() => void startFresh()}>
+      <div
+        data-testid="cleanup-completed"
+        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+      >
+        <p className="text-sm text-muted-foreground">Canvas removed.</p>
+        <button
+          type="button"
+          onClick={() => void startFresh()}
+          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+        >
           Start fresh
         </button>
       </div>
@@ -56,7 +71,11 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
 
   if (pageState.kind === 'loading') {
     return (
-      <div role="status" aria-live="polite">
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
+      >
         Loading…
       </div>
     )
@@ -75,20 +94,27 @@ export function BrowserLocalCanvasPage({ store }: BrowserLocalCanvasPageProps) {
           : status.message
 
   return (
-    <main>
-      <header>
-        <h1>{pageState.snapshot.name}</h1>
-        <span>{persistenceLabel}</span>
+    // h-dvh makes the page own its viewport height: without it the flex chain
+    // has no sized ancestor and the editor area collapses to 0px.
+    <main className="flex h-dvh w-full flex-col">
+      <header className="flex shrink-0 items-center gap-3 border-b bg-background px-4 py-2">
+        <h1 className="truncate text-sm font-semibold">{pageState.snapshot.name}</h1>
+        <span className="text-xs text-muted-foreground">{persistenceLabel}</span>
         {cleanupError && (
-          <div role="alert" aria-live="assertive">
+          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
             {cleanupError}
           </div>
         )}
-        <button type="button" onClick={() => void triggerCleanup()} aria-label="Delete canvas">
+        <button
+          type="button"
+          onClick={() => void triggerCleanup()}
+          aria-label="Delete canvas"
+          className="ml-auto rounded-md border px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+        >
           Delete
         </button>
       </header>
-      <div data-testid="excalidraw-container" style={{ height: '100%', width: '100%' }}>
+      <div data-testid="excalidraw-container" className="min-h-0 flex-1">
         <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} />
       </div>
     </main>

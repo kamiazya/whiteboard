@@ -1,6 +1,7 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
 import wasm from 'vite-plugin-wasm'
@@ -19,7 +20,9 @@ export default defineConfig({
       ),
     },
   },
-  plugins: [react(), wasm(), topLevelAwait()],
+  // tailwindcss: layout browser tests import src/index.css to assert real
+  // computed geometry (e.g. the Excalidraw container filling the viewport).
+  plugins: [tailwindcss(), react(), wasm(), topLevelAwait()],
   test: {
     name: 'web-browser',
     include: ['src/**/*.browser.test.tsx'],
