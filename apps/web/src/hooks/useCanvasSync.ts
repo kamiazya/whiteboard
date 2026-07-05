@@ -154,55 +154,70 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
   // Debounced scene change → commit to Loro → pushLocalUpdate via subscribeLocalUpdates.
   // Declared before the connect effect below so that effect can cancel a
   // pending flush on every (re)connect, not only on unmount.
+  //
+  // `doc`, `bk`, and `connGen` are captured at call time (inside `onChange`,
+  // below) rather than read from the mutable refs when the debounce fires.
+  // A backend switch mutates backendRef/docRef synchronously, so reading them
+  // at fire time can route a change queued against the old connection (both
+  // its file uploads and its Loro commit) to the new one. Capturing at call
+  // time — and dropping the whole flush if connectionGenerationRef has moved
+  // on by the time it fires — keeps a pending change scoped to the
+  // connection it was made against.
   const onSceneChange = useMemo(() => {
-    return debounce((elements: readonly ExcalidrawElement[], files: BinaryFiles) => {
-      const doc = docRef.current
-      if (!doc) return
+    return debounce(
+      (
+        elements: readonly ExcalidrawElement[],
+        files: BinaryFiles,
+        doc: LoroDoc,
+        bk: CanvasBackend,
+        connGen: number,
+      ) => {
+        if (connectionGenerationRef.current !== connGen) return
 
-      const newEntries = Object.entries(files).filter(
-        ([fileId, fd]) => fd && !uploadedFileIdsRef.current.has(fileId),
-      ) as [string, BinaryFileData][]
+        const newEntries = Object.entries(files).filter(
+          ([fileId, fd]) => fd && !uploadedFileIdsRef.current.has(fileId),
+        ) as [string, BinaryFileData][]
 
-      const bk = backendRef.current
+        if (newEntries.length > 0) {
+          void bk.putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
+        }
 
-      if (bk && newEntries.length > 0) {
-        void bk.putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
-      }
+        // Write elements into the Loro MovableList using field-by-field set operations,
+        // then commit so subscribeLocalUpdates fires and routes bytes to backend.pushLocalUpdate.
+        const list = doc.getMovableList('elements')
+        const current = list.toJSON() as ExcalidrawElement[]
+        const currentIds = new Set(current.map((e: ExcalidrawElement) => e.id))
 
-      // Write elements into the Loro MovableList using field-by-field set operations,
-      // then commit so subscribeLocalUpdates fires and routes bytes to backend.pushLocalUpdate.
-      const list = doc.getMovableList('elements')
-      const current = list.toJSON() as ExcalidrawElement[]
-      const currentIds = new Set(current.map((e: ExcalidrawElement) => e.id))
-
-      // Append newly added elements.
-      for (const el of elements) {
-        if (!currentIds.has(el.id)) {
-          const map = list.insertContainer(list.length, new LoroMap())
-          for (const [k, v] of Object.entries(el)) {
-            if (v !== undefined) map.set(k, v as Value)
+        // Append newly added elements.
+        for (const el of elements) {
+          if (!currentIds.has(el.id)) {
+            const map = list.insertContainer(list.length, new LoroMap())
+            for (const [k, v] of Object.entries(el)) {
+              if (v !== undefined) map.set(k, v as Value)
+            }
           }
         }
-      }
 
-      // Update or tombstone existing elements.
-      const nextById = new Map(elements.map((e) => [e.id, e]))
-      for (let i = 0; i < list.length; i++) {
-        const item = list.get(i)
-        if (!(item instanceof LoroMap)) continue
-        const id = item.get('id') as string
-        const next = nextById.get(id)
-        if (!next) {
-          item.set('isDeleted', true)
-        } else {
-          for (const [k, v] of Object.entries(next)) {
-            if (v !== undefined) item.set(k, v as Value)
+        // Update or tombstone existing elements.
+        const nextById = new Map(elements.map((e) => [e.id, e]))
+        for (let i = 0; i < list.length; i++) {
+          const item = list.get(i)
+          if (!(item instanceof LoroMap)) continue
+          const id = item.get('id') as string
+          const next = nextById.get(id)
+          if (!next) {
+            item.set('isDeleted', true)
+          } else {
+            for (const [k, v] of Object.entries(next)) {
+              if (v !== undefined) item.set(k, v as Value)
+            }
           }
         }
-      }
 
-      doc.commit()
-    }, 300)
+        doc.commit()
+      },
+      300,
+    )
   }, [])
 
   // Backend connect/disconnect lifecycle. Depends on `backend` identity so a
@@ -391,7 +406,10 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
 
   const onChange = useCallback(
     (elements: readonly ExcalidrawElement[], _appState: AppState, files: BinaryFiles) => {
-      onSceneChange(elements, files)
+      const doc = docRef.current
+      const bk = backendRef.current
+      if (!doc || !bk) return
+      onSceneChange(elements, files, doc, bk, connectionGenerationRef.current)
     },
     [onSceneChange],
   )

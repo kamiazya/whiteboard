@@ -37,6 +37,7 @@ type FakeBackendControl = {
   handlers: CanvasBackendHandlers | null
   disconnectCalled: boolean
   pushLocalUpdateCalls: Uint8Array[]
+  putFileCalls: [string, unknown][][]
 }
 
 function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
@@ -44,6 +45,7 @@ function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
     handlers: null,
     disconnectCalled: false,
     pushLocalUpdateCalls: [],
+    putFileCalls: [],
   }
   const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
     _ctrl: ctrl,
@@ -60,7 +62,9 @@ function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
       return Promise.resolve()
     },
     getFile: async () => null,
-    putFile: async () => {},
+    putFile: async (entries) => {
+      ctrl.putFileCalls.push(entries as [string, unknown][])
+    },
     sendClientReady: () => {},
     sendExportResponse: () => {},
   }
@@ -319,6 +323,58 @@ describe('useCanvasSync', () => {
     expect(backendB._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(bCallsBefore)
   })
 
+  it('drops a pending debounced file upload scheduled against a since-superseded backend, even if its cancellation is lost to a timing race', async () => {
+    const backendA = makeFakeBackend()
+    const backendB = makeFakeBackend()
+    const api = makeApiStub()
+
+    const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+      initialProps: { backend: backendA as CanvasBackend },
+    })
+
+    act(() => {
+      result.current.setExcalidrawAPI(api as never)
+    })
+
+    await act(async () => {
+      backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+      await vi.runAllTimersAsync()
+    })
+
+    // Queue a scene change with a new file against backend A. The debounce
+    // schedules a real (fake-clock) timer for this call's args.
+    const fakeEl = { type: 'image', id: 'img-x', x: 0, y: 0, width: 10, height: 10 }
+    const fakeFile = { id: 'file-x', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+    act(() => {
+      result.current.onChange([fakeEl as never], {} as never, { 'file-x': fakeFile as never })
+    })
+
+    // Simulate the real-browser race the finding describes: the passive
+    // effect's own `onSceneChange.cancel()` call races the already-elapsing
+    // timer and loses, so A's pending flush survives the switch to B. Stub
+    // out clearTimeout for the duration of the switch so `.cancel()` becomes
+    // a no-op without touching any of this hook's own logic.
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout').mockImplementation(() => {})
+    rerender({ backend: backendB })
+    clearTimeoutSpy.mockRestore()
+
+    // Let B finish connecting so its doc is live by the time A's stale timer fires.
+    await act(async () => {
+      backendB._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    // Fire A's un-cancelled timer.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400)
+    })
+
+    // The queued change was scheduled against A's connection; once
+    // superseded it must be dropped entirely rather than uploaded to B.
+    expect(backendA._ctrl.putFileCalls.length).toBe(0)
+    expect(backendB._ctrl.putFileCalls.length).toBe(0)
+  })
+
   it("does not let a stale getFile fetch from a torn-down backend pollute the new backend's file cache", async () => {
     const api = makeApiStub()
     const fileId = 'shared-file'
@@ -398,7 +454,7 @@ describe('useCanvasSync', () => {
 
     // Backend B fails to connect: fires onError synchronously instead of onConnected.
     const failingBackend: CanvasBackend & { _ctrl: FakeBackendControl } = {
-      _ctrl: { handlers: null, disconnectCalled: false, pushLocalUpdateCalls: [] },
+      _ctrl: { handlers: null, disconnectCalled: false, pushLocalUpdateCalls: [], putFileCalls: [] },
       connect(handlers) {
         handlers.onError?.('storage-failure')
       },
