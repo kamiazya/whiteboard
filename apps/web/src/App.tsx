@@ -15,6 +15,25 @@ interface AppProps {
   providerState?: ProviderState
 }
 
+// Reports the configured storage backend only — this reflects runtime
+// config, not a live connection/detection probe. Do not claim 'Connected'
+// or 'Daemon unavailable' here; that needs an actual live probe.
+function BackendConfigChip({ state }: { state: ProviderState }) {
+  const label =
+    state.kind === 'local-daemon'
+      ? `Configured for local daemon at ${state.daemonBaseUrl}`
+      : 'Browser only'
+
+  return (
+    <div
+      data-testid="backend-config-chip"
+      className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground"
+    >
+      {label}
+    </div>
+  )
+}
+
 export function App({ providerState }: AppProps) {
   const state = providerState ?? _defaultProviderState
 
@@ -29,10 +48,16 @@ export function App({ providerState }: AppProps) {
   if (state.kind === 'local-daemon') {
     return (
       <main data-provider="local-daemon" data-status="placeholder">
+        <BackendConfigChip state={state} />
         <h1>Whiteboard</h1>
       </main>
     )
   }
 
-  return <BrowserLocalCanvasPage store={_browserLocalStore} />
+  return (
+    <>
+      <BackendConfigChip state={state} />
+      <BrowserLocalCanvasPage store={_browserLocalStore} />
+    </>
+  )
 }
