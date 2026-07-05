@@ -122,8 +122,13 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
     await Promise.allSettled(
       missingIds.map(async (fileId) => {
         const blob = await bk.getFile(fileId)
-        if (!blob) return
+        // A connection swap can resolve this fetch after filesCacheRef has
+        // already been reset for the next backend. Re-check the generation
+        // right before writing so a stale fetch from a torn-down backend
+        // never lands in the new connection's shared file cache.
+        if (!blob || generation !== applyGenerationRef.current) return
         const dataURL = await blobToBase64(blob)
+        if (generation !== applyGenerationRef.current) return
         filesCacheRef.current[fileId] = {
           id: fileId as FileId,
           mimeType: blob.type as BinaryFileData['mimeType'],
