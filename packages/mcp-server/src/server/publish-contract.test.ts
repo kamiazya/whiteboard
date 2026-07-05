@@ -87,6 +87,10 @@ describe('publish contract', () => {
         types: './src/shared/browser-shared-index.ts',
         import: './dist/shared/browser-shared-index.js',
       },
+      './migration-bundle': {
+        types: './src/shared/migration-bundle.ts',
+        import: './dist/shared/migration-bundle.js',
+      },
       './package.json': './package.json',
     })
     // publishConfig.exports is the shape pnpm substitutes on npm publish,
@@ -103,6 +107,10 @@ describe('publish contract', () => {
       './browser-shared': {
         types: './dist/shared/browser-shared-index.d.ts',
         import: './dist/shared/browser-shared-index.js',
+      },
+      './migration-bundle': {
+        types: './dist/shared/migration-bundle.d.ts',
+        import: './dist/shared/migration-bundle.js',
       },
       './package.json': './package.json',
     })

@@ -38,6 +38,10 @@
       "types": "./src/shared/browser-shared-index.ts",
       "import": "./dist/shared/browser-shared-index.js"
     },
+    "./migration-bundle": {
+      "types": "./src/shared/migration-bundle.ts",
+      "import": "./dist/shared/migration-bundle.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -72,6 +76,10 @@
       "./browser-shared": {
         "types": "./dist/shared/browser-shared-index.d.ts",
         "import": "./dist/shared/browser-shared-index.js"
+      },
+      "./migration-bundle": {
+        "types": "./dist/shared/migration-bundle.d.ts",
+        "import": "./dist/shared/migration-bundle.js"
       },
       "./package.json": "./package.json"
     }
