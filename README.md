@@ -93,8 +93,10 @@ claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest
 In a Codex session, run:
 
 ```
-codex plugin marketplace add kamiazya/whiteboard
+codex plugin marketplace add kamiazya/whiteboard@stable
 ```
+
+The `@stable` pin tracks the latest release instead of the development branch.
 
 Then open `/plugins`, choose **kamiazya Whiteboard → whiteboard → Install plugin**, and restart Codex. This installs the MCP server **and** the bundled skills in one step.
 
