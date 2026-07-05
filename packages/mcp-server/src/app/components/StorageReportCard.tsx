@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { Eraser, HardDrive, Library, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -94,6 +94,23 @@ export function StorageReportCard() {
   const [updatedAt, setUpdatedAt] = useState<number | null>(null)
   const [now, setNow] = useState(() => Date.now())
 
+  // Every handler below is async and resumes after an await to call
+  // setState. If the component unmounts mid-flight (a fast test teardown,
+  // or the user navigating away before a fetch/min-refresh delay settles),
+  // that resumed setState can outlive the component. Guard every
+  // post-await setState with this ref instead of relying on React to no-op
+  // the call safely — a live jsdom `window` makes an unmounted-root
+  // setState harmless, but if the environment itself is torn down before
+  // the callback resumes (e.g. end-of-test-file jsdom teardown racing a
+  // pending setTimeout), the same call throws.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   // Coarse tick so the "Updated …" / "Auto-optimised …" lines stay live
   // without flickering second-by-second. Humanized strings only change at
   // 30s / 1m / 1h boundaries, so a 30s re-render is plenty.
@@ -108,22 +125,28 @@ export function StorageReportCard() {
     const start = Date.now()
     try {
       const res = await apiFetch('/api/runtime/storage')
+      if (!mountedRef.current) return
       if (!res.ok) {
         setError(`HTTP ${res.status}`)
         return
       }
       const json = storageReportPayloadSchema.parse(await res.json())
+      if (!mountedRef.current) return
       setReport(json)
       setUpdatedAt(Date.now())
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (mountedRef.current) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
       const elapsed = Date.now() - start
       const remaining = MIN_REFRESH_MS - elapsed
       if (remaining > 0) {
         await new Promise((resolve) => setTimeout(resolve, remaining))
       }
-      setLoading(false)
+      if (mountedRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
@@ -142,6 +165,7 @@ export function StorageReportCard() {
     setOptimizeStatus('Optimizing…')
     try {
       const wsRes = await apiFetch('/api/workspaces')
+      if (!mountedRef.current) return
       if (!wsRes.ok) {
         setOptimizeStatus('Optimize failed')
         return
@@ -161,13 +185,18 @@ export function StorageReportCard() {
         }
         savings += body.totalBeforeBytes - body.totalAfterBytes
       }
+      if (!mountedRef.current) return
       setOptimizeStatus(savings > 0 ? `Saved ${formatBytes(savings)}` : 'Already optimal')
       void refresh()
     } catch {
-      setOptimizeStatus('Optimize failed')
+      if (mountedRef.current) setOptimizeStatus('Optimize failed')
     } finally {
-      setOptimizing(false)
-      window.setTimeout(() => setOptimizeStatus(null), 3000)
+      if (mountedRef.current) {
+        setOptimizing(false)
+        window.setTimeout(() => {
+          if (mountedRef.current) setOptimizeStatus(null)
+        }, 3000)
+      }
     }
   }, [refresh])
 
@@ -183,16 +212,20 @@ export function StorageReportCard() {
     setLibsError(null)
     try {
       const res = await apiFetch('/api/user-libraries')
+      if (!mountedRef.current) return
       if (!res.ok) {
         setLibsError(`HTTP ${res.status}`)
         return
       }
       const json = (await res.json()) as { libraries: UserLibraryRow[] }
+      if (!mountedRef.current) return
       setLibs(json.libraries)
     } catch (err) {
-      setLibsError(err instanceof Error ? err.message : String(err))
+      if (mountedRef.current) {
+        setLibsError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
-      setLibsLoading(false)
+      if (mountedRef.current) setLibsLoading(false)
     }
   }, [])
   const removeLib = useCallback(
@@ -200,6 +233,7 @@ export function StorageReportCard() {
       const res = await apiFetch(`/api/user-libraries/${encodeURIComponent(name)}`, {
         method: 'DELETE',
       })
+      if (!mountedRef.current) return
       if (!res.ok) {
         setLibsError(`Remove failed: HTTP ${res.status}`)
         return
@@ -224,11 +258,13 @@ export function StorageReportCard() {
     setPruneLogsStatus('Pruning…')
     try {
       const res = await apiFetch('/api/runtime/logs/prune', { method: 'POST' })
+      if (!mountedRef.current) return
       if (!res.ok) {
         setPruneLogsStatus('Prune failed')
         return
       }
       const body = (await res.json()) as { purgedCount: number; purgedBytes: number }
+      if (!mountedRef.current) return
       setPruneLogsStatus(
         body.purgedCount > 0
           ? `Removed ${body.purgedCount} (${formatBytes(body.purgedBytes)})`
@@ -236,10 +272,14 @@ export function StorageReportCard() {
       )
       void refresh()
     } catch {
-      setPruneLogsStatus('Prune failed')
+      if (mountedRef.current) setPruneLogsStatus('Prune failed')
     } finally {
-      setPruningLogs(false)
-      window.setTimeout(() => setPruneLogsStatus(null), 3000)
+      if (mountedRef.current) {
+        setPruningLogs(false)
+        window.setTimeout(() => {
+          if (mountedRef.current) setPruneLogsStatus(null)
+        }, 3000)
+      }
     }
   }, [refresh])
 
@@ -253,6 +293,7 @@ export function StorageReportCard() {
     setPruneVersionsStatus('Cleaning…')
     try {
       const wsRes = await apiFetch('/api/workspaces')
+      if (!mountedRef.current) return
       if (!wsRes.ok) {
         setPruneVersionsStatus('Cleanup failed')
         return
@@ -269,15 +310,20 @@ export function StorageReportCard() {
         const body = (await res.json()) as { totalDeleted: number }
         totalDeleted += body.totalDeleted
       }
+      if (!mountedRef.current) return
       setPruneVersionsStatus(
         totalDeleted > 0 ? `Removed ${totalDeleted} auto-version(s)` : 'Nothing to clean',
       )
       void refresh()
     } catch {
-      setPruneVersionsStatus('Cleanup failed')
+      if (mountedRef.current) setPruneVersionsStatus('Cleanup failed')
     } finally {
-      setPruningVersions(false)
-      window.setTimeout(() => setPruneVersionsStatus(null), 3000)
+      if (mountedRef.current) {
+        setPruningVersions(false)
+        window.setTimeout(() => {
+          if (mountedRef.current) setPruneVersionsStatus(null)
+        }, 3000)
+      }
     }
   }, [refresh])
 
@@ -291,6 +337,7 @@ export function StorageReportCard() {
     setCleanFilesStatus('Cleaning…')
     try {
       const wsRes = await apiFetch('/api/workspaces')
+      if (!mountedRef.current) return
       if (!wsRes.ok) {
         setCleanFilesStatus('Cleanup failed')
         return
@@ -309,6 +356,7 @@ export function StorageReportCard() {
         purgedBytes += body.purgedBytes
         purgedCount += body.purgedCount
       }
+      if (!mountedRef.current) return
       setCleanFilesStatus(
         purgedCount > 0
           ? `Removed ${purgedCount} (${formatBytes(purgedBytes)})`
@@ -316,10 +364,14 @@ export function StorageReportCard() {
       )
       void refresh()
     } catch {
-      setCleanFilesStatus('Cleanup failed')
+      if (mountedRef.current) setCleanFilesStatus('Cleanup failed')
     } finally {
-      setCleaningFiles(false)
-      window.setTimeout(() => setCleanFilesStatus(null), 3000)
+      if (mountedRef.current) {
+        setCleaningFiles(false)
+        window.setTimeout(() => {
+          if (mountedRef.current) setCleanFilesStatus(null)
+        }, 3000)
+      }
     }
   }, [refresh])
 

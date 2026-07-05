@@ -24,9 +24,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-05-01T00:00:00Z'))
   vi.stubGlobal(
     'fetch',
-    vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify(PAYLOAD), { status: 200 })),
-    ),
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify(PAYLOAD), { status: 200 }))),
   )
 })
 
@@ -181,6 +179,33 @@ describe('StorageReportCard', () => {
       // formatting since formatBytes may pick KiB / MiB depending on size).
       expect(filesActions!.textContent ?? '').toMatch(/Removed\s+4/i)
     })
+  })
+
+  it('does not call setState after unmount while the min-refresh delay is still pending', async () => {
+    const { unmount } = render(<StorageReportCard />)
+    // Unmount while the initial mount-time refresh() is still awaiting its
+    // fetch response and MIN_REFRESH_MS floor — this is the timing window
+    // that let a post-unmount setLoading(false) fire during jsdom teardown.
+    unmount()
+    // Simulate the jsdom environment being torn down (as Vitest does once a
+    // test file's tests finish) while refresh()'s pending setTimeout is
+    // still scheduled. React 19 silently no-ops a setState call on an
+    // already-unmounted root under a *live* jsdom window — the crash seen
+    // in CI only reproduces once `window` itself is gone by the time the
+    // timer fires, which is what actually happened: dispatchSetState
+    // touched the (now-undefined) `window` and threw
+    // "ReferenceError: window is not defined".
+    const savedWindow = (globalThis as { window?: unknown }).window
+    delete (globalThis as { window?: unknown }).window
+    let thrown: unknown = null
+    try {
+      await vi.advanceTimersByTimeAsync(500)
+    } catch (err) {
+      thrown = err
+    } finally {
+      ;(globalThis as { window?: unknown }).window = savedWindow
+    }
+    expect(thrown).toBeNull()
   })
 
   it('humanises the "Updated …" line and ticks across humanise boundaries without per-second flicker', async () => {
