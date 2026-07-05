@@ -429,6 +429,23 @@ describe('release.yml publish job step ordering hazards', () => {
       ).toMatch(/working-directory:\s*\.\s*$/m)
     }
   })
+
+  it('publish jobs extend the daemon startup timeout for CI cold starts', () => {
+    // Packaged daemon cold-start (native modules, WASM, first-run migrations)
+    // exceeds the 10s default on CI runners and killed the tarball smoke.
+    const releaseYml = readFile('.github/workflows/release.yml')
+    for (const [jobId, nextJobId] of [
+      ['publish-mcp', 'docker-publish-sign'],
+      ['docker-publish-sign', 'deploy-web'],
+    ] as const) {
+      const section = jobSection(releaseYml, jobId, nextJobId)
+      expect(section, `${jobId} job must exist`).not.toBe('')
+      expect(
+        section,
+        `${jobId} must set WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS for slow CI cold starts`,
+      ).toContain('WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS')
+    }
+  })
 })
 
 describe('generate-npm-sbom.mjs pnpm-run environment', () => {
