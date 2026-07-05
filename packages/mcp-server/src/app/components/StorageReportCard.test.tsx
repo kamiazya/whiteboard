@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
-import { StorageReportCard } from './StorageReportCard.js'
+import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
 const PAYLOAD = {
   totalBytes: 4096,
@@ -24,9 +24,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date('2026-05-01T00:00:00Z'))
   vi.stubGlobal(
     'fetch',
-    vi.fn(() =>
-      Promise.resolve(new Response(JSON.stringify(PAYLOAD), { status: 200 })),
-    ),
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify(PAYLOAD), { status: 200 }))),
   )
 })
 
@@ -182,6 +180,92 @@ describe('StorageReportCard', () => {
       expect(filesActions!.textContent ?? '').toMatch(/Removed\s+4/i)
     })
   })
+
+  it('does not call setState after unmount while the min-refresh delay is still pending', async () => {
+    const { unmount } = render(<StorageReportCard />)
+    // Unmount while the initial mount-time refresh() is still awaiting its
+    // fetch response and MIN_REFRESH_MS floor — this is the timing window
+    // that let a post-unmount setLoading(false) fire during jsdom teardown.
+    unmount()
+    // Simulate the jsdom environment being torn down (as Vitest does once a
+    // test file's tests finish) while refresh()'s pending setTimeout is
+    // still scheduled. React 19 silently no-ops a setState call on an
+    // already-unmounted root under a *live* jsdom window — the crash seen
+    // in CI only reproduces once `window` itself is gone by the time the
+    // timer fires, which is what actually happened: dispatchSetState
+    // touched the (now-undefined) `window` and threw
+    // "ReferenceError: window is not defined".
+    const savedWindow = (globalThis as { window?: unknown }).window
+    delete (globalThis as { window?: unknown }).window
+    let thrown: unknown = null
+    try {
+      await vi.advanceTimersByTimeAsync(500)
+    } catch (err) {
+      thrown = err
+    } finally {
+      ;(globalThis as { window?: unknown }).window = savedWindow
+    }
+    expect(thrown).toBeNull()
+  })
+
+  it(
+    'does not call setState after unmount while the optimizeAll status-clear timer is still pending',
+    async () => {
+      const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+      fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (url === '/api/runtime/storage') {
+          return Promise.resolve(jsonResponse(PAYLOAD))
+        }
+        if (url === '/api/workspaces') {
+          return Promise.resolve(jsonResponse({ workspaces: [] }))
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`))
+      })
+
+      // Real timers — optimizeAll's own fetch chain must actually settle
+      // before its finally-block schedules the STATUS_CLEAR_MS timer that
+      // this test unmounts underneath.
+      vi.useRealTimers()
+
+      const { container, unmount } = render(<StorageReportCard />)
+      await waitFor(() => {
+        expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+      })
+
+      const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
+      const button = blobsActions.querySelector('button')!
+      fireEvent.click(button)
+
+      // Wait for optimizeAll to settle — its finally block has now called
+      // scheduleStatusClear(), arming a pending STATUS_CLEAR_MS setTimeout.
+      await waitFor(() => {
+        expect(blobsActions.textContent ?? '').toMatch(/optimal|saved/i)
+      })
+
+      // Unmount while that setTimeout is still pending. This mirrors the
+      // refresh()-focused unmount test above but exercises
+      // scheduleStatusClear's own mountedRef branch instead of refresh()'s.
+      unmount()
+
+      // Simulate the jsdom environment being torn down before the timer
+      // fires — the same "window is not defined" hazard the refresh() test
+      // guards against, reached through a different handler this time.
+      const savedWindow = (globalThis as { window?: unknown }).window
+      delete (globalThis as { window?: unknown }).window
+      let thrown: unknown = null
+      try {
+        await new Promise((resolve) => setTimeout(resolve, STATUS_CLEAR_MS + 200))
+      } catch (err) {
+        thrown = err
+      } finally {
+        ;(globalThis as { window?: unknown }).window = savedWindow
+      }
+      expect(thrown).toBeNull()
+    },
+    STATUS_CLEAR_MS + 5000,
+  )
 
   it('humanises the "Updated …" line and ticks across humanise boundaries without per-second flicker', async () => {
     const { container } = render(<StorageReportCard />)
