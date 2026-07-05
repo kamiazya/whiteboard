@@ -171,11 +171,20 @@ describe('publish contract', () => {
       'node_modules/@kamiazya/whiteboard-mcp/dist/server/mcp/index.js',
     )
 
-    // The marketplace plugin manifest points at the existing .claude-plugin/plugin.json
-    // and the marketplace name in README must match the marketplace.json declaration.
+    // The marketplace plugin manifest points at the release-gated stable branch
+    // (advance-stable in release.yml fast-forwards it on each root release) so
+    // merging to main does not immediately ship plugin content. The marketplace
+    // name in README must match the marketplace.json declaration.
     expect(claudeMarketplace.name).toBe('whiteboard-marketplace')
     expect(claudeMarketplace.plugins[0].name).toBe('whiteboard')
-    expect(claudeMarketplace.plugins[0].source).toBe('./')
+    expect(claudeMarketplace.plugins[0].source).toEqual({
+      source: 'github',
+      repo: 'kamiazya/whiteboard',
+      ref: 'stable',
+    })
+    // Codex ref pinning is user-side opt-in, so the README install command must
+    // carry the @stable pin to keep Codex installs release-gated too.
+    expect(rootReadme).toContain('codex plugin marketplace add kamiazya/whiteboard@stable')
     // marketplace.json versions must stay aligned with the published mcp-server package
     // (release-please-config.json tracks both jsonpaths in extra-files).
     expect(claudeMarketplace.metadata.version).toBe(mcpPackage.version)
