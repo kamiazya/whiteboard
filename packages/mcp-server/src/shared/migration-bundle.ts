@@ -16,10 +16,12 @@ import { z } from 'zod'
 
 const migrationSceneSchema = z
   .object({
+    // Excalidraw element shapes are vendor-owned and evolve outside this
+    // repo's control; z.unknown() per element is deliberately loose here
+    // rather than a gap in the schema. The import side revalidates elements
+    // against its own persistence contract before storing them.
     elements: z.array(z.unknown()),
-    // Excalidraw's appState/files shapes are vendor-owned and evolve outside
-    // this repo's control; z.record(z.unknown()) is deliberately loose here
-    // rather than a gap in the schema.
+    // Same rationale as elements: appState/files are vendor-owned shapes.
     appState: z.record(z.string(), z.unknown()).optional(),
     files: z.record(z.string(), z.unknown()).optional(),
   })
@@ -38,7 +40,7 @@ export const migrationBundleSchema = z
     format: z.literal('whiteboard-migration'),
     version: z.literal(1),
     sourceProvider: z.literal('browser-local'),
-    createdAt: z.string(),
+    createdAt: z.iso.datetime(),
     canvases: z.array(migrationCanvasSchema),
   })
   .strict()

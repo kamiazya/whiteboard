@@ -104,6 +104,15 @@ describe('migrationBundleSchema', () => {
     expect(() => migrationBundleSchema.parse(withoutCanvases)).toThrow()
   })
 
+  it('rejects a createdAt that is not an ISO 8601 datetime', () => {
+    expect(() =>
+      migrationBundleSchema.parse({ ...validBundle(), createdAt: 'yesterday' }),
+    ).toThrow()
+    expect(() =>
+      migrationBundleSchema.parse({ ...validBundle(), createdAt: '2026-07-05' }),
+    ).toThrow()
+  })
+
   it('rejects non-array elements in scene', () => {
     const bundle = validBundle()
     const invalid = {
