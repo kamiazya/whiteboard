@@ -1,6 +1,6 @@
-import { describe, expect, it, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
-import { MemoryStore, IndexedDBStore } from './browser-local-store.js'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { IndexedDBStore, MemoryStore } from './browser-local-store.js'
 import type { CanvasSnapshot } from './whiteboard-client.js'
 
 const snap: CanvasSnapshot = {
@@ -87,6 +87,22 @@ describe('MemoryStore', () => {
     expect(a.length).toBeGreaterThan(0)
     expect(a).not.toBe(b)
   })
+
+  it('listCanvases returns empty array when store is empty', async () => {
+    const store = new MemoryStore()
+    expect(await store.listCanvases()).toEqual([])
+  })
+
+  it('listCanvases returns all saved snapshots by id', async () => {
+    const store = new MemoryStore()
+    const a: CanvasSnapshot = { ...snap, id: 'c1', name: 'Canvas A' }
+    const b: CanvasSnapshot = { ...snap, id: 'c2', name: 'Canvas B' }
+    await store.save(a)
+    await store.save(b)
+    const list = await store.listCanvases()
+    expect(list).toHaveLength(2)
+    expect(list).toEqual(expect.arrayContaining([a, b]))
+  })
 })
 
 describe('IndexedDBStore', () => {
@@ -161,5 +177,44 @@ describe('IndexedDBStore', () => {
   it('del when no default id returns not-found', async () => {
     const store = new IndexedDBStore()
     expect(await store.del('c1')).toEqual({ deleted: false, reason: 'not-found' })
+  })
+
+  it('listCanvases returns empty array when store is empty', async () => {
+    const store = new IndexedDBStore()
+    expect(await store.listCanvases()).toEqual([])
+  })
+
+  it('listCanvases returns all saved snapshots by id', async () => {
+    const store = new IndexedDBStore()
+    const a: CanvasSnapshot = { ...snap, id: 'c1', name: 'Canvas A' }
+    const b: CanvasSnapshot = { ...snap, id: 'c2', name: 'Canvas B' }
+    await store.save(a)
+    await store.save(b)
+    const list = await store.listCanvases()
+    expect(list).toHaveLength(2)
+    expect(list).toEqual(expect.arrayContaining([a, b]))
+  })
+
+  it('listCanvases skips a corrupt row instead of throwing or blanking the list', async () => {
+    const store = new IndexedDBStore()
+    const a: CanvasSnapshot = { ...snap, id: 'c1', name: 'Canvas A' }
+    await store.save(a)
+    // Write a malformed row directly via raw IDB (bypasses canvasSnapshotSchema).
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('whiteboard', 3)
+      req.onsuccess = () => {
+        const db = req.result
+        const tx = db.transaction('canvases', 'readwrite')
+        tx.objectStore('canvases').put({ broken: true }, 'corrupt')
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      req.onerror = () => reject(req.error)
+    })
+    const list = await store.listCanvases()
+    expect(list).toEqual([a])
   })
 })

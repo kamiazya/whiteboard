@@ -1,6 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { Loro } from 'loro-crdt'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import { LoroStore } from '../lib/loro-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+
+// Narrow surface used by the controller to seed a new canvas's Loro doc.
+// Injectable so node/jsdom tests can supply an in-memory fake instead of
+// touching real IndexedDB.
+export interface LoroStoreLike {
+  save(canvasId: string, snapshot: Uint8Array): Promise<void>
+}
 
 export type BrowserLocalPersistenceState =
   | { kind: 'saved'; lastSavedAt: null | string }
@@ -16,6 +25,9 @@ export interface BrowserLocalCanvasController {
   renameCanvas(name: string): void
   triggerCleanup(): Promise<void>
   startFresh(): Promise<void>
+  listCanvases(): Promise<CanvasSnapshot[]>
+  createCanvas(name?: string): Promise<CanvasSnapshot>
+  switchCanvas(id: string): Promise<void>
 }
 
 function createUntitledSnapshot(id: string): CanvasSnapshot {
@@ -24,6 +36,7 @@ function createUntitledSnapshot(id: string): CanvasSnapshot {
 
 export function useBrowserLocalCanvasController(
   store: BrowserLocalStore,
+  loro: LoroStoreLike = new LoroStore(),
 ): BrowserLocalCanvasController {
   const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
@@ -36,6 +49,8 @@ export function useBrowserLocalCanvasController(
   // Stable refs so timer callbacks always see current state without re-creating
   const storeRef = useRef(store)
   storeRef.current = store
+  const loroRef = useRef(loro)
+  loroRef.current = loro
   const setPersistenceRef = useRef(setPersistence)
   setPersistenceRef.current = setPersistence
   const persistenceRef = useRef(persistence)
@@ -214,6 +229,49 @@ export function useBrowserLocalCanvasController(
     setCleanupCompleted(false)
   }, [])
 
+  const listCanvases = useCallback((): Promise<CanvasSnapshot[]> => {
+    return storeRef.current.listCanvases()
+  }, [])
+
+  const createCanvas = useCallback(async (name?: string): Promise<CanvasSnapshot> => {
+    const id = storeRef.current.generateId()
+    const fresh: CanvasSnapshot = {
+      id,
+      name: name?.trim() || 'untitled',
+      updatedAt: new Date().toISOString(),
+    }
+    // Metadata first, then the Loro doc: if the Loro write fails, the
+    // metadata row is rolled back so a failed create never leaves an
+    // orphan metadata row with no backing Loro doc.
+    await storeRef.current.save(fresh)
+    try {
+      await loroRef.current.save(id, new Loro().export({ mode: 'snapshot' }))
+    } catch (err) {
+      try {
+        await storeRef.current.removeCanvas?.(id)
+      } catch {
+        // Orphan cleanup is best-effort; leaving a stray metadata row is harmless.
+      }
+      throw err
+    }
+    return fresh
+  }, [])
+
+  const switchCanvas = useCallback(
+    async (id: string): Promise<void> => {
+      // Flush any pending edit on the current canvas before switching away
+      // from it, so a fast switch never drops an in-flight rename.
+      const flushed = await flushSave()
+      if (!flushed) return
+      const result = await storeRef.current.load(id)
+      if (result.kind !== 'ok') return // unknown id: safe no-op, current snapshot untouched
+      await storeRef.current.setDefaultCanvasId(id)
+      snapshotRef.current = result.snapshot
+      setSnapshot(result.snapshot)
+    },
+    [flushSave],
+  )
+
   return {
     snapshot,
     persistence,
@@ -222,5 +280,8 @@ export function useBrowserLocalCanvasController(
     renameCanvas,
     triggerCleanup,
     startFresh,
+    listCanvases,
+    createCanvas,
+    switchCanvas,
   }
 }

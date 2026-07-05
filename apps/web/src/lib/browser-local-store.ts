@@ -1,6 +1,6 @@
 import { openWhiteboardDb } from './browser-idb.js'
-import { canvasSnapshotSchema } from './whiteboard-client.js'
 import type { CanvasSnapshot } from './whiteboard-client.js'
+import { canvasSnapshotSchema } from './whiteboard-client.js'
 
 export type LoadResult =
   | { kind: 'ok'; snapshot: CanvasSnapshot }
@@ -22,6 +22,7 @@ export interface BrowserLocalStore {
   // (it only removes the canvas the default pointer currently aims at).
   removeCanvas?(id: string): Promise<void>
   generateId(): string
+  listCanvases(): Promise<CanvasSnapshot[]>
 }
 
 export class MemoryStore implements BrowserLocalStore {
@@ -60,6 +61,10 @@ export class MemoryStore implements BrowserLocalStore {
 
   generateId(): string {
     return crypto.randomUUID()
+  }
+
+  async listCanvases(): Promise<CanvasSnapshot[]> {
+    return [...this.canvases.values()]
   }
 }
 
@@ -193,5 +198,32 @@ export class IndexedDBStore implements BrowserLocalStore {
 
   generateId(): string {
     return crypto.randomUUID()
+  }
+
+  async listCanvases(): Promise<CanvasSnapshot[]> {
+    const db = await openWhiteboardDb()
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('canvases', 'readonly')
+      const cursorReq = tx.objectStore('canvases').openCursor()
+      const results: CanvasSnapshot[] = []
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result
+        if (!cursor) return
+        // Hydrate through the single parse boundary; skip a corrupt/legacy row
+        // instead of throwing so it cannot blank the whole list.
+        const parsed = canvasSnapshotSchema.safeParse(cursor.value)
+        if (parsed.success) results.push(parsed.data)
+        cursor.continue()
+      }
+      cursorReq.onerror = () => reject(cursorReq.error)
+      tx.oncomplete = () => {
+        db.close()
+        resolve(results)
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    })
   }
 }

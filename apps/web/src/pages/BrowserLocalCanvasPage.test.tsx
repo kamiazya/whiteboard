@@ -1,9 +1,9 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act, cleanup, fireEvent } from '@testing-library/react'
-import { MemoryStore } from '../lib/browser-local-store.js'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
+import { MemoryStore } from '../lib/browser-local-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 
 // Excalidraw requires a real browser (roughjs native bindings). Mock it in jsdom.
 vi.mock('@excalidraw/excalidraw', () => ({
@@ -87,6 +87,7 @@ describe('BrowserLocalCanvasPage', () => {
       save: base.save.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
     }
     await act(async () => {
       render(<BrowserLocalCanvasPage store={failingStore} />)
@@ -107,6 +108,7 @@ describe('BrowserLocalCanvasPage', () => {
       save: base.save.bind(base),
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
     }
     await act(async () => {
       render(<BrowserLocalCanvasPage store={failingStore} />)
@@ -131,6 +133,7 @@ describe('BrowserLocalCanvasPage', () => {
       },
       del: base.del.bind(base),
       generateId: () => 'fresh-id',
+      listCanvases: async () => [],
     }
     await act(async () => {
       render(<BrowserLocalCanvasPage store={failingFreshStore} />)
@@ -187,6 +190,7 @@ describe('BrowserLocalCanvasPage', () => {
       },
       del: base.del.bind(base),
       generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
     }
     await act(async () => {
       render(<BrowserLocalCanvasPage store={failingSaveStore} />)
