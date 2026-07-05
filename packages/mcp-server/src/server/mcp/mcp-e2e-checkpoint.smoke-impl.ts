@@ -56,6 +56,13 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
     }
   })
 
+  // The first tools/call spawns the packaged daemon, so its latency includes the
+  // full cold-start. CI runners exceed the 20s default; the env override lets the
+  // release publish jobs wait longer without slowing local runs.
+  const rpcTimeoutMs = /^\d+$/.test(process.env.WHITEBOARD_SMOKE_RPC_TIMEOUT_MS ?? '')
+    ? Number(process.env.WHITEBOARD_SMOKE_RPC_TIMEOUT_MS)
+    : 20_000
+
   let nextId = 1
 
   function rpc(method: string, params: unknown): Promise<unknown> {
@@ -78,7 +85,7 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
           pending.delete(id)
           reject(new Error(`RPC ${method} (#${id}) timed out`))
         }
-      }, 20_000)
+      }, rpcTimeoutMs)
     })
   }
 
@@ -105,9 +112,7 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
       await promise
     } catch (err) {
       if (err instanceof Error && pattern.test(err.message)) return
-      throw new Error(
-        `${label}: wrong error: ${err instanceof Error ? err.message : String(err)}`,
-      )
+      throw new Error(`${label}: wrong error: ${err instanceof Error ? err.message : String(err)}`)
     }
     throw new Error(`${label}: expected rejection but resolved`)
   }
@@ -176,7 +181,9 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
       (n, ws) => n + (Array.isArray(ws.canvases) ? ws.canvases.length : 0),
       0,
     )
-    console.log(`[e2e] canvas_list → ${(listed.workspaces as unknown[]).length} workspaces, ${totalCanvases} canvases`)
+    console.log(
+      `[e2e] canvas_list → ${(listed.workspaces as unknown[]).length} workspaces, ${totalCanvases} canvases`,
+    )
 
     const palette = await callTool('palette_get', { workspaceId })
     if (typeof palette.palette !== 'object' || palette.palette === null) {
@@ -186,9 +193,13 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
 
     const libsInstalled = await callTool('library_list_installed', {})
     if (!Array.isArray(libsInstalled.installedUrls)) {
-      throw new Error(`library_list_installed returned unexpected shape: ${JSON.stringify(libsInstalled)}`)
+      throw new Error(
+        `library_list_installed returned unexpected shape: ${JSON.stringify(libsInstalled)}`,
+      )
     }
-    console.log(`[e2e] library_list_installed → ${(libsInstalled.installedUrls as unknown[]).length} urls`)
+    console.log(
+      `[e2e] library_list_installed → ${(libsInstalled.installedUrls as unknown[]).length} urls`,
+    )
 
     // library_uninstall with a never-installed URL. removeInstalledLibrary is an idempotent SQL DELETE
     // that returns the current installed list, so this succeeds offline without any HTTPS fetch.
@@ -196,7 +207,9 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
       libraryUrl: 'https://smoke-test.example.com/never-installed.excalidrawlib',
     })
     if (!Array.isArray(libUninstalled.installedUrls)) {
-      throw new Error(`library_uninstall returned unexpected shape: ${JSON.stringify(libUninstalled)}`)
+      throw new Error(
+        `library_uninstall returned unexpected shape: ${JSON.stringify(libUninstalled)}`,
+      )
     }
     console.log('[e2e] library_uninstall (idempotent) → OK')
 
@@ -331,7 +344,9 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
     // export_png now falls back to headless rendering when no browser is connected.
     // Verify it succeeds (headless path is active after the #45 merge).
     const pngResult = await callTool('export_png', { canvasId: created.id })
-    console.log(`[e2e] export_png → headless render OK (pngDataUrl=${typeof (pngResult as Record<string, unknown>).pngDataUrl !== 'undefined' ? 'present' : 'not present'})`)
+    console.log(
+      `[e2e] export_png → headless render OK (pngDataUrl=${typeof (pngResult as Record<string, unknown>).pngDataUrl !== 'undefined' ? 'present' : 'not present'})`,
+    )
 
     const exported = await callTool('canvas_export_json', { canvasId: created.id })
     if (!exported.filePath || !(exported.filePath as string).endsWith('.excalidraw')) {
