@@ -66,6 +66,9 @@ const buildResult = spawnSync('docker', buildArgs, {
 })
 
 if (buildResult.status !== 0 || buildResult.error) {
+  if (buildResult.stderr) {
+    process.stderr.write(buildResult.stderr)
+  }
   fail('docker build')
 }
 
