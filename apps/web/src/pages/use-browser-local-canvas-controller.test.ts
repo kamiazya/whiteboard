@@ -8,7 +8,6 @@ import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 const snap: CanvasSnapshot = {
   id: 'c1',
   name: 'untitled',
-  scene: { elements: [] },
   updatedAt: '2026-05-24T00:00:00.000Z',
 }
 
@@ -43,7 +42,7 @@ describe('useBrowserLocalCanvasController', () => {
     const { result } = renderHook(() => useBrowserLocalCanvasController(store))
     await act(async () => {})
     expect(result.current.snapshot).not.toBeNull()
-    expect(result.current.snapshot?.scene.elements).toEqual([])
+    expect(result.current.snapshot?.name).toBe('untitled')
   })
 
   it('loads existing canvas from store on mount', async () => {
@@ -55,30 +54,20 @@ describe('useBrowserLocalCanvasController', () => {
     expect(result.current.snapshot).toEqual(snap)
   })
 
-  it('updateScene sets persistence to pending', async () => {
+  it('renameCanvas transitions persistence pending -> saved via an immediate flush (no debounce)', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
     const { result } = renderHook(() => useBrowserLocalCanvasController(store))
     await act(async () => {})
     act(() => {
-      result.current.updateScene([{ type: 'rectangle' }])
+      result.current.renameCanvas('Renamed')
     })
-    expect(result.current.persistence.kind).toBe('pending')
-  })
-
-  it('persistence becomes saved after debounce timer fires', async () => {
-    const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
-    await store.save(snap)
-    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
-    await act(async () => {})
-    act(() => {
-      result.current.updateScene([{ type: 'rectangle' }])
-    })
-    expect(result.current.persistence.kind).toBe('pending')
+    // renameCanvas flushes immediately (no setTimeout), so a microtask flush
+    // settles it back to 'saved' without advancing any timers.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000)
+      await Promise.resolve()
+      await Promise.resolve()
     })
     expect(result.current.persistence.kind).toBe('saved')
   })
@@ -100,11 +89,8 @@ describe('useBrowserLocalCanvasController', () => {
     }
     const { result } = renderHook(() => useBrowserLocalCanvasController(failingStore))
     await act(async () => {})
-    act(() => {
-      result.current.updateScene([{ type: 'rectangle' }])
-    })
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000)
+      result.current.renameCanvas('Renamed')
     })
     expect(result.current.persistence.kind).toBe('degraded')
     if (result.current.persistence.kind === 'degraded') {
@@ -122,7 +108,7 @@ describe('useBrowserLocalCanvasController', () => {
     const { result } = renderHook(() => useBrowserLocalCanvasController(store))
     await act(async () => {})
     act(() => {
-      result.current.updateScene([{ type: 'line' }])
+      result.current.renameCanvas('Renamed before cleanup')
     })
     await act(async () => {
       await result.current.triggerCleanup()
@@ -152,9 +138,14 @@ describe('useBrowserLocalCanvasController', () => {
     const { result } = renderHook(() => useBrowserLocalCanvasController(store))
     await act(async () => {})
     shouldFailSave = true
-    act(() => {
-      result.current.updateScene([{ type: 'circle' }])
+    // renameCanvas flushes immediately; let that failing save settle to 'degraded'
+    // before triggerCleanup runs, matching how a real prior save failure lingers.
+    await act(async () => {
+      result.current.renameCanvas('Renamed')
+      await Promise.resolve()
+      await Promise.resolve()
     })
+    expect(result.current.persistence.kind).toBe('degraded')
     await act(async () => {
       await result.current.triggerCleanup()
     })
@@ -195,10 +186,14 @@ describe('useBrowserLocalCanvasController', () => {
     const { result } = renderHook(() => useBrowserLocalCanvasController(store))
     await act(async () => {})
     shouldFailSave = true
-    act(() => {
-      result.current.updateScene([{ type: 'circle' }]) // sets pendingSnapshotRef
+    // renameCanvas flushes immediately and fails; let it settle to 'degraded'
+    // before triggerCleanup runs, so triggerCleanup's own degraded-guard aborts.
+    await act(async () => {
+      result.current.renameCanvas('Renamed')
+      await Promise.resolve()
+      await Promise.resolve()
     })
-    // triggerCleanup triggers flushSave with pending data; save fails → abort
+    expect(result.current.persistence.kind).toBe('degraded')
     await act(async () => {
       await result.current.triggerCleanup()
     })
@@ -228,40 +223,6 @@ describe('useBrowserLocalCanvasController', () => {
     expect(result.current.snapshot).toEqual(snap)
   })
 
-  it('rapid updateScene calls within debounce window coalesce into a single save', async () => {
-    const base = new MemoryStore()
-    await base.setDefaultCanvasId('c1')
-    await base.save(snap)
-    let saveCount = 0
-    const trackingStore: BrowserLocalStore = {
-      getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
-      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
-      load: base.load.bind(base),
-      del: base.del.bind(base),
-      generateId: base.generateId.bind(base),
-      save: async (s) => {
-        saveCount++
-        return base.save(s)
-      },
-    }
-    const { result } = renderHook(() => useBrowserLocalCanvasController(trackingStore))
-    await act(async () => {})
-    saveCount = 0 // ignore initial load (no save triggered on load)
-    act(() => {
-      result.current.updateScene([{ type: 'a' }])
-    })
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(500)
-    }) // halfway
-    act(() => {
-      result.current.updateScene([{ type: 'b' }])
-    }) // resets debounce
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1500)
-    }) // past second debounce
-    expect(saveCount).toBe(1)
-  })
-
   it('no phantom save re-populates store after triggerCleanup', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
@@ -269,12 +230,12 @@ describe('useBrowserLocalCanvasController', () => {
     const { result } = renderHook(() => useBrowserLocalCanvasController(store))
     await act(async () => {})
     act(() => {
-      result.current.updateScene([{ type: 'line' }])
+      result.current.renameCanvas('Renamed')
     })
     await act(async () => {
       await result.current.triggerCleanup()
     })
-    // Advance past the debounce window — any un-flushed timer would save phantom data
+    // Advance past any timer window — no un-flushed timer should save phantom data.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(2000)
     })
@@ -406,49 +367,6 @@ describe('useBrowserLocalCanvasController', () => {
     expect(result.current.snapshot?.name).toBe('untitled')
   })
 
-  it('renameCanvas merges with a concurrently-pending scene edit (updateScene then renameCanvas)', async () => {
-    const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
-    await store.save(snap)
-    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
-    await act(async () => {})
-    act(() => {
-      result.current.updateScene([{ type: 'rectangle' }])
-    })
-    await act(async () => {
-      result.current.renameCanvas('Renamed')
-    })
-    const loadResult = await store.load('c1')
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Renamed')
-      expect(loadResult.snapshot.scene.elements).toEqual([{ type: 'rectangle' }])
-    }
-  })
-
-  it('renameCanvas merges with a concurrently-pending scene edit (renameCanvas then updateScene)', async () => {
-    const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
-    await store.save(snap)
-    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
-    await act(async () => {})
-    act(() => {
-      result.current.renameCanvas('Renamed')
-    })
-    act(() => {
-      result.current.updateScene([{ type: 'rectangle' }])
-    })
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000)
-    })
-    const loadResult = await store.load('c1')
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Renamed')
-      expect(loadResult.snapshot.scene.elements).toEqual([{ type: 'rectangle' }])
-    }
-  })
-
   it('renameCanvas before the initial load resolves is a safe no-op', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
@@ -498,24 +416,5 @@ describe('useBrowserLocalCanvasController', () => {
     })
     expect(result.current.snapshot?.updatedAt).not.toBe(snap.updatedAt)
     expect(result.current.persistence.kind).toBe('saved')
-  })
-
-  it('save/reload roundtrip: saved elements persist in store', async () => {
-    const store = new MemoryStore()
-    await store.setDefaultCanvasId('c1')
-    await store.save(snap)
-    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
-    await act(async () => {})
-    act(() => {
-      result.current.updateScene([{ type: 'ellipse' }])
-    })
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1000)
-    })
-    const loadResult = await store.load('c1')
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.scene.elements).toEqual([{ type: 'ellipse' }])
-    }
   })
 })

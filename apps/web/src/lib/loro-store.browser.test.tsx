@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Loro } from 'loro-crdt'
 import { LoroStore, loroRecordEnvelopeSchema } from './loro-store.js'
+import { DB_VERSION } from './browser-idb.js'
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
@@ -55,8 +56,12 @@ describe('loroRecordEnvelopeSchema', () => {
 })
 
 describe('LoroStore (real IndexedDB)', () => {
-  beforeEach(async () => { await clearDb() })
-  afterEach(async () => { await clearDb() })
+  beforeEach(async () => {
+    await clearDb()
+  })
+  afterEach(async () => {
+    await clearDb()
+  })
 
   it('load returns not-found for unknown canvasId', async () => {
     const store = new LoroStore()
@@ -104,9 +109,7 @@ describe('LoroStore (real IndexedDB)', () => {
       const fresh = new Loro()
       fresh.import(result.snapshot)
       for (const d of result.deltas ?? []) fresh.import(d)
-      expect(fresh.getList('elements').toJSON()).toEqual([
-        { id: 'a' }, { id: 'b' }, { id: 'c' },
-      ])
+      expect(fresh.getList('elements').toJSON()).toEqual([{ id: 'a' }, { id: 'b' }, { id: 'c' }])
     }
   })
 
@@ -199,7 +202,7 @@ describe('LoroStore (real IndexedDB)', () => {
 function openLoroDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     // Open at the CURRENT DB_VERSION so upgrade runs if needed
-    const req = indexedDB.open('whiteboard', 2)
+    const req = indexedDB.open('whiteboard', DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')

@@ -52,7 +52,6 @@ vi.mock('../lib/browser-local-backend.js', () => ({
 const snap: CanvasSnapshot = {
   id: 'c1',
   name: 'untitled',
-  scene: { elements: [] },
   updatedAt: '2026-05-24T00:00:00.000Z',
 }
 

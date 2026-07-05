@@ -1,5 +1,6 @@
 import { Loro } from 'loro-crdt'
 import { z } from 'zod'
+import { openWhiteboardDb } from './browser-idb.js'
 
 /**
  * Versioned envelope for Loro records persisted in IndexedDB.
@@ -30,28 +31,6 @@ export type LoroLoadResult =
   | { kind: 'corrupt-delta' }
   | { kind: 'unsupported-version' }
 
-const DB_NAME = 'whiteboard'
-/**
- * DB_VERSION 2 adds the 'loroCanvases' object store for Loro CRDT records.
- * The v1 'canvases' and 'meta' stores are preserved untouched by the upgrade.
- */
-const DB_VERSION = 2
-
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
-    req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      // Preserve v1 stores; only add the new Loro store.
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
-      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
 /**
  * Try importing bytes into a throwaway LoroDoc to confirm they are valid Loro
  * bytes (snapshot or update). Returns false if the import throws.
@@ -68,7 +47,7 @@ function isValidLoroBytes(bytes: Uint8Array): boolean {
 
 /**
  * LoroStore: persists Loro CRDT snapshot+delta records in the 'loroCanvases'
- * IndexedDB object store (DB v2). Isolated from the v1 'canvases' JSON store
+ * IndexedDB object store. Isolated from the 'canvases' JSON metadata store
  * so legacy records are never misread as Loro bytes.
  *
  * load() deep-validates bytes by importing them into a throwaway LoroDoc so
@@ -77,7 +56,7 @@ function isValidLoroBytes(bytes: Uint8Array): boolean {
  */
 export class LoroStore {
   async load(canvasId: string): Promise<LoroLoadResult> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve) => {
       const tx = db.transaction('loroCanvases', 'readonly')
       const req = tx.objectStore('loroCanvases').get(canvasId)
@@ -122,18 +101,28 @@ export class LoroStore {
       }
       // req.onerror fires when the get request itself fails; close db and resolve
       // so the IDB connection is not leaked. Prevent the error from propagating to tx.onerror.
-      req.onerror = (e) => { e.preventDefault(); db.close(); resolve({ kind: 'corrupt-snapshot' }) }
+      req.onerror = (e) => {
+        e.preventDefault()
+        db.close()
+        resolve({ kind: 'corrupt-snapshot' })
+      }
       // tx.onerror/tx.onabort fire when the transaction errors before req completes
       // (e.g. quota exceeded, database closing mid-read). Without these the promise
       // never settles and loadAndDeliver stalls permanently.
-      tx.onerror = () => { db.close(); resolve({ kind: 'corrupt-snapshot' }) }
-      tx.onabort = () => { db.close(); resolve({ kind: 'corrupt-snapshot' }) }
+      tx.onerror = () => {
+        db.close()
+        resolve({ kind: 'corrupt-snapshot' })
+      }
+      tx.onabort = () => {
+        db.close()
+        resolve({ kind: 'corrupt-snapshot' })
+      }
       tx.oncomplete = () => db.close()
     })
   }
 
   async save(canvasId: string, snapshot: Uint8Array): Promise<void> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const envelope: LoroRecordEnvelope = {
         v: 1,
@@ -142,8 +131,18 @@ export class LoroStore {
       }
       const tx = db.transaction('loroCanvases', 'readwrite')
       tx.objectStore('loroCanvases').put(envelope, canvasId)
-      tx.oncomplete = () => { db.close(); resolve() }
-      tx.onerror = () => { db.close(); reject(tx.error) }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+      tx.onabort = () => {
+        db.close()
+        reject(tx.error ?? new Error('transaction aborted'))
+      }
     })
   }
 
@@ -156,7 +155,7 @@ export class LoroStore {
    * If no record exists yet, this is a no-op (snapshot must be saved first).
    */
   async appendDelta(canvasId: string, delta: Uint8Array): Promise<void> {
-    const db = await openDb()
+    const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('loroCanvases', 'readwrite')
       const store = tx.objectStore('loroCanvases')
@@ -181,10 +180,19 @@ export class LoroStore {
         }
         store.put(updated, canvasId)
       }
-      tx.oncomplete = () => { db.close(); resolve() }
-      tx.onerror = () => { db.close(); reject(tx.error) }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
       // tx.onabort fires when our code calls tx.abort() (corrupt envelope branch above).
-      tx.onabort = () => { db.close(); reject(new DOMException('Corrupt envelope; delta not appended', 'AbortError')) }
+      tx.onabort = () => {
+        db.close()
+        reject(new DOMException('Corrupt envelope; delta not appended', 'AbortError'))
+      }
     })
   }
 }

@@ -6,7 +6,6 @@ import type { CanvasSnapshot } from './whiteboard-client.js'
 const snap: CanvasSnapshot = {
   id: 'c1',
   name: 'untitled',
-  scene: { elements: [] },
   updatedAt: '2026-05-24T00:00:00.000Z',
 }
 
@@ -131,7 +130,10 @@ describe('IndexedDBStore', () => {
         const db = req.result
         const tx = db.transaction('canvases', 'readwrite')
         tx.objectStore('canvases').put({ broken: true }, 'c1')
-        tx.oncomplete = () => { db.close(); resolve() }
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
         tx.onerror = () => reject(tx.error)
       }
       req.onerror = () => reject(req.error)

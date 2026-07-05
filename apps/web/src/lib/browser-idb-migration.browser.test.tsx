@@ -1,0 +1,197 @@
+/**
+ * v2 -> v3 upgrade migration (real IndexedDB): the persisted JSON 'canvases'
+ * row is demoted to metadata-only. Elements are canonical in the Loro doc
+ * ('loroCanvases'), so a legacy 'scene' field on a v2 'canvases' row must be
+ * stripped on upgrade without ever touching 'loroCanvases'.
+ */
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { Loro } from 'loro-crdt'
+import { openWhiteboardDb, DB_VERSION } from './browser-idb.js'
+import { IndexedDBStore } from './browser-local-store.js'
+import { LoroStore } from './loro-store.js'
+
+async function clearDb(): Promise<void> {
+  return new Promise((resolve) => {
+    const req = indexedDB.deleteDatabase('whiteboard')
+    req.onsuccess = () => resolve()
+    req.onerror = () => resolve()
+  })
+}
+
+/** Seed a pre-v3 ("v2 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
+async function seedV2Fixture(canvasId: string, loroSnapshot: Uint8Array): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', 2)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
+      tx.objectStore('meta').put(canvasId, 'defaultCanvasId')
+      tx.objectStore('canvases').put(
+        {
+          id: canvasId,
+          name: 'Pre-migration canvas',
+          scene: { elements: [{ id: 'legacy-el', type: 'rectangle' }] },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        canvasId,
+      )
+      tx.objectStore('loroCanvases').put(
+        {
+          v: 1,
+          snapshot: loroSnapshot,
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+        canvasId,
+      )
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** Reads a 'canvases' row directly via raw IDB, bypassing canvasSnapshotSchema. */
+async function readRawCanvasesRow(canvasId: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard')
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction('canvases', 'readonly')
+      const getReq = tx.objectStore('canvases').get(canvasId)
+      getReq.onsuccess = () => resolve(getReq.result)
+      getReq.onerror = () => reject(getReq.error)
+      tx.oncomplete = () => db.close()
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('current DB_VERSION is 3 or higher (guards against reverting the bump alone)', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(3)
+  })
+
+  it('opens a seeded v2 fixture at the current version without VersionError, strips scene, and keeps loroCanvases canonical', async () => {
+    const canvasId = 'canvas-migrate-1'
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'canonical-el' })
+    const loroSnapshot = doc.export({ mode: 'snapshot' })
+    await seedV2Fixture(canvasId, loroSnapshot)
+
+    // (a) Open through the shared opener at the current DB_VERSION — must not VersionError.
+    const db = await openWhiteboardDb()
+    db.close()
+
+    // (b) The loroCanvases record survives and its elements are canonical after load.
+    const loroStore = new LoroStore()
+    const loroResult = await loroStore.load(canvasId)
+    expect(loroResult.kind).toBe('ok')
+    if (loroResult.kind === 'ok') {
+      const restored = new Loro()
+      restored.import(loroResult.snapshot)
+      expect(restored.getList('elements').toArray()).toEqual([{ id: 'canonical-el' }])
+    }
+
+    // (c) The 'canvases' row has no scene / no old-schema orphan remains.
+    // Checked against the RAW stored row (not the parsed load() result): Zod's
+    // z.object() silently strips unrecognized keys from its parsed OUTPUT even
+    // when the underlying row still carries them, so asserting only against
+    // loadResult.snapshot would pass even if the upgrade never ran.
+    const rawRow = await readRawCanvasesRow(canvasId)
+    expect(rawRow).not.toHaveProperty('scene')
+    expect(rawRow).toEqual({
+      id: canvasId,
+      name: 'Pre-migration canvas',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    })
+
+    const metaStore = new IndexedDBStore()
+    const loadResult = await metaStore.load(canvasId)
+    expect(loadResult.kind).toBe('ok')
+    if (loadResult.kind === 'ok') {
+      expect(loadResult.snapshot).toEqual({
+        id: canvasId,
+        name: 'Pre-migration canvas',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      })
+    }
+
+    // (d) The default pointer/id is intact.
+    expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
+  })
+
+  it('upgrades without aborting when a legacy canvases row is a non-object (corrupt data)', async () => {
+    // A null / non-object row must not throw a TypeError from `'scene' in value`
+    // inside the upgrade cursor — that would abort the transaction and brick the
+    // DB open for the user.
+    await new Promise<void>((resolve, reject) => {
+      const req = indexedDB.open('whiteboard', 2)
+      req.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result
+        if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+        if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+        if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      }
+      req.onsuccess = () => {
+        const db = req.result
+        const tx = db.transaction('canvases', 'readwrite')
+        // A corrupt non-object value stored under a key.
+        tx.objectStore('canvases').put(null, 'corrupt-row')
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }
+      req.onerror = () => reject(req.error)
+    })
+
+    // Opening through the shared opener at v3 must complete (guard prevents the
+    // `in` TypeError from aborting the upgrade).
+    const db = await openWhiteboardDb()
+    expect(db.version).toBe(DB_VERSION)
+    db.close()
+  })
+
+  it('mutation-check: reverting DB_VERSION to 2 makes the seeded v2 fixture fail to strip scene', async () => {
+    // This test documents the guard rather than actually reverting production
+    // code (that is done manually per the zod-schema-discipline mutation-check
+    // step). It re-asserts the invariant the real mutation-check depends on:
+    // opening at version 2 must NOT run the v2->v3 upgrade at all.
+    const canvasId = 'canvas-migrate-2'
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'el' })
+    await seedV2Fixture(canvasId, doc.export({ mode: 'snapshot' }))
+
+    // Opening at the (hypothetically reverted) old version 2 does not run
+    // onupgradeneeded at all, so the legacy 'scene' field is still present.
+    const rawDb = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('whiteboard', 2)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+    const raw = await new Promise<unknown>((resolve, reject) => {
+      const tx = rawDb.transaction('canvases', 'readonly')
+      const getReq = tx.objectStore('canvases').get(canvasId)
+      getReq.onsuccess = () => resolve(getReq.result)
+      getReq.onerror = () => reject(getReq.error)
+      tx.oncomplete = () => rawDb.close()
+    })
+    expect(raw).toHaveProperty('scene')
+  })
+})

@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Loro } from 'loro-crdt'
 import { BrowserLocalBackend } from './browser-local-backend.js'
+import { DB_VERSION } from './browser-idb.js'
 import type { CanvasBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 
 async function clearDb(): Promise<void> {
@@ -277,7 +278,7 @@ describe('BrowserLocalBackend', () => {
 
 async function forceInvalidLoroRecord(canvasId: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 2)
+    const req = indexedDB.open('whiteboard', DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -311,7 +312,7 @@ async function forceInvalidLoroRecord(canvasId: string): Promise<void> {
 
 async function forceRecordWithBadDelta(canvasId: string, snapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 2)
+    const req = indexedDB.open('whiteboard', DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -346,7 +347,7 @@ async function forceRecordWithBadDelta(canvasId: string, snapshot: Uint8Array): 
 
 async function forceCorruptRecord(canvasId: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 2)
+    const req = indexedDB.open('whiteboard', DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
