@@ -28,20 +28,34 @@ export interface UseCanvasSyncResult {
 function debounce<T extends (...args: Parameters<T>) => void>(
   fn: T,
   ms: number,
-): T & { cancel: () => void } {
+): T & { cancel: () => void; flush: () => void } {
   let timer: ReturnType<typeof setTimeout> | null = null
+  // Retained as a thunk (rather than the raw args tuple) because TS cannot
+  // re-spread a `Parameters<T>` read back out of a variable — it only accepts
+  // the tuple at the call site where it is directly bound to `...args`.
+  let pending: (() => void) | null = null
   const debounced = (...args: Parameters<T>) => {
     if (timer) clearTimeout(timer)
-    timer = setTimeout(() => {
-      fn(...args)
-      timer = null
-    }, ms)
+    pending = () => fn(...args)
+    // The trailing edge is just a flush fired by the timer.
+    timer = setTimeout(() => debounced.flush(), ms)
   }
   debounced.cancel = () => {
     if (timer) clearTimeout(timer)
     timer = null
+    pending = null
   }
-  return debounced as T & { cancel: () => void }
+  // Runs the pending call (if any) synchronously right now and clears the
+  // timer, instead of waiting for the trailing edge. Used on teardown so a
+  // debounced write in flight is persisted rather than cancelled/lost.
+  debounced.flush = () => {
+    if (timer) clearTimeout(timer)
+    timer = null
+    const run = pending
+    pending = null
+    run?.()
+  }
+  return debounced as T & { cancel: () => void; flush: () => void }
 }
 
 function blobToBase64(blob: Blob): Promise<string> {
@@ -274,7 +288,16 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
         undoManagerRef.current = new UndoManager(doc, { mergeInterval: 500 })
 
         doc.subscribeLocalUpdates((update) => {
-          if (isStale()) return
+          // No isStale() guard here: this callback is bound to this specific
+          // `doc` and the connect-effect's captured `bk`, both fixed for the
+          // lifetime of this connection, so it can never route bytes to a
+          // different backend. Gating on isStale() would drop a local commit
+          // that lands on a microtask AFTER teardown flips `disposed` — which
+          // is exactly what happens when onSceneChange.flush() runs during
+          // cleanup (doc.commit() fires synchronously, but this subscriber
+          // fires on a later microtask, by which point `disposed` is already
+          // true) — silently losing the last edit made before a canvas
+          // switch or unmount.
           void Promise.resolve(bk.pushLocalUpdate(update)).catch(() => {
             if (isStale()) return
             setSyncStatus('error')
@@ -310,6 +333,14 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
     })
 
     return () => {
+      // Flush any pending debounced scene edit into this connection's doc
+      // BEFORE disconnecting, so the last edit made against this backend is
+      // persisted instead of dropped by the next effect run's
+      // onSceneChange.cancel(). Flushing before `disposed = true` matters:
+      // flush() calls doc.commit() synchronously, but its
+      // subscribeLocalUpdates callback fires on a later microtask — see the
+      // comment on that subscription for why it has no isStale() guard.
+      onSceneChange.flush()
       disposed = true
       bk.disconnect()
     }
@@ -403,13 +434,6 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
       } as EventListenerOptions)
     }
   }, [loroUndo, loroRedo])
-
-  // Cancel debounce on unmount to prevent post-unmount Loro writes.
-  useEffect(() => {
-    return () => {
-      onSceneChange.cancel()
-    }
-  }, [onSceneChange])
 
   const onChange = useCallback(
     (elements: readonly ExcalidrawElement[], _appState: AppState, files: BinaryFiles) => {
