@@ -27,7 +27,9 @@ const GIT = CWD ? `git -C ${CWD}` : 'git'
 // dimensions / qaScenarios: tune cost. Smaller increments → fewer dimensions.
 // Each entry is either a legacy string (criteria stays embedded in reviewer-dimension.md)
 // or {name, content} where content is authoritative externalized criteria injected into
-// the reviewer prompt (see workflow-authoring skill's review-dimensions resources).
+// the reviewer prompt. No `resources/*.md` externalized-criteria pack exists yet for this
+// workflow's dimensions (unlike audit-triage's .claude/skills/audit-triage/resources/) —
+// {name, content} is accepted so a caller can supply criteria inline until one is added.
 const RAW_DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage']
 const DIMENSIONS = RAW_DIMENSIONS.map((d) =>
   typeof d === 'string' ? { name: d, content: null } : { name: d.name, content: d.content || null },
