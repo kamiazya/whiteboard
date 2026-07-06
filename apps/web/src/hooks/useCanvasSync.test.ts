@@ -1046,6 +1046,86 @@ describe('useCanvasSync', () => {
     })
   })
 
+  describe('stale-generation drop coverage for restore/viewport/export handlers', () => {
+    it('drops a stale-generation onRestoreStarted/onRestoreComplete event from a torn-down connection', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      act(() => {
+        staleHandlers.onRestoreStarted({ label: 'stale restore' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+
+      // Also verify onRestoreComplete is dropped: put the live connection into
+      // a restoring state via a fresh (non-stale) event, then confirm the
+      // stale handler cannot clear it.
+      act(() => {
+        backendB._ctrl.handlers!.onRestoreStarted({ label: 'live restore' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+
+      act(() => {
+        staleHandlers.onRestoreComplete()
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+      expect(result.current.restoreLabel).toBe('live restore')
+    })
+
+    it('drops a stale-generation onViewportRequest event from a torn-down connection', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const api = makeApiStub()
+      const scrollToContent = vi.fn()
+      ;(api as unknown as { scrollToContent: typeof scrollToContent }).scrollToContent =
+        scrollToContent
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [
+        { id: 'a' },
+      ]
+
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      act(() => {
+        staleHandlers.onViewportRequest({ mode: 'fit', elementIds: ['a'] } as never)
+      })
+
+      expect(scrollToContent).not.toHaveBeenCalled()
+    })
+
+    it('drops a stale-generation onExportRequest event from a torn-down connection', async () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const sendExportResponseSpyA = vi.spyOn(backendA, 'sendExportResponse')
+
+      const { rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      await act(async () => {
+        await staleHandlers.onExportRequest({ requestId: 'stale-req' } as never)
+      })
+
+      expect(sendExportResponseSpyA).not.toHaveBeenCalled()
+    })
+  })
+
   describe('export_response routing after a backend switch', () => {
     // Root-cause regression: an in-flight export must be answered on the
     // backend that requested it, never on whatever backend happens to be
