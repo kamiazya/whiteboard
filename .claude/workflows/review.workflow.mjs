@@ -31,9 +31,21 @@ const GIT = CWD ? `git -C ${CWD}` : 'git'
 // workflow's dimensions (unlike audit-triage's .claude/skills/audit-triage/resources/) —
 // {name, content} is accepted so a caller can supply criteria inline until one is added.
 const RAW_DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage']
-const DIMENSIONS = RAW_DIMENSIONS.map((d) =>
-  typeof d === 'string' ? { name: d, content: null } : { name: d.name, content: d.content || null },
-)
+// Mirrors .claude/workflows/lib/normalize-dimensions.mjs (unit-tested via node:test — the
+// workflow runtime executes this file as a standalone function body with no module resolution,
+// so it cannot `import` that file; keep the two in sync). Throws on a malformed non-string entry
+// (e.g. missing `name`) instead of letting `undefined` silently propagate into the lane `key`,
+// the reviewer prompt label, and the Codex lane-key special-case match below.
+function normalizeDimension(d) {
+  if (typeof d === 'string') return { name: d, content: null }
+  if (d && typeof d === 'object' && typeof d.name === 'string' && d.name.length > 0) {
+    return { name: d.name, content: d.content || null }
+  }
+  throw new Error(
+    `invalid dimension entry: expected a string or a {name, content} object with a non-empty "name", got ${JSON.stringify(d)}`,
+  )
+}
+const DIMENSIONS = RAW_DIMENSIONS.map((d) => normalizeDimension(d))
 const QA_SCENARIOS = A.qaScenarios || ['smoke', 'error-recovery', 'startup']
 // dogfood: optional live persona pass over the touched flow. Default OFF — needs a running app.
 // Inline (not a nested workflow) so review stays composable as a child of dev-loop (1-level nesting limit).
