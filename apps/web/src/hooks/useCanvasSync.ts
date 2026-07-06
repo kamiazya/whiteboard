@@ -360,6 +360,7 @@ export function useCanvasSync(
             return
           }
 
+          let uploadTimeoutId: ReturnType<typeof setTimeout> | undefined
           try {
             // A hung upload must not block the chain forever — race it against
             // a deadline and fall through to the commit (upload failure is
@@ -367,7 +368,10 @@ export function useCanvasSync(
             await Promise.race([
               bk.putFile(newEntries, (fileId) => uploadedFileIds.add(fileId)),
               new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('putFile timed out')), PUT_FILE_TIMEOUT_MS)
+                uploadTimeoutId = setTimeout(
+                  () => reject(new Error('putFile timed out')),
+                  PUT_FILE_TIMEOUT_MS,
+                )
               }),
             ])
             if (connectionGenerationRef.current === connGen) {
@@ -386,6 +390,10 @@ export function useCanvasSync(
                 console.error('onFileUploadFailed callback threw', callbackErr)
               }
             }
+          } finally {
+            // Clear the deadline timer when the upload settles first, so a
+            // resolved race doesn't leave a live timer behind.
+            clearTimeout(uploadTimeoutId)
           }
           guardedCommit()
         }
@@ -541,8 +549,10 @@ export function useCanvasSync(
           }
         } else if (mode === 'move') {
           const appState = api.getAppState()
-          // AppState.zoom.value is a branded NormalizedZoomValue and AppState itself is readonly,
-          // so rebuild a mutable object before writing plain numeric values into it.
+          // updateScene's appState typing is NOT Partial in this Excalidraw
+          // version (it demands the full picked shape), so a changed-fields-only
+          // object fails to compile — clone the (readonly) snapshot into a
+          // mutable copy and overwrite just the requested fields.
           type MutableAppState = {
             -readonly [K in keyof typeof appState]: (typeof appState)[K]
           }
