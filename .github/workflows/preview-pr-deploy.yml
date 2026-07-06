@@ -27,7 +27,13 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
-    environment: preview-web
+    environment:
+      name: preview-web
+      # Attaches this PR's branch-alias preview URL to the deployment record so
+      # the Environments UI reflects reality; preview-cleanup.yml releases the
+      # record when the PR closes. (environment.url is resolved at job end, so
+      # it may reference the deploy step's output.)
+      url: ${{ steps.deploy.outputs.url }}
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

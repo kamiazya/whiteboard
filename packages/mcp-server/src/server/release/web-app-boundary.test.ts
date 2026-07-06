@@ -643,8 +643,8 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     )
     expect(
       deployWebSection,
-      'deploy-web job must declare environment: production-web (secrets scoped to tag-protected env)',
-    ).toContain('environment: production-web')
+      'deploy-web job must declare the production-web environment (secrets scoped to tag-protected env); the string form and the name/url mapping form are both valid',
+    ).toMatch(/environment:\s*(?:production-web\b|\n\s+name:\s*production-web\b)/)
   })
 
   it('deploy-web avoids the wrangler-action npm-install fallback (catalog: is pnpm-only)', () => {
