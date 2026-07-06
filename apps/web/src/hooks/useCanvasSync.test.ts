@@ -1045,4 +1045,45 @@ describe('useCanvasSync', () => {
       expect(backendB._ctrl.pushLocalUpdateCalls.length).toBe(0)
     })
   })
+
+  describe('export_response routing after a backend switch', () => {
+    // Root-cause regression: an in-flight export must be answered on the
+    // backend that requested it, never on whatever backend happens to be
+    // live by the time the (async) export/base64 work finishes.
+    it('routes the export response to the requesting backend, not a backend switched in mid-export', async () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const sendExportResponseSpyA = vi.spyOn(backendA, 'sendExportResponse')
+      const sendExportResponseSpyB = vi.spyOn(backendB, 'sendExportResponse')
+      const api = makeApiStub()
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => []
+      ;(api as unknown as { getFiles: () => unknown }).getFiles = () => ({})
+
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      // Fire the export request against A, then switch to B before the
+      // (mocked, but still async) export/base64 conversion resolves. The
+      // promise is intentionally not awaited directly here — blobToBase64
+      // uses a real FileReader, which needs fake timers advanced via
+      // runAllTimersAsync to ever settle.
+      void backendA._ctrl.handlers!.onExportRequest({ requestId: 'req-a' } as never)
+
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      await act(async () => {
+        await vi.runAllTimersAsync()
+      })
+
+      expect(sendExportResponseSpyA).toHaveBeenCalledWith('req-a', expect.any(String))
+      expect(sendExportResponseSpyB).not.toHaveBeenCalled()
+    })
+  })
 })

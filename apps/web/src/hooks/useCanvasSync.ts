@@ -13,12 +13,14 @@ import type {
   VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import {
+  exportResponseMessageSchema,
   resolveParentedElements,
   validateLoroRawElements,
 } from '@kamiazya/whiteboard-mcp/browser-shared'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { z } from 'zod'
 import {
   type ExportRequestHandlerDeps,
   flushPendingExportRequests,
@@ -158,24 +160,29 @@ export function useCanvasSync(
   // Bridges flushPendingExportRequests'/handleIncomingExportRequest's
   // string-message `send` contract (ported verbatim from the frozen
   // useWhiteboardSync.helpers.ts) to CanvasBackend's typed
-  // sendExportResponse(requestId, data) method.
-  const sendExportResponseMessage = useCallback((message: string): void => {
-    let parsed: { requestId: string; data: string }
+  // sendExportResponse(requestId, data) method. Takes the target backend
+  // explicitly (never reads backendRef) so a response is always routed to
+  // the connection that produced it, even if the live backend has since
+  // been swapped out from under an in-flight export.
+  const sendExportResponseMessage = useCallback((bk: CanvasBackend, message: string): void => {
+    let parsed: z.infer<typeof exportResponseMessageSchema>
     try {
-      parsed = JSON.parse(message) as { requestId: string; data: string }
+      parsed = exportResponseMessageSchema.parse(JSON.parse(message))
     } catch {
       return
     }
-    backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
+    bk.sendExportResponse(parsed.requestId, parsed.data)
   }, [])
 
   // Built fresh at each call site so it reads the live api/pending refs;
-  // shared by onExportRequest and the apiReady flush effect.
+  // shared by onExportRequest and the apiReady flush effect. `bk` is always
+  // the specific backend the response must reach, not whatever backend is
+  // live by the time the export finishes.
   const buildExportDeps = useCallback(
-    (): ExportRequestHandlerDeps => ({
+    (bk: CanvasBackend): ExportRequestHandlerDeps => ({
       api: excalidrawAPIRef.current,
       pending: pendingExportRequestsRef.current,
-      send: sendExportResponseMessage,
+      send: (message) => sendExportResponseMessage(bk, message),
       exportToBlobFn: exportToBlob,
       blobToBase64Fn: blobToBase64,
     }),
@@ -496,7 +503,7 @@ export function useCanvasSync(
 
       async onExportRequest(payload) {
         if (isStale()) return
-        await handleIncomingExportRequest(payload, buildExportDeps())
+        await handleIncomingExportRequest(payload, buildExportDeps(bk))
       },
 
       onAuthError() {
@@ -537,8 +544,10 @@ export function useCanvasSync(
   // API becomes ready before the first snapshot lands.
   useEffect(() => {
     if (!apiReady) return
-    backendRef.current?.sendClientReady()
-    void flushPendingExportRequests(buildExportDeps()).catch((err: unknown) => {
+    const bk = backendRef.current
+    bk?.sendClientReady()
+    if (!bk) return
+    void flushPendingExportRequests(buildExportDeps(bk)).catch((err: unknown) => {
       console.error('flushPendingExportRequests failed', err)
     })
   }, [apiReady, buildExportDeps])
