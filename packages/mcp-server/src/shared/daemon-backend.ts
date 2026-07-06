@@ -83,7 +83,7 @@ export class DaemonBackend implements CanvasBackend {
 
   async getFile(fileId: string): Promise<Blob | null> {
     const res = await apiFetch(
-      `/api/canvas/${this.workspaceId}/${encodeURIComponent(this.slug)}/file/${fileId}`,
+      `/api/canvas/${this.workspaceId}/${encodeURIComponent(this.slug)}/file/${encodeURIComponent(fileId)}`,
     )
     if (!res.ok) return null
     return res.blob()

@@ -41,7 +41,12 @@ export async function apiFetch(
   if (!isLocalApiRequest(input)) {
     return fetch(input, init)
   }
-  const headers = new Headers(init?.headers)
+  // Seed from the Request's own headers when no init.headers override is given —
+  // fetch() replaces (not merges) a Request input's headers with the ones passed
+  // in init, which would silently drop them.
+  const headers = new Headers(
+    init?.headers ?? (input instanceof Request ? input.headers : undefined),
+  )
   // Always inject the active trace context so the server middleware can
   // stitch the inbound request span onto whatever client-side span (if
   // any) is active. No-op when browser tracing has not been enabled.

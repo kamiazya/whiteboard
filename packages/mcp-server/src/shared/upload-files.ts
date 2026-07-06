@@ -17,9 +17,14 @@ export async function uploadFiles(
   await Promise.all(
     newEntries.map(async ([fileId, fd]) => {
       const [, base64] = fd.dataURL.split(',')
+      // A malformed dataURL (no comma) would reach atob(undefined) and throw a
+      // cryptic DOMException; fail with an identifiable error instead.
+      if (!base64) {
+        throw new Error(`file ${fileId}: malformed dataURL (no base64 payload)`)
+      }
       const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
       const res = await apiFetch(
-        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`,
+        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${encodeURIComponent(fileId)}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': fd.mimeType },
