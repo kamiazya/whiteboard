@@ -24,9 +24,11 @@ export function getAppLogger(name: string): AppLogger {
   ): void {
     // Read DEV at call time (not module load time). vi.stubGlobal('import.meta', ...)
     // stores the stub under the key 'import.meta' (literal dot) on globalThis, so we
-    // look that up first. Vite replaces the source literal `import.meta.env.DEV` at
-    // transform time, so we must avoid that expression in production source; the
-    // globalThis bracket lookup is invisible to the Vite transform pass.
+    // look that up first to let tests override it after the module is imported.
+    // When no stub is present (the real running app), this falls through to the
+    // genuine `import.meta` object that Vite injects at runtime — `import.meta.env.DEV`
+    // is a real, always-populated property there, not just a build-time literal
+    // substitution, so the fallback reflects the actual dev/prod build correctly.
     const g = globalThis as Record<string, unknown>
     const importMeta = (g['import.meta'] ?? import.meta) as
       | { env?: Record<string, unknown> }

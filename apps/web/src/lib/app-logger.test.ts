@@ -84,6 +84,21 @@ describe('getAppLogger', () => {
     })
   })
 
+  describe('real import.meta.env.DEV (no global stub)', () => {
+    // Regression: the logger must read the real Vite-provided import.meta.env.DEV
+    // when nothing stubs globalThis['import.meta'] — this is the path the actual
+    // running app takes. Vitest itself runs with import.meta.env.DEV === true,
+    // so the fallback should behave like a real dev build here.
+    it('logs because the real import.meta.env.DEV is true under vitest', () => {
+      expect(import.meta.env.DEV).toBe(true)
+      const spy = vi.spyOn(console, 'info').mockImplementation(() => {})
+      const logger = getAppLogger('real-env')
+      logger.info('via real import.meta')
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy.mock.calls[0][0]).toContain('[real-env]')
+    })
+  })
+
   describe('name tag independence', () => {
     beforeEach(() => {
       vi.stubGlobal('import.meta', { env: { DEV: true } })
