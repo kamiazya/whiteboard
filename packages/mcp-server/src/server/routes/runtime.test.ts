@@ -44,6 +44,7 @@ function createApp() {
   const shutdown = vi.fn(async () => undefined)
   const app = createRuntimeRouter({
     token: 'secret',
+    instanceId: 'test-instance-id',
     touch,
     shutdown,
     getStatus: () => ({
@@ -75,7 +76,7 @@ describe('runtime routes', () => {
     const { app } = createApp()
     const res = await app.request('/api/runtime/ping')
     expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toMatchObject({ ok: true })
+    await expect(res.json()).resolves.toEqual({ ok: true, instanceId: 'test-instance-id' })
   })
 
   it('rejects status without a bearer token', async () => {

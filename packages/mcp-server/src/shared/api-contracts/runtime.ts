@@ -1,11 +1,13 @@
 import { z } from 'zod'
 
-// pid is process-internal data that becomes cross-origin-readable once CORS is
-// applied to /api/runtime/ping. The schema keeps it present deliberately;
-// dropping it from the contract is a security decision, not an oversight.
+// instanceId (a per-daemon-start crypto.randomUUID) replaces the OS pid here.
+// pid is reused by the OS across processes, so a stale record comparing pid
+// alone can misidentify an unrelated process as "our" daemon; instanceId is
+// unique per start and never reused, closing that identity-confusion window
+// for the CLI's stop/status/doctor checks that read this endpoint.
 export const daemonPingResponseSchema = z.object({
   ok: z.literal(true),
-  pid: z.number(),
+  instanceId: z.string(),
 })
 
 export type DaemonPingResponse = z.infer<typeof daemonPingResponseSchema>

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
@@ -35,6 +36,7 @@ import {
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
+import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import type { AuthScope } from './security/auth-strategy.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
@@ -141,6 +143,9 @@ export interface LocalDaemonAppOptions {
   authMode: 'local-daemon'
   token?: string
   mcpAuth?: McpHttpAuthStrategy
+  /** Per-process-start identifier for /api/runtime/ping. Falls back to a
+   *  fresh crypto.randomUUID() when omitted (tests, ad-hoc callers). */
+  instanceId?: string
   touch: () => void
   getStatus: () => RuntimeStatusResponse
   shutdown: () => Promise<void>
@@ -151,6 +156,9 @@ export interface ServerModeAppOptions {
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy
+  /** Per-process-start identifier for /api/runtime/ping. Falls back to a
+   *  fresh crypto.randomUUID() when omitted (tests, ad-hoc callers). */
+  instanceId?: string
   touch: () => void
   getStatus: () => RuntimeStatusResponse
   shutdown: () => Promise<void>
@@ -339,6 +347,7 @@ export function createApp(options: AppOptions) {
 
   const app = new Hono()
 
+  const instanceId = options.instanceId ?? randomUUID()
   const token = options.authMode === 'local-daemon' ? options.token : undefined
   const mcpAuth =
     options.authMode === 'local-daemon'
@@ -378,8 +387,13 @@ export function createApp(options: AppOptions) {
   })
 
   if (options.authMode === 'server-mode') {
+    app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
     app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
   } else {
+    // Host guard runs first, ahead of CORS, so a spoofed non-loopback Host
+    // (DNS rebinding) is rejected before the OPTIONS short-circuit below can
+    // hand out a 204 — otherwise a preflight would bypass the guard entirely.
+    app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
     // In local-daemon mode, allow cross-origin loopback requests (e.g. apps/web
     // dev server on localhost:5173 → daemon on 127.0.0.1:3099).
     // The CORS middleware is applied BEFORE the mutation-auth guard so that
@@ -554,6 +568,7 @@ export function createApp(options: AppOptions) {
     createRuntimeRouter({
       token,
       mcpAuth: mcpAuth ?? undefined,
+      instanceId,
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       shutdown: options.shutdown,

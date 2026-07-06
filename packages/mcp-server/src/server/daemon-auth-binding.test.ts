@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isLoopbackHost } from './daemon-auth-binding.js'
+import { assertLoopbackBindHost, isLoopbackHost } from './daemon-auth-binding.js'
 
 // Security-boundary conformance: these cases define what the daemon binding
 // considers "loopback-only" for server-mode exposure validation.
@@ -25,5 +25,27 @@ describe('isLoopbackHost', () => {
     '[::2]',
   ])('rejects non-loopback or malformed host %s', (host) => {
     expect(isLoopbackHost(host)).toBe(false)
+  })
+})
+
+describe('assertLoopbackBindHost', () => {
+  it.each([
+    '127.0.0.1',
+    'localhost',
+    '::1',
+    '[::1]',
+  ])('allows starting the daemon bound to loopback host %s', (host) => {
+    expect(assertLoopbackBindHost(host)).toEqual({ ok: true })
+  })
+
+  it.each([
+    '0.0.0.0',
+    '192.168.1.5',
+    'evil.example',
+  ])('refuses to start the daemon bound to non-loopback host %s', (host) => {
+    expect(assertLoopbackBindHost(host)).toEqual({
+      ok: false,
+      code: 'bind_host_not_loopback',
+    })
   })
 })

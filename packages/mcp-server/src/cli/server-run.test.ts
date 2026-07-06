@@ -12,7 +12,9 @@ const VALID_ENV: NodeJS.ProcessEnv = {
   WHITEBOARD_SERVER_JWKS_URI: 'https://auth.example.com/.well-known/jwks.json',
 }
 
-function dryRunFlags(overrides: Partial<ServerRunArgs & { kind: 'ok' }> = {}): ServerRunArgs & { kind: 'ok' } {
+function dryRunFlags(
+  overrides: Partial<ServerRunArgs & { kind: 'ok' }> = {},
+): ServerRunArgs & { kind: 'ok' } {
   return {
     kind: 'ok',
     json: true,
@@ -172,6 +174,7 @@ describe('runServerRun — actual run (no --dry-run)', () => {
         host: opts.host,
         startedAt: new Date().toISOString(),
         resolvedDataDir: '/tmp/mock-server-data',
+        instanceId: 'mock-instance-id',
         close: async () => {},
       }
     }
@@ -204,7 +207,14 @@ describe('runServerRun — actual run (no --dry-run)', () => {
     const startServer: StartServerFn = async (opts) => {
       capturedHost = opts.host
       capturedPort = opts.port
-      return { port: opts.port, host: opts.host, startedAt: new Date().toISOString(), resolvedDataDir: '/tmp/mock', close: async () => {} }
+      return {
+        port: opts.port,
+        host: opts.host,
+        startedAt: new Date().toISOString(),
+        resolvedDataDir: '/tmp/mock',
+        instanceId: 'mock-instance-id',
+        close: async () => {},
+      }
     }
     await runServerRun({
       flags: dryRunFlags({ dryRun: false, host: '127.0.0.1', port: '4399' }),
@@ -221,7 +231,14 @@ describe('runServerRun — actual run (no --dry-run)', () => {
     const startServer: StartServerFn = async (opts) => {
       capturedPublicBaseUrl = opts.publicBaseUrl
       capturedAllowedOrigins = opts.allowedOrigins
-      return { port: opts.port, host: opts.host, startedAt: new Date().toISOString(), resolvedDataDir: '/tmp/mock', close: async () => {} }
+      return {
+        port: opts.port,
+        host: opts.host,
+        startedAt: new Date().toISOString(),
+        resolvedDataDir: '/tmp/mock',
+        instanceId: 'mock-instance-id',
+        close: async () => {},
+      }
     }
     await runServerRun({
       flags: dryRunFlags({ dryRun: false }),
@@ -269,6 +286,7 @@ describe('runServerRun — actual run (no --dry-run)', () => {
     expect(record.authStrategy).toBe('oauth-jwt')
     expect(typeof record.startedAt).toBe('string')
     expect(typeof record.port).toBe('number')
+    expect(record.instanceId).toBe('mock-instance-id')
   })
 
   it('record write failure → start-error and server closed', async () => {
@@ -278,13 +296,16 @@ describe('runServerRun — actual run (no --dry-run)', () => {
       host: opts.host,
       startedAt: new Date().toISOString(),
       resolvedDataDir: '/tmp/mock',
+      instanceId: 'mock-instance-id',
       close: closeFn,
     })
     const outcome = await runServerRun({
       flags: dryRunFlags({ dryRun: false }),
       env: VALID_ENV,
       startServer,
-      writeRecord: vi.fn().mockImplementationOnce(() => { throw new Error('EROFS') }),
+      writeRecord: vi.fn().mockImplementationOnce(() => {
+        throw new Error('EROFS')
+      }),
       deleteRecord: vi.fn(),
     })
     expect(outcome.kind).toBe('start-error')
@@ -311,6 +332,7 @@ describe('runServerRun — actual run (no --dry-run)', () => {
       host: opts.host,
       startedAt: new Date().toISOString(),
       resolvedDataDir: customDataDir,
+      instanceId: 'mock-instance-id',
       close: async () => {},
     })
     const outcome = await runServerRun({

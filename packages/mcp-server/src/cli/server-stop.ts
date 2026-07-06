@@ -29,6 +29,10 @@ export type ServerStopReason =
   | 'server-process-not-running'
   | 'server-stop-signal-failed'
   | 'server-stop-timeout'
+  // Record predates instanceId (written by an older daemon build). Identity
+  // cannot be confirmed, so the safe choice is to refuse to kill rather than
+  // risk terminating an unrelated process that reused the recorded pid.
+  | 'server-instance-unverifiable'
 
 export interface ServerStopResult {
   schemaVersion: typeof SERVER_STOP_SCHEMA_VERSION
@@ -80,14 +84,18 @@ function resolveConnectHost(bindHost: string): string {
 }
 
 async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
+  // A record with no instanceId predates this check (older daemon build). It
+  // cannot be verified, so treat it the same as a mismatch — the caller maps
+  // that to the 'server-instance-unverifiable' reason, never to a kill.
+  if (!record.instanceId) return false
   const host = resolveConnectHost(record.host)
   try {
     const res = await fetch(`http://${host}:${record.port}/api/runtime/ping`, {
       signal: AbortSignal.timeout(2000),
     })
     if (!res.ok) return false
-    const body = (await res.json()) as { pid?: unknown }
-    return typeof body?.pid === 'number' && body.pid === record.pid
+    const body = (await res.json()) as { instanceId?: unknown }
+    return typeof body?.instanceId === 'string' && body.instanceId === record.instanceId
   } catch {
     return false
   }
@@ -204,7 +212,7 @@ export async function runServerStop(options: RunServerStopOptions): Promise<RunS
         schemaVersion: SERVER_STOP_SCHEMA_VERSION,
         ok: true,
         action: 'not-running',
-        reason: 'server-process-not-running',
+        reason: record.instanceId ? 'server-process-not-running' : 'server-instance-unverifiable',
         recordFound: true,
         recordFresh: false,
         pid: record.pid,

@@ -19,6 +19,7 @@ const VALID_RECORD: ServerModeRecord = {
   publicBaseUrl: 'https://whiteboard.example.com',
   authStrategy: 'oauth-jwt',
   startedAt: '2026-05-19T00:00:00.000Z',
+  instanceId: 'valid-instance-id',
 }
 
 const alivePid = vi.fn(() => true)
@@ -29,7 +30,10 @@ const identityFail = async () => false
 describe('runServerStatus', () => {
   it('missing record → ok:false, state:missing, exit 1', async () => {
     mockRead.mockReturnValueOnce({ kind: 'missing' })
-    const { result, exitCode } = await runServerStatus({ dataDir: '/tmp/test', isPidAlive: deadPid })
+    const { result, exitCode } = await runServerStatus({
+      dataDir: '/tmp/test',
+      isPidAlive: deadPid,
+    })
     expect(exitCode).toBe(1)
     expect(result.ok).toBe(false)
     expect(result.state).toBe('missing')
@@ -39,7 +43,10 @@ describe('runServerStatus', () => {
 
   it('malformed record → ok:false, state:malformed, exit 1', async () => {
     mockRead.mockReturnValueOnce({ kind: 'malformed' })
-    const { result, exitCode } = await runServerStatus({ dataDir: '/tmp/test', isPidAlive: deadPid })
+    const { result, exitCode } = await runServerStatus({
+      dataDir: '/tmp/test',
+      isPidAlive: deadPid,
+    })
     expect(exitCode).toBe(1)
     expect(result.ok).toBe(false)
     expect(result.state).toBe('malformed')
@@ -48,7 +55,10 @@ describe('runServerStatus', () => {
 
   it('valid record with dead pid → ok:false, state:stale, exit 1', async () => {
     mockRead.mockReturnValueOnce({ kind: 'ok', record: VALID_RECORD })
-    const { result, exitCode } = await runServerStatus({ dataDir: '/tmp/test', isPidAlive: deadPid })
+    const { result, exitCode } = await runServerStatus({
+      dataDir: '/tmp/test',
+      isPidAlive: deadPid,
+    })
     expect(exitCode).toBe(1)
     expect(result.ok).toBe(false)
     expect(result.state).toBe('stale')
@@ -65,6 +75,21 @@ describe('runServerStatus', () => {
     expect(exitCode).toBe(1)
     expect(result.ok).toBe(false)
     expect(result.state).toBe('stale')
+    expect(result.recordFresh).toBe(false)
+  })
+
+  it('legacy record without instanceId + alive pid → ok:false, state:unverifiable, exit 1', async () => {
+    const legacyRecord: ServerModeRecord = { ...VALID_RECORD, instanceId: undefined }
+    mockRead.mockReturnValueOnce({ kind: 'ok', record: legacyRecord })
+    // No verifyIdentity override: exercises the default, which must refuse
+    // to confirm identity when instanceId is absent.
+    const { result, exitCode } = await runServerStatus({
+      dataDir: '/tmp/test',
+      isPidAlive: alivePid,
+    })
+    expect(exitCode).toBe(1)
+    expect(result.ok).toBe(false)
+    expect(result.state).toBe('unverifiable')
     expect(result.recordFresh).toBe(false)
   })
 
@@ -115,7 +140,10 @@ describe('runServerStatus', () => {
 
   it('non-leak: malformed result does not echo dataDir or record content', async () => {
     mockRead.mockReturnValueOnce({ kind: 'malformed' })
-    const { result } = await runServerStatus({ dataDir: '/secret/path/whiteboard', isPidAlive: deadPid })
+    const { result } = await runServerStatus({
+      dataDir: '/secret/path/whiteboard',
+      isPidAlive: deadPid,
+    })
     const asText = JSON.stringify(result)
     expect(asText).not.toContain('/secret/path')
     expect(asText).not.toContain('whiteboard')

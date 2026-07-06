@@ -19,6 +19,7 @@ const VALID_RECORD: ServerModeRecord = {
   publicBaseUrl: 'https://whiteboard.example.com',
   authStrategy: 'oauth-jwt',
   startedAt: '2026-05-19T00:00:00.000Z',
+  instanceId: 'valid-instance-id',
 }
 
 const noOp = async () => {}
@@ -115,6 +116,25 @@ describe('runServerStop', () => {
     expect(killFn).not.toHaveBeenCalled()
   })
 
+  it('legacy record without instanceId → identity unverifiable, not-running, no kill', async () => {
+    const legacyRecord: ServerModeRecord = { ...VALID_RECORD, instanceId: undefined }
+    mockRead.mockReturnValueOnce({ kind: 'ok', record: legacyRecord })
+    const killFn = vi.fn()
+    // No verifyIdentity override: exercises the default, which must refuse
+    // to confirm identity when instanceId is absent.
+    const { result, exitCode } = await runServerStop({
+      dataDir: '/tmp/test',
+      isPidAlive: alivePid,
+      killFn,
+      removeRecord: noOp,
+    })
+    expect(exitCode).toBe(0)
+    expect(result.ok).toBe(true)
+    expect(result.action).toBe('not-running')
+    expect(result.reason).toBe('server-instance-unverifiable')
+    expect(killFn).not.toHaveBeenCalled()
+  })
+
   it('SIGTERM timeout → identity still matches → SIGKILL sent, action:stopped with timeout reason', async () => {
     mockRead.mockReturnValueOnce({ kind: 'ok', record: VALID_RECORD })
     const killFn = vi.fn()
@@ -140,9 +160,7 @@ describe('runServerStop', () => {
     mockRead.mockReturnValueOnce({ kind: 'ok', record: VALID_RECORD })
     const killFn = vi.fn()
     // First identity call (before SIGTERM) passes; subsequent call (before SIGKILL) fails.
-    const verifyIdentity = vi.fn()
-      .mockResolvedValueOnce(true)
-      .mockResolvedValue(false)
+    const verifyIdentity = vi.fn().mockResolvedValueOnce(true).mockResolvedValue(false)
     const { result, exitCode } = await runServerStop({
       dataDir: '/tmp/test',
       isPidAlive: alivePid, // PID still in OS (reused by other process)

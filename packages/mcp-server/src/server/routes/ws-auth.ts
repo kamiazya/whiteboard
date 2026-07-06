@@ -3,6 +3,7 @@ import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '../../shared/ws-protocol.js'
+import { isLoopbackHostname, normalizeHostHeader } from '../security/cors-loopback.js'
 
 function parseProtocolHeader(header: string | string[] | undefined): string[] {
   if (Array.isArray(header)) {
@@ -13,19 +14,6 @@ function parseProtocolHeader(header: string | string[] | undefined): string[] {
     .split(',')
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-}
-
-function normalizeHostHeader(hostHeader: string | undefined): string | null {
-  if (!hostHeader) return null
-  try {
-    return new URL(`http://${hostHeader}`).hostname
-  } catch {
-    return null
-  }
 }
 
 function isAllowedBrowserOrigin(
@@ -75,10 +63,7 @@ export function authorizeWsUpgrade(
   const offeredToken = protocols.find((protocol) =>
     protocol.startsWith(DAEMON_TOKEN_WS_PROTOCOL_PREFIX),
   )
-  if (
-    !offeredBaseProtocol ||
-    offeredToken !== `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`
-  ) {
+  if (!offeredBaseProtocol || offeredToken !== `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`) {
     return { accept: false, statusCode: 401 }
   }
 

@@ -14,7 +14,7 @@ import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 
 export const SERVER_STATUS_SCHEMA_VERSION = 1 as const
 
-export type ServerStatusState = 'running' | 'missing' | 'stale' | 'malformed'
+export type ServerStatusState = 'running' | 'missing' | 'stale' | 'malformed' | 'unverifiable'
 
 export interface ServerStatusRunningResult {
   schemaVersion: typeof SERVER_STATUS_SCHEMA_VERSION
@@ -69,14 +69,18 @@ function resolveConnectHost(bindHost: string): string {
 }
 
 async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
+  // A record with no instanceId predates this check (older daemon build) and
+  // cannot be verified — the caller reports 'unverifiable', never a silent
+  // 'stale'/not-running or a false 'running'.
+  if (!record.instanceId) return false
   const host = resolveConnectHost(record.host)
   try {
     const res = await fetch(`http://${host}:${record.port}/api/runtime/ping`, {
       signal: AbortSignal.timeout(2000),
     })
     if (!res.ok) return false
-    const body = (await res.json()) as { pid?: unknown }
-    return typeof body?.pid === 'number' && body.pid === record.pid
+    const body = (await res.json()) as { instanceId?: unknown }
+    return typeof body?.instanceId === 'string' && body.instanceId === record.instanceId
   } catch {
     return false
   }
@@ -134,7 +138,9 @@ export async function runServerStatus(
       result: {
         schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
         ok: false,
-        state: 'stale',
+        // A record without instanceId (legacy daemon build) can never be
+        // confirmed — report 'unverifiable' rather than a false 'stale'.
+        state: record.instanceId ? 'stale' : 'unverifiable',
         recordFresh: false,
       },
       exitCode: 1,

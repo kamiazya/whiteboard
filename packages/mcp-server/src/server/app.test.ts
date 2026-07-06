@@ -991,6 +991,23 @@ describe('createApp daemon mutation auth', () => {
       expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
     })
 
+    it('rejects a GET with a spoofed non-loopback Host with 403 (DNS-rebinding guard)', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Host: 'evil.example' },
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('rejects an OPTIONS preflight with a spoofed non-loopback Host with 403 before any CORS short-circuit', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/workspaces/session1/canvases', {
+        method: 'OPTIONS',
+        headers: { Host: 'evil.example', Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(403)
+    })
+
     it('cross-origin loopback POST to a mutation route without Authorization returns 401 (auth ordering)', async () => {
       const app = createApp(createRuntimeOptions('secret'))
       const res = await app.request('/api/workspaces/session1/canvases', {
@@ -1057,7 +1074,16 @@ describe('createApp daemon mutation auth', () => {
       expect(() => daemonPingResponseSchema.parse(body)).not.toThrow()
       const parsed = daemonPingResponseSchema.parse(body)
       expect(parsed.ok).toBe(true)
-      expect(typeof parsed.pid).toBe('number')
+      expect(typeof parsed.instanceId).toBe('string')
+    })
+
+    it('ping response has no pid field and two apps get different instanceIds', async () => {
+      const appA = createApp(createRuntimeOptions('secret'))
+      const appB = createApp(createRuntimeOptions('secret'))
+      const bodyA = await (await appA.request('/api/runtime/ping')).json()
+      const bodyB = await (await appB.request('/api/runtime/ping')).json()
+      expect(bodyA.pid).toBeUndefined()
+      expect(bodyA.instanceId).not.toBe(bodyB.instanceId)
     })
   })
 })

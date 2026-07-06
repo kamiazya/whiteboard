@@ -24,6 +24,24 @@ export function normalizeOriginHostname(originHeader: string | undefined): strin
   }
 }
 
+// Canonical Host-header normalizer shared by ws-auth, mcp-http, and the
+// /api/* host guard so the loopback definition cannot drift between them.
+export function normalizeHostHeader(hostHeader: string | undefined): string | null {
+  if (!hostHeader) return null
+  try {
+    const hostname = new URL(`http://${hostHeader}`).hostname
+    // URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets
+    // so isLoopbackHostname can match against the bare address "::1".
+    // See WHATWG URL spec §4.1 (host serializing).
+    if (hostname.startsWith('[') && hostname.endsWith(']')) {
+      return hostname.slice(1, -1)
+    }
+    return hostname
+  } catch {
+    return null
+  }
+}
+
 export function appendVary(value: string | null, token: string): string {
   if (!value || value.length === 0) return token
   const parts = value
@@ -63,10 +81,7 @@ export function createApiLoopbackCorsMiddleware(): MiddlewareHandler {
     if (isLoopback && origin) {
       c.res.headers.set('Access-Control-Allow-Origin', origin)
       c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set(
-        'Access-Control-Allow-Methods',
-        'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      )
+      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
       c.res.headers.set('Access-Control-Max-Age', '86400')
       c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
     }
@@ -83,10 +98,7 @@ export function createApiLoopbackCorsMiddleware(): MiddlewareHandler {
     if (isLoopback && origin) {
       c.res.headers.set('Access-Control-Allow-Origin', origin)
       c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set(
-        'Access-Control-Allow-Methods',
-        'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      )
+      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
       c.res.headers.set('Access-Control-Max-Age', '86400')
       c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
     }

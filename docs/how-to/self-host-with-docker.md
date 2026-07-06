@@ -88,7 +88,10 @@ volume has the correct ownership if you pre-populate it.
 
 The image configures a Docker healthcheck that polls
 `/api/runtime/ping` every 30 s. This endpoint is public (no auth required)
-and returns `{"ok":true,"pid":<number>}`. It does not include any
+and returns `{"ok":true,"instanceId":"<uuid>"}`. `instanceId` is a random
+identifier generated fresh on every process start (not the OS pid — an OS
+pid can be reused by an unrelated process, which would let a stale
+record misidentify it as the daemon). It does not include any
 configuration, credentials, or filesystem paths.
 
 `whiteboard server doctor --json` is intentionally **not** used as the default
