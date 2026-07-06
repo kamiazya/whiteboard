@@ -67,6 +67,15 @@ describe('readPersistedTheme', () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, '')
     expect(readPersistedTheme()).toBe('system')
   })
+
+  it('falls back to "system" instead of throwing when storage access is blocked', () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+    expect(() => readPersistedTheme()).not.toThrow()
+    expect(readPersistedTheme()).toBe('system')
+    getItemSpy.mockRestore()
+  })
 })
 
 describe('resolveTheme', () => {
@@ -207,5 +216,32 @@ describe('useThemeMode', () => {
     // OS flips to dark, but we are no longer in system mode — no change expected.
     act(() => mq.setSystem('dark'))
     expect(api!.resolvedTheme).toBe('light')
+  })
+
+  it('does not crash when localStorage access throws (privacy mode / sandboxed iframe)', () => {
+    const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+
+    let api: ReturnType<typeof useThemeMode> | null = null
+    expect(() =>
+      render(
+        <Probe
+          onState={(s) => {
+            api = s
+          }}
+        />,
+      ),
+    ).not.toThrow()
+    expect(api!.theme).toBe('system')
+
+    expect(() => act(() => api!.setTheme('dark'))).not.toThrow()
+    expect(api!.resolvedTheme).toBe('dark')
+
+    getItemSpy.mockRestore()
+    setItemSpy.mockRestore()
   })
 })

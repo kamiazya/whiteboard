@@ -12,12 +12,33 @@ export const THEME_STORAGE_KEY = 'whiteboard:theme'
 
 const SYSTEM_QUERY = '(prefers-color-scheme: dark)'
 
+// localStorage access itself can throw (SecurityError when the browser blocks
+// storage via privacy settings or embedded/sandboxed contexts). Theme
+// persistence is a nice-to-have, not a correctness requirement, so a throwing
+// storage degrades to an in-memory-only "system" default rather than crashing
+// render.
+function safeGetItem(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function safeSetItem(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value)
+  } catch {
+    // Contract: never throws; an unwritable storage just loses persistence.
+  }
+}
+
 // Read the persisted preference without triggering a render. Safe to call from
 // module init (main.tsx) so we set <html class="dark"> before React mounts and
 // avoid a flash on cold load.
 export function readPersistedTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'system'
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const stored = safeGetItem(THEME_STORAGE_KEY)
   if (stored === 'dark' || stored === 'light' || stored === 'system') return stored
   return 'system'
 }
@@ -71,7 +92,7 @@ export function useThemeMode(): {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(THEME_STORAGE_KEY, theme)
+      safeSetItem(THEME_STORAGE_KEY, theme)
     }
   }, [theme])
 
