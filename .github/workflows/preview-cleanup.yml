@@ -1,0 +1,59 @@
+# Releases a PR's preview-web deployment records when the PR closes (merged or
+# not), so the Environments UI doesn't accumulate stale "Active" previews.
+# Matches records by their environment_url (the branch-alias URL that
+# preview-pr-deploy.yml attaches), marks them inactive, then deletes them.
+#
+# Deliberately has NO environment binding and NO Cloudflare secrets: it only
+# touches GitHub deployment records via the workflow token, so the cleanup run
+# itself never mints a new deployment record. The Cloudflare-side preview
+# deployments are inert static files that the next push to the same branch
+# alias overwrites; they are left to Cloudflare's own retention.
+name: Preview Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  deployments: write
+
+concurrency:
+  group: preview-cleanup-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  release-deployment:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deactivate and delete this PR's preview deployment records
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          # Untrusted branch name: read via env and sanitized to [a-z0-9-] with
+          # the same rules the deploy path uses, so the alias hostnames match.
+          HEAD_REF: ${{ github.head_ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          label=$(printf '%s' "$HEAD_REF" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-28)
+          [ -z "$label" ] && label="pr-$PR_NUMBER"
+          alias_prefix="https://$label.kamiazya-whiteboard.pages.dev"
+          echo "releasing preview deployments with environment_url under: $alias_prefix"
+
+          ids=$(gh api "repos/$REPO/deployments?environment=preview-web&per_page=100" --jq '.[].id')
+          released=0
+          for id in $ids; do
+            url=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=1" --jq '.[0].environment_url // empty')
+            case "$url" in
+              "$alias_prefix"|"$alias_prefix"/*)
+                # Deployments must be inactive before they can be deleted.
+                gh api --method POST "repos/$REPO/deployments/$id/statuses" \
+                  -f state=inactive >/dev/null
+                gh api --method DELETE "repos/$REPO/deployments/$id" >/dev/null
+                released=$((released+1))
+                echo "released deployment $id ($url)"
+                ;;
+            esac
+          done
+          echo "released $released deployment record(s)"
