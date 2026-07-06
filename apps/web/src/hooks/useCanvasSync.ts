@@ -1,4 +1,4 @@
-import { CaptureUpdateAction, restoreElements } from '@excalidraw/excalidraw'
+import { CaptureUpdateAction, exportToBlob, restoreElements } from '@excalidraw/excalidraw'
 import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types'
 import type {
   AppState,
@@ -7,7 +7,11 @@ import type {
   DataURL,
   ExcalidrawImperativeAPI,
 } from '@excalidraw/excalidraw/types'
-import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type {
+  CanvasBackend,
+  HeadChangedPayload,
+  VersionCreatedPayload,
+} from '@kamiazya/whiteboard-mcp/browser-contract'
 import {
   resolveParentedElements,
   validateLoroRawElements,
@@ -15,13 +19,33 @@ import {
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type ExportRequestHandlerDeps,
+  flushPendingExportRequests,
+  handleIncomingExportRequest,
+} from './canvas-sync-export.js'
 
 export type SyncStatus = 'idle' | 'connected' | 'error'
+
+// Daemon-only callback seam. Every member is stored in a ref (see optionsRef
+// below) so passing a fresh inline object on every render never forces a
+// backend reconnect. A browser-local backend never fires any of these
+// events, so none of them are called and the hook behaves exactly as before
+// this seam was added.
+export interface UseCanvasSyncOptions {
+  onVersionCreated?: (payload: VersionCreatedPayload) => void
+  onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
+  onFileUploadFailed?: () => void
+  onFileUploadSucceeded?: () => void
+}
 
 export interface UseCanvasSyncResult {
   syncStatus: SyncStatus
   setExcalidrawAPI: (api: ExcalidrawImperativeAPI) => void
   onChange: (elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => void
+  restoreInProgress: boolean
+  restoreLabel: string | null
+  clearLocalUndo: () => void
 }
 
 // Small debounce helper with no external dependency.
@@ -68,7 +92,11 @@ function blobToBase64(blob: Blob): Promise<string> {
 }
 
 /**
- * useCanvasSync — browser-local port of useWhiteboardSync.
+ * useCanvasSync — canonical sync hook for both the browser-local backend and
+ * (once slice 11 wires it up) a daemon-backed connection. Drives a LoroDoc
+ * from onSnapshot/onRemoteUpdate, hydrates Excalidraw via
+ * applyLoroToExcalidraw, and writes scene changes back via a debounced
+ * onSceneChange → backend.pushLocalUpdate.
  *
  * Accepts a CanvasBackend (e.g. BrowserLocalBackend) or null when no backend
  * is available yet (e.g. the initial snapshot is still loading). A null
@@ -76,16 +104,15 @@ function blobToBase64(blob: Blob): Promise<string> {
  * When the backend identity changes — including null-to-backend and
  * backend-to-backend — the previous connection is fully torn down
  * (disconnect + per-connection state reset) before the new one connects.
- * This is the mechanism a future browser-local → daemon in-place migration
- * rides on: swapping the CanvasBackend prop is the whole contract.
+ * This is the mechanism a browser-local → daemon in-place migration rides
+ * on: swapping the CanvasBackend prop is the whole contract.
  *
- * Drives a LoroDoc from onSnapshot/onRemoteUpdate, hydrates Excalidraw via
- * applyLoroToExcalidraw, and writes scene changes back via a debounced
- * onSceneChange → backend.pushLocalUpdate.
- *
- * Daemon-specific callbacks (onVersionCreated, onRestoreStarted, onRestoreComplete,
- * onHeadChanged, onViewportRequest, onExportRequest) are wired as no-ops to satisfy
- * the CanvasBackendHandlers interface without importing server-only helpers.
+ * `options` wires the daemon-only capability receptors (onVersionCreated,
+ * onHeadChanged, onFileUploadFailed/Succeeded) plus the restore-overlay
+ * state and onViewportRequest/onExportRequest/onAuthError handling that a
+ * daemon backend can drive. A browser-local backend never fires any of
+ * these events, so passing no `options` behaves exactly as before this seam
+ * was added.
  *
  * applyGenerationRef is never reset to 0 — only ever incremented — to avoid
  * stale-async collisions when the hook is reused across canvas remounts.
@@ -93,9 +120,13 @@ function blobToBase64(blob: Blob): Promise<string> {
  * connectionGenerationRef + the per-effect `disposed` flag guard every
  * callback bound to a specific connection: once a connection is torn down
  * (disconnected, or superseded by a backend switch), its callbacks become
- * inert instead of routing pushes/errors to whatever backend is live now.
+ * inert instead of routing pushes/errors/daemon events to whatever backend
+ * is live now.
  */
-export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResult {
+export function useCanvasSync(
+  backend: CanvasBackend | null,
+  options?: UseCanvasSyncOptions,
+): UseCanvasSyncResult {
   const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null)
   const docRef = useRef<LoroDoc | null>(null)
   const undoManagerRef = useRef<UndoManager | null>(null)
@@ -103,6 +134,13 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
   const uploadedFileIdsRef = useRef<Set<string>>(new Set())
   const backendRef = useRef<CanvasBackend | null>(backend)
   backendRef.current = backend
+
+  // Never read inside effect dependency arrays: holds the latest options so a
+  // fresh inline object passed on every render never forces a reconnect.
+  const optionsRef = useRef<UseCanvasSyncOptions>(options ?? {})
+  optionsRef.current = options ?? {}
+
+  const pendingExportRequestsRef = useRef<ExportRequestHandlerDeps['pending']>([])
 
   // Monotonic — never reset to 0 to prevent stale async work from a prior mount
   // landing in the current doc after a fast remount.
@@ -114,6 +152,22 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [apiReady, setApiReady] = useState(false)
+  const [restoreInProgress, setRestoreInProgress] = useState(false)
+  const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
+
+  // Bridges flushPendingExportRequests'/handleIncomingExportRequest's
+  // string-message `send` contract (ported verbatim from the frozen
+  // useWhiteboardSync.helpers.ts) to CanvasBackend's typed
+  // sendExportResponse(requestId, data) method.
+  const sendExportResponseMessage = useCallback((message: string): void => {
+    let parsed: { requestId: string; data: string }
+    try {
+      parsed = JSON.parse(message) as { requestId: string; data: string }
+    } catch {
+      return
+    }
+    backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
+  }, [])
 
   async function applyLoroToExcalidraw(doc: LoroDoc, bk: CanvasBackend) {
     const generation = ++applyGenerationRef.current
@@ -188,54 +242,71 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
       ) => {
         if (connectionGenerationRef.current !== connGen) return
 
+        // Writes the elements into the Loro doc and commits, so
+        // subscribeLocalUpdates fires and routes bytes to bk.pushLocalUpdate.
+        function commitElements(): void {
+          const list = doc.getMovableList('elements')
+          const current = list.toJSON() as ExcalidrawElement[]
+          const currentIds = new Set(current.map((e: ExcalidrawElement) => e.id))
+
+          // Append newly added elements.
+          for (const el of elements) {
+            if (!currentIds.has(el.id)) {
+              const map = list.insertContainer(list.length, new LoroMap())
+              for (const [k, v] of Object.entries(el)) {
+                if (v !== undefined) map.set(k, v as Value)
+              }
+            }
+          }
+
+          // Update or tombstone existing elements.
+          const nextById = new Map(elements.map((e) => [e.id, e]))
+          for (let i = 0; i < list.length; i++) {
+            const item = list.get(i)
+            if (!(item instanceof LoroMap)) continue
+            const id = item.get('id') as string
+            const next = nextById.get(id)
+            if (!next) {
+              item.set('isDeleted', true)
+            } else {
+              for (const [k, v] of Object.entries(next)) {
+                if (v !== undefined) item.set(k, v as Value)
+              }
+            }
+          }
+
+          doc.commit()
+        }
+
         const newEntries = Object.entries(files).filter(
           ([fileId, fd]) => fd && !uploadedFileIdsRef.current.has(fileId),
         ) as [string, BinaryFileData][]
 
-        if (newEntries.length > 0) {
-          // A file-upload failure is non-fatal (elements persist via the Loro
-          // commit below on a separate path); catch so it never surfaces as an
-          // unhandled promise rejection.
-          bk.putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId)).catch(
-            (err: unknown) => {
-              console.error('putFile failed', err)
-            },
-          )
+        if (newEntries.length === 0) {
+          commitElements()
+          return
         }
 
-        // Write elements into the Loro MovableList using field-by-field set operations,
-        // then commit so subscribeLocalUpdates fires and routes bytes to backend.pushLocalUpdate.
-        const list = doc.getMovableList('elements')
-        const current = list.toJSON() as ExcalidrawElement[]
-        const currentIds = new Set(current.map((e: ExcalidrawElement) => e.id))
-
-        // Append newly added elements.
-        for (const el of elements) {
-          if (!currentIds.has(el.id)) {
-            const map = list.insertContainer(list.length, new LoroMap())
-            for (const [k, v] of Object.entries(el)) {
-              if (v !== undefined) map.set(k, v as Value)
-            }
-          }
-        }
-
-        // Update or tombstone existing elements.
-        const nextById = new Map(elements.map((e) => [e.id, e]))
-        for (let i = 0; i < list.length; i++) {
-          const item = list.get(i)
-          if (!(item instanceof LoroMap)) continue
-          const id = item.get('id') as string
-          const next = nextById.get(id)
-          if (!next) {
-            item.set('isDeleted', true)
-          } else {
-            for (const [k, v] of Object.entries(next)) {
-              if (v !== undefined) item.set(k, v as Value)
-            }
-          }
-        }
-
-        doc.commit()
+        // Upload completes before the Loro commit (matching the
+        // commitAfterUpload ordering contract), but a failed upload is still
+        // non-fatal: the elements commit still happens so nothing is lost
+        // locally. Generation-guarded so a backend switch mid-upload drops
+        // the callback and skips the commit for the superseded connection.
+        void bk
+          .putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
+          .then(() => {
+            if (connectionGenerationRef.current !== connGen) return
+            optionsRef.current.onFileUploadSucceeded?.()
+          })
+          .catch((err: unknown) => {
+            console.error('putFile failed', err)
+            if (connectionGenerationRef.current !== connGen) return
+            optionsRef.current.onFileUploadFailed?.()
+          })
+          .finally(() => {
+            if (connectionGenerationRef.current !== connGen) return
+            commitElements()
+          })
       },
       300,
     )
@@ -254,6 +325,7 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
     undoManagerRef.current = null
     filesCacheRef.current = {}
     uploadedFileIdsRef.current = new Set()
+    pendingExportRequestsRef.current = []
     applyGenerationRef.current += 1
     onSceneChange.cancel()
 
@@ -272,6 +344,7 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
       onConnected() {
         if (isStale()) return
         setSyncStatus('connected')
+        bk.sendClientReady()
       },
 
       onSnapshot(bytes) {
@@ -318,13 +391,87 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
         docRef.current?.import(bytes)
       },
 
-      // Daemon-specific callbacks — no-ops in browser-local mode.
-      onVersionCreated: () => {},
-      onRestoreStarted: () => {},
-      onRestoreComplete: () => {},
-      onHeadChanged: () => {},
-      onViewportRequest: () => {},
-      onExportRequest: async () => {},
+      onVersionCreated(payload) {
+        if (isStale()) return
+        optionsRef.current.onVersionCreated?.(payload)
+      },
+
+      onRestoreStarted(payload) {
+        if (isStale()) return
+        setRestoreInProgress(true)
+        setRestoreLabel(payload.label ?? null)
+      },
+
+      onRestoreComplete() {
+        if (isStale()) return
+        setRestoreInProgress(false)
+        setRestoreLabel(null)
+        undoManagerRef.current?.clear()
+      },
+
+      onHeadChanged(payload) {
+        if (isStale()) return
+        optionsRef.current.onHeadChanged?.(payload)
+      },
+
+      onViewportRequest(payload) {
+        if (isStale()) return
+        const api = excalidrawAPIRef.current
+        if (!api) return
+
+        const mode = payload.mode ?? 'fit'
+        if (mode === 'fit') {
+          const all = api.getSceneElements()
+          // If elementIds are provided, fit only those. Otherwise use the full scene.
+          const target =
+            payload.elementIds !== undefined
+              ? all.filter((el) => payload.elementIds!.includes(el.id))
+              : all
+          // fitToContent also adjusts zoom.
+          // Skip empty targets because some implementations mis-handle zoom for empty arrays.
+          if (target.length > 0) {
+            api.scrollToContent(target, {
+              fitToContent: true,
+              animate: payload.animate ?? true,
+            })
+          }
+        } else if (mode === 'move') {
+          const appState = api.getAppState()
+          // AppState.zoom.value is a branded NormalizedZoomValue and AppState itself is readonly,
+          // so rebuild a mutable object before writing plain numeric values into it.
+          type MutableAppState = {
+            -readonly [K in keyof typeof appState]: (typeof appState)[K]
+          }
+          const merged: MutableAppState = { ...appState }
+          if (payload.scrollX !== undefined) merged.scrollX = payload.scrollX
+          if (payload.scrollY !== undefined) merged.scrollY = payload.scrollY
+          if (payload.zoom !== undefined) {
+            merged.zoom = {
+              value: payload.zoom as unknown as typeof appState.zoom.value,
+            }
+          }
+          api.updateScene({
+            appState: merged,
+            captureUpdate: CaptureUpdateAction.NEVER,
+          })
+        }
+      },
+
+      async onExportRequest(payload) {
+        if (isStale()) return
+        await handleIncomingExportRequest(payload, {
+          api: excalidrawAPIRef.current,
+          pending: pendingExportRequestsRef.current,
+          send: sendExportResponseMessage,
+          exportToBlobFn: exportToBlob,
+          blobToBase64Fn: blobToBase64,
+        })
+      },
+
+      onAuthError() {
+        if (isStale()) return
+        setSyncStatus('error')
+      },
 
       onError: () => {
         if (isStale()) return
@@ -353,6 +500,24 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
     void applyLoroToExcalidraw(docRef.current, bk)
   }, [apiReady]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Tell the backend the client is ready (again) once the Excalidraw API
+  // mounts, and flush any export request that arrived before it did. Kept
+  // independent of the doc-reapply effect above so it still fires when the
+  // API becomes ready before the first snapshot lands.
+  useEffect(() => {
+    if (!apiReady) return
+    backendRef.current?.sendClientReady()
+    void flushPendingExportRequests({
+      api: excalidrawAPIRef.current,
+      pending: pendingExportRequestsRef.current,
+      send: sendExportResponseMessage,
+      exportToBlobFn: exportToBlob,
+      blobToBase64Fn: blobToBase64,
+    }).catch((err: unknown) => {
+      console.error('flushPendingExportRequests failed', err)
+    })
+  }, [apiReady, sendExportResponseMessage])
+
   const setExcalidrawAPI = useCallback((api: ExcalidrawImperativeAPI) => {
     excalidrawAPIRef.current = api
     setApiReady(true)
@@ -379,6 +544,10 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
     void applyLoroToExcalidraw(doc, bk)
     return true
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const clearLocalUndo = useCallback(() => {
+    undoManagerRef.current?.clear()
+  }, [])
 
   // Keyboard and pointer intercept for undo/redo.
   useEffect(() => {
@@ -445,5 +614,12 @@ export function useCanvasSync(backend: CanvasBackend | null): UseCanvasSyncResul
     [onSceneChange],
   )
 
-  return { syncStatus, setExcalidrawAPI, onChange }
+  return {
+    syncStatus,
+    setExcalidrawAPI,
+    onChange,
+    restoreInProgress,
+    restoreLabel,
+    clearLocalUndo,
+  }
 }
