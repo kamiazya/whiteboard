@@ -50,10 +50,11 @@ abstraction.
    capability-gated JSX inside `editing` — chrome, not a distinct page state.
 4. **Introduce React Router in `apps/web`.** `/` renders the canvas list
    (browser-local populates from IndexedDB; daemon mode uses the existing
-   grid/search/pin pattern). `/canvas/:id/*slug` is the shared editor URL for
-   both modes (`:id` is the IndexedDB id with an empty slug in browser-local,
-   or `workspaceId` + slug in daemon mode), giving both modes an equivalent
-   bookmarkable, deep-linkable URL.
+   grid/search/pin pattern). `/canvas/:id/*` is the shared editor URL for
+   both modes — the trailing splat carries the slug, read via `params['*']`
+   per React Router v6 conventions (`:id` is the IndexedDB id with an empty
+   splat in browser-local, or `workspaceId` + slug in daemon mode) — giving
+   both modes an equivalent bookmarkable, deep-linkable URL.
 5. **Mode is a read-only status decided at page load.** There is no
    in-session runtime toggle between browser-local and daemon mode.
 
