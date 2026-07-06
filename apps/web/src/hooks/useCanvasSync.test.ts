@@ -872,9 +872,62 @@ describe('useCanvasSync', () => {
 
       expect(api.updateScene).toHaveBeenCalledWith(
         expect.objectContaining({
-          appState: expect.objectContaining({ scrollX: 10, scrollY: 20 }),
+          appState: expect.objectContaining({
+            scrollX: 10,
+            scrollY: 20,
+            zoom: { value: 2 },
+          }),
         }),
       )
+    })
+
+    it('mode "fit" with elementIds omitted fits the entire scene', () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const elA = { id: 'a' }
+      const elB = { id: 'b' }
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [elA, elB]
+      const { result } = renderHook(() => useCanvasSync(backend))
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const scrollToContent = vi.fn()
+      ;(api as unknown as { scrollToContent: typeof scrollToContent }).scrollToContent =
+        scrollToContent
+
+      act(() => {
+        backend._ctrl.handlers!.onViewportRequest({ mode: 'fit' } as never)
+      })
+
+      expect(scrollToContent).toHaveBeenCalledWith(
+        [elA, elB],
+        expect.objectContaining({ fitToContent: true }),
+      )
+    })
+
+    it('mode "fit" skips scrollToContent when the filtered target list is empty', () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const elA = { id: 'a' }
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [elA]
+      const { result } = renderHook(() => useCanvasSync(backend))
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const scrollToContent = vi.fn()
+      ;(api as unknown as { scrollToContent: typeof scrollToContent }).scrollToContent =
+        scrollToContent
+
+      act(() => {
+        backend._ctrl.handlers!.onViewportRequest({
+          mode: 'fit',
+          elementIds: ['nonexistent'],
+        } as never)
+      })
+
+      expect(scrollToContent).not.toHaveBeenCalled()
     })
   })
 
