@@ -565,13 +565,15 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
 })
 
 // ── Cloudflare deploy secrets drift guard ─────────────────────────────────────
-// Production Cloudflare Pages deploy secrets are allowed only in release.yml
-// (the deploy-web job). All other workflow files and apps/web config files must
-// not embed these secrets — add to the allowlist below if a second deploy path
-// is introduced intentionally.
+// Cloudflare Pages deploy secrets are allowed only in the two intentional deploy
+// paths: release.yml (tag-gated production deploy, production-web env) and
+// deploy-preview.yml (latest + per-PR previews, non-protected preview-web env).
+// Every other workflow file and apps/web config file must not embed these
+// secrets — add to the allowlist below only if a new deploy path is introduced
+// intentionally and reviewed.
 
 const CF_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] as const
-const CF_SECRET_WORKFLOW_ALLOWLIST = new Set(['release.yml'])
+const CF_SECRET_WORKFLOW_ALLOWLIST = new Set(['release.yml', 'deploy-preview.yml'])
 
 describe('apps/web Cloudflare deploy secrets guard', () => {
   const configFiles = [
