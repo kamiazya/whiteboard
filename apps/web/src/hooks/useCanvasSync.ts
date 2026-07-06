@@ -169,6 +169,19 @@ export function useCanvasSync(
     backendRef.current?.sendExportResponse(parsed.requestId, parsed.data)
   }, [])
 
+  // Built fresh at each call site so it reads the live api/pending refs;
+  // shared by onExportRequest and the apiReady flush effect.
+  const buildExportDeps = useCallback(
+    (): ExportRequestHandlerDeps => ({
+      api: excalidrawAPIRef.current,
+      pending: pendingExportRequestsRef.current,
+      send: sendExportResponseMessage,
+      exportToBlobFn: exportToBlob,
+      blobToBase64Fn: blobToBase64,
+    }),
+    [sendExportResponseMessage],
+  )
+
   async function applyLoroToExcalidraw(doc: LoroDoc, bk: CanvasBackend) {
     const generation = ++applyGenerationRef.current
 
@@ -459,13 +472,7 @@ export function useCanvasSync(
 
       async onExportRequest(payload) {
         if (isStale()) return
-        await handleIncomingExportRequest(payload, {
-          api: excalidrawAPIRef.current,
-          pending: pendingExportRequestsRef.current,
-          send: sendExportResponseMessage,
-          exportToBlobFn: exportToBlob,
-          blobToBase64Fn: blobToBase64,
-        })
+        await handleIncomingExportRequest(payload, buildExportDeps())
       },
 
       onAuthError() {
@@ -507,16 +514,10 @@ export function useCanvasSync(
   useEffect(() => {
     if (!apiReady) return
     backendRef.current?.sendClientReady()
-    void flushPendingExportRequests({
-      api: excalidrawAPIRef.current,
-      pending: pendingExportRequestsRef.current,
-      send: sendExportResponseMessage,
-      exportToBlobFn: exportToBlob,
-      blobToBase64Fn: blobToBase64,
-    }).catch((err: unknown) => {
+    void flushPendingExportRequests(buildExportDeps()).catch((err: unknown) => {
       console.error('flushPendingExportRequests failed', err)
     })
-  }, [apiReady, sendExportResponseMessage])
+  }, [apiReady, buildExportDeps])
 
   const setExcalidrawAPI = useCallback((api: ExcalidrawImperativeAPI) => {
     excalidrawAPIRef.current = api
