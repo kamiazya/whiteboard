@@ -1,5 +1,5 @@
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CapabilityTeaser } from './CapabilityTeaser.js'
 
 afterEach(cleanup)
@@ -28,6 +28,19 @@ describe('CapabilityTeaser', () => {
     control.click()
     // No throw, no navigation side effect — the control simply does nothing.
     expect(control.getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('does not bubble its click to a clickable ancestor while disabled', () => {
+    // aria-disabled still dispatches/bubbles click; the control must stop it so
+    // it stays inert even inside a clickable container.
+    const onAncestorClick = vi.fn()
+    render(
+      <div onClick={onAncestorClick}>
+        <CapabilityTeaser label="Merge" enabled={false} />
+      </div>,
+    )
+    screen.getByRole('button', { name: 'Merge' }).click()
+    expect(onAncestorClick).not.toHaveBeenCalled()
   })
 
   it('mutation-check: drops aria-disabled and the sr-only description once the capability is enabled', () => {

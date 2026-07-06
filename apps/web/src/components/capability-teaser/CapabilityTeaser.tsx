@@ -26,7 +26,11 @@ export function CapabilityTeaser({ label, enabled }: CapabilityTeaserProps) {
       tabIndex={0}
       onClick={(event) => {
         if (!enabled) {
+          // aria-disabled (unlike native `disabled`) still dispatches and bubbles
+          // click events, so stop it here to stay truly inert even inside a
+          // clickable ancestor.
           event.preventDefault()
+          event.stopPropagation()
           return
         }
         // Daemon-mode wiring for this feature ships in a later slice; treat
