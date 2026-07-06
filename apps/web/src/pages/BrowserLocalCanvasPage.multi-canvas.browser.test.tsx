@@ -6,7 +6,7 @@
  * useCanvasSync reconnect-on-backend-identity-change path.
  */
 
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
@@ -189,7 +189,6 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
 
     // Switch back to A via the switcher control.
     const switcherBack = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
-    const { fireEvent } = await import('@testing-library/react')
     await act(async () => {
       fireEvent.change(switcherBack, { target: { value: idA } })
     })

@@ -81,8 +81,13 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
         // rejection; the switcher just keeps showing its last-known list.
         console.error('listCanvases failed', err)
       })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canvasId, currentUpdatedAt])
+  }, [canvasId, currentUpdatedAt, listCanvases])
+
+  // Clear a stale "New canvas" failure once the active canvas changes, so the
+  // error banner doesn't linger after the user has moved on.
+  useEffect(() => {
+    setCreateError(null)
+  }, [canvasId])
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
   // re-connecting on re-renders when id is unchanged.
@@ -190,6 +195,7 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
         <select
           aria-label="Canvases"
           value={pageState.snapshot.id}
+          disabled={isCreatingCanvas}
           onChange={(event) => {
             const id = event.target.value
             if (id !== pageState.snapshot.id) void switchCanvas(id)
