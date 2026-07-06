@@ -13,7 +13,12 @@ import { describe, expect, it } from 'vitest'
 //   1. Relative import specifier extension style (e.g. `./foo.js` vs `./foo`)
 //   2. The `// @vitest-environment jsdom` pragma line (apps/web defaults to
 //      jsdom, so the pragma is redundant there and was dropped)
-//   3. Trailing whitespace / trailing-newline differences
+//   3. Whitespace differences, including line-wrapping, and the trailing
+//      commas the formatter adds/removes as a direct consequence of
+//      wrapping — apps/web and packages/mcp-server run separate formatter
+//      configs (Biome pre-commit hooks reformat on each commit
+//      independently), so wrap width drifts between the two trees without
+//      any logic change
 //
 // Any other divergence is a real drift and must fail.
 
@@ -70,18 +75,31 @@ const pairs: PortPair[] = [
 ]
 
 function normalize(source: string): string {
-  return source
+  let normalized = source
     .split('\n')
     .filter((line) => line.trim() !== '// @vitest-environment jsdom')
-    .map((line) =>
-      line.replace(
-        /from ('|")(\.\.?\/[^'"]+)\.js\1/g,
-        (_match, quote, spec) => `from ${quote}${spec}${quote}`,
-      ),
-    )
-    .map((line) => line.replace(/[ \t]+$/, ''))
     .join('\n')
+    .replace(
+      /from ('|")(\.\.?\/[^'"]+)\.js\1/g,
+      (_match, quote, spec) => `from ${quote}${spec}${quote}`,
+    )
+    .replace(/\s+/g, ' ')
     .trim()
+
+  // Wrapping a call/array/object across multiple lines is a pure formatter
+  // choice: it can add/remove a trailing comma before the closing bracket,
+  // and it always inserts a newline (collapsed to a space above) right
+  // after an opening bracket / before a closing one. Neither is a logic
+  // change, so strip whitespace touching brackets and drop dangling
+  // trailing commas. Repeat until stable — removing one can expose another
+  // (e.g. `a, ], )`).
+  let previous: string
+  do {
+    previous = normalized
+    normalized = normalized.replace(/,\s*([)\]}])/g, '$1').replace(/\s*([()[\]{}])\s*/g, '$1')
+  } while (normalized !== previous)
+
+  return normalized
 }
 
 function unifiedDiff(label: string, expected: string, actual: string): string {
