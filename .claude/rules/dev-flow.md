@@ -52,7 +52,7 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 ## Skills (load for detail)
 
-`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `docs-sync`, `whiteboard-mcp-smoke`, `audit-triage`, `ci-triage`, `dependabot-review`.
+`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `docs-sync`, `whiteboard-mcp-smoke`, `review-gate`, `audit-triage`, `ci-triage`, `dependabot-review`.
 
 ## Gates: local + cloud
 
