@@ -76,7 +76,10 @@ function defaultIsPidAlive(pid: number): boolean {
   }
 }
 
-async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
+// Exported for direct unit testing of the live-ping comparison (see
+// server-stop.test.ts) — the option default is otherwise only ever
+// exercised indirectly through runServerStop with an injected override.
+export async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
   // A record with no instanceId predates this check (older daemon build). It
   // cannot be verified, so treat it the same as a mismatch — the caller maps
   // that to the 'server-instance-unverifiable' reason, never to a kill.

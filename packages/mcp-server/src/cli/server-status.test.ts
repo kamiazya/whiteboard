@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 
 // Mock the record reader so tests don't need real files.
@@ -7,7 +7,11 @@ vi.mock('../server/security/server-mode-record.js', () => ({
 }))
 
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
-import { SERVER_STATUS_SCHEMA_VERSION, runServerStatus } from './server-status.js'
+import {
+  SERVER_STATUS_SCHEMA_VERSION,
+  defaultVerifyIdentity,
+  runServerStatus,
+} from './server-status.js'
 
 const mockRead = vi.mocked(readServerModeRecord)
 
@@ -147,5 +151,42 @@ describe('runServerStatus', () => {
     const asText = JSON.stringify(result)
     expect(asText).not.toContain('/secret/path')
     expect(asText).not.toContain('whiteboard')
+  })
+})
+
+// ─── Direct unit tests for the default identity implementation ──────────────
+// Every scenario above injects a verifyIdentity override except the legacy
+// no-instanceId case, which short-circuits before the fetch. These exercise
+// the real fetchDaemonPing(...) + instanceId comparison so a regression
+// there (e.g. inverted equality) does not go undetected.
+
+describe('defaultVerifyIdentity', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('confirms identity when the ping response instanceId matches the record', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'valid-instance-id' }),
+    }))
+    await expect(defaultVerifyIdentity(VALID_RECORD)).resolves.toBe(true)
+  })
+
+  it('refuses to confirm identity when the ping response instanceId mismatches', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'some-other-instance-id' }),
+    }))
+    await expect(defaultVerifyIdentity(VALID_RECORD)).resolves.toBe(false)
+  })
+
+  it('never confirms identity when the record predates instanceId', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const legacyRecord: ServerModeRecord = { ...VALID_RECORD, instanceId: undefined }
+    await expect(defaultVerifyIdentity(legacyRecord)).resolves.toBe(false)
+    // Short-circuits before making a network call.
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
