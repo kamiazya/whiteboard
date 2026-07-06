@@ -183,6 +183,9 @@ jobs:
       - name: Web app artifact smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:artifact
 
+      - name: Web app bundle-size gate
+        run: pnpm --filter @kamiazya/whiteboard-web smoke:bundle-size
+
       - name: Web app preview-origin behavioral smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
 
