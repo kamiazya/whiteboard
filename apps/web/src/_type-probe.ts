@@ -10,6 +10,8 @@
  * - CanvasBackend, CanvasBackendHandlers, and ws-message payload types
  *   resolve from @kamiazya/whiteboard-mcp/browser-contract and compile
  *   against the z.infer-derived payload types.
+ * - DaemonBackend resolves from the ./daemon-backend subpath and its
+ *   relocated source compiles under this DOM-enabled tsconfig too.
  */
 
 // ── browser-contract types from the package subpath ──────────────────────────
@@ -20,6 +22,9 @@ export type {
   CanvasBackendHandlers,
   VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
+
+// ── daemon-backend from its own subpath ───────────────────────────────────────
+export type { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 
 // ── shadcn ui primitives ──────────────────────────────────────────────────────
 // Re-exporting the value imports both proves they resolve and satisfies

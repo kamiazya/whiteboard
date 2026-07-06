@@ -7,7 +7,7 @@
 //   - apps/web skeleton must exist at the intended deploy-target location
 // No PBT: static file-list / import-list guards are clearer as example tests.
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { builtinModules } from 'node:module'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -88,13 +88,18 @@ function isForbiddenNodeBuiltin(specifier: string): boolean {
 // Any src/shared/* import NOT matching this list is a boundary violation.
 // Add new entries here only after confirming the module contains no Node-only APIs.
 const ALLOWED_SHARED_EXACT = new Set([
+  'api-client.js', // fetch transport wrapper — DOM/global-only, no Node APIs
+  'browser-tracing.js', // optional browser-side OpenTelemetry init — DOM/global-only, no Node APIs
   'canvas-backend-contract.js', // transport/callback seam — types + Zod re-exports only, no Node APIs
+  'daemon-backend.js', // WebSocket + apiFetch transport for the canvas editor, no Node APIs
   'external-url-policy.js', // pure URL validation, no Node APIs
   'loro-raw-element.js', // Zod schema for Loro-stored element shape — zod-only, no Node APIs
   'migration-bundle.js', // MigrationBundle Zod contract — zod-only, no Node APIs
   'resolve-parented-elements.js', // pure data transformation
+  'upload-files.js', // file upload transport, no Node APIs
   'ws-messages.js', // WebSocket protocol types/constants
   'ws-protocol.js', // WebSocket protocol helpers
+  'ws-text-message.js', // WebSocket text-message parsing, no Node APIs
 ])
 
 // test-utils/* is intentionally excluded here — it is handled separately below
@@ -216,6 +221,14 @@ describe('src/shared allowlist', () => {
     ).toBeNull()
     expect(forbiddenResolvedPath(fakeAppFile, '../../shared/ws-messages.js')).toBeNull()
     expect(forbiddenResolvedPath(fakeAppFile, '../../shared/ws-protocol.js')).toBeNull()
+  })
+
+  it('relocated daemon-backend transport modules are allowed', () => {
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/daemon-backend.js')).toBeNull()
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/api-client.js')).toBeNull()
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/upload-files.js')).toBeNull()
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/ws-text-message.js')).toBeNull()
+    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/browser-tracing.js')).toBeNull()
   })
 
   it('test-utils/* imports are allowed from test files', () => {
@@ -369,6 +382,16 @@ describe('allowed shared modules browser-safety', () => {
       allowedSharedFiles().length,
       'at least one allowed shared module must exist',
     ).toBeGreaterThan(0)
+  })
+
+  it('every ALLOWED_SHARED_EXACT entry resolves to a file on disk', () => {
+    const missing = [...ALLOWED_SHARED_EXACT]
+      .map((name) => name.replace(/\.js$/, '.ts'))
+      .filter((tsName) => !existsSync(resolve(SHARED_SRC_DIR, tsName)))
+    expect(
+      missing,
+      'ALLOWED_SHARED_EXACT lists a module with no corresponding source file',
+    ).toEqual([])
   })
 
   it('no allowlisted shared module imports a Node-only builtin', () => {
@@ -633,7 +656,7 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     const content = readFileSync(releaseYml, 'utf-8')
     expect(content, 'release.yml must contain deploy-web job').toContain('deploy-web:')
     // Extract just the deploy-web job block so assertions are scoped to that job only.
-    const deployWebMatch = content.match(/  deploy-web:[\s\S]*?(?=\n  [\w][\w-]*:|$)/)
+    const deployWebMatch = content.match(/ {2}deploy-web:[\s\S]*?(?=\n {2}[\w][\w-]*:|$)/)
     const deployWebSection = deployWebMatch ? deployWebMatch[0] : ''
     expect(deployWebSection, 'deploy-web job must reference CLOUDFLARE_API_TOKEN').toContain(
       'CLOUDFLARE_API_TOKEN',
@@ -657,7 +680,7 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     const releaseYml = resolve(REPO_ROOT, '.github/workflows/release.yml')
     expect(existsSync(releaseYml), 'release.yml must exist').toBe(true)
     const content = readFileSync(releaseYml, 'utf-8')
-    const deployWebMatch = content.match(/  deploy-web:[\s\S]*?(?=\n  [\w][\w-]*:|$)/)
+    const deployWebMatch = content.match(/ {2}deploy-web:[\s\S]*?(?=\n {2}[\w][\w-]*:|$)/)
     const deployWebSection = deployWebMatch ? deployWebMatch[0] : ''
     expect(deployWebSection, 'deploy-web wrangler-action must set packageManager: pnpm').toContain(
       'packageManager: pnpm',
