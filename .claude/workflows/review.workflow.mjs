@@ -162,7 +162,22 @@ const reviewed = await pipeline(
     ),
 )
 
-const allFindings = reviewed.flat().filter(Boolean)
+const reviewedFindings = reviewed.flat().filter(Boolean)
+// A failed mandatory partition lane (e.g. security, correctness) must never silently degrade to
+// "zero findings" — that reads as a clean pass to the dev-loop gate, which only looks at
+// confirmedFindings. Synthesize a gating finding instead; it's a process fact (the lane never
+// ran), not a refutable code claim, so it bypasses adversarial verify like the failed-dimension
+// coverage-gap advisories in audit-triage.
+const failedLaneFindings = failedDimensions.map((key) => ({
+  severity: 'HIGH',
+  title: `mandatory review lane failed: ${key}`,
+  kind: 'lane-failure',
+  dimension: key,
+  file: '',
+  detail: `The ${key} review lane returned no result, so it contributed zero findings by default. Re-run the ${key} review lane (or otherwise confirm the diff is clean for it) before treating this gate as passed.`,
+  verdict: { isReal: true, confidence: 'high', reasoning: 'lane failure is a process fact, not a claim to verify' },
+}))
+const allFindings = reviewedFindings.concat(failedLaneFindings)
 const confirmed = allFindings.filter((f) => f.verdict && f.verdict.isReal)
 
 // --- Phase 3: QA smoke on the touched flows ---
