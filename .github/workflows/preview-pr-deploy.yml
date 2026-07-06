@@ -64,7 +64,9 @@ jobs:
           set -euo pipefail
           # wrangler reads CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID from env.
           # BRANCH is pre-sanitized to [a-z0-9-]; --project pins the target project.
-          out=$(npx --yes wrangler@^4.105.0 pages deploy artifacts/preview-pr-dist \
+          # Exact-pinned: this step holds deploy secrets, so the tool version must
+          # not float at run time — bump deliberately.
+          out=$(npx --yes wrangler@4.105.0 pages deploy artifacts/preview-pr-dist \
             --project-name=kamiazya-whiteboard --branch="$BRANCH" 2>&1) || { printf '%s\n' "$out"; exit 1; }
           printf '%s\n' "$out"
           url=$(printf '%s' "$out" | grep -oE 'https://[a-z0-9.-]+\.pages\.dev' | tail -1)
