@@ -24,9 +24,9 @@ Check:
 Check:
 - Does AGENTS.md / a skill / a README section describe a command, flag, or
   file path that no longer exists or behaves differently now?
-- Cross-reference with the `ai-assets` dimension for `.claude/` tooling
-  drift specifically; this dimension covers contributor-facing docs and
-  scripts more broadly.
+- Does `.claude/` tooling (a workflow, agent, or skill) reference a command,
+  path, or flag that has since changed? Contributor-facing docs and scripts
+  both fall under this dimension.
 
 ### 4. Friction discovered but never resolved
 
