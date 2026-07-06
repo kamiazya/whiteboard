@@ -159,11 +159,28 @@ describe('resolveHostedProviderStateFromRaw', () => {
     }
   })
 
-  // browserOrigin guard: preview browser origin is rejected even with no runtime config,
-  // so a Cloudflare Pages preview deploy cannot silently enter browser-local mode.
-  it('preview browserOrigin returns invalid-config even with empty runtime config', () => {
+  // browserOrigin policy: preview deploys (latest.<project>.pages.dev, per-PR
+  // branch aliases, hash previews) run in browser-local mode — offline and
+  // origin-agnostic — but must never connect to a daemon from a preview origin.
+  it('preview browserOrigin with empty runtime config returns browser-local', () => {
     const state = resolveHostedProviderStateFromRaw(
       {},
+      'https://abc123.kamiazya-whiteboard.pages.dev',
+    )
+    expect(state.kind).toBe('browser-local')
+  })
+
+  it('latest-alias browserOrigin with empty runtime config returns browser-local', () => {
+    const state = resolveHostedProviderStateFromRaw(
+      {},
+      'https://latest.kamiazya-whiteboard.pages.dev',
+    )
+    expect(state.kind).toBe('browser-local')
+  })
+
+  it('preview browserOrigin with a daemonBaseUrl config returns invalid-config (daemon refused on previews)', () => {
+    const state = resolveHostedProviderStateFromRaw(
+      { daemonBaseUrl: 'http://127.0.0.1:3099' },
       'https://abc123.kamiazya-whiteboard.pages.dev',
     )
     expect(state.kind).toBe('invalid-config')
@@ -179,9 +196,9 @@ describe('resolveHostedProviderStateFromRaw', () => {
     expect(state.kind).toBe('browser-local')
   })
 
-  it('invalid-config from preview browserOrigin does not expose the origin value', () => {
+  it('daemon refusal on a preview browserOrigin does not expose the origin value', () => {
     const state = resolveHostedProviderStateFromRaw(
-      {},
+      { daemonBaseUrl: 'http://127.0.0.1:3099' },
       'https://secret-hash.kamiazya-whiteboard.pages.dev',
     )
     expect(state.kind).toBe('invalid-config')

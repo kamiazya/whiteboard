@@ -73,15 +73,25 @@ export function resolveProviderStateFromRaw(raw: unknown): ProviderState {
   }
 }
 
-// Hosted-production variant: rejects non-production publicOrigin values and
-// Cloudflare Pages preview browser origins so that preview deploys cannot
-// silently enter browser-local mode. localhost is allowed for local dev.
+// Hosted-production variant: rejects non-production publicOrigin values;
+// localhost is allowed for local dev. Cloudflare Pages preview browser origins
+// (latest.<project>.pages.dev, per-PR branch aliases, hash previews) run in
+// browser-local mode — it is offline and origin-agnostic — but a daemon
+// connection is refused there so a preview deploy can never reach a daemon.
 export function resolveHostedProviderStateFromRaw(
   raw: unknown,
   browserOrigin?: string,
 ): ProviderState {
   if (browserOrigin !== undefined && classifyPagesOrigin(browserOrigin) === 'preview') {
-    return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
+    try {
+      const state = resolveProviderState(resolveHostedRuntimeConfig(raw))
+      if (state.kind === 'local-daemon') {
+        return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
+      }
+      return state
+    } catch {
+      return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
+    }
   }
   try {
     return resolveProviderState(resolveHostedRuntimeConfig(raw))
