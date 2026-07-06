@@ -36,3 +36,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0001](0001-apps-web-canonical-frontend.md) | apps/web as the canonical frontend | Accepted |
 | [ADR-0002](0002-browser-to-daemon-transport.md) | Browser-to-daemon transport for Stage 4 | Accepted |
 | [ADR-0003](0003-track-claude-dev-flow-tooling.md) | Track .claude AI dev-flow tooling in git with repo-relative workflow scriptPaths | Accepted |
+| [ADR-0004](0004-unified-capability-gated-canvas-page.md) | Unified capability-gated CanvasPage | Accepted |
