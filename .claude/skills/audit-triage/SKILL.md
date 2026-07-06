@@ -15,15 +15,27 @@ Workflow({ scriptPath: '.claude/workflows/audit-triage.workflow.mjs',
 ```
 
 - **scope**: free-text area to focus (e.g. `"apps/web and its migration"`) or omit for the whole repo. Narrow the scope for a faster, deeper pass on a hot area.
-- **dimensions**: defaults to the six below; pass a subset to focus.
+- **dimensions**: defaults to the six below. Pass a subset to focus, or supply `{name, content}` objects to inject externalized criteria (see below). Legacy plain-string dimensions are still supported.
 - **auditorAgent**: defaults to `Explore` (read-only, always registered). The tuned `codebase-auditor` agent is NOT registered until a session reload (workflow-authoring gotcha #7) — pass `auditorAgent: 'codebase-auditor'` only after a reload.
 - **verifyFloor**: lowest severity that gets an adversarial verify pass (default `HIGH`). Verification kills false positives — the audit favors recall, verify restores precision.
 
-It returns `triaged.items[]` (read-only). **The workflow cannot create Tasks** — the integrator (main session) files the survivors.
+It returns `triaged.items[]` (read-only), plus coverage-honesty fields: `dimensionsAudited` (dimensions that actually produced a result), `failedDimensions` (a dimension's auditor agent returned nothing — a LOW `coverage-gap` advisory finding is also injected into `triaged` so a silent gap can't hide), and `notApplicable` (an auditor explicitly opted out via `notApplicable:true` because the dimension doesn't apply to this scope). Check `failedDimensions` before trusting a clean run. **The workflow cannot create Tasks** — the integrator (main session) files the survivors.
 
 ## The six dimensions
 
 `wiring-gaps` (looks-done-isn't) · `architecture` (seams/coupling) · `maintainability` (size/dup/dead-code) · `contract-drift` (hand-written-vs-Zod, casts) · `test-gaps` (untested critical paths, skips) · `dev-experience` (clean-clone friction).
+
+## Externalized criteria (`resources/*.md`)
+
+Each dimension's detailed criteria lives in `.claude/skills/audit-triage/resources/<dimension>.md` (`# <name>` heading + `## Criteria` + numbered checks), not embedded only in `.claude/agents/codebase-auditor.md`. To run with the authoritative externalized criteria:
+
+1. `Glob('.claude/skills/audit-triage/resources/*.md')`.
+2. `Read` each file; extract the `# ` heading as `name`, the full file body as `content`.
+3. Pass `args.dimensions = [{name, content}, ...]` (a subset is fine — narrow to the dimensions relevant to this run).
+
+**Workflow scripts have no filesystem access** — the workflow cannot glob/read `resources/*.md` itself. The launching session (this skill's caller) must do the glob+read and pass `content` through `args`; that is why the mechanism accepts `{name, content}` objects rather than a directory path.
+
+`.claude/agents/codebase-auditor.md` still carries its own embedded summary of the six dimensions as a legacy fallback (used when a caller passes plain dimension strings, or omits `dimensions` entirely). This is a deliberate duplication, not an oversight: `resources/*.md` is authoritative when `content` is supplied; the agent's embedded text is only the safety-net default.
 
 ## Severity rubric (precision over recall)
 
