@@ -82,4 +82,15 @@ describe('authorizeWsUpgrade', () => {
     )
     expect(decision).toEqual({ accept: false, statusCode: 401 })
   })
+
+  it('accepts a bracketed IPv6 loopback Origin against a bracketed IPv6 loopback Host', () => {
+    // Node's URL parser keeps the brackets in .hostname for IPv6 ("[::1]"),
+    // while the Host header side is normalized to bare "::1" — both sides
+    // must agree once stripped, or real IPv6 loopback dev setups get a 403.
+    const decision = authorizeWsUpgrade({
+      host: '[::1]:3099',
+      origin: 'http://[::1]:5173',
+    })
+    expect(decision.accept).toBe(true)
+  })
 })
