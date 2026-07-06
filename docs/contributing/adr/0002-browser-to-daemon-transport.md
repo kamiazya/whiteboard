@@ -47,4 +47,66 @@ Availability detection in `apps/web`:
 
 **Portless (`whiteboard.localhost`)** — Would avoid mixed-content for the hosted case. Rejected: `whiteboard.localhost` is not in `isLoopbackHostname`, so the daemon returns 403; deferred pending security review.
 
-**Token delivery via `runtimeConfigSchema` extension** — Inject `daemonToken` alongside `daemonBaseUrl`. Deferred: `runtimeConfigSchema.strict()` would reject an unknown `daemonToken` field, throwing `invalid-config`. The schema must be extended first via `z.infer<>` (no parallel interface). This open question is resolved at Stage 4 planning.
+**Token delivery via `runtimeConfigSchema` extension** — Inject `daemonToken` alongside `daemonBaseUrl`. Rejected — see the addendum below; the schema stays permanently token-free.
+
+## Addendum (accepted): token delivery and local auth model resolved
+
+This ADR originally deferred the token-delivery question to Stage 4 planning.
+That question is now resolved.
+
+### Decision
+
+- `runtimeConfigSchema` remains **permanently token-free**: no `daemonToken`
+  field is added. A static Pages build has no per-user injection point at
+  build time, so baking a token into a build artifact is not possible; and
+  keeping the token out of the runtime-config surface avoids exposing it to
+  the logging/error-reporting code paths that already read that config.
+- Daemon self-serving and local dev deliver the token through a dedicated,
+  separate global — `window.__WHITEBOARD_DAEMON_TOKEN__` — distinct from
+  `__WHITEBOARD_RUNTIME_CONFIG__`. The `apps/web` client reads it once at
+  startup into an in-memory `TokenStore` (module singleton, never persisted),
+  then deletes the global. This is a **serialization-surface reduction, not a
+  security boundary** — it does nothing against a script that runs before the
+  delete, and is documented as such.
+- A static-Pages deployment (Stage 4) uses a pairing flow: a short-lived
+  `bootstrapToken` (delivered as a code, or a one-time URL fragment) is
+  exchanged for a `sessionToken` that is itself short-lived and memory-only.
+- Wire transport is restricted to two channels: the WS subprotocol
+  `daemon-token.<token>` and the HTTP `Authorization: Bearer` header. URL
+  query parameters, `runtimeConfig`, and build artifacts are all prohibited
+  as token carriers.
+- Local-daemon read-path carve-out: canvas/asset `GET` endpoints stay
+  tokenless, relying on the existing trust model (loopback bind + Host
+  loopback check + hard-to-guess IDs). All of `/api/runtime/*` except `ping`
+  requires Bearer, including on `GET`. Server-mode requires Bearer on every
+  method, with no bypass.
+- The `ping` response no longer includes the daemon's OS `pid`; a random
+  `instanceId` minted at daemon startup replaces it. `whiteboard server
+  stop`'s ownership check switches from pid-matching to instanceId-matching,
+  preserving protection against killing an unrelated process that reused the
+  port.
+
+### Consequences
+
+- Closes the open question above; no further `runtimeConfigSchema` changes
+  are anticipated for the token story.
+- As of this addendum the design is accepted but not yet shipped: the
+  `/api/*` Host-loopback middleware, the daemon bind-host guard, the
+  token-global plumbing on both daemon and `apps/web`, and the ping
+  `pid`→`instanceId` swap are tracked as follow-up slices.
+- Residual accepted risk: a malicious page on another localhost port can
+  still read canvas `GET` responses via reflected CORS; a Stage 4 origin
+  allowlist is the planned mitigation.
+
+### Alternatives considered (addendum)
+
+- **Extend `runtimeConfigSchema` with `daemonToken`** — rejected: no per-user
+  injection point in a static build, and it would widen the serialization
+  surface visible to logging/error-reporting.
+- **Tokenize canvas/asset `GET`** — rejected: breaks `<img src>` thumbnail
+  usage for negligible defense-in-depth, since a loopback attacker can
+  already read the token from local config files.
+- **Keep `pid` in `ping` for `server stop` matching** — rejected: publishes
+  an OS-level process identifier from an intentionally unauthenticated
+  endpoint; a startup-time `instanceId` gives an equivalent ownership check
+  without exposing `pid`.
