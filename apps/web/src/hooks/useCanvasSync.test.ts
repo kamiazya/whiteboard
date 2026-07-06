@@ -22,6 +22,8 @@ vi.mock('@excalidraw/excalidraw', () => ({
 }))
 
 // eslint-disable-next-line import/first
+import { exportToBlob } from '@excalidraw/excalidraw'
+// eslint-disable-next-line import/first
 import { useCanvasSync } from './useCanvasSync.js'
 
 // Minimal ExcalidrawImperativeAPI stub — only the methods the hook uses.
@@ -900,6 +902,35 @@ describe('useCanvasSync', () => {
       })
 
       expect(sendExportResponseSpy).toHaveBeenCalledWith('req-1', expect.any(String))
+    })
+
+    // Root-cause regression: onExportRequest awaited handleIncomingExportRequest
+    // with no error handling, unlike the equivalent flushPendingExportRequests
+    // path a few lines below it (which wraps the same call in .catch). A
+    // rejection here (e.g. exportToBlob throwing) must be caught and logged,
+    // not left to become an unhandled promise rejection.
+    it('catches and logs a rejection from handleIncomingExportRequest instead of throwing', async () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useCanvasSync(backend))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const api = makeApiStub()
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => []
+      ;(api as unknown as { getFiles: () => unknown }).getFiles = () => ({})
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      vi.mocked(exportToBlob).mockRejectedValueOnce(new Error('export blew up'))
+
+      await expect(
+        act(async () => {
+          await backend._ctrl.handlers!.onExportRequest({ requestId: 'req-fail' } as never)
+        }),
+      ).resolves.not.toThrow()
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('onExportRequest failed', expect.any(Error))
+      consoleErrorSpy.mockRestore()
     })
   })
 

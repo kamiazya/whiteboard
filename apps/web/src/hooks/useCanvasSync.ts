@@ -531,7 +531,11 @@ export function useCanvasSync(
 
       async onExportRequest(payload) {
         if (isStale()) return
-        await handleIncomingExportRequest(payload, buildExportDeps(bk))
+        try {
+          await handleIncomingExportRequest(payload, buildExportDeps(bk))
+        } catch (err) {
+          console.error('onExportRequest failed', err)
+        }
       },
 
       onAuthError() {
