@@ -212,7 +212,16 @@ function resolveServerModeApiScopes(method: string, path: string): readonly Auth
     return isWrite ? ['workspace:write'] : ['workspace:read']
   }
 
-  if (path === '/api/runtime/touch' || path === '/api/runtime/shutdown') return ['runtime:admin']
+  // touch/shutdown/logs-prune all mutate daemon-managed state (liveness timer,
+  // process lifecycle, on-disk log files) and require the admin tier even
+  // though the HTTP verb for prune is POST like any other write route.
+  if (
+    path === '/api/runtime/touch' ||
+    path === '/api/runtime/shutdown' ||
+    path === '/api/runtime/logs/prune'
+  ) {
+    return ['runtime:admin']
+  }
   if (path.startsWith('/api/runtime/')) return ['runtime:read']
 
   return isWrite ? ['canvas:write'] : ['canvas:read']
