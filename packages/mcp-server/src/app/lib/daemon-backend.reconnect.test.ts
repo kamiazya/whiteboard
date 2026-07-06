@@ -7,11 +7,18 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+// DaemonBackend now lives in src/shared/daemon-backend.ts, so its
+// api-client/upload-files imports resolve to src/shared/*, not the
+// src/app/lib re-export shims.
 const apiFetchMock = vi.fn()
-vi.mock('./api-client.js', () => ({ apiFetch: apiFetchMock }))
+const readRuntimeConfigMock = vi.fn(() => ({ daemonToken: null }))
+vi.mock('../../shared/api-client.js', () => ({
+  apiFetch: apiFetchMock,
+  readRuntimeConfig: readRuntimeConfigMock,
+}))
 
 const uploadFilesMock = vi.fn()
-vi.mock('./upload-files.js', () => ({ uploadFiles: uploadFilesMock }))
+vi.mock('../../shared/upload-files.js', () => ({ uploadFiles: uploadFilesMock }))
 
 const { DaemonBackend } = await import('./daemon-backend.js')
 

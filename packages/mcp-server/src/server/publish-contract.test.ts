@@ -87,6 +87,10 @@ describe('publish contract', () => {
         types: './src/shared/browser-shared-index.ts',
         import: './dist/shared/browser-shared-index.js',
       },
+      './daemon-backend': {
+        types: './src/shared/daemon-backend.ts',
+        import: './dist/shared/daemon-backend.js',
+      },
       './migration-bundle': {
         types: './src/shared/migration-bundle.ts',
         import: './dist/shared/migration-bundle.js',
@@ -107,6 +111,10 @@ describe('publish contract', () => {
       './browser-shared': {
         types: './dist/shared/browser-shared-index.d.ts',
         import: './dist/shared/browser-shared-index.js',
+      },
+      './daemon-backend': {
+        types: './dist/shared/daemon-backend.d.ts',
+        import: './dist/shared/daemon-backend.js',
       },
       './migration-bundle': {
         types: './dist/shared/migration-bundle.d.ts',
