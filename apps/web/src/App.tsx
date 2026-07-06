@@ -82,7 +82,7 @@ export function App({ providerState }: AppProps) {
       />
       <BackendConfigChip state={state} />
       <div className="min-h-0 flex-1 overflow-hidden">
-        <BrowserLocalCanvasPage store={_browserLocalStore} />
+        <BrowserLocalCanvasPage store={_browserLocalStore} capabilities={state.capabilities} />
       </div>
     </div>
   )

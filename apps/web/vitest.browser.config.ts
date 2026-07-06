@@ -1,11 +1,11 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vitest/config'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { playwright } from '@vitest/browser-playwright'
-import wasm from 'vite-plugin-wasm'
 import topLevelAwait from 'vite-plugin-top-level-await'
+import wasm from 'vite-plugin-wasm'
+import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -13,6 +13,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 export default defineConfig({
   resolve: {
     alias: {
+      // Matches vitest.config.ts and tsconfig's '@/*' path — needed once any
+      // browser-tested component pulls in a components/ui/* file (they all
+      // import '@/lib/utils' for the cn() helper).
+      '@': resolve(__dirname, 'src'),
       // Resolve browser-shared from source so tests run before `pnpm build`.
       '@kamiazya/whiteboard-mcp/browser-shared': resolve(
         __dirname,

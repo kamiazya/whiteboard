@@ -1,15 +1,20 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
-import type { ProviderState } from './lib/provider.js'
+import type { ProviderState, WhiteboardCapabilities } from './lib/provider.js'
 
 afterEach(cleanup)
 
-// BrowserLocalCanvasPage pulls in Excalidraw/loro-crdt which need a real
-// browser (roughjs native bindings, WASM). Mock it here since this suite
-// only exercises the backend-configuration chip, not the canvas itself.
+// Records the props BrowserLocalCanvasPage receives so tests can assert
+// capabilities actually flow from App down to the page, not just that the
+// page mounts. BrowserLocalCanvasPage pulls in Excalidraw/loro-crdt which
+// need a real browser (roughjs native bindings, WASM), so it stays mocked.
+let receivedCapabilities: WhiteboardCapabilities | undefined
 vi.mock('./pages/BrowserLocalCanvasPage.js', () => ({
-  BrowserLocalCanvasPage: () => <div data-testid="browser-local-canvas-page" />,
+  BrowserLocalCanvasPage: ({ capabilities }: { capabilities?: WhiteboardCapabilities }) => {
+    receivedCapabilities = capabilities
+    return <div data-testid="browser-local-canvas-page" />
+  },
 }))
 
 const BROWSER_LOCAL_STATE: ProviderState = {
@@ -20,6 +25,8 @@ const BROWSER_LOCAL_STATE: ProviderState = {
     migrationImport: false,
     workspaces: false,
     versions: false,
+    branches: false,
+    merge: false,
   },
 }
 
@@ -32,6 +39,8 @@ const LOCAL_DAEMON_STATE: ProviderState = {
     migrationImport: true,
     workspaces: true,
     versions: true,
+    branches: true,
+    merge: true,
   },
 }
 
@@ -55,6 +64,17 @@ describe('App backend configuration chip', () => {
     render(<App providerState={INVALID_CONFIG_STATE} />)
     expect(screen.queryByText('Browser only')).toBeNull()
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
+  })
+})
+
+describe('App capability wiring', () => {
+  beforeEach(() => {
+    receivedCapabilities = undefined
+  })
+
+  it('passes the browser-local capabilities down to BrowserLocalCanvasPage', () => {
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
   })
 })
 
