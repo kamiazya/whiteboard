@@ -25,7 +25,13 @@ const FILES = (Array.isArray(A.files) && A.files.length > 0) ? A.files : null
 const CWD = A.cwd || null
 const GIT = CWD ? `git -C ${CWD}` : 'git'
 // dimensions / qaScenarios: tune cost. Smaller increments → fewer dimensions.
-const DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage']
+// Each entry is either a legacy string (criteria stays embedded in reviewer-dimension.md)
+// or {name, content} where content is authoritative externalized criteria injected into
+// the reviewer prompt (see workflow-authoring skill's review-dimensions resources).
+const RAW_DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage']
+const DIMENSIONS = RAW_DIMENSIONS.map((d) =>
+  typeof d === 'string' ? { name: d, content: null } : { name: d.name, content: d.content || null },
+)
 const QA_SCENARIOS = A.qaScenarios || ['smoke', 'error-recovery', 'startup']
 // dogfood: optional live persona pass over the touched flow. Default OFF — needs a running app.
 // Inline (not a nested workflow) so review stays composable as a child of dev-loop (1-level nesting limit).
@@ -61,6 +67,7 @@ const FINDINGS_SCHEMA = {
         required: ['severity', 'title', 'file', 'detail'],
       },
     },
+    notApplicable: { type: 'boolean', description: 'set true when this dimension cannot meaningfully apply to the diff; findings stays [] unless something was still found' },
   },
   required: ['findings'],
 }
@@ -88,27 +95,38 @@ const QA_SCHEMA = {
 }
 
 // --- Phase 1+2: each review dimension is adversarially verified as soon as it lands (pipeline, no barrier) ---
+// Partition = requested dimensions ∪ {'security'} (security is always-on and failable, same
+// as any other dimension). The optional codex lane sits OUTSIDE the partition entirely — it's
+// a second opinion, reported only via codexUnavailable, never counted as a failed dimension.
 const REVIEW_LANES = [
-  ...DIMENSIONS.map((key) => ({
+  ...DIMENSIONS.map((dim) => ({
     agentType: 'reviewer-dimension',
-    key,
-    prompt: `Review dimension: ${key}. ${diffHint}`,
+    key: dim.name,
+    partition: true,
+    prompt: `Review dimension: ${dim.name}. ${dim.content ? `\nAUTHORITATIVE CRITERIA:\n${dim.content}\n` : ''}${diffHint}`,
   })),
   {
     agentType: 'security-scanner',
     key: 'security',
+    partition: true,
     prompt: `Scan for injection / path-traversal / info-leak / auth-bypass introduced by the diff. ${diffHint}`,
   },
   // Optional Codex second opinion at the review gate. Runs only when codex is requested;
-  // if the Codex runtime is unavailable the agent returns null and is simply dropped.
+  // if the Codex runtime is unavailable the agent returns null and is reported via
+  // codexUnavailable, never as a failed partition dimension.
   ...(CODEX
     ? [{
         agentType: 'codex:codex-rescue',
         key: 'codex',
+        partition: false,
         prompt: `Independently review this diff as a gate before merge. Report concrete correctness/contract/security/test-gap findings the other reviewers may have missed. ${diffHint}`,
       }]
     : []),
 ]
+
+let codexUnavailable = false
+const failedDimensions = []
+const notApplicableDimensions = []
 
 const reviewed = await pipeline(
   REVIEW_LANES,
@@ -118,7 +136,21 @@ const reviewed = await pipeline(
       phase: 'Review',
       agentType: lane.agentType,
       schema: FINDINGS_SCHEMA,
-    }).then((r) => ({ key: lane.key, findings: (r && r.findings) || [] })),
+    }).then((r) => {
+      if (!r) {
+        if (lane.key === 'codex' && !lane.partition) {
+          codexUnavailable = true
+        } else if (lane.partition) {
+          failedDimensions.push(lane.key)
+        }
+        return { key: lane.key, findings: [] }
+      }
+      const hasFindings = Array.isArray(r.findings) && r.findings.length > 0
+      if (lane.partition && r.notApplicable && !hasFindings) {
+        notApplicableDimensions.push(lane.key)
+      }
+      return { key: lane.key, findings: r.findings || [] }
+    }),
   (rev) =>
     parallel(
       rev.findings.map((f) => () =>
@@ -195,7 +227,11 @@ return {
     high: bySeverity('HIGH'),
     qaFail: qa.filter((q) => q.status === 'fail').length,
     dogfoodFriction: dogfood.reduce((n, r) => n + (r.friction ? r.friction.length : 0), 0),
+    failedDimensions: failedDimensions.length,
   },
+  failedDimensions,
+  notApplicable: notApplicableDimensions,
+  ...(CODEX ? { codexUnavailable } : {}),
   confirmedFindings: confirmed,
   qa,
   dogfood,
