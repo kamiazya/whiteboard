@@ -63,6 +63,26 @@ describe('buildMiniGraph', () => {
     expect(v2Row?.branchOut).toBe('feature')
   })
 
+  it('joins multiple branch names with a comma when they share a baseVersionId', () => {
+    const input: MiniGraphInput = {
+      head: 'feature-b',
+      branches: [
+        branch('main', '#1971c2'),
+        branch('feature-a', '#9333ea', 'main', 'v2'),
+        branch('feature-b', '#e8590c', 'main', 'v2'),
+      ],
+      versions: [
+        version('b1', 'feature-b', '2026-04-23T05:00:00Z'),
+        version('a1', 'feature-a', '2026-04-23T04:00:00Z'),
+        version('v2', 'main', '2026-04-23T02:00:00Z'),
+        version('v1', 'main', '2026-04-23T01:00:00Z'),
+      ],
+    }
+    const rows = buildMiniGraph(input)
+    const v2Row = rows.find((r) => r.versionId === 'v2')
+    expect(v2Row?.branchOut).toBe('feature-a, feature-b')
+  })
+
   it('falls back to neutral gray for unknown branch names', () => {
     const input: MiniGraphInput = {
       head: 'main',
