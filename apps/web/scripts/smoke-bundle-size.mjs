@@ -9,7 +9,7 @@
 // The entry ceiling is a regression stop at today's measured size (~541 KB),
 // not an endorsement: shrinking it toward the <300 KB app budget needs
 // loro/Excalidraw first-paint splitting, tracked separately.
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
@@ -33,6 +33,11 @@ let failures = 0
 
 function gzipSize(path) {
   return gzipSync(readFileSync(path)).length
+}
+
+if (!existsSync(ASSETS)) {
+  console.error(`  FAIL  dist/assets not found at ${ASSETS} — run \`pnpm build\` first`)
+  process.exit(1)
 }
 
 const files = readdirSync(ASSETS)
