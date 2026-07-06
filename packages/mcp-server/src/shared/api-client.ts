@@ -1,8 +1,18 @@
+import { z } from 'zod'
 import { injectTraceContextIntoHeaders } from './browser-tracing.js'
 
-export interface RuntimeConfig {
-  daemonToken: string | null
-}
+// The server injects this shape into `window.__WHITEBOARD_RUNTIME_CONFIG__`
+// via a same-origin inline <script> (see server/app.ts). It crosses a
+// process boundary (server -> browser), so it is validated on read rather
+// than trusted as a cast — a malformed or tampered global falls back to the
+// unauthenticated default instead of propagating a bad value into apiFetch.
+export const runtimeConfigSchema = z.object({
+  daemonToken: z.string().nullable(),
+})
+
+export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>
+
+const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = { daemonToken: null }
 
 // This module compiles under both tsconfig.server.json (lib ES2022 + types
 // node — no DOM lib, no ambient `window`) and apps/web's DOM-enabled
@@ -12,7 +22,7 @@ export interface RuntimeConfig {
 // DOM globals across all server/cli/daemon code).
 type WindowLike = {
   location: { origin: string }
-  __WHITEBOARD_RUNTIME_CONFIG__?: RuntimeConfig
+  __WHITEBOARD_RUNTIME_CONFIG__?: unknown
 }
 
 function getWindow(): WindowLike | undefined {
@@ -20,7 +30,12 @@ function getWindow(): WindowLike | undefined {
 }
 
 export function readRuntimeConfig(): RuntimeConfig {
-  return getWindow()?.__WHITEBOARD_RUNTIME_CONFIG__ ?? { daemonToken: null }
+  const injected = getWindow()?.__WHITEBOARD_RUNTIME_CONFIG__
+  if (injected === undefined) {
+    return DEFAULT_RUNTIME_CONFIG
+  }
+  const result = runtimeConfigSchema.safeParse(injected)
+  return result.success ? result.data : DEFAULT_RUNTIME_CONFIG
 }
 
 function isLocalApiRequest(input: Request | string | URL): boolean {

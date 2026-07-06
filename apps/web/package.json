@@ -37,6 +37,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@fast-check/vitest": "^0.4.1",
     "@tailwindcss/vite": "^4",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19",
@@ -44,6 +45,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/browser-playwright": "catalog:",
     "fake-indexeddb": "^6.2.5",
+    "fast-check": "^4.7.0",
     "playwright": "1.59.1",
     "tailwindcss": "^4",
     "typescript": "catalog:",

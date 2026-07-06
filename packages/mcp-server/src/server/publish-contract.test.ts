@@ -95,6 +95,14 @@ describe('publish contract', () => {
         types: './src/shared/migration-bundle.ts',
         import: './dist/shared/migration-bundle.js',
       },
+      './api-client': {
+        types: './src/shared/api-client.ts',
+        import: './dist/shared/api-client.js',
+      },
+      './api-contracts': {
+        types: './src/shared/api-contracts/index.ts',
+        import: './dist/shared/api-contracts/index.js',
+      },
       './package.json': './package.json',
     })
     // publishConfig.exports is the shape pnpm substitutes on npm publish,
@@ -119,6 +127,14 @@ describe('publish contract', () => {
       './migration-bundle': {
         types: './dist/shared/migration-bundle.d.ts',
         import: './dist/shared/migration-bundle.js',
+      },
+      './api-client': {
+        types: './dist/shared/api-client.d.ts',
+        import: './dist/shared/api-client.js',
+      },
+      './api-contracts': {
+        types: './dist/shared/api-contracts/index.d.ts',
+        import: './dist/shared/api-contracts/index.js',
       },
       './package.json': './package.json',
     })
