@@ -3,6 +3,7 @@ import type { MiddlewareHandler } from 'hono'
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
 import {
   appendVary,
+  getRequestHost,
   isLoopbackHostname,
   normalizeHostHeader,
   normalizeOriginHostname,
@@ -10,16 +11,6 @@ import {
 
 function normalizeMethod(method: string): string {
   return method.toUpperCase()
-}
-
-function getRequestHost(c: Parameters<MiddlewareHandler>[0]): string | undefined {
-  const headerHost = c.req.header('host')
-  if (headerHost) return headerHost
-  try {
-    return new URL(c.req.url).host
-  } catch {
-    return undefined
-  }
 }
 
 function mcpHttpError(status: number, message: string, headers?: Headers): Response {

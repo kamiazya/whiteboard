@@ -7,17 +7,7 @@
 
 import type { MiddlewareHandler } from 'hono'
 import type { ServerModeExposureMode } from './server-mode-exposure.js'
-import { isLoopbackHostname, normalizeHostHeader } from './cors-loopback.js'
-
-function getRequestHost(c: Parameters<MiddlewareHandler>[0]): string | undefined {
-  const headerHost = c.req.header('host')
-  if (headerHost) return headerHost
-  try {
-    return new URL(c.req.url).host
-  } catch {
-    return undefined
-  }
-}
+import { getRequestHost, isLoopbackHostname, normalizeHostHeader } from './cors-loopback.js'
 
 export function createApiHostGuardMiddleware(mode: ServerModeExposureMode): MiddlewareHandler {
   return async (c, next) => {

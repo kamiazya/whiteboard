@@ -8,17 +8,17 @@ export function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
 }
 
+// URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets so
+// isLoopbackHostname can match against the bare address "::1".
+// See WHATWG URL spec §4.1 (host serializing).
+function stripIpv6Brackets(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+}
+
 export function normalizeOriginHostname(originHeader: string | undefined): string | null {
   if (!originHeader) return null
   try {
-    const hostname = new URL(originHeader).hostname
-    // URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets
-    // so isLoopbackHostname can match against the bare address "::1".
-    // See WHATWG URL spec §4.1 (host serializing).
-    if (hostname.startsWith('[') && hostname.endsWith(']')) {
-      return hostname.slice(1, -1)
-    }
-    return hostname
+    return stripIpv6Brackets(new URL(originHeader).hostname)
   } catch {
     return null
   }
@@ -29,16 +29,21 @@ export function normalizeOriginHostname(originHeader: string | undefined): strin
 export function normalizeHostHeader(hostHeader: string | undefined): string | null {
   if (!hostHeader) return null
   try {
-    const hostname = new URL(`http://${hostHeader}`).hostname
-    // URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets
-    // so isLoopbackHostname can match against the bare address "::1".
-    // See WHATWG URL spec §4.1 (host serializing).
-    if (hostname.startsWith('[') && hostname.endsWith(']')) {
-      return hostname.slice(1, -1)
-    }
-    return hostname
+    return stripIpv6Brackets(new URL(`http://${hostHeader}`).hostname)
   } catch {
     return null
+  }
+}
+
+// Resolve the request Host: prefer the Host header, fall back to the parsed
+// request URL. Shared by the /mcp and /api/* host guards.
+export function getRequestHost(c: Parameters<MiddlewareHandler>[0]): string | undefined {
+  const headerHost = c.req.header('host')
+  if (headerHost) return headerHost
+  try {
+    return new URL(c.req.url).host
+  } catch {
+    return undefined
   }
 }
 
