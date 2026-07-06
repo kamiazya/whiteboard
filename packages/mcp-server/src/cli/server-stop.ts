@@ -17,6 +17,7 @@ import {
   readServerModeRecord,
 } from '../server/security/server-mode-record.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import { fetchDaemonPing } from './daemon-ping-client.js'
 
 export const SERVER_STOP_SCHEMA_VERSION = 1 as const
 
@@ -75,30 +76,13 @@ function defaultIsPidAlive(pid: number): boolean {
   }
 }
 
-function resolveConnectHost(bindHost: string): string {
-  if (bindHost === '0.0.0.0') return '127.0.0.1'
-  if (bindHost === '::' || bindHost === '::0') return '[::1]'
-  // Bare IPv6 addresses contain colons — bracket them for URL construction.
-  if (bindHost.includes(':') && !bindHost.startsWith('[')) return `[${bindHost}]`
-  return bindHost
-}
-
 async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
   // A record with no instanceId predates this check (older daemon build). It
   // cannot be verified, so treat it the same as a mismatch — the caller maps
   // that to the 'server-instance-unverifiable' reason, never to a kill.
   if (!record.instanceId) return false
-  const host = resolveConnectHost(record.host)
-  try {
-    const res = await fetch(`http://${host}:${record.port}/api/runtime/ping`, {
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!res.ok) return false
-    const body = (await res.json()) as { instanceId?: unknown }
-    return typeof body?.instanceId === 'string' && body.instanceId === record.instanceId
-  } catch {
-    return false
-  }
+  const ping = await fetchDaemonPing(record.host, record.port)
+  return ping !== null && ping.instanceId === record.instanceId
 }
 
 const defaultKillFn = (pid: number, signal: NodeJS.Signals | number) => {

@@ -28,6 +28,7 @@ import {
 } from '../server/security/server-mode-record.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { ENV_KEYS } from '../server/security/server-mode-env-config.js'
+import { fetchDaemonPing, resolveConnectHost } from './daemon-ping-client.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
 export const SERVER_DOCTOR_SCHEMA_VERSION = 1 as const
@@ -81,32 +82,15 @@ function defaultIsPidAlive(pid: number): boolean {
   }
 }
 
-// Mirrors the same helper in server-status.ts and server-stop.ts.
-// Kept local per the project instruction: no new shared module for
-// this small utility until there are three callers.
-function resolveConnectHost(bindHost: string): string {
-  if (bindHost === '0.0.0.0') return '127.0.0.1'
-  if (bindHost === '::' || bindHost === '::0') return '[::1]'
-  // Bare IPv6 addresses contain colons — bracket them for URL construction.
-  if (bindHost.includes(':') && !bindHost.startsWith('[')) return `[${bindHost}]`
-  return bindHost
-}
-
-async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
+// Exported for direct unit testing of the instanceId comparison logic below
+// (see server-doctor.test.ts) — the option default is otherwise only ever
+// exercised indirectly through runServerDoctor with an injected override.
+export async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
   // A record with no instanceId predates this check (older daemon build) and
   // cannot be verified — the caller reports a warning, never a false 'ok'.
   if (!record.instanceId) return false
-  const host = resolveConnectHost(record.host)
-  try {
-    const res = await fetch(`http://${host}:${record.port}/api/runtime/ping`, {
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!res.ok) return false
-    const body = (await res.json()) as { instanceId?: unknown }
-    return typeof body?.instanceId === 'string' && body.instanceId === record.instanceId
-  } catch {
-    return false
-  }
+  const ping = await fetchDaemonPing(record.host, record.port)
+  return ping !== null && ping.instanceId === record.instanceId
 }
 
 async function defaultFetchJwks(uri: string): Promise<{ ok: boolean; hasKeys: boolean }> {
@@ -147,27 +131,17 @@ function defaultReadRecordMode(dataDir: string): number | null {
   }
 }
 
-async function defaultFetchPing(
+// Exported for direct unit testing — same rationale as defaultVerifyIdentity.
+export async function defaultFetchPing(
   host: string,
   port: number,
   expectedInstanceId: string | undefined,
 ): Promise<{ ok: boolean; pidMatches: boolean }> {
-  const connectHost = resolveConnectHost(host)
-  try {
-    const res = await fetch(`http://${connectHost}:${port}/api/runtime/ping`, {
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!res.ok) return { ok: false, pidMatches: false }
-    const body = (await res.json()) as { instanceId?: unknown }
-    return {
-      ok: true,
-      pidMatches:
-        expectedInstanceId !== undefined &&
-        typeof body?.instanceId === 'string' &&
-        body.instanceId === expectedInstanceId,
-    }
-  } catch {
-    return { ok: false, pidMatches: false }
+  const ping = await fetchDaemonPing(host, port)
+  if (ping === null) return { ok: false, pidMatches: false }
+  return {
+    ok: true,
+    pidMatches: expectedInstanceId !== undefined && ping.instanceId === expectedInstanceId,
   }
 }
 
