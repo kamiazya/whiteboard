@@ -1206,6 +1206,80 @@ describe('useCanvasSync', () => {
 
       expect(backendB._ctrl.putFileCalls.length).toBeGreaterThan(0)
     })
+
+    // Root-cause regression: onSceneChange used to gate doc.commit() behind
+    // an async putFile().finally() only for firings with new files. Firings
+    // are not otherwise serialized against each other, so a later, file-less
+    // firing could commit synchronously (out of order) while an earlier
+    // firing's putFile was still pending. When that earlier firing's commit
+    // finally ran, it used its own stale `elements` snapshot — silently
+    // tombstoning any element the later firing had added in the meantime.
+    it('serializes commits across firings so a slow file-upload commit never reverts a faster, later file-less commit', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const elA = {
+        type: 'image',
+        id: 'el-a',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        fileId: 'file-a',
+      }
+      const fileA = { id: 'file-a', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+
+      // Firing A: a new image element with a file upload that stays pending
+      // until _resolvePutFile() is called below.
+      act(() => {
+        result.current.onChange([elA as never], {} as never, { 'file-a': fileA as never })
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+      expect(backend._ctrl.putFileCalls.length).toBe(1)
+
+      // Firing B: a later, file-less edit adding a second element. No new
+      // files means this firing has nothing to await, so it would otherwise
+      // race ahead of A's still-pending commit.
+      const elB = { type: 'rectangle', id: 'el-b', x: 0, y: 0, width: 5, height: 5 }
+      act(() => {
+        result.current.onChange([elA as never, elB as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      // Now let A's stale putFile settle.
+      await act(async () => {
+        backend._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      const finalDoc = new LoroDoc()
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) {
+        finalDoc.import(bytes)
+      }
+      const finalElements = finalDoc.getMovableList('elements').toJSON() as Array<{
+        id: string
+        isDeleted?: boolean
+      }>
+      const elBFinal = finalElements.find((e) => e.id === 'el-b')
+      expect(elBFinal).toBeDefined()
+      expect(elBFinal?.isDeleted).not.toBe(true)
+    })
   })
 
   describe('stale-generation drop coverage for restore/viewport/export handlers', () => {

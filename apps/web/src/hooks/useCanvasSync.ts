@@ -144,6 +144,17 @@ export function useCanvasSync(
 
   const pendingExportRequestsRef = useRef<ExportRequestHandlerDeps['pending']>([])
 
+  // Chains every onSceneChange firing's commit (whether or not it awaits
+  // putFile) so firings are applied to the Loro doc strictly in the order
+  // they were scheduled, never in the order their async work happens to
+  // settle. Without this, a firing with new files stays pending on putFile
+  // while a later, file-less firing can commit synchronously first; when the
+  // earlier firing's commit finally runs, it writes its own now-stale
+  // `elements` snapshot on top, silently reverting/tombstoning the later
+  // firing's edits. Reset on every (re)connect so a new connection never
+  // waits on a torn-down connection's chain.
+  const commitChainRef = useRef<Promise<void>>(Promise.resolve())
+
   // Monotonic — never reset to 0 to prevent stale async work from a prior mount
   // landing in the current doc after a fast remount.
   const applyGenerationRef = useRef(0)
@@ -303,11 +314,6 @@ export function useCanvasSync(
           ([fileId, fd]) => fd && !uploadedFileIds.has(fileId),
         ) as [string, BinaryFileData][]
 
-        if (newEntries.length === 0) {
-          commitElements()
-          return
-        }
-
         // Upload completes before the Loro commit (matching the
         // commitAfterUpload ordering contract), but a failed upload is still
         // non-fatal: the elements commit always happens (regardless of a
@@ -325,39 +331,46 @@ export function useCanvasSync(
         // misreports its outcome to a consumer that has already moved on to a
         // new backend.
         //
-        // The two-argument `.then(onFulfilled, onRejected)` form is used
-        // instead of `.then(onFulfilled).catch(onRejected)` so that an
-        // exception thrown by the caller-supplied onFileUploadSucceeded
-        // callback itself can never be caught by the rejection handler
-        // meant for putFile's own failure. The callback invocation is also
-        // wrapped in its own try/catch: it is a caller-supplied fire-and
-        // forget notification, so a throw there must never become an
-        // unhandled rejection or otherwise disrupt this hook's own control
-        // flow (the .finally() commit below).
-        void bk
-          .putFile(newEntries, (fileId) => uploadedFileIds.add(fileId))
-          .then(
-            () => {
-              if (connectionGenerationRef.current !== connGen) return
+        // Every firing — with or without new files — is chained onto
+        // commitChainRef so its commit only runs after the previous firing's
+        // commit has fully settled. Without this, a file-less firing (nothing
+        // to await) could commit synchronously ahead of an earlier firing
+        // still waiting on putFile, and that earlier firing's eventual commit
+        // would then overwrite the newer state with its own stale snapshot.
+        const previousChain = commitChainRef.current
+        const runThisFiring = async (): Promise<void> => {
+          if (newEntries.length === 0) {
+            commitElements()
+            return
+          }
+
+          try {
+            await bk.putFile(newEntries, (fileId) => uploadedFileIds.add(fileId))
+            if (connectionGenerationRef.current === connGen) {
               try {
                 optionsRef.current.onFileUploadSucceeded?.()
               } catch (err) {
                 console.error('onFileUploadSucceeded callback threw', err)
               }
-            },
-            (err: unknown) => {
-              console.error('putFile failed', err)
-              if (connectionGenerationRef.current !== connGen) return
+            }
+          } catch (err) {
+            console.error('putFile failed', err)
+            if (connectionGenerationRef.current === connGen) {
               try {
                 optionsRef.current.onFileUploadFailed?.()
               } catch (callbackErr) {
                 console.error('onFileUploadFailed callback threw', callbackErr)
               }
-            },
-          )
-          .finally(() => {
-            commitElements()
-          })
+            }
+          }
+          commitElements()
+        }
+        // Chained with a resolved-only continuation (never `.catch`) because
+        // runThisFiring never rejects — every branch inside it is already
+        // guarded by its own try/catch — so the chain itself must never
+        // reject either, or a later firing awaiting it would skip its own
+        // commit entirely.
+        commitChainRef.current = previousChain.then(runThisFiring)
       },
       300,
     )
@@ -378,6 +391,7 @@ export function useCanvasSync(
     uploadedFileIdsRef.current = new Set()
     pendingExportRequestsRef.current = []
     applyGenerationRef.current += 1
+    commitChainRef.current = Promise.resolve()
     onSceneChange.cancel()
     // A restore in flight against the connection being torn down (backend
     // switch or disconnect) belongs to that connection alone — leaving these
