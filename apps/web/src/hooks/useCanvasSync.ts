@@ -50,6 +50,11 @@ export interface UseCanvasSyncResult {
   clearLocalUndo: () => void
 }
 
+// Upper bound on waiting for a file upload before committing anyway. A hung
+// putFile would otherwise block the commit chain (and every later scene edit)
+// indefinitely; upload failure is non-fatal, so falling through is safe.
+const PUT_FILE_TIMEOUT_MS = 15_000
+
 // Small debounce helper with no external dependency.
 function debounce<T extends (...args: Parameters<T>) => void>(
   fn: T,
@@ -338,14 +343,33 @@ export function useCanvasSync(
         // still waiting on putFile, and that earlier firing's eventual commit
         // would then overwrite the newer state with its own stale snapshot.
         const previousChain = commitChainRef.current
+        // A commit that throws (unexpected element shape, Loro internal error)
+        // must fail only its own firing: an unguarded throw would reject the
+        // chain and silently skip every later firing's commit for the rest of
+        // the session.
+        const guardedCommit = (): void => {
+          try {
+            commitElements()
+          } catch (err) {
+            console.error('scene commit failed; skipping this firing', err)
+          }
+        }
         const runThisFiring = async (): Promise<void> => {
           if (newEntries.length === 0) {
-            commitElements()
+            guardedCommit()
             return
           }
 
           try {
-            await bk.putFile(newEntries, (fileId) => uploadedFileIds.add(fileId))
+            // A hung upload must not block the chain forever — race it against
+            // a deadline and fall through to the commit (upload failure is
+            // non-fatal; elements persist via the Loro commit either way).
+            await Promise.race([
+              bk.putFile(newEntries, (fileId) => uploadedFileIds.add(fileId)),
+              new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('putFile timed out')), PUT_FILE_TIMEOUT_MS)
+              }),
+            ])
             if (connectionGenerationRef.current === connGen) {
               try {
                 optionsRef.current.onFileUploadSucceeded?.()
@@ -363,12 +387,12 @@ export function useCanvasSync(
               }
             }
           }
-          commitElements()
+          guardedCommit()
         }
         // Chained with a resolved-only continuation (never `.catch`) because
-        // runThisFiring never rejects — every branch inside it is already
-        // guarded by its own try/catch — so the chain itself must never
-        // reject either, or a later firing awaiting it would skip its own
+        // runThisFiring never rejects — the commit is wrapped in guardedCommit
+        // and the upload path in its own try/catch — so the chain itself never
+        // rejects either, or a later firing awaiting it would skip its own
         // commit entirely.
         commitChainRef.current = previousChain.then(runThisFiring)
       },
@@ -465,7 +489,11 @@ export function useCanvasSync(
 
       onVersionCreated(payload) {
         if (isStale()) return
-        optionsRef.current.onVersionCreated?.(payload)
+        try {
+          optionsRef.current.onVersionCreated?.(payload)
+        } catch (err) {
+          console.error('onVersionCreated callback threw', err)
+        }
       },
 
       onRestoreStarted(payload) {
@@ -483,7 +511,11 @@ export function useCanvasSync(
 
       onHeadChanged(payload) {
         if (isStale()) return
-        optionsRef.current.onHeadChanged?.(payload)
+        try {
+          optionsRef.current.onHeadChanged?.(payload)
+        } catch (err) {
+          console.error('onHeadChanged callback threw', err)
+        }
       },
 
       onViewportRequest(payload) {

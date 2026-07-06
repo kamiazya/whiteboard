@@ -9,6 +9,7 @@
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
+  VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -606,9 +607,18 @@ describe('useCanvasSync', () => {
       const onVersionCreated = vi.fn()
       renderHook(() => useCanvasSync(backend, { onVersionCreated }))
 
-      const payload = { versionId: 'v1', createdAt: 1 }
+      // Typed against the z.infer contract (no cast) so payload drift between
+      // the test and versionCreatedPayloadSchema fails to compile.
+      const payload: VersionCreatedPayload = {
+        id: 'v1',
+        slug: 'canvas-a',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        elementCount: 3,
+        auto: false,
+        hasThumbnail: false,
+      }
       act(() => {
-        backend._ctrl.handlers!.onVersionCreated(payload as never)
+        backend._ctrl.handlers!.onVersionCreated(payload)
       })
 
       expect(onVersionCreated).toHaveBeenCalledWith(payload)
@@ -827,8 +837,6 @@ describe('useCanvasSync', () => {
       const elA = { id: 'a' }
       const elB = { id: 'b' }
       ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [elA, elB]
-      renderHook(() => useCanvasSync(backend))
-
       const { result } = renderHook(() => useCanvasSync(backend))
       act(() => {
         result.current.setExcalidrawAPI(api as never)
@@ -1363,6 +1371,106 @@ describe('useCanvasSync', () => {
       const elBFinal = finalElements.find((e) => e.id === 'el-b')
       expect(elBFinal).toBeDefined()
       expect(elBFinal?.isDeleted).not.toBe(true)
+    })
+
+    it('a firing whose commit throws does not poison the chain — later firings still commit', async () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+      const callsBefore = backend._ctrl.pushLocalUpdateCalls.length
+
+      // Firing 1: an element whose property enumeration throws mid-commit.
+      // Without a guard this rejects the commit chain, and every later firing
+      // chained via .then() is silently skipped for the rest of the session.
+      const poison = new Proxy(
+        { type: 'rectangle', id: 'el-poison', x: 0, y: 0, width: 1, height: 1 },
+        {
+          ownKeys() {
+            throw new Error('poisoned element')
+          },
+        },
+      )
+      act(() => {
+        result.current.onChange([poison as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      // Firing 2: a normal element. Its commit must still land.
+      const elB = { type: 'rectangle', id: 'el-after-poison', x: 0, y: 0, width: 5, height: 5 }
+      act(() => {
+        result.current.onChange([elB as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(callsBefore)
+      const finalDoc = new LoroDoc()
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) {
+        finalDoc.import(bytes)
+      }
+      const ids = (finalDoc.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
+        (e) => e.id,
+      )
+      expect(ids).toContain('el-after-poison')
+    })
+
+    it('a putFile that never settles stops blocking the chain after the upload timeout', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      // Firing A: image upload that never settles (hung network).
+      const elA = { type: 'image', id: 'el-hang', x: 0, y: 0, width: 10, height: 10, fileId: 'f-h' }
+      const fileA = { id: 'f-h', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([elA as never], {} as never, { 'f-h': fileA as never })
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+      expect(backend._ctrl.putFileCalls.length).toBe(1)
+
+      // Firing B: file-less edit queued behind A's hung upload.
+      const elB = { type: 'rectangle', id: 'el-after-hang', x: 0, y: 0, width: 5, height: 5 }
+      act(() => {
+        result.current.onChange([elA as never, elB as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      // Never resolve the upload; advance past the upload timeout instead.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000)
+      })
+
+      const finalDoc = new LoroDoc()
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) {
+        finalDoc.import(bytes)
+      }
+      const ids = (finalDoc.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
+        (e) => e.id,
+      )
+      expect(ids).toContain('el-after-hang')
     })
   })
 
