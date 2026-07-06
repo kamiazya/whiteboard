@@ -935,5 +935,114 @@ describe('useCanvasSync', () => {
       expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
       expect(onFileUploadFailed).toHaveBeenCalled()
     })
+
+    // Root-cause regression for the then().catch() antipattern: an exception
+    // thrown by the caller-supplied onFileUploadSucceeded callback must never
+    // be observed as a putFile failure (no onFileUploadFailed call, commit
+    // still happens exactly once).
+    it('does not treat an exception thrown by onFileUploadSucceeded as a putFile failure', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const onFileUploadFailed = vi.fn()
+      const onFileUploadSucceeded = vi.fn(() => {
+        throw new Error('consumer callback blew up')
+      })
+      const { result } = renderHook(() =>
+        useCanvasSync(backend, { onFileUploadSucceeded, onFileUploadFailed }),
+      )
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const priorPushCalls = backend._ctrl.pushLocalUpdateCalls.length
+      const fakeEl = { type: 'image', id: 'img-throw', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-throw', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, { 'file-throw': fakeFile as never })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      await act(async () => {
+        backend._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(onFileUploadSucceeded).toHaveBeenCalled()
+      expect(onFileUploadFailed).not.toHaveBeenCalled()
+      // The commit must still happen exactly once despite the thrown callback.
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
+    })
+
+    // Root-cause regression for the missing-coverage finding: the new
+    // generation guard is only supposed to suppress the *callback signal* to
+    // a superseded connection's options, never the local Loro commit itself
+    // — dropping the commit would silently lose the edit from the document,
+    // not merely fail to notify a stale consumer.
+    it('still commits the pending edit to A when A is superseded mid-upload, but suppresses the stale onFileUploadSucceeded callback', async () => {
+      const backendA = makeControllablePutFileBackend()
+      const backendB = makeFakeBackend()
+      const api = makeApiStub()
+      const onFileUploadSucceeded = vi.fn()
+
+      const { result, rerender } = renderHook(
+        ({ backend }) => useCanvasSync(backend, { onFileUploadSucceeded }),
+        { initialProps: { backend: backendA as CanvasBackend } },
+      )
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const aPushCallsBefore = backendA._ctrl.pushLocalUpdateCalls.length
+
+      const fakeEl = { type: 'image', id: 'img-switch', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-switch', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-switch': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      // putFile is in flight against A. Switch to B before it settles.
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      // Now let A's putFile resolve, after the generation has moved on.
+      await act(async () => {
+        backendA._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      // The local edit must still be committed and pushed through A's own
+      // (now-disconnected) connection — never silently dropped.
+      expect(backendA._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(aPushCallsBefore)
+      // But the stale connection must not report success to the live options.
+      expect(onFileUploadSucceeded).not.toHaveBeenCalled()
+      // And it must never be routed to B.
+      expect(backendB._ctrl.pushLocalUpdateCalls.length).toBe(0)
+    })
   })
 })

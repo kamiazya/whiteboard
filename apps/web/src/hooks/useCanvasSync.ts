@@ -302,22 +302,46 @@ export function useCanvasSync(
 
         // Upload completes before the Loro commit (matching the
         // commitAfterUpload ordering contract), but a failed upload is still
-        // non-fatal: the elements commit still happens so nothing is lost
-        // locally. Generation-guarded so a backend switch mid-upload drops
-        // the callback and skips the commit for the superseded connection.
+        // non-fatal: the elements commit always happens (regardless of a
+        // backend switch in the meantime) so nothing is lost locally —
+        // `doc`/`bk` are captured at call time and isolated to this
+        // connection, matching the no-guard subscribeLocalUpdates callback
+        // below. Only the options.onFileUploadSucceeded/Failed *signal* is
+        // generation-guarded, so a superseded connection never misreports
+        // its outcome to a consumer that has already moved on to a new
+        // backend.
+        //
+        // The two-argument `.then(onFulfilled, onRejected)` form is used
+        // instead of `.then(onFulfilled).catch(onRejected)` so that an
+        // exception thrown by the caller-supplied onFileUploadSucceeded
+        // callback itself can never be caught by the rejection handler
+        // meant for putFile's own failure. The callback invocation is also
+        // wrapped in its own try/catch: it is a caller-supplied fire-and
+        // forget notification, so a throw there must never become an
+        // unhandled rejection or otherwise disrupt this hook's own control
+        // flow (the .finally() commit below).
         void bk
           .putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
-          .then(() => {
-            if (connectionGenerationRef.current !== connGen) return
-            optionsRef.current.onFileUploadSucceeded?.()
-          })
-          .catch((err: unknown) => {
-            console.error('putFile failed', err)
-            if (connectionGenerationRef.current !== connGen) return
-            optionsRef.current.onFileUploadFailed?.()
-          })
+          .then(
+            () => {
+              if (connectionGenerationRef.current !== connGen) return
+              try {
+                optionsRef.current.onFileUploadSucceeded?.()
+              } catch (err) {
+                console.error('onFileUploadSucceeded callback threw', err)
+              }
+            },
+            (err: unknown) => {
+              console.error('putFile failed', err)
+              if (connectionGenerationRef.current !== connGen) return
+              try {
+                optionsRef.current.onFileUploadFailed?.()
+              } catch (callbackErr) {
+                console.error('onFileUploadFailed callback threw', callbackErr)
+              }
+            },
+          )
           .finally(() => {
-            if (connectionGenerationRef.current !== connGen) return
             commitElements()
           })
       },
