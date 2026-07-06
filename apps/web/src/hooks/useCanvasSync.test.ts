@@ -696,6 +696,49 @@ describe('useCanvasSync', () => {
       expect(result.current.restoreLabel).toBe(null)
     })
 
+    // Root-cause regression: a connection torn down (backend switch or
+    // disconnect) while a restore was in flight must not leave the overlay
+    // permanently stuck reporting the old, now-defunct restore.
+    it('resets restoreInProgress/restoreLabel when the restoring connection is superseded', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      act(() => {
+        backendA._ctrl.handlers!.onRestoreStarted({ label: 'Restoring v3' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+      expect(result.current.restoreLabel).toBe('Restoring v3')
+
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+    })
+
+    it('resets restoreInProgress/restoreLabel when the restoring connection disconnects to null', () => {
+      const backendA = makeFakeBackend()
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend | null },
+      })
+
+      act(() => {
+        backendA._ctrl.handlers!.onRestoreStarted({ label: 'Restoring v3' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+
+      act(() => {
+        rerender({ backend: null })
+      })
+
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+    })
+
     it('clearLocalUndo() clears the UndoManager so canUndo becomes false', async () => {
       const backend = makeFakeBackend()
       const api = makeApiStub()
@@ -984,6 +1027,57 @@ describe('useCanvasSync', () => {
       expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
     })
 
+    // Mirrors the onFileUploadSucceeded-throws regression above for the
+    // catch(callbackErr) branch on the rejection path: a caller-supplied
+    // onFileUploadFailed throwing must never escape and disrupt the
+    // .finally() commit.
+    it('does not treat an exception thrown by onFileUploadFailed as disrupting the commit', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const onFileUploadFailed = vi.fn(() => {
+        throw new Error('consumer callback blew up')
+      })
+      const { result } = renderHook(() => useCanvasSync(backend, { onFileUploadFailed }))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const priorPushCalls = backend._ctrl.pushLocalUpdateCalls.length
+      const fakeEl = { type: 'image', id: 'img-fail-throw', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = {
+        id: 'file-fail-throw',
+        mimeType: 'image/png',
+        dataURL: 'data:x',
+        created: 0,
+      }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-fail-throw': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      await act(async () => {
+        backend._rejectPutFile(new Error('upload failed'))
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(onFileUploadFailed).toHaveBeenCalled()
+      // The commit must still happen exactly once despite the thrown callback.
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
+    })
+
     // Root-cause regression for the missing-coverage finding: the new
     // generation guard is only supposed to suppress the *callback signal* to
     // a superseded connection's options, never the local Loro commit itself
@@ -1043,6 +1137,74 @@ describe('useCanvasSync', () => {
       expect(onFileUploadSucceeded).not.toHaveBeenCalled()
       // And it must never be routed to B.
       expect(backendB._ctrl.pushLocalUpdateCalls.length).toBe(0)
+    })
+
+    // Root-cause regression: A's onSuccess callback fires after the
+    // connection has already switched to B. It must record the upload only
+    // against A's own (now-detached) uploaded-file set, never against B's
+    // live set — otherwise B would wrongly believe it already has the file
+    // and skip uploading it on a later change with the same fileId.
+    it("does not mark a file as uploaded on the new backend when the old backend's upload settles after a switch", async () => {
+      const backendA = makeControllablePutFileBackend()
+      const backendB = makeFakeBackend()
+      const api = makeApiStub()
+
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend, {}), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const fakeEl = { type: 'image', id: 'img-shared', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-shared', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-shared': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      // Switch to B before A's putFile settles.
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      await act(async () => {
+        backendB._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      // Now let A's putFile resolve, well after the generation moved on.
+      await act(async () => {
+        backendA._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      // A later change on B with the same fileId must still be uploaded to
+      // B — the stale A success must not have marked it uploaded on B.
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-shared': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      expect(backendB._ctrl.putFileCalls.length).toBeGreaterThan(0)
     })
   })
 

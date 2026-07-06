@@ -259,6 +259,7 @@ export function useCanvasSync(
         doc: LoroDoc,
         bk: CanvasBackend,
         connGen: number,
+        uploadedFileIds: Set<string>,
       ) => {
         if (connectionGenerationRef.current !== connGen) return
 
@@ -299,7 +300,7 @@ export function useCanvasSync(
         }
 
         const newEntries = Object.entries(files).filter(
-          ([fileId, fd]) => fd && !uploadedFileIdsRef.current.has(fileId),
+          ([fileId, fd]) => fd && !uploadedFileIds.has(fileId),
         ) as [string, BinaryFileData][]
 
         if (newEntries.length === 0) {
@@ -311,12 +312,18 @@ export function useCanvasSync(
         // commitAfterUpload ordering contract), but a failed upload is still
         // non-fatal: the elements commit always happens (regardless of a
         // backend switch in the meantime) so nothing is lost locally —
-        // `doc`/`bk` are captured at call time and isolated to this
-        // connection, matching the no-guard subscribeLocalUpdates callback
-        // below. Only the options.onFileUploadSucceeded/Failed *signal* is
-        // generation-guarded, so a superseded connection never misreports
-        // its outcome to a consumer that has already moved on to a new
-        // backend.
+        // `doc`/`bk`/`uploadedFileIds` are captured at call time and isolated
+        // to this connection, matching the no-guard subscribeLocalUpdates
+        // callback below. `uploadedFileIds` must be the Set instance in effect
+        // when this change was queued (not read from the ref at settle time):
+        // a backend switch reassigns uploadedFileIdsRef.current to a fresh Set
+        // for the new connection, and a stale success settling afterwards must
+        // record itself only on its own (now-detached) Set, never bleed into
+        // the new connection's set and falsely mark a file as already
+        // uploaded there. Only the options.onFileUploadSucceeded/Failed
+        // *signal* is generation-guarded, so a superseded connection never
+        // misreports its outcome to a consumer that has already moved on to a
+        // new backend.
         //
         // The two-argument `.then(onFulfilled, onRejected)` form is used
         // instead of `.then(onFulfilled).catch(onRejected)` so that an
@@ -328,7 +335,7 @@ export function useCanvasSync(
         // unhandled rejection or otherwise disrupt this hook's own control
         // flow (the .finally() commit below).
         void bk
-          .putFile(newEntries, (fileId) => uploadedFileIdsRef.current.add(fileId))
+          .putFile(newEntries, (fileId) => uploadedFileIds.add(fileId))
           .then(
             () => {
               if (connectionGenerationRef.current !== connGen) return
@@ -372,6 +379,13 @@ export function useCanvasSync(
     pendingExportRequestsRef.current = []
     applyGenerationRef.current += 1
     onSceneChange.cancel()
+    // A restore in flight against the connection being torn down (backend
+    // switch or disconnect) belongs to that connection alone — leaving these
+    // set would permanently stick the restore overlay to a defunct restore
+    // even though the new connection (or no connection) is not restoring
+    // anything.
+    setRestoreInProgress(false)
+    setRestoreLabel(null)
 
     if (backend === null) {
       setSyncStatus('idle')
@@ -643,7 +657,14 @@ export function useCanvasSync(
       const doc = docRef.current
       const bk = backendRef.current
       if (!doc || !bk) return
-      onSceneChange(elements, files, doc, bk, connectionGenerationRef.current)
+      onSceneChange(
+        elements,
+        files,
+        doc,
+        bk,
+        connectionGenerationRef.current,
+        uploadedFileIdsRef.current,
+      )
     },
     [onSceneChange],
   )
