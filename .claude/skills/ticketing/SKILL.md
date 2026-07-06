@@ -5,7 +5,7 @@ description: Local-private task/ticket management for the whiteboard repo across
 
 # Ticketing (local-private)
 
-Both `tmp/` and `.claude/` are gitignored, so everything here is **local to this machine** — not committed, not on GitHub, not shared. We deliberately do NOT use GitHub Issues. Two layers + a bridge:
+`tmp/` is gitignored, so its contents are **local to this machine** — not committed, not on GitHub, not shared (the shared `.claude/` tooling — workflows, agents, skills, rules — is tracked in git; only `tmp/` and a few `.claude/` sub-paths like `settings.local.json` and `worktrees/` stay per-machine). We deliberately do NOT use GitHub Issues. Two layers + a bridge:
 
 ## Two layers
 

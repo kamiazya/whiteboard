@@ -1,6 +1,6 @@
 # Development Flow (local, AI-orchestrated)
 
-Always-on map of how work runs in this repo. Day-to-day development goes through local, gitignored AI tooling under `.claude/` (workflows / agents / skills). The **main session is the single integrator**: it owns human gates (AskUserQuestion), git, CI, and status. Workflows automate bursts of work; a persistent Agent Team handles iterative consensus. Detailed how-to lives in **skills** (loaded on demand) — this rule is the index so the flow is never missed.
+Always-on map of how work runs in this repo. Day-to-day development goes through local AI tooling under `.claude/` (workflows / agents / skills) — this tooling is tracked in git and shared with every clone; only a few sub-paths (`.claude/settings.local.json`, `.claude/worktrees/`, `.claude/**/*.log`) stay per-machine via `.gitignore`. The **main session is the single integrator**: it owns human gates (AskUserQuestion), git, CI, and status. Workflows automate bursts of work; a persistent Agent Team handles iterative consensus. Detailed how-to lives in **skills** (loaded on demand) — this rule is the index so the flow is never missed.
 
 ## Lifecycle
 
@@ -48,7 +48,7 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 ## Ticketing (no GitHub Issues — all local-private)
 
-Native **Task list** = live board (in-flight / blocked / done; main session owns status). **tmp/issues/*.md** = durable private backlog (frontmatter: id/status/severity/owner/blocked-by/related/created; delete on resolve). `tmp/` and `.claude/` are both gitignored = local to this machine. See the `ticketing` skill.
+Native **Task list** = live board (in-flight / blocked / done; main session owns status). **tmp/issues/*.md** = durable private backlog (frontmatter: id/status/severity/owner/blocked-by/related/created; delete on resolve). `tmp/` is gitignored = local to this machine; `.claude/` shared tooling (workflows, agents, skills, rules, scripts, settings.json) is tracked in git, so `tmp/issues` is the private-backlog half of the split, not `.claude/` as a whole. See the `ticketing` skill.
 
 ## Skills (load for detail)
 
