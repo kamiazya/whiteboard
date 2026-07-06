@@ -161,7 +161,7 @@
     "happy-dom": "^20.9.0",
     "hono": "^4.12.27",
     "image-size": "^2",
-    "jose": "^6.2.2",
+    "jose": "^6.2.3",
     "kysely": "^0.28.17",
     "loro-crdt": "catalog:",
     "nanoid": "^5.1.16",
