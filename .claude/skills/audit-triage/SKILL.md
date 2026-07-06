@@ -27,10 +27,10 @@ It returns `triaged.items[]` (read-only), plus coverage-honesty fields: `dimensi
 
 ## Externalized criteria (`resources/*.md`)
 
-Each dimension's detailed criteria lives in `.claude/skills/audit-triage/resources/<dimension>.md` (`# <name>` heading + `## Criteria` + numbered checks), not embedded only in `.claude/agents/codebase-auditor.md`. To run with the authoritative externalized criteria:
+Each dimension's detailed criteria lives in `.claude/skills/audit-triage/resources/<dimension>.md` (Title-Case `# <Name>` heading + `## Criteria` + numbered checks), not embedded only in `.claude/agents/codebase-auditor.md`. To run with the authoritative externalized criteria:
 
 1. `Glob('.claude/skills/audit-triage/resources/*.md')`.
-2. `Read` each file; extract the `# ` heading as `name`, the full file body as `content`.
+2. `Read` each file; derive `name` from the **filename** (kebab-case, minus `.md` — e.g. `contract-drift.md` -> `contract-drift`), not the Title-Case `# ` heading. This keeps `name` matching the canonical kebab-case dimension identifiers used everywhere else (the default dimension list, the `FINDING.kind` values, `dimensionsAudited`/`failedDimensions`/`notApplicable`). Use the full file body as `content`.
 3. Pass `args.dimensions = [{name, content}, ...]` (a subset is fine — narrow to the dimensions relevant to this run).
 
 **Workflow scripts have no filesystem access** — the workflow cannot glob/read `resources/*.md` itself. The launching session (this skill's caller) must do the glob+read and pass `content` through `args`; that is why the mechanism accepts `{name, content}` objects rather than a directory path.
