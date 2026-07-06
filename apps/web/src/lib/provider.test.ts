@@ -46,6 +46,22 @@ describe('resolveProviderState', () => {
     })
   })
 
+  it('browser-local capabilities: branches and merge are false', () => {
+    const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
+    expect(state).toMatchObject({
+      kind: 'browser-local',
+      capabilities: { branches: false, merge: false },
+    })
+  })
+
+  it('local-daemon capabilities: branches and merge are true', () => {
+    const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
+    expect(state).toMatchObject({
+      kind: 'local-daemon',
+      capabilities: { branches: true, merge: true },
+    })
+  })
+
   it('descriptor JSON contains no token Authorization Bearer secret fields', () => {
     const daemonState = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     const localState = resolveProviderState(EMPTY_RUNTIME_CONFIG)

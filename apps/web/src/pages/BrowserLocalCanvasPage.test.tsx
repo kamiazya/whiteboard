@@ -555,4 +555,76 @@ describe('BrowserLocalCanvasPage', () => {
     const optionNames = screen.getAllByRole('option').map((o) => o.textContent)
     expect(optionNames).toEqual(['untitled (fresh)'])
   })
+
+  describe('daemon-only capability teasers', () => {
+    const TEASER_LABELS = ['Version history', 'Workspaces', 'Branches', 'Merge']
+
+    it('renders the four daemon-only teasers as aria-disabled with an accessible description under default (browser-local) capabilities', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await act(async () => {
+        render(<BrowserLocalCanvasPage store={store} />)
+      })
+      for (const label of TEASER_LABELS) {
+        const control = screen.getByRole('button', { name: label })
+        expect(control.getAttribute('aria-disabled')).toBe('true')
+        const describedById = control.getAttribute('aria-describedby')
+        expect(describedById).toBeTruthy()
+        const description = document.getElementById(describedById as string)
+        expect(description?.textContent).toBe(`Connect a local daemon (MCP) to enable ${label}`)
+      }
+    })
+
+    it('mutation-check: drops aria-disabled on the teasers once daemon capabilities are passed', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await act(async () => {
+        render(
+          <BrowserLocalCanvasPage
+            store={store}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: true,
+              branches: true,
+              merge: true,
+            }}
+          />,
+        )
+      })
+      for (const label of TEASER_LABELS) {
+        const control = screen.getByRole('button', { name: label })
+        expect(control.getAttribute('aria-disabled')).toBeNull()
+      }
+    })
+
+    it('does not render any mode-switch control — mode stays a read-only status', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await act(async () => {
+        render(<BrowserLocalCanvasPage store={store} />)
+      })
+      expect(screen.queryByRole('switch')).toBeNull()
+      const suspiciousButtons = screen
+        .queryAllByRole('button')
+        .filter((btn) => /switch|mode|connect daemon/i.test(btn.textContent ?? ''))
+      expect(suspiciousButtons).toEqual([])
+    })
+
+    it('keeps the existing Delete button and title editing working alongside the new teasers', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await act(async () => {
+        render(<BrowserLocalCanvasPage store={store} />)
+      })
+      expect(screen.getByRole('button', { name: /delete/i })).toBeTruthy()
+      expect(screen.getByRole('textbox', { name: /canvas title/i })).toBeTruthy()
+    })
+  })
 })

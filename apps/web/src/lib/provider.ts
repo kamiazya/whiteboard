@@ -1,35 +1,52 @@
-import { resolveHostedRuntimeConfig, resolveRuntimeConfig, type RuntimeConfig } from '../runtime-config.js'
+import {
+  resolveHostedRuntimeConfig,
+  resolveRuntimeConfig,
+  type RuntimeConfig,
+} from '../runtime-config.js'
 import { classifyPagesOrigin } from './pages-origin-policy.js'
 
 export type ProviderKind = 'browser-local' | 'local-daemon'
 
+// Static, in-process, per-provider-kind capability map — NOT a cross-process
+// or persisted contract (no negotiation, no wire payload), so this stays a
+// plain type + const map rather than a Zod schema. Deliberate, not an oversight.
 export type WhiteboardCapabilities = {
   readonly canvasReadWrite: boolean
   readonly migrationExport: boolean
   readonly migrationImport: boolean
   readonly workspaces: boolean
   readonly versions: boolean
+  readonly branches: boolean
+  readonly merge: boolean
 }
 
 export type ProviderState =
   | { readonly kind: 'browser-local'; readonly capabilities: WhiteboardCapabilities }
-  | { readonly kind: 'local-daemon'; readonly daemonBaseUrl: string; readonly capabilities: WhiteboardCapabilities }
+  | {
+      readonly kind: 'local-daemon'
+      readonly daemonBaseUrl: string
+      readonly capabilities: WhiteboardCapabilities
+    }
   | { readonly kind: 'invalid-config'; readonly message: string }
 
-const BROWSER_LOCAL_CAPABILITIES: WhiteboardCapabilities = {
+export const BROWSER_LOCAL_CAPABILITIES: WhiteboardCapabilities = {
   canvasReadWrite: true,
   migrationExport: true,
   migrationImport: false,
   workspaces: false,
   versions: false,
+  branches: false,
+  merge: false,
 }
 
-const LOCAL_DAEMON_CAPABILITIES: WhiteboardCapabilities = {
+export const LOCAL_DAEMON_CAPABILITIES: WhiteboardCapabilities = {
   canvasReadWrite: true,
   migrationExport: false,
   migrationImport: true,
   workspaces: true,
   versions: true,
+  branches: true,
+  merge: true,
 }
 
 export function resolveProviderState(config: RuntimeConfig): ProviderState {
@@ -59,7 +76,10 @@ export function resolveProviderStateFromRaw(raw: unknown): ProviderState {
 // Hosted-production variant: rejects non-production publicOrigin values and
 // Cloudflare Pages preview browser origins so that preview deploys cannot
 // silently enter browser-local mode. localhost is allowed for local dev.
-export function resolveHostedProviderStateFromRaw(raw: unknown, browserOrigin?: string): ProviderState {
+export function resolveHostedProviderStateFromRaw(
+  raw: unknown,
+  browserOrigin?: string,
+): ProviderState {
   if (browserOrigin !== undefined && classifyPagesOrigin(browserOrigin) === 'preview') {
     return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
   }
