@@ -164,7 +164,7 @@
     "jose": "^6.2.2",
     "kysely": "^0.28.17",
     "loro-crdt": "catalog:",
-    "nanoid": "^5.1.9",
+    "nanoid": "^5.1.16",
     "open": "^11.0.0",
     "pino": "^10.3.1",
     "wawoff2": "^2.0.1",
