@@ -188,7 +188,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^6.0.3",
     "@vitest/browser-playwright": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "class-variance-authority": "^0.7.1",
