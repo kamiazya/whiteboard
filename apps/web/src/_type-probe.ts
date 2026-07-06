@@ -61,3 +61,21 @@ import type {
 export declare function _useBackend(b: CanvasBackend): void
 export declare function _useHandlers(h: CanvasBackendHandlers): void
 export declare function _usePayload(p: VersionCreatedPayload): void
+
+// ── api-client from its own subpath ───────────────────────────────────────────
+import type { RuntimeConfig } from '@kamiazya/whiteboard-mcp/api-client'
+
+export { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+export declare function _useRuntimeConfig(c: RuntimeConfig): void
+
+// ── api-contracts barrel: proves the branches + canvas Zod schemas resolve
+// and z.infer-derived types compile under this DOM-enabled tsconfig too ─────
+export { branchMetaSchema, createCanvasRequestSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+
+import type {
+  branchMetaSchema,
+  createCanvasRequestSchema,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { z } from 'zod'
+export declare function _useBranchMeta(b: z.infer<typeof branchMetaSchema>): void
+export declare function _useCreateCanvasRequest(r: z.infer<typeof createCanvasRequestSchema>): void
