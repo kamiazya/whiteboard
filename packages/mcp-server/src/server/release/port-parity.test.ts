@@ -23,7 +23,7 @@ import { describe, expect, it } from 'vitest'
 // Any other divergence is a real drift and must fail.
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../../..')
+const repoRoot = resolve(__dirname, '../../../../..')
 
 interface PortPair {
   label: string
