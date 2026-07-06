@@ -25,6 +25,13 @@ It returns `triaged.items[]` (read-only), plus coverage-honesty fields: `dimensi
 
 `wiring-gaps` (looks-done-isn't) · `architecture` (seams/coupling) · `maintainability` (size/dup/dead-code) · `contract-drift` (hand-written-vs-Zod, casts) · `test-gaps` (untested critical paths, skips) · `dev-experience` (clean-clone friction).
 
+A seventh, `ai-assets` (drift within the `.claude/` asset ecosystem itself —
+stale cross-references, frontmatter validity, skill/agent overlap, naming
+consistency, coverage gaps), is available as an opt-in `resources/*.md`
+dimension (see below). It is not part of the embedded six-dimension default
+in `audit-triage.workflow.mjs` — pass it explicitly via the externalized
+`{name, content}` mechanism when auditing the tooling itself.
+
 ## Externalized criteria (`resources/*.md`)
 
 Each dimension's detailed criteria lives in `.claude/skills/audit-triage/resources/<dimension>.md` (Title-Case `# <Name>` heading + `## Criteria` + numbered checks), not embedded only in `.claude/agents/codebase-auditor.md`. To run with the authoritative externalized criteria:
@@ -36,6 +43,24 @@ Each dimension's detailed criteria lives in `.claude/skills/audit-triage/resourc
 **Workflow scripts have no filesystem access** — the workflow cannot glob/read `resources/*.md` itself. The launching session (this skill's caller) must do the glob+read and pass `content` through `args`; that is why the mechanism accepts `{name, content}` objects rather than a directory path.
 
 `.claude/agents/codebase-auditor.md` still carries its own embedded summary of the six dimensions as a legacy fallback (used when a caller passes plain dimension strings, or omits `dimensions` entirely). This is a deliberate duplication, not an oversight: `resources/*.md` is authoritative when `content` is supplied; the agent's embedded text is only the safety-net default.
+
+## Ad-hoc dimensions
+
+The launching session is not limited to the resource pack. For a run scoped
+to something the standing dimensions don't cover well (e.g. "audit only the
+websocket reconnection logic" or "audit the release-please config"),
+synthesize a target-specific `{name, content}` dimension on the fly — same
+`# <Name>` + `## Criteria` + numbered-checks shape as a `resources/*.md`
+file — and pass it in `args.dimensions` alongside (or instead of) the base
+resource dimensions.
+
+After the run, review `triaged.items[]` grouped by dimension: an ad-hoc
+dimension that produced real, verified findings (survived `verifyFloor`) is
+a candidate worth keeping for future runs. Offer it to the user for
+persistence as a new `.claude/skills/audit-triage/resources/<name>.md` file
+using the same structure. **Only persist on explicit user approval** —
+an ad-hoc dimension that found nothing this run, or that duplicates an
+existing resource, should not be added.
 
 ## Severity rubric (precision over recall)
 

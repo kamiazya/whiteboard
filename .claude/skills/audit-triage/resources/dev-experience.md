@@ -26,7 +26,9 @@ Check:
   file path that no longer exists or behaves differently now?
 - Does `.claude/` tooling (a workflow, agent, or skill) reference a command,
   path, or flag that has since changed? Contributor-facing docs and scripts
-  both fall under this dimension.
+  both fall under this dimension. Deeper drift within the `.claude/` asset
+  ecosystem itself (stale cross-references, frontmatter validity, skill
+  overlap) is the `ai-assets` dimension's job — forward findings there.
 
 ### 4. Friction discovered but never resolved
 
