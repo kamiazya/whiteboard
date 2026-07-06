@@ -5,12 +5,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Stubs for modules that DaemonBackend imports.
+// Stubs for modules that DaemonBackend imports. DaemonBackend now lives in
+// src/shared/daemon-backend.ts, so its api-client/upload-files imports
+// resolve to src/shared/*, not the src/app/lib re-export shims.
 const apiFetchMock = vi.fn()
-vi.mock('./api-client.js', () => ({ apiFetch: apiFetchMock }))
+vi.mock('../../shared/api-client.js', () => ({ apiFetch: apiFetchMock }))
 
 const uploadFilesMock = vi.fn()
-vi.mock('./upload-files.js', () => ({ uploadFiles: uploadFilesMock }))
+vi.mock('../../shared/upload-files.js', () => ({ uploadFiles: uploadFilesMock }))
 
 // Import after mocks are hoisted.
 const { DaemonBackend } = await import('./daemon-backend.js')
@@ -62,7 +64,10 @@ describe('DaemonBackend', () => {
     // jsdom does not define window.location so supply a minimal shim
     if (typeof window === 'undefined' || !window.location) {
       Object.defineProperty(globalThis, 'window', {
-        value: { location: { href: 'http://localhost/', origin: 'http://localhost' }, __WHITEBOARD_RUNTIME_CONFIG__: null },
+        value: {
+          location: { href: 'http://localhost/', origin: 'http://localhost' },
+          __WHITEBOARD_RUNTIME_CONFIG__: null,
+        },
         writable: true,
         configurable: true,
       })
@@ -78,7 +83,9 @@ describe('DaemonBackend', () => {
     })
   })
 
-  function makeHandlers(overrides: Partial<Parameters<InstanceType<typeof DaemonBackend>['connect']>[0]> = {}): Parameters<InstanceType<typeof DaemonBackend>['connect']>[0] {
+  function makeHandlers(
+    overrides: Partial<Parameters<InstanceType<typeof DaemonBackend>['connect']>[0]> = {},
+  ): Parameters<InstanceType<typeof DaemonBackend>['connect']>[0] {
     return {
       onSnapshot: vi.fn(),
       onRemoteUpdate: vi.fn(),
@@ -348,7 +355,17 @@ describe('DaemonBackend', () => {
       backend.connect(makeHandlers({ onVersionCreated }))
       const ws = FakeWebSocket.instances[0]
 
-      const msg = { type: 'version_created', version: { id: 'v1', slug: 'sl', createdAt: '2024-01-01', elementCount: 1, auto: true, hasThumbnail: false } }
+      const msg = {
+        type: 'version_created',
+        version: {
+          id: 'v1',
+          slug: 'sl',
+          createdAt: '2024-01-01',
+          elementCount: 1,
+          auto: true,
+          hasThumbnail: false,
+        },
+      }
       ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify(msg) }))
 
       expect(onVersionCreated).toHaveBeenCalledTimes(1)
@@ -362,7 +379,11 @@ describe('DaemonBackend', () => {
       backend.connect(makeHandlers({ onRestoreStarted }))
       const ws = FakeWebSocket.instances[0]
 
-      ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'restore_started', label: 'Restoring v1' }) }))
+      ws.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'restore_started', label: 'Restoring v1' }),
+        }),
+      )
       expect(onRestoreStarted).toHaveBeenCalledWith({ label: 'Restoring v1' })
       backend.disconnect()
     })
@@ -373,7 +394,9 @@ describe('DaemonBackend', () => {
       backend.connect(makeHandlers({ onRestoreComplete }))
       const ws = FakeWebSocket.instances[0]
 
-      ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'restore_complete' }) }))
+      ws.onmessage?.(
+        new MessageEvent('message', { data: JSON.stringify({ type: 'restore_complete' }) }),
+      )
       expect(onRestoreComplete).toHaveBeenCalledTimes(1)
       backend.disconnect()
     })
@@ -384,7 +407,11 @@ describe('DaemonBackend', () => {
       backend.connect(makeHandlers({ onHeadChanged }))
       const ws = FakeWebSocket.instances[0]
 
-      ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'head_changed', head: 'main' }) }))
+      ws.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'head_changed', head: 'main' }),
+        }),
+      )
       expect(onHeadChanged).toHaveBeenCalledWith({ head: 'main' })
       backend.disconnect()
     })
@@ -400,7 +427,9 @@ describe('DaemonBackend', () => {
       ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify(msg) }))
 
       expect(onViewportRequest).toHaveBeenCalledTimes(1)
-      expect(ws.send).toHaveBeenCalledWith(JSON.stringify({ type: 'viewport_response', requestId: 'req-1' }))
+      expect(ws.send).toHaveBeenCalledWith(
+        JSON.stringify({ type: 'viewport_response', requestId: 'req-1' }),
+      )
       backend.disconnect()
     })
 
@@ -434,7 +463,9 @@ describe('DaemonBackend', () => {
       backend.connect(makeHandlers({ onVersionCreated }))
       const ws = FakeWebSocket.instances[0]
 
-      ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'unknown_type', value: 42 }) }))
+      ws.onmessage?.(
+        new MessageEvent('message', { data: JSON.stringify({ type: 'unknown_type', value: 42 }) }),
+      )
       expect(onVersionCreated).not.toHaveBeenCalled()
       backend.disconnect()
     })
@@ -448,9 +479,7 @@ describe('DaemonBackend', () => {
       const backend = makeBackend()
       const result = await backend.getFile('file-abc')
 
-      expect(apiFetchMock).toHaveBeenCalledWith(
-        '/api/canvas/ws-sid/slug/file/file-abc',
-      )
+      expect(apiFetchMock).toHaveBeenCalledWith('/api/canvas/ws-sid/slug/file/file-abc')
       expect(result).toBe(fakeBlob)
     })
 
@@ -468,8 +497,14 @@ describe('DaemonBackend', () => {
       uploadFilesMock.mockResolvedValueOnce(undefined)
 
       const backend = makeBackend()
-      const entries: [string, { dataURL: string; mimeType: string; id: string; created: number }][] = [
-        ['fid-1', { id: 'fid-1', mimeType: 'image/png', dataURL: 'data:image/png;base64,abc', created: 1 }],
+      const entries: [
+        string,
+        { dataURL: string; mimeType: string; id: string; created: number },
+      ][] = [
+        [
+          'fid-1',
+          { id: 'fid-1', mimeType: 'image/png', dataURL: 'data:image/png;base64,abc', created: 1 },
+        ],
       ]
       const onFileSuccess = vi.fn()
       await backend.putFile(entries as Parameters<typeof backend.putFile>[0], onFileSuccess)
@@ -554,7 +589,11 @@ describe('DaemonBackend', () => {
       backend.connect(makeHandlers())
       const ws = FakeWebSocket.instances[0]
       ws.readyState = FakeWebSocket.OPEN
-      ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'viewport_request', requestId: 'vp-req', mode: 'fit' }) }))
+      ws.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'viewport_request', requestId: 'vp-req', mode: 'fit' }),
+        }),
+      )
       const parsed = viewportResponseMessageSchema.safeParse(JSON.parse(ws.send.mock.calls[0][0]))
       expect(parsed.success).toBe(true)
       backend.disconnect()
@@ -596,7 +635,11 @@ describe('DaemonBackend', () => {
         hasThumbnail: true,
         label: 'checkpoint',
       }
-      ws.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'version_created', version: payload }) }))
+      ws.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ type: 'version_created', version: payload }),
+        }),
+      )
 
       expect(onVersionCreated).toHaveBeenCalledWith(payload)
       backend.disconnect()

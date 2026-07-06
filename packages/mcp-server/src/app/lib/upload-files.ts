@@ -1,35 +1,4 @@
-import type { BinaryFileDataLike } from '../../shared/canvas-backend-contract.js'
-import { apiFetch } from './api-client.js'
-
-/**
- * Upload binary payloads for new fileIds with PUT /file/:fileId.
- *
- * Uses Promise.all, so any single failure rejects the whole upload step.
- * Callers must skip commitToLoro() when this rejects so elements never
- * reference files that failed to upload.
- */
-export async function uploadFiles(
-  newEntries: [string, BinaryFileDataLike][],
-  workspaceId: string,
-  slug: string,
-  onSuccess: (fileId: string) => void,
-): Promise<void> {
-  await Promise.all(
-    newEntries.map(async ([fileId, fd]) => {
-      const [, base64] = fd.dataURL.split(',')
-      const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
-      const res = await apiFetch(
-        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${fileId}`,
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': fd.mimeType },
-          body: binary,
-        },
-      )
-      if (!res.ok) {
-        throw new Error(`PUT /file/${fileId} failed: ${res.status}`)
-      }
-      onSuccess(fileId)
-    }),
-  )
-}
+// Relocated to src/shared/upload-files.ts as part of the daemon-backend
+// transport move. Re-exported here so existing src/app imports keep working
+// unchanged.
+export { uploadFiles } from '../../shared/upload-files.js'
