@@ -565,15 +565,20 @@ describe('apps/web Cloudflare Pages config (wrangler.toml)', () => {
 })
 
 // ── Cloudflare deploy secrets drift guard ─────────────────────────────────────
-// Cloudflare Pages deploy secrets are allowed only in the two intentional deploy
-// paths: release.yml (tag-gated production deploy, production-web env) and
-// deploy-preview.yml (latest + per-PR previews, non-protected preview-web env).
-// Every other workflow file and apps/web config file must not embed these
-// secrets — add to the allowlist below only if a new deploy path is introduced
-// intentionally and reviewed.
+// Cloudflare Pages deploy secrets are allowed only in the intentional deploy
+// paths: release.yml (tag-gated production deploy, production-web env),
+// deploy-preview.yml (main -> "latest" alias), and preview-pr-deploy.yml (the
+// trusted workflow_run half that publishes a PR's pre-built artifact). Note
+// preview-pr-build.yml is deliberately NOT here — it runs untrusted PR code and
+// must never see these secrets. Every other workflow / apps/web config file must
+// not embed them — extend the allowlist only for a new, reviewed deploy path.
 
 const CF_SECRETS = ['CLOUDFLARE_API_TOKEN', 'CF_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID'] as const
-const CF_SECRET_WORKFLOW_ALLOWLIST = new Set(['release.yml', 'deploy-preview.yml'])
+const CF_SECRET_WORKFLOW_ALLOWLIST = new Set([
+  'release.yml',
+  'deploy-preview.yml',
+  'preview-pr-deploy.yml',
+])
 
 describe('apps/web Cloudflare deploy secrets guard', () => {
   const configFiles = [
