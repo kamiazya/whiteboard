@@ -20,13 +20,19 @@ const LABEL: Record<ThemeMode, string> = {
   dark: 'Theme: dark — click for system',
 }
 
+const ICON: Record<ThemeMode, typeof Monitor> = {
+  system: Monitor,
+  light: Sun,
+  dark: Moon,
+}
+
 interface Props {
   theme: ThemeMode
   onChange: (next: ThemeMode) => void
 }
 
 export function ThemeToggleButton({ theme, onChange }: Props) {
-  const Icon = theme === 'system' ? Monitor : theme === 'dark' ? Moon : Sun
+  const Icon = ICON[theme]
   return (
     <Tooltip>
       <TooltipTrigger asChild>
