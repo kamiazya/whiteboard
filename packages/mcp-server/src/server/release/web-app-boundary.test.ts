@@ -643,8 +643,10 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
     )
     expect(
       deployWebSection,
-      'deploy-web job must declare the production-web environment (secrets scoped to tag-protected env); the string form and the name/url mapping form are both valid',
-    ).toMatch(/environment:\s*(?:production-web\b|\n\s+name:\s*production-web\b)/)
+      'deploy-web job must declare the production-web environment (secrets scoped to tag-protected env); the string form and the name/url mapping form are both valid, with optional quotes and any key order',
+    ).toMatch(
+      /environment:\s*(?:['"]?production-web['"]?\s*(?:\r?\n|$)|\r?\n(?:\s+[\w-]+:[^\n]*\r?\n)*?\s+name:\s*['"]?production-web['"]?)/,
+    )
   })
 
   it('deploy-web avoids the wrangler-action npm-install fallback (catalog: is pnpm-only)', () => {
