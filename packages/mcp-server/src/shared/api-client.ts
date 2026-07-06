@@ -19,7 +19,7 @@ function getWindow(): WindowLike | undefined {
   return (globalThis as { window?: WindowLike }).window
 }
 
-function readRuntimeConfig(): RuntimeConfig {
+export function readRuntimeConfig(): RuntimeConfig {
   return getWindow()?.__WHITEBOARD_RUNTIME_CONFIG__ ?? { daemonToken: null }
 }
 

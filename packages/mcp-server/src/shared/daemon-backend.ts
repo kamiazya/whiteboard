@@ -21,8 +21,7 @@
  * UndoManager history.
  */
 
-import type { RuntimeConfig } from './api-client.js'
-import { apiFetch } from './api-client.js'
+import { apiFetch, readRuntimeConfig } from './api-client.js'
 import type {
   BinaryFileDataLike,
   CanvasBackend,
@@ -117,12 +116,7 @@ export class DaemonBackend implements CanvasBackend {
   private openSocket(handlers: CanvasBackendHandlers): void {
     if (this.cancelled) return
 
-    // Structurally-typed globalThis read — see api-client.ts for why this
-    // avoids both `declare global` and a DOM lib dependency.
-    const runtimeWindow = (
-      globalThis as { window?: { __WHITEBOARD_RUNTIME_CONFIG__?: RuntimeConfig } }
-    ).window
-    const daemonToken = runtimeWindow?.__WHITEBOARD_RUNTIME_CONFIG__?.daemonToken ?? null
+    const { daemonToken } = readRuntimeConfig()
 
     const ws = new WebSocket(
       buildWhiteboardWsUrl(this.locationHref, this.workspaceId, this.slug),
