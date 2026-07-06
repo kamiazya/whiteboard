@@ -14,6 +14,15 @@ describe('formatBytes', () => {
     expect(formatBytes(1023)).toBe('1023 B')
   })
 
+  it('bumps to the next unit when rounding would display 1024', () => {
+    // 1023.6 B rounds to 1024 — display as 1.0 KiB, never "1024 B".
+    expect(formatBytes(1023.6)).toBe('1.0 KiB')
+    // 1023.95 KiB → toFixed(1) gives "1024.0" — display as 1.0 MiB.
+    expect(formatBytes(1023.95 * 1024)).toBe('1.0 MiB')
+    // At the TiB cap there is no next unit; the raw rounding stands.
+    expect(formatBytes(1023.95 * 1024 ** 4)).toBe('1024.0 TiB')
+  })
+
   it('uses one decimal at KiB / MiB / GiB scale', () => {
     expect(formatBytes(1024)).toBe('1.0 KiB')
     expect(formatBytes(1536)).toBe('1.5 KiB')
