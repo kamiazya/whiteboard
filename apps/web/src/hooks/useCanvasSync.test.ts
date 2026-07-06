@@ -220,6 +220,12 @@ describe('useCanvasSync', () => {
 
     unmount()
 
+    // subscribeLocalUpdates fires on a microtask after the flush's doc.commit(),
+    // so let it run before asserting the push landed.
+    await act(async () => {
+      await Promise.resolve()
+    })
+
     // The pending edit must have been flushed and persisted during teardown,
     // not silently dropped by the unmount cleanup.
     expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(callsBeforeChange)
@@ -254,6 +260,12 @@ describe('useCanvasSync', () => {
 
     act(() => {
       rerender({ backend: backendB })
+    })
+
+    // subscribeLocalUpdates fires on a microtask after the flush's doc.commit(),
+    // so let it run before asserting where the push landed.
+    await act(async () => {
+      await Promise.resolve()
     })
 
     // The pending edit must have landed on A during teardown — never dropped,

@@ -61,6 +61,9 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
   // Surfaces a failed "New canvas" click — mirrors cleanupError so a create
   // failure is visible instead of leaving the button a silent no-op.
   const [createError, setCreateError] = useState<string | null>(null)
+  // Guards against rapid repeated "New canvas" clicks: without it, concurrent
+  // createCanvas() calls before the first resolves would mint orphaned rows.
+  const [isCreatingCanvas, setIsCreatingCanvas] = useState(false)
   const listGenerationRef = useRef(0)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
@@ -201,15 +204,18 @@ export function BrowserLocalCanvasPage({ store, loro }: BrowserLocalCanvasPagePr
         </select>
         <button
           type="button"
+          disabled={isCreatingCanvas}
           onClick={() => {
             setCreateError(null)
+            setIsCreatingCanvas(true)
             createCanvas()
               .then((created) => switchCanvas(created.id))
               .catch(() => {
                 setCreateError('Could not create a new canvas. Please try again.')
               })
+              .finally(() => setIsCreatingCanvas(false))
           }}
-          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           New canvas
         </button>

@@ -44,6 +44,10 @@ async function clearDb(): Promise<void> {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
+    // If a prior connection isn't fully closed, deleteDatabase fires onblocked
+    // (not onsuccess/onerror); settle anyway so the suite fails clearly instead
+    // of hanging until timeout.
+    req.onblocked = () => resolve()
   })
 }
 

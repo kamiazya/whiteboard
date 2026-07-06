@@ -369,6 +369,39 @@ describe('BrowserLocalCanvasPage', () => {
     expect(list.map((c) => c.id)).toEqual(expect.arrayContaining(['c1', newId]))
   })
 
+  it('disables the New canvas button while a create is in flight so rapid clicks cannot mint orphans', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    // Gate the Loro seed inside createCanvas so the create stays pending until released.
+    let releaseCreate!: () => void
+    const gate = new Promise<void>((r) => {
+      releaseCreate = r
+    })
+    const loro = new FakeLoroStore()
+    loro.save = async () => {
+      await gate
+    }
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={loro} />)
+    })
+    const newBtn = screen.getByRole('button', { name: /new canvas/i }) as HTMLButtonElement
+    expect(newBtn.disabled).toBe(false)
+
+    await act(async () => {
+      newBtn.click()
+    })
+    // Create is in flight (Loro seed gated) — the button must be disabled.
+    expect(newBtn.disabled).toBe(true)
+
+    await act(async () => {
+      releaseCreate()
+      await vi.runAllTimersAsync()
+    })
+    // Re-enabled once the create+switch settles.
+    expect(newBtn.disabled).toBe(false)
+  })
+
   it('surfaces an error and stays on the current canvas when creating a new canvas fails', async () => {
     const base = new MemoryStore()
     await base.setDefaultCanvasId('c1')
