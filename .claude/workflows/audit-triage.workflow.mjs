@@ -36,13 +36,30 @@ const RAW_DIMENSIONS = Array.isArray(A.dimensions) && A.dimensions.length
       'test-gaps — critical paths with no nearest-layer test, .skip/xfail/todo tests, browser-only behavior covered only in jsdom, a contract with no conformance test.',
       'dev-experience — broken/incorrect setup steps, scripts that fail on a clean clone, flaky local services, missing/stale docs for a real workflow, new-contributor friction.',
     ]
-// Normalize each dimension to {name, content}. Legacy callers pass a plain descriptive
-// string (criteria stays embedded in the codebase-auditor agent); newer callers pass
-// {name, content} where content is the authoritative externalized criteria (see the
-// audit-triage skill's resources/*.md) injected straight into the auditor prompt.
-const DIMENSIONS = RAW_DIMENSIONS.map((d) =>
-  typeof d === 'string' ? { name: d.split(' ')[0], content: null, label: d } : { name: d.name, content: d.content || null, label: d.name },
-)
+// Mirrors .claude/workflows/lib/normalize-dimensions.mjs (unit-tested via node:test — the
+// workflow runtime executes this file as a standalone function body with no module resolution,
+// so it cannot `import` that file; keep the two in sync). Throws on a malformed non-string entry
+// (e.g. missing `name`) instead of letting `undefined` silently propagate into agent labels and
+// coverage-tracking arrays.
+function normalizeDimension(d) {
+  if (typeof d === 'string') return { name: d, content: null }
+  if (d && typeof d === 'object' && typeof d.name === 'string' && d.name.length > 0) {
+    return { name: d.name, content: d.content || null }
+  }
+  throw new Error(
+    `invalid dimension entry: expected a string or a {name, content} object with a non-empty "name", got ${JSON.stringify(d)}`,
+  )
+}
+// Normalize each dimension to {name, content, label}. Legacy callers pass a plain descriptive
+// string (criteria stays embedded in the codebase-auditor agent; `name` is just its first word,
+// used as the compact coverage-tracking id, while `label` keeps the full description for the
+// auditor prompt). Newer callers pass {name, content} where content is the authoritative
+// externalized criteria (see the audit-triage skill's resources/*.md) injected straight into the
+// auditor prompt; `label` mirrors `name` since there is no separate short id to derive.
+const DIMENSIONS = RAW_DIMENSIONS.map((d) => {
+  const { name, content } = normalizeDimension(d)
+  return typeof d === 'string' ? { name: name.split(' ')[0], content, label: name } : { name, content, label: name }
+})
 
 log(`audit-triage: scope="${SCOPE}", ${DIMENSIONS.length} dimensions, auditor=${AUDITOR}, verifyFloor=${VERIFY_FLOOR}`)
 
