@@ -9,6 +9,7 @@
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
+  VersionCreatedPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -18,8 +19,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@excalidraw/excalidraw', () => ({
   restoreElements: (els: unknown[]) => els,
   CaptureUpdateAction: { NEVER: 'NEVER' },
+  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
 }))
 
+// eslint-disable-next-line import/first
+import { exportToBlob } from '@excalidraw/excalidraw'
 // eslint-disable-next-line import/first
 import { useCanvasSync } from './useCanvasSync.js'
 
@@ -99,6 +103,56 @@ function makeDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void }
     resolve = r
   })
   return { promise, resolve }
+}
+
+function makeControllablePutFileBackend(): CanvasBackend & {
+  _ctrl: FakeBackendControl
+  _resolvePutFile: () => void
+  _rejectPutFile: (err: unknown) => void
+} {
+  const ctrl: FakeBackendControl = {
+    handlers: null,
+    disconnectCalled: false,
+    pushLocalUpdateCalls: [],
+    putFileCalls: [],
+  }
+  let resolvePending: (() => void) | null = null
+  let rejectPending: ((err: unknown) => void) | null = null
+  const backend: CanvasBackend & {
+    _ctrl: FakeBackendControl
+    _resolvePutFile: () => void
+    _rejectPutFile: (err: unknown) => void
+  } = {
+    _ctrl: ctrl,
+    connect(handlers) {
+      ctrl.handlers = handlers
+      handlers.onConnected()
+    },
+    disconnect() {
+      ctrl.disconnectCalled = true
+      ctrl.handlers = null
+    },
+    pushLocalUpdate(bytes) {
+      ctrl.pushLocalUpdateCalls.push(bytes)
+      return Promise.resolve()
+    },
+    getFile: async () => null,
+    putFile(entries, onSuccess) {
+      ctrl.putFileCalls.push(entries as [string, unknown][])
+      return new Promise<void>((resolve, reject) => {
+        resolvePending = () => {
+          for (const [fileId] of entries) onSuccess(fileId)
+          resolve()
+        }
+        rejectPending = reject
+      })
+    },
+    sendClientReady: () => {},
+    sendExportResponse: () => {},
+    _resolvePutFile: () => resolvePending?.(),
+    _rejectPutFile: (err: unknown) => rejectPending?.(err),
+  }
+  return backend
 }
 
 describe('useCanvasSync', () => {
@@ -545,5 +599,999 @@ describe('useCanvasSync', () => {
 
     expect(backendC._ctrl.handlers).not.toBeNull()
     expect(result.current.syncStatus).toBe('connected')
+  })
+
+  describe('daemon capability receptors', () => {
+    it('delivers onVersionCreated payload to options.onVersionCreated', () => {
+      const backend = makeFakeBackend()
+      const onVersionCreated = vi.fn()
+      renderHook(() => useCanvasSync(backend, { onVersionCreated }))
+
+      // Typed against the z.infer contract (no cast) so payload drift between
+      // the test and versionCreatedPayloadSchema fails to compile.
+      const payload: VersionCreatedPayload = {
+        id: 'v1',
+        slug: 'canvas-a',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        elementCount: 3,
+        auto: false,
+        hasThumbnail: false,
+      }
+      act(() => {
+        backend._ctrl.handlers!.onVersionCreated(payload)
+      })
+
+      expect(onVersionCreated).toHaveBeenCalledWith(payload)
+    })
+
+    it('drops a stale-generation onVersionCreated event from a torn-down connection', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const onVersionCreated = vi.fn()
+      const { rerender } = renderHook(
+        ({ backend }) => useCanvasSync(backend, { onVersionCreated }),
+        { initialProps: { backend: backendA as CanvasBackend } },
+      )
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      act(() => {
+        staleHandlers.onVersionCreated({ versionId: 'stale', createdAt: 1 } as never)
+      })
+
+      expect(onVersionCreated).not.toHaveBeenCalled()
+    })
+
+    it('passes onHeadChanged payload through to options.onHeadChanged', () => {
+      const backend = makeFakeBackend()
+      const onHeadChanged = vi.fn()
+      renderHook(() => useCanvasSync(backend, { onHeadChanged }))
+
+      const payload = { head: 'branch-1' }
+      act(() => {
+        backend._ctrl.handlers!.onHeadChanged(payload as never)
+      })
+
+      expect(onHeadChanged).toHaveBeenCalledWith(payload)
+    })
+
+    it('drops a stale-generation onHeadChanged event from a torn-down connection', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const onHeadChanged = vi.fn()
+      const { rerender } = renderHook(({ backend }) => useCanvasSync(backend, { onHeadChanged }), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      act(() => {
+        staleHandlers.onHeadChanged({ head: 'stale' } as never)
+      })
+
+      expect(onHeadChanged).not.toHaveBeenCalled()
+    })
+
+    it('sets restoreInProgress/restoreLabel on onRestoreStarted and clears them plus local undo on onRestoreComplete', () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+
+      act(() => {
+        backend._ctrl.handlers!.onRestoreStarted({ label: 'Restoring v3' } as never)
+      })
+
+      expect(result.current.restoreInProgress).toBe(true)
+      expect(result.current.restoreLabel).toBe('Restoring v3')
+
+      act(() => {
+        backend._ctrl.handlers!.onRestoreComplete()
+      })
+
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+    })
+
+    it('onRestoreStarted without a label sets restoreLabel to null', () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        backend._ctrl.handlers!.onRestoreStarted({} as never)
+      })
+
+      expect(result.current.restoreInProgress).toBe(true)
+      expect(result.current.restoreLabel).toBe(null)
+    })
+
+    // Root-cause regression: a connection torn down (backend switch or
+    // disconnect) while a restore was in flight must not leave the overlay
+    // permanently stuck reporting the old, now-defunct restore.
+    it('resets restoreInProgress/restoreLabel when the restoring connection is superseded', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      act(() => {
+        backendA._ctrl.handlers!.onRestoreStarted({ label: 'Restoring v3' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+      expect(result.current.restoreLabel).toBe('Restoring v3')
+
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+    })
+
+    it('resets restoreInProgress/restoreLabel when the restoring connection disconnects to null', () => {
+      const backendA = makeFakeBackend()
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend | null },
+      })
+
+      act(() => {
+        backendA._ctrl.handlers!.onRestoreStarted({ label: 'Restoring v3' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+
+      act(() => {
+        rerender({ backend: null })
+      })
+
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+    })
+
+    it('clearLocalUndo() clears the UndoManager so canUndo becomes false', async () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const fakeEl = { type: 'rectangle', id: 'el-undo', x: 0, y: 0, width: 10, height: 10 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      act(() => {
+        result.current.clearLocalUndo()
+      })
+
+      // Undo shortcut is a no-op after clearLocalUndo: the scene is untouched.
+      const updateSceneCallsBefore = api.updateScene.mock.calls.length
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
+      )
+      expect(api.updateScene.mock.calls.length).toBe(updateSceneCallsBefore)
+    })
+
+    it('sets syncStatus to "error" when onAuthError fires', () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        backend._ctrl.handlers!.onAuthError?.()
+      })
+
+      expect(result.current.syncStatus).toBe('error')
+    })
+
+    it('drops a stale-generation onAuthError from a torn-down connection', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+      expect(result.current.syncStatus).toBe('connected')
+
+      act(() => {
+        staleHandlers.onAuthError?.()
+      })
+
+      expect(result.current.syncStatus).toBe('connected')
+    })
+
+    it('calls sendClientReady on connect and again when setExcalidrawAPI fires', () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const sendClientReadySpy = vi.spyOn(backend, 'sendClientReady')
+
+      const { result } = renderHook(() => useCanvasSync(backend))
+      expect(sendClientReadySpy).toHaveBeenCalledTimes(1)
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      expect(sendClientReadySpy).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('onViewportRequest', () => {
+    it('mode "fit" with elementIds calls scrollToContent with only the matching elements', () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const elA = { id: 'a' }
+      const elB = { id: 'b' }
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [elA, elB]
+      const { result } = renderHook(() => useCanvasSync(backend))
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const scrollToContent = vi.fn()
+      ;(api as unknown as { scrollToContent: typeof scrollToContent }).scrollToContent =
+        scrollToContent
+
+      act(() => {
+        backend._ctrl.handlers!.onViewportRequest({
+          mode: 'fit',
+          elementIds: ['a'],
+        } as never)
+      })
+
+      expect(scrollToContent).toHaveBeenCalledWith(
+        [elA],
+        expect.objectContaining({
+          fitToContent: true,
+        }),
+      )
+    })
+
+    it('mode "move" calls updateScene with merged appState', () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      act(() => {
+        backend._ctrl.handlers!.onViewportRequest({
+          mode: 'move',
+          scrollX: 10,
+          scrollY: 20,
+          zoom: 2,
+        } as never)
+      })
+
+      expect(api.updateScene).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appState: expect.objectContaining({
+            scrollX: 10,
+            scrollY: 20,
+            zoom: { value: 2 },
+          }),
+        }),
+      )
+    })
+
+    it('mode "fit" with elementIds omitted fits the entire scene', () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const elA = { id: 'a' }
+      const elB = { id: 'b' }
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [elA, elB]
+      const { result } = renderHook(() => useCanvasSync(backend))
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const scrollToContent = vi.fn()
+      ;(api as unknown as { scrollToContent: typeof scrollToContent }).scrollToContent =
+        scrollToContent
+
+      act(() => {
+        backend._ctrl.handlers!.onViewportRequest({ mode: 'fit' } as never)
+      })
+
+      expect(scrollToContent).toHaveBeenCalledWith(
+        [elA, elB],
+        expect.objectContaining({ fitToContent: true }),
+      )
+    })
+
+    it('mode "fit" skips scrollToContent when the filtered target list is empty', () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const elA = { id: 'a' }
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [elA]
+      const { result } = renderHook(() => useCanvasSync(backend))
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const scrollToContent = vi.fn()
+      ;(api as unknown as { scrollToContent: typeof scrollToContent }).scrollToContent =
+        scrollToContent
+
+      act(() => {
+        backend._ctrl.handlers!.onViewportRequest({
+          mode: 'fit',
+          elementIds: ['nonexistent'],
+        } as never)
+      })
+
+      expect(scrollToContent).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('onExportRequest', () => {
+    it('queues a request before the API is ready and flushes it once setExcalidrawAPI fires', async () => {
+      const backend = makeFakeBackend()
+      const sendExportResponseSpy = vi.spyOn(backend, 'sendExportResponse')
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      await act(async () => {
+        await backend._ctrl.handlers!.onExportRequest({ requestId: 'req-1' } as never)
+      })
+
+      expect(sendExportResponseSpy).not.toHaveBeenCalled()
+
+      const api = makeApiStub()
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => []
+      ;(api as unknown as { getFiles: () => unknown }).getFiles = () => ({})
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        await vi.runAllTimersAsync()
+      })
+
+      expect(sendExportResponseSpy).toHaveBeenCalledWith('req-1', expect.any(String))
+    })
+
+    // Root-cause regression: onExportRequest awaited handleIncomingExportRequest
+    // with no error handling, unlike the equivalent flushPendingExportRequests
+    // path a few lines below it (which wraps the same call in .catch). A
+    // rejection here (e.g. exportToBlob throwing) must be caught and logged,
+    // not left to become an unhandled promise rejection.
+    it('catches and logs a rejection from handleIncomingExportRequest instead of throwing', async () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useCanvasSync(backend))
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const api = makeApiStub()
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => []
+      ;(api as unknown as { getFiles: () => unknown }).getFiles = () => ({})
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      vi.mocked(exportToBlob).mockRejectedValueOnce(new Error('export blew up'))
+
+      await expect(
+        act(async () => {
+          await backend._ctrl.handlers!.onExportRequest({ requestId: 'req-fail' } as never)
+        }),
+      ).resolves.not.toThrow()
+
+      expect(consoleErrorSpy).toHaveBeenCalledWith('onExportRequest failed', expect.any(Error))
+      consoleErrorSpy.mockRestore()
+    })
+  })
+
+  describe('putFile ordering', () => {
+    it('awaits putFile settlement before doc.commit(), and calls onFileUploadSucceeded on success', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const onFileUploadSucceeded = vi.fn()
+      const { result } = renderHook(() => useCanvasSync(backend, { onFileUploadSucceeded }))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const priorPushCalls = backend._ctrl.pushLocalUpdateCalls.length
+      const fakeEl = { type: 'image', id: 'img-await', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-await', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, { 'file-await': fakeFile as never })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      // Commit must not have happened yet: putFile has not settled.
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBe(priorPushCalls)
+
+      await act(async () => {
+        backend._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
+      expect(onFileUploadSucceeded).toHaveBeenCalled()
+    })
+
+    it('still commits (non-fatal) when putFile rejects, and calls onFileUploadFailed', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const onFileUploadFailed = vi.fn()
+      const { result } = renderHook(() => useCanvasSync(backend, { onFileUploadFailed }))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const priorPushCalls = backend._ctrl.pushLocalUpdateCalls.length
+      const fakeEl = { type: 'image', id: 'img-fail', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-fail', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, { 'file-fail': fakeFile as never })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      await act(async () => {
+        backend._rejectPutFile(new Error('upload failed'))
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
+      expect(onFileUploadFailed).toHaveBeenCalled()
+    })
+
+    // Root-cause regression for the then().catch() antipattern: an exception
+    // thrown by the caller-supplied onFileUploadSucceeded callback must never
+    // be observed as a putFile failure (no onFileUploadFailed call, commit
+    // still happens exactly once).
+    it('does not treat an exception thrown by onFileUploadSucceeded as a putFile failure', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const onFileUploadFailed = vi.fn()
+      const onFileUploadSucceeded = vi.fn(() => {
+        throw new Error('consumer callback blew up')
+      })
+      const { result } = renderHook(() =>
+        useCanvasSync(backend, { onFileUploadSucceeded, onFileUploadFailed }),
+      )
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const priorPushCalls = backend._ctrl.pushLocalUpdateCalls.length
+      const fakeEl = { type: 'image', id: 'img-throw', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-throw', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, { 'file-throw': fakeFile as never })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      await act(async () => {
+        backend._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(onFileUploadSucceeded).toHaveBeenCalled()
+      expect(onFileUploadFailed).not.toHaveBeenCalled()
+      // The commit must still happen exactly once despite the thrown callback.
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
+    })
+
+    // Mirrors the onFileUploadSucceeded-throws regression above for the
+    // catch(callbackErr) branch on the rejection path: a caller-supplied
+    // onFileUploadFailed throwing must never escape and disrupt the
+    // .finally() commit.
+    it('does not treat an exception thrown by onFileUploadFailed as disrupting the commit', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const onFileUploadFailed = vi.fn(() => {
+        throw new Error('consumer callback blew up')
+      })
+      const { result } = renderHook(() => useCanvasSync(backend, { onFileUploadFailed }))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const priorPushCalls = backend._ctrl.pushLocalUpdateCalls.length
+      const fakeEl = { type: 'image', id: 'img-fail-throw', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = {
+        id: 'file-fail-throw',
+        mimeType: 'image/png',
+        dataURL: 'data:x',
+        created: 0,
+      }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-fail-throw': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      await act(async () => {
+        backend._rejectPutFile(new Error('upload failed'))
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(onFileUploadFailed).toHaveBeenCalled()
+      // The commit must still happen exactly once despite the thrown callback.
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(priorPushCalls)
+    })
+
+    // Root-cause regression for the missing-coverage finding: the new
+    // generation guard is only supposed to suppress the *callback signal* to
+    // a superseded connection's options, never the local Loro commit itself
+    // — dropping the commit would silently lose the edit from the document,
+    // not merely fail to notify a stale consumer.
+    it('still commits the pending edit to A when A is superseded mid-upload, but suppresses the stale onFileUploadSucceeded callback', async () => {
+      const backendA = makeControllablePutFileBackend()
+      const backendB = makeFakeBackend()
+      const api = makeApiStub()
+      const onFileUploadSucceeded = vi.fn()
+
+      const { result, rerender } = renderHook(
+        ({ backend }) => useCanvasSync(backend, { onFileUploadSucceeded }),
+        { initialProps: { backend: backendA as CanvasBackend } },
+      )
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const aPushCallsBefore = backendA._ctrl.pushLocalUpdateCalls.length
+
+      const fakeEl = { type: 'image', id: 'img-switch', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-switch', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-switch': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      // putFile is in flight against A. Switch to B before it settles.
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      // Now let A's putFile resolve, after the generation has moved on.
+      await act(async () => {
+        backendA._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      // The local edit must still be committed and pushed through A's own
+      // (now-disconnected) connection — never silently dropped.
+      expect(backendA._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(aPushCallsBefore)
+      // But the stale connection must not report success to the live options.
+      expect(onFileUploadSucceeded).not.toHaveBeenCalled()
+      // And it must never be routed to B.
+      expect(backendB._ctrl.pushLocalUpdateCalls.length).toBe(0)
+    })
+
+    // Root-cause regression: A's onSuccess callback fires after the
+    // connection has already switched to B. It must record the upload only
+    // against A's own (now-detached) uploaded-file set, never against B's
+    // live set — otherwise B would wrongly believe it already has the file
+    // and skip uploading it on a later change with the same fileId.
+    it("does not mark a file as uploaded on the new backend when the old backend's upload settles after a switch", async () => {
+      const backendA = makeControllablePutFileBackend()
+      const backendB = makeFakeBackend()
+      const api = makeApiStub()
+
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend, {}), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const fakeEl = { type: 'image', id: 'img-shared', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = { id: 'file-shared', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-shared': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      // Switch to B before A's putFile settles.
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      await act(async () => {
+        backendB._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      // Now let A's putFile resolve, well after the generation moved on.
+      await act(async () => {
+        backendA._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      // A later change on B with the same fileId must still be uploaded to
+      // B — the stale A success must not have marked it uploaded on B.
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-shared': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      expect(backendB._ctrl.putFileCalls.length).toBeGreaterThan(0)
+    })
+
+    // Root-cause regression: onSceneChange used to gate doc.commit() behind
+    // an async putFile().finally() only for firings with new files. Firings
+    // are not otherwise serialized against each other, so a later, file-less
+    // firing could commit synchronously (out of order) while an earlier
+    // firing's putFile was still pending. When that earlier firing's commit
+    // finally ran, it used its own stale `elements` snapshot — silently
+    // tombstoning any element the later firing had added in the meantime.
+    it('serializes commits across firings so a slow file-upload commit never reverts a faster, later file-less commit', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const elA = {
+        type: 'image',
+        id: 'el-a',
+        x: 0,
+        y: 0,
+        width: 10,
+        height: 10,
+        fileId: 'file-a',
+      }
+      const fileA = { id: 'file-a', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+
+      // Firing A: a new image element with a file upload that stays pending
+      // until _resolvePutFile() is called below.
+      act(() => {
+        result.current.onChange([elA as never], {} as never, { 'file-a': fileA as never })
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+      expect(backend._ctrl.putFileCalls.length).toBe(1)
+
+      // Firing B: a later, file-less edit adding a second element. No new
+      // files means this firing has nothing to await, so it would otherwise
+      // race ahead of A's still-pending commit.
+      const elB = { type: 'rectangle', id: 'el-b', x: 0, y: 0, width: 5, height: 5 }
+      act(() => {
+        result.current.onChange([elA as never, elB as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      // Now let A's stale putFile settle.
+      await act(async () => {
+        backend._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      const finalDoc = new LoroDoc()
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) {
+        finalDoc.import(bytes)
+      }
+      const finalElements = finalDoc.getMovableList('elements').toJSON() as Array<{
+        id: string
+        isDeleted?: boolean
+      }>
+      const elBFinal = finalElements.find((e) => e.id === 'el-b')
+      expect(elBFinal).toBeDefined()
+      expect(elBFinal?.isDeleted).not.toBe(true)
+    })
+
+    it('a firing whose commit throws does not poison the chain — later firings still commit', async () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+      const callsBefore = backend._ctrl.pushLocalUpdateCalls.length
+
+      // Firing 1: an element whose property enumeration throws mid-commit.
+      // Without a guard this rejects the commit chain, and every later firing
+      // chained via .then() is silently skipped for the rest of the session.
+      const poison = new Proxy(
+        { type: 'rectangle', id: 'el-poison', x: 0, y: 0, width: 1, height: 1 },
+        {
+          ownKeys() {
+            throw new Error('poisoned element')
+          },
+        },
+      )
+      act(() => {
+        result.current.onChange([poison as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      // Firing 2: a normal element. Its commit must still land.
+      const elB = { type: 'rectangle', id: 'el-after-poison', x: 0, y: 0, width: 5, height: 5 }
+      act(() => {
+        result.current.onChange([elB as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(callsBefore)
+      const finalDoc = new LoroDoc()
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) {
+        finalDoc.import(bytes)
+      }
+      const ids = (finalDoc.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
+        (e) => e.id,
+      )
+      expect(ids).toContain('el-after-poison')
+    })
+
+    it('a putFile that never settles stops blocking the chain after the upload timeout', async () => {
+      const backend = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      // Firing A: image upload that never settles (hung network).
+      const elA = { type: 'image', id: 'el-hang', x: 0, y: 0, width: 10, height: 10, fileId: 'f-h' }
+      const fileA = { id: 'f-h', mimeType: 'image/png', dataURL: 'data:x', created: 0 }
+      act(() => {
+        result.current.onChange([elA as never], {} as never, { 'f-h': fileA as never })
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+      expect(backend._ctrl.putFileCalls.length).toBe(1)
+
+      // Firing B: file-less edit queued behind A's hung upload.
+      const elB = { type: 'rectangle', id: 'el-after-hang', x: 0, y: 0, width: 5, height: 5 }
+      act(() => {
+        result.current.onChange([elA as never, elB as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      // Never resolve the upload; advance past the upload timeout instead.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000)
+      })
+
+      const finalDoc = new LoroDoc()
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) {
+        finalDoc.import(bytes)
+      }
+      const ids = (finalDoc.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
+        (e) => e.id,
+      )
+      expect(ids).toContain('el-after-hang')
+    })
+  })
+
+  describe('stale-generation drop coverage for restore/viewport/export handlers', () => {
+    it('drops a stale-generation onRestoreStarted/onRestoreComplete event from a torn-down connection', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      act(() => {
+        staleHandlers.onRestoreStarted({ label: 'stale restore' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(false)
+      expect(result.current.restoreLabel).toBe(null)
+
+      // Also verify onRestoreComplete is dropped: put the live connection into
+      // a restoring state via a fresh (non-stale) event, then confirm the
+      // stale handler cannot clear it.
+      act(() => {
+        backendB._ctrl.handlers!.onRestoreStarted({ label: 'live restore' } as never)
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+
+      act(() => {
+        staleHandlers.onRestoreComplete()
+      })
+      expect(result.current.restoreInProgress).toBe(true)
+      expect(result.current.restoreLabel).toBe('live restore')
+    })
+
+    it('drops a stale-generation onViewportRequest event from a torn-down connection', () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const api = makeApiStub()
+      const scrollToContent = vi.fn()
+      ;(api as unknown as { scrollToContent: typeof scrollToContent }).scrollToContent =
+        scrollToContent
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => [
+        { id: 'a' },
+      ]
+
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      act(() => {
+        staleHandlers.onViewportRequest({ mode: 'fit', elementIds: ['a'] } as never)
+      })
+
+      expect(scrollToContent).not.toHaveBeenCalled()
+    })
+
+    it('drops a stale-generation onExportRequest event from a torn-down connection', async () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const sendExportResponseSpyA = vi.spyOn(backendA, 'sendExportResponse')
+
+      const { rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      const staleHandlers = backendA._ctrl.handlers!
+      rerender({ backend: backendB })
+
+      await act(async () => {
+        await staleHandlers.onExportRequest({ requestId: 'stale-req' } as never)
+      })
+
+      expect(sendExportResponseSpyA).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('export_response routing after a backend switch', () => {
+    // Root-cause regression: an in-flight export must be answered on the
+    // backend that requested it, never on whatever backend happens to be
+    // live by the time the (async) export/base64 work finishes.
+    it('routes the export response to the requesting backend, not a backend switched in mid-export', async () => {
+      const backendA = makeFakeBackend()
+      const backendB = makeFakeBackend()
+      const sendExportResponseSpyA = vi.spyOn(backendA, 'sendExportResponse')
+      const sendExportResponseSpyB = vi.spyOn(backendB, 'sendExportResponse')
+      const api = makeApiStub()
+      ;(api as unknown as { getSceneElements: () => unknown[] }).getSceneElements = () => []
+      ;(api as unknown as { getFiles: () => unknown }).getFiles = () => ({})
+
+      const { result, rerender } = renderHook(({ backend }) => useCanvasSync(backend), {
+        initialProps: { backend: backendA as CanvasBackend },
+      })
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      // Fire the export request against A, then switch to B before the
+      // (mocked, but still async) export/base64 conversion resolves. The
+      // promise is intentionally not awaited directly here — blobToBase64
+      // uses a real FileReader, which needs fake timers advanced via
+      // runAllTimersAsync to ever settle.
+      void backendA._ctrl.handlers!.onExportRequest({ requestId: 'req-a' } as never)
+
+      act(() => {
+        rerender({ backend: backendB })
+      })
+
+      await act(async () => {
+        await vi.runAllTimersAsync()
+      })
+
+      expect(sendExportResponseSpyA).toHaveBeenCalledWith('req-a', expect.any(String))
+      expect(sendExportResponseSpyB).not.toHaveBeenCalled()
+    })
   })
 })

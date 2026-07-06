@@ -32,6 +32,7 @@ vi.mock('@excalidraw/excalidraw', () => ({
   },
   restoreElements: (els: unknown[]) => els,
   CaptureUpdateAction: { NEVER: 'NEVER' },
+  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
 }))
 
 // BrowserLocalBackend uses LoroDoc; mock it to avoid WASM in jsdom.
