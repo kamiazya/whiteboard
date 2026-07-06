@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
+import { BROWSER_LOCAL_CAPABILITIES } from '../lib/provider.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
@@ -599,6 +600,28 @@ describe('BrowserLocalCanvasPage', () => {
       for (const label of TEASER_LABELS) {
         const control = screen.getByRole('button', { name: label })
         expect(control.getAttribute('aria-disabled')).toBeNull()
+      }
+    })
+
+    it('pins each teaser to its own distinct capability field', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await act(async () => {
+        render(
+          <BrowserLocalCanvasPage
+            store={store}
+            capabilities={{ ...BROWSER_LOCAL_CAPABILITIES, workspaces: true }}
+          />,
+        )
+      })
+      for (const label of TEASER_LABELS) {
+        const control = screen.getByRole('button', { name: label })
+        if (label === 'Workspaces') {
+          expect(control.getAttribute('aria-disabled')).toBeNull()
+        } else {
+          expect(control.getAttribute('aria-disabled')).toBe('true')
+        }
       }
     })
 
