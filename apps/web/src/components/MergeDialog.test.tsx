@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Stub @excalidraw/excalidraw because roughjs does not resolve cleanly in this Vitest environment.
 // The visual preview path is covered by browser-level verification.
@@ -9,7 +9,11 @@ vi.mock('@excalidraw/excalidraw', () => ({
 }))
 vi.mock('@excalidraw/excalidraw/index.css', () => ({}))
 
-import type { BranchMeta, MergeResponse } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type {
+  BranchMeta,
+  MergeResponse,
+  VersionEntry,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
 import { MERGE_COMMITTED_EVENT, mergeCommittedDetailSchema } from '@/lib/merge-committed-event'
 import { MergeDialog } from './MergeDialog.js'
 
@@ -26,7 +30,33 @@ const feature: BranchMeta = {
   createdAt: '2026-04-23T01:00:00Z',
 }
 
-afterEach(() => cleanup())
+function versionEntry(overrides: Partial<VersionEntry>): VersionEntry {
+  return {
+    id: 'v0',
+    slug: 'c1',
+    createdAt: '2026-04-23T00:00:00Z',
+    elementCount: 1,
+    auto: false,
+    hasThumbnail: true,
+    branchName: 'main',
+    ...overrides,
+  }
+}
+
+beforeEach(() => {
+  // The thumbnail-fallback effect calls apiFetch(.../versions) whenever workspaceId/slug
+  // are provided; default to an empty (but schema-valid) list so tests that don't care
+  // about thumbnails resolve deterministically instead of hitting the real network.
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ versions: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+})
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 describe('MergeDialog', () => {
   it('calls runMerge with dryRun=true when opened', async () => {
@@ -251,5 +281,52 @@ describe('MergeDialog', () => {
       />,
     )
     await screen.findByText(/branch already exists/i)
+  })
+
+  it('renders the latest thumbnail per branch, picking the newest when several match', async () => {
+    const versions: VersionEntry[] = [
+      versionEntry({ id: 'main-old', branchName: 'main', createdAt: '2026-04-22T00:00:00Z' }),
+      versionEntry({ id: 'main-new', branchName: 'main', createdAt: '2026-04-23T12:00:00Z' }),
+      versionEntry({
+        id: 'feature-only',
+        branchName: 'feature',
+        createdAt: '2026-04-23T05:00:00Z',
+      }),
+      // No thumbnail: must be excluded from candidates even though it is the newest.
+      versionEntry({
+        id: 'feature-no-thumb',
+        branchName: 'feature',
+        createdAt: '2026-04-23T23:00:00Z',
+        hasThumbnail: false,
+      }),
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ versions }), { status: 200 })),
+    )
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+        workspaceId="w1"
+        slug="c1"
+      />,
+    )
+    const sourceCard = await screen.findByTestId('merge-branch-card-source')
+    const targetCard = await screen.findByTestId('merge-branch-card-target')
+    await waitFor(() => {
+      expect(sourceCard.querySelector('img')?.getAttribute('src')).toBe(
+        '/api/workspaces/w1/canvases/c1/versions/feature-only/thumbnail',
+      )
+    })
+    expect(targetCard.querySelector('img')?.getAttribute('src')).toBe(
+      '/api/workspaces/w1/canvases/c1/versions/main-new/thumbnail',
+    )
   })
 })
