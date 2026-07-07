@@ -126,10 +126,11 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     const input = await screen.findByPlaceholderText('New branch name')
     await userEvent.type(input, 'my-new-branch{Enter}')
 
-    // The dropdown stays open on error so the user can retry, which puts the
-    // error banner under Radix's aria-hidden'd background wrapper — query
-    // with `hidden: true` to reach it.
-    const alert = await screen.findByRole('alert', { hidden: true })
+    // The dropdown stays open on error so the user can retry; the error must
+    // render inside the still-open dropdown content, not behind Radix's
+    // aria-hidden'd background wrapper — a plain (non-hidden) query proves
+    // it is actually visible/announced.
+    const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('Failed to create branch')
   })
 
@@ -160,7 +161,9 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     await userEvent.clear(input)
     await userEvent.type(input, 'renamed-branch{Enter}')
 
-    const alert = await screen.findByRole('alert', { hidden: true })
+    // The rename dialog stays open on error; the error must render inside the
+    // still-open dialog content, so a plain (non-hidden) query must find it.
+    const alert = await screen.findByRole('alert')
     expect(alert.textContent).toContain('Failed to rename branch')
   })
 
@@ -218,6 +221,41 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     await userEvent.type(input, 'renamed-branch{Enter}')
 
     expect(stateHolder.current.renameBranch).toHaveBeenCalledWith('feature-x', 'renamed-branch')
+  })
+
+  it('does not open MergeDialog when HEAD is stale (not yet present in the branches list)', async () => {
+    // Simulates HEAD changing before the branches list has been refetched to
+    // include it: `state.branches.find(b => b.name === head)` is undefined,
+    // so a merge pick must not open MergeDialog with a null target.
+    stateHolder.current.state = { head: 'ghost-branch', branches }
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const mergeItem = await screen.findByText('feature-x')
+    await userEvent.click(mergeItem)
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(stateHolder.current.merge).not.toHaveBeenCalled()
+  })
+
+  it('omits the unmerged-commits count when getBranchStats rejects during delete confirmation', async () => {
+    stateHolder.current.state = { head: 'feature-x', branches }
+    stateHolder.current.getBranchStats = vi.fn().mockRejectedValue(new Error('network error'))
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const deleteItem = await screen.findByText(/Delete/)
+    await userEvent.click(deleteItem)
+
+    await screen.findByText(/Delete «feature-x»\?/)
+    expect(screen.queryByText(/unmerged commits remain/)).toBeNull()
+
+    const confirmButton = await screen.findByRole('button', { name: 'Delete' })
+    await userEvent.click(confirmButton)
+
+    expect(stateHolder.current.deleteBranch).toHaveBeenCalledWith('feature-x')
   })
 
   it('keeps the merge target stable when HEAD changes while the merge dialog is open', async () => {

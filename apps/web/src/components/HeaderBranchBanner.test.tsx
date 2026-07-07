@@ -88,6 +88,15 @@ describe('HeaderBranchBanner', () => {
     expect(screen.queryByTestId('header-branch-banner')).toBeNull()
   })
 
+  it('hides the banner when getBranchStats rejects (failures stay silent)', async () => {
+    state.current.getBranchStats = vi.fn().mockRejectedValue(new Error('network error'))
+    render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)
+    await waitFor(() => {
+      expect(state.current.getBranchStats).toHaveBeenCalled()
+    })
+    expect(screen.queryByTestId('header-branch-banner')).toBeNull()
+  })
+
   it('does NOT register an excalidraw:head_changed listener (callback model, not window bus)', () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
     render(<HeaderBranchBanner workspaceId="s1" slug="c1" />)

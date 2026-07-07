@@ -162,6 +162,30 @@ export function HeaderBranchChip({
 
   const chipColor = activeBranch?.color ?? '#64748b'
 
+  // Radix marks background content inert/aria-hidden while a dropdown or
+  // dialog is open, so an error raised inside one of those flows must render
+  // *inside* the still-open surface to stay visible and announced — a copy
+  // rendered only in the header row would be hidden until the user closes it.
+  const errorBanner = errorMessage ? (
+    <div
+      role="alert"
+      className="flex max-w-[200px] items-center gap-1 text-[11px] text-destructive"
+    >
+      <span aria-hidden>⚠</span>
+      <span className="truncate" title={errorMessage}>
+        {errorMessage}
+      </span>
+      <button
+        type="button"
+        className="ml-auto text-muted-foreground hover:text-foreground"
+        onClick={() => setErrorMessage(null)}
+        aria-label="Dismiss error"
+      >
+        ×
+      </button>
+    </div>
+  ) : null
+
   return (
     <div className="flex items-center gap-1">
       {/* Main chip: branch switching and creation live in this dropdown. */}
@@ -231,37 +255,40 @@ export function HeaderBranchChip({
           ))}
           <DropdownMenuSeparator />
           {createOpen ? (
-            <form
-              className="flex items-center gap-1 p-1"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void submitCreate()
-              }}
-            >
-              <Input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="New branch name"
-                autoFocus
-                aria-label="New branch name"
-                className="h-7 text-xs"
-              />
-              <Button type="submit" size="sm" variant="outline" className="h-7 px-2 text-xs">
-                Add
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="h-7 px-2 text-xs"
-                onClick={() => {
-                  setCreateOpen(false)
-                  setNewName('')
+            <>
+              <form
+                className="flex items-center gap-1 p-1"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void submitCreate()
                 }}
               >
-                Cancel
-              </Button>
-            </form>
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="New branch name"
+                  autoFocus
+                  aria-label="New branch name"
+                  className="h-7 text-xs"
+                />
+                <Button type="submit" size="sm" variant="outline" className="h-7 px-2 text-xs">
+                  Add
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => {
+                    setCreateOpen(false)
+                    setNewName('')
+                  }}
+                >
+                  Cancel
+                </Button>
+              </form>
+              {errorBanner ? <div className="px-1 pb-1">{errorBanner}</div> : null}
+            </>
           ) : (
             <DropdownMenuItem
               onSelect={(event) => {
@@ -306,7 +333,13 @@ export function HeaderBranchChip({
             otherBranches.map((b) => (
               <DropdownMenuItem
                 key={`merge-${b.name}`}
-                onSelect={() => setPendingMerge({ source: b, target: activeBranch ?? null })}
+                onSelect={() => {
+                  // activeBranch can be momentarily undefined if HEAD changed
+                  // but the branches list has not been refetched yet. Never
+                  // open MergeDialog with a null target in that window.
+                  if (!activeBranch) return
+                  setPendingMerge({ source: b, target: activeBranch })
+                }}
                 className="gap-2"
               >
                 <span
@@ -344,25 +377,10 @@ export function HeaderBranchChip({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {errorMessage ? (
-        <div
-          role="alert"
-          className="flex max-w-[200px] items-center gap-1 text-[11px] text-destructive"
-        >
-          <span aria-hidden>⚠</span>
-          <span className="truncate" title={errorMessage}>
-            {errorMessage}
-          </span>
-          <button
-            type="button"
-            className="ml-auto text-muted-foreground hover:text-foreground"
-            onClick={() => setErrorMessage(null)}
-            aria-label="Dismiss error"
-          >
-            ×
-          </button>
-        </div>
-      ) : null}
+      {/* Rendered inline inside the create form / rename dialog while those
+          surfaces are open (see errorBanner above); only fall back to this
+          header-row copy once neither is open. */}
+      {!createOpen && !renameOpen ? errorBanner : null}
 
       {/* Rename dialog */}
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
@@ -386,6 +404,7 @@ export function HeaderBranchChip({
             placeholder={renameTarget?.name ?? head}
             maxLength={80}
           />
+          {renameOpen && errorBanner ? errorBanner : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameOpen(false)}>
               Cancel
