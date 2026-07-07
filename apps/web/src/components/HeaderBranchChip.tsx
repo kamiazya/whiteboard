@@ -389,7 +389,11 @@ export function HeaderBranchChip({
             className="gap-2 text-destructive focus:text-destructive"
             onSelect={(e) => {
               e.preventDefault()
-              if (activeBranch) setPendingDelete(activeBranch)
+              if (activeBranch) {
+                // Same stale-error hygiene as the rename flow.
+                setErrorMessage(null)
+                setPendingDelete(activeBranch)
+              }
             }}
           >
             <Trash2 className="size-3.5" />
