@@ -352,14 +352,14 @@ export function MergeDialog({
           <DialogTitle className="flex items-center gap-2">
             <GitMerge className="h-4 w-4" />
             <span>
+              Merge changes from{' '}
               <span style={{ color: source?.color ?? undefined }} className="font-semibold">
                 «{source?.name ?? '?'}»
               </span>{' '}
-              changes from{' '}
+              into{' '}
               <span style={{ color: target?.color ?? undefined }} className="font-semibold">
                 «{target?.name ?? '?'}»
-              </span>{' '}
-              into
+              </span>
             </span>
           </DialogTitle>
           <DialogDescription>

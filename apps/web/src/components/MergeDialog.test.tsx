@@ -283,6 +283,76 @@ describe('MergeDialog', () => {
     await screen.findByText(/branch already exists/i)
   })
 
+  it('renders a complete, correctly-ordered merge title', async () => {
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    const title = await screen.findByText(/Merge changes from/)
+    expect(title.textContent).toBe('Merge changes from «feature» into «main»')
+  })
+
+  it('shows the post-merge side-effect notice for a non-main source', async () => {
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    const notice = await screen.findByTestId('merge-side-effect-notice')
+    expect(notice.textContent).toContain('main')
+    expect(notice.textContent).toContain('feature')
+  })
+
+  it('hides the post-merge side-effect notice when the source is main', async () => {
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <MergeDialog
+        open
+        source={main}
+        target={feature}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    await screen.findByText(/5 elements/)
+    expect(screen.queryByTestId('merge-side-effect-notice')).toBeNull()
+  })
+
+  it('hides the post-merge side-effect notice when source and target names match', async () => {
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    const sameNameTarget: BranchMeta = { ...feature, color: '#000000' }
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={sameNameTarget}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    await screen.findByText(/5 elements/)
+    expect(screen.queryByTestId('merge-side-effect-notice')).toBeNull()
+  })
+
   it('renders the latest thumbnail per branch, picking the newest when several match', async () => {
     const versions: VersionEntry[] = [
       versionEntry({ id: 'main-old', branchName: 'main', createdAt: '2026-04-22T00:00:00Z' }),
