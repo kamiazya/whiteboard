@@ -27,7 +27,16 @@ describe('ErrorBoundary', () => {
     )
     expect(screen.getByRole('alert')).toBeTruthy()
     expect(screen.getByText('Something went wrong')).toBeTruthy()
-    expect(screen.getByText(/boom/)).toBeTruthy()
+  })
+
+  it('does not leak the raw error message or stack into the default fallback UI', () => {
+    console.error = vi.fn()
+    render(
+      <ErrorBoundary>
+        <Bomb trigger />
+      </ErrorBoundary>,
+    )
+    expect(screen.queryByText(/boom/)).toBeNull()
   })
 
   it('resets on "Try again" and re-renders the child once the error is gone', () => {

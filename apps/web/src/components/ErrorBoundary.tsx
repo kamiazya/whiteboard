@@ -69,20 +69,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         <p style={{ margin: '0 0 16px', fontSize: '14px', color: '#525252' }}>
           The whiteboard hit an unexpected error. Try recovering, or reload the page.
         </p>
-        <pre
-          style={{
-            margin: '0 0 16px',
-            padding: '12px',
-            background: '#f5f5f5',
-            borderRadius: '4px',
-            fontSize: '12px',
-            overflow: 'auto',
-            maxHeight: '160px',
-          }}
-        >
-          {error.message}
-          {error.stack ? `\n\n${error.stack}` : ''}
-        </pre>
+        {/*
+          Deliberately no error.message / error.stack here: the default fallback is
+          shown to end users, and raw error text can leak implementation details
+          (file paths, function names, internal identifiers). componentDidCatch
+          already reports the full error + stack through errorBoundaryLog for
+          diagnostics; callers that need the message visible to the user can pass
+          a custom `fallback` prop that renders `error.message` deliberately.
+        */}
         <div style={{ display: 'flex', gap: '8px' }}>
           <button
             type="button"
