@@ -1,6 +1,5 @@
-import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { AlertTriangle, GitMerge } from 'lucide-react'
-import { type JSX, useEffect, useMemo, useState } from 'react'
+import { type JSX, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
@@ -30,9 +29,9 @@ export function HeaderBranchBanner({
 }: HeaderBranchBannerProps): JSX.Element | null {
   const { state, getBranchStats, merge: runMerge } = useBranches(workspaceId, slug)
   const head = state.head
-  const targetBranch: BranchMeta | undefined = state.branches.find((b) => b.name === 'main')
-  const sourceBranch: BranchMeta | undefined = state.branches.find((b) => b.name === head)
-  const [unmergedCommits, setUnmergedCommits] = useState<number>(0)
+  const targetBranch = state.branches.find((b) => b.name === 'main')
+  const sourceBranch = state.branches.find((b) => b.name === head)
+  const [unmergedCommits, setUnmergedCommits] = useState(0)
   const [mergeOpen, setMergeOpen] = useState(false)
 
   // Shared loader for unmerged stats. Skip work and force 0 while HEAD is main.
@@ -70,10 +69,7 @@ export function HeaderBranchBanner({
     }
   }, [head, getBranchStats, workspaceId, slug])
 
-  const visible = useMemo(
-    () => head !== 'main' && unmergedCommits > 0 && !!targetBranch && !!sourceBranch,
-    [head, unmergedCommits, targetBranch, sourceBranch],
-  )
+  const visible = head !== 'main' && unmergedCommits > 0 && !!targetBranch && !!sourceBranch
 
   if (!visible) return null
 

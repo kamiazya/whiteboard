@@ -76,7 +76,7 @@ export function HeaderBranchChip({
   } = useBranches(workspaceId, slug)
 
   const head = state.head
-  const activeBranch: BranchMeta | undefined = state.branches.find((b) => b.name === head)
+  const activeBranch = state.branches.find((b) => b.name === head)
   const otherBranches = state.branches.filter((b) => b.name !== head)
 
   // Surface create/rename/delete failures through one shared inline error banner.
