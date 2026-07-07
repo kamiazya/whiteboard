@@ -25,7 +25,28 @@ const FILES = (Array.isArray(A.files) && A.files.length > 0) ? A.files : null
 const CWD = A.cwd || null
 const GIT = CWD ? `git -C ${CWD}` : 'git'
 // dimensions / qaScenarios: tune cost. Smaller increments → fewer dimensions.
-const DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage']
+// Each entry is either a legacy string (criteria stays embedded in reviewer-dimension.md)
+// or {name, content} where content is authoritative externalized criteria injected into
+// the reviewer prompt. A resources/*.md pack exists under
+// .claude/skills/review-gate/resources/ (mirroring audit-triage's
+// .claude/skills/audit-triage/resources/) — see the review-gate skill for how a caller
+// globs/reads those files and passes them through as {name, content}.
+const RAW_DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage']
+// Mirrors .claude/workflows/lib/normalize-dimensions.mjs (unit-tested via node:test — the
+// workflow runtime executes this file as a standalone function body with no module resolution,
+// so it cannot `import` that file; keep the two in sync). Throws on a malformed non-string entry
+// (e.g. missing `name`) instead of letting `undefined` silently propagate into the lane `key`,
+// the reviewer prompt label, and the Codex lane-key special-case match below.
+function normalizeDimension(d) {
+  if (typeof d === 'string') return { name: d, content: null }
+  if (d && typeof d === 'object' && typeof d.name === 'string' && d.name.length > 0) {
+    return { name: d.name, content: d.content || null }
+  }
+  throw new Error(
+    `invalid dimension entry: expected a string or a {name, content} object with a non-empty "name", got ${JSON.stringify(d)}`,
+  )
+}
+const DIMENSIONS = RAW_DIMENSIONS.map((d) => normalizeDimension(d))
 const QA_SCENARIOS = A.qaScenarios || ['smoke', 'error-recovery', 'startup']
 // dogfood: optional live persona pass over the touched flow. Default OFF — needs a running app.
 // Inline (not a nested workflow) so review stays composable as a child of dev-loop (1-level nesting limit).
@@ -61,6 +82,7 @@ const FINDINGS_SCHEMA = {
         required: ['severity', 'title', 'file', 'detail'],
       },
     },
+    notApplicable: { type: 'boolean', description: 'set true when this dimension cannot meaningfully apply to the diff; findings stays [] unless something was still found' },
   },
   required: ['findings'],
 }
@@ -88,27 +110,38 @@ const QA_SCHEMA = {
 }
 
 // --- Phase 1+2: each review dimension is adversarially verified as soon as it lands (pipeline, no barrier) ---
+// Partition = requested dimensions ∪ {'security'} (security is always-on and failable, same
+// as any other dimension). The optional codex lane sits OUTSIDE the partition entirely — it's
+// a second opinion, reported only via codexUnavailable, never counted as a failed dimension.
 const REVIEW_LANES = [
-  ...DIMENSIONS.map((key) => ({
+  ...DIMENSIONS.map((dim) => ({
     agentType: 'reviewer-dimension',
-    key,
-    prompt: `Review dimension: ${key}. ${diffHint}`,
+    key: dim.name,
+    partition: true,
+    prompt: `Review dimension: ${dim.name}. ${dim.content ? `\nAUTHORITATIVE CRITERIA:\n${dim.content}\n` : ''}${diffHint}`,
   })),
   {
     agentType: 'security-scanner',
     key: 'security',
+    partition: true,
     prompt: `Scan for injection / path-traversal / info-leak / auth-bypass introduced by the diff. ${diffHint}`,
   },
   // Optional Codex second opinion at the review gate. Runs only when codex is requested;
-  // if the Codex runtime is unavailable the agent returns null and is simply dropped.
+  // if the Codex runtime is unavailable the agent returns null and is reported via
+  // codexUnavailable, never as a failed partition dimension.
   ...(CODEX
     ? [{
         agentType: 'codex:codex-rescue',
         key: 'codex',
+        partition: false,
         prompt: `Independently review this diff as a gate before merge. Report concrete correctness/contract/security/test-gap findings the other reviewers may have missed. ${diffHint}`,
       }]
     : []),
 ]
+
+let codexUnavailable = false
+const failedDimensions = []
+const notApplicableDimensions = []
 
 const reviewed = await pipeline(
   REVIEW_LANES,
@@ -118,7 +151,21 @@ const reviewed = await pipeline(
       phase: 'Review',
       agentType: lane.agentType,
       schema: FINDINGS_SCHEMA,
-    }).then((r) => ({ key: lane.key, findings: (r && r.findings) || [] })),
+    }).then((r) => {
+      if (!r) {
+        if (lane.key === 'codex' && !lane.partition) {
+          codexUnavailable = true
+        } else if (lane.partition) {
+          failedDimensions.push(lane.key)
+        }
+        return { key: lane.key, findings: [] }
+      }
+      const hasFindings = Array.isArray(r.findings) && r.findings.length > 0
+      if (lane.partition && r.notApplicable && !hasFindings) {
+        notApplicableDimensions.push(lane.key)
+      }
+      return { key: lane.key, findings: r.findings || [] }
+    }),
   (rev) =>
     parallel(
       rev.findings.map((f) => () =>
@@ -130,8 +177,25 @@ const reviewed = await pipeline(
     ),
 )
 
-const allFindings = reviewed.flat().filter(Boolean)
-const confirmed = allFindings.filter((f) => f.verdict && f.verdict.isReal)
+const reviewedFindings = reviewed.flat().filter(Boolean)
+// A failed mandatory partition lane (e.g. security, correctness) must never silently degrade to
+// "zero findings" — that reads as a clean pass to the dev-loop gate, which only looks at
+// confirmedFindings. Synthesize a gating finding instead; it's a process fact (the lane never
+// ran), not a refutable code claim, so it bypasses adversarial verify like the failed-dimension
+// coverage-gap advisories in audit-triage.
+const failedLaneFindings = failedDimensions.map((key) => ({
+  severity: 'HIGH',
+  title: `mandatory review lane failed: ${key}`,
+  kind: 'lane-failure',
+  dimension: key,
+  file: '',
+  detail: `The ${key} review lane returned no result, so it contributed zero findings by default. Re-run the ${key} review lane (or otherwise confirm the diff is clean for it) before treating this gate as passed.`,
+  verdict: { isReal: true, confidence: 'high', reasoning: 'lane failure is a process fact, not a claim to verify' },
+}))
+const allFindings = reviewedFindings.concat(failedLaneFindings)
+// If a verdict is missing (verify agent died), keep the finding rather than silently drop it —
+// same policy as audit-triage's verify pass: an unverified claim is safer surfaced than hidden.
+const confirmed = allFindings.filter((f) => !f.verdict || f.verdict.isReal)
 
 // --- Phase 3: QA smoke on the touched flows ---
 const qa = (
@@ -195,7 +259,11 @@ return {
     high: bySeverity('HIGH'),
     qaFail: qa.filter((q) => q.status === 'fail').length,
     dogfoodFriction: dogfood.reduce((n, r) => n + (r.friction ? r.friction.length : 0), 0),
+    failedDimensions: failedDimensions.length,
   },
+  failedDimensions,
+  notApplicable: notApplicableDimensions,
+  ...(CODEX ? { codexUnavailable } : {}),
   confirmedFindings: confirmed,
   qa,
   dogfood,

@@ -19,14 +19,15 @@ const SCOPE = A.scope || 'the whole repository'
 const CWD = A.cwd || null
 const GIT = CWD ? `git -C ${CWD}` : 'git'
 const cwdHint = CWD ? ` Audit the repo under ${CWD} (run git as \`${GIT} ...\`, Read at that absolute path).` : ' Audit the repo at the session root.'
-// Auditor agentType. Custom 'codebase-auditor' is NOT registered until a session reload (see
-// workflow-authoring gotcha #7), so default to the always-registered read-only Explore agent and
+// Auditor agentType. Custom 'codebase-auditor' is NOT registered until a session reload (see the
+// workflow-authoring skill's mid-session-agent-registration gotcha), so default to the
+// always-registered read-only Explore agent and
 // let callers override once it is loaded: args.auditorAgent.
 const AUDITOR = A.auditorAgent || 'Explore'
 // verifyFloor: lowest severity that gets an adversarial verify pass (default HIGH — verify HIGH+).
 const VERIFY_FLOOR = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(A.verifyFloor) ? A.verifyFloor : 'HIGH'
 const RANK = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 }
-const DIMENSIONS = Array.isArray(A.dimensions) && A.dimensions.length
+const RAW_DIMENSIONS = Array.isArray(A.dimensions) && A.dimensions.length
   ? A.dimensions
   : [
       'wiring-gaps — features that build/typecheck but do not actually function (placeholder/stub renders, _-prefixed-but-load-bearing values, TODO/FIXME/not-implemented, UI with no backend, backend with no caller, dead routes). The "looks done, isn\'t" class.',
@@ -36,6 +37,30 @@ const DIMENSIONS = Array.isArray(A.dimensions) && A.dimensions.length
       'test-gaps — critical paths with no nearest-layer test, .skip/xfail/todo tests, browser-only behavior covered only in jsdom, a contract with no conformance test.',
       'dev-experience — broken/incorrect setup steps, scripts that fail on a clean clone, flaky local services, missing/stale docs for a real workflow, new-contributor friction.',
     ]
+// Mirrors .claude/workflows/lib/normalize-dimensions.mjs (unit-tested via node:test — the
+// workflow runtime executes this file as a standalone function body with no module resolution,
+// so it cannot `import` that file; keep the two in sync). Throws on a malformed non-string entry
+// (e.g. missing `name`) instead of letting `undefined` silently propagate into agent labels and
+// coverage-tracking arrays.
+function normalizeDimension(d) {
+  if (typeof d === 'string') return { name: d, content: null }
+  if (d && typeof d === 'object' && typeof d.name === 'string' && d.name.length > 0) {
+    return { name: d.name, content: d.content || null }
+  }
+  throw new Error(
+    `invalid dimension entry: expected a string or a {name, content} object with a non-empty "name", got ${JSON.stringify(d)}`,
+  )
+}
+// Normalize each dimension to {name, content, label}. Legacy callers pass a plain descriptive
+// string (criteria stays embedded in the codebase-auditor agent; `name` is just its first word,
+// used as the compact coverage-tracking id, while `label` keeps the full description for the
+// auditor prompt). Newer callers pass {name, content} where content is the authoritative
+// externalized criteria (see the audit-triage skill's resources/*.md) injected straight into the
+// auditor prompt; `label` mirrors `name` since there is no separate short id to derive.
+const DIMENSIONS = RAW_DIMENSIONS.map((d) => {
+  const { name, content } = normalizeDimension(d)
+  return typeof d === 'string' ? { name: name.split(' ')[0], content, label: name } : { name, content, label: name }
+})
 
 log(`audit-triage: scope="${SCOPE}", ${DIMENSIONS.length} dimensions, auditor=${AUDITOR}, verifyFloor=${VERIFY_FLOOR}`)
 
@@ -56,7 +81,11 @@ const FINDING = {
 }
 const FINDINGS_SCHEMA = {
   type: 'object', additionalProperties: false,
-  properties: { dimension: { type: 'string' }, findings: { type: 'array', items: FINDING } },
+  properties: {
+    dimension: { type: 'string' },
+    findings: { type: 'array', items: FINDING },
+    notApplicable: { type: 'boolean', description: 'set true when this dimension cannot meaningfully apply to the scope; findings stays [] unless something was still found' },
+  },
   required: ['dimension', 'findings'],
 }
 const VERDICT_SCHEMA = {
@@ -89,23 +118,71 @@ const TRIAGE_SCHEMA = {
 
 // --- Phase 1: audit (one auditor per dimension) ---
 phase('Audit')
-const audits = (
-  await parallel(
-    DIMENSIONS.map((dim) => () =>
-      agent(
-        `Audit ${SCOPE} for STANDING health problems in this ONE dimension.\n\nDIMENSION: ${dim}\n${cwdHint}\n\nReturn evidence-grounded findings worth a ticket (path:line / grep). Severity honestly — precision over recall, no inflation; return an empty list if the dimension is clean in scope. Each finding needs a task-ready title, area, evidence, whyItMatters, suggestedAction, effort.`,
-        { label: `audit:${dim.split(' ')[0]}`, phase: 'Audit', agentType: AUDITOR, schema: FINDINGS_SCHEMA },
-      ),
+const auditResults = await parallel(
+  DIMENSIONS.map((dim) => () =>
+    agent(
+      `Audit ${SCOPE} for STANDING health problems in this ONE dimension.\n\nDIMENSION: ${dim.label}\n` +
+        (dim.content ? `\nAUTHORITATIVE CRITERIA (use this, not your own judgement of what the dimension means):\n${dim.content}\n` : '') +
+        `${cwdHint}\n\nReturn evidence-grounded findings worth a ticket (path:line / grep). Severity honestly — precision over recall, no inflation; return an empty list if the dimension is clean in scope. If this dimension cannot meaningfully apply to ${SCOPE}, set notApplicable:true with findings:[]. Each finding needs a task-ready title, area, evidence, whyItMatters, suggestedAction, effort.`,
+      { label: `audit:${dim.name}`, phase: 'Audit', agentType: AUDITOR, schema: FINDINGS_SCHEMA },
     ),
-  )
-).filter(Boolean)
-const allFindings = audits.flatMap((a) => (a.findings || []).map((f) => ({ ...f, dimension: a.dimension })))
-log(`audit: ${allFindings.length} raw findings across ${audits.length} dimensions`)
+  ),
+)
+// Index-aligned over the NORMALIZED requested dimension list — never partition off the
+// agent-returned `dimension` field (a drifted/rephrased label must not silently swap which
+// dimension counts as audited).
+const failedDimensions = []
+const notApplicable = []
+const coverageAdvisories = []
+const dimensionsAudited = []
+const allFindings = []
+DIMENSIONS.forEach((dim, i) => {
+  const result = auditResults[i]
+  if (!result) {
+    failedDimensions.push(dim.name)
+    coverageAdvisories.push({
+      severity: 'LOW',
+      title: `dimension not audited — agent failed: ${dim.name}`,
+      kind: 'coverage-gap',
+      area: dim.name,
+      dimension: dim.name,
+      evidence: 'audit agent returned no result',
+      whyItMatters: 'a silently skipped dimension looks like a clean pass when it never ran',
+      suggestedAction: `re-run the ${dim.name} audit dimension individually`,
+    })
+    return
+  }
+  const hasFindings = Array.isArray(result.findings) && result.findings.length > 0
+  if (result.notApplicable && !hasFindings) {
+    notApplicable.push(dim.name)
+    return
+  }
+  if (result.notApplicable && hasFindings) {
+    // Inconsistent payload: findings win (the dimension clearly did apply), but flag it.
+    coverageAdvisories.push({
+      severity: 'LOW',
+      title: `dimension reported notApplicable with non-empty findings: ${dim.name}`,
+      kind: 'coverage-gap',
+      area: dim.name,
+      dimension: dim.name,
+      evidence: 'agent returned notApplicable:true alongside findings',
+      whyItMatters: 'the two signals disagree — treated as audited since findings were produced',
+      suggestedAction: 'clarify the auditor prompt or re-run to confirm applicability',
+    })
+  }
+  dimensionsAudited.push(dim.name)
+  ;(result.findings || []).forEach((f) => allFindings.push({ ...f, dimension: dim.name }))
+})
+coverageAdvisories.forEach((f) => allFindings.push(f))
+log(`audit: ${allFindings.length} raw findings across ${dimensionsAudited.length} dimensions (${failedDimensions.length} failed, ${notApplicable.length} not applicable)`)
 
 // --- Phase 2: adversarially verify HIGH+ findings (kill false positives) ---
 phase('Verify')
 const floor = RANK[VERIFY_FLOOR] || RANK.HIGH
-const toVerify = allFindings.filter((f) => (RANK[f.severity] || 0) >= floor)
+// Synthetic coverage-gap advisories are process facts (an agent failed / a dimension
+// doesn't apply), not refutable claims about the codebase — never send them to adversarial
+// verify, even when verifyFloor is lowered to LOW.
+const toVerify = allFindings.filter((f) => f.kind !== 'coverage-gap' && (RANK[f.severity] || 0) >= floor)
 const verifiedHigh = (
   await parallel(
     toVerify.map((f) => () =>
@@ -117,9 +194,10 @@ const verifiedHigh = (
   )
 ).filter(Boolean)
 const verdictByTitle = new Map(verifiedHigh.map((v) => [v.title, v]))
-// Keep: all sub-floor findings as-is + the HIGH+ ones that survived verification (with adjusted severity).
+// Keep: all sub-floor findings as-is + coverage-gap advisories (never filtered by floor) +
+// the HIGH+ ones that survived verification (with adjusted severity).
 const survivors = [
-  ...allFindings.filter((f) => (RANK[f.severity] || 0) < floor),
+  ...allFindings.filter((f) => f.kind === 'coverage-gap' || (RANK[f.severity] || 0) < floor),
   ...toVerify
     .map((f) => ({ f, v: verdictByTitle.get(f.title) }))
     .filter(({ v }) => !v || v.real) // if a verdict is missing (agent died), keep rather than silently drop
@@ -137,11 +215,13 @@ const triaged = await agent(
 
 return {
   scope: SCOPE,
-  dimensionsAudited: audits.map((a) => a.dimension),
+  dimensionsAudited,
+  failedDimensions,
+  notApplicable,
   rawCount: allFindings.length,
   verifiedHighCount: toVerify.length,
   survivorCount: survivors.length,
   triaged,
   needsHumanGate: true,
-  note: 'Read-only audit. Integrator: file triaged.items into Tasks (track=task) / tmp/issues (track=issue); skip dupes of existing tickets.',
+  note: 'Read-only audit. Integrator: file triaged.items into Tasks (track=task) / tmp/issues (track=issue); skip dupes of existing tickets. Check failedDimensions before trusting a clean run — it lists dimensions whose auditor agent produced no result.',
 }
