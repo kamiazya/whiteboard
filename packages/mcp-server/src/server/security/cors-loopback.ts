@@ -2,7 +2,7 @@
 // Keeping these in one place prevents the two CORS paths from drifting
 // when the loopback definition or Vary logic needs updating.
 
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 
 export function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
@@ -26,10 +26,17 @@ export function normalizeOriginHostname(originHeader: string | undefined): strin
 
 // Canonical Host-header normalizer shared by ws-auth, mcp-http, and the
 // /api/* host guard so the loopback definition cannot drift between them.
+// A Host header is host[:port] only — anything URL parsing shunts into
+// credentials, path, query, or fragment (e.g. "evil.example@localhost",
+// "localhost/x") is malformed and must be rejected rather than normalized
+// down to a loopback hostname that would slip past the guard.
 export function normalizeHostHeader(hostHeader: string | undefined): string | null {
   if (!hostHeader) return null
   try {
-    return stripIpv6Brackets(new URL(`http://${hostHeader}`).hostname)
+    const url = new URL(`http://${hostHeader}`)
+    if (url.username !== '' || url.password !== '') return null
+    if (url.pathname !== '/' || url.search !== '' || url.hash !== '') return null
+    return stripIpv6Brackets(url.hostname)
   } catch {
     return null
   }
@@ -37,7 +44,7 @@ export function normalizeHostHeader(hostHeader: string | undefined): string | nu
 
 // Resolve the request Host: prefer the Host header, fall back to the parsed
 // request URL. Shared by the /mcp and /api/* host guards.
-export function getRequestHost(c: Parameters<MiddlewareHandler>[0]): string | undefined {
+export function getRequestHost(c: Context): string | undefined {
   const headerHost = c.req.header('host')
   if (headerHost) return headerHost
   try {

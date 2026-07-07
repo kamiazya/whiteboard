@@ -6,6 +6,7 @@
 
 import { daemonPingResponseSchema } from '../shared/api-contracts/runtime.js'
 import type { DaemonPingResponse } from '../shared/api-contracts/runtime.js'
+import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 
 const DEFAULT_TIMEOUT_MS = 2000
 
@@ -39,4 +40,16 @@ export async function fetchDaemonPing(
   } catch {
     return null
   }
+}
+
+/**
+ * Daemon-identity check shared by server-status / server-stop / server-doctor.
+ * A record without an instanceId (older daemon build) cannot be verified and
+ * reports false — callers map that to an explicit 'unverifiable' outcome,
+ * never a kill, a false 'healthy', or a silent 'not running'.
+ */
+export async function verifyDaemonIdentity(record: ServerModeRecord): Promise<boolean> {
+  if (!record.instanceId) return false
+  const ping = await fetchDaemonPing(record.host, record.port)
+  return ping !== null && ping.instanceId === record.instanceId
 }

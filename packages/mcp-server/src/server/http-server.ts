@@ -8,6 +8,7 @@ import { IdleTimer } from '../daemon/idle-timer.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { createApp } from './app.js'
+import { normalizeBindHost } from './daemon-auth-binding.js'
 import { DATA_DIR, DIST_APP_DIR } from './config.js'
 import { handleWsUpgrade, getConnectionStats, setRuntimeTouchFn } from './routes/ws.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
@@ -43,7 +44,7 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
 }
 
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
-  const host = options.host ?? '127.0.0.1'
+  const host = normalizeBindHost(options.host ?? '127.0.0.1')
   const instanceId = randomUUID()
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()

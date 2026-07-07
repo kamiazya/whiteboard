@@ -11,7 +11,7 @@
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
-import { fetchDaemonPing } from './daemon-ping-client.js'
+import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STATUS_SCHEMA_VERSION = 1 as const
 
@@ -64,14 +64,7 @@ function defaultIsPidAlive(pid: number): boolean {
 // Exported for direct unit testing of the live-ping comparison (see
 // server-status.test.ts) — the option default is otherwise only ever
 // exercised indirectly through runServerStatus with an injected override.
-export async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
-  // A record with no instanceId predates this check (older daemon build) and
-  // cannot be verified — the caller reports 'unverifiable', never a silent
-  // 'stale'/not-running or a false 'running'.
-  if (!record.instanceId) return false
-  const ping = await fetchDaemonPing(record.host, record.port)
-  return ping !== null && ping.instanceId === record.instanceId
-}
+export const defaultVerifyIdentity = verifyDaemonIdentity
 
 export async function runServerStatus(
   options: RunServerStatusOptions,

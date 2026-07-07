@@ -15,7 +15,7 @@ export function createApiHostGuardMiddleware(mode: ServerModeExposureMode): Midd
 
     const host = normalizeHostHeader(getRequestHost(c))
     if (!host || !isLoopbackHostname(host)) {
-      return Response.json({ error: 'forbidden host' }, { status: 403 })
+      return c.json({ error: 'forbidden host' }, 403)
     }
     return next()
   }

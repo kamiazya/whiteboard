@@ -28,7 +28,7 @@ import {
 } from '../server/security/server-mode-record.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { ENV_KEYS } from '../server/security/server-mode-env-config.js'
-import { fetchDaemonPing, resolveConnectHost } from './daemon-ping-client.js'
+import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './daemon-ping-client.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
 export const SERVER_DOCTOR_SCHEMA_VERSION = 1 as const
@@ -85,13 +85,7 @@ function defaultIsPidAlive(pid: number): boolean {
 // Exported for direct unit testing of the instanceId comparison logic below
 // (see server-doctor.test.ts) — the option default is otherwise only ever
 // exercised indirectly through runServerDoctor with an injected override.
-export async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
-  // A record with no instanceId predates this check (older daemon build) and
-  // cannot be verified — the caller reports a warning, never a false 'ok'.
-  if (!record.instanceId) return false
-  const ping = await fetchDaemonPing(record.host, record.port)
-  return ping !== null && ping.instanceId === record.instanceId
-}
+export const defaultVerifyIdentity = verifyDaemonIdentity
 
 async function defaultFetchJwks(uri: string): Promise<{ ok: boolean; hasKeys: boolean }> {
   try {
