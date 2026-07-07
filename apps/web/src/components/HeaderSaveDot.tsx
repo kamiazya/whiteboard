@@ -35,8 +35,14 @@ export function HeaderSaveDot({
       <TooltipTrigger asChild>
         <button
           type="button"
-          onClick={() => void onSave()}
-          disabled={saving}
+          // Native `disabled` inside a Radix TooltipTrigger swallows the
+          // pointer events the tooltip needs, hiding the "Saving…" status on
+          // hover — gate the click instead and expose state via aria-disabled.
+          onClick={() => {
+            if (saving) return
+            void onSave()
+          }}
+          aria-disabled={saving}
           aria-label={label}
           data-testid="header-save-dot"
           className={cn(

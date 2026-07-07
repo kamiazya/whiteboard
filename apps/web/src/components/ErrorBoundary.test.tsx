@@ -29,6 +29,24 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Something went wrong')).toBeTruthy()
   })
 
+  it('normalizes a thrown non-Error value so fallbacks can rely on Error fields', () => {
+    console.error = vi.fn()
+    function StringBomb(): JSX.Element {
+      // Anything can be thrown in JS; a string here reached custom fallbacks
+      // typed as Error and crashed on .message access.
+      throw 'plain string failure'
+    }
+    const fallback = vi.fn(({ error }: { error: Error; reset: () => void }) => (
+      <div data-testid="custom-fallback">{error.message}</div>
+    ))
+    render(
+      <ErrorBoundary fallback={fallback}>
+        <StringBomb />
+      </ErrorBoundary>,
+    )
+    expect(screen.getByTestId('custom-fallback').textContent).toBe('plain string failure')
+  })
+
   it('does not leak the raw error message or stack into the default fallback UI', () => {
     console.error = vi.fn()
     render(

@@ -27,11 +27,11 @@ describe('HeaderSaveDot', () => {
     expect(dot.getAttribute('aria-label')).toBe('Unsaved changes')
   })
 
-  it('shows "Saving…" aria text and disables the button when saving=true', () => {
+  it('shows "Saving…" aria text and marks the button aria-disabled when saving=true', () => {
     renderDot({ dirty: true, saving: true, onSave: () => {} })
     const dot = screen.getByTestId('header-save-dot')
     expect(dot.getAttribute('aria-label')).toBe('Saving…')
-    expect(dot.hasAttribute('disabled')).toBe(true)
+    expect(dot.getAttribute('aria-disabled')).toBe('true')
   })
 
   it('calls onSave on click', () => {
@@ -41,5 +41,20 @@ describe('HeaderSaveDot', () => {
       fireEvent.click(screen.getByTestId('header-save-dot'))
     })
     expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks clicks while saving without using the disabled attribute (keeps the tooltip reachable)', () => {
+    // A natively disabled button inside a Radix TooltipTrigger swallows the
+    // pointer events the tooltip needs, so "Saving…" would never show on
+    // hover. aria-disabled + a click guard keeps both behaviors.
+    const onSave = vi.fn()
+    renderDot({ dirty: true, saving: true, onSave })
+    const dot = screen.getByTestId('header-save-dot')
+    expect(dot.hasAttribute('disabled')).toBe(false)
+    expect(dot.getAttribute('aria-disabled')).toBe('true')
+    act(() => {
+      fireEvent.click(dot)
+    })
+    expect(onSave).not.toHaveBeenCalled()
   })
 })

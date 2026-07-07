@@ -30,8 +30,11 @@ interface ErrorBoundaryProps {
 export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    return { error }
+  static getDerivedStateFromError(error: unknown): ErrorBoundaryState {
+    // Anything can be thrown in JS (strings, plain objects, null). Normalize
+    // to a real Error so the fallback contract ({ error: Error }) holds and
+    // consumers can safely read .message.
+    return { error: error instanceof Error ? error : new Error(String(error)) }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo): void {
