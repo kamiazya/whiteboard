@@ -5,8 +5,13 @@ part of the codebase and can drift like any other code — a renamed workflow
 arg, a skill referencing a dropped script, two skills quietly duplicating
 the same guidance. This dimension audits that ecosystem, not the app.
 
-Scope: `.claude/skills/*/SKILL.md`, `.claude/workflows/*.workflow.mjs`,
-`.claude/agents/*.md`, `.claude/rules/*.md`, and `AGENTS.md`.
+Scope: `.claude/skills/*/SKILL.md`, `.claude/skills/*/resources/*.md`,
+`.claude/workflows/*.workflow.mjs`, `.claude/agents/*.md`, `.claude/rules/*.md`,
+and `AGENTS.md`. Resource files are in scope because dimensions like
+`audit-triage` and `review-gate` treat their `resources/*.md` as the
+authoritative criteria pack (see `## Externalized criteria` in
+`audit-triage/SKILL.md`) — drift there is drift in the audit itself, not
+merely in a supporting doc.
 
 ## Criteria
 
@@ -19,6 +24,9 @@ Check:
   differently now, or point at a file that moved?
 - Does a skill claim a fact about repo state (e.g. what is or isn't
   gitignored) that contradicts `git ls-files` / `.gitignore` reality?
+- Does a `resources/*.md` criteria pack reference a workflow arg, dimension
+  name, skill, or embedded-agent section that was renamed or removed, or
+  does it drift out of sync with the `SKILL.md` that externalizes it to?
 
 ### 2. Frontmatter validity
 
