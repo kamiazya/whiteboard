@@ -67,9 +67,15 @@ Workflow({ scriptPath: '.claude/workflows/review.workflow.mjs',
   codexUnavailable?: boolean,   // present ONLY when args.codex was true
   confirmedFindings: Array<Finding & { dimension: string, verdict: {...} }>,
   qa: Array<{ scenario: string, status: 'pass'|'fail'|'skip', notes?: string }>,
-  dogfood: Array<{ persona: string, goalAchieved: 'yes'|'partial'|'no'|'skip', summary: string, friction: [...] }>,
+  dogfood: Array<{ persona?: string, goalAchieved: 'yes'|'partial'|'no'|'skip', summary: string, friction: [...] }>,
 }
 ```
+
+`persona` is optional — the workflow's `DOGFOOD_SCHEMA` does not list it in
+`required` (only `goalAchieved`, `summary`, `friction` are), so a
+`dogfood-persona` agent run can legitimately omit it. Destructure with a
+fallback (`run.persona ?? 'unlabeled'`) rather than assuming it is always
+present.
 
 Coverage-honesty fields mirror `audit-triage`: check `failedDimensions`
 before trusting a clean run — a failed mandatory partition lane (e.g.
