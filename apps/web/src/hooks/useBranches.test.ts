@@ -1,10 +1,10 @@
-import { renderHook, act } from '@testing-library/react'
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { act, renderHook } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  buildBranchUrls,
   type BranchesState,
-  parseBranchesResponse,
   branchesApi,
+  buildBranchUrls,
+  parseBranchesResponse,
   useBranches,
 } from './useBranches.js'
 
@@ -527,5 +527,209 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     })
 
     expect(result.current.state.head).toBe('main')
+  })
+
+  it('createBranch() posts the request and refetches the list', async () => {
+    let listCallCount = 0
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (_input, reqInit) => {
+        if (reqInit?.method === 'POST') {
+          return new Response(
+            JSON.stringify({
+              branch: {
+                name: 'feature',
+                tipFrontiers: '',
+                color: '#9333ea',
+                createdAt: '2026-04-23T01:00:00Z',
+              },
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        listCallCount++
+        return new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    const listCallsAfterMount = listCallCount
+
+    let created!: Awaited<ReturnType<typeof result.current.createBranch>>
+    await act(async () => {
+      created = await result.current.createBranch({ name: 'feature' })
+    })
+
+    expect(created.name).toBe('feature')
+    expect(listCallCount).toBeGreaterThan(listCallsAfterMount)
+  })
+
+  it('deleteBranch() issues DELETE and refetches the list', async () => {
+    const calls: string[] = []
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (input, reqInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        calls.push(`${reqInit?.method ?? 'GET'} ${url}`)
+        if (reqInit?.method === 'DELETE') {
+          return new Response(JSON.stringify({ ok: true, unmergedCommits: 0 }), { status: 200 })
+        }
+        return new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    const callsBefore = calls.length
+
+    await act(async () => {
+      await result.current.deleteBranch('feature')
+    })
+
+    expect(calls.some((c) => c.startsWith('DELETE'))).toBe(true)
+    expect(calls.length).toBeGreaterThan(callsBefore + 1) // DELETE + follow-up refetch
+  })
+
+  it('renameBranch() PATCHes and refetches, returning the renamed branch', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (_input, reqInit) => {
+        if (reqInit?.method === 'PATCH') {
+          return new Response(
+            JSON.stringify({
+              branch: {
+                name: 'new-name',
+                tipFrontiers: '',
+                color: '#9333ea',
+                createdAt: '2026-04-23T01:00:00Z',
+              },
+              renamedVersionCount: 2,
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    let renamed!: Awaited<ReturnType<typeof result.current.renameBranch>>
+    await act(async () => {
+      renamed = await result.current.renameBranch('old', 'new-name')
+    })
+
+    expect(renamed.name).toBe('new-name')
+  })
+
+  it('setHead() PUTs and refetches, returning the new head', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (_input, reqInit) => {
+        if (reqInit?.method === 'PUT') {
+          return new Response(JSON.stringify({ head: 'feature', previousHead: 'main' }), {
+            status: 200,
+          })
+        }
+        return new Response(JSON.stringify({ head: 'feature', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    let setHeadResult!: Awaited<ReturnType<typeof result.current.setHead>>
+    await act(async () => {
+      setHeadResult = await result.current.setHead('feature')
+    })
+
+    expect(setHeadResult.head).toBe('feature')
+    expect(result.current.state.head).toBe('feature')
+  })
+
+  it('merge() with dryRun does not refetch the branch list', async () => {
+    let listCallCount = 0
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (_input, reqInit) => {
+        if (reqInit?.method === 'POST') {
+          return new Response(JSON.stringify({ badges: [], preview: { elementCount: 5 } }), {
+            status: 200,
+          })
+        }
+        listCallCount++
+        return new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    const listCallsAfterMount = listCallCount
+
+    let mergeResult!: Awaited<ReturnType<typeof result.current.merge>>
+    await act(async () => {
+      mergeResult = await result.current.merge('feature', { into: 'main', dryRun: true })
+    })
+
+    expect(mergeResult.preview?.elementCount).toBe(5)
+    // dryRun must skip the post-merge refetch.
+    expect(listCallCount).toBe(listCallsAfterMount)
+  })
+
+  it('merge() without dryRun refetches the branch list', async () => {
+    let listCallCount = 0
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async (_input, reqInit) => {
+        if (reqInit?.method === 'POST') {
+          return new Response(JSON.stringify({ badges: [] }), { status: 200 })
+        }
+        listCallCount++
+        return new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a'))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    const listCallsAfterMount = listCallCount
+
+    await act(async () => {
+      await result.current.merge('feature', { into: 'main' })
+    })
+
+    // A real (non-dryRun) merge must trigger the post-merge refetch.
+    expect(listCallCount).toBeGreaterThan(listCallsAfterMount)
   })
 })

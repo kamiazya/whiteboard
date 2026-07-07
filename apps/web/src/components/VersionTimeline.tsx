@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import {
+  listVersionsResponseSchema,
+  type OperatorInfo,
+  type VersionEntry,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
 import { History } from 'lucide-react'
-import { CardContent } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,14 +16,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  type OperatorInfo,
-  type VersionEntry,
-  listVersionsResponseSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import { CardContent } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { useBranches } from '@/hooks/useBranches'
+import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
+
+const log = getAppLogger('VersionTimeline')
 
 interface Props {
   workspaceId: string
@@ -62,20 +65,29 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
+  const [restoreError, setRestoreError] = useState<string | null>(null)
+  // Monotonically increasing sequence stamp. Each refresh() call captures the
+  // value at dispatch time; a response only commits if no newer refresh has
+  // started meanwhile. Without this, a slow /versions response for an older
+  // workspaceId/slug pair could overwrite the list after the canvas changed.
+  const fetchSeqRef = useRef(0)
 
   const refresh = useCallback(async () => {
+    const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
       const res = await apiFetch(
         `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
       )
+      if (seq !== fetchSeqRef.current) return
       if (res.ok) {
         const parsed = listVersionsResponseSchema.safeParse(await res.json())
+        if (seq !== fetchSeqRef.current) return
         if (parsed.success) setVersions(parsed.data.versions)
         else setVersions([])
       }
     } finally {
-      setLoading(false)
+      if (seq === fetchSeqRef.current) setLoading(false)
     }
   }, [workspaceId, slug])
 
@@ -95,11 +107,27 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
   const confirmRestore = useCallback(async () => {
     if (!pendingRestore) return
     const v = pendingRestore
+    setRestoreError(null)
+    // Only clear the dialog and run success side effects (onRestored clears the
+    // browser-side LoroUndoManager) once the server confirms the restore
+    // actually happened. A failed request keeps the dialog open with an error
+    // so the caller never discards undo history for a restore that didn't occur.
+    try {
+      const res = await apiFetch(
+        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/restore`,
+        { method: 'POST' },
+      )
+      if (!res.ok) {
+        log.error('restore request failed', { status: res.status, versionId: v.id })
+        setRestoreError('Restore failed. Please try again.')
+        return
+      }
+    } catch (err) {
+      log.error('restore request threw', err)
+      setRestoreError('Restore failed. Please try again.')
+      return
+    }
     setPendingRestore(null)
-    await apiFetch(
-      `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/restore`,
-      { method: 'POST' },
-    )
     onRestored?.()
     // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
@@ -182,7 +210,10 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
                   <button
                     type="button"
                     className="bg-card text-card-foreground flex flex-1 min-w-0 cursor-pointer flex-col gap-6 overflow-hidden rounded-xl border py-2 text-left shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    onClick={() => setPendingRestore(v)}
+                    onClick={() => {
+                      setRestoreError(null)
+                      setPendingRestore(v)
+                    }}
                   >
                     {v.hasThumbnail && (
                       <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
@@ -226,7 +257,12 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
 
       <AlertDialog
         open={!!pendingRestore}
-        onOpenChange={(open) => !open && setPendingRestore(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingRestore(null)
+            setRestoreError(null)
+          }
+        }}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -240,11 +276,21 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
                   to every connected tab. Per-peer Ctrl+Z history is cleared.
                 </>
               )}
+              {restoreError && <span className="mt-2 block text-destructive">{restoreError}</span>}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRestore}>Restore</AlertDialogAction>
+            {/* AlertDialogAction closes the dialog by default on click; prevent that so a
+                failed restore keeps the dialog open with the error instead of discarding it. */}
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                void confirmRestore()
+              }}
+            >
+              Restore
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

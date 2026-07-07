@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, cleanup, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import VersionTimeline from './VersionTimeline.js'
 
 // Cover the current VersionTimeline contract:
@@ -231,5 +231,79 @@ describe('VersionTimeline', () => {
     expect(container.querySelector('[data-slot="scroll-area"]')?.className ?? '').toContain(
       'min-h-0',
     )
+  })
+
+  it('calls onRestored and refreshes after a successful restore', async () => {
+    const onRestored = vi.fn()
+    const restoreCalls: string[] = []
+    vi.unstubAllGlobals()
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) {
+        restoreCalls.push(url)
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+
+    const row = await screen.findByText('🤖 Assistant')
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(screen.getByText('Restore this version?')).toBeTruthy()
+    })
+
+    const restoreButton = screen.getByRole('button', { name: 'Restore' })
+    fireEvent.click(restoreButton)
+
+    await waitFor(() => {
+      expect(restoreCalls.some((u) => u.includes('/versions/v-new/restore'))).toBe(true)
+    })
+    await waitFor(() => {
+      expect(onRestored).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => {
+      expect(screen.queryByText('Restore this version?')).toBeNull()
+    })
+  })
+
+  it('keeps the dialog open and does not fire onRestored when the restore request fails', async () => {
+    const onRestored = vi.fn()
+    vi.unstubAllGlobals()
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }),
+        )
+      }
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+
+    const row = await screen.findByText('🤖 Assistant')
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(screen.getByText('Restore this version?')).toBeTruthy()
+    })
+
+    const restoreButton = screen.getByRole('button', { name: 'Restore' })
+    fireEvent.click(restoreButton)
+
+    await waitFor(() => {
+      expect(screen.getByText(/restore failed/i)).toBeTruthy()
+    })
+    expect(onRestored).not.toHaveBeenCalled()
+    expect(screen.getByText('Restore this version?')).toBeTruthy()
   })
 })

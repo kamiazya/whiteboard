@@ -1,6 +1,6 @@
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import '../index.css'
 import VersionTimeline from './VersionTimeline.js'
 
@@ -122,5 +122,86 @@ describe('VersionTimeline browser mode', () => {
 
     await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
     await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
+  })
+
+  it('closes the dialog and notifies the caller after a real click through a successful restore', async () => {
+    const onRestored = vi.fn()
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) {
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <div
+        style={{
+          width: '340px',
+          height: '480px',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        }}
+      >
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />
+      </div>,
+    )
+
+    const firstVersion = await screen.findByRole('button', { name: /^Version 1\b/ })
+    firstVersion.click()
+
+    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
+    await page.getByRole('button', { name: 'Restore' }).click()
+
+    await expect.element(page.getByRole('alertdialog')).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(onRestored).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('keeps the dialog open with an error after a real click through a failed restore', async () => {
+    const onRestored = vi.fn()
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }),
+        )
+      }
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <div
+        style={{
+          width: '340px',
+          height: '480px',
+          display: 'flex',
+          flexDirection: 'column',
+          minHeight: 0,
+        }}
+      >
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />
+      </div>,
+    )
+
+    const firstVersion = await screen.findByRole('button', { name: /^Version 1\b/ })
+    firstVersion.click()
+
+    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
+    await page.getByRole('button', { name: 'Restore' }).click()
+
+    await expect.element(page.getByText(/restore failed/i)).toBeInTheDocument()
+    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
+    expect(onRestored).not.toHaveBeenCalled()
   })
 })
