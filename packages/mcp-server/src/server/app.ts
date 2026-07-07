@@ -90,6 +90,15 @@ function setBaselineSecurityHeaders(headers: Headers): void {
   headers.set('Cross-Origin-Resource-Policy', 'same-origin')
 }
 
+// Serialize a value for inlining into a `<script>` body, escaping `<` so a
+// value such as `</script>` cannot terminate the tag and inject markup. Tokens
+// today are nanoid-generated (safe), but this keeps the path safe if
+// user-controlled values are ever inlined here.
+// https://html.spec.whatwg.org/multipage/scripting.html#restrictions-for-contents-of-script-elements
+function toInlineScriptJson(value: unknown): string {
+  return JSON.stringify(value).replace(/</g, '\\u003c')
+}
+
 function extractInitializeDebugPayload(parsedBody: unknown) {
   if (!isJsonObject(parsedBody) || parsedBody.method !== 'initialize') {
     return null
@@ -870,23 +879,18 @@ export function createApp(options: AppOptions) {
   app.get('*', async (c) => {
     try {
       const html = await readFile(join(DIST_APP_DIR, 'index.html'), 'utf-8')
-      // When inlining JSON into `<script>`, escape `<` so strings such as `</script>`
-      // cannot terminate the tag. The current token is generated with nanoid and is not
-      // dangerous, but this keeps runtime config safe if user-controlled values are added later.
-      // Details: https://html.spec.whatwg.org/multipage/scripting.html#restrictions-for-contents-of-script-elements
-      //
       // The daemon token is deliberately NOT part of __WHITEBOARD_RUNTIME_CONFIG__
       // (see shared/token-store.ts) — it ships in its own global so it never
       // rides along inside an object that logging / error-reporting could
       // serialize wholesale.
-      const runtimeConfigJson = JSON.stringify({
+      const runtimeConfigJson = toInlineScriptJson({
         // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the
         // value is always a loopback origin, even when the daemon binds 0.0.0.0.
         daemonBaseUrl: `http://127.0.0.1:${options.getStatus().port}`,
-      }).replace(/</g, '\\u003c')
+      })
       const runtimeConfigScript = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
       const tokenScript = token
-        ? `<script>window.__WHITEBOARD_DAEMON_TOKEN__ = ${JSON.stringify(token).replace(/</g, '\\u003c')}</script>`
+        ? `<script>window.__WHITEBOARD_DAEMON_TOKEN__ = ${toInlineScriptJson(token)}</script>`
         : ''
       const injected = `${runtimeConfigScript}${tokenScript}`
       const withRuntimeConfig = html.includes('</head>')
