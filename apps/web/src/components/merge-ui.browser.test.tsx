@@ -1,13 +1,13 @@
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import type { BranchMeta, MergeResponse } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
-import { MergeDialog } from './MergeDialog.js'
-import { MergeToast } from './MergeToast.js'
-import { MergeHighlight } from './MergeHighlight.js'
-import type { BranchMeta, MergeResponse } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { MERGE_COMMITTED_EVENT } from '@/lib/merge-committed-event'
+import { MergeDialog } from './MergeDialog.js'
+import { MergeHighlight } from './MergeHighlight.js'
+import { MergeToast } from './MergeToast.js'
 
 const main: BranchMeta = {
   name: 'main',

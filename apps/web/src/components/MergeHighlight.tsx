@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import { type JSX, useEffect, useRef, useState } from 'react'
 import { MERGE_COMMITTED_EVENT, parseMergeCommittedEvent } from '@/lib/merge-committed-event'
 
 // Highlight new elements in emerald and conflicts in amber for a short time after merge.

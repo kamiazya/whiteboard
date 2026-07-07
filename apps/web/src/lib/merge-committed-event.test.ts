@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  MERGE_COMMITTED_EVENT,
   dispatchMergeCommitted,
+  MERGE_COMMITTED_EVENT,
+  type MergeCommittedDetail,
   mergeCommittedDetailSchema,
   parseMergeCommittedEvent,
-  type MergeCommittedDetail,
 } from './merge-committed-event.js'
 
 const validDetail: MergeCommittedDetail = {

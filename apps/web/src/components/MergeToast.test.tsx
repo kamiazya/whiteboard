@@ -1,11 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MergeToast } from './MergeToast.js'
 import {
-  MERGE_COMMITTED_EVENT,
   dispatchMergeCommitted,
+  MERGE_COMMITTED_EVENT,
   type MergeCommittedDetail,
 } from '@/lib/merge-committed-event'
+import { MergeToast } from './MergeToast.js'
 
 const baseDetail: MergeCommittedDetail = {
   workspaceId: 's1',

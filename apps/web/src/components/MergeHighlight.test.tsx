@@ -1,9 +1,9 @@
+import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
+import { dispatchMergeCommitted, MERGE_COMMITTED_EVENT } from '@/lib/merge-committed-event'
 import { MergeHighlight } from './MergeHighlight.js'
-import { MERGE_COMMITTED_EVENT, dispatchMergeCommitted } from '@/lib/merge-committed-event'
 
 afterEach(() => cleanup())
 

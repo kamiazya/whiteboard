@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
 // Stub @excalidraw/excalidraw because roughjs does not resolve cleanly in this Vitest environment.
 // The visual preview path is covered by browser-level verification.
 vi.mock('@excalidraw/excalidraw', () => ({
@@ -7,9 +8,10 @@ vi.mock('@excalidraw/excalidraw', () => ({
   exportToBlob: () => Promise.resolve(null),
 }))
 vi.mock('@excalidraw/excalidraw/index.css', () => ({}))
-import { MergeDialog } from './MergeDialog.js'
+
 import type { BranchMeta, MergeResponse } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { MERGE_COMMITTED_EVENT, mergeCommittedDetailSchema } from '@/lib/merge-committed-event'
+import { MergeDialog } from './MergeDialog.js'
 
 const main: BranchMeta = {
   name: 'main',

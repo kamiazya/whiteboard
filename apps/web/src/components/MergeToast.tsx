@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
-import { CheckCircle2, Undo2, X } from 'lucide-react'
-import { Button } from './ui/button.js'
-import { cn } from '@/lib/utils'
 import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import { CheckCircle2, Undo2, X } from 'lucide-react'
+import { type JSX, useEffect, useRef, useState } from 'react'
 import {
   MERGE_COMMITTED_EVENT,
-  parseMergeCommittedEvent,
   type MergeCommittedDetail,
+  parseMergeCommittedEvent,
 } from '@/lib/merge-committed-event'
+import { cn } from '@/lib/utils'
+import { Button } from './ui/button.js'
 
 // Short-lived toast shown in the bottom-right after merge completes.
 // - Content: ✓ merged source branch, summary counts, optional Undo

@@ -1,4 +1,9 @@
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import {
+  type BranchMeta,
+  listVersionsResponseSchema,
+  type MergeResponse,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
   AlertTriangle,
   ArrowDown,
@@ -8,6 +13,10 @@ import {
   Info,
   Loader2,
 } from 'lucide-react'
+import { type JSX, useEffect, useMemo, useState } from 'react'
+import { safeErrorCopy } from '@/lib/error-copy'
+import { dispatchMergeCommitted } from '@/lib/merge-committed-event'
+import { cn } from '@/lib/utils'
 import { Button } from './ui/button.js'
 import {
   Dialog,
@@ -17,15 +26,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog.js'
-import { cn } from '@/lib/utils'
-import {
-  listVersionsResponseSchema,
-  type BranchMeta,
-  type MergeResponse,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
-import { safeErrorCopy } from '@/lib/error-copy'
-import { dispatchMergeCommitted } from '@/lib/merge-committed-event'
 
 // Note: this originally tried to embed a read-only <Excalidraw> preview, but Excalidraw does not
 // recommend multi-instance usage and it destabilized the main canvas scene state.
@@ -96,11 +96,23 @@ function badgeLabel(badge: Record<string, unknown>): BadgeView {
 
 const TONE_STYLE: Record<
   BadgeView['tone'],
-  { fg: string; bg: string; border: string; icon: typeof AlertTriangle }
+  { fg: string; bg: string; border: string; icon: typeof AlertTriangle; summaryLabel: string }
 > = {
-  danger: { fg: '#dc2626', bg: '#fee2e2', border: '#fecaca', icon: AlertTriangle },
-  warning: { fg: '#d97706', bg: '#fef3c7', border: '#fde68a', icon: AlertTriangle },
-  info: { fg: '#1971c2', bg: '#dbeafe', border: '#bfdbfe', icon: Info },
+  danger: {
+    fg: '#dc2626',
+    bg: '#fee2e2',
+    border: '#fecaca',
+    icon: AlertTriangle,
+    summaryLabel: 'critical',
+  },
+  warning: {
+    fg: '#d97706',
+    bg: '#fef3c7',
+    border: '#fde68a',
+    icon: AlertTriangle,
+    summaryLabel: 'warning',
+  },
+  info: { fg: '#1971c2', bg: '#dbeafe', border: '#bfdbfe', icon: Info, summaryLabel: 'info' },
 }
 
 interface CompareCardProps {
@@ -454,10 +466,7 @@ export function MergeDialog({
                 <span className="text-xs text-muted-foreground">
                   {(['danger', 'warning', 'info'] as const)
                     .filter((t) => (badgeByTone[t] ?? 0) > 0)
-                    .map(
-                      (t) =>
-                        `${badgeByTone[t]} ${t === 'danger' ? 'critical' : t === 'warning' ? 'warning' : 'info'}`,
-                    )
+                    .map((t) => `${badgeByTone[t]} ${TONE_STYLE[t].summaryLabel}`)
                     .join(' · ')}
                 </span>
               </div>
