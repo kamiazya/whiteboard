@@ -143,3 +143,31 @@ export const storageReportPayloadSchema = z.object({
 
 export type StorageBucket = z.infer<typeof storageBucketSchema>
 export type StorageReportPayload = z.infer<typeof storageReportPayloadSchema>
+
+// POST /api/workspaces/:workspaceId/canvases/optimize-all — response body.
+// The route also returns a per-canvas `results` array; the Storage tab only
+// needs the aggregated totals, so that detail is left unvalidated here
+// rather than duplicating compactCanvas's result shape.
+export const optimizeAllCanvasesResponseSchema = z.object({
+  totalBeforeBytes: z.number(),
+  totalAfterBytes: z.number(),
+})
+
+export type OptimizeAllCanvasesResponse = z.infer<typeof optimizeAllCanvasesResponseSchema>
+
+// POST /api/workspaces/:workspaceId/versions/prune-sandwiched — response body.
+export const pruneSandwichedVersionsResponseSchema = z.object({
+  totalDeleted: z.number(),
+})
+
+export type PruneSandwichedVersionsResponse = z.infer<typeof pruneSandwichedVersionsResponseSchema>
+
+// Shared response shape for the two file-purge endpoints that wrap
+// file-gc.ts's PurgeResult: POST /api/runtime/logs/prune and
+// POST /api/workspaces/:workspaceId/files/purge-dangling.
+export const purgeResultSchema = z.object({
+  purgedCount: z.number(),
+  purgedBytes: z.number(),
+})
+
+export type PurgeResult = z.infer<typeof purgeResultSchema>

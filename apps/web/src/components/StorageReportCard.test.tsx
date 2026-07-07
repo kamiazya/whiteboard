@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
 const PAYLOAD = {
@@ -266,6 +266,315 @@ describe('StorageReportCard', () => {
     },
     STATUS_CLEAR_MS + 5000,
   )
+
+  it('opens the libraries dialog, fetches rows, and renders the "file missing" branch', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/user-libraries') {
+        return Promise.resolve(
+          jsonResponse({
+            libraries: [
+              { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
+              { name: 'orphan', path: '/data/orphan.excalidrawlib', itemCount: 1, bytes: null },
+            ],
+          }),
+        )
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
+    })
+
+    const manageButton = container.querySelector(
+      '[aria-label="Manage installed user libraries"]',
+    ) as HTMLButtonElement
+    expect(manageButton).not.toBeNull()
+    fireEvent.click(manageButton)
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
+    })
+    const shapesRow = document.querySelector('[data-user-library-row="shapes"]')!
+    expect(shapesRow.textContent).toMatch(/3\s*items?/i)
+    expect(shapesRow.textContent).toMatch(/KiB|2048/)
+
+    const orphanRow = document.querySelector('[data-user-library-row="orphan"]')!
+    expect(orphanRow.textContent).toMatch(/file missing/i)
+  })
+
+  it('removes a user library optimistically and re-pulls the list on success', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    let libraries = [
+      { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
+    ]
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/user-libraries') {
+        return Promise.resolve(jsonResponse({ libraries }))
+      }
+      if (init?.method === 'DELETE' && url === '/api/user-libraries/shapes') {
+        libraries = []
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
+    })
+    fireEvent.click(
+      container.querySelector('[aria-label="Manage installed user libraries"]') as HTMLElement,
+    )
+    await waitFor(() => {
+      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
+    })
+
+    fireEvent.click(document.querySelector('[aria-label="Remove user library shapes"]')!)
+
+    await waitFor(() => {
+      expect(document.querySelector('[data-user-library-row="shapes"]')).toBeNull()
+    })
+  })
+
+  it('surfaces a remove failure without dropping the row', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/user-libraries') {
+        return Promise.resolve(
+          jsonResponse({
+            libraries: [
+              { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
+            ],
+          }),
+        )
+      }
+      if (init?.method === 'DELETE' && url === '/api/user-libraries/shapes') {
+        return Promise.resolve(new Response(null, { status: 500 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
+    })
+    fireEvent.click(
+      container.querySelector('[aria-label="Manage installed user libraries"]') as HTMLElement,
+    )
+    await waitFor(() => {
+      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
+    })
+
+    fireEvent.click(document.querySelector('[aria-label="Remove user library shapes"]')!)
+
+    await waitFor(() => {
+      expect(document.body.textContent ?? '').toMatch(/Remove failed: HTTP 500/i)
+    })
+    // The row must still be there — a failed remove should not disappear.
+    expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
+  })
+
+  it('exposes Cleanup on the Versions row and aggregates sandwiched-auto-version prunes across workspaces', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/workspaces') {
+        return Promise.resolve(
+          jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }] }),
+        )
+      }
+      if (init?.method === 'POST' && url.endsWith('/versions/prune-sandwiched')) {
+        return Promise.resolve(jsonResponse({ totalDeleted: url.includes('ws_a') ? 2 : 1 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="versions"]')).not.toBeNull()
+    })
+
+    const versionsActions = container.querySelector('[data-storage-actions="versions"]')!
+    fireEvent.click(versionsActions.querySelector('button')!)
+
+    await waitFor(() => {
+      expect(versionsActions.textContent ?? '').toMatch(/Removed\s+3\s+auto-version/i)
+    })
+  })
+
+  it('exposes Cleanup on the Logs row and prunes old daemon logs', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (init?.method === 'POST' && url === '/api/runtime/logs/prune') {
+        return Promise.resolve(jsonResponse({ purgedCount: 5, purgedBytes: 10_240 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="logs"]')).not.toBeNull()
+    })
+
+    const logsActions = container.querySelector('[data-storage-actions="logs"]')!
+    fireEvent.click(logsActions.querySelector('button')!)
+
+    await waitFor(() => {
+      expect(logsActions.textContent ?? '').toMatch(/Removed\s+5/i)
+    })
+  })
+
+  it('reports "Nothing to prune" when the Logs row Cleanup finds nothing to remove', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (init?.method === 'POST' && url === '/api/runtime/logs/prune') {
+        return Promise.resolve(jsonResponse({ purgedCount: 0, purgedBytes: 0 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="logs"]')).not.toBeNull()
+    })
+
+    const logsActions = container.querySelector('[data-storage-actions="logs"]')!
+    fireEvent.click(logsActions.querySelector('button')!)
+
+    await waitFor(() => {
+      expect(logsActions.textContent ?? '').toMatch(/Nothing to prune/i)
+    })
+  })
+
+  it('shows "Optimize failed" when the workspaces list request itself fails', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/workspaces') {
+        return Promise.resolve(new Response(null, { status: 500 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+    })
+
+    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
+    fireEvent.click(blobsActions.querySelector('button')!)
+
+    await waitFor(() => {
+      expect(blobsActions.textContent ?? '').toMatch(/Optimize failed/i)
+    })
+  })
+
+  it('shows "Cleanup failed" when the dangling-files workspaces list request itself fails', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/workspaces') {
+        return Promise.resolve(new Response(null, { status: 500 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="files"]')).not.toBeNull()
+    })
+
+    const filesActions = container.querySelector('[data-storage-actions="files"]')!
+    fireEvent.click(filesActions.querySelector('button')!)
+
+    await waitFor(() => {
+      expect(filesActions.textContent ?? '').toMatch(/Cleanup failed/i)
+    })
+  })
+
+  it('surfaces a partial-failure note when Optimize all succeeds for some workspaces but not others', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/workspaces') {
+        return Promise.resolve(
+          jsonResponse({ workspaces: [{ workspaceId: 'ws_a' }, { workspaceId: 'ws_b' }] }),
+        )
+      }
+      if (init?.method === 'POST' && url.endsWith('/canvases/optimize-all')) {
+        if (url.includes('ws_a')) {
+          return Promise.resolve(new Response(null, { status: 500 }))
+        }
+        return Promise.resolve(jsonResponse({ totalBeforeBytes: 4000, totalAfterBytes: 1000 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+    })
+
+    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
+    fireEvent.click(blobsActions.querySelector('button')!)
+
+    await waitFor(() => {
+      expect(blobsActions.textContent ?? '').toMatch(/Saved.*1 workspace failed/i)
+    })
+  })
 
   it('humanises the "Updated …" line and ticks across humanise boundaries without per-second flicker', async () => {
     const { container } = render(<StorageReportCard />)

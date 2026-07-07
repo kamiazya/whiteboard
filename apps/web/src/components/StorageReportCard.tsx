@@ -1,5 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import {
+  listWorkspacesResponseSchema,
+  optimizeAllCanvasesResponseSchema,
+  pruneSandwichedVersionsResponseSchema,
+  purgeResultSchema,
+  type StorageReportPayload,
+  storageReportPayloadSchema,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
 import { Eraser, HardDrive, Library, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { z } from 'zod'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -9,19 +19,26 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import { formatBytes } from '../lib/format-bytes.js'
-import {
-  storageReportPayloadSchema,
-  type StorageReportPayload,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
 
-interface UserLibraryRow {
-  name: string
-  path: string
-  itemCount: number
-  bytes?: number | null
-}
+// Mirrors userLibrarySummarySchema / listUserLibrariesResponseSchema in
+// packages/mcp-server/src/shared/api-contracts/libraries.ts. That module is
+// deliberately kept off the public `./api-contracts` npm subpath (see the
+// barrel comment there and api-contracts-barrel.test.ts), so this schema is
+// duplicated here rather than imported, pending a decision to widen the
+// published surface.
+const userLibraryRowSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  itemCount: z.number().int().nonnegative(),
+  bytes: z.number().int().nonnegative().nullable().optional(),
+})
+
+const userLibrariesResponseSchema = z.object({
+  libraries: z.array(userLibraryRowSchema),
+})
+
+type UserLibraryRow = z.infer<typeof userLibraryRowSchema>
 
 // Storage starts as visibility-before-enforcement: rows expose where bytes are
 // accumulating before the app applies caps, LRU, or category-specific cleanup.
@@ -82,6 +99,17 @@ const HUMANIZE_TICK_MS = 30_000
 // new dependency — Intl.RelativeTimeFormat ships with Node and modern
 // browsers.
 const RELATIVE_TIME_FORMAT = new Intl.RelativeTimeFormat('en', { numeric: 'auto' })
+
+// Workspace-iterating cleanup actions (optimizeAll, pruneSandwichedAutoVersions,
+// cleanupDanglingFiles) skip any workspace whose per-workspace request fails
+// and keep aggregating the rest, so a status built only from the successful
+// totals would tell the user everything succeeded even when some workspaces
+// were left untouched. Appending this note keeps the aggregation resilient
+// (partial progress still counts) while surfacing that the job was partial.
+function appendPartialFailureNote(status: string, failedWorkspaces: number): string {
+  if (failedWorkspaces <= 0) return status
+  return `${status} (${failedWorkspaces} workspace${failedWorkspaces === 1 ? '' : 's'} failed)`
+}
 
 function humanizeAge(seconds: number): string {
   if (seconds < 30) return 'just now'
@@ -182,23 +210,31 @@ export function StorageReportCard() {
         setOptimizeStatus('Optimize failed')
         return
       }
-      const { workspaces } = (await wsRes.json()) as {
-        workspaces: Array<{ workspaceId: string }>
-      }
+      const { workspaces } = listWorkspacesResponseSchema.parse(await wsRes.json())
       let savings = 0
+      let failedWorkspaces = 0
       for (const { workspaceId } of workspaces) {
         const res = await apiFetch(`/api/workspaces/${workspaceId}/canvases/optimize-all`, {
           method: 'POST',
         })
-        if (!res.ok) continue
-        const body = (await res.json()) as {
-          totalBeforeBytes: number
-          totalAfterBytes: number
+        if (!res.ok) {
+          failedWorkspaces += 1
+          continue
         }
+        const body = optimizeAllCanvasesResponseSchema.parse(await res.json())
         savings += body.totalBeforeBytes - body.totalAfterBytes
       }
       if (!mountedRef.current) return
-      setOptimizeStatus(savings > 0 ? `Saved ${formatBytes(savings)}` : 'Already optimal')
+      // A per-workspace failure does not abort the loop (other workspaces
+      // may still succeed), so the summary must say so explicitly — silently
+      // reporting "Saved"/"Already optimal" would tell the user everything
+      // succeeded when it did not.
+      setOptimizeStatus(
+        appendPartialFailureNote(
+          savings > 0 ? `Saved ${formatBytes(savings)}` : 'Already optimal',
+          failedWorkspaces,
+        ),
+      )
       void refresh()
     } catch {
       if (mountedRef.current) setOptimizeStatus('Optimize failed')
@@ -227,7 +263,7 @@ export function StorageReportCard() {
         setLibsError(`HTTP ${res.status}`)
         return
       }
-      const json = (await res.json()) as { libraries: UserLibraryRow[] }
+      const json = userLibrariesResponseSchema.parse(await res.json())
       if (!mountedRef.current) return
       setLibs(json.libraries)
     } catch (err) {
@@ -273,7 +309,7 @@ export function StorageReportCard() {
         setPruneLogsStatus('Prune failed')
         return
       }
-      const body = (await res.json()) as { purgedCount: number; purgedBytes: number }
+      const body = purgeResultSchema.parse(await res.json())
       if (!mountedRef.current) return
       setPruneLogsStatus(
         body.purgedCount > 0
@@ -306,21 +342,26 @@ export function StorageReportCard() {
         setPruneVersionsStatus('Cleanup failed')
         return
       }
-      const { workspaces } = (await wsRes.json()) as {
-        workspaces: Array<{ workspaceId: string }>
-      }
+      const { workspaces } = listWorkspacesResponseSchema.parse(await wsRes.json())
       let totalDeleted = 0
+      let failedWorkspaces = 0
       for (const { workspaceId } of workspaces) {
         const res = await apiFetch(`/api/workspaces/${workspaceId}/versions/prune-sandwiched`, {
           method: 'POST',
         })
-        if (!res.ok) continue
-        const body = (await res.json()) as { totalDeleted: number }
+        if (!res.ok) {
+          failedWorkspaces += 1
+          continue
+        }
+        const body = pruneSandwichedVersionsResponseSchema.parse(await res.json())
         totalDeleted += body.totalDeleted
       }
       if (!mountedRef.current) return
       setPruneVersionsStatus(
-        totalDeleted > 0 ? `Removed ${totalDeleted} auto-version(s)` : 'Nothing to clean',
+        appendPartialFailureNote(
+          totalDeleted > 0 ? `Removed ${totalDeleted} auto-version(s)` : 'Nothing to clean',
+          failedWorkspaces,
+        ),
       )
       void refresh()
     } catch {
@@ -348,25 +389,30 @@ export function StorageReportCard() {
         setCleanFilesStatus('Cleanup failed')
         return
       }
-      const { workspaces } = (await wsRes.json()) as {
-        workspaces: Array<{ workspaceId: string }>
-      }
+      const { workspaces } = listWorkspacesResponseSchema.parse(await wsRes.json())
       let purgedBytes = 0
       let purgedCount = 0
+      let failedWorkspaces = 0
       for (const { workspaceId } of workspaces) {
         const res = await apiFetch(`/api/workspaces/${workspaceId}/files/purge-dangling`, {
           method: 'POST',
         })
-        if (!res.ok) continue
-        const body = (await res.json()) as { purgedCount: number; purgedBytes: number }
+        if (!res.ok) {
+          failedWorkspaces += 1
+          continue
+        }
+        const body = purgeResultSchema.parse(await res.json())
         purgedBytes += body.purgedBytes
         purgedCount += body.purgedCount
       }
       if (!mountedRef.current) return
       setCleanFilesStatus(
-        purgedCount > 0
-          ? `Removed ${purgedCount} (${formatBytes(purgedBytes)})`
-          : 'Nothing to clean',
+        appendPartialFailureNote(
+          purgedCount > 0
+            ? `Removed ${purgedCount} (${formatBytes(purgedBytes)})`
+            : 'Nothing to clean',
+          failedWorkspaces,
+        ),
       )
       void refresh()
     } catch {
