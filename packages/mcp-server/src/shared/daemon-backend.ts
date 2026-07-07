@@ -21,12 +21,13 @@
  * UndoManager history.
  */
 
-import { apiFetch, readRuntimeConfig } from './api-client.js'
+import { apiFetch } from './api-client.js'
 import type {
   BinaryFileDataLike,
   CanvasBackend,
   CanvasBackendHandlers,
 } from './canvas-backend-contract.js'
+import { readDaemonTokenOnce } from './token-store.js'
 import { uploadFiles } from './upload-files.js'
 import {
   clientReadyMessageSchema,
@@ -116,7 +117,7 @@ export class DaemonBackend implements CanvasBackend {
   private openSocket(handlers: CanvasBackendHandlers): void {
     if (this.cancelled) return
 
-    const { daemonToken } = readRuntimeConfig()
+    const daemonToken = readDaemonTokenOnce()
 
     const ws = new WebSocket(
       buildWhiteboardWsUrl(this.locationHref, this.workspaceId, this.slug),

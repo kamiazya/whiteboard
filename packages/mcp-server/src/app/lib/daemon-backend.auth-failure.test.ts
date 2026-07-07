@@ -5,8 +5,9 @@
  * Transient codes (1001, 1006, etc.) must still trigger the normal backoff reconnect.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DaemonBackend } from './daemon-backend.js'
+import { resetTokenStoreForTests } from '../../shared/token-store.js'
 import type { CanvasBackendHandlers } from './canvas-backend.js'
+import { DaemonBackend } from './daemon-backend.js'
 
 interface FakeCloseEvent extends Event {
   code: number
@@ -73,10 +74,12 @@ describe('DaemonBackend – auth failure (close code 1008)', () => {
     vi.useFakeTimers()
     FakeWebSocket.instances = []
     originalWebSocket = (globalThis as Record<string, unknown>).WebSocket
-    // DaemonBackend reads window.__WHITEBOARD_RUNTIME_CONFIG__; stub it.
+    // DaemonBackend reads the token via TokenStore, seeded from
+    // window.__WHITEBOARD_DAEMON_TOKEN__; stub the global.
     originalWindow = (globalThis as Record<string, unknown>).window
+    resetTokenStoreForTests()
     ;(globalThis as Record<string, unknown>).window = {
-      __WHITEBOARD_RUNTIME_CONFIG__: { daemonToken: null },
+      __WHITEBOARD_DAEMON_TOKEN__: undefined,
     }
     ;(globalThis as Record<string, unknown>).WebSocket = FakeWebSocket
   })
@@ -85,6 +88,7 @@ describe('DaemonBackend – auth failure (close code 1008)', () => {
     vi.useRealTimers()
     ;(globalThis as Record<string, unknown>).WebSocket = originalWebSocket
     ;(globalThis as Record<string, unknown>).window = originalWindow
+    resetTokenStoreForTests()
   })
 
   it('does NOT reconnect on close code 1008', async () => {

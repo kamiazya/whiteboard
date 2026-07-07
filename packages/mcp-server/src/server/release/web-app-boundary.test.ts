@@ -96,6 +96,7 @@ const ALLOWED_SHARED_EXACT = new Set([
   'loro-raw-element.js', // Zod schema for Loro-stored element shape — zod-only, no Node APIs
   'migration-bundle.js', // MigrationBundle Zod contract — zod-only, no Node APIs
   'resolve-parented-elements.js', // pure data transformation
+  'token-store.js', // in-memory daemon-token holder, no Node APIs
   'upload-files.js', // file upload transport, no Node APIs
   'ws-messages.js', // WebSocket protocol types/constants
   'ws-protocol.js', // WebSocket protocol helpers

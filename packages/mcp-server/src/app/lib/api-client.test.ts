@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { resetTokenStoreForTests } from '../../shared/token-store.js'
 
 const { apiFetch } = await import('./api-client.js')
 
@@ -9,6 +10,7 @@ describe('apiFetch', () => {
   beforeEach(() => {
     originalFetch = globalThis.fetch
     originalWindow = globalThis.window
+    resetTokenStoreForTests()
   })
 
   afterEach(() => {
@@ -18,13 +20,14 @@ describe('apiFetch', () => {
       configurable: true,
       writable: true,
     })
+    resetTokenStoreForTests()
   })
 
   it('attaches the daemon bearer token to local API requests', async () => {
     Object.defineProperty(globalThis, 'window', {
       value: {
         location: { origin: 'http://localhost:3099' },
-        __WHITEBOARD_RUNTIME_CONFIG__: { daemonToken: 'secret' },
+        __WHITEBOARD_DAEMON_TOKEN__: 'secret',
       },
       configurable: true,
       writable: true,
@@ -42,7 +45,7 @@ describe('apiFetch', () => {
     Object.defineProperty(globalThis, 'window', {
       value: {
         location: { origin: 'http://localhost:3099' },
-        __WHITEBOARD_RUNTIME_CONFIG__: { daemonToken: 'secret' },
+        __WHITEBOARD_DAEMON_TOKEN__: 'secret',
       },
       configurable: true,
       writable: true,

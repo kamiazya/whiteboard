@@ -1,18 +1,28 @@
 import { z } from 'zod'
 import { injectTraceContextIntoHeaders } from './browser-tracing.js'
+import { readDaemonTokenOnce } from './token-store.js'
 
 // The server injects this shape into `window.__WHITEBOARD_RUNTIME_CONFIG__`
 // via a same-origin inline <script> (see server/app.ts). It crosses a
 // process boundary (server -> browser), so it is validated on read rather
 // than trusted as a cast — a malformed or tampered global falls back to the
 // unauthenticated default instead of propagating a bad value into apiFetch.
-export const runtimeConfigSchema = z.object({
-  daemonToken: z.string().nullable(),
-})
+//
+// Permanently token-free (ADR-0002 addendum): the daemon auth token travels
+// through its own global (see token-store.ts) so it never lands in a config
+// object that logging / error-reporting could serialize wholesale. `.strict()`
+// means a payload that still carries `daemonToken` fails validation rather
+// than silently dropping the extra key, so a stale server build cannot slip
+// a token back into this object undetected.
+export const runtimeConfigSchema = z
+  .object({
+    daemonBaseUrl: z.string().optional(),
+  })
+  .strict()
 
 export type RuntimeConfig = z.infer<typeof runtimeConfigSchema>
 
-const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = { daemonToken: null }
+const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {}
 
 // This module compiles under both tsconfig.server.json (lib ES2022 + types
 // node — no DOM lib, no ambient `window`) and apps/web's DOM-enabled
@@ -66,7 +76,7 @@ export async function apiFetch(
   // stitch the inbound request span onto whatever client-side span (if
   // any) is active. No-op when browser tracing has not been enabled.
   injectTraceContextIntoHeaders(headers)
-  const { daemonToken } = readRuntimeConfig()
+  const daemonToken = readDaemonTokenOnce()
   if (daemonToken) {
     headers.set('Authorization', `Bearer ${daemonToken}`)
   }

@@ -58,6 +58,22 @@ describe('runtimeConfigSchema', () => {
     expect(() => resolveRuntimeConfig({ Authorization: 'Bearer tok' })).toThrow()
   })
 
+  // Mutation-check target: the daemon auth token travels via its own global
+  // (window.__WHITEBOARD_DAEMON_TOKEN__), never inside this config object.
+  // Reverting that split — putting daemonToken back into the injected config —
+  // must make this assertion fail.
+  it('rejects a payload containing daemonToken (.strict() rejection of the token channel)', () => {
+    expect(runtimeConfigSchema.safeParse({ daemonToken: 'secret' }).success).toBe(false)
+    expect(() =>
+      resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099', daemonToken: 'secret' }),
+    ).toThrow()
+  })
+
+  it('parses the split shape: a token-free config with daemonBaseUrl only', () => {
+    const config = resolveRuntimeConfig({ daemonBaseUrl: 'http://127.0.0.1:3099' })
+    expect(config).toEqual({ daemonBaseUrl: 'http://127.0.0.1:3099' })
+  })
+
   it('explicit default port 443 is rejected (URL.origin normalizes it away)', () => {
     expect(() => resolveRuntimeConfig({ publicOrigin: 'https://app.example.com:443' })).toThrow()
   })

@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 // Nearest-layer test for the Vite dev-server plugin that injects
-// window.__WHITEBOARD_RUNTIME_CONFIG__ into the HTML served by `pnpm dev`.
+// window.__WHITEBOARD_DAEMON_TOKEN__ into the HTML served by `pnpm dev`.
 // We import the plugin factory directly and exercise its transformIndexHtml
 // hook so no running Vite server is needed.
 
@@ -17,15 +17,15 @@ describe('runtimeConfigDevPlugin', () => {
     }
   })
 
-  it('injects a <script> that sets window.__WHITEBOARD_RUNTIME_CONFIG__ with the default token', async () => {
+  it('injects a <script> that sets window.__WHITEBOARD_DAEMON_TOKEN__ with the default token, and no daemonToken key inside a config object', async () => {
     delete process.env.WHITEBOARD_TOKEN
     const { runtimeConfigDevPlugin } = await import('./vite-dev-token-plugin.js')
     const plugin = runtimeConfigDevPlugin()
     const result = (plugin as { transformIndexHtml: (html: string) => string }).transformIndexHtml(
       '<html><head></head><body></body></html>',
     )
-    expect(result).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
-    expect(result).toContain('"daemonToken"')
+    expect(result).toContain('window.__WHITEBOARD_DAEMON_TOKEN__')
+    expect(result).not.toContain('daemonToken')
     expect(result).toContain('"whiteboard-dev"')
     expect(result).toContain('<script>')
   })

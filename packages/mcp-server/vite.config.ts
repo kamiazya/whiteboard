@@ -38,8 +38,8 @@ export default defineConfig({
         getExcalidrawFontCopyTarget(__dirname),
       ],
     }),
-    // Dev-only: injects window.__WHITEBOARD_RUNTIME_CONFIG__ so apiFetch
-    // sends Authorization: Bearer <token> on every /api/* request.
+    // Dev-only: injects window.__WHITEBOARD_DAEMON_TOKEN__ so TokenStore
+    // (via apiFetch) sends Authorization: Bearer <token> on every /api/* request.
     // apply: 'serve' inside the plugin ensures this never reaches production.
     runtimeConfigDevPlugin(),
   ],
