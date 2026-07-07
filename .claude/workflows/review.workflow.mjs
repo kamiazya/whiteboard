@@ -193,7 +193,9 @@ const failedLaneFindings = failedDimensions.map((key) => ({
   verdict: { isReal: true, confidence: 'high', reasoning: 'lane failure is a process fact, not a claim to verify' },
 }))
 const allFindings = reviewedFindings.concat(failedLaneFindings)
-const confirmed = allFindings.filter((f) => f.verdict && f.verdict.isReal)
+// If a verdict is missing (verify agent died), keep the finding rather than silently drop it —
+// same policy as audit-triage's verify pass: an unverified claim is safer surfaced than hidden.
+const confirmed = allFindings.filter((f) => !f.verdict || f.verdict.isReal)
 
 // --- Phase 3: QA smoke on the touched flows ---
 const qa = (
