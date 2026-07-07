@@ -410,6 +410,17 @@ describe('optimizeAllCanvasesResponseSchema', () => {
       false,
     )
   })
+
+  it('rejects negative or fractional byte totals', () => {
+    expect(
+      optimizeAllCanvasesResponseSchema.safeParse({ totalBeforeBytes: -1, totalAfterBytes: 0 })
+        .success,
+    ).toBe(false)
+    expect(
+      optimizeAllCanvasesResponseSchema.safeParse({ totalBeforeBytes: 1.5, totalAfterBytes: 0 })
+        .success,
+    ).toBe(false)
+  })
 })
 
 describe('pruneSandwichedVersionsResponseSchema', () => {
@@ -432,6 +443,15 @@ describe('pruneSandwichedVersionsResponseSchema', () => {
   it('rejects missing totalDeleted', () => {
     expect(pruneSandwichedVersionsResponseSchema.safeParse({}).success).toBe(false)
   })
+
+  it('rejects a negative or fractional deletion count', () => {
+    expect(pruneSandwichedVersionsResponseSchema.safeParse({ totalDeleted: -2 }).success).toBe(
+      false,
+    )
+    expect(pruneSandwichedVersionsResponseSchema.safeParse({ totalDeleted: 0.5 }).success).toBe(
+      false,
+    )
+  })
 })
 
 describe('purgeResultSchema', () => {
@@ -449,5 +469,10 @@ describe('purgeResultSchema', () => {
 
   it('rejects missing purgedBytes', () => {
     expect(purgeResultSchema.safeParse({ purgedCount: 2 }).success).toBe(false)
+  })
+
+  it('rejects negative or fractional counts and byte totals', () => {
+    expect(purgeResultSchema.safeParse({ purgedCount: -1, purgedBytes: 0 }).success).toBe(false)
+    expect(purgeResultSchema.safeParse({ purgedCount: 0, purgedBytes: 0.5 }).success).toBe(false)
   })
 })

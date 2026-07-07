@@ -276,20 +276,28 @@ export function StorageReportCard() {
   }, [])
   const removeLib = useCallback(
     async (name: string) => {
-      const res = await apiFetch(`/api/user-libraries/${encodeURIComponent(name)}`, {
-        method: 'DELETE',
-      })
-      if (!mountedRef.current) return
-      if (!res.ok) {
-        setLibsError(`Remove failed: HTTP ${res.status}`)
-        return
+      // Callers fire-and-forget this (void removeLib(...)), so a thrown fetch
+      // must be converted to state here or it becomes an unhandled rejection.
+      try {
+        const res = await apiFetch(`/api/user-libraries/${encodeURIComponent(name)}`, {
+          method: 'DELETE',
+        })
+        if (!mountedRef.current) return
+        if (!res.ok) {
+          setLibsError(`Remove failed: HTTP ${res.status}`)
+          return
+        }
+        // Optimistic update so the row disappears immediately, then re-pull
+        // from the server to stay consistent with whatever else changed
+        // (timestamps etc.).
+        setLibs((prev) => prev.filter((l) => l.name !== name))
+        void fetchLibs()
+        void refresh()
+      } catch (err) {
+        if (mountedRef.current) {
+          setLibsError(err instanceof Error ? err.message : String(err))
+        }
       }
-      // Optimistic update so the row disappears immediately, then re-pull
-      // from the server to stay consistent with whatever else changed
-      // (timestamps etc.).
-      setLibs((prev) => prev.filter((l) => l.name !== name))
-      void fetchLibs()
-      void refresh()
     },
     [fetchLibs, refresh],
   )
@@ -622,7 +630,9 @@ export function StorageReportCard() {
           </DialogHeader>
           {libsLoading ? (
             <div className="text-sm text-muted-foreground">Loading…</div>
-          ) : libs.length === 0 ? (
+          ) : libs.length === 0 && !libsError ? (
+            // A failed fetch also leaves libs empty — that renders the error
+            // line below instead of masquerading as "no libraries installed".
             <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
               No user libraries installed.
             </div>

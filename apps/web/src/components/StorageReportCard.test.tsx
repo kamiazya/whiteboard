@@ -311,6 +311,74 @@ describe('StorageReportCard', () => {
     expect(orphanRow.textContent).toMatch(/file missing/i)
   })
 
+  it('shows the fetch error instead of "No user libraries installed." when the list request fails', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/user-libraries') {
+        return Promise.resolve(new Response('{}', { status: 500 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
+    })
+    fireEvent.click(container.querySelector('[aria-label="Manage installed user libraries"]')!)
+
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/HTTP 500/)
+    })
+    // An empty list caused by a failed fetch must not masquerade as
+    // "no libraries installed".
+    expect(document.body.textContent).not.toMatch(/No user libraries installed/)
+  })
+
+  it('surfaces a network failure from remove as libsError instead of an unhandled rejection', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/user-libraries' && !init?.method) {
+        return Promise.resolve(
+          jsonResponse({
+            libraries: [
+              { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
+            ],
+          }),
+        )
+      }
+      if (url.startsWith('/api/user-libraries/') && init?.method === 'DELETE') {
+        return Promise.reject(new Error('network down'))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+    const { container } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
+    })
+    fireEvent.click(container.querySelector('[aria-label="Manage installed user libraries"]')!)
+    await waitFor(() => {
+      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
+    })
+
+    fireEvent.click(document.querySelector('[aria-label="Remove user library shapes"]')!)
+    await waitFor(() => {
+      expect(document.body.textContent).toMatch(/network down/)
+    })
+  })
+
   it('removes a user library optimistically and re-pulls the list on success', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
     let libraries = [
