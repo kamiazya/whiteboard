@@ -1,6 +1,8 @@
 import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import { CheckCircle2, Undo2, X } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
+import { getAppLogger } from '@/lib/app-logger'
+import { safeErrorCopy } from '@/lib/error-copy'
 import {
   MERGE_COMMITTED_EVENT,
   type MergeCommittedDetail,
@@ -8,6 +10,8 @@ import {
 } from '@/lib/merge-committed-event'
 import { cn } from '@/lib/utils'
 import { Button } from './ui/button.js'
+
+const log = getAppLogger('merge-toast')
 
 // Short-lived toast shown in the bottom-right after merge completes.
 // - Content: ✓ merged source branch, summary counts, optional Undo
@@ -31,6 +35,7 @@ interface ActiveToast {
 export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): JSX.Element | null {
   const [active, setActive] = useState<ActiveToast | null>(null)
   const [undoing, setUndoing] = useState(false)
+  const [undoError, setUndoError] = useState<string | null>(null)
   const hoverRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -40,6 +45,7 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
       const detail = parseMergeCommittedEvent(event)
       if (!detail) return
       if (detail.workspaceId !== workspaceId || detail.slug !== slug) return
+      setUndoError(null)
       setActive({ key: Date.now(), detail })
     }
     window.addEventListener(MERGE_COMMITTED_EVENT, handler)
@@ -78,6 +84,7 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
   const handleUndo = async () => {
     if (!canUndo || undoing) return
     setUndoing(true)
+    setUndoError(null)
     try {
       const res = await apiFetch(
         `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${preMergeVersionId}/restore`,
@@ -85,12 +92,19 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
       )
       if (res.ok) {
         onRestored?.()
+        setActive(null)
+        return
       }
-    } catch {
-      /* If restore fails, close the toast and leave further reporting to websocket-driven state. */
+      const body = await res.json().catch(() => undefined)
+      const message = safeErrorCopy({ status: res.status, body }, 'Undo failed. Try again.')
+      log.error('restore request failed', { status: res.status, workspaceId, slug })
+      setUndoError(message)
+    } catch (err) {
+      // Keep the toast (and its retry affordance) visible; the restore did not happen.
+      log.error('restore request threw', err, { workspaceId, slug })
+      setUndoError(safeErrorCopy(err, 'Undo failed. Try again.'))
     } finally {
       setUndoing(false)
-      setActive(null)
     }
   }
 
@@ -146,6 +160,14 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
               <Undo2 className="size-3.5" />
               {undoing ? 'Undoing…' : 'Undo'}
             </Button>
+            {undoError && (
+              <div
+                className="mt-1 text-[11px] text-destructive"
+                data-testid="merge-toast-undo-error"
+              >
+                {undoError}
+              </div>
+            )}
           </div>
         )}
       </div>

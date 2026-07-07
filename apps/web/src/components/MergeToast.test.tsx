@@ -98,4 +98,35 @@ describe('MergeToast', () => {
     fireEvent.click(screen.getByTestId('merge-toast-close'))
     expect(screen.queryByTestId('merge-toast')).toBeNull()
   })
+
+  it('keeps the toast open and shows an error when restore responds non-ok', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ title: 'nope' }), { status: 409 })),
+    )
+    const onRestored = vi.fn()
+    render(<MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />)
+    act(() => dispatchMergeCommitted(baseDetail))
+    fireEvent.click(screen.getByTestId('merge-toast-undo'))
+    await waitFor(() => {
+      expect(screen.getByTestId('merge-toast-undo-error')).toBeTruthy()
+    })
+    expect(onRestored).not.toHaveBeenCalled()
+    // The toast (and its retry affordance) stays visible after a failed restore.
+    expect(screen.getByTestId('merge-toast')).toBeTruthy()
+    expect(screen.getByTestId('merge-toast-undo')).toBeTruthy()
+  })
+
+  it('keeps the toast open and shows an error when restore throws', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
+    const onRestored = vi.fn()
+    render(<MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />)
+    act(() => dispatchMergeCommitted(baseDetail))
+    fireEvent.click(screen.getByTestId('merge-toast-undo'))
+    await waitFor(() => {
+      expect(screen.getByTestId('merge-toast-undo-error')).toBeTruthy()
+    })
+    expect(onRestored).not.toHaveBeenCalled()
+    expect(screen.getByTestId('merge-toast')).toBeTruthy()
+  })
 })
