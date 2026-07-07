@@ -111,6 +111,9 @@ export function HeaderBranchChip({
   const [renameDraft, setRenameDraft] = useState('')
   const openRename = () => {
     if (!activeBranch) return
+    // Errors from a previous operation (e.g. a failed create) must not
+    // greet the user inside a fresh rename dialog.
+    setErrorMessage(null)
     setRenameTarget(activeBranch)
     setRenameDraft(activeBranch.name)
     setRenameOpen(true)
@@ -189,7 +192,18 @@ export function HeaderBranchChip({
   return (
     <div className="flex items-center gap-1">
       {/* Main chip: branch switching and creation live in this dropdown. */}
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) {
+            // A stale error from the previous interaction shouldn't greet
+            // the user when they re-open the menu.
+            setErrorMessage(null)
+          } else {
+            setCreateOpen(false)
+            setNewName('')
+          }
+        }}
+      >
         <Tooltip>
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
@@ -270,8 +284,15 @@ export function HeaderBranchChip({
                   autoFocus
                   aria-label="New branch name"
                   className="h-7 text-xs"
+                  maxLength={80}
                 />
-                <Button type="submit" size="sm" variant="outline" className="h-7 px-2 text-xs">
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  disabled={!newName.trim()}
+                >
                   Add
                 </Button>
                 <Button
@@ -383,7 +404,14 @@ export function HeaderBranchChip({
       {!createOpen && !renameOpen ? errorBanner : null}
 
       {/* Rename dialog */}
-      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
+      <Dialog
+        open={renameOpen}
+        onOpenChange={(open) => {
+          setRenameOpen(open)
+          // A rename error must not leak into the header row after close.
+          if (!open) setErrorMessage(null)
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Rename «{renameTarget?.name ?? head}»</DialogTitle>
@@ -409,7 +437,12 @@ export function HeaderBranchChip({
             <Button variant="outline" onClick={() => setRenameOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={submitRename}>Rename</Button>
+            <Button
+              onClick={submitRename}
+              disabled={!renameDraft.trim() || renameDraft.trim() === renameTarget?.name}
+            >
+              Rename
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
