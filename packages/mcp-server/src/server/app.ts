@@ -6,6 +6,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { Hono, type MiddlewareHandler } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
+import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { detectMergeBadges } from '../shared/merge-engine.js'
 import { reconcileElementsOnDoc } from '../shared/reconcile-elements.js'
 import { DIST_APP_DIR } from './config.js'
@@ -29,18 +30,17 @@ import {
   setResolveExportFn,
   setResolveViewportFn,
 } from './routes/ws.js'
+import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
+import type { AuthScope } from './security/auth-strategy.js'
+import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
 import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
   type McpHttpAuthStrategy,
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
-import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
-import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
-import type { AuthScope } from './security/auth-strategy.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
-import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import {
   BranchNotFoundError,
   deleteBranch,
@@ -874,16 +874,24 @@ export function createApp(options: AppOptions) {
       // cannot terminate the tag. The current token is generated with nanoid and is not
       // dangerous, but this keeps runtime config safe if user-controlled values are added later.
       // Details: https://html.spec.whatwg.org/multipage/scripting.html#restrictions-for-contents-of-script-elements
+      //
+      // The daemon token is deliberately NOT part of __WHITEBOARD_RUNTIME_CONFIG__
+      // (see shared/token-store.ts) — it ships in its own global so it never
+      // rides along inside an object that logging / error-reporting could
+      // serialize wholesale.
       const runtimeConfigJson = JSON.stringify({
-        daemonToken: token ?? null,
         // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the
         // value is always a loopback origin, even when the daemon binds 0.0.0.0.
         daemonBaseUrl: `http://127.0.0.1:${options.getStatus().port}`,
       }).replace(/</g, '\\u003c')
       const runtimeConfigScript = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
+      const tokenScript = token
+        ? `<script>window.__WHITEBOARD_DAEMON_TOKEN__ = ${JSON.stringify(token).replace(/</g, '\\u003c')}</script>`
+        : ''
+      const injected = `${runtimeConfigScript}${tokenScript}`
       const withRuntimeConfig = html.includes('</head>')
-        ? html.replace('</head>', `${runtimeConfigScript}</head>`)
-        : `${runtimeConfigScript}${html}`
+        ? html.replace('</head>', `${injected}</head>`)
+        : `${injected}${html}`
       return c.html(withRuntimeConfig)
     } catch {
       return c.text('Not found. Run `pnpm build` first.', 404)

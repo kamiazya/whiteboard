@@ -201,6 +201,23 @@ async function main() {
   }
   console.log('[e2e] /api/runtime/ping with spoofed Host → 403 OK')
 
+  // Token channel split (ADR-0002 addendum): the served HTML must never carry
+  // the daemon token inside __WHITEBOARD_RUNTIME_CONFIG__. This is a
+  // serialization-surface reduction, not a security boundary — a script that
+  // ran earlier in the page could still have observed the token global before
+  // TokenStore consumed it.
+  const canvasHtmlRes = await fetch(created.url)
+  const canvasHtml = await canvasHtmlRes.text()
+  if (canvasHtml.includes('daemonToken')) {
+    throw new Error('served HTML still carries daemonToken inside __WHITEBOARD_RUNTIME_CONFIG__')
+  }
+  // ensureDaemon always generates a token (nanoid), so local-daemon mode
+  // always configures one — the dedicated token global must be present.
+  if (!canvasHtml.includes('window.__WHITEBOARD_DAEMON_TOKEN__')) {
+    throw new Error('served HTML is missing window.__WHITEBOARD_DAEMON_TOKEN__')
+  }
+  console.log('[e2e] served HTML: no daemonToken in config, dedicated token global present')
+
   const ann = await callTool('annotate', {
     canvasId: created.id,
     type: 'rectangle',

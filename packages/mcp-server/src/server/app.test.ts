@@ -134,13 +134,23 @@ describe('createApp daemon mutation auth', () => {
     expect(authedDebugRes.status).toBe(200)
   })
 
-  it('injects runtime config with daemon token into served HTML', async () => {
+  it('injects the daemon token into its own dedicated global, not the runtime-config object', async () => {
     const app = createApp(createRuntimeOptions('secret'))
     const res = await app.request('/canvas/session1/demo')
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
-    expect(html).toContain('"daemonToken":"secret"')
+    expect(html).not.toContain('daemonToken')
+    expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
+  })
+
+  it('omits the token script entirely when no daemon token is configured', async () => {
+    const app = createApp(createRuntimeOptions(undefined))
+    const res = await app.request('/canvas/session1/demo')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
+    expect(html).not.toContain('__WHITEBOARD_DAEMON_TOKEN__')
   })
 
   it('adds baseline security headers to HTML responses', async () => {
@@ -1034,24 +1044,31 @@ describe('createApp daemon mutation auth', () => {
   })
 
   describe('runtime config injection', () => {
-    it('injects daemonBaseUrl composed from 127.0.0.1 and port into served HTML', async () => {
+    it('injects daemonBaseUrl composed from 127.0.0.1 and port into served HTML, with no daemonToken key', async () => {
       const app = createApp(createRuntimeOptions('secret'))
       const res = await app.request('/canvas/session1/demo')
       expect(res.status).toBe(200)
       const html = await res.text()
       expect(html).toContain('"daemonBaseUrl":"http://127.0.0.1:3099"')
-      // existing daemonToken assertion must still pass
-      expect(html).toContain('"daemonToken":"secret"')
+      // Token separation (ADR-0002 addendum): the config object never carries
+      // the token; it travels via window.__WHITEBOARD_DAEMON_TOKEN__ instead.
+      expect(html).not.toContain('daemonToken')
+      expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
     })
 
-    it('emitted runtime-config is accepted by the active dist/app reader (non-strict)', async () => {
-      // The dist/app reader (packages/mcp-server/src/app/lib/api-client.ts) uses a
-      // hand-written non-strict interface RuntimeConfig { daemonToken: string | null }
-      // Extra keys (daemonBaseUrl) must be silently ignored - this test locks that behavior.
-      const emittedConfig = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
-      // Non-strict: accessing known properties works, extra ones are ignored
-      const config = emittedConfig as { daemonToken: string | null }
-      expect(config.daemonToken).toBe('secret')
+    it('emitted runtime-config is accepted by the shared api-client reader (strict, token-free)', async () => {
+      const { runtimeConfigSchema } = await import('../shared/api-client.js')
+      const emittedConfig = { daemonBaseUrl: 'http://127.0.0.1:3099' }
+      expect(() => runtimeConfigSchema.parse(emittedConfig)).not.toThrow()
+    })
+
+    it('shared api-client strict runtimeConfigSchema REJECTS a payload that includes daemonToken', async () => {
+      // .strict() forbids unknown keys. daemonToken is NOT in the schema, so
+      // .parse({ daemonToken, daemonBaseUrl }) must throw. This locks the
+      // token-channel split as a deliberate guarded step.
+      const { runtimeConfigSchema } = await import('../shared/api-client.js')
+      const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
+      expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
     })
 
     it('apps/web strict runtimeConfigSchema REJECTS a payload that includes daemonToken', async () => {

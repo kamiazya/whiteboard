@@ -11,10 +11,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // api-client/upload-files imports resolve to src/shared/*, not the
 // src/app/lib re-export shims.
 const apiFetchMock = vi.fn()
-const readRuntimeConfigMock = vi.fn(() => ({ daemonToken: null }))
 vi.mock('../../shared/api-client.js', () => ({
   apiFetch: apiFetchMock,
-  readRuntimeConfig: readRuntimeConfigMock,
+}))
+
+const readDaemonTokenOnceMock = vi.fn(() => null)
+vi.mock('../../shared/token-store.js', () => ({
+  readDaemonTokenOnce: readDaemonTokenOnceMock,
 }))
 
 const uploadFilesMock = vi.fn()

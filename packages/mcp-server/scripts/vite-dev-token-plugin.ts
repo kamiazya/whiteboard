@@ -1,7 +1,7 @@
 import type { Plugin } from 'vite'
 
-// Dev-only Vite plugin that injects window.__WHITEBOARD_RUNTIME_CONFIG__
-// into every HTML response so apiFetch (api-client.ts) sends
+// Dev-only Vite plugin that injects window.__WHITEBOARD_DAEMON_TOKEN__
+// into every HTML response so TokenStore (via apiFetch) sends
 // Authorization: Bearer <token> on every /api/* request.
 //
 // apply: 'serve' ensures Vite never includes this script in production builds.
@@ -21,8 +21,11 @@ export function runtimeConfigDevPlugin(): Plugin {
       // Escape `<` so a token containing `</script>` cannot break out of the
       // script tag and inject arbitrary markup. The production server path
       // applies the same guard before inlining runtime config.
-      const config = JSON.stringify({ daemonToken: token }).replace(/</g, '\\u003c')
-      const script = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${config};</script>`
+      //
+      // The token ships on its own global (window.__WHITEBOARD_DAEMON_TOKEN__),
+      // not inside __WHITEBOARD_RUNTIME_CONFIG__ — see shared/token-store.ts.
+      const tokenJson = JSON.stringify(token).replace(/</g, '\\u003c')
+      const script = `<script>window.__WHITEBOARD_DAEMON_TOKEN__ = ${tokenJson};</script>`
       if (!html.includes('</head>')) {
         throw new Error(
           'vite-dev-token-plugin: missing </head> in index.html — runtime config script cannot be injected',
