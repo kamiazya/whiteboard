@@ -67,6 +67,11 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(false)
+  // Mirrors pendingRestore, refreshed on every render so confirmRestore's
+  // async continuation can read the *current* pending version after an
+  // await, instead of a value closed over before the request started.
+  const pendingRestoreRef = useRef<VersionEntry | null>(pendingRestore)
+  pendingRestoreRef.current = pendingRestore
   // Monotonically increasing sequence stamp. Each refresh() call captures the
   // value at dispatch time; a response only commits if no newer refresh has
   // started meanwhile. Without this, a slow /versions response for an older
@@ -113,13 +118,22 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     refresh()
   }, [refresh])
 
-  // Poll every 15 seconds for new auto-versions.
+  // Keep branch state here for head filtering and the mini-graph.
+  // Legacy versions without branchName are treated as main.
+  const { state: branchesState, refetch: refetchBranches } = useBranches(workspaceId, slug)
+
+  // Poll every 15 seconds for new auto-versions, and re-fetch branches on the
+  // same tick. useBranches has no event subscription of its own, so this is
+  // the only path by which an externally-driven HEAD change (another peer
+  // switching branches, a merge from another tab) reaches this component's
+  // branch filter.
   useEffect(() => {
     const h = setInterval(() => {
       refresh()
+      refetchBranches()
     }, 15_000)
     return () => clearInterval(h)
-  }, [refresh])
+  }, [refresh, refetchBranches])
 
   const confirmRestore = useCallback(async () => {
     // Guard against a double-click or repeated keyboard activation firing a
@@ -149,15 +163,19 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     } finally {
       setIsRestoring(false)
     }
+    // Re-check that the dialog still refers to this same version before
+    // clearing it: the dialog is guarded against dismissal while isRestoring
+    // is true, but this identity check keeps success side effects (which
+    // clear undo history) tied to the request that actually completed rather
+    // than whatever version the dialog happens to show when the response
+    // lands.
+    if (pendingRestoreRef.current?.id !== v.id) return
     setPendingRestore(null)
     onRestored?.()
     // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
   }, [pendingRestore, isRestoring, workspaceId, slug, onRestored, refresh])
 
-  // Keep branch state here for head filtering and the mini-graph.
-  // Legacy versions without branchName are treated as main.
-  const { state: branchesState } = useBranches(workspaceId, slug)
   const head = branchesState.head
 
   const visibleVersions = versions.filter((v) => (v.branchName ?? 'main') === head)
@@ -211,13 +229,17 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
                         strokeOpacity={0.6}
                       />
                     ) : null}
+                    {/* visibleVersions (and therefore every row here) is already
+                        filtered to the active HEAD branch, so the dot is always
+                        solid — the mini-graph's hollow "other branch" ring never
+                        applies at this call site. */}
                     <circle
                       cx={12}
                       cy={18}
                       r={4}
-                      fill={row?.active ? row.dotColor : '#fff'}
+                      fill={row?.dotColor ?? '#94a3b8'}
                       stroke={row?.dotColor ?? '#94a3b8'}
-                      strokeWidth={row?.active ? 0 : 1.5}
+                      strokeWidth={0}
                     />
                     <line
                       x1={12}
@@ -280,6 +302,12 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
       <AlertDialog
         open={!!pendingRestore}
         onOpenChange={(open) => {
+          // A restore POST is in flight for the currently pending version;
+          // dismissing here (Escape, overlay click, Cancel) would let the
+          // user reopen the same or a different row and fire a second
+          // /restore before the first resolves. Keep the dialog pinned to
+          // the in-flight request until it settles.
+          if (!open && isRestoring) return
           if (!open) {
             setPendingRestore(null)
             setRestoreError(null)
@@ -303,7 +331,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isRestoring}>Cancel</AlertDialogCancel>
             {/* AlertDialogAction closes the dialog by default on click; prevent that so a
                 failed restore keeps the dialog open with the error instead of discarding it. */}
             <AlertDialogAction

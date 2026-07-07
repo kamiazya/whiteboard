@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import VersionTimeline from './VersionTimeline.js'
 
@@ -155,6 +155,11 @@ describe('VersionTimeline', () => {
     expect(circles[0]?.getAttribute('stroke')).toBe('#1971c2')
     expect(circles[1]?.getAttribute('fill')).toBe('#1971c2')
     expect(circles[1]?.getAttribute('stroke')).toBe('#1971c2')
+    // Every row shown here is on the active HEAD branch (versions are
+    // pre-filtered to head before reaching the mini-graph), so the dot is
+    // always solid — never the hollow "other branch" ring.
+    expect(circles[0]?.getAttribute('stroke-width')).toBe('0')
+    expect(circles[1]?.getAttribute('stroke-width')).toBe('0')
   })
 
   it('legacy row without operator renders system fallback', async () => {
@@ -400,6 +405,121 @@ describe('VersionTimeline', () => {
     await waitFor(() => {
       expect(onRestored).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it('ignores Cancel and keeps the pending version locked while a restore is in flight', async () => {
+    const onRestored = vi.fn()
+    const restoreCalls: string[] = []
+    vi.unstubAllGlobals()
+    let resolveRestore: (() => void) | undefined
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) {
+        restoreCalls.push(url)
+        return new Promise<Response>((resolve) => {
+          resolveRestore = () =>
+            resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+        })
+      }
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+
+    const row = await screen.findByText('🤖 Assistant')
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(screen.getByText('Restore this version?')).toBeTruthy()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    await waitFor(() => {
+      expect(restoreCalls.length).toBe(1)
+    })
+
+    // Cancel must not close the dialog nor unlock a second /restore submission
+    // while the first request is still in flight.
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('Restore this version?')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Restoring…' })).toBeTruthy()
+
+    resolveRestore?.()
+    await waitFor(() => {
+      expect(onRestored).toHaveBeenCalledTimes(1)
+    })
+    expect(restoreCalls).toHaveLength(1)
+    await waitFor(() => {
+      expect(screen.queryByText('Restore this version?')).toBeNull()
+    })
+  })
+})
+
+describe('VersionTimeline HEAD polling', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+    cleanup()
+  })
+
+  it('refetches branches on the same 15s poll as versions, picking up an external HEAD change', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    let head = 'main'
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              head,
+              branches: [
+                {
+                  name: 'main',
+                  tipFrontiers: '',
+                  color: '#1971c2',
+                  createdAt: '2026-04-23T00:00:00Z',
+                },
+                {
+                  name: 'feature',
+                  tipFrontiers: '',
+                  color: '#9333ea',
+                  createdAt: '2026-04-23T01:00:00Z',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    await waitFor(() => {
+      expect(screen.getByText(/5 els/)).toBeTruthy()
+    })
+
+    // An external HEAD change (e.g. another peer switching branches) is not
+    // pushed to this component; simulate the server having moved on.
+    head = 'feature'
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(15_000)
+    })
+
+    // mkVersionsResponse's v-feat row (branchName: 'feature', 4 elements) is
+    // the one version on the new head; the two main-branch rows must drop
+    // out of the filtered view.
+    await waitFor(() => {
+      expect(screen.getByText(/4 els/)).toBeTruthy()
+    })
+    expect(screen.queryByText(/5 els/)).toBeNull()
+    expect(screen.queryByText(/3 els/)).toBeNull()
   })
 })
 
