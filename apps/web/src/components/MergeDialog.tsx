@@ -2,6 +2,7 @@ import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import {
   type BranchMeta,
   listVersionsResponseSchema,
+  type MergeRequest,
   type MergeResponse,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
@@ -42,7 +43,7 @@ export interface MergeDialogProps {
   source: BranchMeta | null
   target: BranchMeta | null
   onClose: () => void
-  runMerge: (source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>
+  runMerge: (source: string, args: MergeRequest) => Promise<MergeResponse>
   workspaceId?: string
   slug?: string
 }
@@ -258,7 +259,10 @@ export function MergeDialog({
         const res = await apiFetch(
           `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
         )
-        if (!res.ok) return
+        if (!res.ok) {
+          if (!cancelled) setThumbs({ target: null, source: null })
+          return
+        }
         const parsed = listVersionsResponseSchema.safeParse(await res.json())
         if (cancelled) return
         if (!parsed.success) {
@@ -278,7 +282,9 @@ export function MergeDialog({
           source: src ? thumbUrlFor(workspaceId, slug, src.id) : null,
         })
       } catch {
-        /* Fall back to placeholders if thumbnail loading fails. */
+        // Fall back to placeholders if thumbnail loading fails, so a stale pair from a
+        // previous source/target selection is never shown as the current preview.
+        if (!cancelled) setThumbs({ target: null, source: null })
       } finally {
         if (!cancelled) setThumbsLoading(false)
       }
@@ -450,6 +456,11 @@ export function MergeDialog({
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="size-3.5 animate-spin" />
               Checking conflicts…
+            </div>
+          ) : error && badgeViews.length === 0 ? (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <AlertTriangle className="size-3.5" />
+              Conflict status unavailable - see error above.
             </div>
           ) : badgeViews.length === 0 ? (
             <div className="flex items-center gap-2 text-sm">

@@ -240,6 +240,70 @@ describe('MergeDialog', () => {
     expect(await screen.findByText(/\+3/)).toBeTruthy()
   })
 
+  it('does not show the reassuring no-conflicts banner when the preview fetch failed', async () => {
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockRejectedValue(new Error('boom'))
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    await screen.findByText(/preview failed/i)
+    expect(screen.queryByText(/No conflicts/)).toBeNull()
+  })
+
+  it('clears stale thumbnails when a version refetch responds non-ok', async () => {
+    const versions: VersionEntry[] = [
+      versionEntry({ id: 'feature-v1', branchName: 'feature', createdAt: '2026-04-23T05:00:00Z' }),
+    ]
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ versions }), { status: 200 }))
+      .mockResolvedValueOnce(new Response('nope', { status: 500 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    const { rerender } = render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+        workspaceId="w1"
+        slug="c1"
+      />,
+    )
+    const sourceCard = await screen.findByTestId('merge-branch-card-source')
+    await waitFor(() => {
+      expect(sourceCard.querySelector('img')?.getAttribute('src')).toBe(
+        '/api/workspaces/w1/canvases/c1/versions/feature-v1/thumbnail',
+      )
+    })
+    // Switch the source branch so the effect re-runs and the follow-up fetch fails.
+    const otherFeature: BranchMeta = { ...feature, name: 'other-feature' }
+    rerender(
+      <MergeDialog
+        open
+        source={otherFeature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+        workspaceId="w1"
+        slug="c1"
+      />,
+    )
+    await waitFor(() => {
+      expect(screen.queryByTestId('merge-branch-card-source')?.querySelector('img')).toBeNull()
+    })
+  })
+
   it('shows a safe fallback copy when runMerge throws an Error (never exposes Error.message)', async () => {
     const runMerge = vi
       .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()

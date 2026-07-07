@@ -92,6 +92,21 @@ describe('MergeToast', () => {
     await waitFor(() => expect(screen.queryByTestId('merge-toast')).toBeNull())
   })
 
+  it('encodes preMergeVersionId in the restore URL', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<MergeToast workspaceId="s1" slug="c1" />)
+    act(() => dispatchMergeCommitted({ ...baseDetail, preMergeVersionId: 'v/pre?weird#id' }))
+    fireEvent.click(screen.getByTestId('merge-toast-undo'))
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled()
+    })
+    const calledUrl = fetchMock.mock.calls[0]?.[0] as string
+    expect(calledUrl).toBe('/api/workspaces/s1/canvases/c1/versions/v%2Fpre%3Fweird%23id/restore')
+  })
+
   it('closes immediately when the close button is clicked', () => {
     render(<MergeToast workspaceId="s1" slug="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))

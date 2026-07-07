@@ -91,7 +91,7 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
     setUndoError(null)
     try {
       const res = await apiFetch(
-        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${preMergeVersionId}/restore`,
+        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(preMergeVersionId)}/restore`,
         { method: 'POST' },
       )
       if (res.ok) {
