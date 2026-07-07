@@ -40,6 +40,11 @@ function formatRelative(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// A version's display title: its explicit label, or a fallback naming its origin.
+function versionTitle(version: Pick<VersionEntry, 'label' | 'auto'>): string {
+  return version.label || (version.auto ? 'Auto-save' : 'Manual')
+}
+
 function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: string } {
   const kind = operator?.kind ?? 'system'
   const icon = kind === 'ai' ? '🤖' : kind === 'human' ? '👤' : '⚙'
@@ -191,9 +196,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
                     )}
                     <CardContent className="px-3 flex items-center justify-between gap-2">
                       <div className="flex flex-col min-w-0">
-                        <span className="text-xs font-medium truncate">
-                          {v.label || (v.auto ? 'Auto-save' : 'Manual')}
-                        </span>
+                        <span className="text-xs font-medium truncate">{versionTitle(v)}</span>
                         <span className="text-[11px] text-muted-foreground">
                           {operator.icon} {operator.label}
                         </span>
@@ -231,11 +234,8 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
             <AlertDialogDescription>
               {pendingRestore && (
                 <>
-                  Restoring{' '}
-                  <strong>
-                    {pendingRestore.label || (pendingRestore.auto ? 'Auto-save' : 'Manual')}
-                  </strong>{' '}
-                  ({formatRelative(pendingRestore.createdAt)}, {pendingRestore.elementCount}{' '}
+                  Restoring <strong>{versionTitle(pendingRestore)}</strong> (
+                  {formatRelative(pendingRestore.createdAt)}, {pendingRestore.elementCount}{' '}
                   elements) will merge that state into the current canvas and broadcast the change
                   to every connected tab. Per-peer Ctrl+Z history is cleared.
                 </>
