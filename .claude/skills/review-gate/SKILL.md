@@ -119,7 +119,7 @@ the safety-net default.
 
 - One level of nesting only: `review` must NOT call `workflow()` (its
   dogfood phase is an inline agent + Playwright pass, not a nested
-  workflow) — see `workflow-authoring` gotcha #2.
+  workflow) — see the `workflow-authoring` skill's one-level-nesting gotcha.
 - `security` is always-on and failable, exactly like any requested
   dimension — it is not optional and is included in the partition whose
   failure gates the run.

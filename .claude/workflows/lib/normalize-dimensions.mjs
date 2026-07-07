@@ -1,7 +1,7 @@
 // Canonical, unit-tested reference for the dimension-normalization logic inlined into both
 // audit-triage.workflow.mjs and review.workflow.mjs. Those workflow scripts are executed by the
 // Workflow runtime as standalone function bodies with no module resolution (see the
-// workflow-authoring skill, gotcha #5), so they cannot `import` this file — each keeps its own
+// workflow-authoring skill's sandbox gotcha), so they cannot `import` this file — each keeps its own
 // mirrored copy in sync with this one, which node:test exercises directly.
 //
 // Both callers accept a caller-supplied `dimensions` list that is either a legacy plain string
