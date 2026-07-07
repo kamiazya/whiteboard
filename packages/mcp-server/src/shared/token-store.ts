@@ -34,7 +34,14 @@ export function readDaemonTokenOnce(): string | null {
     return null
   }
   const raw = win.__WHITEBOARD_DAEMON_TOKEN__
-  delete win.__WHITEBOARD_DAEMON_TOKEN__
+  try {
+    delete win.__WHITEBOARD_DAEMON_TOKEN__
+  } catch {
+    // In strict mode, delete on a non-configurable property throws a
+    // TypeError (e.g. the global was declared rather than assigned).
+    // Failing to scrub is acceptable — the value is already cached, and the
+    // delete is surface reduction, not a security boundary.
+  }
   const result = tokenValueSchema.safeParse(raw)
   cachedToken = result.success ? result.data : null
   return cachedToken

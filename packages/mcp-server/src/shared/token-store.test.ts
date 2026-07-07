@@ -24,6 +24,19 @@ describe('token-store', () => {
     ).toBeUndefined()
   })
 
+  it('still returns the token when the global is non-configurable (delete throws in strict mode)', () => {
+    const win: Record<string, unknown> = {}
+    Object.defineProperty(win, '__WHITEBOARD_DAEMON_TOKEN__', {
+      value: 'pinned-token',
+      configurable: false,
+      writable: false,
+    })
+    setWindow(win)
+    expect(readDaemonTokenOnce()).toBe('pinned-token')
+    // The scrub failed (property is non-configurable) but reads still work.
+    expect(readDaemonTokenOnce()).toBe('pinned-token')
+  })
+
   it('returns null when the global is absent', () => {
     setWindow({})
     expect(readDaemonTokenOnce()).toBeNull()
