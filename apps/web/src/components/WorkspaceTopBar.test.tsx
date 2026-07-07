@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 
 // Stub heavy/irrelevant dependencies so the component mounts without network or browser-only requirements.
 vi.mock('./HeaderBranchChip', () => ({ HeaderBranchChip: () => null }))
@@ -198,6 +199,150 @@ describe('WorkspaceTopBar — router-free navigation callbacks', () => {
     fireEvent.click(screen.getByRole('button', { name: /back to canvas list/i }))
 
     expect(onNavigateBack).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
+  it('does not let a stale in-flight /names response for a previous workspaceId overwrite the current workspace names', async () => {
+    let resolveA!: (r: Response) => void
+    let resolveB!: (r: Response) => void
+    const pendingA = new Promise<Response>((resolve) => {
+      resolveA = resolve
+    })
+    const pendingB = new Promise<Response>((resolve) => {
+      resolveB = resolve
+    })
+
+    vi.mocked(apiFetch).mockImplementation(async (url) => {
+      const u = String(url)
+      if (u.includes('/workspaces/ws_a/names')) return pendingA
+      if (u.includes('/workspaces/ws_b/names')) return pendingB
+      return new Response('{}', { status: 200 })
+    })
+
+    const baseProps = {
+      slug: 'shared-slug',
+      canvases: [{ slug: 'shared-slug', updatedAt: '2026-04-23T00:00:00Z' }],
+      onEnterFullscreen: () => {},
+      onNavigateBack: () => {},
+      onNavigateToCanvas: () => {},
+    }
+
+    const { rerender } = render(<WorkspaceTopBar workspaceId="ws_a" {...baseProps} />)
+    rerender(<WorkspaceTopBar workspaceId="ws_b" {...baseProps} />)
+
+    // The newer workspace's response arrives first; the stale ws_a response
+    // arrives later and must not clobber it.
+    resolveB(
+      new Response(
+        JSON.stringify({ workspace: 'B', canvases: { 'shared-slug': 'Fresh B' }, pinned: [] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+    await waitFor(() => {
+      expect(screen.getByText('Fresh B')).toBeTruthy()
+    })
+
+    resolveA(
+      new Response(
+        JSON.stringify({ workspace: 'A', canvases: { 'shared-slug': 'Stale A' }, pinned: [] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    await waitFor(() => {
+      expect(screen.queryByText('Stale A')).toBeNull()
+      expect(screen.getByText('Fresh B')).toBeTruthy()
+    })
+  })
+})
+
+describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
+  it('wraps the canvas list section in a scrollable max-height container so many canvases remain reachable', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({
+      slug: `canvas-${i}`,
+      updatedAt: '2026-04-23T00:00:00Z',
+    }))
+    renderBar()
+    cleanup()
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-0"
+        canvases={many}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+      />,
+    )
+
+    const switcher = screen.getByRole('button', { name: /canvas-0/i })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    await screen.findByTestId('new-canvas-menu-item')
+
+    expect(document.querySelector('.max-h-\\[300px\\].overflow-y-auto')).toBeTruthy()
+  })
+})
+
+describe('WorkspaceTopBar — saveVersion double-invoke race (RED-first)', () => {
+  it('issues exactly one POST /versions when Cmd/Ctrl+S fires twice before the first request resolves', async () => {
+    let resolvePost!: (r: Response) => void
+    const deferred = new Promise<Response>((resolve) => {
+      resolvePost = resolve
+    })
+    let postCount = 0
+    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
+      const u = String(url)
+      if (u.includes('/names')) return mkNamesOk()
+      if (u.includes('/versions') && (init as RequestInit | undefined)?.method === 'POST') {
+        postCount++
+        return deferred
+      }
+      return new Response('{}', { status: 200 })
+    })
+
+    renderBar()
+
+    // Fire both keydowns inside a single act() batch so no intermediate
+    // render (and thus no updated `saving` closure) happens between them —
+    // this is the actual shape of the race: two dispatches landing before
+    // React has a chance to re-render with saving=true.
+    act(() => {
+      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+    })
+
+    resolvePost(new Response('{}', { status: 200 }))
+    await waitFor(() => expect(postCount).toBe(1))
+  })
+})
+
+describe('WorkspaceTopBar — new-canvas double submission (RED-first)', () => {
+  it('issues exactly one POST /canvases when Enter is pressed twice before the first request resolves', async () => {
+    let resolvePost!: (r: Response) => void
+    const deferred = new Promise<Response>((resolve) => {
+      resolvePost = resolve
+    })
+    let postCount = 0
+    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
+      const u = String(url)
+      if (u.includes('/names')) return mkNamesOk()
+      if (u.includes('/canvases') && (init as RequestInit | undefined)?.method === 'POST') {
+        postCount++
+        return deferred
+      }
+      return new Response('{}', { status: 200 })
+    })
+
+    renderBar()
+    await openNewCanvasDialog()
+    const input = screen.getByPlaceholderText('e.g. design/login-flow')
+    fireEvent.change(input, { target: { value: 'double-submit' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    resolvePost(new Response('{}', { status: 200 }))
+    await waitFor(() => expect(postCount).toBe(1))
   })
 })
 

@@ -1,8 +1,8 @@
 import type { SaveVersionResponse } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import '../index.css'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
@@ -162,6 +162,27 @@ describe('WorkspaceTopBar browser mode', () => {
     await waitFor(() => {
       expect(container.textContent).not.toContain('Version 24')
     })
+  })
+
+  it('keeps the version popover open when a mousedown lands inside the restore confirmation dialog (RED-first)', async () => {
+    renderTopBar()
+
+    await page.getByRole('button', { name: 'History' }).click()
+    await waitFor(() => {
+      expect(screen.getByText('Version history')).toBeTruthy()
+    })
+
+    await page.getByText(/^Version 1$/).click()
+    await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
+
+    // The AlertDialog renders through a Radix portal into document.body, so
+    // this mousedown target is outside versionPanelRef's DOM subtree — the
+    // outside-click handler must still recognize it as "inside" via role.
+    const dialog = screen.getByRole('alertdialog')
+    fireEvent.mouseDown(dialog)
+
+    expect(screen.getByText('Version history')).toBeTruthy()
+    expect(screen.getByText('Restore this version?')).toBeTruthy()
   })
 
   it('exposes a theme toggle that cycles light → dark → system → light', async () => {

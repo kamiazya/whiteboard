@@ -179,6 +179,11 @@ export default function WorkspaceTopBar({
   // way of automation (e.g. Playwright workflows).
   const { isDirty } = useDirtyState(workspaceId, slug)
   const [saving, setSaving] = useState(false)
+  // `saving` state updates land on the next render, so two calls issued
+  // before React re-renders both see the same stale `false`. Guard with a
+  // ref instead, which is set/cleared synchronously and never causes the
+  // keydown listener to be re-subscribed (kept out of saveVersion's deps).
+  const savingRef = useRef(false)
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
   const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
@@ -186,7 +191,8 @@ export default function WorkspaceTopBar({
   // Quick save passes an empty label.
   const saveVersion = useCallback(
     async (label = ''): Promise<boolean> => {
-      if (saving) return false
+      if (savingRef.current) return false
+      savingRef.current = true
       setSaving(true)
       try {
         const res = await apiFetch(
@@ -229,10 +235,11 @@ export default function WorkspaceTopBar({
         }
         return true
       } finally {
+        savingRef.current = false
         setSaving(false)
       }
     },
-    [workspaceId, slug, saving, getThumbnailBlob, log],
+    [workspaceId, slug, getThumbnailBlob, log],
   )
 
   // Cmd/Ctrl+S performs a quick save.
@@ -258,19 +265,22 @@ export default function WorkspaceTopBar({
   const [newCanvasError, setNewCanvasError] = useState<string | null>(null)
   const [newCanvasBusy, setNewCanvasBusy] = useState(false)
 
-  // Load display names.
-  const fetchNames = useCallback(async () => {
-    try {
-      const res = await apiFetch(`/api/workspaces/${workspaceId}/names`)
-      if (res.ok) setNames(workspaceNamesSchema.parse(await res.json()))
-    } catch {
-      /* best-effort */
+  // Load display names. Guard against a stale response for a previous
+  // workspaceId landing after a newer request already resolved.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const res = await apiFetch(`/api/workspaces/${workspaceId}/names`)
+        if (res.ok && active) setNames(workspaceNamesSchema.parse(await res.json()))
+      } catch {
+        /* best-effort */
+      }
+    })()
+    return () => {
+      active = false
     }
   }, [workspaceId])
-
-  useEffect(() => {
-    fetchNames()
-  }, [fetchNames])
 
   const commitCanvasName = async () => {
     const name = draft.trim()
@@ -377,9 +387,15 @@ export default function WorkspaceTopBar({
       if (!panel) return
       const target = e.target as Node | null
       if (target && !panel.contains(target)) {
+        const targetEl = e.target as HTMLElement
         // Ignore clicks on the trigger itself because the toggle button handles those.
-        const isTrigger = (e.target as HTMLElement)?.closest('[data-version-trigger]')
-        if (!isTrigger) setVersionOpen(false)
+        const isTrigger = targetEl.closest('[data-version-trigger]')
+        // Radix dialogs (e.g. VersionTimeline's restore confirmation) render
+        // into a document.body portal, outside versionPanelRef's DOM subtree —
+        // treat clicks inside them as "inside" so confirming a restore doesn't
+        // also close the version popover behind it.
+        const isInPortalDialog = targetEl.closest('[role="dialog"], [role="alertdialog"]')
+        if (!isTrigger && !isInPortalDialog) setVersionOpen(false)
       }
     }
     document.addEventListener('mousedown', onClick)
@@ -398,6 +414,7 @@ export default function WorkspaceTopBar({
   }
 
   const submitNewCanvas = async () => {
+    if (newCanvasBusy) return
     const target = newCanvasSlug.trim()
     if (!target || target.endsWith('/')) {
       setNewCanvasError('Enter a slug (e.g. "design/foo" or "quick-note").')
@@ -496,7 +513,7 @@ export default function WorkspaceTopBar({
                 />
               </div>
             </div>
-            <div>
+            <div className="max-h-[300px] overflow-y-auto">
               <div className="flex flex-col p-1">
                 {filteredCanvases.length === 0 ? (
                   <div className="px-2 py-3 text-center text-xs text-muted-foreground">
