@@ -12,38 +12,44 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
-  createCanvasRequestSchema,
-  setNameRequestSchema,
-  setPinnedRequestSchema,
-  operatorInfoSchema,
-  saveVersionRequestSchema,
-  restoreVersionRequestSchema,
-  exportCanvasJsonRequestSchema,
-  versionEntrySchema,
-  listVersionsResponseSchema,
-  saveVersionResponseSchema,
-  problemDetailsErrorSchema,
-  createCanvasResponseSchema,
-  workspaceSummarySchema,
-  listWorkspacesResponseSchema,
-  canvasSummarySchema,
-  listCanvasesResponseSchema,
+  type CanvasSummary,
   type CreateCanvasRequest,
+  type CreateCanvasResponse,
+  canvasSummarySchema,
+  createCanvasRequestSchema,
+  createCanvasResponseSchema,
+  type ExportCanvasJsonRequest,
+  exportCanvasJsonRequestSchema,
+  type ListCanvasesResponse,
+  type ListVersionsResponse,
+  type ListWorkspacesResponse,
+  listCanvasesResponseSchema,
+  listVersionsResponseSchema,
+  listWorkspacesResponseSchema,
+  type OperatorInfo,
+  type OptimizeAllCanvasesResponse,
+  operatorInfoSchema,
+  optimizeAllCanvasesResponseSchema,
+  type ProblemDetailsError,
+  type PruneSandwichedVersionsResponse,
+  type PurgeResult,
+  problemDetailsErrorSchema,
+  pruneSandwichedVersionsResponseSchema,
+  purgeResultSchema,
+  type RestoreVersionRequest,
+  restoreVersionRequestSchema,
+  type SaveVersionRequest,
+  type SaveVersionResponse,
   type SetNameRequest,
   type SetPinnedRequest,
-  type OperatorInfo,
-  type SaveVersionRequest,
-  type RestoreVersionRequest,
-  type ExportCanvasJsonRequest,
+  saveVersionRequestSchema,
+  saveVersionResponseSchema,
+  setNameRequestSchema,
+  setPinnedRequestSchema,
   type VersionEntry,
-  type ListVersionsResponse,
-  type SaveVersionResponse,
-  type ProblemDetailsError,
-  type CreateCanvasResponse,
+  versionEntrySchema,
   type WorkspaceSummary,
-  type ListWorkspacesResponse,
-  type CanvasSummary,
-  type ListCanvasesResponse,
+  workspaceSummarySchema,
 } from './canvas.js'
 import { roundtrip } from './roundtrip.test-helper.js'
 
@@ -383,5 +389,90 @@ describe('listCanvasesResponseSchema', () => {
 
   it('rejects missing canvases', () => {
     expect(listCanvasesResponseSchema.safeParse({}).success).toBe(false)
+  })
+})
+
+describe('optimizeAllCanvasesResponseSchema', () => {
+  const valid: OptimizeAllCanvasesResponse = { totalBeforeBytes: 4096, totalAfterBytes: 1024 }
+
+  it('parses a well-formed value', () => {
+    const result: OptimizeAllCanvasesResponse = optimizeAllCanvasesResponseSchema.parse(valid)
+    expect(result.totalBeforeBytes).toBe(4096)
+  })
+
+  it('roundtrip preserves fields', () => {
+    const result: OptimizeAllCanvasesResponse = roundtrip(optimizeAllCanvasesResponseSchema, valid)
+    expect(result).toEqual(valid)
+  })
+
+  it('rejects missing totalAfterBytes', () => {
+    expect(optimizeAllCanvasesResponseSchema.safeParse({ totalBeforeBytes: 4096 }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects negative or fractional byte totals', () => {
+    expect(
+      optimizeAllCanvasesResponseSchema.safeParse({ totalBeforeBytes: -1, totalAfterBytes: 0 })
+        .success,
+    ).toBe(false)
+    expect(
+      optimizeAllCanvasesResponseSchema.safeParse({ totalBeforeBytes: 1.5, totalAfterBytes: 0 })
+        .success,
+    ).toBe(false)
+  })
+})
+
+describe('pruneSandwichedVersionsResponseSchema', () => {
+  const valid: PruneSandwichedVersionsResponse = { totalDeleted: 3 }
+
+  it('parses a well-formed value', () => {
+    const result: PruneSandwichedVersionsResponse =
+      pruneSandwichedVersionsResponseSchema.parse(valid)
+    expect(result.totalDeleted).toBe(3)
+  })
+
+  it('roundtrip preserves fields', () => {
+    const result: PruneSandwichedVersionsResponse = roundtrip(
+      pruneSandwichedVersionsResponseSchema,
+      valid,
+    )
+    expect(result).toEqual(valid)
+  })
+
+  it('rejects missing totalDeleted', () => {
+    expect(pruneSandwichedVersionsResponseSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('rejects a negative or fractional deletion count', () => {
+    expect(pruneSandwichedVersionsResponseSchema.safeParse({ totalDeleted: -2 }).success).toBe(
+      false,
+    )
+    expect(pruneSandwichedVersionsResponseSchema.safeParse({ totalDeleted: 0.5 }).success).toBe(
+      false,
+    )
+  })
+})
+
+describe('purgeResultSchema', () => {
+  const valid: PurgeResult = { purgedCount: 2, purgedBytes: 4096 }
+
+  it('parses a well-formed value', () => {
+    const result: PurgeResult = purgeResultSchema.parse(valid)
+    expect(result.purgedCount).toBe(2)
+  })
+
+  it('roundtrip preserves fields', () => {
+    const result: PurgeResult = roundtrip(purgeResultSchema, valid)
+    expect(result).toEqual(valid)
+  })
+
+  it('rejects missing purgedBytes', () => {
+    expect(purgeResultSchema.safeParse({ purgedCount: 2 }).success).toBe(false)
+  })
+
+  it('rejects negative or fractional counts and byte totals', () => {
+    expect(purgeResultSchema.safeParse({ purgedCount: -1, purgedBytes: 0 }).success).toBe(false)
+    expect(purgeResultSchema.safeParse({ purgedCount: 0, purgedBytes: 0.5 }).success).toBe(false)
   })
 })
