@@ -16,7 +16,7 @@ Workflow({ scriptPath: '.claude/workflows/audit-triage.workflow.mjs',
 
 - **scope**: free-text area to focus (e.g. `"apps/web and its migration"`) or omit for the whole repo. Narrow the scope for a faster, deeper pass on a hot area.
 - **dimensions**: defaults to the six below. Pass a subset to focus, or supply `{name, content}` objects to inject externalized criteria (see below). Legacy plain-string dimensions are still supported.
-- **auditorAgent**: defaults to `Explore` (read-only, always registered). The tuned `codebase-auditor` agent is NOT registered until a session reload (workflow-authoring gotcha #7) — pass `auditorAgent: 'codebase-auditor'` only after a reload.
+- **auditorAgent**: defaults to `Explore` (read-only, always registered). The tuned `codebase-auditor` agent is NOT registered until a session reload (see the `workflow-authoring` skill's mid-session-agent-registration gotcha) — pass `auditorAgent: 'codebase-auditor'` only after a reload.
 - **verifyFloor**: lowest severity that gets an adversarial verify pass (default `HIGH`). Verification kills false positives — the audit favors recall, verify restores precision.
 
 It returns `triaged.items[]` (read-only), plus coverage-honesty fields: `dimensionsAudited` (dimensions that actually produced a result), `failedDimensions` (a dimension's auditor agent returned nothing — a LOW `coverage-gap` advisory finding is also injected into `triaged` so a silent gap can't hide), and `notApplicable` (an auditor explicitly opted out via `notApplicable:true` because the dimension doesn't apply to this scope). Check `failedDimensions` before trusting a clean run. **The workflow cannot create Tasks** — the integrator (main session) files the survivors.
