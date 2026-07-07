@@ -114,6 +114,33 @@ afterEach(() => {
 })
 
 describe('VersionTimeline', () => {
+  it('does not render version rows while the branch HEAD is still loading', async () => {
+    // useBranches defaults head to 'main' until /branches resolves. If the
+    // real HEAD is a feature branch, rendering rows filtered by that default
+    // briefly offers the WRONG branch's versions as restore targets.
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      // Branches never resolve within this test; versions resolve immediately.
+      if (url.includes('/branches')) return new Promise<Response>(() => {})
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+
+    // Give the versions fetch time to land.
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/versions'))).toBe(true)
+    })
+
+    // No rows filtered against the default head — show loading instead.
+    expect(screen.getByText('Loading…')).toBeTruthy()
+    expect(screen.queryByText(/5 els/)).toBeNull()
+    expect(screen.queryByText(/3 els/)).toBeNull()
+  })
+
   it('filters cards and mini-graph rows to the active branch', async () => {
     render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
 

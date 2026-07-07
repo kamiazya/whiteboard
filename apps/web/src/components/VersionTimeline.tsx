@@ -120,7 +120,11 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
 
   // Keep branch state here for head filtering and the mini-graph.
   // Legacy versions without branchName are treated as main.
-  const { state: branchesState, refetch: refetchBranches } = useBranches(workspaceId, slug)
+  const {
+    state: branchesState,
+    loading: branchesLoading,
+    refetch: refetchBranches,
+  } = useBranches(workspaceId, slug)
 
   // Poll every 15 seconds for new auto-versions, and re-fetch branches on the
   // same tick. useBranches has no event subscription of its own, so this is
@@ -202,7 +206,10 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
 
       <ScrollArea className="min-h-0 flex-1 -mx-1">
         <div className="flex flex-col gap-1.5 px-1">
-          {loading && visibleVersions.length === 0 ? (
+          {branchesLoading || (loading && visibleVersions.length === 0) ? (
+            // Until /branches resolves, `head` is the hook's 'main' default —
+            // rendering rows filtered by it would offer the wrong branch's
+            // versions as restore targets during the fetch race.
             <div className="text-xs text-muted-foreground py-4 text-center">Loading…</div>
           ) : visibleVersions.length === 0 ? (
             <div className="text-xs text-muted-foreground py-4 text-center">
