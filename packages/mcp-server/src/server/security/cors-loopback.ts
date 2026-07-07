@@ -2,25 +2,55 @@
 // Keeping these in one place prevents the two CORS paths from drifting
 // when the loopback definition or Vary logic needs updating.
 
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 
 export function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
 }
 
+// URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets so
+// isLoopbackHostname can match against the bare address "::1".
+// See WHATWG URL spec §4.1 (host serializing).
+function stripIpv6Brackets(hostname: string): string {
+  return hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname
+}
+
 export function normalizeOriginHostname(originHeader: string | undefined): string | null {
   if (!originHeader) return null
   try {
-    const hostname = new URL(originHeader).hostname
-    // URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets
-    // so isLoopbackHostname can match against the bare address "::1".
-    // See WHATWG URL spec §4.1 (host serializing).
-    if (hostname.startsWith('[') && hostname.endsWith(']')) {
-      return hostname.slice(1, -1)
-    }
-    return hostname
+    return stripIpv6Brackets(new URL(originHeader).hostname)
   } catch {
     return null
+  }
+}
+
+// Canonical Host-header normalizer shared by ws-auth, mcp-http, and the
+// /api/* host guard so the loopback definition cannot drift between them.
+// A Host header is host[:port] only — anything URL parsing shunts into
+// credentials, path, query, or fragment (e.g. "evil.example@localhost",
+// "localhost/x") is malformed and must be rejected rather than normalized
+// down to a loopback hostname that would slip past the guard.
+export function normalizeHostHeader(hostHeader: string | undefined): string | null {
+  if (!hostHeader) return null
+  try {
+    const url = new URL(`http://${hostHeader}`)
+    if (url.username !== '' || url.password !== '') return null
+    if (url.pathname !== '/' || url.search !== '' || url.hash !== '') return null
+    return stripIpv6Brackets(url.hostname)
+  } catch {
+    return null
+  }
+}
+
+// Resolve the request Host: prefer the Host header, fall back to the parsed
+// request URL. Shared by the /mcp and /api/* host guards.
+export function getRequestHost(c: Context): string | undefined {
+  const headerHost = c.req.header('host')
+  if (headerHost) return headerHost
+  try {
+    return new URL(c.req.url).host
+  } catch {
+    return undefined
   }
 }
 
@@ -63,10 +93,7 @@ export function createApiLoopbackCorsMiddleware(): MiddlewareHandler {
     if (isLoopback && origin) {
       c.res.headers.set('Access-Control-Allow-Origin', origin)
       c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set(
-        'Access-Control-Allow-Methods',
-        'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      )
+      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
       c.res.headers.set('Access-Control-Max-Age', '86400')
       c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
     }
@@ -83,10 +110,7 @@ export function createApiLoopbackCorsMiddleware(): MiddlewareHandler {
     if (isLoopback && origin) {
       c.res.headers.set('Access-Control-Allow-Origin', origin)
       c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set(
-        'Access-Control-Allow-Methods',
-        'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-      )
+      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
       c.res.headers.set('Access-Control-Max-Age', '86400')
       c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
     }

@@ -26,6 +26,12 @@ export const serverModeRecordSchema = z.object({
   authStrategy: z.literal('oauth-jwt'),
   // ISO 8601 with timezone offset — z accepts both 'Z' and '+HH:MM' forms.
   startedAt: z.string().datetime({ offset: true }),
+  // Per-process-start identifier (crypto.randomUUID), compared against
+  // /api/runtime/ping's instanceId to confirm process identity without
+  // trusting a pid the OS can reuse. Optional so records written by an
+  // older daemon build still parse; readers must treat a missing instanceId
+  // as "identity unverifiable", never as an automatic match.
+  instanceId: z.string().optional(),
 })
 
 export type ServerModeRecord = z.infer<typeof serverModeRecordSchema>

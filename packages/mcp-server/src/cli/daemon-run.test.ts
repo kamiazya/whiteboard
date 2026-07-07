@@ -10,7 +10,28 @@ vi.mock('node:net', async (importOriginal) => {
   return { ...real, createServer: createServerSpy }
 })
 
-const { findAvailablePort } = await import('./daemon-run.js')
+const { loadDaemonRecordMock, startHttpServerMock } = vi.hoisted(() => ({
+  loadDaemonRecordMock: vi.fn(async () => null),
+  startHttpServerMock: vi.fn(async () => ({
+    port: 3099,
+    close: vi.fn(async () => undefined),
+    touch: vi.fn(),
+    getRuntimeStatus: vi.fn(),
+  })),
+}))
+
+vi.mock('../daemon/daemon-registry.js', () => ({
+  loadDaemonRecord: loadDaemonRecordMock,
+  saveDaemonRecord: vi.fn(async () => undefined),
+  deleteDaemonRecord: vi.fn(async () => undefined),
+  isPidAlive: vi.fn(() => false),
+}))
+
+vi.mock('../server/http-server.js', () => ({
+  startHttpServer: startHttpServerMock,
+}))
+
+const { findAvailablePort, runDaemonRun } = await import('./daemon-run.js')
 
 // A minimal net.Server stand-in: EventEmitter for .on()/.emit() plus the
 // listen/close/address surface findAvailablePort touches. Mocking createServer
@@ -54,5 +75,29 @@ describe('findAvailablePort', () => {
     })
     await expect(findAvailablePort(5004)).resolves.toBe(5005)
     expect(createServerSpy).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('runDaemonRun bind-host guard', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it.each([
+    '0.0.0.0',
+    '192.168.1.5',
+    'evil.example',
+  ])('refuses to start the daemon bound to non-loopback host %s and never calls startHttpServer', async (host) => {
+    const outcome = await runDaemonRun({ host, tokenStdin: false, dataDir: '/tmp/whiteboard-test' })
+    expect(outcome.kind).toBe('refused')
+    expect(startHttpServerMock).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    '127.0.0.1',
+    'localhost',
+    '::1',
+  ])('starts the daemon when bound to loopback host %s', async (host) => {
+    const outcome = await runDaemonRun({ host, tokenStdin: false, dataDir: '/tmp/whiteboard-test' })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalled()
   })
 })

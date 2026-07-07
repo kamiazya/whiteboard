@@ -1,9 +1,10 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
-import { runServerDoctor } from './server-doctor.js'
+import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import { defaultFetchPing, defaultVerifyIdentity, runServerDoctor } from './server-doctor.js'
 
 let dataDir: string
 
@@ -143,7 +144,11 @@ describe('runServerDoctor', () => {
 
   it('credentialed JWKS URI → server.config error (caught at config parse)', async () => {
     const { result, exitCode } = await runServerDoctor({
-      flags: { ...VALID_FLAGS, dataDir, jwksUri: 'https://user:pass@auth.example.com/.well-known/jwks.json' },
+      flags: {
+        ...VALID_FLAGS,
+        dataDir,
+        jwksUri: 'https://user:pass@auth.example.com/.well-known/jwks.json',
+      },
       env: {},
       checkDataDir: () => 'ok',
     })
@@ -302,6 +307,28 @@ describe('runServerDoctor', () => {
     // Downstream checks are skipped because identity is not ok
     expect(checkById(result.checks, 'server.runtime_ping').status).toBe('skipped')
     expect(checkById(result.checks, 'server.runtime_status').status).toBe('skipped')
+  })
+
+  // ─── 12b. Legacy record without instanceId → server.identity warning ──────
+  // Exercises the real defaultVerifyIdentity (no override injected), same
+  // pattern as the "legacy record" tests in server-status.test.ts /
+  // server-stop.test.ts, since this is the one branch of the real default
+  // that never requires a live network call.
+
+  it('legacy record without instanceId → server.identity warning via the real default verifyIdentity', async () => {
+    await writeServerRecord(makeRecord({ instanceId: undefined }))
+    const { result } = await runServerDoctor({
+      flags: { ...VALID_FLAGS, dataDir },
+      env: {},
+      isPidAlive: () => true,
+      // No verifyIdentity override — exercises the real default, which must
+      // refuse to confirm identity when instanceId is absent.
+      fetchJwks: async () => ({ ok: true, hasKeys: true }),
+      checkDataDir: () => 'ok',
+      readRecordMode: () => 0o600,
+    })
+    expect(checkById(result.checks, 'server.identity').status).toBe('warning')
+    expect(checkById(result.checks, 'server.runtime_ping').status).toBe('skipped')
   })
 
   // ─── 13. PID dead → server.identity skipped ───────────────────────────────
@@ -463,6 +490,75 @@ describe('runServerDoctor', () => {
     expect(result.ok).toBe(true)
     expect(exitCode).toBe(0)
     expect(result.status).toBe('warning')
+  })
+})
+
+// ─── Direct unit tests for the default identity/ping implementations ────────
+// These are the seams runServerDoctor falls back to when no verifyIdentity /
+// fetchPing override is injected. Every scenario above injects overrides, so
+// without these, a regression to the real instanceId comparison logic
+// (introduced alongside the pid→instanceId rename) would go uncaught.
+
+describe('defaultVerifyIdentity', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('confirms identity when the ping response instanceId matches the record', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'instance-a' }),
+    }))
+    const record = makeRecord({ instanceId: 'instance-a' }) as ServerModeRecord
+    await expect(defaultVerifyIdentity(record)).resolves.toBe(true)
+  })
+
+  it('refuses to confirm identity when the ping response instanceId mismatches', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'instance-b' }),
+    }))
+    const record = makeRecord({ instanceId: 'instance-a' }) as ServerModeRecord
+    await expect(defaultVerifyIdentity(record)).resolves.toBe(false)
+  })
+
+  it('never confirms identity when the record predates instanceId', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const record = makeRecord({ instanceId: undefined }) as ServerModeRecord
+    await expect(defaultVerifyIdentity(record)).resolves.toBe(false)
+    // Short-circuits before making a network call.
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('defaultFetchPing', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reports pidMatches:true when the ping instanceId equals expectedInstanceId', async () => {
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'instance-a' }),
+    }))
+    await expect(defaultFetchPing('127.0.0.1', 3099, 'instance-a')).resolves.toEqual({
+      ok: true,
+      pidMatches: true,
+    })
+  })
+
+  it('never reports pidMatches:true when expectedInstanceId is undefined (legacy record)', async () => {
+    // Regression guard: a record without instanceId must never be treated as
+    // a match, even if the live daemon's ping response carries a real one.
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, instanceId: 'instance-a' }),
+    }))
+    await expect(defaultFetchPing('127.0.0.1', 3099, undefined)).resolves.toEqual({
+      ok: true,
+      pidMatches: false,
+    })
   })
 })
 

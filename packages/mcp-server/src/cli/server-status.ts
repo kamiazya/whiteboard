@@ -11,10 +11,11 @@
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STATUS_SCHEMA_VERSION = 1 as const
 
-export type ServerStatusState = 'running' | 'missing' | 'stale' | 'malformed'
+export type ServerStatusState = 'running' | 'missing' | 'stale' | 'malformed' | 'unverifiable'
 
 export interface ServerStatusRunningResult {
   schemaVersion: typeof SERVER_STATUS_SCHEMA_VERSION
@@ -60,27 +61,10 @@ function defaultIsPidAlive(pid: number): boolean {
   }
 }
 
-function resolveConnectHost(bindHost: string): string {
-  if (bindHost === '0.0.0.0') return '127.0.0.1'
-  if (bindHost === '::' || bindHost === '::0') return '[::1]'
-  // Bare IPv6 addresses contain colons — bracket them for URL construction.
-  if (bindHost.includes(':') && !bindHost.startsWith('[')) return `[${bindHost}]`
-  return bindHost
-}
-
-async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
-  const host = resolveConnectHost(record.host)
-  try {
-    const res = await fetch(`http://${host}:${record.port}/api/runtime/ping`, {
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!res.ok) return false
-    const body = (await res.json()) as { pid?: unknown }
-    return typeof body?.pid === 'number' && body.pid === record.pid
-  } catch {
-    return false
-  }
-}
+// Exported for direct unit testing of the live-ping comparison (see
+// server-status.test.ts) — the option default is otherwise only ever
+// exercised indirectly through runServerStatus with an injected override.
+export const defaultVerifyIdentity = verifyDaemonIdentity
 
 export async function runServerStatus(
   options: RunServerStatusOptions,
@@ -134,7 +118,9 @@ export async function runServerStatus(
       result: {
         schemaVersion: SERVER_STATUS_SCHEMA_VERSION,
         ok: false,
-        state: 'stale',
+        // A record without instanceId (legacy daemon build) can never be
+        // confirmed — report 'unverifiable' rather than a false 'stale'.
+        state: record.instanceId ? 'stale' : 'unverifiable',
         recordFresh: false,
       },
       exitCode: 1,

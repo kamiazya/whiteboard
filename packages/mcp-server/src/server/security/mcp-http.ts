@@ -1,36 +1,16 @@
 import type { MiddlewareHandler } from 'hono'
 
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
-import { appendVary, isLoopbackHostname, normalizeOriginHostname } from './cors-loopback.js'
+import {
+  appendVary,
+  getRequestHost,
+  isLoopbackHostname,
+  normalizeHostHeader,
+  normalizeOriginHostname,
+} from './cors-loopback.js'
 
 function normalizeMethod(method: string): string {
   return method.toUpperCase()
-}
-
-function normalizeHostname(value: string | undefined): string | null {
-  if (!value) return null
-  try {
-    const hostname = new URL(`http://${value}`).hostname
-    // URL.hostname returns bracketed IPv6 (e.g. "[::1]"); strip the brackets
-    // so isLoopbackHostname can match against the bare address "::1".
-    // See WHATWG URL spec §4.1 (host serializing).
-    if (hostname.startsWith('[') && hostname.endsWith(']')) {
-      return hostname.slice(1, -1)
-    }
-    return hostname
-  } catch {
-    return null
-  }
-}
-
-function getRequestHost(c: Parameters<MiddlewareHandler>[0]): string | undefined {
-  const headerHost = c.req.header('host')
-  if (headerHost) return headerHost
-  try {
-    return new URL(c.req.url).host
-  } catch {
-    return undefined
-  }
 }
 
 function mcpHttpError(status: number, message: string, headers?: Headers): Response {
@@ -48,7 +28,7 @@ export function isAllowedMcpHttpOrigin(
   originHeader: string | undefined,
   hostHeader: string | undefined,
 ): boolean {
-  const requestHost = normalizeHostname(hostHeader)
+  const requestHost = normalizeHostHeader(hostHeader)
   if (!requestHost || !isLoopbackHostname(requestHost)) {
     return false
   }

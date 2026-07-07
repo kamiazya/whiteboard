@@ -269,6 +269,26 @@ describe('app — server-mode composition', () => {
     })
   })
 
+  describe('server-mode runtime scope tiers', () => {
+    it('POST /api/runtime/logs/prune → 403 with runtime:read only (requires runtime:admin)', async () => {
+      const app = createApp(makeServerModeOptions(['runtime:read']))
+      const res = await app.request('/api/runtime/logs/prune', {
+        method: 'POST',
+        headers: { authorization: BEARER },
+      })
+      expect(res.status).toBe(403)
+    })
+
+    it('POST /api/runtime/logs/prune → reaches the route with runtime:admin', async () => {
+      const app = createApp(makeServerModeOptions(['runtime:admin']))
+      const res = await app.request('/api/runtime/logs/prune', {
+        method: 'POST',
+        headers: { authorization: BEARER },
+      })
+      expect(res.status).not.toBe(403)
+    })
+  })
+
   // Req 4: MCP origin policy
   describe('server-mode MCP origin policy', () => {
     it('rejects request with disallowed Origin → 403', async () => {
@@ -703,19 +723,25 @@ describe('app — server-mode composition', () => {
 
     it('GET /api/workspaces/:wid/canvases/:slug/versions/:id/thumbnail → 403 with workspace:read only (requires versions:read)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/versions/v-001/thumbnail', {
-        headers: { authorization: BEARER },
-      })
+      const res = await app.request(
+        '/api/workspaces/w1/canvases/canvas-a/versions/v-001/thumbnail',
+        {
+          headers: { authorization: BEARER },
+        },
+      )
       expect(res.status).toBe(403)
     })
 
     it('PUT /api/workspaces/:wid/canvases/:slug/versions/:id/thumbnail → 403 with versions:read only (requires versions:write)', async () => {
       const app = createApp(makeServerModeOptions(['versions:read']))
-      const res = await app.request('/api/workspaces/w1/canvases/canvas-a/versions/v-001/thumbnail', {
-        method: 'PUT',
-        headers: { authorization: BEARER, 'content-type': 'image/png' },
-        body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
-      })
+      const res = await app.request(
+        '/api/workspaces/w1/canvases/canvas-a/versions/v-001/thumbnail',
+        {
+          method: 'PUT',
+          headers: { authorization: BEARER, 'content-type': 'image/png' },
+          body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+        },
+      )
       expect(res.status).toBe(403)
     })
 

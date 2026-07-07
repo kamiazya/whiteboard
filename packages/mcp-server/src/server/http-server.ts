@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import type { Socket } from 'node:net'
@@ -7,6 +8,7 @@ import { IdleTimer } from '../daemon/idle-timer.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { createApp } from './app.js'
+import { normalizeBindHost } from './daemon-auth-binding.js'
 import { DATA_DIR, DIST_APP_DIR } from './config.js'
 import { handleWsUpgrade, getConnectionStats, setRuntimeTouchFn } from './routes/ws.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
@@ -28,6 +30,9 @@ export interface StartHttpServerOptions {
 
 export interface RunningServer {
   port: number
+  /** Unique per process-start id; used by CLI stop/status/doctor to verify
+   *  they are talking to the daemon they recorded, not a PID-reuse impostor. */
+  instanceId: string
   close: () => Promise<void>
   touch: () => void
   getRuntimeStatus: () => RuntimeStatus
@@ -39,7 +44,8 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
 }
 
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
-  const host = options.host ?? '127.0.0.1'
+  const host = normalizeBindHost(options.host ?? '127.0.0.1')
+  const instanceId = randomUUID()
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
   let server: ReturnType<typeof serve>
@@ -67,7 +73,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       auth: { mode: 'local-token', hasToken: Boolean(options.token) },
       storage: {
         dataDir: DATA_DIR,
-        dataDirWritable: (() => { try { accessSync(DATA_DIR, fsConstants.W_OK); return true } catch { return false } })(),
+        dataDirWritable: (() => {
+          try {
+            accessSync(DATA_DIR, fsConstants.W_OK)
+            return true
+          } catch {
+            return false
+          }
+        })(),
       },
       app: { served: true, buildPresent: existsSync(join(DIST_APP_DIR, 'index.html')) },
       mcp: { httpEnabled: true, endpoint: `http://${host}:${options.port}/mcp` },
@@ -111,6 +124,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     authMode: 'local-daemon',
     token: options.token,
     mcpAuth: options.mcpAuth,
+    instanceId,
     touch,
     getStatus: getRuntimeStatus,
     shutdown: close,
@@ -145,8 +159,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     const decision = authorizeWsUpgrade(req.headers, options.token)
     if (!decision.accept) {
       const statusCode = decision.statusCode ?? 401
-      const statusText =
-        statusCode === 403 ? 'Forbidden' : 'Unauthorized'
+      const statusText = statusCode === 403 ? 'Forbidden' : 'Unauthorized'
       socket.write(`HTTP/1.1 ${statusCode} ${statusText}\r\nConnection: close\r\n\r\n`)
       socket.destroy()
       return
@@ -170,6 +183,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
 
   return {
     port: options.port,
+    instanceId,
     close,
     touch,
     getRuntimeStatus,

@@ -3,6 +3,11 @@ import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '../../shared/ws-protocol.js'
+import {
+  isLoopbackHostname,
+  normalizeHostHeader,
+  normalizeOriginHostname,
+} from '../security/cors-loopback.js'
 
 function parseProtocolHeader(header: string | string[] | undefined): string[] {
   if (Array.isArray(header)) {
@@ -13,19 +18,6 @@ function parseProtocolHeader(header: string | string[] | undefined): string[] {
     .split(',')
     .map((value) => value.trim())
     .filter((value) => value.length > 0)
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
-}
-
-function normalizeHostHeader(hostHeader: string | undefined): string | null {
-  if (!hostHeader) return null
-  try {
-    return new URL(`http://${hostHeader}`).hostname
-  } catch {
-    return null
-  }
 }
 
 function isAllowedBrowserOrigin(
@@ -40,12 +32,11 @@ function isAllowedBrowserOrigin(
   if (!requestHost) return false
   if (!isLoopbackHostname(requestHost)) return false
   if (!originHeader) return true
-  try {
-    const origin = new URL(originHeader)
-    return isLoopbackHostname(origin.hostname) && origin.hostname === requestHost
-  } catch {
-    return false
-  }
+  // Use the shared normalizer (strips IPv6 brackets) so this side agrees
+  // with normalizeHostHeader above — otherwise http://[::1] never matches
+  // a Host header normalized to bare "::1".
+  const originHost = normalizeOriginHostname(originHeader)
+  return originHost !== null && isLoopbackHostname(originHost) && originHost === requestHost
 }
 
 export interface WsUpgradeDecision {
@@ -75,10 +66,7 @@ export function authorizeWsUpgrade(
   const offeredToken = protocols.find((protocol) =>
     protocol.startsWith(DAEMON_TOKEN_WS_PROTOCOL_PREFIX),
   )
-  if (
-    !offeredBaseProtocol ||
-    offeredToken !== `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`
-  ) {
+  if (!offeredBaseProtocol || offeredToken !== `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`) {
     return { accept: false, statusCode: 401 }
   }
 
