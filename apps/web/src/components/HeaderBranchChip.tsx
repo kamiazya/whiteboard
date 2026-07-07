@@ -60,6 +60,11 @@ export interface HeaderBranchChipProps {
   disabled?: boolean
 }
 
+interface PendingMerge {
+  source: BranchMeta
+  target: BranchMeta | null
+}
+
 export function HeaderBranchChip({
   workspaceId,
   slug,
@@ -98,21 +103,27 @@ export function HeaderBranchChip({
     }
   }
 
-  // Rename state.
+  // Rename state. Snapshot the branch being renamed at open time so a HEAD
+  // change while the dialog is open (e.g. from an external onHeadChanged
+  // update) cannot redirect the rename onto a different branch.
   const [renameOpen, setRenameOpen] = useState(false)
+  const [renameTarget, setRenameTarget] = useState<BranchMeta | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
   const openRename = () => {
-    setRenameDraft(head)
+    if (!activeBranch) return
+    setRenameTarget(activeBranch)
+    setRenameDraft(activeBranch.name)
     setRenameOpen(true)
   }
   const submitRename = async () => {
+    if (!renameTarget) return
     const next = renameDraft.trim()
-    if (!next || next === head) {
+    if (!next || next === renameTarget.name) {
       setRenameOpen(false)
       return
     }
     try {
-      await renameBranch(head, next)
+      await renameBranch(renameTarget.name, next)
       setRenameOpen(false)
       setErrorMessage(null)
     } catch (err) {
@@ -144,8 +155,10 @@ export function HeaderBranchChip({
   }, [pendingDelete, getBranchStats])
 
   // Merge state. Reuse MergeDialog with source=chosen and target=HEAD.
-  const [mergeSource, setMergeSource] = useState<BranchMeta | null>(null)
-  const mergeTarget = activeBranch ?? null
+  // Snapshot both source and target together when the user picks a branch to
+  // merge, so a HEAD change while the dialog is open cannot merge into a
+  // different target than the one shown when the action was chosen.
+  const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null)
 
   const chipColor = activeBranch?.color ?? '#64748b'
 
@@ -293,7 +306,7 @@ export function HeaderBranchChip({
             otherBranches.map((b) => (
               <DropdownMenuItem
                 key={`merge-${b.name}`}
-                onSelect={() => setMergeSource(b)}
+                onSelect={() => setPendingMerge({ source: b, target: activeBranch ?? null })}
                 className="gap-2"
               >
                 <span
@@ -355,7 +368,7 @@ export function HeaderBranchChip({
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Rename «{head}»</DialogTitle>
+            <DialogTitle>Rename «{renameTarget?.name ?? head}»</DialogTitle>
             <DialogDescription>
               Enter a new name. Every saved version on this branch will be relinked to it.
             </DialogDescription>
@@ -370,7 +383,7 @@ export function HeaderBranchChip({
                 void submitRename()
               }
             }}
-            placeholder={head}
+            placeholder={renameTarget?.name ?? head}
             maxLength={80}
           />
           <DialogFooter>
@@ -433,10 +446,10 @@ export function HeaderBranchChip({
 
       {/* Reuse the shared merge dialog. */}
       <MergeDialog
-        open={mergeSource !== null}
-        source={mergeSource}
-        target={mergeTarget}
-        onClose={() => setMergeSource(null)}
+        open={pendingMerge !== null}
+        source={pendingMerge?.source ?? null}
+        target={pendingMerge?.target ?? null}
+        onClose={() => setPendingMerge(null)}
         runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
         workspaceId={workspaceId}
         slug={slug}

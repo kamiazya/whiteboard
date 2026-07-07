@@ -1,6 +1,6 @@
 import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { cleanup, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { UseBranchesResult } from '@/hooks/useBranches'
 
@@ -39,8 +39,18 @@ vi.mock('@/hooks/useBranches', async () => {
 
 import { HeaderBranchChip } from './HeaderBranchChip.js'
 
+beforeEach(() => {
+  // MergeDialog's thumbnail-fallback effect calls apiFetch(.../versions); return
+  // an empty (but schema-valid) list so it resolves without a preview image.
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ versions: [] }), { status: 200 }))
+  vi.stubGlobal('fetch', fetchMock)
+})
+
 afterEach(() => {
   cleanup()
+  vi.unstubAllGlobals()
   stateHolder.current = makeState()
 })
 
@@ -121,5 +131,117 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     // with `hidden: true` to reach it.
     const alert = await screen.findByRole('alert', { hidden: true })
     expect(alert.textContent).toContain('Failed to create branch')
+  })
+
+  it('surfaces setHead rejection as a role=alert with the safe error copy', async () => {
+    stateHolder.current.setHead = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const chip = screen.getByTestId('header-branch-chip')
+    await userEvent.click(chip)
+
+    const option = await screen.findByText('feature-x')
+    await userEvent.click(option)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Failed to switch branch')
+  })
+
+  it('surfaces renameBranch rejection as a role=alert with the safe error copy', async () => {
+    stateHolder.current.state = { head: 'feature-x', branches }
+    stateHolder.current.renameBranch = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const renameItem = await screen.findByText(/Rename/)
+    await userEvent.click(renameItem)
+
+    const input = await screen.findByPlaceholderText('feature-x')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'renamed-branch{Enter}')
+
+    const alert = await screen.findByRole('alert', { hidden: true })
+    expect(alert.textContent).toContain('Failed to rename branch')
+  })
+
+  it('surfaces deleteBranch rejection as a role=alert with the safe error copy', async () => {
+    stateHolder.current.state = { head: 'feature-x', branches }
+    stateHolder.current.deleteBranch = vi.fn().mockRejectedValue(new Error('boom'))
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const deleteItem = await screen.findByText(/Delete/)
+    await userEvent.click(deleteItem)
+
+    const confirmButton = await screen.findByRole('button', { name: 'Delete' })
+    await userEvent.click(confirmButton)
+
+    const alert = await screen.findByRole('alert', { hidden: true })
+    expect(alert.textContent).toContain('Failed to delete branch')
+  })
+
+  it('kebab -> merge opens MergeDialog with the chosen source and current HEAD as target', async () => {
+    stateHolder.current.state = { head: 'main', branches }
+    stateHolder.current.merge = vi.fn().mockResolvedValue({})
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const mergeItem = await screen.findByText('feature-x')
+    await userEvent.click(mergeItem)
+
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog.textContent).toContain('feature-x')
+    expect(dialog.textContent).toContain('main')
+    expect(stateHolder.current.merge).toHaveBeenCalledWith('feature-x', {
+      into: 'main',
+      dryRun: true,
+    })
+  })
+
+  it('keeps the rename target stable when HEAD changes while the rename dialog is open', async () => {
+    stateHolder.current.state = { head: 'feature-x', branches }
+    const { rerender } = render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const renameItem = await screen.findByText(/Rename/)
+    await userEvent.click(renameItem)
+
+    // Simulate an external onHeadChanged update landing while the dialog is open.
+    stateHolder.current.state = { head: 'main', branches }
+    rerender(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+
+    const input = await screen.findByPlaceholderText('feature-x')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'renamed-branch{Enter}')
+
+    expect(stateHolder.current.renameBranch).toHaveBeenCalledWith('feature-x', 'renamed-branch')
+  })
+
+  it('keeps the merge target stable when HEAD changes while the merge dialog is open', async () => {
+    stateHolder.current.state = { head: 'main', branches }
+    stateHolder.current.merge = vi.fn().mockResolvedValue({})
+    const { rerender } = render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const mergeItem = await screen.findByText('feature-x')
+    await userEvent.click(mergeItem)
+    await screen.findByRole('dialog')
+
+    // Simulate an external onHeadChanged update landing while the dialog is open.
+    stateHolder.current.state = { head: 'feature-x', branches: [branches[1], branches[0]] }
+    rerender(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+
+    // Assert on the *last* call: a stale-target regression would fire a second
+    // preview request for `into: 'feature-x'` once the dialog re-derives its
+    // target from the (now-changed) HEAD, even though the first call above is
+    // still correct.
+    expect(stateHolder.current.merge).toHaveBeenLastCalledWith('feature-x', {
+      into: 'main',
+      dryRun: true,
+    })
   })
 })
