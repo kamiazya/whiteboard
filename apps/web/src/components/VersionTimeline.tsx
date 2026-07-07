@@ -66,6 +66,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
   const [loading, setLoading] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
+  const [isRestoring, setIsRestoring] = useState(false)
   // Monotonically increasing sequence stamp. Each refresh() call captures the
   // value at dispatch time; a response only commits if no newer refresh has
   // started meanwhile. Without this, a slow /versions response for an older
@@ -84,11 +85,27 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
         const parsed = listVersionsResponseSchema.safeParse(await res.json())
         if (seq !== fetchSeqRef.current) return
         if (parsed.success) setVersions(parsed.data.versions)
-        else setVersions([])
+        else {
+          log.error('versions response failed schema validation', { workspaceId, slug })
+          setVersions([])
+        }
+      } else {
+        log.error('versions request failed', { status: res.status, workspaceId, slug })
       }
+    } catch (err) {
+      if (seq !== fetchSeqRef.current) return
+      log.error('versions request threw', err)
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false)
     }
+  }, [workspaceId, slug])
+
+  // Clear the previously loaded canvas's versions immediately on canvas
+  // change so a stale row (with thumbnail URLs pointing at the old
+  // workspaceId/slug) never renders under the new canvas while the refetch
+  // is in flight.
+  useEffect(() => {
+    setVersions([])
   }, [workspaceId, slug])
 
   // Reload whenever the canvas changes.
@@ -105,9 +122,12 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
   }, [refresh])
 
   const confirmRestore = useCallback(async () => {
-    if (!pendingRestore) return
+    // Guard against a double-click or repeated keyboard activation firing a
+    // second /restore POST before the first response closes the dialog.
+    if (!pendingRestore || isRestoring) return
     const v = pendingRestore
     setRestoreError(null)
+    setIsRestoring(true)
     // Only clear the dialog and run success side effects (onRestored clears the
     // browser-side LoroUndoManager) once the server confirms the restore
     // actually happened. A failed request keeps the dialog open with an error
@@ -126,12 +146,14 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
       log.error('restore request threw', err)
       setRestoreError('Restore failed. Please try again.')
       return
+    } finally {
+      setIsRestoring(false)
     }
     setPendingRestore(null)
     onRestored?.()
     // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
-  }, [pendingRestore, workspaceId, slug, onRestored, refresh])
+  }, [pendingRestore, isRestoring, workspaceId, slug, onRestored, refresh])
 
   // Keep branch state here for head filtering and the mini-graph.
   // Legacy versions without branchName are treated as main.
@@ -261,6 +283,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
           if (!open) {
             setPendingRestore(null)
             setRestoreError(null)
+            setIsRestoring(false)
           }
         }}
       >
@@ -284,12 +307,13 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
             {/* AlertDialogAction closes the dialog by default on click; prevent that so a
                 failed restore keeps the dialog open with the error instead of discarding it. */}
             <AlertDialogAction
+              disabled={isRestoring}
               onClick={(e) => {
                 e.preventDefault()
                 void confirmRestore()
               }}
             >
-              Restore
+              {isRestoring ? 'Restoring…' : 'Restore'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

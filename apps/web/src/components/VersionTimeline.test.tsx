@@ -2,6 +2,17 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import VersionTimeline from './VersionTimeline.js'
 
+const mockLog = vi.hoisted(() => ({
+  error: vi.fn(),
+  warn: vi.fn(),
+  info: vi.fn(),
+  debug: vi.fn(),
+}))
+
+vi.mock('@/lib/app-logger', () => ({
+  getAppLogger: () => mockLog,
+}))
+
 // Cover the current VersionTimeline contract:
 // - filter versions by the active branch (HEAD)
 // - render the mini-graph lane for each row
@@ -83,6 +94,10 @@ function mkVersionsResponse(): Response {
 }
 
 beforeEach(() => {
+  mockLog.error.mockClear()
+  mockLog.warn.mockClear()
+  mockLog.info.mockClear()
+  mockLog.debug.mockClear()
   const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -305,5 +320,267 @@ describe('VersionTimeline', () => {
     })
     expect(onRestored).not.toHaveBeenCalled()
     expect(screen.getByText('Restore this version?')).toBeTruthy()
+  })
+
+  it('keeps the dialog open with an error when the restore request throws (network failure)', async () => {
+    const onRestored = vi.fn()
+    vi.unstubAllGlobals()
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) return Promise.reject(new TypeError('Failed to fetch'))
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+
+    const row = await screen.findByText('🤖 Assistant')
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(screen.getByText('Restore this version?')).toBeTruthy()
+    })
+
+    const restoreButton = screen.getByRole('button', { name: 'Restore' })
+    fireEvent.click(restoreButton)
+
+    await waitFor(() => {
+      expect(screen.getByText(/restore failed/i)).toBeTruthy()
+    })
+    expect(onRestored).not.toHaveBeenCalled()
+    expect(screen.getByText('Restore this version?')).toBeTruthy()
+    expect(mockLog.error).toHaveBeenCalledWith('restore request threw', expect.any(TypeError))
+  })
+
+  it('disables the Restore action while a restore is in flight so repeat activation cannot double-submit', async () => {
+    const onRestored = vi.fn()
+    const restoreCalls: string[] = []
+    vi.unstubAllGlobals()
+    let resolveRestore: (() => void) | undefined
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) {
+        restoreCalls.push(url)
+        return new Promise<Response>((resolve) => {
+          resolveRestore = () =>
+            resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+        })
+      }
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" onRestored={onRestored} />)
+
+    const row = await screen.findByText('🤖 Assistant')
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(screen.getByText('Restore this version?')).toBeTruthy()
+    })
+
+    const restoreButton = screen.getByRole('button', { name: 'Restore' })
+    fireEvent.click(restoreButton)
+    // Repeat activation while the first request is still in flight.
+    fireEvent.click(restoreButton)
+    fireEvent.click(restoreButton)
+
+    await waitFor(() => {
+      expect(restoreCalls.length).toBe(1)
+    })
+    expect((screen.getByRole('button', { name: 'Restoring…' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
+
+    resolveRestore?.()
+    await waitFor(() => {
+      expect(onRestored).toHaveBeenCalledTimes(1)
+    })
+  })
+})
+
+describe('formatRelative display branches (via rendered version rows)', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function mkSingleVersionResponse(createdAt: string): Response {
+    return new Response(
+      JSON.stringify({
+        versions: [
+          {
+            id: 'v-1',
+            slug: 'canvas-a',
+            createdAt,
+            elementCount: 1,
+            auto: true,
+            hasThumbnail: false,
+            branchName: 'main',
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  function stubFetchWithVersionAt(createdAt: string) {
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkSingleVersionResponse(createdAt))
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+  }
+
+  it('renders seconds-ago for a timestamp under a minute old', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const now = new Date('2026-04-23T02:00:00Z')
+    vi.setSystemTime(now)
+    stubFetchWithVersionAt(new Date(now.getTime() - 30_000).toISOString())
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    await waitFor(() => {
+      expect(screen.getByText(/30s ago/)).toBeTruthy()
+    })
+  })
+
+  it('renders minutes-ago for a timestamp under an hour old', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const now = new Date('2026-04-23T02:00:00Z')
+    vi.setSystemTime(now)
+    stubFetchWithVersionAt(new Date(now.getTime() - 5 * 60_000).toISOString())
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    await waitFor(() => {
+      expect(screen.getByText(/5m ago/)).toBeTruthy()
+    })
+  })
+
+  it('renders hours-ago for a timestamp under a day old', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const now = new Date('2026-04-23T02:00:00Z')
+    vi.setSystemTime(now)
+    stubFetchWithVersionAt(new Date(now.getTime() - 3 * 3600_000).toISOString())
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    await waitFor(() => {
+      expect(screen.getByText(/3h ago/)).toBeTruthy()
+    })
+  })
+
+  it('renders an absolute date/time for a timestamp a day or more old', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const now = new Date('2026-04-23T02:00:00Z')
+    vi.setSystemTime(now)
+    stubFetchWithVersionAt(new Date(now.getTime() - 2 * 86_400_000).toISOString())
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    await waitFor(() => {
+      // 2026-04-21 00:00 local time rendered as M/D HH:MM.
+      expect(screen.getByText(/4\/21 \d{2}:\d{2}/)).toBeTruthy()
+    })
+  })
+
+  it('falls back to the raw ISO string for an invalid createdAt', async () => {
+    stubFetchWithVersionAt('not-a-real-date')
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    await waitFor(() => {
+      expect(screen.getByText(/not-a-real-date/)).toBeTruthy()
+    })
+  })
+})
+
+describe('VersionTimeline error handling and canvas-switch reset', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    cleanup()
+  })
+
+  it('does not reject or crash when the versions fetch throws a network error', async () => {
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.reject(new TypeError('network down'))
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    mockLog.error.mockClear()
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+
+    await waitFor(() => {
+      expect(mockLog.error).toHaveBeenCalledWith('versions request threw', expect.any(TypeError))
+    })
+    // Loading settles instead of spinning forever, and no unhandled rejection
+    // propagates out of the effect (a rejection here would fail the test run).
+    await waitFor(() => {
+      expect(screen.getByText(/No versions on/)).toBeTruthy()
+    })
+  })
+
+  it('logs and leaves the list empty when the versions response is not ok', async () => {
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(new Response('{}', { status: 500 }))
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    mockLog.error.mockClear()
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+
+    await waitFor(() => {
+      expect(mockLog.error).toHaveBeenCalledWith(
+        'versions request failed',
+        expect.objectContaining({ status: 500 }),
+      )
+    })
+    expect(screen.getByText(/No versions on/)).toBeTruthy()
+  })
+
+  it('clears the previous canvas versions immediately when workspaceId/slug changes', async () => {
+    // canvas-new's /versions request hangs for the rest of the test, so any
+    // row rendered after the switch can only be the stale canvas-old data —
+    // unless the reset-on-change effect cleared it.
+    let versionsCallCount = 0
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) {
+        versionsCallCount += 1
+        if (versionsCallCount === 1) return Promise.resolve(mkVersionsResponse())
+        return new Promise<Response>(() => {
+          /* canvas-new's request never resolves in this test */
+        })
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { rerender } = render(<VersionTimeline workspaceId="sess_1" slug="canvas-old" />)
+
+    // Load canvas-old's versions first so there is stale data to leak.
+    await waitFor(() => {
+      expect(screen.getByText('🤖 Assistant')).toBeTruthy()
+    })
+
+    // Switching to canvas-new (same component instance, no remount key) must
+    // clear that stale data immediately, even though canvas-new's own
+    // /versions request never resolves here.
+    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-new" />)
+    await waitFor(() => {
+      expect(screen.queryByText('🤖 Assistant')).toBeNull()
+    })
   })
 })
