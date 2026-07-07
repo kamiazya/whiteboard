@@ -1,23 +1,24 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ZodError } from 'zod'
+import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import {
   type BranchMeta,
   type BranchStatsResponse,
-  type CanvasBranchesState,
-  type CreateBranchRequest,
-  type DeleteBranchResponse,
-  type MergeResponse,
-  type RenameBranchResponse,
-  type SetHeadResponse,
   branchMetaSchema,
   branchStatsResponseSchema,
+  type CanvasBranchesState,
+  type CreateBranchRequest,
+  canvasBranchesStateSchema,
   createBranchResponseSchema,
+  type DeleteBranchResponse,
   deleteBranchResponseSchema,
+  type MergeResponse,
   mergeResponseSchema,
+  type RenameBranchResponse,
   renameBranchResponseSchema,
+  type SetHeadResponse,
   setHeadResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ZodError } from 'zod'
 
 // Branch API helpers plus the React hook wrapper.
 // - branchesApi: pure request helpers that can be tested without React.
@@ -52,11 +53,20 @@ export function buildBranchUrls(
   }
 }
 
-// Defensive parse: filter malformed entries per-item so the BranchPicker keeps
-// rendering valid branches even if the server (or a stale cache) ships a rogue
-// row. branchMetaSchema is the single source of truth for the wire shape.
+// canvasBranchesStateSchema is the single source of truth for the envelope
+// shape. Fall back to filtering the branches array per-item only when the
+// envelope itself fails validation (e.g. a single rogue row breaks the whole
+// array parse), so the BranchPicker keeps rendering the valid branches
+// instead of dropping the entire response.
 export function parseBranchesResponse(raw: unknown): BranchesState {
   if (!raw || typeof raw !== 'object') return { branches: [], head: 'main' }
+  const envelope = canvasBranchesStateSchema.safeParse(raw)
+  if (envelope.success) {
+    return {
+      branches: envelope.data.branches,
+      head: envelope.data.head.length > 0 ? envelope.data.head : 'main',
+    }
+  }
   const data = raw as { head?: unknown; branches?: unknown }
   const branches: BranchMeta[] = []
   if (Array.isArray(data.branches)) {
