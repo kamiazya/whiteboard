@@ -23,6 +23,18 @@ describe('CanvasThumb', () => {
     expect(container.querySelector('img')).toBeNull()
   })
 
+  it('resets the failed state and re-renders the img when slug changes on a reused instance', () => {
+    const { container, rerender } = render(<CanvasThumb workspaceId="ws-1" slug="canvas-a" />)
+    const imgA = container.querySelector('img') as HTMLImageElement
+    fireEvent.error(imgA)
+    expect(container.querySelector('img')).toBeNull()
+
+    rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
+    const imgB = container.querySelector('img') as HTMLImageElement
+    expect(imgB).not.toBeNull()
+    expect(imgB.getAttribute('src')).toBe('/api/workspaces/ws-1/canvases/canvas-b/latest-thumbnail')
+  })
+
   it('applies the card wrapper classes and merges className for size="card"', () => {
     const { container } = render(
       <CanvasThumb workspaceId="ws-1" slug="a" size="card" className="extra-class" />,

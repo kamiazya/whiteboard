@@ -1,5 +1,5 @@
 import { FileText } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 // Latest-thumbnail surface for a canvas.
@@ -23,6 +23,12 @@ interface CanvasThumbProps {
 export function CanvasThumb({ workspaceId, slug, size = 'dropdown', className }: CanvasThumbProps) {
   const [failed, setFailed] = useState(false)
   const src = `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/latest-thumbnail`
+  // Instances are reused across re-renders with a new slug/workspaceId (e.g.
+  // the canvas switcher dropdown), so a stale `failed` flag from a previous
+  // src must not leak into the next canvas's thumbnail.
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
   const wrapperClasses =
     size === 'card'
       ? 'flex aspect-[16/9] w-full items-center justify-center overflow-hidden rounded-md border bg-muted/40'
