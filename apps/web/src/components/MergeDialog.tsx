@@ -201,7 +201,7 @@ function CompareCard({
 }
 
 function thumbUrlFor(workspaceId: string, slug: string, versionId: string): string {
-  return `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${versionId}/thumbnail`
+  return `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(versionId)}/thumbnail`
 }
 
 export function MergeDialog({
@@ -272,7 +272,7 @@ export function MergeDialog({
         const latestFor = (name: string) => {
           const matches = parsed.data.versions
             .filter((v) => v.hasThumbnail && v.branchName === name)
-            .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           return matches[0] ?? null
         }
         const tgt = latestFor(target.name)
@@ -347,9 +347,7 @@ export function MergeDialog({
       : undefined
 
   // Preview element count is still shown even though the inline Excalidraw preview was removed.
-  const previewElementCount = Array.isArray(preview?.previewElements)
-    ? preview!.previewElements!.length
-    : (previewCount ?? 0)
+  const previewElementCount = preview?.previewElements?.length ?? previewCount ?? 0
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>

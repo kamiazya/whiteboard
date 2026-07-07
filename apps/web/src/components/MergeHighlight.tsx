@@ -85,11 +85,16 @@ export function MergeHighlight({
       const api = apiRef.current
       if (api) {
         const st = api.getAppState()
-        setScroll({
+        const next = {
           x: st.scrollX ?? 0,
           y: st.scrollY ?? 0,
           zoom: (st.zoom?.value as number) ?? 1,
-        })
+        }
+        // Only commit when the viewport actually moved — an unconditional
+        // setState here re-renders the overlay at 60fps even on an idle canvas.
+        setScroll((prev) =>
+          prev.x === next.x && prev.y === next.y && prev.zoom === next.zoom ? prev : next,
+        )
       }
       rafRef.current = requestAnimationFrame(tick)
     }
