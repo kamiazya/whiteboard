@@ -26,6 +26,14 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/migration-bundle.ts',
       ),
+      '@kamiazya/whiteboard-mcp/api-client': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/api-client.ts',
+      ),
+      '@kamiazya/whiteboard-mcp/api-contracts': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/api-contracts/index.ts',
+      ),
     },
   },
   // tailwindcss: layout browser tests import src/index.css to assert real
