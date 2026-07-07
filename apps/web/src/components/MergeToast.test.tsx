@@ -117,6 +117,26 @@ describe('MergeToast', () => {
     expect(screen.getByTestId('merge-toast-undo')).toBeTruthy()
   })
 
+  it('auto-dismisses after mouseleave even when the 5s timer already elapsed while hovered', () => {
+    vi.useFakeTimers()
+    render(<MergeToast workspaceId="s1" slug="c1" />)
+    act(() => dispatchMergeCommitted(baseDetail))
+    const toast = screen.getByTestId('merge-toast')
+    fireEvent.mouseEnter(toast)
+    // The auto-dismiss timer fires while still hovered, so it must not close yet.
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    expect(screen.getByTestId('merge-toast')).toBeTruthy()
+    // Leaving after the timer already elapsed must arm a fresh timer instead of
+    // leaving the toast stuck open forever.
+    fireEvent.mouseLeave(toast)
+    act(() => {
+      vi.advanceTimersByTime(5000)
+    })
+    expect(screen.queryByTestId('merge-toast')).toBeNull()
+  })
+
   it('keeps the toast open and shows an error when restore throws', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network down')))
     const onRestored = vi.fn()

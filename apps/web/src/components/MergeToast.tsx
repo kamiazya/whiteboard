@@ -38,6 +38,7 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
   const [undoError, setUndoError] = useState<string | null>(null)
   const hoverRef = useRef(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const scheduleRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -54,13 +55,16 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
 
   useEffect(() => {
     if (!active) return
-    // Auto-close after 5 seconds. Do not reschedule while hovered; mouseleave starts the next timer.
+    // Auto-close after 5 seconds. If still hovered when the timer fires, mouseleave
+    // (via scheduleRef) restarts a fresh timer instead of leaving the toast stuck open.
     const schedule = () => {
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
-        if (!hoverRef.current) setActive(null)
+        if (hoverRef.current) return
+        setActive(null)
       }, 5000)
     }
+    scheduleRef.current = schedule
     schedule()
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -120,6 +124,7 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
       }}
       onMouseLeave={() => {
         hoverRef.current = false
+        scheduleRef.current()
       }}
       className={cn(
         'pointer-events-auto fixed bottom-4 right-4 z-50 flex w-[380px] max-w-[90vw] items-start gap-3',
