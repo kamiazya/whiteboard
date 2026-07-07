@@ -35,7 +35,9 @@ interface Props {
 function formatRelative(iso: string): string {
   const then = new Date(iso).getTime()
   if (!Number.isFinite(then)) return iso
-  const diffSec = Math.floor((Date.now() - then) / 1000)
+  // Clamp: server clocks slightly ahead of the client would otherwise yield
+  // "-5s ago".
+  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000))
   if (diffSec < 60) return `${diffSec}s ago`
   if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
   if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
@@ -108,9 +110,14 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
   // Clear the previously loaded canvas's versions immediately on canvas
   // change so a stale row (with thumbnail URLs pointing at the old
   // workspaceId/slug) never renders under the new canvas while the refetch
-  // is in flight.
+  // is in flight. Also drop any staged restore — confirming a dialog opened
+  // on the previous canvas would POST that version id to the NEW canvas's
+  // restore endpoint.
   useEffect(() => {
     setVersions([])
+    setPendingRestore(null)
+    setRestoreError(null)
+    setIsRestoring(false)
   }, [workspaceId, slug])
 
   // Reload whenever the canvas changes.

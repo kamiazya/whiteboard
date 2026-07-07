@@ -141,6 +141,62 @@ describe('VersionTimeline', () => {
     expect(screen.queryByText(/3 els/)).toBeNull()
   })
 
+  it('closes an open restore dialog when the canvas changes', async () => {
+    // Switching canvases with the dialog open must not leave the previous
+    // canvas's version staged — confirming would POST that version id to the
+    // NEW canvas's restore endpoint.
+    const { rerender } = render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+
+    const row = await screen.findByText('🤖 Assistant')
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(screen.getByText('Restore this version?')).toBeTruthy()
+    })
+
+    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-b" />)
+    await waitFor(() => {
+      expect(screen.queryByText('Restore this version?')).toBeNull()
+    })
+  })
+
+  it('clamps relative timestamps to "0s ago" when the server clock is ahead', async () => {
+    vi.unstubAllGlobals()
+    const future = new Date(Date.now() + 30_000).toISOString()
+    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              versions: [
+                {
+                  id: 'v-skew',
+                  slug: 'canvas-a',
+                  createdAt: future,
+                  elementCount: 1,
+                  auto: true,
+                  hasThumbnail: false,
+                  branchName: 'main',
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+    await waitFor(() => {
+      expect(screen.getByText(/0s ago/)).toBeTruthy()
+    })
+    expect(screen.queryByText(/-\d+s ago/)).toBeNull()
+  })
+
   it('filters cards and mini-graph rows to the active branch', async () => {
     render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
 

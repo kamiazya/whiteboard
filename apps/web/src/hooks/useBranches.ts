@@ -207,6 +207,18 @@ export function useBranches(workspaceId: string, slug: string): UseBranchesResul
   // from overwriting the result of a later refetch.
   const fetchSeqRef = useRef(0)
 
+  // Reset synchronously during render when the canvas changes — an effect
+  // would leave one frame where consumers that don't check `loading` see the
+  // PREVIOUS canvas's branches/head.
+  const canvasKey = `${workspaceId} ${slug}`
+  const [prevCanvasKey, setPrevCanvasKey] = useState(canvasKey)
+  if (prevCanvasKey !== canvasKey) {
+    setPrevCanvasKey(canvasKey)
+    setState({ branches: [], head: 'main' })
+    setError(null)
+    setLoading(true)
+  }
+
   // Recreate the API wrapper whenever session or slug changes.
   useEffect(() => {
     apiRef.current = branchesApi(workspaceId, slug)

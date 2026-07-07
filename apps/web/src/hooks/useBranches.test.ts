@@ -529,6 +529,73 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     expect(result.current.state.head).toBe('main')
   })
 
+  it('resets state to the defaults when workspaceId/slug changes, instead of exposing the previous canvas', async () => {
+    let resolveB: (() => void) | undefined
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      (input) => {
+        const url = String(input)
+        if (url.includes('canvas-a')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                head: 'feature',
+                branches: [
+                  {
+                    name: 'main',
+                    tipFrontiers: '',
+                    color: '#1971c2',
+                    createdAt: '2026-01-01T00:00:00Z',
+                  },
+                  {
+                    name: 'feature',
+                    tipFrontiers: 'AA==',
+                    color: '#9333ea',
+                    createdAt: '2026-01-02T00:00:00Z',
+                  },
+                ],
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          )
+        }
+        // canvas-b: hold the response so the reset window is observable.
+        return new Promise<Response>((resolve) => {
+          resolveB = () =>
+            resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+        })
+      },
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result, rerender } = renderHook(
+      ({ workspaceId, slug }: { workspaceId: string; slug: string }) =>
+        useBranches(workspaceId, slug),
+      { initialProps: { workspaceId: 'sess_1', slug: 'canvas-a' } },
+    )
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(result.current.state.head).toBe('feature')
+
+    rerender({ workspaceId: 'sess_1', slug: 'canvas-b' })
+    // While canvas-b's fetch is in flight, the hook must not hand canvas-a's
+    // branches/head to consumers that don't check `loading`.
+    expect(result.current.loading).toBe(true)
+    expect(result.current.state.head).toBe('main')
+    expect(result.current.state.branches).toEqual([])
+
+    await act(async () => {
+      resolveB?.()
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(result.current.state.head).toBe('main')
+  })
+
   it('createBranch() posts the request and refetches the list', async () => {
     let listCallCount = 0
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
