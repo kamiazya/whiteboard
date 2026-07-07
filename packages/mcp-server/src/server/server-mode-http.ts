@@ -5,6 +5,7 @@
 // The close() returned by startServerModeHttp tears down the HTTP server
 // cleanly so the dispatcher's SIGTERM handler can await it.
 
+import { randomUUID } from 'node:crypto'
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
@@ -26,6 +27,9 @@ export interface ServerModeRunning {
   host: string
   startedAt: string
   resolvedDataDir: string
+  /** Unique per process-start id; written into the server-mode record so
+   *  stop/status/doctor can verify identity instead of trusting a reused pid. */
+  instanceId: string
   close: () => Promise<void>
 }
 
@@ -43,6 +47,7 @@ export async function startServerModeHttp(
 ): Promise<ServerModeRunning> {
   const startedAtMs = Date.now()
   const startedAt = new Date(startedAtMs).toISOString()
+  const instanceId = randomUUID()
   const baseUrl = `https://${options.host}:${options.port}`
   let closing = false
 
@@ -62,6 +67,7 @@ export async function startServerModeHttp(
     publicBaseUrl: options.publicBaseUrl,
     allowedOrigins: options.allowedOrigins,
     authStrategy: options.authStrategy,
+    instanceId,
     touch: () => {},
     getStatus: () => ({
       ok: true,
@@ -108,5 +114,12 @@ export async function startServerModeHttp(
     server.once('error', onError)
   })
 
-  return { port: options.port, host: options.host, startedAt, resolvedDataDir: DATA_DIR, close }
+  return {
+    port: options.port,
+    host: options.host,
+    startedAt,
+    resolvedDataDir: DATA_DIR,
+    instanceId,
+    close,
+  }
 }

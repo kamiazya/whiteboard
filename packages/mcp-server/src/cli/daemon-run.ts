@@ -15,6 +15,7 @@ import {
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
 import { DATA_DIR } from '../shared/data-dir-secure.js'
+import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
@@ -90,6 +91,20 @@ function installDaemonSignalHandlers(cleanup: () => Promise<void>): void {
 
 export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRunOutcome> {
   const dataDir = options.dataDir ?? DATA_DIR
+  const host = options.host ?? '127.0.0.1'
+
+  // Pre-startup guard: local-daemon is loopback-only regardless of --host.
+  // Refusing here (before any lock/fs work) means a non-loopback bind never
+  // reaches startHttpServer, so an unauthenticated daemon can't be exposed
+  // beyond loopback even by operator error.
+  const bindGuard = assertLoopbackBindHost(host)
+  if (!bindGuard.ok) {
+    return {
+      kind: 'refused',
+      message:
+        'Refusing to bind the local daemon to a non-loopback host. Use 127.0.0.1, localhost, or ::1.',
+    }
+  }
 
   const existing = await loadDaemonRecord(dataDir)
   if (existing !== null && isPidAlive(existing.pid)) {
@@ -115,7 +130,6 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
 
   return await withDaemonStartupLock(dataDir, async () => {
     const port = options.port ?? (await findAvailablePort())
-    const host = options.host ?? '127.0.0.1'
 
     const running = await startHttpServer({ port, host, token })
 

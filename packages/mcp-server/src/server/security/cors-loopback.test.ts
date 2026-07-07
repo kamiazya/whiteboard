@@ -1,5 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { appendVary, isLoopbackHostname, normalizeOriginHostname } from './cors-loopback.js'
+import {
+  appendVary,
+  isLoopbackHostname,
+  normalizeHostHeader,
+  normalizeOriginHostname,
+} from './cors-loopback.js'
+
+describe('normalizeHostHeader', () => {
+  it('normalizes a plain host and strips the port', () => {
+    expect(normalizeHostHeader('localhost:3099')).toBe('localhost')
+    expect(normalizeHostHeader('127.0.0.1')).toBe('127.0.0.1')
+  })
+
+  it('strips IPv6 brackets', () => {
+    expect(normalizeHostHeader('[::1]:3099')).toBe('::1')
+  })
+
+  it.each([
+    'evil.example@localhost', // credentials smuggle a loopback hostname
+    'localhost/path', // path smuggling
+    'localhost?query', // query smuggling
+    'localhost#frag', // fragment smuggling
+  ])('rejects malformed Host %s instead of normalizing it to loopback', (header) => {
+    expect(normalizeHostHeader(header)).toBeNull()
+  })
+})
 
 describe('isLoopbackHostname', () => {
   it('recognises localhost', () => {

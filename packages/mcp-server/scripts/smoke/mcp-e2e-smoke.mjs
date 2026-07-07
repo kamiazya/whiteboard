@@ -23,9 +23,34 @@
 
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import http from 'node:http'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+// fetch() treats Host as a forbidden header and silently drops any override,
+// so a genuine Host-header spoof for the DNS-rebinding guard test needs a raw
+// node:http request instead.
+function requestWithHostHeader(url, hostHeader) {
+  return new Promise((resolveReq, reject) => {
+    const target = new URL(url)
+    const req = http.request(
+      {
+        hostname: target.hostname,
+        port: target.port,
+        path: target.pathname,
+        method: 'GET',
+        headers: { Host: hostHeader },
+      },
+      (res) => {
+        res.resume()
+        res.on('end', () => resolveReq({ status: res.statusCode }))
+      },
+    )
+    req.on('error', reject)
+    req.end()
+  })
+}
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
@@ -155,6 +180,26 @@ async function main() {
   const created = await callTool('canvas_create', { slug: 'e2e-src' })
   if (!created.id || !created.url) throw new Error('canvas_create returned unexpected shape')
   console.log(`[e2e] canvas_create → ${created.id}`)
+
+  // The daemon is up now (canvas_create spawned it) — exercise the local-daemon
+  // auth hardening directly over HTTP: instanceId-shaped ping, and the
+  // Host-guard rejecting a spoofed non-loopback Host on /api/*.
+  const daemonOrigin = new URL(created.url).origin
+  const pingRes = await fetch(`${daemonOrigin}/api/runtime/ping`)
+  const pingBody = await pingRes.json()
+  if (pingRes.status !== 200 || pingBody.ok !== true || typeof pingBody.instanceId !== 'string') {
+    throw new Error(`ping did not return an instanceId-shaped body: ${JSON.stringify(pingBody)}`)
+  }
+  if ('pid' in pingBody) {
+    throw new Error(`ping response still leaks pid: ${JSON.stringify(pingBody)}`)
+  }
+  console.log(`[e2e] /api/runtime/ping → instanceId=${pingBody.instanceId}, no pid`)
+
+  const spoofedRes = await requestWithHostHeader(`${daemonOrigin}/api/runtime/ping`, 'evil.example')
+  if (spoofedRes.status !== 403) {
+    throw new Error(`spoofed Host GET expected 403, got ${spoofedRes.status}`)
+  }
+  console.log('[e2e] /api/runtime/ping with spoofed Host → 403 OK')
 
   const ann = await callTool('annotate', {
     canvasId: created.id,

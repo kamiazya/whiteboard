@@ -11,6 +11,7 @@ import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 export interface RuntimeRouterOptions {
   token?: string
   mcpAuth?: McpHttpAuthStrategy
+  instanceId: string
   touch: () => void
   getStatus: () => RuntimeStatus
   shutdown: () => Promise<void>
@@ -20,7 +21,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
   const app = new Hono()
 
   app.get('/api/runtime/ping', (c) => {
-    return c.json(daemonPingResponseSchema.parse({ ok: true, pid: process.pid }))
+    return c.json(daemonPingResponseSchema.parse({ ok: true, instanceId: options.instanceId }))
   })
 
   app.use('/api/runtime/*', async (c, next) => {

@@ -28,6 +28,7 @@ import {
 } from '../server/security/server-mode-record.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { ENV_KEYS } from '../server/security/server-mode-env-config.js'
+import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './daemon-ping-client.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
 export const SERVER_DOCTOR_SCHEMA_VERSION = 1 as const
@@ -51,8 +52,14 @@ export interface RunServerDoctorOptions {
   checkDataDir?: (dataDir: string) => 'ok' | 'not-writable' | 'not-exists'
   // Test seam: read the POSIX mode bits of the record file.
   readRecordMode?: (dataDir: string) => number | null
-  // Test seam: fetch /api/runtime/ping and compare the returned pid to expectedPid.
-  fetchPing?: (host: string, port: number, expectedPid: number) => Promise<{ ok: boolean; pidMatches: boolean }>
+  // Test seam: fetch /api/runtime/ping and compare the returned instanceId to
+  // expectedInstanceId (undefined means the record predates instanceId and
+  // can never match).
+  fetchPing?: (
+    host: string,
+    port: number,
+    expectedInstanceId: string | undefined,
+  ) => Promise<{ ok: boolean; pidMatches: boolean }>
   // Test seam: fetch /api/runtime/status and check for leaked fields.
   // `protected: true` means the endpoint returned 401/403 (correctly secured).
   fetchRuntimeStatus?: (
@@ -75,30 +82,10 @@ function defaultIsPidAlive(pid: number): boolean {
   }
 }
 
-// Mirrors the same helper in server-status.ts and server-stop.ts.
-// Kept local per the project instruction: no new shared module for
-// this small utility until there are three callers.
-function resolveConnectHost(bindHost: string): string {
-  if (bindHost === '0.0.0.0') return '127.0.0.1'
-  if (bindHost === '::' || bindHost === '::0') return '[::1]'
-  // Bare IPv6 addresses contain colons — bracket them for URL construction.
-  if (bindHost.includes(':') && !bindHost.startsWith('[')) return `[${bindHost}]`
-  return bindHost
-}
-
-async function defaultVerifyIdentity(record: ServerModeRecord): Promise<boolean> {
-  const host = resolveConnectHost(record.host)
-  try {
-    const res = await fetch(`http://${host}:${record.port}/api/runtime/ping`, {
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!res.ok) return false
-    const body = (await res.json()) as { pid?: unknown }
-    return typeof body?.pid === 'number' && body.pid === record.pid
-  } catch {
-    return false
-  }
-}
+// Exported for direct unit testing of the instanceId comparison logic below
+// (see server-doctor.test.ts) — the option default is otherwise only ever
+// exercised indirectly through runServerDoctor with an injected override.
+export const defaultVerifyIdentity = verifyDaemonIdentity
 
 async function defaultFetchJwks(uri: string): Promise<{ ok: boolean; hasKeys: boolean }> {
   try {
@@ -138,21 +125,17 @@ function defaultReadRecordMode(dataDir: string): number | null {
   }
 }
 
-async function defaultFetchPing(
+// Exported for direct unit testing — same rationale as defaultVerifyIdentity.
+export async function defaultFetchPing(
   host: string,
   port: number,
-  expectedPid: number,
+  expectedInstanceId: string | undefined,
 ): Promise<{ ok: boolean; pidMatches: boolean }> {
-  const connectHost = resolveConnectHost(host)
-  try {
-    const res = await fetch(`http://${connectHost}:${port}/api/runtime/ping`, {
-      signal: AbortSignal.timeout(2000),
-    })
-    if (!res.ok) return { ok: false, pidMatches: false }
-    const body = (await res.json()) as { pid?: unknown }
-    return { ok: true, pidMatches: typeof body?.pid === 'number' && body.pid === expectedPid }
-  } catch {
-    return { ok: false, pidMatches: false }
+  const ping = await fetchDaemonPing(host, port)
+  if (ping === null) return { ok: false, pidMatches: false }
+  return {
+    ok: true,
+    pidMatches: expectedInstanceId !== undefined && ping.instanceId === expectedInstanceId,
   }
 }
 
@@ -329,10 +312,15 @@ export async function runServerDoctor(
       id: 'server.jwks',
       status: 'error',
       summary: 'JWKS endpoint returned no keys',
-      remediation: 'Check that the JWKS endpoint returns a JSON document with a non-empty `keys` array.',
+      remediation:
+        'Check that the JWKS endpoint returns a JSON document with a non-empty `keys` array.',
     })
   } else {
-    checks.push({ id: 'server.jwks', status: 'ok', summary: 'JWKS endpoint is reachable and has keys' })
+    checks.push({
+      id: 'server.jwks',
+      status: 'ok',
+      summary: 'JWKS endpoint is reachable and has keys',
+    })
   }
 
   // ── 4. server.data_dir ───────────────────────────────────────────
@@ -343,7 +331,8 @@ export async function runServerDoctor(
       id: 'server.data_dir',
       status: 'error',
       summary: 'Data directory does not exist',
-      remediation: 'Create the data directory or set WHITEBOARD_DATA_DIR to an existing writable path.',
+      remediation:
+        'Create the data directory or set WHITEBOARD_DATA_DIR to an existing writable path.',
     })
   } else if (dataDirState === 'not-writable') {
     checks.push({
@@ -440,7 +429,11 @@ export async function runServerDoctor(
         remediation: 'Restart the server to refresh the server record.',
       })
     } else {
-      checks.push({ id: 'server.identity', status: 'ok', summary: 'Server process identity confirmed' })
+      checks.push({
+        id: 'server.identity',
+        status: 'ok',
+        summary: 'Server process identity confirmed',
+      })
     }
   }
 
@@ -455,7 +448,7 @@ export async function runServerDoctor(
       summary: 'Skipped because server identity is not confirmed',
     })
   } else {
-    const pingResult = await fetchPing(record.host, record.port, record.pid)
+    const pingResult = await fetchPing(record.host, record.port, record.instanceId)
     if (!pingResult.ok) {
       checks.push({
         id: 'server.runtime_ping',
@@ -471,7 +464,11 @@ export async function runServerDoctor(
         remediation: 'Restart the server to refresh the server record.',
       })
     } else {
-      checks.push({ id: 'server.runtime_ping', status: 'ok', summary: 'Runtime ping responded successfully' })
+      checks.push({
+        id: 'server.runtime_ping',
+        status: 'ok',
+        summary: 'Runtime ping responded successfully',
+      })
     }
   }
 

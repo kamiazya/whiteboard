@@ -12,10 +12,7 @@ import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.
 import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
-import {
-  ENV_KEYS,
-  parseServerModeEnvConfig,
-} from '../server/security/server-mode-env-config.js'
+import { ENV_KEYS, parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
 import {
   SERVER_MODE_RECORD_SCHEMA_VERSION,
   deleteServerModeRecord,
@@ -60,6 +57,7 @@ export interface ServerModeRunning {
   host: string
   startedAt: string
   resolvedDataDir: string
+  instanceId: string
   close: () => Promise<void>
 }
 
@@ -159,8 +157,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
   // Dynamic import defers loading server/config.js (which has mkdirSync at
   // module load) until after WHITEBOARD_DATA_DIR is set above.
   const startFn: StartServerFn =
-    options.startServer ??
-    (await import('../server/server-mode-http.js')).startServerModeHttp
+    options.startServer ?? (await import('../server/server-mode-http.js')).startServerModeHttp
 
   let running: ServerModeRunning
   try {
@@ -187,6 +184,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
       publicBaseUrl: plan.publicBaseUrl,
       authStrategy: parsed.config.authStrategy,
       startedAt: running.startedAt,
+      instanceId: running.instanceId,
     })
   } catch {
     // Record write failure means status/stop cannot locate this server.

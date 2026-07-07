@@ -60,6 +60,18 @@ describe('authorizeWsUpgrade', () => {
     expect(decision).toEqual({ accept: true, protocol: WHITEBOARD_WS_PROTOCOL })
   })
 
+  it('rejects with 403 for a non-loopback Origin even with a valid token (Origin check precedes token check)', () => {
+    const decision = authorizeWsUpgrade(
+      {
+        host: '127.0.0.1:3099',
+        origin: 'https://evil.example',
+        'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
+      },
+      'secret',
+    )
+    expect(decision).toEqual({ accept: false, statusCode: 403 })
+  })
+
   it('rejects with 401 when the offered token does not match', () => {
     const decision = authorizeWsUpgrade(
       {
@@ -69,5 +81,16 @@ describe('authorizeWsUpgrade', () => {
       'secret',
     )
     expect(decision).toEqual({ accept: false, statusCode: 401 })
+  })
+
+  it('accepts a bracketed IPv6 loopback Origin against a bracketed IPv6 loopback Host', () => {
+    // Node's URL parser keeps the brackets in .hostname for IPv6 ("[::1]"),
+    // while the Host header side is normalized to bare "::1" — both sides
+    // must agree once stripped, or real IPv6 loopback dev setups get a 403.
+    const decision = authorizeWsUpgrade({
+      host: '[::1]:3099',
+      origin: 'http://[::1]:5173',
+    })
+    expect(decision.accept).toBe(true)
   })
 })
