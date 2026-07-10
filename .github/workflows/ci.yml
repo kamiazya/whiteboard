@@ -186,6 +186,9 @@ jobs:
       - name: Web app bundle-size gate
         run: pnpm --filter @kamiazya/whiteboard-web smoke:bundle-size
 
+      - name: Web app PWA precache gate
+        run: pnpm --filter @kamiazya/whiteboard-web smoke:pwa-precache
+
       - name: Web app preview-origin behavioral smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
 
