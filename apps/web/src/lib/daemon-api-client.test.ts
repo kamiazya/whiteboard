@@ -65,6 +65,20 @@ describe('createDaemonFetch', () => {
     expect(headers.get('Authorization')).toBe('Bearer my-token')
   })
 
+  it('sets duplex: "half" when forwarding a Request whose body is a stream', async () => {
+    // Fetch spec: passing a ReadableStream as `body` requires `duplex: 'half'`
+    // in RequestInit, or the call throws in browsers/undici that enforce it.
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
+    const req = new Request(`${DAEMON_BASE_URL}/api/canvases`, {
+      method: 'POST',
+      body: JSON.stringify({ a: 1 }),
+    })
+    await daemonFetch(req)
+    const [, initArg] = fetchMock.mock.calls[0]
+    expect(initArg?.body).toBeTruthy()
+    expect(initArg?.duplex).toBe('half')
+  })
+
   it('never attaches the daemon token to an absolute external URL', async () => {
     const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
     await daemonFetch('https://evil.example/x')

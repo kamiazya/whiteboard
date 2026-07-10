@@ -46,11 +46,14 @@ export function createDaemonFetch(daemonBaseUrl: string, token?: string): typeof
     }
 
     if (input instanceof Request) {
+      const body =
+        init?.body ?? (input.method === 'GET' || input.method === 'HEAD' ? undefined : input.body)
       return fetch(resolvedUrl, {
         method: input.method,
-        body:
-          init?.body ??
-          (input.method === 'GET' || input.method === 'HEAD' ? undefined : input.body),
+        body,
+        // Fetch spec: a ReadableStream body requires `duplex: 'half'` or the
+        // call throws (browsers/undici enforce this at runtime).
+        ...(body ? { duplex: 'half' as const } : {}),
         ...init,
         headers,
       })
