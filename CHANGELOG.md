@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.0.12](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.11...whiteboard-plugin-v0.0.12) (2026-07-10)
+
+
+### Features
+
+* **mcp-server:** expose api-client/api-contracts subpaths, port pure libs to apps/web ([#140](https://github.com/kamiazya/whiteboard/issues/140)) ([ee277e4](https://github.com/kamiazya/whiteboard/commit/ee277e45b11b4f88be519beadc203f300e4f70cd))
+* **mcp-server:** harden local-daemon auth surface ([#141](https://github.com/kamiazya/whiteboard/issues/141)) ([dca3863](https://github.com/kamiazya/whiteboard/commit/dca3863dcf5908da4520393efd59911f019269bf))
+* **mcp-server:** move daemonToken out of runtime config into a one-shot TokenStore ([#148](https://github.com/kamiazya/whiteboard/issues/148)) ([8f9039f](https://github.com/kamiazya/whiteboard/commit/8f9039f84a10aba1d0e39b4c1aee7c95a3e10763))
+* **web:** capability-gated daemon-feature teasers in apps/web ([#129](https://github.com/kamiazya/whiteboard/issues/129)) ([54362bf](https://github.com/kamiazya/whiteboard/commit/54362bf691823a3af5271d01c125489325bd3bad))
+* **web:** editable canvas title with browser-local persistence ([#120](https://github.com/kamiazya/whiteboard/issues/120)) ([6e7eff4](https://github.com/kamiazya/whiteboard/commit/6e7eff4fa74ef48a1866f84020676b3131adbb61))
+* **web:** id-addressed multi-canvas foundation for browser-local storage ([#122](https://github.com/kamiazya/whiteboard/issues/122)) ([0729393](https://github.com/kamiazya/whiteboard/commit/0729393804f35472610c2278875fd0be50aef2c1))
+* **web:** make useCanvasSync capability-complete for daemon wiring ([#136](https://github.com/kamiazya/whiteboard/issues/136)) ([d231d21](https://github.com/kamiazya/whiteboard/commit/d231d214d401b98e11fa0c40f7e03458ec079463))
+* **web:** multi-canvas UI — canvas switcher and New-canvas control ([#123](https://github.com/kamiazya/whiteboard/issues/123)) ([3646e43](https://github.com/kamiazya/whiteboard/commit/3646e43fe4e3fc7f8ae2521ca9ac277a271f5fc8))
+* **web:** port branch UI (HeaderBranchChip / HeaderBranchBanner) ([#147](https://github.com/kamiazya/whiteboard/issues/147)) ([59c862f](https://github.com/kamiazya/whiteboard/commit/59c862f0c32fda46190fb8bb5cc8478776e659d0))
+* **web:** port merge UI with a Zod-typed merge_committed event contract ([#144](https://github.com/kamiazya/whiteboard/issues/144)) ([8ea48e1](https://github.com/kamiazya/whiteboard/commit/8ea48e17efcc5625155f5241c6bdfb920aee9e4b))
+* **web:** port misc UI components (CanvasThumb/ThemeToggle/ErrorBoundary/HeaderSaveDot) ([#143](https://github.com/kamiazya/whiteboard/issues/143)) ([51c7c77](https://github.com/kamiazya/whiteboard/commit/51c7c77133e789491bce9c92c943d9a56bada942))
+* **web:** port pure-logic hooks (theme/dirty-state/fullscreen) to apps/web ([#139](https://github.com/kamiazya/whiteboard/issues/139)) ([57a021f](https://github.com/kamiazya/whiteboard/commit/57a021ff35b3abcaa8aee749707dd82c4a6b96e8))
+* **web:** port StorageReportCard with Zod-validated storage responses ([#146](https://github.com/kamiazya/whiteboard/issues/146)) ([9393d78](https://github.com/kamiazya/whiteboard/commit/9393d787348f8292ee0cf5a7a2bdfde4680b901e))
+* **web:** port useBranches (callback-based) and VersionTimeline ([#145](https://github.com/kamiazya/whiteboard/issues/145)) ([fb6baa3](https://github.com/kamiazya/whiteboard/commit/fb6baa3961233ed7b5c2d6d048119baf5a78649c))
+* **web:** port WorkspaceTopBar aggregation component ([#149](https://github.com/kamiazya/whiteboard/issues/149)) ([29ca30e](https://github.com/kamiazya/whiteboard/commit/29ca30e8d7fcb93fabd08543c7e5df87bb9c5de9))
+
+
+### Bug Fixes
+
+* **audit-triage:** include skill resources/*.md in ai-assets scope ([10240b6](https://github.com/kamiazya/whiteboard/commit/10240b620f120f57abee089ddb8c46f74316f078))
+* **claude:** fail fast on malformed dimension entries in audit/review workflows ([a217efc](https://github.com/kamiazya/whiteboard/commit/a217efc84ed88d0febc637664d0f39eb3c487d61))
+* **claude:** give coverage-gap advisories the same dimension field as real findings ([55db21c](https://github.com/kamiazya/whiteboard/commit/55db21c46f8ef75c1bb8fd3189ea1aeda5fdd738))
+* **claude:** keep review findings whose verify agent died instead of silently dropping ([fbd5c31](https://github.com/kamiazya/whiteboard/commit/fbd5c3136940a64dc7662c20bbba6398be95fac1))
+* **claude:** make failed mandatory review lanes gate instead of silently passing ([336784e](https://github.com/kamiazya/whiteboard/commit/336784ed908081217f09c4853eb41d3d06bc5ffc))
+* **release:** honour SMOKE_RPC_TIMEOUT in the tarball smoke path too ([#118](https://github.com/kamiazya/whiteboard/issues/118)) ([f8e5d17](https://github.com/kamiazya/whiteboard/commit/f8e5d17aa4294b4c7760cea1518d9387f0b42fb7))
+* **web:** allow browser-local mode on Cloudflare Pages preview origins ([#133](https://github.com/kamiazya/whiteboard/issues/133)) ([f0e8b08](https://github.com/kamiazya/whiteboard/commit/f0e8b08581217a1bc506304f4501a8cce6eaeae6))
+
 ## [0.0.11](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.10...whiteboard-plugin-v0.0.11) (2026-07-05)
 
 

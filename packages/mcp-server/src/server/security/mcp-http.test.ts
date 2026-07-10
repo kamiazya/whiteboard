@@ -1,9 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  isAllowedMcpHttpOrigin,
-  requiresMcpHttpAuth,
-} from './mcp-http.js'
+import { isAllowedMcpHttpOrigin, requiresMcpHttpAuth } from './mcp-http.js'
 
 describe('MCP HTTP security', () => {
   describe('isAllowedMcpHttpOrigin', () => {
@@ -34,6 +31,46 @@ describe('MCP HTTP security', () => {
       // isLoopbackHostname can match the bare "::1" address.
       expect(isAllowedMcpHttpOrigin(undefined, '[::1]:3099')).toBe(true)
       expect(isAllowedMcpHttpOrigin('http://[::1]:6274', '[::1]:3099')).toBe(true)
+    })
+
+    describe('with an allowedOrigins allowlist', () => {
+      const allowlist = ['https://kamiazya-whiteboard.pages.dev']
+
+      it('admits an exact allowlisted hosted origin for a loopback host', () => {
+        expect(
+          isAllowedMcpHttpOrigin(
+            'https://kamiazya-whiteboard.pages.dev',
+            '127.0.0.1:3099',
+            allowlist,
+          ),
+        ).toBe(true)
+      })
+
+      it('still requires a loopback Host even for an allowlisted origin', () => {
+        expect(
+          isAllowedMcpHttpOrigin(
+            'https://kamiazya-whiteboard.pages.dev',
+            'evil.example',
+            allowlist,
+          ),
+        ).toBe(false)
+      })
+
+      it('rejects a lookalike origin not in the allowlist', () => {
+        expect(
+          isAllowedMcpHttpOrigin(
+            'https://evil-kamiazya-whiteboard.pages.dev',
+            '127.0.0.1:3099',
+            allowlist,
+          ),
+        ).toBe(false)
+      })
+
+      it('defaults to empty allowlist and preserves prior 403 behavior', () => {
+        expect(
+          isAllowedMcpHttpOrigin('https://kamiazya-whiteboard.pages.dev', '127.0.0.1:3099'),
+        ).toBe(false)
+      })
     })
   })
 

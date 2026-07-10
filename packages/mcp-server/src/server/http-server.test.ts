@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { request } from 'node:http'
+import { afterEach, describe, expect, it } from 'vitest'
+import { findAvailablePort } from '../cli/daemon-run.js'
+import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
+import { startHttpServer, type RunningServer } from './http-server.js'
 
 describe('authorizeWsUpgrade', () => {
   it('rejects websocket upgrade without the daemon subprotocol token when token auth is enabled', () => {
@@ -68,5 +72,66 @@ describe('authorizeWsUpgrade', () => {
         'secret',
       ),
     ).toEqual({ accept: false, statusCode: 403 })
+  })
+})
+
+// Attempts a raw WS handshake and resolves with the response status code:
+// either the HTTP upgrade response (101 on accept) or the plain HTTP
+// rejection response the 'upgrade' handler writes by hand for a refusal.
+function attemptWsUpgrade(port: number, origin: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = request({
+      host: '127.0.0.1',
+      port,
+      path: '/ws/ws_test/canvas',
+      method: 'GET',
+      headers: {
+        Connection: 'Upgrade',
+        Upgrade: 'websocket',
+        'Sec-WebSocket-Version': '13',
+        'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+        'Sec-WebSocket-Protocol': WHITEBOARD_WS_PROTOCOL,
+        Origin: origin,
+      },
+    })
+    req.on('upgrade', (res, socket) => {
+      socket.destroy()
+      resolve(res.statusCode ?? 0)
+    })
+    req.on('response', (res) => {
+      res.resume()
+      resolve(res.statusCode ?? 0)
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+describe('startHttpServer WS upgrade with allowedWebOrigins', () => {
+  let running: RunningServer | undefined
+
+  afterEach(async () => {
+    await running?.close()
+    running = undefined
+  })
+
+  it('threads allowedWebOrigins through to the real WS upgrade handler', async () => {
+    const port = await findAvailablePort(4100)
+    const hostedOrigin = 'https://kamiazya-whiteboard.pages.dev'
+    running = await startHttpServer({
+      port,
+      host: '127.0.0.1',
+      allowedWebOrigins: [hostedOrigin],
+    })
+
+    // Listed hosted origin is admitted -- proves the option reached the
+    // real Node HTTP upgrade handler, not just the pure authorizeWsUpgrade
+    // unit under test above.
+    await expect(attemptWsUpgrade(port, hostedOrigin)).resolves.toBe(101)
+
+    // An origin absent from the allowlist is still refused, confirming the
+    // allowlist is actually consulted rather than the upgrade path always
+    // accepting.
+    await expect(attemptWsUpgrade(port, 'https://not-allowed.example')).resolves.toBe(403)
   })
 })

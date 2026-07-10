@@ -26,6 +26,9 @@ export interface StartHttpServerOptions {
   mcpAuth?: McpHttpAuthStrategy
   idleTimeoutMs?: number
   onClose?: () => Promise<void> | void
+  /** Exact-match hosted origins admitted alongside loopback, on /api CORS,
+   *  /mcp, and WS upgrade (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default. */
+  allowedWebOrigins?: readonly string[]
 }
 
 export interface RunningServer {
@@ -128,6 +131,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     touch,
     getStatus: getRuntimeStatus,
     shutdown: close,
+    allowedWebOrigins: options.allowedWebOrigins,
   })
 
   setRuntimeTouchFn(touch)
@@ -156,7 +160,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       socket.destroy()
       return
     }
-    const decision = authorizeWsUpgrade(req.headers, options.token)
+    const decision = authorizeWsUpgrade(req.headers, options.token, options.allowedWebOrigins)
     if (!decision.accept) {
       const statusCode = decision.statusCode ?? 401
       const statusText = statusCode === 403 ? 'Forbidden' : 'Unauthorized'
