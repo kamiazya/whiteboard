@@ -36,9 +36,16 @@ export function mountUpdateToast(updateServiceWorker: (reloadPage?: boolean) => 
       onReload={() => updateServiceWorker(true)}
       onDismiss={() => {
         dismissedThisPageLoad = true
-        root.unmount()
+        // Guard + defer: unmounting synchronously from an event handler
+        // rendered by this same root makes React 18 warn about unmounting a
+        // root while it is rendering, and a double-click would unmount twice.
+        if (activeRoot === null) return
+        const rootToUnmount = activeRoot
         activeRoot = null
-        container?.remove()
+        setTimeout(() => {
+          rootToUnmount.unmount()
+          container?.remove()
+        }, 0)
       }}
     />,
   )
