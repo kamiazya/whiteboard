@@ -24,25 +24,29 @@ export interface DaemonCanvasPageProps {
   createBackend?: (workspaceId: string, slug: string, daemonFetch: typeof fetch) => CanvasBackend
 }
 
-function defaultCreateBackend(
-  workspaceId: string,
-  slug: string,
-  daemonFetch: typeof fetch,
-): CanvasBackend {
-  return new DaemonBackend(workspaceId, slug, window.location.href, { fetch: daemonFetch })
-}
-
 export function DaemonCanvasPage({
   daemonBaseUrl,
   workspaceId,
   slug,
   token,
   capabilities = LOCAL_DAEMON_CAPABILITIES,
-  createBackend = defaultCreateBackend,
+  createBackend,
 }: DaemonCanvasPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+
+  // The WebSocket URL is derived from this locationHref (see
+  // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
+  // web app paired to a loopback daemon must not open the socket against its
+  // own page origin.
+  const resolvedCreateBackend = useMemo(
+    () =>
+      createBackend ??
+      ((workspaceId: string, slug: string, daemonFetch: typeof fetch): CanvasBackend =>
+        new DaemonBackend(workspaceId, slug, daemonBaseUrl, { fetch: daemonFetch })),
+    [createBackend, daemonBaseUrl],
+  )
 
   const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, slug, daemonFetch })
 
@@ -56,9 +60,9 @@ export function DaemonCanvasPage({
   // how disconnect/connect ordering happens).
   const backend = useMemo(() => {
     if (controller.workspaceId === null || controller.slug === null) return null
-    return createBackend(controller.workspaceId, controller.slug, daemonFetch)
+    return resolvedCreateBackend(controller.workspaceId, controller.slug, daemonFetch)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [createBackend, controller.workspaceId, controller.slug, daemonFetch])
+  }, [resolvedCreateBackend, controller.workspaceId, controller.slug, daemonFetch])
 
   const { setExcalidrawAPI, onChange } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),

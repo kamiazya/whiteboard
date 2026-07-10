@@ -264,4 +264,47 @@ describe('DaemonCanvasPage', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     expect(screen.getByRole('alert').textContent).toMatch(/slug already exists/i)
   })
+
+  describe('default backend wiring (no createBackend override)', () => {
+    class FakeWebSocket {
+      static instances: FakeWebSocket[] = []
+      binaryType = 'blob'
+      readyState = 0
+      onopen: (() => void) | null = null
+      onclose: ((event: { code: number }) => void) | null = null
+      onerror: (() => void) | null = null
+      onmessage: ((event: MessageEvent) => void) | null = null
+      send = vi.fn()
+      close = vi.fn()
+
+      constructor(
+        public url: string,
+        public protocols?: string | string[],
+      ) {
+        FakeWebSocket.instances.push(this)
+      }
+    }
+
+    let originalWebSocket: typeof globalThis.WebSocket
+
+    beforeEach(() => {
+      FakeWebSocket.instances = []
+      originalWebSocket = globalThis.WebSocket
+      globalThis.WebSocket = FakeWebSocket as unknown as typeof globalThis.WebSocket
+    })
+
+    afterEach(() => {
+      globalThis.WebSocket = originalWebSocket
+    })
+
+    it('opens the WebSocket against the daemon origin, not the page origin', async () => {
+      await act(async () => {
+        render(<DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} />)
+      })
+
+      await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
+      const wsUrl = new URL(FakeWebSocket.instances[0]!.url)
+      expect(wsUrl.origin).toBe(new URL(DAEMON_BASE_URL).origin.replace('http:', 'ws:'))
+    })
+  })
 })
