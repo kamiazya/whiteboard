@@ -8,7 +8,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import { type JSX, useEffect, useRef, useState } from 'react'
+import { type JSX, lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -43,7 +43,11 @@ import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
 import { safeErrorCopy } from '@/lib/error-copy'
 import { cn } from '@/lib/utils'
-import { MergeDialog } from './MergeDialog'
+
+// MergeDialog pulls in its own thumbnail-fetch effect and a second Dialog
+// surface; loading it on demand keeps it out of the daemon-canvas chunk
+// until a merge is actually initiated.
+const MergeDialog = lazy(() => import('./MergeDialog').then((m) => ({ default: m.MergeDialog })))
 
 // Consolidate branch operations into a single `●branch▾` chip in the header.
 //
@@ -519,16 +523,21 @@ export function HeaderBranchChip({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reuse the shared merge dialog. */}
-      <MergeDialog
-        open={pendingMerge !== null}
-        source={pendingMerge?.source ?? null}
-        target={pendingMerge?.target ?? null}
-        onClose={() => setPendingMerge(null)}
-        runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
-        workspaceId={workspaceId}
-        slug={slug}
-      />
+      {/* Reuse the shared merge dialog, loaded on demand so its bundle cost
+          is only paid once a merge is actually initiated. */}
+      {pendingMerge !== null && (
+        <Suspense fallback={null}>
+          <MergeDialog
+            open={pendingMerge !== null}
+            source={pendingMerge?.source ?? null}
+            target={pendingMerge?.target ?? null}
+            onClose={() => setPendingMerge(null)}
+            runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
+            workspaceId={workspaceId}
+            slug={slug}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
