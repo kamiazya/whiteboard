@@ -61,13 +61,7 @@ function encodeBase64Url(value: string): string {
 function extractFragmentValue(hash: string): string | null {
   const withoutHash = hash.startsWith('#') ? hash.slice(1) : hash
   if (withoutHash.length === 0) return null
-  let params: URLSearchParams
-  try {
-    params = new URLSearchParams(withoutHash)
-  } catch {
-    return null
-  }
-  return params.get(FRAGMENT_KEY)
+  return new URLSearchParams(withoutHash).get(FRAGMENT_KEY)
 }
 
 // Parses the `#wb=<base64url-json>` daemon-pairing fragment. Never throws — every
