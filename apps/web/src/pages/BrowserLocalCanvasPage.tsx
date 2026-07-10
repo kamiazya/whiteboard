@@ -14,10 +14,12 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { CanvasTitle } from '../components/canvas-title/CanvasTitle.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
+import { DaemonDetectedBanner } from '../components/migration/DaemonDetectedBanner.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-local-page-state.js'
 import {
@@ -69,6 +71,10 @@ export function BrowserLocalCanvasPage({
     createCanvas,
     switchCanvas,
   } = useBrowserLocalCanvasController(store, loro)
+
+  // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
+  // re-read from localStorage on every render.
+  const [settingsStore] = useState(() => createUserSettingsStore())
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
@@ -202,6 +208,7 @@ export function BrowserLocalCanvasPage({
         <span className="text-xs text-muted-foreground">
           {persistenceLabel(pageState.persistence)}
         </span>
+        <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
         {cleanupError && (
           <div role="alert" aria-live="assertive" className="text-xs text-destructive">
             {cleanupError}
