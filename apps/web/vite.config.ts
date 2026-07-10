@@ -98,6 +98,19 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    rollupOptions: {
+      output: {
+        // The bundle-size gate (scripts/smoke-bundle-size.mjs) matches this
+        // lazy chunk by a fixed `daemon-canvas-*.js` prefix. Without an
+        // explicit name here, Rollup names it after the source file
+        // (`DaemonCanvasPage-<hash>.js`), which the gate's pattern never
+        // matches — silently skipping the budget instead of enforcing it.
+        chunkFileNames: (chunkInfo) =>
+          chunkInfo.name === 'DaemonCanvasPage'
+            ? 'assets/daemon-canvas-[hash].js'
+            : 'assets/[name]-[hash].js',
+      },
+    },
   },
   plugins: [
     react(),
