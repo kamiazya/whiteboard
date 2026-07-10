@@ -151,6 +151,9 @@ function removeFragmentKey(hash: string): string {
 // Other hash segments sharing the fragment (e.g. `#fullscreen&wb=...`) are preserved —
 // mirrors the hash-ownership pattern in canvas-fullscreen-hash.ts.
 export function consumeDaemonConnectionFragment(): void {
+  // Guard against non-DOM contexts (SSR, a Node-side import that never set up
+  // jsdom) so the module is safe to reference anywhere, not just in the browser.
+  if (typeof window === 'undefined') return
   if (window.location.hash.length === 0) return
   const url = new URL(window.location.href)
   url.hash = removeFragmentKey(url.hash)
