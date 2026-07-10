@@ -20,6 +20,7 @@ describe('mcp-server vitest.browser.config optimizeDeps', () => {
         'react/jsx-dev-runtime',
         'react-dom',
         'react-dom/client',
+        'react-router-dom',
         '@testing-library/react',
       ]),
     )
