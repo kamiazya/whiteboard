@@ -3,17 +3,25 @@ import { isProductionPagesOrigin } from './lib/pages-origin-policy.js'
 
 // Validates that a URL string is a bare origin: scheme + host + optional port, no path/query/hash/credentials.
 // Downstream CORS, OAuth, and Cloudflare config all require a strict origin, not an arbitrary URL.
-const bareOriginSchema = z.string().url().refine(
-  (v) => {
-    try {
-      const url = new URL(v)
-      return url.origin === v && !url.hostname.includes('*')
-    } catch {
-      return false
-    }
-  },
-  { message: 'must be a bare origin (scheme + host + optional port, no path, query, hash, credentials, or wildcards)' },
-)
+// Exported so other cross-boundary contracts (e.g. daemon-connection-payload.ts) reuse the same
+// origin-validation rules instead of redefining them.
+export const bareOriginSchema = z
+  .string()
+  .url()
+  .refine(
+    (v) => {
+      try {
+        const url = new URL(v)
+        return url.origin === v && !url.hostname.includes('*')
+      } catch {
+        return false
+      }
+    },
+    {
+      message:
+        'must be a bare origin (scheme + host + optional port, no path, query, hash, credentials, or wildcards)',
+    },
+  )
 
 export const runtimeConfigSchema = z
   .object({
