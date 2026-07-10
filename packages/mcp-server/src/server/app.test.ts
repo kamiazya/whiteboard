@@ -1041,6 +1041,122 @@ describe('createApp daemon mutation auth', () => {
       expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:5173')
       expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
     })
+
+    it('OPTIONS preflight for a loopback Origin also carries Access-Control-Allow-Local-Network', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        method: 'OPTIONS',
+        headers: { Origin: 'http://localhost:5173' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
+    })
+  })
+
+  describe('/api/* hosted-origin allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
+    const allowedWebOrigins = ['https://kamiazya-whiteboard.pages.dev']
+
+    it('reflects ACAO for an allowlisted hosted origin on GET', async () => {
+      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://kamiazya-whiteboard.pages.dev',
+      )
+      expect(res.headers.get('Vary')).toContain('Origin')
+    })
+
+    it('OPTIONS preflight for an allowlisted hosted origin returns PNA + ALN headers', async () => {
+      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
+      const res = await app.request('/api/runtime/ping', {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://kamiazya-whiteboard.pages.dev',
+      )
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
+    })
+
+    it('does NOT reflect ACAO for an evil-prefix lookalike origin', async () => {
+      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://evil-kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('does NOT reflect ACAO for a suffix-match lookalike origin', async () => {
+      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev.evil.com' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('does NOT reflect ACAO for an http:// scheme variant of the allowlisted origin', async () => {
+      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'http://kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('does NOT reflect ACAO for the hosted origin when no allowlist is configured (default preserved)', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+
+    it('mutation route from an allowlisted hosted origin without Bearer still 401s', async () => {
+      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
+      const res = await app.request('/api/workspaces/session1/canvases', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: 'https://kamiazya-whiteboard.pages.dev',
+        },
+        body: JSON.stringify({ slug: 'demo' }),
+      })
+      expect(res.status).toBe(401)
+    })
+  })
+
+  describe('/mcp hosted-origin allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
+    const allowedWebOrigins = ['https://kamiazya-whiteboard.pages.dev']
+
+    it('OPTIONS /mcp with an allowlisted hosted Origin returns PNA + ALN headers', async () => {
+      const app = createApp({ ...createRuntimeOptions('secret'), allowedWebOrigins })
+      const res = await app.request('http://127.0.0.1/mcp', {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://kamiazya-whiteboard.pages.dev',
+      )
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
+    })
+
+    it('OPTIONS /mcp with a non-allowlisted hosted Origin is still forbidden (default preserved)', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('http://127.0.0.1/mcp', {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(403)
+    })
   })
 
   describe('runtime config injection', () => {

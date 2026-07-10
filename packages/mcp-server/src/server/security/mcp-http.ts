@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
 import {
@@ -8,6 +8,7 @@ import {
   normalizeHostHeader,
   normalizeOriginHostname,
 } from './cors-loopback.js'
+import { isAllowedWebOrigin } from './web-origin-allowlist.js'
 
 function normalizeMethod(method: string): string {
   return method.toUpperCase()
@@ -27,45 +28,59 @@ function mcpHttpError(status: number, message: string, headers?: Headers): Respo
 export function isAllowedMcpHttpOrigin(
   originHeader: string | undefined,
   hostHeader: string | undefined,
+  allowedOrigins: readonly string[] = [],
 ): boolean {
+  // DNS-rebinding guard: unchanged regardless of the Origin allowlist below —
+  // the request Host must always be loopback.
   const requestHost = normalizeHostHeader(hostHeader)
   if (!requestHost || !isLoopbackHostname(requestHost)) {
     return false
   }
   if (!originHeader) return true
   const originHost = normalizeOriginHostname(originHeader)
-  return originHost !== null && isLoopbackHostname(originHost)
+  if (originHost !== null && isLoopbackHostname(originHost)) return true
+  return isAllowedWebOrigin(originHeader, allowedOrigins)
 }
 
 export function requiresMcpHttpAuth(method: string): boolean {
   return normalizeMethod(method) !== 'OPTIONS'
 }
 
-export function createMcpHttpOriginMiddleware(): MiddlewareHandler {
+function setMcpCorsHeaders(c: Context, origin: string): void {
+  c.res.headers.set('Access-Control-Allow-Origin', origin)
+  c.res.headers.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
+  )
+  c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+  c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
+  c.res.headers.set('Access-Control-Max-Age', '86400')
+  c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+}
+
+export function createMcpHttpOriginMiddleware(
+  allowedOrigins: readonly string[] = [],
+): MiddlewareHandler {
   return async (c, next) => {
     const origin = c.req.header('origin')
     const host = getRequestHost(c)
-    if (!isAllowedMcpHttpOrigin(origin, host)) {
+    if (!isAllowedMcpHttpOrigin(origin, host, allowedOrigins)) {
       return mcpHttpError(403, 'forbidden origin')
     }
 
     if (origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-      )
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+      setMcpCorsHeaders(c, origin)
     }
 
     if (normalizeMethod(c.req.method) === 'OPTIONS') {
       if (origin) {
-        // Local Network Access preflight header — required by Chrome for
-        // private-network → loopback requests regardless of PNA spec state.
+        // Local Network Access preflight headers — required by Chrome for
+        // private-network → loopback requests. Both the legacy PNA header and
+        // its in-flight successor (ALN) are emitted so the preflight
+        // satisfies whichever LNA generation the browser enforces.
+        // https://wicg.github.io/local-network-access/
         c.res.headers.set('Access-Control-Allow-Private-Network', 'true')
+        c.res.headers.set('Access-Control-Allow-Local-Network', 'true')
       }
       return new Response(null, { status: 204, headers: c.res.headers })
     }
@@ -73,15 +88,7 @@ export function createMcpHttpOriginMiddleware(): MiddlewareHandler {
     await next()
 
     if (origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-      )
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+      setMcpCorsHeaders(c, origin)
     }
   }
 }
