@@ -1,6 +1,7 @@
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
+import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
 import type { ProviderState, WhiteboardCapabilities } from './lib/provider.js'
 
 afterEach(cleanup)
@@ -14,6 +15,22 @@ vi.mock('./pages/BrowserLocalCanvasPage.js', () => ({
   BrowserLocalCanvasPage: ({ capabilities }: { capabilities?: WhiteboardCapabilities }) => {
     receivedCapabilities = capabilities
     return <div data-testid="browser-local-canvas-page" />
+  },
+}))
+
+// useDaemonConnection is a module-level singleton (see its own test file for
+// why) — mocked here so App routing tests control its result directly
+// instead of round-tripping through window.location.hash.
+let mockDaemonConnectionResult: DaemonConnectionResult = { status: 'none' }
+vi.mock('./hooks/useDaemonConnection.js', () => ({
+  useDaemonConnection: () => mockDaemonConnectionResult,
+}))
+
+let receivedDaemonPageProps: Record<string, unknown> | undefined
+vi.mock('./pages/DaemonCanvasPage.js', () => ({
+  DaemonCanvasPage: (props: Record<string, unknown>) => {
+    receivedDaemonPageProps = props
+    return <div data-testid="daemon-canvas-page" />
   },
 }))
 
@@ -101,5 +118,49 @@ describe('App beta banner', () => {
   it('does not show the beta banner on the invalid-config error page', () => {
     render(<App providerState={INVALID_CONFIG_STATE} />)
     expect(screen.queryByText(/Beta preview/)).toBeNull()
+  })
+})
+
+describe('App daemon-pairing routing', () => {
+  beforeEach(() => {
+    mockDaemonConnectionResult = { status: 'none' }
+    receivedDaemonPageProps = undefined
+  })
+
+  it('renders DaemonCanvasPage from the payload when paired', () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(screen.getByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
+    expect(receivedDaemonPageProps?.daemonBaseUrl).toBe('http://127.0.0.1:3099')
+    expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
+    expect(receivedDaemonPageProps?.slug).toBe('main')
+    expect(receivedDaemonPageProps?.token).toBe('tok')
+  })
+
+  it('renders a role=alert error UI with a browser-local escape hatch on error', () => {
+    mockDaemonConnectionResult = { status: 'error', detail: 'malformed fragment' }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(screen.getByRole('alert')).toBeTruthy()
+    const button = screen.getByRole('button', { name: /continue in browser-local/i })
+    expect(button).toBeTruthy()
+    fireEvent.click(button)
+    expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+  })
+
+  it('falls through to existing provider-state resolution unchanged when there is no fragment', () => {
+    mockDaemonConnectionResult = { status: 'none' }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
   })
 })

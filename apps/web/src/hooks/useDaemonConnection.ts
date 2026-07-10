@@ -10,6 +10,7 @@ export type DaemonConnectionResult =
   | { status: 'error'; detail: string }
 
 type WindowLike = {
+  location: { hash: string }
   __WHITEBOARD_DAEMON_TOKEN__?: unknown
 }
 
