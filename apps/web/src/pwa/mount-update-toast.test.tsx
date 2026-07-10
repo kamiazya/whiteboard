@@ -34,4 +34,26 @@ describe('mountUpdateToast', () => {
     mountUpdateToast(vi.fn())
     expect(screen.queryByText(/Update available/i)).toBeNull()
   })
+
+  it('reuses the existing root when onNeedRefresh fires again before dismiss', async () => {
+    const { mountUpdateToast } = await import('./mount-update-toast.js')
+    const firstUpdateServiceWorker = vi.fn()
+    const secondUpdateServiceWorker = vi.fn()
+
+    mountUpdateToast(firstUpdateServiceWorker)
+    await screen.findByRole('button', { name: 'Reload' })
+
+    // A second SW update notification arrives before the user dismisses or
+    // reloads. Re-mounting must not throw (React's createRoot() called
+    // twice on the same container warns and can corrupt the fiber tree) and
+    // must still render exactly one toast wired to the latest callback.
+    expect(() => mountUpdateToast(secondUpdateServiceWorker)).not.toThrow()
+    const reloadButtons = await screen.findAllByRole('button', { name: 'Reload' })
+    expect(reloadButtons).toHaveLength(1)
+
+    fireEvent.click(reloadButtons[0] as HTMLElement)
+    expect(firstUpdateServiceWorker).not.toHaveBeenCalled()
+    expect(secondUpdateServiceWorker).toHaveBeenCalledTimes(1)
+    expect(secondUpdateServiceWorker).toHaveBeenCalledWith(true)
+  })
 })
