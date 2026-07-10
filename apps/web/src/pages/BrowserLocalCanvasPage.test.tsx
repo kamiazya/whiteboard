@@ -162,7 +162,7 @@ describe('BrowserLocalCanvasPage', () => {
     expect(screen.getByText('Could not start a new canvas. Please try again.')).toBeTruthy()
   })
 
-  it('renders cleanup-completed view after delete button click', async () => {
+  it('renders cleanup-completed view after delete button click and confirm', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
@@ -173,9 +173,36 @@ describe('BrowserLocalCanvasPage', () => {
     const cleanupBtn = screen.getByRole('button', { name: /delete/i })
     await act(async () => {
       cleanupBtn.click()
+    })
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+    const confirmBtn = screen.getByRole('button', { name: /^delete$/i })
+    await act(async () => {
+      confirmBtn.click()
       await vi.runAllTimersAsync()
     })
     expect(screen.getByTestId('cleanup-completed')).toBeTruthy()
+  })
+
+  it('does not delete the canvas when the confirmation dialog is cancelled', async () => {
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    const cleanupBtn = screen.getByRole('button', { name: /delete canvas/i })
+    await act(async () => {
+      cleanupBtn.click()
+    })
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+    const cancelBtn = screen.getByRole('button', { name: /cancel/i })
+    await act(async () => {
+      cancelBtn.click()
+      await vi.runAllTimersAsync()
+    })
+    expect(screen.queryByTestId('cleanup-completed')).toBeNull()
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    expect(screen.getByRole('main')).toBeTruthy()
   })
 
   it('renders a human-readable save status instead of the raw state enum', async () => {
@@ -223,6 +250,10 @@ describe('BrowserLocalCanvasPage', () => {
     const deleteBtn = screen.getByRole('button', { name: /delete/i })
     await act(async () => {
       deleteBtn.click()
+    })
+    const confirmBtn = screen.getByRole('button', { name: /^delete$/i })
+    await act(async () => {
+      confirmBtn.click()
       await vi.runAllTimersAsync()
     })
     // cleanup-completed must not be a dead end: Start fresh mints a new canvas.
@@ -247,6 +278,10 @@ describe('BrowserLocalCanvasPage', () => {
     const deleteBtn = screen.getByRole('button', { name: /delete/i })
     await act(async () => {
       deleteBtn.click()
+    })
+    const confirmBtn = screen.getByRole('button', { name: /^delete$/i })
+    await act(async () => {
+      confirmBtn.click()
       await vi.runAllTimersAsync()
     })
     expect(fetchSpy).not.toHaveBeenCalled()

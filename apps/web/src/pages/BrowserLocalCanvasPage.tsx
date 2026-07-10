@@ -1,6 +1,17 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '../components/ui/alert-dialog.js'
 import { CanvasTitle } from '../components/canvas-title/CanvasTitle.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
@@ -244,14 +255,30 @@ export function BrowserLocalCanvasPage({
           <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
           <CapabilityTeaser label="Merge" enabled={capabilities.merge} />
         </div>
-        <button
-          type="button"
-          onClick={() => void triggerCleanup()}
-          aria-label="Delete canvas"
-          className="ml-auto rounded-md border px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
-        >
-          Delete
-        </button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <button
+              type="button"
+              aria-label="Delete canvas"
+              className="ml-auto rounded-md border px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+            >
+              Delete
+            </button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this canvas?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently removes the canvas and its drawing data from this browser. This
+                action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={() => void triggerCleanup()}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </header>
       <div data-testid="excalidraw-container" className="min-h-0 flex-1">
         <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} />

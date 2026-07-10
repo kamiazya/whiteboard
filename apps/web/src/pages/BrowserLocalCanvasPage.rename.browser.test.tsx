@@ -85,6 +85,63 @@ describe('BrowserLocalCanvasPage rename (browser — real IndexedDB)', () => {
     }
   })
 
+  it('Escape during edit reverts without persisting to IndexedDB', async () => {
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+      timeout: 5000,
+    })
+    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    titleInput.focus()
+    fireEvent.change(titleInput, { target: { value: 'Should not persist' } })
+    fireEvent.keyDown(titleInput, { key: 'Escape' })
+    await waitFor(
+      () => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled'),
+      { timeout: 5000 },
+    )
+
+    cleanup()
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(
+      () => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled'),
+      { timeout: 5000 },
+    )
+  })
+
+  it("whitespace-only commit persists 'untitled' and restores it on remount", async () => {
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+      timeout: 5000,
+    })
+    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    // Commit a real name first so the remount assertion below can distinguish
+    // "restored the whitespace-commit's normalized value" from "never persisted
+    // anything, so it's just showing the initial default".
+    titleInput.focus()
+    fireEvent.change(titleInput, { target: { value: 'Named canvas' } })
+    titleInput.blur()
+    await waitFor(
+      () => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Named canvas'),
+      { timeout: 5000 },
+    )
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument(), { timeout: 5000 })
+
+    titleInput.focus()
+    fireEvent.change(titleInput, { target: { value: '   ' } })
+    titleInput.blur()
+    await waitFor(
+      () => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled'),
+      { timeout: 5000 },
+    )
+    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument(), { timeout: 5000 })
+
+    cleanup()
+    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    await waitFor(
+      () => expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled'),
+      { timeout: 5000 },
+    )
+  })
+
   it('network-negative: editing the title triggers no fetch to /api/ or daemon endpoints', async () => {
     const calls: string[] = []
     const original = window.fetch.bind(window)
