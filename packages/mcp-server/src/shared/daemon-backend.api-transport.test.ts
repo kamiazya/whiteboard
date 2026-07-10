@@ -69,4 +69,31 @@ describe('DaemonBackend apiTransport', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
   })
+
+  it('putFile falls back to the module-level apiFetch when no apiTransport is supplied', async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }))
+
+    const backend = new DaemonBackend('ws-1', 'canvas-1', 'https://web.example.com/')
+
+    const entries: [string, BinaryFileDataLike][] = [
+      [
+        'file-a',
+        {
+          id: 'file-a',
+          mimeType: 'image/png',
+          dataURL: 'data:image/png;base64,aGVsbG8=',
+          created: Date.now(),
+        },
+      ],
+    ]
+    const onSuccess = vi.fn()
+
+    await backend.putFile(entries, onSuccess)
+
+    expect(fetch).toHaveBeenCalledTimes(1)
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit]
+    expect(url).toBe('/api/canvas/ws-1/canvas-1/file/file-a')
+    expect(init.method).toBe('PUT')
+    expect(onSuccess).toHaveBeenCalledWith('file-a')
+  })
 })
