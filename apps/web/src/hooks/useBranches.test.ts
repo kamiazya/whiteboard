@@ -1,5 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
+import { createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import {
   type BranchesState,
   branchesApi,
@@ -195,6 +197,33 @@ describe('branchesApi', () => {
     expect(url).toBe('/api/workspaces/sess_1/canvases/canvas-a/branches/feature/merge')
     expect(init2?.method).toBe('POST')
     expect(init2?.body).toBe(JSON.stringify({ into: 'main', dryRun: true }))
+  })
+
+  it('constructing with an explicit fetch arg uses it for every method; omitting it defaults to apiFetch', async () => {
+    const injected = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    const api = branchesApi('sess_1', 'canvas-a', injected)
+    await api.list()
+    expect(injected).toHaveBeenCalledTimes(1)
+
+    // Omitting the third arg falls back to apiFetch, which reads global fetch.
+    const globalFetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    vi.stubGlobal('fetch', globalFetchMock)
+    const defaultApi = branchesApi('sess_1', 'canvas-a')
+    await defaultApi.list()
+    expect(globalFetchMock).toHaveBeenCalledTimes(1)
+    expect(injected).toHaveBeenCalledTimes(1)
   })
 
   describe('contract_mismatch normalization: malformed 200 must not leak ZodError', () => {
@@ -798,5 +827,67 @@ describe('useBranches hook (callback model, no window event subscription)', () =
 
     // A real (non-dryRun) merge must trigger the post-merge refetch.
     expect(listCallCount).toBeGreaterThan(listCallsAfterMount)
+  })
+
+  it('uses the DaemonApiContext-provided fetch when a provider is mounted', async () => {
+    const globalFetchMock = vi.fn()
+    vi.stubGlobal('fetch', globalFetchMock)
+    const providedFetch = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(
+      async () =>
+        new Response(JSON.stringify({ head: 'main', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a', providedFetch), {
+      wrapper: ({ children }) =>
+        createElement(DaemonApiContext.Provider, { value: providedFetch }, children),
+    })
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    expect(providedFetch).toHaveBeenCalled()
+    expect(globalFetchMock).not.toHaveBeenCalled()
+    expect(result.current.state.head).toBe('main')
+  })
+
+  it('rerendering with a new fetch identity (same workspaceId/slug) routes the next refetch through it', async () => {
+    const fetchA = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ head: 'from-a', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    const fetchB = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ head: 'from-b', branches: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+
+    const { result, rerender } = renderHook(
+      ({ fetchFn }: { fetchFn: typeof fetch }) => useBranches('sess_1', 'canvas-a', fetchFn),
+      { initialProps: { fetchFn: fetchA } },
+    )
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0))
+    })
+    expect(result.current.state.head).toBe('from-a')
+
+    rerender({ fetchFn: fetchB })
+    await act(async () => {
+      await result.current.refetch()
+    })
+
+    // A stale apiRef (recreated only on workspaceId/slug change, not fetchFn)
+    // would still call fetchA here.
+    expect(result.current.state.head).toBe('from-b')
+    expect(fetchB).toHaveBeenCalled()
   })
 })

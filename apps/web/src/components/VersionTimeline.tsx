@@ -1,4 +1,3 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import {
   listVersionsResponseSchema,
   type OperatorInfo,
@@ -18,6 +17,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
 import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
@@ -64,6 +64,8 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 // Branch operations and save controls live in the header.
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
 export default function VersionTimeline({ workspaceId, slug, onRestored }: Props) {
+  const fetchFn = useDaemonApi()
+  const hasDaemonApi = useHasDaemonApi()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
@@ -84,7 +86,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
-      const res = await apiFetch(
+      const res = await fetchFn(
         `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
       )
       if (seq !== fetchSeqRef.current) return
@@ -105,7 +107,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false)
     }
-  }, [workspaceId, slug])
+  }, [workspaceId, slug, fetchFn])
 
   // Clear the previously loaded canvas's versions immediately on canvas
   // change so a stale row (with thumbnail URLs pointing at the old
@@ -131,7 +133,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     state: branchesState,
     loading: branchesLoading,
     refetch: refetchBranches,
-  } = useBranches(workspaceId, slug)
+  } = useBranches(workspaceId, slug, fetchFn)
 
   // Poll every 15 seconds for new auto-versions, and re-fetch branches on the
   // same tick. useBranches has no event subscription of its own, so this is
@@ -158,7 +160,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     // actually happened. A failed request keeps the dialog open with an error
     // so the caller never discards undo history for a restore that didn't occur.
     try {
-      const res = await apiFetch(
+      const res = await fetchFn(
         `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/restore`,
         { method: 'POST' },
       )
@@ -185,7 +187,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     onRestored?.()
     // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
-  }, [pendingRestore, isRestoring, workspaceId, slug, onRestored, refresh])
+  }, [pendingRestore, isRestoring, workspaceId, slug, onRestored, refresh, fetchFn])
 
   const head = branchesState.head
 
@@ -273,7 +275,10 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
                       setPendingRestore(v)
                     }}
                   >
-                    {v.hasThumbnail && (
+                    {/* A plain <img src> cannot carry the daemon origin or bearer
+                        token, so thumbnails only render for the same-origin
+                        mcp-server app (no DaemonApiContext provider mounted). */}
+                    {v.hasThumbnail && !hasDaemonApi && (
                       <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
                         <img
                           src={`/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`}

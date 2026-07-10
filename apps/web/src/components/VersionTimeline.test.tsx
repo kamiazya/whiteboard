@@ -1,5 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
+import { createDaemonFetch } from '@/lib/daemon-api-client'
 import VersionTimeline from './VersionTimeline.js'
 
 const mockLog = vi.hoisted(() => ({
@@ -696,6 +698,182 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
     await waitFor(() => {
       expect(screen.getByText(/not-a-real-date/)).toBeTruthy()
+    })
+  })
+})
+
+describe('VersionTimeline via DaemonApiContext', () => {
+  const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    cleanup()
+  })
+
+  function mkThumbnailVersionsResponse(): Response {
+    return new Response(
+      JSON.stringify({
+        versions: [
+          {
+            id: 'v-thumb',
+            slug: 'canvas-a',
+            createdAt: '2026-04-23T02:00:00Z',
+            elementCount: 5,
+            auto: true,
+            hasThumbnail: true,
+            branchName: 'main',
+            operator: { kind: 'ai', peerId: 'peer-ai', displayName: 'Assistant' },
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  it('resolves the versions request against the daemon origin with an Authorization header', async () => {
+    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', underlyingFetch)
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+      </DaemonApiContext.Provider>,
+    )
+
+    await waitFor(() => {
+      expect(
+        underlyingFetch.mock.calls.some(([input]) => {
+          const url = input instanceof URL ? input : new URL(String(input))
+          return url.origin === DAEMON_BASE_URL && String(url).includes('/versions')
+        }),
+      ).toBe(true)
+    })
+
+    const versionsCall = underlyingFetch.mock.calls.find(([input]) =>
+      String(input instanceof URL ? input : new URL(String(input))).includes('/versions'),
+    )
+    const init = versionsCall?.[1]
+    const headers = new Headers(init?.headers)
+    expect(headers.get('Authorization')).toBe('Bearer test-token')
+  })
+
+  it('POSTs restore through the provided daemon fetch', async () => {
+    const restoreCalls: string[] = []
+    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/restore')) {
+        restoreCalls.push(url)
+        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+      }
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', underlyingFetch)
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+      </DaemonApiContext.Provider>,
+    )
+
+    const row = await screen.findByText('🤖 Assistant')
+    fireEvent.click(row.closest('button')!)
+    await waitFor(() => {
+      expect(screen.getByText('Restore this version?')).toBeTruthy()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+
+    await waitFor(() => {
+      expect(restoreCalls.some((u) => u.startsWith(DAEMON_BASE_URL))).toBe(true)
+    })
+  })
+
+  it('does not render the thumbnail <img> when a daemon provider is active', async () => {
+    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkThumbnailVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', underlyingFetch)
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+      </DaemonApiContext.Provider>,
+    )
+
+    await screen.findByText('🤖 Assistant')
+    expect(document.querySelector('img')).toBeNull()
+  })
+
+  it('renders the thumbnail <img> for the same-origin fallback (no provider)', async () => {
+    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkThumbnailVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', underlyingFetch)
+
+    render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
+
+    await screen.findByText('🤖 Assistant')
+    expect(document.querySelector('img')).not.toBeNull()
+  })
+
+  it('renders a manual-trigger version returned by the daemon list', async () => {
+    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              versions: [
+                {
+                  id: 'v-manual',
+                  slug: 'canvas-a',
+                  createdAt: '2026-04-23T02:00:00Z',
+                  elementCount: 5,
+                  auto: false,
+                  hasThumbnail: false,
+                  branchName: 'main',
+                  operator: { kind: 'human', peerId: 'peer-human', displayName: 'Alice' },
+                },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        )
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', underlyingFetch)
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+      </DaemonApiContext.Provider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('manual')).toBeTruthy()
     })
   })
 })
