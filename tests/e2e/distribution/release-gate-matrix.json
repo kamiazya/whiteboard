@@ -14,7 +14,16 @@
       "id": "typecheck",
       "command": "pnpm typecheck",
       "category": "typecheck",
-      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiredFor": ["ci", "local-release", "docker-release", "publish"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "fast"
+    },
+    {
+      "id": "test:mcp-node",
+      "command": "pnpm test:mcp-node",
+      "category": "unit",
+      "requiredFor": ["publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
       "expectedRuntimeBucket": "fast"
@@ -23,7 +32,7 @@
       "id": "build",
       "command": "pnpm build",
       "category": "build",
-      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiredFor": ["ci", "local-release", "docker-release", "publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
       "expectedRuntimeBucket": "medium"
@@ -32,7 +41,16 @@
       "id": "check:release-artifacts",
       "command": "pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts",
       "category": "release-artifacts",
-      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiredFor": ["ci", "local-release", "docker-release", "publish"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "fast"
+    },
+    {
+      "id": "generate:sbom:npm",
+      "command": "pnpm --filter @kamiazya/whiteboard-mcp generate:sbom:npm",
+      "category": "release-artifacts",
+      "requiredFor": ["publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
       "expectedRuntimeBucket": "fast"
@@ -41,7 +59,7 @@
       "id": "smoke:tarball",
       "command": "pnpm smoke:tarball",
       "category": "tarball",
-      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiredFor": ["ci", "local-release", "docker-release", "publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
       "expectedRuntimeBucket": "medium"
@@ -50,7 +68,16 @@
       "id": "smoke:packaged",
       "command": "pnpm smoke:packaged",
       "category": "mcp-protocol",
-      "requiredFor": ["ci", "local-release", "docker-release"],
+      "requiredFor": ["ci", "local-release", "docker-release", "publish"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "medium"
+    },
+    {
+      "id": "smoke:distribution:packaged",
+      "command": "pnpm smoke:distribution:packaged",
+      "category": "distribution",
+      "requiredFor": ["publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
       "expectedRuntimeBucket": "medium"
