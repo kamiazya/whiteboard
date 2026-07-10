@@ -6,6 +6,8 @@ one specific task. For a guided first run, start with the [Tutorials](../tutoria
 Guides:
 
 - **[self-host-with-docker](self-host-with-docker.md)** — run Whiteboard in server mode for a team.
+- **[connect-to-local-daemon](connect-to-local-daemon.md)** — detect a local daemon from the web
+  app and copy browser-local canvases onto it.
 
 Planned guides:
 
