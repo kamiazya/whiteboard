@@ -27,14 +27,14 @@ function pass(message) {
   console.log(`  pass  ${message}`)
 }
 
-if (!existsSync(SW_PATH)) {
-  fail(`dist/sw.js not found at ${SW_PATH} — run \`pnpm build\` first`)
+function requireBuildOutput(label, path) {
+  if (existsSync(path)) return
+  fail(`${label} not found at ${path} — run \`pnpm build\` first`)
   process.exit(1)
 }
-if (!existsSync(MANIFEST_PATH)) {
-  fail(`dist/manifest.webmanifest not found at ${MANIFEST_PATH} — run \`pnpm build\` first`)
-  process.exit(1)
-}
+
+requireBuildOutput('dist/sw.js', SW_PATH)
+requireBuildOutput('dist/manifest.webmanifest', MANIFEST_PATH)
 
 const swSource = readFileSync(SW_PATH, 'utf8')
 
