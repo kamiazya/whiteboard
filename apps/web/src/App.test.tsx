@@ -127,7 +127,7 @@ describe('App daemon-pairing routing', () => {
     receivedDaemonPageProps = undefined
   })
 
-  it('renders DaemonCanvasPage from the payload when paired', () => {
+  it('renders DaemonCanvasPage from the payload when paired', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
@@ -139,7 +139,9 @@ describe('App daemon-pairing routing', () => {
       },
     }
     render(<App providerState={BROWSER_LOCAL_STATE} />)
-    expect(screen.getByTestId('daemon-canvas-page')).toBeTruthy()
+    // DaemonCanvasPage is React.lazy — resolves after a microtask even with
+    // a mocked module, so the assertion must await past the Suspense fallback.
+    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
     expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
     expect(receivedDaemonPageProps?.daemonBaseUrl).toBe('http://127.0.0.1:3099')
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')

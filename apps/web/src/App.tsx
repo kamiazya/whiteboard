@@ -1,11 +1,17 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { BetaBanner } from './components/BetaBanner.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { BrowserLocalCanvasPage } from './pages/BrowserLocalCanvasPage.js'
-import { DaemonCanvasPage } from './pages/DaemonCanvasPage.js'
+
+// Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
+// of the entry chunk — only sessions arriving via a #wb= pairing fragment pay
+// for it, keeping the browser-local entry under the bundle-size budget.
+const DaemonCanvasPage = lazy(() =>
+  import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
+)
 
 const _browserLocalStore = new IndexedDBStore()
 const _userSettingsStore = createUserSettingsStore()
@@ -63,12 +69,25 @@ export function App({ providerState }: AppProps) {
     if (daemonConnection.status === 'paired') {
       const { payload } = daemonConnection
       return (
-        <DaemonCanvasPage
-          daemonBaseUrl={payload.baseUrl}
-          workspaceId={payload.workspaceId}
-          slug={payload.slug}
-          token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
-        />
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
+            >
+              Connecting to daemon…
+            </div>
+          }
+        >
+          <DaemonCanvasPage
+            daemonBaseUrl={payload.baseUrl}
+            workspaceId={payload.workspaceId}
+            slug={payload.slug}
+            token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
+            onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+          />
+        </Suspense>
       )
     }
 
