@@ -13,3 +13,13 @@ export const DaemonApiContext = createContext<typeof globalThis.fetch | null>(nu
 export function useDaemonApi(): typeof globalThis.fetch {
   return useContext(DaemonApiContext) ?? apiFetch
 }
+
+/**
+ * True when a DaemonApiContext.Provider is mounted above this component.
+ * Lets a consumer branch on same-origin vs. cross-origin daemon access — for
+ * example, VersionTimeline's thumbnail <img> cannot carry a daemon origin or
+ * bearer token, so it only renders in the same-origin (no provider) case.
+ */
+export function useHasDaemonApi(): boolean {
+  return useContext(DaemonApiContext) !== null
+}

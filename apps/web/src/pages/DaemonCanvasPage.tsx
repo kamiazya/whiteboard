@@ -4,6 +4,8 @@ import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { useEffect, useMemo, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
+import VersionTimeline from '../components/VersionTimeline.js'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -57,6 +59,7 @@ export function DaemonCanvasPage({
 
   const [authError, setAuthError] = useState(false)
   const [newCanvasSlug, setNewCanvasSlug] = useState('')
+  const [versionPanelOpen, setVersionPanelOpen] = useState(false)
 
   // Backend identity is keyed on (workspaceId, slug, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
@@ -76,7 +79,7 @@ export function DaemonCanvasPage({
     setAuthError(false)
   }, [backend])
 
-  const { setExcalidrawAPI, onChange } = useCanvasSync(backend, {
+  const { setExcalidrawAPI, onChange, clearLocalUndo } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
   })
 
@@ -105,7 +108,7 @@ export function DaemonCanvasPage({
   }
 
   return (
-    <main className="flex h-dvh w-full flex-col">
+    <main className="relative flex h-dvh w-full flex-col">
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
         <h1 className="sr-only">Whiteboard (daemon)</h1>
         {authError && (
@@ -139,12 +142,49 @@ export function DaemonCanvasPage({
           </select>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
+          {capabilities.versions ? (
+            <button
+              type="button"
+              aria-pressed={versionPanelOpen}
+              onClick={() => setVersionPanelOpen((open) => !open)}
+              className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent aria-pressed:bg-accent"
+            >
+              Version history
+            </button>
+          ) : (
+            <CapabilityTeaser label="Version history" enabled={false} />
+          )}
           <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
           <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
           <CapabilityTeaser label="Merge" enabled={capabilities.merge} />
         </div>
       </header>
+      {versionPanelOpen && controller.workspaceId !== null && controller.slug !== null && (
+        <div className="w-72 shrink-0 border-l bg-background absolute right-0 top-0 bottom-0 z-10 shadow-lg overflow-hidden flex flex-col">
+          {/* The panel overlays the header (including the toggle that opened
+              it), so it needs its own close affordance rather than relying
+              on a control the panel itself may cover. */}
+          <div className="flex shrink-0 items-center justify-end border-b px-2 py-1">
+            <button
+              type="button"
+              aria-label="Close version history"
+              onClick={() => setVersionPanelOpen(false)}
+              className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
+            >
+              Close
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <DaemonApiContext.Provider value={daemonFetch}>
+              <VersionTimeline
+                workspaceId={controller.workspaceId}
+                slug={controller.slug}
+                onRestored={clearLocalUndo}
+              />
+            </DaemonApiContext.Provider>
+          </div>
+        </div>
+      )}
       {controller.canvases.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
           <p className="text-sm text-muted-foreground">This workspace has no canvases yet.</p>

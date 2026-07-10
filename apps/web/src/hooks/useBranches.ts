@@ -118,17 +118,22 @@ function safeParse<T>(schema: { parse: (v: unknown) => T }, value: unknown): T {
   }
 }
 
-// Imperative API helpers independent from React.
-export function branchesApi(workspaceId: string, slug: string) {
+// Imperative API helpers independent from React. `fetchFn` defaults to the
+// same-origin apiFetch so every pre-existing caller (MergeDialog,
+// WorkspaceTopBar) is unaffected; a daemon-paired caller passes the
+// daemon-origin-aware fetch obtained from useDaemonApi() instead. Kept a
+// plain function (not a hook) because it is also constructed outside React
+// (branchesApi.test.ts) and inside a ref (see useBranches below).
+export function branchesApi(workspaceId: string, slug: string, fetchFn: typeof fetch = apiFetch) {
   const urls = buildBranchUrls(workspaceId, slug)
   return {
     async list(): Promise<BranchesState> {
-      const res = await requireOk(await apiFetch(urls.list))
+      const res = await requireOk(await fetchFn(urls.list))
       return parseBranchesResponse(await res.json())
     },
     async create(args: CreateBranchRequest): Promise<BranchMeta> {
       const res = await requireOk(
-        await apiFetch(urls.list, {
+        await fetchFn(urls.list, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(args),
@@ -137,16 +142,16 @@ export function branchesApi(workspaceId: string, slug: string) {
       return safeParse(createBranchResponseSchema, await res.json()).branch
     },
     async getStats(name: string): Promise<BranchStatsResponse> {
-      const res = await requireOk(await apiFetch(urls.stats(name)))
+      const res = await requireOk(await fetchFn(urls.stats(name)))
       return safeParse(branchStatsResponseSchema, await res.json())
     },
     async remove(name: string): Promise<DeleteBranchResponse> {
-      const res = await requireOk(await apiFetch(urls.deleteBranch(name), { method: 'DELETE' }))
+      const res = await requireOk(await fetchFn(urls.deleteBranch(name), { method: 'DELETE' }))
       return safeParse(deleteBranchResponseSchema, await res.json())
     },
     async rename(oldName: string, newName: string): Promise<RenameBranchResponse> {
       const res = await requireOk(
-        await apiFetch(urls.deleteBranch(oldName), {
+        await fetchFn(urls.deleteBranch(oldName), {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: newName }),
@@ -156,7 +161,7 @@ export function branchesApi(workspaceId: string, slug: string) {
     },
     async setHead(branch: string): Promise<SetHeadResponse> {
       const res = await requireOk(
-        await apiFetch(urls.head, {
+        await fetchFn(urls.head, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ branch }),
@@ -166,7 +171,7 @@ export function branchesApi(workspaceId: string, slug: string) {
     },
     async merge(source: string, args: { into: string; dryRun?: boolean }): Promise<MergeResult> {
       const res = await requireOk(
-        await apiFetch(urls.merge(source), {
+        await fetchFn(urls.merge(source), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -196,11 +201,29 @@ export interface UseBranchesResult {
   merge: (source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResult>
 }
 
-export function useBranches(workspaceId: string, slug: string): UseBranchesResult {
+export function useBranches(
+  workspaceId: string,
+  slug: string,
+  fetchFn: typeof fetch = apiFetch,
+): UseBranchesResult {
   const [state, setState] = useState<BranchesState>({ branches: [], head: 'main' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<BranchApiError | Error | null>(null)
-  const apiRef = useRef(branchesApi(workspaceId, slug))
+  // Recreated synchronously during render (compare-and-update below) rather
+  // than in an effect: refetch() reads apiRef.current, and an effect-based
+  // rebuild would depend on effect declaration order to run before the
+  // initial-fetch effect — correct today but fragile under reordering. The
+  // factory is a stateless wrapper, so rebuilding during render is safe.
+  const apiRef = useRef(branchesApi(workspaceId, slug, fetchFn))
+  const apiDepsRef = useRef({ workspaceId, slug, fetchFn })
+  if (
+    apiDepsRef.current.workspaceId !== workspaceId ||
+    apiDepsRef.current.slug !== slug ||
+    apiDepsRef.current.fetchFn !== fetchFn
+  ) {
+    apiDepsRef.current = { workspaceId, slug, fetchFn }
+    apiRef.current = branchesApi(workspaceId, slug, fetchFn)
+  }
   // Monotonically increasing counter. Each refetch call stamps its result with
   // the counter value at dispatch time; the setter is a no-op when a newer
   // fetch has already committed. This prevents a slower in-flight response
@@ -218,11 +241,6 @@ export function useBranches(workspaceId: string, slug: string): UseBranchesResul
     setError(null)
     setLoading(true)
   }
-
-  // Recreate the API wrapper whenever session or slug changes.
-  useEffect(() => {
-    apiRef.current = branchesApi(workspaceId, slug)
-  }, [workspaceId, slug])
 
   const refetch = useCallback(async () => {
     const seq = ++fetchSeqRef.current
@@ -242,7 +260,7 @@ export function useBranches(workspaceId: string, slug: string): UseBranchesResul
 
   useEffect(() => {
     void refetch()
-  }, [refetch, workspaceId, slug])
+  }, [refetch, workspaceId, slug, fetchFn])
 
   // Bump the sequence counter on unmount so any in-flight fetch resolution is
   // routed into the stale-fetch guard above instead of committing state after
