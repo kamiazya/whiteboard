@@ -7,6 +7,7 @@ import {
   resolveMcpProtectedResourceMetadataFromEnv,
 } from './security/mcp-auth.js'
 import { isDirectEntryPoint } from './entrypoint.js'
+import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
@@ -42,7 +43,7 @@ export function resolveToken(
 export { createApp } from './app.js'
 export { startHttpServer } from './http-server.js'
 
-async function main() {
+export async function main() {
   const port = parseInt(readArg('port', '3099') ?? '3099', 10)
   const host = readArg('host', '127.0.0.1') ?? '127.0.0.1'
   const token = resolveToken(process.argv, process.env)
@@ -50,6 +51,15 @@ async function main() {
     readArg('idle-timeout-ms', `${15 * 60_000}`) ?? `${15 * 60_000}`,
     10,
   )
+
+  // Fail fast, before any tracing/store/server wiring: an invalid
+  // WHITEBOARD_ALLOWED_WEB_ORIGINS must abort startup rather than silently
+  // fall back to an empty (loopback-only) allowlist. The failure record is
+  // logged by loadAllowedWebOriginsFromEnv itself (no raw value echoed).
+  const allowedWebOrigins = loadAllowedWebOriginsFromEnv(process.env)
+  if (allowedWebOrigins === null) {
+    process.exit(1)
+  }
   const daemonMode = hasFlag('daemon')
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
   const mcpAuth = createLocalTokenMcpHttpAuthStrategy({
@@ -83,6 +93,7 @@ async function main() {
     token,
     mcpAuth,
     idleTimeoutMs,
+    allowedWebOrigins,
     onClose: daemonMode
       ? async () => {
           await deleteDaemonRecord(DATA_DIR)

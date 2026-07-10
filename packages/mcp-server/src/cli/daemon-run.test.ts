@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { captureLogsForTests } from '../server/log.js'
 
 const { createServerSpy } = vi.hoisted(() => ({ createServerSpy: vi.fn() }))
 
@@ -99,5 +100,61 @@ describe('runDaemonRun bind-host guard', () => {
     const outcome = await runDaemonRun({ host, tokenStdin: false, dataDir: '/tmp/whiteboard-test' })
     expect(outcome.kind).toBe('running')
     expect(startHttpServerMock).toHaveBeenCalled()
+  })
+})
+
+describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('fails fast with a structured outcome and logs an error record on an invalid env value', async () => {
+    const capture = captureLogsForTests('debug')
+    try {
+      const outcome = await runDaemonRun({
+        host: '127.0.0.1',
+        tokenStdin: false,
+        dataDir: '/tmp/whiteboard-test',
+        env: { WHITEBOARD_ALLOWED_WEB_ORIGINS: 'not a url' },
+      })
+      expect(outcome).toEqual({
+        kind: 'input-error',
+        message: expect.stringContaining('WHITEBOARD_ALLOWED_WEB_ORIGINS'),
+        code: 'invalid_allowed_web_origins',
+      })
+      expect(startHttpServerMock).not.toHaveBeenCalled()
+      const record = capture.records.find(
+        (r) => r.scope === 'web-origin-allowlist' && r.level === 'error',
+      )
+      expect(record).toBeDefined()
+    } finally {
+      capture.restore()
+    }
+  })
+
+  it('threads a valid allowlist through to startHttpServer', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_ALLOWED_WEB_ORIGINS: 'https://kamiazya-whiteboard.pages.dev' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowedWebOrigins: ['https://kamiazya-whiteboard.pages.dev'],
+      }),
+    )
+  })
+
+  it('defaults to an empty allowlist when the env var is unset', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: {},
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedWebOrigins: [] }),
+    )
   })
 })

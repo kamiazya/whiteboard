@@ -93,4 +93,82 @@ describe('authorizeWsUpgrade', () => {
     })
     expect(decision.accept).toBe(true)
   })
+
+  describe('loopback Origin/Host mismatch regression (allowlist must not loosen it)', () => {
+    // A localhost Origin against a 127.0.0.1 Host is still a loopback-origin/
+    // loopback-host MISMATCH under the originHost === requestHost rule. The
+    // allowedOrigins allowlist widens admission for exact non-loopback
+    // matches only — it must not accidentally loosen this rule for loopback
+    // origins.
+    it('rejects with an empty allowlist', () => {
+      const decision = authorizeWsUpgrade(
+        { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
+        undefined,
+        [],
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 403 })
+    })
+
+    it('rejects when the allowlist has unrelated entries', () => {
+      const decision = authorizeWsUpgrade(
+        { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
+        undefined,
+        ['https://kamiazya-whiteboard.pages.dev'],
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 403 })
+    })
+
+    it('only accepts once that exact origin is itself allowlisted', () => {
+      const decision = authorizeWsUpgrade(
+        { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
+        undefined,
+        ['http://localhost:5173'],
+      )
+      expect(decision.accept).toBe(true)
+    })
+  })
+
+  describe('hosted-origin allowlist admission', () => {
+    const allowedOrigins = ['https://kamiazya-whiteboard.pages.dev']
+
+    it('admits an exact allowlisted hosted origin against a loopback Host', () => {
+      const decision = authorizeWsUpgrade(
+        { host: '127.0.0.1:3099', origin: 'https://kamiazya-whiteboard.pages.dev' },
+        undefined,
+        allowedOrigins,
+      )
+      expect(decision.accept).toBe(true)
+    })
+
+    it('still rejects a non-loopback Host even for an allowlisted origin (DNS-rebinding guard)', () => {
+      const decision = authorizeWsUpgrade(
+        { host: 'evil.example.com:3099', origin: 'https://kamiazya-whiteboard.pages.dev' },
+        undefined,
+        allowedOrigins,
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 403 })
+    })
+
+    it('rejects a lookalike origin not present in the allowlist', () => {
+      const decision = authorizeWsUpgrade(
+        { host: '127.0.0.1:3099', origin: 'https://evil-kamiazya-whiteboard.pages.dev' },
+        undefined,
+        allowedOrigins,
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 403 })
+    })
+
+    it('401s an allowlisted origin without the required token', () => {
+      const decision = authorizeWsUpgrade(
+        {
+          host: '127.0.0.1:3099',
+          origin: 'https://kamiazya-whiteboard.pages.dev',
+          'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
+        },
+        'secret',
+        allowedOrigins,
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 401 })
+    })
+  })
 })

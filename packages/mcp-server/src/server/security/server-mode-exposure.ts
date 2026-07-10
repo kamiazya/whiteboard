@@ -26,6 +26,7 @@
 // them without a flag day.
 
 import { isLoopbackHost } from '../daemon-auth-binding.js'
+import { validateOriginEntry } from './origin-validation.js'
 
 function bracketIpv6(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
@@ -128,36 +129,25 @@ export function resolveServerModeExposure(
     return { ok: false, code: 'server_mode.external_url_must_be_origin' }
   }
 
+  // Same origin-only rules as externalUrl (https required, no
+  // credentials/path/query/fragment) via the shared neutral validator; the
+  // neutral reason is mapped back onto this module's own failure-code
+  // namespace so existing callers see byte-identical codes. The raw origin
+  // string is never echoed in the failure decision.
   const allowedOrigins = input.allowedOrigins ?? []
   const normalizedOrigins: string[] = []
   for (const origin of allowedOrigins) {
-    if (origin === '*') {
-      return { ok: false, code: 'server_mode.wildcard_origin_forbidden' }
+    const result = validateOriginEntry(origin)
+    if (!result.ok) {
+      return {
+        ok: false,
+        code:
+          result.reason === 'wildcard'
+            ? 'server_mode.wildcard_origin_forbidden'
+            : 'server_mode.external_url_must_be_origin',
+      }
     }
-    let parsedOrigin: URL
-    try {
-      parsedOrigin = new URL(origin)
-    } catch {
-      return { ok: false, code: 'server_mode.external_url_must_be_origin' }
-    }
-    // Same origin-only rules as externalUrl: https required, no
-    // credentials/path/query/fragment. The raw origin string is never
-    // echoed in the failure decision.
-    if (
-      parsedOrigin.protocol !== 'https:' ||
-      parsedOrigin.username !== '' ||
-      parsedOrigin.password !== '' ||
-      parsedOrigin.pathname !== '/' ||
-      parsedOrigin.search !== '' ||
-      parsedOrigin.hash !== ''
-    ) {
-      return { ok: false, code: 'server_mode.external_url_must_be_origin' }
-    }
-    // Store the URL-normalised origin (lowercased host, explicit-default port
-    // dropped) so the per-request exact-match compares canonical forms. An
-    // operator writing `https://Example.com:443` otherwise false-denies the
-    // browser's canonical `https://example.com`.
-    normalizedOrigins.push(parsedOrigin.origin)
+    normalizedOrigins.push(result.origin)
   }
 
   return {

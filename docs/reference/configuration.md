@@ -13,6 +13,15 @@ Runtime environment variables and sandbox quirks.
 | `WHITEBOARD_MCP_RESOURCE` | Canonical MCP resource URL exposed in metadata. If unset, `/mcp` is derived from the incoming request URL. | unset |
 | `WHITEBOARD_MCP_SCOPES_SUPPORTED` | Comma-separated list of scopes exposed in metadata. | unset |
 | `MCP_HTTP_DEBUG` | When set to `1`, the HTTP MCP server logs `[mcp-http:init]` / `[mcp-http]` events to help diagnose request flow. | unset |
+| `WHITEBOARD_ALLOWED_WEB_ORIGINS` | Comma-separated list of extra hosted origins admitted alongside the fixed loopback set (`localhost`, `127.0.0.1`, `::1`) on `/api/*` CORS, `/mcp`, and WS upgrade — **local-daemon mode only**. Each entry must be an exact `https://` origin (no path/query/fragment/credentials); wildcards are rejected. Matching is case-insensitive on the host and normalizes the default `:443` port, but any other port is significant. An invalid entry aborts daemon startup with a logged error naming the offending entry's index (the raw value is never echoed). | unset (loopback-only, unchanged) |
+
+Setting `WHITEBOARD_ALLOWED_WEB_ORIGINS` only widens which browser *origins*
+the daemon will talk to over CORS/WS — it does not change authentication.
+Mutating `/api/*` routes still require the daemon Bearer token, and `/mcp`
+still requires its own auth regardless of origin. Only add an origin you
+control; the hosted pairing flow this enables also depends on the browser's
+own Local Network Access permission prompt (Chrome), which is a separate,
+per-user consent step.
 
 ## Codex sandbox constraints
 

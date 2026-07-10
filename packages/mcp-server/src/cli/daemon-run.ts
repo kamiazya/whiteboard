@@ -17,6 +17,7 @@ import {
 import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
+import { loadAllowedWebOriginsFromEnv } from '../server/security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 const DAEMON_RUN_SCHEMA_VERSION = 1 as const
@@ -32,7 +33,7 @@ export interface DaemonRunReadyResult {
 }
 
 export type DaemonRunOutcome =
-  | { kind: 'input-error'; message: string }
+  | { kind: 'input-error'; message: string; code?: 'invalid_allowed_web_origins' }
   | { kind: 'refused'; message: string }
   | { kind: 'running'; result: DaemonRunReadyResult }
 
@@ -41,6 +42,8 @@ export interface DaemonRunOptions {
   port?: number
   dataDir?: string
   tokenStdin: boolean
+  /** Defaults to process.env; overridable for tests. */
+  env?: Readonly<Record<string, string | undefined>>
 }
 
 // Exported for unit testing of the EADDRINUSE-only retry contract.
@@ -106,6 +109,19 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     }
   }
 
+  // Fail fast before any lock/fs work: an invalid WHITEBOARD_ALLOWED_WEB_ORIGINS
+  // must never start a daemon with a silently-empty or partially-parsed
+  // allowlist. loadAllowedWebOriginsFromEnv logs the structured failure via
+  // getLogger without echoing the raw offending value.
+  const allowedWebOrigins = loadAllowedWebOriginsFromEnv(options.env ?? process.env)
+  if (allowedWebOrigins === null) {
+    return {
+      kind: 'input-error',
+      message: 'Invalid WHITEBOARD_ALLOWED_WEB_ORIGINS entry. See the daemon log for details.',
+      code: 'invalid_allowed_web_origins',
+    }
+  }
+
   const existing = await loadDaemonRecord(dataDir)
   if (existing !== null && isPidAlive(existing.pid)) {
     return {
@@ -131,7 +147,7 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   return await withDaemonStartupLock(dataDir, async () => {
     const port = options.port ?? (await findAvailablePort())
 
-    const running = await startHttpServer({ port, host, token })
+    const running = await startHttpServer({ port, host, token, allowedWebOrigins })
 
     const startedAt = new Date().toISOString()
 
