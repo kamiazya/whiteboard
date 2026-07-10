@@ -19,6 +19,23 @@ function jsonResponse(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200 })
 }
 
+// Simulate Vitest tearing the jsdom environment down (as it does once a test
+// file finishes) while a component-scheduled timer is still pending, then
+// restore `window`. React 19 silently no-ops a setState on an unmounted root
+// under a *live* jsdom window; the crash only reproduces once `window` itself
+// is gone by the time the timer fires — dispatchSetState then touches the
+// now-undefined `window` and throws "ReferenceError: window is not defined".
+// If waitForPendingTimer throws, it propagates and fails the test.
+async function withWindowTornDown(waitForPendingTimer: () => Promise<unknown>): Promise<void> {
+  const savedWindow = (globalThis as { window?: unknown }).window
+  delete (globalThis as { window?: unknown }).window
+  try {
+    await waitForPendingTimer()
+  } finally {
+    ;(globalThis as { window?: unknown }).window = savedWindow
+  }
+}
+
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-05-01T00:00:00Z'))
@@ -187,32 +204,16 @@ describe('StorageReportCard', () => {
     // fetch response and MIN_REFRESH_MS floor — this is the timing window
     // that let a post-unmount setLoading(false) fire during jsdom teardown.
     unmount()
-    // Simulate the jsdom environment being torn down (as Vitest does once a
-    // test file's tests finish) while refresh()'s pending setTimeout is
-    // still scheduled. React 19 silently no-ops a setState call on an
-    // already-unmounted root under a *live* jsdom window — the crash seen
-    // in CI only reproduces once `window` itself is gone by the time the
-    // timer fires, which is what actually happened: dispatchSetState
-    // touched the (now-undefined) `window` and threw
-    // "ReferenceError: window is not defined".
-    const savedWindow = (globalThis as { window?: unknown }).window
-    delete (globalThis as { window?: unknown }).window
-    let thrown: unknown = null
-    try {
-      await vi.advanceTimersByTimeAsync(500)
-    } catch (err) {
-      thrown = err
-    } finally {
-      ;(globalThis as { window?: unknown }).window = savedWindow
-    }
-    expect(thrown).toBeNull()
+    // Tear down `window` while refresh()'s pending setTimeout is still
+    // scheduled — the CI crash reproduces only once `window` is gone.
+    await withWindowTornDown(() => vi.advanceTimersByTimeAsync(500))
   })
 
   it(
     'does not call setState after unmount while the optimizeAll status-clear timer is still pending',
     async () => {
       const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-      fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      fetchMock.mockImplementation((input: RequestInfo | URL) => {
         const url =
           typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
         if (url === '/api/runtime/storage') {
@@ -249,20 +250,11 @@ describe('StorageReportCard', () => {
       // scheduleStatusClear's own mountedRef branch instead of refresh()'s.
       unmount()
 
-      // Simulate the jsdom environment being torn down before the timer
-      // fires — the same "window is not defined" hazard the refresh() test
-      // guards against, reached through a different handler this time.
-      const savedWindow = (globalThis as { window?: unknown }).window
-      delete (globalThis as { window?: unknown }).window
-      let thrown: unknown = null
-      try {
-        await new Promise((resolve) => setTimeout(resolve, STATUS_CLEAR_MS + 200))
-      } catch (err) {
-        thrown = err
-      } finally {
-        ;(globalThis as { window?: unknown }).window = savedWindow
-      }
-      expect(thrown).toBeNull()
+      // Tear down `window` before the timer fires — the same hazard the
+      // refresh() test guards against, reached through scheduleStatusClear.
+      await withWindowTornDown(
+        () => new Promise((resolve) => setTimeout(resolve, STATUS_CLEAR_MS + 200)),
+      )
     },
     STATUS_CLEAR_MS + 5000,
   )
