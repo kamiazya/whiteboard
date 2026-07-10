@@ -160,7 +160,10 @@ export function DaemonCanvasPage({
                 Version history
               </button>
             ) : (
-              <CapabilityTeaser label="Version history" enabled={false} />
+              // enabled reflects the CAPABILITY, not whether a canvas is
+              // selected yet — a fresh empty workspace must not claim the
+              // feature needs a daemon connection it already has.
+              <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
             )}
             <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
             {capabilities.branches &&
@@ -173,7 +176,7 @@ export function DaemonCanvasPage({
                 mergeEnabled={capabilities.merge}
               />
             ) : (
-              <CapabilityTeaser label="Branches" enabled={false} />
+              <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
             )}
             {/* Merge lives inside HeaderBranchChip's per-branch "Merge into
                 HEAD" action (which embeds MergeDialog); there is no separate
