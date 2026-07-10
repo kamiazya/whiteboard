@@ -275,7 +275,12 @@ export function BrowserLocalCanvasPage({
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={() => void triggerCleanup()}>Delete</AlertDialogAction>
+              <AlertDialogAction
+                onClick={() => void triggerCleanup()}
+                className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
