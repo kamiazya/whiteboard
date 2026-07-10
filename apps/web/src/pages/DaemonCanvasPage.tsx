@@ -160,14 +160,29 @@ export function DaemonCanvasPage({
         </div>
       </header>
       {versionPanelOpen && controller.workspaceId !== null && controller.slug !== null && (
-        <div className="w-72 shrink-0 border-l bg-background absolute right-0 top-0 bottom-0 z-10 shadow-lg overflow-hidden">
-          <DaemonApiContext.Provider value={daemonFetch}>
-            <VersionTimeline
-              workspaceId={controller.workspaceId}
-              slug={controller.slug}
-              onRestored={clearLocalUndo}
-            />
-          </DaemonApiContext.Provider>
+        <div className="w-72 shrink-0 border-l bg-background absolute right-0 top-0 bottom-0 z-10 shadow-lg overflow-hidden flex flex-col">
+          {/* The panel overlays the header (including the toggle that opened
+              it), so it needs its own close affordance rather than relying
+              on a control the panel itself may cover. */}
+          <div className="flex shrink-0 items-center justify-end border-b px-2 py-1">
+            <button
+              type="button"
+              aria-label="Close version history"
+              onClick={() => setVersionPanelOpen(false)}
+              className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
+            >
+              Close
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <DaemonApiContext.Provider value={daemonFetch}>
+              <VersionTimeline
+                workspaceId={controller.workspaceId}
+                slug={controller.slug}
+                onRestored={clearLocalUndo}
+              />
+            </DaemonApiContext.Provider>
+          </div>
         </div>
       )}
       {controller.canvases.length === 0 ? (

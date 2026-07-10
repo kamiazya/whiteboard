@@ -376,6 +376,53 @@ describe('DaemonCanvasPage', () => {
       vi.unstubAllGlobals()
     })
 
+    it('closes via an in-panel close button, without depending on the covered toggle', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/versions')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ versions: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const toggle = screen.getByRole('button', { name: 'Version history' })
+      await act(async () => {
+        toggle.click()
+      })
+
+      const closeButton = await screen.findByRole('button', { name: 'Close version history' })
+      await act(async () => {
+        closeButton.click()
+      })
+
+      expect(screen.queryByRole('button', { name: 'Close version history' })).toBeNull()
+
+      vi.unstubAllGlobals()
+    })
+
     it('shows the static disabled teaser instead of the toggle when capabilities.versions is false', async () => {
       await act(async () => {
         render(
