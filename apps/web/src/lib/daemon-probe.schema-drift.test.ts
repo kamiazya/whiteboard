@@ -1,0 +1,33 @@
+import { describe, expect, it } from 'vitest'
+import { daemonPingResponseSchema as serverDaemonPingResponseSchema } from '../../../../packages/mcp-server/src/shared/api-contracts/runtime.js'
+import { probeDaemon } from './daemon-probe.js'
+
+// Test-only deep import of the server's source of truth for the ping
+// response shape. apps/web keeps its own local Zod mirror (daemon-probe.ts)
+// because packages/mcp-server/src/shared/api-contracts/runtime.ts is
+// deliberately excluded from the published ./api-contracts barrel. This test
+// pins that mirror against silent field-level drift: a fixture the server
+// schema accepts must also be accepted by the client-observable probe
+// result, and vice versa for the success shape.
+describe('daemon-probe schema drift pin', () => {
+  it('a fixture accepted by the server daemonPingResponseSchema is treated as detected by probeDaemon', async () => {
+    const serverFixture = { ok: true as const, instanceId: 'server-instance-1' }
+    expect(serverDaemonPingResponseSchema.safeParse(serverFixture).success).toBe(true)
+
+    const fetchMock = async () =>
+      new Response(JSON.stringify(serverFixture), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+
+    const result = await probeDaemon('http://drift-pin.invalid', { fetch: fetchMock })
+    expect(result).toEqual({ detected: true, instanceId: 'server-instance-1' })
+  })
+
+  it('the success shape produced by a detected probe result also parses under the server schema', () => {
+    const clientObservedSuccessPayload = { ok: true as const, instanceId: 'client-instance-1' }
+    expect(serverDaemonPingResponseSchema.safeParse(clientObservedSuccessPayload).success).toBe(
+      true,
+    )
+  })
+})

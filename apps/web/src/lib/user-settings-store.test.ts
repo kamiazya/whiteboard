@@ -37,6 +37,22 @@ describe('createUserSettingsStore', () => {
     )
   })
 
+  it('persists dismissedDaemonCtaAt and dismissedDaemonCtaInstanceId (daemon CTA banner dismissal)', () => {
+    const store = createUserSettingsStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        dismissedDaemonCtaAt: '2026-07-05T00:00:00.000Z',
+        dismissedDaemonCtaInstanceId: 'instance-1',
+      },
+    }))
+
+    const reloaded = createUserSettingsStore().load()
+    expect(reloaded.storage.dismissedDaemonCtaAt).toBe('2026-07-05T00:00:00.000Z')
+    expect(reloaded.storage.dismissedDaemonCtaInstanceId).toBe('instance-1')
+  })
+
   it('reset() clears stored settings back to defaults', () => {
     const store = createUserSettingsStore()
     store.save({
