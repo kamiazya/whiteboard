@@ -55,6 +55,14 @@ export function getRequestHost(c: Context): string | undefined {
   }
 }
 
+function setApiCorsHeaders(c: Context, origin: string): void {
+  c.res.headers.set('Access-Control-Allow-Origin', origin)
+  c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  c.res.headers.set('Access-Control-Max-Age', '86400')
+  c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+}
+
 export function appendVary(value: string | null, token: string): string {
   if (!value || value.length === 0) return token
   const parts = value
@@ -97,11 +105,7 @@ export function createApiLoopbackCorsMiddleware(
     const isAdmitted = isLoopback || isAllowedWebOrigin(origin, allowedOrigins)
 
     if (isAdmitted && origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+      setApiCorsHeaders(c, origin)
     }
 
     if (c.req.method.toUpperCase() === 'OPTIONS') {
@@ -119,11 +123,7 @@ export function createApiLoopbackCorsMiddleware(
     await next()
 
     if (isAdmitted && origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+      setApiCorsHeaders(c, origin)
     }
   }
 }

@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
 import {
@@ -46,6 +46,18 @@ export function requiresMcpHttpAuth(method: string): boolean {
   return normalizeMethod(method) !== 'OPTIONS'
 }
 
+function setMcpCorsHeaders(c: Context, origin: string): void {
+  c.res.headers.set('Access-Control-Allow-Origin', origin)
+  c.res.headers.set(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
+  )
+  c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
+  c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
+  c.res.headers.set('Access-Control-Max-Age', '86400')
+  c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+}
+
 export function createMcpHttpOriginMiddleware(
   allowedOrigins: readonly string[] = [],
 ): MiddlewareHandler {
@@ -57,15 +69,7 @@ export function createMcpHttpOriginMiddleware(
     }
 
     if (origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-      )
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+      setMcpCorsHeaders(c, origin)
     }
 
     if (normalizeMethod(c.req.method) === 'OPTIONS') {
@@ -84,15 +88,7 @@ export function createMcpHttpOriginMiddleware(
     await next()
 
     if (origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set(
-        'Access-Control-Allow-Headers',
-        'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-      )
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+      setMcpCorsHeaders(c, origin)
     }
   }
 }
