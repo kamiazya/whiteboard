@@ -4,6 +4,8 @@ import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { useEffect, useMemo, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
+import { HeaderBranchChip } from '../components/HeaderBranchChip.js'
+import { MergeToast } from '../components/MergeToast.js'
 import VersionTimeline from '../components/VersionTimeline.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
@@ -60,6 +62,10 @@ export function DaemonCanvasPage({
   const [authError, setAuthError] = useState(false)
   const [newCanvasSlug, setNewCanvasSlug] = useState('')
   const [versionPanelOpen, setVersionPanelOpen] = useState(false)
+  // Bumped on an externally observed HEAD change (another client, an MCP
+  // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
+  // rename/delete actions already refetch internally and don't need this.
+  const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
 
   // Backend identity is keyed on (workspaceId, slug, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
@@ -81,6 +87,7 @@ export function DaemonCanvasPage({
 
   const { setExcalidrawAPI, onChange, clearLocalUndo } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
+    onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
   })
 
   if (controller.loading) {
@@ -108,118 +115,144 @@ export function DaemonCanvasPage({
   }
 
   return (
-    <main className="relative flex h-dvh w-full flex-col">
-      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
-        <h1 className="sr-only">Whiteboard (daemon)</h1>
-        {authError && (
-          <div role="alert" aria-live="assertive" className="flex items-center gap-2">
-            <span className="text-xs text-destructive">
-              The daemon rejected this session. Try re-pairing.
-            </span>
-            {onContinueBrowserLocal && (
+    <DaemonApiContext.Provider value={daemonFetch}>
+      <main className="relative flex h-dvh w-full flex-col">
+        <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
+          <h1 className="sr-only">Whiteboard (daemon)</h1>
+          {authError && (
+            <div role="alert" aria-live="assertive" className="flex items-center gap-2">
+              <span className="text-xs text-destructive">
+                The daemon rejected this session. Try re-pairing.
+              </span>
+              {onContinueBrowserLocal && (
+                <button
+                  type="button"
+                  onClick={onContinueBrowserLocal}
+                  className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
+                >
+                  Continue in browser-local
+                </button>
+              )}
+            </div>
+          )}
+          {controller.canvases.length > 0 && controller.slug !== null && (
+            <select
+              aria-label="Canvases"
+              value={controller.slug}
+              onChange={(event) => controller.switchCanvas(event.target.value)}
+              className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
+            >
+              {controller.canvases.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {c.slug}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            {capabilities.versions ? (
               <button
                 type="button"
-                onClick={onContinueBrowserLocal}
+                aria-pressed={versionPanelOpen}
+                onClick={() => setVersionPanelOpen((open) => !open)}
+                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent aria-pressed:bg-accent"
+              >
+                Version history
+              </button>
+            ) : (
+              // enabled reflects the CAPABILITY, not whether a canvas is
+              // selected yet — a fresh empty workspace must not claim the
+              // feature needs a daemon connection it already has.
+              <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
+            )}
+            <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
+            {capabilities.branches &&
+            controller.workspaceId !== null &&
+            controller.slug !== null ? (
+              <HeaderBranchChip
+                workspaceId={controller.workspaceId}
+                slug={controller.slug}
+                refreshSignal={branchRefreshSignal}
+                mergeEnabled={capabilities.merge}
+              />
+            ) : (
+              <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
+            )}
+            {/* Merge lives inside HeaderBranchChip's per-branch "Merge into
+                HEAD" action (which embeds MergeDialog); there is no separate
+                merge entry point. The chip itself disables that action via
+                mergeEnabled, so this stays a static teaser only when merge
+                is unavailable, matching the other capability indicators. */}
+            {!capabilities.merge && <CapabilityTeaser label="Merge" enabled={false} />}
+          </div>
+        </header>
+        {versionPanelOpen && controller.workspaceId !== null && controller.slug !== null && (
+          <div className="w-72 shrink-0 border-l bg-background absolute right-0 top-0 bottom-0 z-10 shadow-lg overflow-hidden flex flex-col">
+            {/* The panel overlays the header (including the toggle that opened
+                it), so it needs its own close affordance rather than relying
+                on a control the panel itself may cover. */}
+            <div className="flex shrink-0 items-center justify-end border-b px-2 py-1">
+              <button
+                type="button"
+                aria-label="Close version history"
+                onClick={() => setVersionPanelOpen(false)}
                 className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
               >
-                Continue in browser-local
+                Close
               </button>
-            )}
-          </div>
-        )}
-        {controller.canvases.length > 0 && controller.slug !== null && (
-          <select
-            aria-label="Canvases"
-            value={controller.slug}
-            onChange={(event) => controller.switchCanvas(event.target.value)}
-            className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
-          >
-            {controller.canvases.map((c) => (
-              <option key={c.slug} value={c.slug}>
-                {c.slug}
-              </option>
-            ))}
-          </select>
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          {capabilities.versions ? (
-            <button
-              type="button"
-              aria-pressed={versionPanelOpen}
-              onClick={() => setVersionPanelOpen((open) => !open)}
-              className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent aria-pressed:bg-accent"
-            >
-              Version history
-            </button>
-          ) : (
-            <CapabilityTeaser label="Version history" enabled={false} />
-          )}
-          <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
-          <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
-          <CapabilityTeaser label="Merge" enabled={capabilities.merge} />
-        </div>
-      </header>
-      {versionPanelOpen && controller.workspaceId !== null && controller.slug !== null && (
-        <div className="w-72 shrink-0 border-l bg-background absolute right-0 top-0 bottom-0 z-10 shadow-lg overflow-hidden flex flex-col">
-          {/* The panel overlays the header (including the toggle that opened
-              it), so it needs its own close affordance rather than relying
-              on a control the panel itself may cover. */}
-          <div className="flex shrink-0 items-center justify-end border-b px-2 py-1">
-            <button
-              type="button"
-              aria-label="Close version history"
-              onClick={() => setVersionPanelOpen(false)}
-              className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
-            >
-              Close
-            </button>
-          </div>
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <DaemonApiContext.Provider value={daemonFetch}>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
               <VersionTimeline
                 workspaceId={controller.workspaceId}
                 slug={controller.slug}
                 onRestored={clearLocalUndo}
               />
-            </DaemonApiContext.Provider>
-          </div>
-        </div>
-      )}
-      {controller.canvases.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-          <p className="text-sm text-muted-foreground">This workspace has no canvases yet.</p>
-          {controller.createError && (
-            <div role="alert" aria-live="assertive" className="text-xs text-destructive">
-              {controller.createError}
             </div>
-          )}
-          <form
-            className="flex items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              if (!newCanvasSlug.trim()) return
-              void controller.createCanvas(newCanvasSlug.trim())
-            }}
-          >
-            <input
-              aria-label="New canvas name"
-              value={newCanvasSlug}
-              onChange={(event) => setNewCanvasSlug(event.target.value)}
-              className="rounded-md border bg-background px-2 py-1 text-xs"
-            />
-            <button
-              type="submit"
-              className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+          </div>
+        )}
+        {controller.canvases.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+            <p className="text-sm text-muted-foreground">This workspace has no canvases yet.</p>
+            {controller.createError && (
+              <div role="alert" aria-live="assertive" className="text-xs text-destructive">
+                {controller.createError}
+              </div>
+            )}
+            <form
+              className="flex items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                if (!newCanvasSlug.trim()) return
+                void controller.createCanvas(newCanvasSlug.trim())
+              }}
             >
-              Create canvas
-            </button>
-          </form>
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1">
-          <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} />
-        </div>
-      )}
-    </main>
+              <input
+                aria-label="New canvas name"
+                value={newCanvasSlug}
+                onChange={(event) => setNewCanvasSlug(event.target.value)}
+                className="rounded-md border bg-background px-2 py-1 text-xs"
+              />
+              <button
+                type="submit"
+                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+              >
+                Create canvas
+              </button>
+            </form>
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1">
+            <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} />
+          </div>
+        )}
+        {capabilities.merge && controller.workspaceId !== null && controller.slug !== null && (
+          <MergeToast
+            workspaceId={controller.workspaceId}
+            slug={controller.slug}
+            onRestored={clearLocalUndo}
+          />
+        )}
+      </main>
+    </DaemonApiContext.Provider>
   )
 }

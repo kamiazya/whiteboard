@@ -8,7 +8,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import { type JSX, useEffect, useState } from 'react'
+import { type JSX, lazy, Suspense, useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,11 +38,16 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
 import { safeErrorCopy } from '@/lib/error-copy'
 import { cn } from '@/lib/utils'
-import { MergeDialog } from './MergeDialog'
+
+// MergeDialog pulls in its own thumbnail-fetch effect and a second Dialog
+// surface; loading it on demand keeps it out of the daemon-canvas chunk
+// until a merge is actually initiated.
+const MergeDialog = lazy(() => import('./MergeDialog').then((m) => ({ default: m.MergeDialog })))
 
 // Consolidate branch operations into a single `●branch▾` chip in the header.
 //
@@ -58,6 +63,17 @@ export interface HeaderBranchChipProps {
   workspaceId: string
   slug: string
   disabled?: boolean
+  // Bump this (e.g. a counter) when an external event (WS-observed HEAD
+  // change from another client) should force a list refresh. The chip's own
+  // mutations (create/rename/delete/setHead) already refetch internally, so
+  // this only needs to cover changes this component did not itself trigger.
+  refreshSignal?: number
+  // The provider capability contract: switching/creating/renaming/deleting
+  // branches does not imply merge is available. Defaults to true so existing
+  // callers that only gate on `capabilities.branches` keep today's behavior;
+  // callers must pass `capabilities.merge` explicitly to hide the merge
+  // entry point when the provider does not support it.
+  mergeEnabled?: boolean
 }
 
 interface PendingMerge {
@@ -69,16 +85,30 @@ export function HeaderBranchChip({
   workspaceId,
   slug,
   disabled,
+  refreshSignal,
+  mergeEnabled = true,
 }: HeaderBranchChipProps): JSX.Element {
+  const fetchFn = useDaemonApi()
   const {
     state,
+    refetch,
     createBranch,
     deleteBranch,
     getBranchStats,
     renameBranch,
     setHead,
     merge: runMerge,
-  } = useBranches(workspaceId, slug)
+  } = useBranches(workspaceId, slug, fetchFn)
+
+  // Skip the initial mount (refetch already runs internally via useBranches'
+  // own effect) — only react to a refreshSignal value that actually changes
+  // after mount, i.e. an externally observed HEAD change.
+  const prevRefreshSignalRef = useRef(refreshSignal)
+  useEffect(() => {
+    if (prevRefreshSignalRef.current === refreshSignal) return
+    prevRefreshSignalRef.current = refreshSignal
+    void refetch()
+  }, [refreshSignal, refetch])
 
   const head = state.head
   const activeBranch = state.branches.find((b) => b.name === head)
@@ -346,7 +376,11 @@ export function HeaderBranchChip({
             <GitMerge className="size-3" />
             Merge into «{head}»
           </DropdownMenuLabel>
-          {otherBranches.length === 0 ? (
+          {!mergeEnabled ? (
+            <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+              Merge unavailable
+            </DropdownMenuItem>
+          ) : otherBranches.length === 0 ? (
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
               No other branches
             </DropdownMenuItem>
@@ -500,16 +534,21 @@ export function HeaderBranchChip({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reuse the shared merge dialog. */}
-      <MergeDialog
-        open={pendingMerge !== null}
-        source={pendingMerge?.source ?? null}
-        target={pendingMerge?.target ?? null}
-        onClose={() => setPendingMerge(null)}
-        runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
-        workspaceId={workspaceId}
-        slug={slug}
-      />
+      {/* Reuse the shared merge dialog, loaded on demand so its bundle cost
+          is only paid once a merge is actually initiated. */}
+      {pendingMerge !== null && (
+        <Suspense fallback={null}>
+          <MergeDialog
+            open
+            source={pendingMerge.source}
+            target={pendingMerge.target}
+            onClose={() => setPendingMerge(null)}
+            runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
+            workspaceId={workspaceId}
+            slug={slug}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

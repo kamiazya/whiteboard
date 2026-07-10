@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import {
   dispatchMergeCommitted,
   MERGE_COMMITTED_EVENT,
@@ -107,6 +108,24 @@ describe('MergeToast', () => {
     expect(calledUrl).toBe('/api/workspaces/s1/canvases/c1/versions/v%2Fpre%3Fweird%23id/restore')
   })
 
+  it('restores the canvas the merge happened on, not the currently selected one', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { rerender } = render(<MergeToast workspaceId="s1" slug="c1" />)
+    act(() => dispatchMergeCommitted(baseDetail))
+    // Simulate switching to a different canvas while the toast is still open;
+    // the toast state is not keyed on workspaceId/slug so it survives the switch.
+    rerender(<MergeToast workspaceId="s1" slug="c2" />)
+    fireEvent.click(screen.getByTestId('merge-toast-undo'))
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled()
+    })
+    const calledUrl = fetchMock.mock.calls[0]?.[0] as string
+    expect(calledUrl).toBe('/api/workspaces/s1/canvases/c1/versions/v-pre/restore')
+  })
+
   it('closes immediately when the close button is clicked', () => {
     render(<MergeToast workspaceId="s1" slug="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
@@ -163,5 +182,26 @@ describe('MergeToast', () => {
     })
     expect(onRestored).not.toHaveBeenCalled()
     expect(screen.getByTestId('merge-toast')).toBeTruthy()
+  })
+
+  it('restores through the daemon-context fetch instead of the same-origin apiFetch', async () => {
+    const daemonFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    const globalFetch = vi.mocked(fetch)
+    const onRestored = vi.fn()
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <MergeToast workspaceId="s1" slug="c1" onRestored={onRestored} />
+      </DaemonApiContext.Provider>,
+    )
+    act(() => dispatchMergeCommitted(baseDetail))
+    fireEvent.click(screen.getByTestId('merge-toast-undo'))
+    await waitFor(() => expect(onRestored).toHaveBeenCalled())
+    expect(daemonFetch).toHaveBeenCalledWith(
+      '/api/workspaces/s1/canvases/c1/versions/v-pre/restore',
+      { method: 'POST' },
+    )
+    expect(globalFetch).not.toHaveBeenCalled()
   })
 })

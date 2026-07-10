@@ -14,6 +14,7 @@ import type {
   MergeResponse,
   VersionEntry,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { MERGE_COMMITTED_EVENT, mergeCommittedDetailSchema } from '@/lib/merge-committed-event'
 import { MergeDialog } from './MergeDialog.js'
 
@@ -462,5 +463,34 @@ describe('MergeDialog', () => {
     expect(targetCard.querySelector('img')?.getAttribute('src')).toBe(
       '/api/workspaces/w1/canvases/c1/versions/main-new/thumbnail',
     )
+  })
+
+  it('skips the versions fetch entirely and suppresses thumbnails in cross-origin daemon mode', async () => {
+    // Thumbnails are suppressed cross-origin (an <img> cannot carry the bearer
+    // token), so fetching the versions list only to discard it would be a
+    // wasted network round-trip — the dialog must not issue it at all.
+    const daemonFetch = vi.fn()
+    const globalFetch = vi.mocked(fetch)
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <MergeDialog
+          open
+          source={feature}
+          target={main}
+          onClose={() => undefined}
+          runMerge={runMerge}
+          workspaceId="w1"
+          slug="c1"
+        />
+      </DaemonApiContext.Provider>,
+    )
+    await screen.findByText(/5 elements/)
+    expect(daemonFetch).not.toHaveBeenCalled()
+    expect(globalFetch).not.toHaveBeenCalled()
+    const sourceCard = screen.getByTestId('merge-branch-card-source')
+    expect(sourceCard.querySelector('img')).toBeNull()
   })
 })
