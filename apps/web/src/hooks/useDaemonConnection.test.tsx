@@ -73,6 +73,32 @@ describe('useDaemonConnection', () => {
     expect(result.status).toBe('error')
   })
 
+  it('strips the #wb= fragment even when the payload fails schema validation', () => {
+    // Schema-invalid because of the unknown `extra` field (.strict()), but it
+    // still carries a bootstrapToken that must not linger in the URL.
+    const json = JSON.stringify({
+      baseUrl: 'http://127.0.0.1:3000',
+      authMode: 'bootstrap',
+      bootstrapToken: 'sekrit-token-leak',
+      extra: 'unexpected-field',
+    })
+    const b64 = btoa(json).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+    setHash(`#wb=${b64}`)
+    render(<Consumer />)
+    const result = JSON.parse(screen.getByTestId('result').textContent ?? '{}')
+    expect(result.status).toBe('error')
+    expect(window.location.hash).not.toContain('wb=')
+    expect(window.location.hash).not.toContain('sekrit-token-leak')
+  })
+
+  it('strips the #wb= fragment for malformed base64 too', () => {
+    setHash('#wb=!!!not-base64!!!')
+    render(<Consumer />)
+    const result = JSON.parse(screen.getByTestId('result').textContent ?? '{}')
+    expect(result.status).toBe('error')
+    expect(window.location.hash).not.toContain('wb=')
+  })
+
   it('never throws, and only consumes the fragment once across StrictMode double-mount', () => {
     setHash(
       encodeDaemonConnectionFragment({

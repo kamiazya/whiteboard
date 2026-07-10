@@ -39,10 +39,19 @@ function computeDaemonConnection(): DaemonConnectionResult {
   }
 
   if (result.status === 'malformed') {
+    // The undecodable payload may still carry token material (e.g. a
+    // truncated/corrupted bootstrapToken), so strip it from the URL even
+    // though it was never usable.
+    consumeDaemonConnectionFragment()
     return { status: 'error', detail: `malformed fragment (${result.stage}): ${result.message}` }
   }
 
   if (result.status === 'invalid') {
+    // Schema-invalid payloads (e.g. an unexpected .strict() field) can still
+    // decode a real bootstrapToken, so strip the fragment before returning
+    // the error — otherwise the token stays visible in the address bar,
+    // history, and any screen share.
+    consumeDaemonConnectionFragment()
     return { status: 'error', detail: 'invalid daemon connection payload' }
   }
 
