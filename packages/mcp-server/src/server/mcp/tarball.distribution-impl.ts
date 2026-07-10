@@ -124,7 +124,14 @@ export async function runPackedTarballSmoke({
     console.log(`[tarball-smoke] installed package → ${installedPackageRoot}`)
     console.log(`[tarball-smoke] installed entry → ${installedEntry}`)
 
-    await runE2eCheckpointSmoke({ entry: installedEntry, root: repoRoot })
+    // The tarball smoke runs as a standalone node script (no vitest
+    // testTimeout ceiling), so it can afford bounded retry across multiple
+    // daemon cold-start windows under CI contention.
+    await runE2eCheckpointSmoke({
+      entry: installedEntry,
+      root: repoRoot,
+      retryDaemonStartup: true,
+    })
 
     console.log('[tarball-smoke] installed tarball entrypoint OK')
   } finally {

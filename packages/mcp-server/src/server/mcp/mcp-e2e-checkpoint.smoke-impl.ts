@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { retryDaemonStartup } from './daemon-readiness.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 
 interface RunOptions {
@@ -10,6 +11,15 @@ interface RunOptions {
   entry: string
   /** Package root used as cwd for the spawned child process. */
   root: string
+  /**
+   * Opt-in: retry the daemon-triggering RPC across bounded cold-start
+   * windows instead of failing on the first "Daemon startup timeout".
+   * Defaults to false so callers running under a fixed vitest testTimeout
+   * (mcp-e2e-checkpoint.smoke.test.ts) keep exact single-window semantics.
+   */
+  retryDaemonStartup?: boolean
+  /** Extra RPC attempts beyond the first when retryDaemonStartup is set. */
+  maxDaemonStartupRetries?: number
 }
 
 type RpcResponse = {
@@ -17,13 +27,47 @@ type RpcResponse = {
   isError?: boolean
 }
 
-export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promise<void> {
+/**
+ * Builds the child process env, preserving WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS
+ * (and any other inherited var) from the parent process while pointing the
+ * child at an isolated data dir. Pure so env propagation is unit-testable
+ * without spawning a real process.
+ */
+export function buildCheckpointChildEnv(
+  processEnv: NodeJS.ProcessEnv,
+  dataDir: string,
+): NodeJS.ProcessEnv {
+  return { ...processEnv, WHITEBOARD_DATA_DIR: dataDir }
+}
+
+/**
+ * Issues the daemon-triggering canvas_create call, optionally retried across
+ * bounded cold-start windows via retryDaemonStartup. Extracted so the retry
+ * wiring is unit-testable against a fake callTool without spawning a real
+ * MCP child process.
+ */
+export function triggerDaemonCanvasCreate(
+  callTool: (name: string, args: unknown) => Promise<Record<string, unknown>>,
+  options: { retryDaemonStartup: boolean; maxDaemonStartupRetries: number },
+): Promise<Record<string, unknown>> {
+  const attempt = () => callTool('canvas_create', { slug: 'e2e-src' })
+  return options.retryDaemonStartup
+    ? retryDaemonStartup({ attempt, maxRetries: options.maxDaemonStartupRetries })
+    : attempt()
+}
+
+export async function runE2eCheckpointSmoke({
+  entry,
+  root,
+  retryDaemonStartup: shouldRetryDaemonStartup = false,
+  maxDaemonStartupRetries = 1,
+}: RunOptions): Promise<void> {
   const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-e2e-'))
   const childArgs = entry.endsWith('.ts') ? ['--import', 'tsx/esm', entry] : [entry]
 
   const child = spawn('node', childArgs, {
     cwd: root,
-    env: { ...process.env, WHITEBOARD_DATA_DIR: tmpDataDir },
+    env: buildCheckpointChildEnv(process.env, tmpDataDir),
     stdio: ['pipe', 'pipe', 'pipe'],
   })
 
@@ -167,7 +211,13 @@ export async function runE2eCheckpointSmoke({ entry, root }: RunOptions): Promis
       }
     }
 
-    const created = await callTool('canvas_create', { slug: 'e2e-src' })
+    // canvas_create is the first daemon-dependent RPC, so its failure mode is
+    // the daemon cold-starting under contention. Retrying is opt-in: only the
+    // tarball smoke (no fixed vitest testTimeout) enables it.
+    const created = await triggerDaemonCanvasCreate(callTool, {
+      retryDaemonStartup: shouldRetryDaemonStartup,
+      maxDaemonStartupRetries,
+    })
     if (!created.id || !created.url) throw new Error(`canvas_create returned unexpected shape`)
     console.log(`[e2e] canvas_create → ${created.id}`)
 
