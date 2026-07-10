@@ -57,6 +57,37 @@ credentials are requested.
 5. `force_publish_tag` input: can re-publish a specific tag (e.g. after a transient
    OIDC failure). Must match `mcp-server-v<semver>`; rejected before checkout otherwise.
 
+### Publish gate scope: publishability, not correctness
+
+`publish-mcp` runs the **publish** tier of `tests/e2e/distribution/release-gate-matrix.json`
+via `pnpm publish-gate` (`tools/checks/src/publish-gate.mjs`, a matrix-driven runner that
+mirrors `pages-release.mjs`). That tier is scoped to **publishability**: does the tarball
+build correctly, contain the required files, carry an SBOM, and actually start when
+unpacked (`smoke:tarball`, `smoke:packaged`, the packaged-daemon/server-mode node smokes,
+`smoke:claude`, `smoke:codex`)? It also carries a fast, deterministic **correctness floor**
+(`pnpm typecheck` + `pnpm test:mcp-node`) so an obviously broken tag never publishes.
+
+It deliberately does **not** re-run the full browser/jsdom test matrix
+(`pnpm test` = mcp-node + mcp-jsdom + mcp-browser + web-browser). That correctness is
+already proven by **verify CI (`ci.yml`) at the identical tag SHA**: a release tag always
+points at a commit that was pushed to `main`, and `ci.yml`'s `verify` job (gated on
+`test-unit`, `test-jsdom`, `test-browser`) already ran against that exact commit before a
+human merged the release PR. Re-running the same suite a second time inside `publish-mcp`
+produced no new correctness signal — it only re-exposed an already-green commit to
+environment flakes (three consecutive releases failed publish this way, each on a
+different flake inside the re-run, while npm sat stuck at an older version). See
+`ci-verify-coverage.test.ts` and `publish-gate-runner.test.ts` in
+`packages/mcp-server/src/server/release/` for the automated guards that keep this
+boundary from drifting.
+
+A blocking cross-workflow dependency on verify's *reported* conclusion (rather than on
+branch-protection having already required it) was considered and rejected: `publish-mcp`
+only depends on `release-please`, not on `verify`, so querying verify's conclusion at
+publish time races a same-push `ci.yml` run that may still be in progress, and would
+require granting `actions: read` that the workflow does not otherwise need. If a stronger,
+machine-checked guarantee is wanted later, add it as a non-blocking advisory annotation
+first.
+
 ### `publish-mcp` job (npm OIDC provenance)
 
 Steps (in order):
@@ -65,8 +96,9 @@ Steps (in order):
    prevents shell injection).
 2. Checkout the release tag.
 3. Install dependencies (Node 24 pinned; npm 11.x meets Trusted Publishing requirement).
-4. `pnpm check:release-candidate`: runs generate:sbom:npm, tests, typecheck, build,
-   artifact checks, smokes, and E2E distribution tests.
+4. `pnpm publish-gate`: runs the publish tier (typecheck, mcp-node floor, build,
+   artifact checks, SBOM generation, tarball/packaged smokes) — see "Publish gate
+   scope" above.
 5. Upload SBOM as GitHub Actions artifact `npm-sbom-<tag>` (retained 90 days,
    `if-no-files-found: error`).
 6. `npm publish --access public --provenance` (OIDC Trusted Publishing, no NPM_TOKEN).
@@ -143,9 +175,10 @@ lockfile-pinned at v4.x):
 - **Script**: `packages/mcp-server/scripts/release/generate-npm-sbom.mjs`
   (called via root script `pnpm generate:sbom:npm`)
 
-- **When it runs in CI**: `pnpm check:release-candidate` (used in the `publish-mcp`
-  job) runs `generate-npm-sbom.mjs` first, before `pnpm test`. This ensures the SBOM
-  content regression tests in `sbom-policy.test.ts` always execute on the release path.
+- **When it runs in CI**: `pnpm publish-gate` (used in the `publish-mcp` job) runs
+  `generate-npm-sbom.mjs` as one of the publish-tier gates, before `npm publish`. This
+  ensures the SBOM content regression tests in `sbom-policy.test.ts` always execute on
+  the release path.
 
 ---
 

@@ -73,8 +73,15 @@ describe('npm SBOM step drift (release.yml publish-mcp job)', () => {
   const npmSection = () =>
     jobSection(readFile(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign')
 
-  it('npm job invokes check:release-candidate (which runs generate:sbom:npm internally)', () => {
-    expect(npmSection()).toContain('check:release-candidate')
+  it('npm job invokes the publish-gate runner (which runs generate:sbom:npm as a publish-tier gate)', () => {
+    expect(npmSection()).toContain('pnpm publish-gate')
+  })
+
+  it('generate:sbom:npm is a publish-tier gate in release-gate-matrix.json', () => {
+    const matrix = JSON.parse(readFile('tests/e2e/distribution/release-gate-matrix.json'))
+    const gate = matrix.gates.find((g: { id: string }) => g.id === 'generate:sbom:npm')
+    expect(gate, 'generate:sbom:npm gate must exist').toBeDefined()
+    expect(gate.requiredFor).toContain('publish')
   })
 
   it('npm job contains upload-artifact step', () => {
@@ -94,19 +101,14 @@ describe('npm SBOM step drift (release.yml publish-mcp job)', () => {
     expect(sbomIdx, 'generate:sbom:npm must precede pnpm test').toBeLessThan(testIdx)
   })
 
-  it('npm job check:release-candidate appears before npm publish', () => {
+  it('npm job publish-gate step appears before npm publish', () => {
     const section = npmSection()
-    const releaseGateIdx = section.indexOf('check:release-candidate')
+    const publishGateIdx = section.indexOf('pnpm publish-gate')
     // Use `run: npm publish` to avoid matching the job `name:` field.
     const publishIdx = section.indexOf('npm publish "$TARBALL"')
-    expect(
-      releaseGateIdx,
-      'check:release-candidate must be present in npm job',
-    ).toBeGreaterThanOrEqual(0)
+    expect(publishGateIdx, 'pnpm publish-gate must be present in npm job').toBeGreaterThanOrEqual(0)
     expect(publishIdx, 'run: npm publish must be present').toBeGreaterThanOrEqual(0)
-    expect(releaseGateIdx, 'check:release-candidate must precede npm publish').toBeLessThan(
-      publishIdx,
-    )
+    expect(publishGateIdx, 'pnpm publish-gate must precede npm publish').toBeLessThan(publishIdx)
   })
 
   it('npm job upload-artifact appears before npm publish', () => {
@@ -256,7 +258,7 @@ describe('ci.yml dry-run SBOM regression safety', () => {
 
   it('ci.yml dry-run-npm job does not contain generate:sbom:npm', () => {
     // SBOM generation in dry-run is premature; dry-run does not produce a publishable artifact.
-    // SBOM generation only runs inside check:release-candidate (release.yml publish-mcp job).
+    // SBOM generation only runs as a publish-tier gate via `pnpm publish-gate` (release.yml publish-mcp job).
     const section = jobSection(readFile(CI_WORKFLOW), 'dry-run-npm', 'dry-run-docker')
     expect(section).not.toContain('generate:sbom:npm')
   })
