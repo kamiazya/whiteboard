@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { withTempDataDir } from './_test-helpers.js'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { updateCanvasResponseSchema } from '../../shared/api-contracts/canvas.js'
 
 const tmp = withTempDataDir('whiteboard-routes-test-')
 
@@ -443,6 +444,10 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
       body: update,
     })
     expect(res.status).toBe(200)
+    // Pin the shared contract: the response body must parse under the
+    // Zod schema the web import client consumes, not just an ad-hoc shape.
+    const body: unknown = await res.json()
+    expect(updateCanvasResponseSchema.safeParse(body).success).toBe(true)
 
     // Clear the cache, reload, and confirm the change was persisted.
     clearCache()

@@ -16,6 +16,7 @@ import {
   saveVersionRequestSchema,
   setNameRequestSchema,
   setPinnedRequestSchema,
+  type UpdateCanvasResponse,
 } from '../../shared/api-contracts/canvas.js'
 import { reconcileElementsOnDoc } from '../../shared/reconcile-elements.js'
 import { getLogger } from '../log.js'
@@ -396,7 +397,8 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
         getLogger('canvas').error({ err: err as Error }, 'auto-version trigger failed')
       })
 
-    return c.json({ ok: true })
+    const response: UpdateCanvasResponse = { ok: true }
+    return c.json(response)
   })
 
   // GET /api/workspaces/:workspaceId/canvases/:slug/versions
