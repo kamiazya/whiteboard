@@ -27,30 +27,35 @@ export function setupSwRegistration({
 }: SetupSwRegistrationOptions): void {
   if (!isProd || !hasServiceWorker) return
 
-  window.addEventListener(
-    'load',
-    () => {
-      void importRegister()
-        .then(({ registerSW }) => {
-          const updateServiceWorker = registerSW({
-            onNeedRefresh: () => {
-              // The toast UI (React component + createRoot) is only needed on
-              // the rare "an update is available" path, so it stays out of the
-              // entry chunk via a dynamic import too.
-              void import('./mount-update-toast.js')
-                .then(({ mountUpdateToast }) => {
-                  mountUpdateToast(updateServiceWorker)
-                })
-                .catch((err: unknown) => {
-                  log.error('failed to load the update toast module', err)
-                })
-            },
-          })
+  const register = () => {
+    void importRegister()
+      .then(({ registerSW }) => {
+        const updateServiceWorker = registerSW({
+          onNeedRefresh: () => {
+            // The toast UI (React component + createRoot) is only needed on
+            // the rare "an update is available" path, so it stays out of the
+            // entry chunk via a dynamic import too.
+            void import('./mount-update-toast.js')
+              .then(({ mountUpdateToast }) => {
+                mountUpdateToast(updateServiceWorker)
+              })
+              .catch((err: unknown) => {
+                log.error('failed to load the update toast module', err)
+              })
+          },
         })
-        .catch((err: unknown) => {
-          log.error('failed to register the service worker', err)
-        })
-    },
-    { once: true },
-  )
+      })
+      .catch((err: unknown) => {
+        log.error('failed to register the service worker', err)
+      })
+  }
+
+  // The entry module graph contains top-level await (loro WASM init), so this
+  // code can run AFTER window 'load' has already fired — a load listener
+  // alone would then never fire and the SW would silently never register.
+  if (document.readyState === 'complete') {
+    register()
+    return
+  }
+  window.addEventListener('load', register, { once: true })
 }

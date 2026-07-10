@@ -35,6 +35,24 @@ describe('setupSwRegistration', () => {
     expect(registerSW.mock.calls[0][0]).toHaveProperty('onNeedRefresh')
   })
 
+  it('registers immediately when the load event has already fired (readyState complete)', async () => {
+    // The entry module graph contains top-level await (loro WASM init), so
+    // module evaluation can finish AFTER window 'load' has fired — a
+    // load-listener-only implementation would never register the SW.
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const registerSW = vi.fn()
+    const importRegister = vi.fn().mockResolvedValue({ registerSW })
+
+    expect(document.readyState).toBe('complete')
+    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    // NO fireWindowLoad() — load already happened before setup ran.
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(importRegister).toHaveBeenCalledTimes(1)
+    expect(registerSW).toHaveBeenCalledTimes(1)
+  })
+
   it('does not attempt registration when serviceWorker is unsupported', async () => {
     const importRegister = vi.fn()
 
