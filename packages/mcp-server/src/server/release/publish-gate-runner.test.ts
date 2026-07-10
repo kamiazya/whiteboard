@@ -200,6 +200,40 @@ describe('publish-gate runner core loop (planSteps / runSteps)', () => {
   })
 })
 
+describe('publish-gate runner CLI arg parsing (parseArgs)', () => {
+  const importRunner = async () => {
+    const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/publish-gate.mjs')).href)
+    return mod as {
+      parseArgs: (
+        args: string[],
+      ) => { mode: 'help' } | { mode: 'error'; message: string } | { mode: 'run' }
+    }
+  }
+
+  it('treats -h as a help request', async () => {
+    const { parseArgs } = await importRunner()
+    expect(parseArgs(['-h'])).toEqual({ mode: 'help' })
+  })
+
+  it('treats --help as a help request', async () => {
+    const { parseArgs } = await importRunner()
+    expect(parseArgs(['--help'])).toEqual({ mode: 'help' })
+  })
+
+  it('rejects unexpected arguments instead of silently running the gates', async () => {
+    const { parseArgs } = await importRunner()
+    expect(parseArgs(['--bogus'])).toEqual({
+      mode: 'error',
+      message: 'unexpected argument(s): --bogus',
+    })
+  })
+
+  it('runs the gates when invoked with no arguments', async () => {
+    const { parseArgs } = await importRunner()
+    expect(parseArgs([])).toEqual({ mode: 'run' })
+  })
+})
+
 describe('smoke:distribution:packaged drift', () => {
   it('its node distribution smoke set matches the 7 node smokes in test:e2e:distribution', () => {
     const distScript = rootPkg.scripts['test:e2e:distribution'] ?? ''
