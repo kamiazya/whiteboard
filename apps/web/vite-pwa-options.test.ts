@@ -21,6 +21,24 @@ describe('pwaOptions', () => {
     }
   })
 
+  it('denylists exact daemon prefixes only, not future routes that merely start with the same characters', () => {
+    const denylist = pwaOptions.workbox?.navigateFallbackDenylist ?? []
+
+    // A future client SPA route like /mcpstatus or /workspace must still get
+    // the offline app-shell fallback; only the exact /mcp and /ws daemon
+    // endpoints (and their sub-paths) are denied.
+    const falsePositiveCases = ['/mcpstatus', '/workspace', '/wishlist']
+    for (const path of falsePositiveCases) {
+      expect(denylist.some((re) => re.test(path))).toBe(false)
+    }
+
+    // Sub-paths of the daemon endpoints must still be denied.
+    const truePositiveSubPaths = ['/mcp/tools', '/ws/session']
+    for (const path of truePositiveSubPaths) {
+      expect(denylist.some((re) => re.test(path))).toBe(true)
+    }
+  })
+
   it('never registers runtime caching, so the SW cannot intercept daemon/LNA traffic', () => {
     const runtimeCaching = pwaOptions.workbox?.runtimeCaching
     expect(runtimeCaching === undefined || runtimeCaching.length === 0).toBe(true)

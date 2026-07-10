@@ -46,7 +46,7 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     // it in the precache manifest an installed/offline PWA loads the JS
     // shell but fails the moment it needs Loro.
     globPatterns: ['**/*.{js,css,html,woff2,png,svg,ico,wasm}'],
-    navigateFallbackDenylist: [/^\/api\//, /^\/mcp/, /^\/ws/],
+    navigateFallbackDenylist: [/^\/api\//, /^\/mcp(\/|$)/, /^\/ws(\/|$)/],
     // Workbox's 2 MiB default would silently drop the entry chunk (~560 KB
     // gzip, larger uncompressed) from the precache manifest with only a
     // build-time warning. Raised so the app shell always precaches in full.
