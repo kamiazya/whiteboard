@@ -57,6 +57,25 @@ describe('server/index main() WHITEBOARD_ALLOWED_WEB_ORIGINS startup gate', () =
     }
   })
 
+  it('refuses to start when an allowlist is set but no auth token is provided', async () => {
+    process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS = 'https://kamiazya-whiteboard.pages.dev'
+    delete process.env.WHITEBOARD_TOKEN
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const capture = captureLogsForTests('debug')
+    try {
+      await expect(main()).rejects.toThrow('process.exit called')
+      expect(exitSpy).toHaveBeenCalledWith(1)
+      expect(startHttpServerMock).not.toHaveBeenCalled()
+      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'error')
+      expect(record).toBeDefined()
+    } finally {
+      capture.restore()
+      exitSpy.mockRestore()
+    }
+  })
+
   it('threads a valid allowlist through to startHttpServer and never exits', async () => {
     process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS = 'https://kamiazya-whiteboard.pages.dev'
     process.env.WHITEBOARD_TOKEN = 'test-token'

@@ -9,6 +9,7 @@ import {
 import { isDirectEntryPoint } from './entrypoint.js'
 import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
+import { getLogger } from './log.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
   const prefix = `--${name}=`
@@ -60,6 +61,23 @@ export async function main() {
   if (allowedWebOrigins === null) {
     process.exit(1)
   }
+
+  // A hosted origin in the allowlist widens which browser origins may reach
+  // /api CORS, /mcp, and WS upgrade. Without a Bearer token, missing-token
+  // auth strategies treat every request as authenticated (local-dev
+  // convenience), so pairing that fallback with a hosted origin would let an
+  // allowlisted hosted page mutate the daemon with no auth barrier at all.
+  // Refuse to start rather than silently downgrade the allowlist's promise
+  // that it "does not change authentication".
+  if (allowedWebOrigins.length > 0 && !token) {
+    const log = getLogger('server-index')
+    log.error(
+      { allowedOriginCount: allowedWebOrigins.length },
+      'WHITEBOARD_ALLOWED_WEB_ORIGINS is set but no auth token was provided (--token or WHITEBOARD_TOKEN); refusing to start',
+    )
+    process.exit(1)
+  }
+
   const daemonMode = hasFlag('daemon')
   const version = process.env.npm_package_version ?? PACKAGE_VERSION
   const mcpAuth = createLocalTokenMcpHttpAuthStrategy({
