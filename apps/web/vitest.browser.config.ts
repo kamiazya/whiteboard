@@ -39,6 +39,24 @@ export default defineConfig({
   // tailwindcss: layout browser tests import src/index.css to assert real
   // computed geometry (e.g. the Excalidraw container filling the viewport).
   plugins: [tailwindcss(), react(), wasm(), topLevelAwait()],
+  // Vitest browser mode serves test dependencies from the Vite dev server on
+  // demand instead of bundling them ahead of time. Under CI load, the lazy
+  // dependency-optimization scan can race with the browser's first fetch of
+  // one of these modules, producing a spurious "Failed to fetch dynamically
+  // imported module" import error unrelated to the test itself. Listing the
+  // packages every browser test transitively imports forces them into the
+  // pre-bundle before any test file runs, removing the race at the source.
+  optimizeDeps: {
+    include: [
+      'react',
+      'react/jsx-runtime',
+      'react/jsx-dev-runtime',
+      'react-dom',
+      'react-dom/client',
+      'react-router-dom',
+      '@testing-library/react',
+    ],
+  },
   test: {
     name: 'web-browser',
     include: ['src/**/*.browser.test.tsx'],
