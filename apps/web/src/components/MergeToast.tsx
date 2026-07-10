@@ -76,6 +76,8 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
   if (!active) return null
 
   const {
+    workspaceId: mergeWorkspaceId,
+    slug: mergeSlug,
     sourceName,
     newCount,
     changedCount,
@@ -91,8 +93,10 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
     setUndoing(true)
     setUndoError(null)
     try {
+      // Restore the canvas the merge actually happened on, not whichever
+      // canvas is currently selected — the toast can outlive a canvas switch.
       const res = await fetchFn(
-        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(preMergeVersionId)}/restore`,
+        `/api/workspaces/${mergeWorkspaceId}/canvases/${encodeURIComponent(mergeSlug)}/versions/${encodeURIComponent(preMergeVersionId)}/restore`,
         { method: 'POST' },
       )
       if (res.ok) {
@@ -102,11 +106,15 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
       }
       const body = await res.json().catch(() => undefined)
       const message = safeErrorCopy({ status: res.status, body }, 'Undo failed. Try again.')
-      log.error('restore request failed', { status: res.status, workspaceId, slug })
+      log.error('restore request failed', {
+        status: res.status,
+        workspaceId: mergeWorkspaceId,
+        slug: mergeSlug,
+      })
       setUndoError(message)
     } catch (err) {
       // Keep the toast (and its retry affordance) visible; the restore did not happen.
-      log.error('restore request threw', err, { workspaceId, slug })
+      log.error('restore request threw', err, { workspaceId: mergeWorkspaceId, slug: mergeSlug })
       setUndoError(safeErrorCopy(err, 'Undo failed. Try again.'))
     } finally {
       setUndoing(false)

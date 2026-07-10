@@ -108,6 +108,24 @@ describe('MergeToast', () => {
     expect(calledUrl).toBe('/api/workspaces/s1/canvases/c1/versions/v%2Fpre%3Fweird%23id/restore')
   })
 
+  it('restores the canvas the merge happened on, not the currently selected one', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { rerender } = render(<MergeToast workspaceId="s1" slug="c1" />)
+    act(() => dispatchMergeCommitted(baseDetail))
+    // Simulate switching to a different canvas while the toast is still open;
+    // the toast state is not keyed on workspaceId/slug so it survives the switch.
+    rerender(<MergeToast workspaceId="s1" slug="c2" />)
+    fireEvent.click(screen.getByTestId('merge-toast-undo'))
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled()
+    })
+    const calledUrl = fetchMock.mock.calls[0]?.[0] as string
+    expect(calledUrl).toBe('/api/workspaces/s1/canvases/c1/versions/v-pre/restore')
+  })
+
   it('closes immediately when the close button is clicked', () => {
     render(<MergeToast workspaceId="s1" slug="c1" />)
     act(() => dispatchMergeCommitted(baseDetail))
