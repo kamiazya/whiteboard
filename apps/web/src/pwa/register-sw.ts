@@ -1,4 +1,7 @@
 import type { RegisterSWOptions } from 'vite-plugin-pwa/types'
+import { getAppLogger } from '../lib/app-logger.js'
+
+const log = getAppLogger('register-sw')
 
 type ImportRegisterModule = () => Promise<{
   registerSW: (options?: RegisterSWOptions) => (reloadPage?: boolean) => Promise<void>
@@ -27,18 +30,26 @@ export function setupSwRegistration({
   window.addEventListener(
     'load',
     () => {
-      void importRegister().then(({ registerSW }) => {
-        const updateServiceWorker = registerSW({
-          onNeedRefresh: () => {
-            // The toast UI (React component + createRoot) is only needed on
-            // the rare "an update is available" path, so it stays out of the
-            // entry chunk via a dynamic import too.
-            void import('./mount-update-toast.js').then(({ mountUpdateToast }) => {
-              mountUpdateToast(updateServiceWorker)
-            })
-          },
+      void importRegister()
+        .then(({ registerSW }) => {
+          const updateServiceWorker = registerSW({
+            onNeedRefresh: () => {
+              // The toast UI (React component + createRoot) is only needed on
+              // the rare "an update is available" path, so it stays out of the
+              // entry chunk via a dynamic import too.
+              void import('./mount-update-toast.js')
+                .then(({ mountUpdateToast }) => {
+                  mountUpdateToast(updateServiceWorker)
+                })
+                .catch((err: unknown) => {
+                  log.error('failed to load the update toast module', err)
+                })
+            },
+          })
         })
-      })
+        .catch((err: unknown) => {
+          log.error('failed to register the service worker', err)
+        })
     },
     { once: true },
   )

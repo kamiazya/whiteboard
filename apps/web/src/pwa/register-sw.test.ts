@@ -57,4 +57,26 @@ describe('setupSwRegistration', () => {
 
     expect(importRegister).not.toHaveBeenCalled()
   })
+
+  it('does not leave an unhandled rejection when the dynamic import fails', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const importRegister = vi.fn().mockRejectedValue(new Error('chunk load failed'))
+    const unhandledRejections: unknown[] = []
+    const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
+      unhandledRejections.push(event.reason)
+    }
+    window.addEventListener('unhandledrejection', onUnhandledRejection)
+
+    try {
+      setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+      fireWindowLoad()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(unhandledRejections).toEqual([])
+    } finally {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection)
+    }
+  })
 })
