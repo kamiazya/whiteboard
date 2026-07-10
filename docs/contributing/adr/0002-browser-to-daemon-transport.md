@@ -110,3 +110,89 @@ That question is now resolved.
   an OS-level process identifier from an intentionally unauthenticated
   endpoint; a startup-time `instanceId` gives an equivalent ownership check
   without exposing `pid`.
+
+## Addendum (accepted): the mixed-content premise was wrong — hosted HTTPS → loopback HTTP works via Local Network Access
+
+This ADR's Context section stated that "a page served over `https://` cannot
+make `http://` requests — this is enforced before CORS and cannot be
+overridden by CSP", and derived from it a hard fork: hosted-Pages pairing
+would require an HTTPS daemon (mkcert, Approach B). Empirical verification
+against the real production origin disproved that premise for two of the
+three engine families.
+
+### Measured facts (2026-07-08, real `https://kamiazya-whiteboard.pages.dev` page)
+
+A CORS-permissive probe server on `http://127.0.0.1` was fetched from page
+context in each engine, driven by Playwright on macOS (page URL:
+`https://kamiazya-whiteboard.pages.dev/`, app build v0.0.10). These are
+observations from the listed builds, not guarantees for whole engine
+families; re-run the harness below before relying on them for a new
+browser version.
+
+| Engine (tested build) | Result | Mechanism |
+|---|---|---|
+| Chromium 149 (Playwright bundled) | **Succeeds (200)** once the `local-network-access` permission is granted; hangs on the pending permission prompt until the user decides | [Local Network Access](https://developer.chrome.com/blog/local-network-access) (permission prompt shipped in Chrome 142) includes a mixed-content exemption for local/loopback targets. Requestable only from secure contexts — the hosted HTTPS page is the intended client. |
+| Firefox 148.0.2 (Playwright build v1511) | **Succeeds (200)** with no prompt | Loopback is a potentially-trustworthy origin; the fetch is not treated as mixed content. Plain CORS governs. |
+| WebKit (Playwright build 2272, macOS) | **Blocked** (`requested insecure content … blocked`) | The tested WebKit build applies no loopback mixed-content exemption. The original premise held only in this engine as tested. |
+
+The remaining blocker for hosted pairing is therefore **this repo's own
+daemon policy**, not the browser: with a `pages.dev` Origin the daemon
+returns no `Access-Control-Allow-Origin` on `/api/*`, 403 on `/mcp`, and
+rejects the WS upgrade (loopback-hostname Origin gate) — all verified
+against a running daemon. Chromium's LNA gating for WebSocket is not yet
+shipped (tracked upstream), so WS behavior must be re-verified when it
+lands.
+
+### Decision (supersedes the Approach A/B framing above)
+
+- **Approach B (mkcert) is demoted** from "the only viable path for hosted
+  pairing" to a WebKit/Safari-compatibility option. It is not required for
+  hosted pairing on Chromium- or Gecko-based browsers.
+- **Hosted pairing targets LNA**: the hosted page requests the
+  `local-network-access` permission (Chromium) or relies on the loopback
+  trustworthiness carve-out (Firefox); the daemon must then admit the exact
+  hosted origin — an exact-match origin allowlist on `/api/*` CORS, `/mcp`,
+  and the WS upgrade is the prerequisite work, never a wildcard or suffix
+  match.
+- **Browser support is capability-tiered, detected by probe, not UA
+  sniffing**: Tier 1 (browser-local + daemon pairing) — Chromium ≥ 142 and
+  Firefox; Tier 2 (browser-local only) — WebKit/Safari, which must see an
+  explicit "daemon pairing not supported in this browser" state instead of a
+  silent failure. The existing capability-gating architecture (ADR-0004)
+  carries this without a new mechanism.
+- **The `mixed-content-skipped` pre-flight guard above is superseded.** The
+  availability-detection spec earlier in this ADR required the probe to
+  return `{ reachable: false, reason: 'mixed-content-skipped' }` without
+  fetching whenever `location.protocol === 'https:'` and `daemonBaseUrl`
+  starts with `http:`. Under that guard the LNA flow would never start.
+  Replacement behavior: on an HTTPS page with a loopback HTTP
+  `daemonBaseUrl`, the probe MUST attempt the fetch (triggering the
+  permission prompt on Chromium where applicable) and classify the observed
+  outcome afterward. `mixed-content-skipped` remains only as the classified
+  outcome for engines that actually block the request (the tested WebKit
+  behavior), no longer as a pre-flight short-circuit.
+- **The probe result classification must be extended** beyond
+  `timeout | network-error | mixed-content-skipped | not-daemon | auth-error`
+  to distinguish the LNA-era outcomes: at minimum a pending/denied
+  permission state (Chromium exposes `navigator.permissions.query({ name:
+  'local-network-access' })` to disambiguate a prompt-pending hang from a
+  plain timeout) and an engine-blocked state. The exact enum is an
+  implementation concern of the availability-probe slice; this ADR only
+  fixes the requirement that these outcomes are distinguishable and drive
+  the capability tiers below.
+- The local-dev HTTP pairing scope shipped under Approach A remains valid
+  and unchanged; LNA extends the same server surface to hosted origins
+  rather than replacing it.
+
+### Consequences
+
+- The daemon-side exact-match origin allowlist graduates from "residual-risk
+  mitigation, optional" to the gating prerequisite for any hosted pairing.
+- A reproducible cross-engine harness exists: drive the production page with
+  Playwright, grant `local-network-access` via `grantPermissions`, and probe
+  loopback — usable as a regression check for the transport assumptions in
+  this ADR.
+- Unverified remainder, to re-check before shipping hosted pairing: the real
+  user-facing prompt UX (automation bypasses the prompt), WS behavior once
+  Chromium gates it behind LNA, and LNA rollout changes (origin trial /
+  enterprise policy knobs).
