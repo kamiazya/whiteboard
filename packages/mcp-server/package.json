@@ -1,6 +1,6 @@
 {
   "name": "@kamiazya/whiteboard-mcp",
-  "version": "0.0.11",
+  "version": "0.0.12",
   "description": "MCP server + Excalidraw whiteboard UI for AI-assisted diagramming (Claude Code / Codex).",
   "author": "kamiazya",
   "license": "MIT",
