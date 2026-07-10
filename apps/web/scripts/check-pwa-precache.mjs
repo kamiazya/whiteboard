@@ -57,6 +57,24 @@ for (const { label, pattern } of checks) {
   }
 }
 
+// loro-crdt's `browser/` entry loads the WASM via a SYNCHRONOUS XHR, which
+// bypasses the service worker entirely — the precached WASM is never served
+// and the offline PWA dies on reload. The vite alias pins the `bundler/`
+// entry (async, SW-interceptable fetch); this guard fails the build if the
+// sync-XHR loader ever reappears in the emitted JS (e.g. the alias is
+// dropped or loro's export map changes).
+import { readdirSync } from 'node:fs'
+const ASSETS_DIR = resolve(ROOT, 'dist', 'assets')
+const SYNC_XHR_MARKER = 'requires XMLHttpRequest for synchronous WASM loading'
+const offender = readdirSync(ASSETS_DIR)
+  .filter((f) => f.endsWith('.js'))
+  .find((f) => readFileSync(resolve(ASSETS_DIR, f), 'utf8').includes(SYNC_XHR_MARKER))
+if (offender) {
+  fail(`sync-XHR loro WASM loader bundled in ${offender} — SW cannot serve it offline`)
+} else {
+  pass('no sync-XHR WASM loader in the bundle (loro bundler entry in effect)')
+}
+
 if (failures > 0) {
   console.error(`\npwa-precache gate: ${failures} failure(s)`)
   process.exit(1)

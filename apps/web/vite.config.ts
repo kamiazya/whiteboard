@@ -96,6 +96,15 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/index.ts',
       ),
+      // loro-crdt's export map resolves the production browser build to its
+      // `browser/` entry, which loads the WASM via a SYNCHRONOUS XHR. Sync
+      // XHR bypasses the service worker, so the precached WASM is never
+      // served offline and the PWA dies on reload without network. Pin the
+      // `bundler/` entry (an ESM `import ... from '*.wasm'` handled by
+      // vite-plugin-wasm as an async, SW-interceptable fetch) — the same
+      // entry vite already uses in dev via the `browser.development`
+      // condition, so dev and prod behavior converge.
+      'loro-crdt': 'loro-crdt/bundler',
     },
   },
   build: {
