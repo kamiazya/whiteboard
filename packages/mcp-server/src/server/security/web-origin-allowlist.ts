@@ -35,14 +35,15 @@ export type ParseAllowedWebOriginsResult =
 export function parseAllowedWebOriginsEnv(value: string | undefined): ParseAllowedWebOriginsResult {
   if (!value || value.trim() === '') return { ok: true, origins: [] }
 
-  const entries = value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0)
-
+  // Iterate the raw split so a reported entryIndex points at the true position
+  // in the operator's comma-separated value; empty/whitespace entries are
+  // skipped in-loop rather than filtered out first (which would shift indices).
+  const entries = value.split(',')
   const origins: string[] = []
   for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
-    const result = validateOriginEntry(entries[entryIndex])
+    const entry = entries[entryIndex].trim()
+    if (entry.length === 0) continue
+    const result = validateOriginEntry(entry)
     if (!result.ok) {
       return { ok: false, code: REASON_TO_CODE[result.reason], entryIndex }
     }
