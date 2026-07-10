@@ -161,6 +161,53 @@ describe('DaemonCanvasPage', () => {
     expect(screen.getByTestId('excalidraw-container')).toBeTruthy()
   })
 
+  it('clears the auth-error banner when switching to a new canvas (new backend identity)', async () => {
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+    await act(async () => {
+      createdBackends[0]?.handlers?.onAuthError?.()
+    })
+    expect(screen.getByRole('alert').textContent).toMatch(/daemon rejected/i)
+
+    const select = screen.getByLabelText('Canvases') as HTMLSelectElement
+    await act(async () => {
+      select.value = 'second'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    // The stale banner must not outlive the backend that produced it.
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('renders a browser-local escape button in the auth banner and invokes the callback', async () => {
+    const onContinueBrowserLocal = vi.fn()
+    await act(async () => {
+      render(
+        <DaemonCanvasPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          createBackend={makeCreateBackend()}
+          onContinueBrowserLocal={onContinueBrowserLocal}
+        />,
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+    await act(async () => {
+      createdBackends[0]?.handlers?.onAuthError?.()
+    })
+
+    const escape = screen.getByRole('button', { name: /continue in browser-local/i })
+    await act(async () => {
+      escape.click()
+    })
+    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the connecting status while workspace/canvas resolution is pending', async () => {
     // Never resolves during this test, so the page stays in the loading state.
     mockListWorkspaces.mockReturnValue(new Promise(() => {}))

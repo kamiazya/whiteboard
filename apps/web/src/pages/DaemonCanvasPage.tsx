@@ -2,7 +2,7 @@ import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
@@ -19,6 +19,10 @@ export interface DaemonCanvasPageProps {
   // side (createDaemonFetch's Authorization header).
   token?: string
   capabilities?: WhiteboardCapabilities
+  // Rendered as a "Continue in browser-local" escape next to the auth-error
+  // banner — without it a rejected session leaves the user stuck on a dead
+  // daemon page with no way back into the app.
+  onContinueBrowserLocal?: () => void
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, slug: string, daemonFetch: typeof fetch) => CanvasBackend
@@ -30,6 +34,7 @@ export function DaemonCanvasPage({
   slug,
   token,
   capabilities = LOCAL_DAEMON_CAPABILITIES,
+  onContinueBrowserLocal,
   createBackend,
 }: DaemonCanvasPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
@@ -64,6 +69,13 @@ export function DaemonCanvasPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resolvedCreateBackend, controller.workspaceId, controller.slug, daemonFetch])
 
+  // A rejected session belongs to one backend identity — switching to a new
+  // canvas opens a fresh connection, so a stale banner must not outlive the
+  // backend that produced it.
+  useEffect(() => {
+    setAuthError(false)
+  }, [backend])
+
   const { setExcalidrawAPI, onChange } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
   })
@@ -97,8 +109,19 @@ export function DaemonCanvasPage({
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
         <h1 className="sr-only">Whiteboard (daemon)</h1>
         {authError && (
-          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
-            The daemon rejected this session. Try re-pairing.
+          <div role="alert" aria-live="assertive" className="flex items-center gap-2">
+            <span className="text-xs text-destructive">
+              The daemon rejected this session. Try re-pairing.
+            </span>
+            {onContinueBrowserLocal && (
+              <button
+                type="button"
+                onClick={onContinueBrowserLocal}
+                className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
+              >
+                Continue in browser-local
+              </button>
+            )}
           </div>
         )}
         {controller.canvases.length > 0 && controller.slug !== null && (
