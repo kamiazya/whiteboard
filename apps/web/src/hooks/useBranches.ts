@@ -209,7 +209,21 @@ export function useBranches(
   const [state, setState] = useState<BranchesState>({ branches: [], head: 'main' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<BranchApiError | Error | null>(null)
+  // Recreated synchronously during render (compare-and-update below) rather
+  // than in an effect: refetch() reads apiRef.current, and an effect-based
+  // rebuild would depend on effect declaration order to run before the
+  // initial-fetch effect — correct today but fragile under reordering. The
+  // factory is a stateless wrapper, so rebuilding during render is safe.
   const apiRef = useRef(branchesApi(workspaceId, slug, fetchFn))
+  const apiDepsRef = useRef({ workspaceId, slug, fetchFn })
+  if (
+    apiDepsRef.current.workspaceId !== workspaceId ||
+    apiDepsRef.current.slug !== slug ||
+    apiDepsRef.current.fetchFn !== fetchFn
+  ) {
+    apiDepsRef.current = { workspaceId, slug, fetchFn }
+    apiRef.current = branchesApi(workspaceId, slug, fetchFn)
+  }
   // Monotonically increasing counter. Each refetch call stamps its result with
   // the counter value at dispatch time; the setter is a no-op when a newer
   // fetch has already committed. This prevents a slower in-flight response
@@ -227,14 +241,6 @@ export function useBranches(
     setError(null)
     setLoading(true)
   }
-
-  // Recreate the API wrapper whenever session, slug, or fetch identity
-  // changes — omitting fetchFn here would leave apiRef pinned to a stale
-  // fetch (e.g. a torn-down daemon session) after a provider swap that
-  // doesn't also change workspaceId/slug.
-  useEffect(() => {
-    apiRef.current = branchesApi(workspaceId, slug, fetchFn)
-  }, [workspaceId, slug, fetchFn])
 
   const refetch = useCallback(async () => {
     const seq = ++fetchSeqRef.current
