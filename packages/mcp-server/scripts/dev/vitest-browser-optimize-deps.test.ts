@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import browserConfig from '../../vitest.browser.config.js'
 
@@ -13,7 +14,14 @@ describe('mcp-server vitest.browser.config optimizeDeps', () => {
     const include = browserConfig.optimizeDeps?.include ?? []
 
     expect(include).toEqual(
-      expect.arrayContaining(['react', 'react-dom', 'react-dom/client', '@testing-library/react']),
+      expect.arrayContaining([
+        'react',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-dom',
+        'react-dom/client',
+        '@testing-library/react',
+      ]),
     )
   })
 })

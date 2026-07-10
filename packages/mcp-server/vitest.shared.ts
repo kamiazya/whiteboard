@@ -27,6 +27,7 @@ export default defineConfig({
     include: [
       'react',
       'react/jsx-runtime',
+      'react/jsx-dev-runtime',
       'react-dom',
       // Vitest browser mode fetches test dependencies through the Vite dev
       // server on demand instead of bundling them ahead of time. Under CI
