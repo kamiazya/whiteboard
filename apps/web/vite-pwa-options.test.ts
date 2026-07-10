@@ -10,7 +10,7 @@ describe('pwaOptions', () => {
     const denylist = pwaOptions.workbox?.navigateFallbackDenylist ?? []
     expect(denylist.length).toBeGreaterThan(0)
 
-    const positiveCases = ['/api/canvases', '/mcp', '/ws']
+    const positiveCases = ['/api/canvases', '/api', '/mcp', '/ws']
     for (const path of positiveCases) {
       expect(denylist.some((re) => re.test(path))).toBe(true)
     }
@@ -27,7 +27,7 @@ describe('pwaOptions', () => {
     // A future client SPA route like /mcpstatus or /workspace must still get
     // the offline app-shell fallback; only the exact /mcp and /ws daemon
     // endpoints (and their sub-paths) are denied.
-    const falsePositiveCases = ['/mcpstatus', '/workspace', '/wishlist']
+    const falsePositiveCases = ['/mcpstatus', '/workspace', '/wishlist', '/apikeys']
     for (const path of falsePositiveCases) {
       expect(denylist.some((re) => re.test(path))).toBe(false)
     }
