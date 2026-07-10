@@ -37,19 +37,31 @@ describe('release smoke contract', () => {
     )
   })
 
-  it('runs the packaged and Codex config smokes after build and before npm publish', () => {
-    const buildIndex = releaseWorkflow.indexOf('- name: Build')
-    const packagedSmokeIndex = releaseWorkflow.indexOf('- name: Packaged stdio smoke')
-    const tarballSmokeIndex = releaseWorkflow.indexOf('- name: Packed tarball smoke')
-    const codexSmokeIndex = releaseWorkflow.indexOf('- name: Codex config smoke')
-    const publishIndex = releaseWorkflow.indexOf('- name: Publish to npm')
+  it('runs the packaged and tarball smokes as publish-tier gates, before npm publish', () => {
+    // The packaged/tarball smokes are no longer standalone release.yml steps —
+    // they are `publish`-tier gates in release-gate-matrix.json, executed in
+    // matrix order by the single `pnpm publish-gate` step. That step must
+    // still run after build and before `npm publish`.
+    const matrix = readJson(resolve(repoRoot, 'tests/e2e/distribution/release-gate-matrix.json'))
+    const publishGateIds: string[] = matrix.gates
+      .filter((g: { requiredFor: string[] }) => g.requiredFor.includes('publish'))
+      .map((g: { id: string }) => g.id)
+    expect(publishGateIds).toContain('build')
+    expect(publishGateIds).toContain('smoke:packaged')
+    expect(publishGateIds).toContain('smoke:tarball')
+    expect(publishGateIds.indexOf('build')).toBeLessThan(publishGateIds.indexOf('smoke:packaged'))
+    expect(publishGateIds.indexOf('build')).toBeLessThan(publishGateIds.indexOf('smoke:tarball'))
 
-    expect(packagedSmokeIndex).toBeGreaterThan(buildIndex)
-    expect(tarballSmokeIndex).toBeGreaterThan(packagedSmokeIndex)
-    expect(codexSmokeIndex).toBeGreaterThan(tarballSmokeIndex)
-    expect(publishIndex).toBeGreaterThan(codexSmokeIndex)
-    expect(releaseWorkflow).toContain('run: pnpm smoke:packaged')
-    expect(releaseWorkflow).toContain('run: pnpm smoke:tarball')
-    expect(releaseWorkflow).toContain('run: pnpm smoke:codex-config')
+    const publishGateStepIndex = releaseWorkflow.indexOf('run: pnpm publish-gate')
+    const publishIndex = releaseWorkflow.indexOf('- name: Publish to npm')
+    expect(publishGateStepIndex).toBeGreaterThan(-1)
+    expect(publishIndex).toBeGreaterThan(publishGateStepIndex)
+  })
+
+  it('does not run smoke:codex-config in the publish-mcp job (verify-covered node correctness smoke, not a publishability check)', () => {
+    const publishMcpStart = releaseWorkflow.indexOf('\n  publish-mcp:')
+    const publishMcpEnd = releaseWorkflow.indexOf('\n  docker-publish-sign:')
+    const publishMcpSection = releaseWorkflow.slice(publishMcpStart, publishMcpEnd)
+    expect(publishMcpSection).not.toContain('smoke:codex-config')
   })
 })
