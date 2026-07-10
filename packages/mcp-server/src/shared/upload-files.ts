@@ -13,6 +13,10 @@ export async function uploadFiles(
   workspaceId: string,
   slug: string,
   onSuccess: (fileId: string) => void,
+  // Cross-origin daemon pairing needs a fetch that targets the daemon's
+  // origin instead of the page origin the module-level apiFetch assumes.
+  // Omitted, this keeps using apiFetch for same-origin daemon UI.
+  fetchFn: typeof globalThis.fetch = apiFetch,
 ): Promise<void> {
   await Promise.all(
     newEntries.map(async ([fileId, fd]) => {
@@ -23,7 +27,7 @@ export async function uploadFiles(
         throw new Error(`file ${fileId}: malformed dataURL (no base64 payload)`)
       }
       const binary = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
-      const res = await apiFetch(
+      const res = await fetchFn(
         `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/file/${encodeURIComponent(fileId)}`,
         {
           method: 'PUT',

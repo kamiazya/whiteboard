@@ -37,10 +37,23 @@ import {
 import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from './ws-protocol.js'
 import { parseServerTextMessage } from './ws-text-message.js'
 
+/**
+ * Cross-origin transport override for getFile/putFile. The module-level
+ * apiFetch only resolves relative /api/... paths against the current page
+ * origin, so a daemon paired from a different origin (apps/web talking to a
+ * loopback daemon) needs its own fetch that targets the daemon's origin.
+ * WS auth stays on readDaemonTokenOnce() regardless — it is subprotocol-based,
+ * not header-based, so it is unaffected by this override.
+ */
+export interface DaemonApiTransport {
+  fetch: typeof globalThis.fetch
+}
+
 export class DaemonBackend implements CanvasBackend {
   private readonly workspaceId: string
   private readonly slug: string
   private readonly locationHref: string
+  private readonly apiTransport: DaemonApiTransport | undefined
 
   private ws: WebSocket | null = null
   private cancelled = false
@@ -51,10 +64,16 @@ export class DaemonBackend implements CanvasBackend {
   // connect() call after the hook tears down the previous backend.
   private snapshotReceived = false
 
-  constructor(workspaceId: string, slug: string, locationHref: string) {
+  constructor(
+    workspaceId: string,
+    slug: string,
+    locationHref: string,
+    apiTransport?: DaemonApiTransport,
+  ) {
     this.workspaceId = workspaceId
     this.slug = slug
     this.locationHref = locationHref
+    this.apiTransport = apiTransport
   }
 
   connect(handlers: CanvasBackendHandlers): void {
@@ -83,7 +102,8 @@ export class DaemonBackend implements CanvasBackend {
   }
 
   async getFile(fileId: string): Promise<Blob | null> {
-    const res = await apiFetch(
+    const fetchFn = this.apiTransport?.fetch ?? apiFetch
+    const res = await fetchFn(
       `/api/canvas/${this.workspaceId}/${encodeURIComponent(this.slug)}/file/${encodeURIComponent(fileId)}`,
     )
     if (!res.ok) return null
@@ -94,7 +114,13 @@ export class DaemonBackend implements CanvasBackend {
     newEntries: [string, BinaryFileDataLike][],
     onFileSuccess: (fileId: string) => void,
   ): Promise<void> {
-    await uploadFiles(newEntries, this.workspaceId, this.slug, onFileSuccess)
+    await uploadFiles(
+      newEntries,
+      this.workspaceId,
+      this.slug,
+      onFileSuccess,
+      this.apiTransport?.fetch,
+    )
   }
 
   sendClientReady(): void {
