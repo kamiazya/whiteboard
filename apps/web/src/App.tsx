@@ -1,8 +1,17 @@
+import { lazy, Suspense, useState } from 'react'
 import { BetaBanner } from './components/BetaBanner.js'
+import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { BrowserLocalCanvasPage } from './pages/BrowserLocalCanvasPage.js'
+
+// Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
+// of the entry chunk — only sessions arriving via a #wb= pairing fragment pay
+// for it, keeping the browser-local entry under the bundle-size budget.
+const DaemonCanvasPage = lazy(() =>
+  import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
+)
 
 const _browserLocalStore = new IndexedDBStore()
 const _userSettingsStore = createUserSettingsStore()
@@ -47,6 +56,63 @@ function BackendConfigChip({ state }: BackendConfigChipProps) {
 }
 
 export function App({ providerState }: AppProps) {
+  // Routed BEFORE providerState resolution: a #wb= pairing fragment always
+  // wins over the runtime-config-driven provider state (which governs the
+  // separate same-origin local-daemon / browser-local split). 'none' (no
+  // fragment) falls through to that existing resolution unchanged.
+  const daemonConnection = useDaemonConnection()
+  const [forcedBrowserLocal, setForcedBrowserLocal] = useState(false)
+
+  // The 'Continue in browser-local' escape hatch opts out of the pairing
+  // fragment entirely, so once it's set both daemon branches are skipped.
+  if (!forcedBrowserLocal) {
+    if (daemonConnection.status === 'paired') {
+      const { payload } = daemonConnection
+      return (
+        <Suspense
+          fallback={
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
+            >
+              Connecting to daemon…
+            </div>
+          }
+        >
+          <DaemonCanvasPage
+            daemonBaseUrl={payload.baseUrl}
+            workspaceId={payload.workspaceId}
+            slug={payload.slug}
+            token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
+            onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+          />
+        </Suspense>
+      )
+    }
+
+    if (daemonConnection.status === 'error') {
+      return (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        >
+          <p className="max-w-md text-sm text-destructive">
+            The daemon pairing link could not be used. You can continue without a daemon connection.
+          </p>
+          <button
+            type="button"
+            onClick={() => setForcedBrowserLocal(true)}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Continue in browser-local
+          </button>
+        </div>
+      )
+    }
+  }
+
   const state = providerState ?? _defaultProviderState
 
   if (state.kind === 'invalid-config') {

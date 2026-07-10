@@ -39,6 +39,10 @@ export interface UseCanvasSyncOptions {
   onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
   onFileUploadFailed?: () => void
   onFileUploadSucceeded?: () => void
+  // Fired in addition to (not instead of) the hook's own syncStatus:'error'
+  // transition on a WS auth failure (close 1008), so a daemon-backed page
+  // can surface a dedicated banner instead of the generic error state.
+  onAuthError?: () => void
 }
 
 export interface UseCanvasSyncResult {
@@ -583,6 +587,11 @@ export function useCanvasSync(
       onAuthError() {
         if (isStale()) return
         setSyncStatus('error')
+        try {
+          optionsRef.current.onAuthError?.()
+        } catch (err) {
+          console.error('onAuthError callback threw', err)
+        }
       },
 
       onError: () => {

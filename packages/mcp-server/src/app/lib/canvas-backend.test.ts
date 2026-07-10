@@ -513,7 +513,13 @@ describe('DaemonBackend', () => {
       const onFileSuccess = vi.fn()
       await backend.putFile(entries as Parameters<typeof backend.putFile>[0], onFileSuccess)
 
-      expect(uploadFilesMock).toHaveBeenCalledWith(entries, 'ws-sid', 'slug', onFileSuccess)
+      expect(uploadFilesMock).toHaveBeenCalledWith(
+        entries,
+        'ws-sid',
+        'slug',
+        onFileSuccess,
+        undefined,
+      )
     })
   })
 
