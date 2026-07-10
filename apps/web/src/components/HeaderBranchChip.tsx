@@ -68,6 +68,12 @@ export interface HeaderBranchChipProps {
   // mutations (create/rename/delete/setHead) already refetch internally, so
   // this only needs to cover changes this component did not itself trigger.
   refreshSignal?: number
+  // The provider capability contract: switching/creating/renaming/deleting
+  // branches does not imply merge is available. Defaults to true so existing
+  // callers that only gate on `capabilities.branches` keep today's behavior;
+  // callers must pass `capabilities.merge` explicitly to hide the merge
+  // entry point when the provider does not support it.
+  mergeEnabled?: boolean
 }
 
 interface PendingMerge {
@@ -80,6 +86,7 @@ export function HeaderBranchChip({
   slug,
   disabled,
   refreshSignal,
+  mergeEnabled = true,
 }: HeaderBranchChipProps): JSX.Element {
   const fetchFn = useDaemonApi()
   const {
@@ -369,7 +376,11 @@ export function HeaderBranchChip({
             <GitMerge className="size-3" />
             Merge into «{head}»
           </DropdownMenuLabel>
-          {otherBranches.length === 0 ? (
+          {!mergeEnabled ? (
+            <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+              Merge unavailable
+            </DropdownMenuItem>
+          ) : otherBranches.length === 0 ? (
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
               No other branches
             </DropdownMenuItem>

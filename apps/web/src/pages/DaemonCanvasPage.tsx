@@ -170,14 +170,16 @@ export function DaemonCanvasPage({
                 workspaceId={controller.workspaceId}
                 slug={controller.slug}
                 refreshSignal={branchRefreshSignal}
+                mergeEnabled={capabilities.merge}
               />
             ) : (
               <CapabilityTeaser label="Branches" enabled={false} />
             )}
             {/* Merge lives inside HeaderBranchChip's per-branch "Merge into
                 HEAD" action (which embeds MergeDialog); there is no separate
-                merge entry point, so this stays a static teaser only when
-                merge itself is unavailable. */}
+                merge entry point. The chip itself disables that action via
+                mergeEnabled, so this stays a static teaser only when merge
+                is unavailable, matching the other capability indicators. */}
             {!capabilities.merge && <CapabilityTeaser label="Merge" enabled={false} />}
           </div>
         </header>

@@ -665,6 +665,111 @@ describe('DaemonCanvasPage', () => {
     })
   })
 
+  describe('MergeToast integration', () => {
+    const dispatchMergeCommitted = (overrides: Partial<Record<string, unknown>> = {}) => {
+      window.dispatchEvent(
+        new CustomEvent('excalidraw:merge_committed', {
+          detail: {
+            workspaceId: 'w1',
+            slug: 'main',
+            sourceName: 'feature-x',
+            targetName: 'main',
+            newCount: 1,
+            changedCount: 0,
+            conflictCount: 0,
+            newElementIds: [],
+            conflictElementIds: [],
+            ...overrides,
+          },
+        }),
+      )
+    }
+
+    it('renders MergeToast and shows it once a merge_committed event fires when capabilities.merge is true', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByTestId('merge-toast')).toBeNull()
+
+      await act(async () => {
+        dispatchMergeCommitted()
+      })
+
+      await waitFor(() => expect(screen.getByTestId('merge-toast')).toBeTruthy())
+      expect(screen.getByTestId('merge-toast').textContent).toContain('feature-x')
+    })
+
+    it('does not mount MergeToast when capabilities.merge is false', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: true,
+              branches: true,
+              merge: false,
+            }}
+          />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      await act(async () => {
+        dispatchMergeCommitted()
+      })
+
+      // MergeToast's own listener is never mounted, so the event is a no-op here.
+      expect(screen.queryByTestId('merge-toast')).toBeNull()
+    })
+
+    it('wires MergeToast onRestored to clearLocalUndo (restore fetch clears the toast via the shared daemon fetch)', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/restore')) {
+            return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      await act(async () => {
+        dispatchMergeCommitted({ preMergeVersionId: 'v-pre' })
+      })
+      await waitFor(() => expect(screen.getByTestId('merge-toast')).toBeTruthy())
+
+      await act(async () => {
+        screen.getByTestId('merge-toast-undo').click()
+      })
+
+      // A successful undo calls onRestored (clearLocalUndo) and dismisses the toast;
+      // this proves the prop is actually wired, not just present as a no-op default.
+      await waitFor(() => expect(screen.queryByTestId('merge-toast')).toBeNull())
+      expect(fetchMock.mock.calls.some(([reqInput]) => String(reqInput).includes('/restore'))).toBe(
+        true,
+      )
+
+      vi.unstubAllGlobals()
+    })
+  })
+
   describe('default backend wiring (no createBackend override)', () => {
     class FakeWebSocket {
       static instances: FakeWebSocket[] = []

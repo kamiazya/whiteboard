@@ -203,6 +203,25 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     })
   })
 
+  it('disables the merge entry point when mergeEnabled is false', async () => {
+    stateHolder.current.state = { head: 'main', branches }
+    stateHolder.current.merge = vi.fn().mockResolvedValue({})
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" mergeEnabled={false} />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const unavailable = await screen.findByText('Merge unavailable')
+    expect(unavailable.getAttribute('data-disabled')).not.toBeNull()
+
+    // The branch that would normally be a mergeable source must not appear
+    // as a selectable item — the provider disabled merge entirely. The item
+    // is aria-disabled, so it cannot be clicked at all (Radix blocks pointer
+    // interaction on disabled menu items), which is itself the assertion
+    // that a merge cannot be initiated through this menu.
+    expect(screen.queryByText('feature-x')).toBeNull()
+    expect(stateHolder.current.merge).not.toHaveBeenCalled()
+  })
+
   it('keeps the rename target stable when HEAD changes while the rename dialog is open', async () => {
     stateHolder.current.state = { head: 'feature-x', branches }
     const { rerender } = render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
