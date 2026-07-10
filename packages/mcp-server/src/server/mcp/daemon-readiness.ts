@@ -18,9 +18,16 @@
  */
 export const DAEMON_STARTUP_CONTENTION_TOKEN = 'Daemon startup'
 
+function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'object' && err !== null && 'message' in err) {
+    return String((err as { message: unknown }).message)
+  }
+  return String(err)
+}
+
 export function isDaemonStartupContentionError(err: unknown): boolean {
-  const message = err instanceof Error ? err.message : String(err)
-  return message.includes(DAEMON_STARTUP_CONTENTION_TOKEN)
+  return getErrorMessage(err).includes(DAEMON_STARTUP_CONTENTION_TOKEN)
 }
 
 export interface RetryDaemonStartupOptions<T> {
@@ -54,7 +61,7 @@ export async function retryDaemonStartup<T>({
       if (attemptIndex < maxRetries && sleep) await sleep(attemptIndex)
     }
   }
-  const message = lastError instanceof Error ? lastError.message : String(lastError)
+  const message = getErrorMessage(lastError)
   throw new Error(
     `Daemon startup retry budget exhausted after ${maxRetries + 1} attempts: ${message}`,
   )
