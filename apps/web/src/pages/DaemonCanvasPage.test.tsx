@@ -2,7 +2,7 @@ import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
@@ -36,6 +36,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListCanvases = vi.mocked(daemonApiClient.listCanvases)
+const mockCreateCanvas = vi.mocked(daemonApiClient.createCanvas)
 
 // Records every fake backend instance created, in order, so tests can assert
 // exactly-once disconnect and ordering (old disconnects before new connects).
@@ -158,5 +159,109 @@ describe('DaemonCanvasPage', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/daemon rejected/i)
     // Editor chrome stays mounted — auth error is a banner, not a full-page replacement.
     expect(screen.getByTestId('excalidraw-container')).toBeTruthy()
+  })
+
+  it('shows the connecting status while workspace/canvas resolution is pending', async () => {
+    // Never resolves during this test, so the page stays in the loading state.
+    mockListWorkspaces.mockReturnValue(new Promise(() => {}))
+
+    render(<DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />)
+
+    expect(screen.getByRole('status').textContent).toMatch(/connecting to daemon/i)
+  })
+
+  it('shows a full-page alert when workspace/canvas resolution fails', async () => {
+    mockListWorkspaces.mockRejectedValue(new Error('daemon unreachable'))
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      )
+    })
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    expect(screen.getByRole('alert').textContent).toMatch(/daemon unreachable/i)
+    expect(screen.queryByTestId('excalidraw-container')).toBeNull()
+  })
+
+  it('renders a create-canvas form when the workspace has zero canvases', async () => {
+    mockListCanvases.mockResolvedValue({ canvases: [] })
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      )
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+    )
+    expect(screen.queryByLabelText('Canvases')).toBeNull()
+    expect(screen.queryByTestId('excalidraw-container')).toBeNull()
+    expect(screen.getByLabelText('New canvas name')).toBeTruthy()
+  })
+
+  it('submits the create-canvas form and mounts the editor once the canvas exists', async () => {
+    mockListCanvases.mockResolvedValueOnce({ canvases: [] })
+    mockCreateCanvas.mockResolvedValue({ slug: 'brand-new' })
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'brand-new', updatedAt: '2026-01-03' }],
+    })
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      )
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+    )
+
+    const input = screen.getByLabelText('New canvas name') as HTMLInputElement
+    const form = input.closest('form')!
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'brand-new' } })
+    })
+    await act(async () => {
+      fireEvent.submit(form)
+    })
+
+    expect(mockCreateCanvas).toHaveBeenCalledWith(
+      expect.anything(),
+      DAEMON_BASE_URL,
+      'w1',
+      'brand-new',
+    )
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+  })
+
+  it('shows the createError alert in the empty-canvases state when creation fails', async () => {
+    mockListCanvases.mockResolvedValue({ canvases: [] })
+    mockCreateCanvas.mockRejectedValue(new Error('slug already exists'))
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      )
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+    )
+
+    const input = screen.getByLabelText('New canvas name') as HTMLInputElement
+    const form = input.closest('form')!
+
+    await act(async () => {
+      fireEvent.change(input, { target: { value: 'brand-new' } })
+    })
+    await act(async () => {
+      fireEvent.submit(form)
+    })
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    expect(screen.getByRole('alert').textContent).toMatch(/slug already exists/i)
   })
 })

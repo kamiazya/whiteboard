@@ -128,6 +128,41 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.slug).toBe('brand-new')
   })
 
+  it('createCanvas surfaces a create error instead of throwing when the daemon call fails', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListCanvases.mockResolvedValue({ canvases: [] })
+    mockCreateCanvas.mockRejectedValue(new Error('slug already exists'))
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(async () => {
+      await result.current.createCanvas('brand-new')
+    })
+
+    expect(result.current.createError).toBe('slug already exists')
+    expect(result.current.slug).toBeNull()
+  })
+
+  it('createCanvas is a no-op before workspaceId has resolved', async () => {
+    // Never resolves during this test, so workspaceId stays null past mount.
+    mockListWorkspaces.mockReturnValue(new Promise(() => {}))
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    expect(result.current.workspaceId).toBeNull()
+
+    await act(async () => {
+      await result.current.createCanvas('brand-new')
+    })
+
+    expect(mockCreateCanvas).not.toHaveBeenCalled()
+    expect(result.current.createError).toBeNull()
+  })
+
   it('surfaces a load error instead of throwing when the daemon call fails', async () => {
     mockListWorkspaces.mockRejectedValue(new Error('network down'))
 
