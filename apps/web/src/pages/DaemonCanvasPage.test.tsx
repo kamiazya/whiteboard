@@ -312,6 +312,199 @@ describe('DaemonCanvasPage', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/slug already exists/i)
   })
 
+  describe('version history panel', () => {
+    it('opens the panel and lists versions for the current (workspaceId, slug) via the daemon fetch', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/versions')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  versions: [
+                    {
+                      id: 'v-1',
+                      slug: 'main',
+                      createdAt: '2026-01-01T00:00:00Z',
+                      elementCount: 3,
+                      auto: true,
+                      hasThumbnail: false,
+                      branchName: 'main',
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const toggle = screen.getByRole('button', { name: 'Version history' })
+      await act(async () => {
+        toggle.click()
+      })
+
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([reqInput]) =>
+              String(reqInput).startsWith(DAEMON_BASE_URL) &&
+              String(reqInput).includes('/workspaces/w1/canvases/main/versions'),
+          ),
+        ).toBe(true)
+      })
+      await waitFor(() => expect(screen.getByText('3 els', { exact: false })).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('shows the static disabled teaser instead of the toggle when capabilities.versions is false', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: false,
+              branches: true,
+              merge: true,
+            }}
+          />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const versionButton = screen.getByRole('button', { name: 'Version history' })
+      // The static CapabilityTeaser renders aria-disabled; the real toggle
+      // never does, so this distinguishes the two without a false negative.
+      expect(versionButton.getAttribute('aria-disabled')).toBe('true')
+      expect(versionButton.hasAttribute('aria-pressed')).toBe(false)
+    })
+
+    it('restoring a version reflects on the canvas via the broadcast incremental update', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/restore')) {
+            return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+          }
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/versions')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  versions: [
+                    {
+                      id: 'v-1',
+                      slug: 'main',
+                      createdAt: '2026-01-01T00:00:00Z',
+                      elementCount: 3,
+                      auto: true,
+                      hasThumbnail: false,
+                      branchName: 'main',
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const toggle = screen.getByRole('button', { name: 'Version history' })
+      await act(async () => {
+        toggle.click()
+      })
+
+      const row = await screen.findByText('⚙ System')
+      await act(async () => {
+        fireEvent.click(row.closest('button')!)
+      })
+      await waitFor(() => {
+        expect(screen.getByText('Restore this version?')).toBeTruthy()
+      })
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+      })
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(([reqInput]) =>
+            String(reqInput).includes('/versions/v-1/restore'),
+          ),
+        ).toBe(true)
+      })
+
+      // Real transport: the initial load already delivered a snapshot via
+      // onSnapshot (see FakeBackend.connect above); restore broadcasts a
+      // second, incremental update via onRemoteUpdate — not another snapshot.
+      const backend = createdBackends[0]!
+      const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
+      const restoredDoc = new LoroDoc()
+      const list = restoredDoc.getMovableList('elements')
+      const map = list.insertContainer(
+        0,
+        new (require('loro-crdt') as typeof import('loro-crdt')).LoroMap(),
+      )
+      map.set('id', 'restored-el')
+      map.set('type', 'rectangle')
+      map.set('x', 0)
+      map.set('y', 0)
+      map.set('width', 10)
+      map.set('height', 10)
+      map.set('isDeleted', false)
+      restoredDoc.commit()
+      const update = restoredDoc.export({ mode: 'update' })
+
+      await act(async () => {
+        backend.handlers?.onRemoteUpdate?.(update)
+      })
+
+      await waitFor(() => expect(screen.queryByText('Restore this version?')).toBeNull())
+
+      vi.unstubAllGlobals()
+    })
+  })
+
   describe('default backend wiring (no createBackend override)', () => {
     class FakeWebSocket {
       static instances: FakeWebSocket[] = []
