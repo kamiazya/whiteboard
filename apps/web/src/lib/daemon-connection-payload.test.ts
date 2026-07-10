@@ -147,6 +147,15 @@ describe('parseDaemonConnectionFragment', () => {
     expect(result.status).toBe('invalid')
   })
 
+  it('reports not-present for a percent-encoded "wb" key, matching removal behavior', () => {
+    // URLSearchParams would decode '%77%62' to 'wb' and match it, but
+    // consumeDaemonConnectionFragment's raw-string removal would not strip it —
+    // parsing must use the same raw-key comparison so an unrecognized encoding
+    // is never silently accepted and left lingering in the hash.
+    const encoded = encodeRawBase64Url(JSON.stringify(payload))
+    expect(parseDaemonConnectionFragment(`#%77%62=${encoded}`)).toEqual({ status: 'not-present' })
+  })
+
   it('does not throw on arbitrary garbage input', () => {
     expect(() => parseDaemonConnectionFragment('#wb=%%%')).not.toThrow()
     expect(() => parseDaemonConnectionFragment('garbage')).not.toThrow()

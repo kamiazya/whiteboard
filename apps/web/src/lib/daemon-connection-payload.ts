@@ -64,10 +64,23 @@ function encodeBase64Url(value: string): string {
 
 // Extracts the raw `wb` fragment value from a location.hash-shaped string, tolerant of
 // a missing leading '#' and of other unrelated fragment params sharing the hash.
+//
+// Segment keys are compared as raw strings (no percent-decoding) rather than via
+// URLSearchParams, which would decode a key like `%77%62` to `wb` and accept it.
+// removeFragmentKey() below does the same raw comparison to strip a consumed token
+// from the URL, so a percent-encoded key must be rejected here too — otherwise a
+// payload could be parsed but never cleaned up, leaving a bootstrapToken lingering
+// in window.location.hash.
 function extractFragmentValue(hash: string): string | null {
   const withoutHash = hash.startsWith('#') ? hash.slice(1) : hash
   if (withoutHash.length === 0) return null
-  return new URLSearchParams(withoutHash).get(FRAGMENT_KEY)
+  for (const segment of withoutHash.split('&')) {
+    const separatorIndex = segment.indexOf('=')
+    const key = separatorIndex === -1 ? segment : segment.slice(0, separatorIndex)
+    if (key !== FRAGMENT_KEY) continue
+    return separatorIndex === -1 ? '' : segment.slice(separatorIndex + 1)
+  }
+  return null
 }
 
 // Parses the `#wb=<base64url-json>` daemon-pairing fragment. Never throws — every
