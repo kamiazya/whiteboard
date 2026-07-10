@@ -552,6 +552,119 @@ describe('DaemonCanvasPage', () => {
     })
   })
 
+  describe('branch UI', () => {
+    function branchesFetchMock(
+      branches: Array<{ name: string; color: string }> = [{ name: 'main', color: '#1971c2' }],
+      head = 'main',
+    ) {
+      return vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>((input) => {
+        const url = String(input)
+        if (url.includes('/branches')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                head,
+                branches: branches.map((b) => ({
+                  name: b.name,
+                  color: b.color,
+                  tipFrontiers: '',
+                  createdAt: '2026-01-01T00:00:00Z',
+                })),
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          )
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      })
+    }
+
+    it('renders HeaderBranchChip when capabilities.branches is true, using the daemon-origin fetch (not global apiFetch)', async () => {
+      const fetchMock = branchesFetchMock()
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      await waitFor(() => expect(screen.getByTestId('header-branch-chip')).toBeTruthy())
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([reqInput]) =>
+              String(reqInput).startsWith(DAEMON_BASE_URL) &&
+              String(reqInput).includes('/workspaces/w1/canvases/main/branches'),
+          ),
+        ).toBe(true)
+      })
+      expect(screen.queryByText('Branches')).toBeNull()
+
+      vi.unstubAllGlobals()
+    })
+
+    it('shows the static disabled teasers when capabilities.branches/merge are false', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: true,
+              branches: false,
+              merge: false,
+            }}
+          />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByTestId('header-branch-chip')).toBeNull()
+      expect(screen.getByText('Branches')).toBeTruthy()
+      expect(screen.getByText('Merge')).toBeTruthy()
+    })
+
+    it('refetches the branch list when the backend reports an externally observed HEAD change', async () => {
+      const fetchMock = branchesFetchMock([
+        { name: 'main', color: '#1971c2' },
+        { name: 'feature-x', color: '#9333ea' },
+      ])
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('header-branch-chip')).toBeTruthy())
+
+      const branchCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
+        String(reqInput).includes('/branches'),
+      ).length
+
+      const backend = createdBackends[0]!
+      await act(async () => {
+        backend.handlers?.onHeadChanged?.({ head: 'feature-x' })
+      })
+
+      await waitFor(() => {
+        const branchCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
+          String(reqInput).includes('/branches'),
+        ).length
+        expect(branchCallCountAfter).toBeGreaterThan(branchCallCountBefore)
+      })
+
+      vi.unstubAllGlobals()
+    })
+  })
+
   describe('default backend wiring (no createBackend override)', () => {
     class FakeWebSocket {
       static instances: FakeWebSocket[] = []
