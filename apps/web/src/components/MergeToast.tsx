@@ -1,6 +1,6 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import { CheckCircle2, Undo2, X } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { getAppLogger } from '@/lib/app-logger'
 import { safeErrorCopy } from '@/lib/error-copy'
 import {
@@ -33,6 +33,7 @@ interface ActiveToast {
 }
 
 export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): JSX.Element | null {
+  const fetchFn = useDaemonApi()
   const [active, setActive] = useState<ActiveToast | null>(null)
   const [undoing, setUndoing] = useState(false)
   const [undoError, setUndoError] = useState<string | null>(null)
@@ -90,7 +91,7 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
     setUndoing(true)
     setUndoError(null)
     try {
-      const res = await apiFetch(
+      const res = await fetchFn(
         `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(preMergeVersionId)}/restore`,
         { method: 'POST' },
       )

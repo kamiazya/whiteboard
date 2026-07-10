@@ -8,7 +8,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react'
-import { type JSX, useEffect, useState } from 'react'
+import { type JSX, useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
 import { safeErrorCopy } from '@/lib/error-copy'
@@ -58,6 +59,11 @@ export interface HeaderBranchChipProps {
   workspaceId: string
   slug: string
   disabled?: boolean
+  // Bump this (e.g. a counter) when an external event (WS-observed HEAD
+  // change from another client) should force a list refresh. The chip's own
+  // mutations (create/rename/delete/setHead) already refetch internally, so
+  // this only needs to cover changes this component did not itself trigger.
+  refreshSignal?: number
 }
 
 interface PendingMerge {
@@ -69,16 +75,29 @@ export function HeaderBranchChip({
   workspaceId,
   slug,
   disabled,
+  refreshSignal,
 }: HeaderBranchChipProps): JSX.Element {
+  const fetchFn = useDaemonApi()
   const {
     state,
+    refetch,
     createBranch,
     deleteBranch,
     getBranchStats,
     renameBranch,
     setHead,
     merge: runMerge,
-  } = useBranches(workspaceId, slug)
+  } = useBranches(workspaceId, slug, fetchFn)
+
+  // Skip the initial mount (refetch already runs internally via useBranches'
+  // own effect) — only react to a refreshSignal value that actually changes
+  // after mount, i.e. an externally observed HEAD change.
+  const prevRefreshSignalRef = useRef(refreshSignal)
+  useEffect(() => {
+    if (prevRefreshSignalRef.current === refreshSignal) return
+    prevRefreshSignalRef.current = refreshSignal
+    void refetch()
+  }, [refreshSignal, refetch])
 
   const head = state.head
   const activeBranch = state.branches.find((b) => b.name === head)

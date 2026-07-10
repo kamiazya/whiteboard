@@ -1,4 +1,3 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import {
   type BranchMeta,
   listVersionsResponseSchema,
@@ -15,6 +14,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { type JSX, useEffect, useMemo, useState } from 'react'
+import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
 import { safeErrorCopy } from '@/lib/error-copy'
 import { dispatchMergeCommitted } from '@/lib/merge-committed-event'
 import { cn } from '@/lib/utils'
@@ -222,6 +222,11 @@ export function MergeDialog({
     source: null,
   })
   const [thumbsLoading, setThumbsLoading] = useState(false)
+  const fetchFn = useDaemonApi()
+  // Thumbnail <img src> is a plain browser request that cannot carry the
+  // daemon's bearer token, so it only works same-origin (no provider
+  // mounted) — same precedent as VersionTimeline.
+  const hasDaemonApi = useHasDaemonApi()
 
   // Dry-run preview.
   useEffect(() => {
@@ -256,7 +261,7 @@ export function MergeDialog({
     setThumbsLoading(true)
     ;(async () => {
       try {
-        const res = await apiFetch(
+        const res = await fetchFn(
           `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
         )
         if (!res.ok) {
@@ -277,9 +282,11 @@ export function MergeDialog({
         }
         const tgt = latestFor(target.name)
         const src = latestFor(source.name)
+        // Cross-origin daemon mode: the thumbnail <img> cannot carry the
+        // bearer token, so suppress the URL rather than render a broken image.
         setThumbs({
-          target: tgt ? thumbUrlFor(workspaceId, slug, tgt.id) : null,
-          source: src ? thumbUrlFor(workspaceId, slug, src.id) : null,
+          target: !hasDaemonApi && tgt ? thumbUrlFor(workspaceId, slug, tgt.id) : null,
+          source: !hasDaemonApi && src ? thumbUrlFor(workspaceId, slug, src.id) : null,
         })
       } catch {
         // Fall back to placeholders if thumbnail loading fails, so a stale pair from a
@@ -292,7 +299,7 @@ export function MergeDialog({
     return () => {
       cancelled = true
     }
-  }, [open, source, target, workspaceId, slug])
+  }, [open, source, target, workspaceId, slug, fetchFn, hasDaemonApi])
 
   const handleMerge = async () => {
     if (!source || !target) return

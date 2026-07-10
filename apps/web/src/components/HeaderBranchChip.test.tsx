@@ -1,7 +1,9 @@
+import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import type { UseBranchesResult } from '@/hooks/useBranches'
 
 // Keep this test shallow.
@@ -33,11 +35,13 @@ const state: { current: UseBranchesResult } = {
   },
 }
 
+const { useBranchesMock } = vi.hoisted(() => ({ useBranchesMock: vi.fn() }))
+
 vi.mock('@/hooks/useBranches', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useBranches')>('@/hooks/useBranches')
   return {
     ...actual,
-    useBranches: () => state.current,
+    useBranches: useBranchesMock,
   }
 })
 
@@ -54,7 +58,11 @@ function renderChip() {
 afterEach(() => {
   cleanup()
   state.current.state.head = 'main'
+  useBranchesMock.mockReset()
+  useBranchesMock.mockImplementation(() => state.current)
 })
+
+useBranchesMock.mockImplementation(() => state.current)
 
 describe('HeaderBranchChip', () => {
   it('renders the HEAD name in the chip trigger', () => {
@@ -94,5 +102,42 @@ describe('HeaderBranchChip', () => {
     renderChip()
     const kebab = screen.getByTestId('header-branch-kebab')
     expect(kebab.getAttribute('aria-label')).toBe('Branch actions')
+  })
+})
+
+describe('HeaderBranchChip daemon context wiring', () => {
+  it('passes the same-origin apiFetch into useBranches when no provider is mounted', () => {
+    renderChip()
+    expect(useBranchesMock).toHaveBeenLastCalledWith('s1', 'c1', apiFetch)
+  })
+
+  it('passes the daemon-context fetchFn into useBranches when a provider is mounted', () => {
+    const daemonFetch = vi.fn() as unknown as typeof fetch
+    render(
+      <TooltipProvider>
+        <DaemonApiContext.Provider value={daemonFetch}>
+          <HeaderBranchChip workspaceId="s1" slug="c1" />
+        </DaemonApiContext.Provider>
+      </TooltipProvider>,
+    )
+    expect(useBranchesMock).toHaveBeenLastCalledWith('s1', 'c1', daemonFetch)
+  })
+})
+
+describe('HeaderBranchChip refreshSignal', () => {
+  it('refetches when refreshSignal changes but not on initial mount', () => {
+    const { rerender } = render(
+      <TooltipProvider>
+        <HeaderBranchChip workspaceId="s1" slug="c1" refreshSignal={0} />
+      </TooltipProvider>,
+    )
+    expect(state.current.refetch).not.toHaveBeenCalled()
+
+    rerender(
+      <TooltipProvider>
+        <HeaderBranchChip workspaceId="s1" slug="c1" refreshSignal={1} />
+      </TooltipProvider>,
+    )
+    expect(state.current.refetch).toHaveBeenCalledTimes(1)
   })
 })

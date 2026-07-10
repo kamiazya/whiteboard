@@ -14,6 +14,7 @@ import type {
   MergeResponse,
   VersionEntry,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { MERGE_COMMITTED_EVENT, mergeCommittedDetailSchema } from '@/lib/merge-committed-event'
 import { MergeDialog } from './MergeDialog.js'
 
@@ -462,5 +463,36 @@ describe('MergeDialog', () => {
     expect(targetCard.querySelector('img')?.getAttribute('src')).toBe(
       '/api/workspaces/w1/canvases/c1/versions/main-new/thumbnail',
     )
+  })
+
+  it('fetches versions through the daemon-context fetch and suppresses thumbnails cross-origin', async () => {
+    const versions: VersionEntry[] = [
+      versionEntry({ id: 'feature-v1', branchName: 'feature', createdAt: '2026-04-23T05:00:00Z' }),
+    ]
+    const daemonFetch = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ versions }), { status: 200 }))
+    const globalFetch = vi.mocked(fetch)
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <MergeDialog
+          open
+          source={feature}
+          target={main}
+          onClose={() => undefined}
+          runMerge={runMerge}
+          workspaceId="w1"
+          slug="c1"
+        />
+      </DaemonApiContext.Provider>,
+    )
+    await screen.findByText(/5 elements/)
+    await waitFor(() => expect(daemonFetch).toHaveBeenCalled())
+    expect(globalFetch).not.toHaveBeenCalled()
+    const sourceCard = screen.getByTestId('merge-branch-card-source')
+    expect(sourceCard.querySelector('img')).toBeNull()
   })
 })
