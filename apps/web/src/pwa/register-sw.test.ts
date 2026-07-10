@@ -19,12 +19,19 @@ describe('setupSwRegistration', () => {
     vi.restoreAllMocks()
   })
 
-  it('registers the SW after window load when in production with serviceWorker support', async () => {
+  it('defers registration to the load event while the document is still loading', async () => {
+    // jsdom reports readyState 'complete' by default, which would exercise
+    // the immediate path — force 'loading' so this test actually covers the
+    // load-listener branch.
+    const readyStateSpy = vi.spyOn(document, 'readyState', 'get').mockReturnValue('loading')
     Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
     const registerSW = vi.fn()
     const importRegister = vi.fn().mockResolvedValue({ registerSW })
 
     setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    // Not yet — registration must wait for 'load'.
+    expect(importRegister).not.toHaveBeenCalled()
+
     fireWindowLoad()
     // dynamic import resolution needs a microtask flush
     await Promise.resolve()
@@ -33,6 +40,7 @@ describe('setupSwRegistration', () => {
     expect(importRegister).toHaveBeenCalledTimes(1)
     expect(registerSW).toHaveBeenCalledTimes(1)
     expect(registerSW.mock.calls[0][0]).toHaveProperty('onNeedRefresh')
+    readyStateSpy.mockRestore()
   })
 
   it('registers immediately when the load event has already fired (readyState complete)', async () => {
