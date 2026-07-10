@@ -528,9 +528,9 @@ export function HeaderBranchChip({
       {pendingMerge !== null && (
         <Suspense fallback={null}>
           <MergeDialog
-            open={pendingMerge !== null}
-            source={pendingMerge?.source ?? null}
-            target={pendingMerge?.target ?? null}
+            open
+            source={pendingMerge.source}
+            target={pendingMerge.target}
             onClose={() => setPendingMerge(null)}
             runMerge={(source, args) => runMerge(source, args) as Promise<MergeResult>}
             workspaceId={workspaceId}
