@@ -3,6 +3,7 @@
 // when the loopback definition or Vary logic needs updating.
 
 import type { Context, MiddlewareHandler } from 'hono'
+import { isAllowedWebOrigin } from './web-origin-allowlist.js'
 
 export function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
@@ -54,6 +55,14 @@ export function getRequestHost(c: Context): string | undefined {
   }
 }
 
+function setApiCorsHeaders(c: Context, origin: string): void {
+  c.res.headers.set('Access-Control-Allow-Origin', origin)
+  c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
+  c.res.headers.set('Access-Control-Max-Age', '86400')
+  c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+}
+
 export function appendVary(value: string | null, token: string): string {
   if (!value || value.length === 0) return token
   const parts = value
@@ -70,49 +79,51 @@ export function appendVary(value: string | null, token: string): string {
  * Middleware for /api/* routes in local-daemon mode.
  *
  * OPTIONS requests always return 204 immediately regardless of origin — no
- * CORS headers are emitted for non-loopback origins, and the downstream auth
+ * CORS headers are emitted for non-admitted origins, and the downstream auth
  * chain is never reached for OPTIONS.
  *
- * For loopback Origins (localhost, 127.0.0.1, ::1) on non-OPTIONS requests:
+ * For admitted Origins (loopback — localhost, 127.0.0.1, ::1 — OR an exact
+ * match in `allowedOrigins`, e.g. a hosted pairing origin) on non-OPTIONS
+ * requests:
  *   - Reflects Access-Control-Allow-Origin and Vary: Origin.
  *   - Falls through to the downstream auth chain so mutation routes are never
- *     bypassed.
+ *     bypassed (Bearer is still required for mutations regardless of origin).
  *
- * For non-loopback Origins or no Origin header on non-OPTIONS requests: no
+ * For non-admitted Origins or no Origin header on non-OPTIONS requests: no
  * CORS headers emitted and the request is forwarded (same-origin and
  * daemon-served-page callers must not be broken by a 403).
  *
  * Never applied in server-mode (the caller guards this).
  */
-export function createApiLoopbackCorsMiddleware(): MiddlewareHandler {
+export function createApiLoopbackCorsMiddleware(
+  allowedOrigins: readonly string[] = [],
+): MiddlewareHandler {
   return async (c, next) => {
     const origin = c.req.header('origin')
     const originHost = normalizeOriginHostname(origin)
     const isLoopback = originHost !== null && isLoopbackHostname(originHost)
+    const isAdmitted = isLoopback || isAllowedWebOrigin(origin, allowedOrigins)
 
-    if (isLoopback && origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+    if (isAdmitted && origin) {
+      setApiCorsHeaders(c, origin)
     }
 
     if (c.req.method.toUpperCase() === 'OPTIONS') {
-      if (isLoopback && origin) {
+      if (isAdmitted && origin) {
+        // Access-Control-Allow-Local-Network is Chrome's in-flight successor
+        // to Access-Control-Allow-Private-Network; both are emitted so the
+        // preflight satisfies whichever LNA generation the browser enforces.
+        // https://wicg.github.io/local-network-access/
         c.res.headers.set('Access-Control-Allow-Private-Network', 'true')
+        c.res.headers.set('Access-Control-Allow-Local-Network', 'true')
       }
       return new Response(null, { status: 204, headers: c.res.headers })
     }
 
     await next()
 
-    if (isLoopback && origin) {
-      c.res.headers.set('Access-Control-Allow-Origin', origin)
-      c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-      c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
-      c.res.headers.set('Access-Control-Max-Age', '86400')
-      c.res.headers.set('Vary', appendVary(c.res.headers.get('Vary'), 'Origin'))
+    if (isAdmitted && origin) {
+      setApiCorsHeaders(c, origin)
     }
   }
 }

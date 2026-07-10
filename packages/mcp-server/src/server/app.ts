@@ -158,6 +158,11 @@ export interface LocalDaemonAppOptions {
   touch: () => void
   getStatus: () => RuntimeStatusResponse
   shutdown: () => Promise<void>
+  /** Exact-match hosted origins admitted alongside the fixed loopback set
+   *  (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default — current loopback-only
+   *  behavior is unchanged unless an operator opts in. Local-daemon only;
+   *  server-mode governs its origins solely via allowedOrigins below. */
+  allowedWebOrigins?: readonly string[]
 }
 
 export interface ServerModeAppOptions {
@@ -417,7 +422,7 @@ export function createApp(options: AppOptions) {
     // The CORS middleware is applied BEFORE the mutation-auth guard so that
     // OPTIONS preflights short-circuit to 204 without needing a bearer token,
     // while non-OPTIONS methods fall through to the auth chain unchanged.
-    app.use('/api/*', createApiLoopbackCorsMiddleware())
+    app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
     app.use('/api/*', createDaemonMutationAuthMiddleware(token))
   }
 
@@ -450,7 +455,7 @@ export function createApp(options: AppOptions) {
     }
     app.use('/mcp', createServerModeAsyncAuthMiddleware(options.authStrategy, ['mcp:call']))
   } else {
-    app.use('/mcp', createMcpHttpOriginMiddleware())
+    app.use('/mcp', createMcpHttpOriginMiddleware(options.allowedWebOrigins ?? []))
     app.use('/mcp', createMcpHttpAuthMiddleware(mcpAuth!))
   }
   app.use(
