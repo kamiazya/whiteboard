@@ -814,6 +814,30 @@ describe('useCanvasSync', () => {
       expect(result.current.syncStatus).toBe('connected')
     })
 
+    it('invokes options.onAuthError in addition to setting syncStatus to "error"', () => {
+      const backend = makeFakeBackend()
+      const onAuthError = vi.fn()
+      const { result } = renderHook(() => useCanvasSync(backend, { onAuthError }))
+
+      act(() => {
+        backend._ctrl.handlers!.onAuthError?.()
+      })
+
+      expect(onAuthError).toHaveBeenCalledTimes(1)
+      expect(result.current.syncStatus).toBe('error')
+    })
+
+    it('behaves identically to today when options.onAuthError is omitted', () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        backend._ctrl.handlers!.onAuthError?.()
+      })
+
+      expect(result.current.syncStatus).toBe('error')
+    })
+
     it('calls sendClientReady on connect and again when setExcalidrawAPI fires', () => {
       const backend = makeFakeBackend()
       const api = makeApiStub()
