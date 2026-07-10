@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 // Real app styles so layout assertions measure the shipped geometry.
@@ -49,6 +49,10 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
       timeout: 5000,
     })
     screen.getByRole('button', { name: /delete canvas/i }).click()
+    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    within(dialog)
+      .getByRole('button', { name: /^delete$/i })
+      .click()
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
@@ -60,6 +64,10 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
       timeout: 5000,
     })
     screen.getByRole('button', { name: /delete canvas/i }).click()
+    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    within(dialog)
+      .getByRole('button', { name: /^delete$/i })
+      .click()
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
