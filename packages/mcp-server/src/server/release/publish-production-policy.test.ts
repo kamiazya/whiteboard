@@ -179,19 +179,19 @@ describe('release.yml publish-mcp SBOM policy', () => {
   const npmSection = () =>
     jobSection(readWorkflow(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign')
 
-  it('SBOM generation is invoked via check:release-candidate before npm publish', () => {
+  it('SBOM generation is invoked via the publish-gate runner before npm publish', () => {
     const section = npmSection()
-    // generate:sbom:npm runs inside pnpm check:release-candidate (package.json), not inline in the job.
-    const releaseGateIdx = section.indexOf('check:release-candidate')
+    // generate:sbom:npm runs as a publish-tier gate inside `pnpm publish-gate`, not inline in the job.
+    const publishGateIdx = section.indexOf('pnpm publish-gate')
     const publishIdx = section.indexOf('npm publish "$TARBALL"')
     expect(
-      releaseGateIdx,
-      'check:release-candidate must be referenced in npm job',
+      publishGateIdx,
+      'pnpm publish-gate must be referenced in npm job',
     ).toBeGreaterThanOrEqual(0)
     expect(publishIdx, 'run: npm publish must be present').toBeGreaterThanOrEqual(0)
     expect(
-      releaseGateIdx,
-      'check:release-candidate (containing generate:sbom:npm) must precede npm publish',
+      publishGateIdx,
+      'pnpm publish-gate (containing generate:sbom:npm) must precede npm publish',
     ).toBeLessThan(publishIdx)
   })
 
@@ -212,6 +212,47 @@ describe('release.yml publish-mcp SBOM policy', () => {
     expect(retentionMatch, 'retention-days must be set for SBOM artifact').not.toBeNull()
     const days = Number(retentionMatch![1])
     expect(days, 'retention-days must be >= 30').toBeGreaterThanOrEqual(30)
+  })
+})
+
+// ── release.yml publish-mcp publish-gate collapse ─────────────────────────────
+//
+// The publish gate is scoped to publishability only: the full browser/jsdom
+// `pnpm test` matrix must not re-run here, and every check the publish-gate
+// runner already carries (typecheck, build, tarball/packaged smokes) must not
+// also appear as a duplicate standalone step in the job.
+
+describe('release.yml publish-mcp job runs the publish-gate runner exactly once, with no duplicate standalone steps', () => {
+  const npmSection = () =>
+    jobSection(readWorkflow(RELEASE_WORKFLOW), 'publish-mcp', 'docker-publish-sign')
+
+  it('does not contain a standalone `pnpm test` step (full browser/jsdom matrix)', () => {
+    const section = npmSection()
+    const lines = section.split('\n').map((l) => l.trim())
+    const standaloneTest = lines.filter((l) => /^run:\s*pnpm test\s*$/.test(l))
+    expect(standaloneTest, 'publish-mcp must not run the full `pnpm test` matrix').toEqual([])
+  })
+
+  it('does not call check:release-candidate (which internally chains `pnpm test`)', () => {
+    expect(npmSection()).not.toContain('check:release-candidate')
+  })
+
+  it('invokes `pnpm publish-gate` exactly once', () => {
+    const section = npmSection()
+    const matches = section.match(/run:\s*pnpm publish-gate\s*$/gm) ?? []
+    expect(matches.length).toBe(1)
+  })
+
+  it.each([
+    'pnpm typecheck',
+    'pnpm build',
+    'pnpm smoke:packaged',
+    'pnpm smoke:tarball',
+  ])('does not run "%s" as a standalone step (it lives inside the publish-gate runner)', (command) => {
+    const section = npmSection()
+    const lines = section.split('\n').map((l) => l.trim())
+    const standalone = lines.filter((l) => l === `run: ${command}`)
+    expect(standalone, `"${command}" must not appear as a standalone step`).toEqual([])
   })
 })
 
