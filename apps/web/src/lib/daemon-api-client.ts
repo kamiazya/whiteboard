@@ -51,6 +51,17 @@ export function createDaemonFetch(daemonBaseUrl: string, token?: string): typeof
       return fetch(resolvedUrl, {
         method: input.method,
         body,
+        // Carry the Request's own semantics through the rebuild — losing
+        // `signal` in particular would break abort-on-unmount for callers
+        // that pass a preconstructed Request. `mode` is deliberately NOT
+        // copied: a Request can carry mode 'navigate', which is invalid as a
+        // fetch init value and throws.
+        signal: input.signal,
+        credentials: input.credentials,
+        referrer: input.referrer,
+        referrerPolicy: input.referrerPolicy,
+        integrity: input.integrity,
+        keepalive: input.keepalive,
         // Fetch spec: a ReadableStream body requires `duplex: 'half'` or the
         // call throws (browsers/undici enforce this at runtime).
         ...(body ? { duplex: 'half' as const } : {}),

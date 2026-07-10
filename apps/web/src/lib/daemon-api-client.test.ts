@@ -65,6 +65,23 @@ describe('createDaemonFetch', () => {
     expect(headers.get('Authorization')).toBe('Bearer my-token')
   })
 
+  it('preserves the abort signal (and request semantics) from a Request-object input', async () => {
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'my-token')
+    const controller = new AbortController()
+    const req = new Request(`${DAEMON_BASE_URL}/api/canvases`, {
+      method: 'GET',
+      signal: controller.signal,
+      keepalive: true,
+    })
+    await daemonFetch(req)
+    const [, initArg] = fetchMock.mock.calls[0]
+    // Losing `signal` would break abort-on-unmount for callers passing a
+    // preconstructed Request through this wrapper.
+    expect(initArg?.signal).toBe(req.signal)
+    expect(initArg?.keepalive).toBe(true)
+    expect(initArg?.credentials).toBe(req.credentials)
+  })
+
   it('sets duplex: "half" when forwarding a Request whose body is a stream', async () => {
     // Fetch spec: passing a ReadableStream as `body` requires `duplex: 'half'`
     // in RequestInit, or the call throws in browsers/undici that enforce it.
