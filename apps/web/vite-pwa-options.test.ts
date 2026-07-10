@@ -38,6 +38,11 @@ describe('pwaOptions', () => {
     expect(patterns.some((p) => p.includes('png'))).toBe(true)
   })
 
+  it('precaches the Loro WASM module so the browser-local editor works offline', () => {
+    const patterns = pwaOptions.workbox?.globPatterns ?? []
+    expect(patterns.some((p) => p.includes('wasm'))).toBe(true)
+  })
+
   it('locks the web manifest fields consumed by installability', () => {
     const manifest = pwaOptions.manifest
     if (manifest === false) throw new Error('manifest must not be disabled')

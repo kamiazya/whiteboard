@@ -43,6 +43,10 @@ const checks = [
   { label: 'an Excalidraw font (*.woff2) is precached', pattern: /url:"fonts\/[^"]+\.woff2"/ },
   { label: 'icon-192.png is precached', pattern: /url:"icon-192\.png"/ },
   { label: 'icon-512.png is precached', pattern: /url:"icon-512\.png"/ },
+  // The browser-local editor depends on loro-crdt's WASM module at runtime;
+  // without it in the precache manifest an installed/offline PWA fails the
+  // moment it needs Loro.
+  { label: 'the Loro WASM module (*.wasm) is precached', pattern: /url:"assets\/[^"]+\.wasm"/ },
 ]
 
 for (const { label, pattern } of checks) {
