@@ -14,7 +14,14 @@ describe('apps/web vitest.browser.config optimizeDeps', () => {
     const include = browserConfig.optimizeDeps?.include ?? []
 
     expect(include).toEqual(
-      expect.arrayContaining(['@testing-library/react', 'react', 'react-dom', 'react-dom/client']),
+      expect.arrayContaining([
+        '@testing-library/react',
+        'react',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-dom',
+        'react-dom/client',
+      ]),
     )
   })
 })
