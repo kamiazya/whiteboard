@@ -465,13 +465,11 @@ describe('MergeDialog', () => {
     )
   })
 
-  it('fetches versions through the daemon-context fetch and suppresses thumbnails cross-origin', async () => {
-    const versions: VersionEntry[] = [
-      versionEntry({ id: 'feature-v1', branchName: 'feature', createdAt: '2026-04-23T05:00:00Z' }),
-    ]
-    const daemonFetch = vi
-      .fn()
-      .mockResolvedValue(new Response(JSON.stringify({ versions }), { status: 200 }))
+  it('skips the versions fetch entirely and suppresses thumbnails in cross-origin daemon mode', async () => {
+    // Thumbnails are suppressed cross-origin (an <img> cannot carry the bearer
+    // token), so fetching the versions list only to discard it would be a
+    // wasted network round-trip — the dialog must not issue it at all.
+    const daemonFetch = vi.fn()
     const globalFetch = vi.mocked(fetch)
     const runMerge = vi
       .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
@@ -490,7 +488,7 @@ describe('MergeDialog', () => {
       </DaemonApiContext.Provider>,
     )
     await screen.findByText(/5 elements/)
-    await waitFor(() => expect(daemonFetch).toHaveBeenCalled())
+    expect(daemonFetch).not.toHaveBeenCalled()
     expect(globalFetch).not.toHaveBeenCalled()
     const sourceCard = screen.getByTestId('merge-branch-card-source')
     expect(sourceCard.querySelector('img')).toBeNull()

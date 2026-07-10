@@ -257,6 +257,14 @@ export function MergeDialog({
       setThumbs({ target: null, source: null })
       return
     }
+    // Cross-origin daemon mode suppresses thumbnails outright (the <img>
+    // cannot carry the bearer token), so skip the versions fetch whose only
+    // purpose is resolving thumbnail URLs.
+    if (hasDaemonApi) {
+      setThumbs({ target: null, source: null })
+      setThumbsLoading(false)
+      return
+    }
     let cancelled = false
     setThumbsLoading(true)
     ;(async () => {
@@ -282,11 +290,9 @@ export function MergeDialog({
         }
         const tgt = latestFor(target.name)
         const src = latestFor(source.name)
-        // Cross-origin daemon mode: the thumbnail <img> cannot carry the
-        // bearer token, so suppress the URL rather than render a broken image.
         setThumbs({
-          target: !hasDaemonApi && tgt ? thumbUrlFor(workspaceId, slug, tgt.id) : null,
-          source: !hasDaemonApi && src ? thumbUrlFor(workspaceId, slug, src.id) : null,
+          target: tgt ? thumbUrlFor(workspaceId, slug, tgt.id) : null,
+          source: src ? thumbUrlFor(workspaceId, slug, src.id) : null,
         })
       } catch {
         // Fall back to placeholders if thumbnail loading fails, so a stale pair from a
