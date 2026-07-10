@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
+import { pwaOptions } from './vite-pwa-options.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -119,6 +121,11 @@ export default defineConfig({
     // Required for the browser bundle that includes the Loro CRDT WASM build.
     wasm(),
     topLevelAwait(),
+    // Must run after excalidrawFontsPlugin (declaration-order hint only —
+    // Rollup does not guarantee closeBundle execution order; the real
+    // guard is scripts/check-pwa-precache.mjs, which fails the build if the
+    // generated precache manifest is missing font entries).
     excalidrawFontsPlugin(),
+    VitePWA(pwaOptions),
   ],
 })
