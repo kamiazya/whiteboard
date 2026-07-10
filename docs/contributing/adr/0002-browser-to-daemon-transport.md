@@ -123,13 +123,17 @@ three engine families.
 ### Measured facts (2026-07-08, real `https://kamiazya-whiteboard.pages.dev` page)
 
 A CORS-permissive probe server on `http://127.0.0.1` was fetched from page
-context in each engine:
+context in each engine, driven by Playwright on macOS (page URL:
+`https://kamiazya-whiteboard.pages.dev/`, app build v0.0.10). These are
+observations from the listed builds, not guarantees for whole engine
+families; re-run the harness below before relying on them for a new
+browser version.
 
-| Engine | Result | Mechanism |
+| Engine (tested build) | Result | Mechanism |
 |---|---|---|
-| Chromium 149 | **Succeeds (200)** once the `local-network-access` permission is granted; hangs on the pending permission prompt until the user decides | [Local Network Access](https://developer.chrome.com/blog/local-network-access) (permission prompt shipped in Chrome 142) includes a mixed-content exemption for local/loopback targets. Requestable only from secure contexts — the hosted HTTPS page is the intended client. |
-| Firefox 148 | **Succeeds (200)** with no prompt | Loopback is a potentially-trustworthy origin; the fetch is not treated as mixed content. Plain CORS governs. |
-| WebKit | **Blocked** (`requested insecure content … blocked`) | WebKit implements no loopback mixed-content exemption. The original premise holds only here. |
+| Chromium 149 (Playwright bundled) | **Succeeds (200)** once the `local-network-access` permission is granted; hangs on the pending permission prompt until the user decides | [Local Network Access](https://developer.chrome.com/blog/local-network-access) (permission prompt shipped in Chrome 142) includes a mixed-content exemption for local/loopback targets. Requestable only from secure contexts — the hosted HTTPS page is the intended client. |
+| Firefox 148.0.2 (Playwright build v1511) | **Succeeds (200)** with no prompt | Loopback is a potentially-trustworthy origin; the fetch is not treated as mixed content. Plain CORS governs. |
+| WebKit (Playwright build 2272, macOS) | **Blocked** (`requested insecure content … blocked`) | The tested WebKit build applies no loopback mixed-content exemption. The original premise held only in this engine as tested. |
 
 The remaining blocker for hosted pairing is therefore **this repo's own
 daemon policy**, not the browser: with a `pages.dev` Origin the daemon
@@ -156,6 +160,26 @@ lands.
   explicit "daemon pairing not supported in this browser" state instead of a
   silent failure. The existing capability-gating architecture (ADR-0004)
   carries this without a new mechanism.
+- **The `mixed-content-skipped` pre-flight guard above is superseded.** The
+  availability-detection spec earlier in this ADR required the probe to
+  return `{ reachable: false, reason: 'mixed-content-skipped' }` without
+  fetching whenever `location.protocol === 'https:'` and `daemonBaseUrl`
+  starts with `http:`. Under that guard the LNA flow would never start.
+  Replacement behavior: on an HTTPS page with a loopback HTTP
+  `daemonBaseUrl`, the probe MUST attempt the fetch (triggering the
+  permission prompt on Chromium where applicable) and classify the observed
+  outcome afterward. `mixed-content-skipped` remains only as the classified
+  outcome for engines that actually block the request (the tested WebKit
+  behavior), no longer as a pre-flight short-circuit.
+- **The probe result classification must be extended** beyond
+  `timeout | network-error | mixed-content-skipped | not-daemon | auth-error`
+  to distinguish the LNA-era outcomes: at minimum a pending/denied
+  permission state (Chromium exposes `navigator.permissions.query({ name:
+  'local-network-access' })` to disambiguate a prompt-pending hang from a
+  plain timeout) and an engine-blocked state. The exact enum is an
+  implementation concern of the availability-probe slice; this ADR only
+  fixes the requirement that these outcomes are distinguishable and drive
+  the capability tiers below.
 - The local-dev HTTP pairing scope shipped under Approach A remains valid
   and unchanged; LNA extends the same server surface to hosted origins
   rather than replacing it.
