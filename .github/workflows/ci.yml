@@ -98,8 +98,8 @@ jobs:
       - name: Test mcp-jsdom
         run: pnpm exec vitest run --project=mcp-jsdom
 
-      - name: Test web (jsdom)
-        run: pnpm --filter @kamiazya/whiteboard-web exec vitest run
+      - name: Test web (jsdom + node)
+        run: pnpm --filter @kamiazya/whiteboard-web test
 
   test-browser:
     runs-on: ubuntu-latest
