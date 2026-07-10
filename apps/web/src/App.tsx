@@ -57,37 +57,41 @@ export function App({ providerState }: AppProps) {
   const daemonConnection = useDaemonConnection()
   const [forcedBrowserLocal, setForcedBrowserLocal] = useState(false)
 
-  if (daemonConnection.status === 'paired' && !forcedBrowserLocal) {
-    const { payload } = daemonConnection
-    return (
-      <DaemonCanvasPage
-        daemonBaseUrl={payload.baseUrl}
-        workspaceId={payload.workspaceId}
-        slug={payload.slug}
-        token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
-      />
-    )
-  }
+  // The 'Continue in browser-local' escape hatch opts out of the pairing
+  // fragment entirely, so once it's set both daemon branches are skipped.
+  if (!forcedBrowserLocal) {
+    if (daemonConnection.status === 'paired') {
+      const { payload } = daemonConnection
+      return (
+        <DaemonCanvasPage
+          daemonBaseUrl={payload.baseUrl}
+          workspaceId={payload.workspaceId}
+          slug={payload.slug}
+          token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
+        />
+      )
+    }
 
-  if (daemonConnection.status === 'error' && !forcedBrowserLocal) {
-    return (
-      <div
-        role="alert"
-        aria-live="assertive"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
-      >
-        <p className="max-w-md text-sm text-destructive">
-          The daemon pairing link could not be used. You can continue without a daemon connection.
-        </p>
-        <button
-          type="button"
-          onClick={() => setForcedBrowserLocal(true)}
-          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+    if (daemonConnection.status === 'error') {
+      return (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
         >
-          Continue in browser-local
-        </button>
-      </div>
-    )
+          <p className="max-w-md text-sm text-destructive">
+            The daemon pairing link could not be used. You can continue without a daemon connection.
+          </p>
+          <button
+            type="button"
+            onClick={() => setForcedBrowserLocal(true)}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Continue in browser-local
+          </button>
+        </div>
+      )
+    }
   }
 
   const state = providerState ?? _defaultProviderState
