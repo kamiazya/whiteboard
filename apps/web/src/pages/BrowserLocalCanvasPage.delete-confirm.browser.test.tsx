@@ -21,6 +21,13 @@ async function renderLoaded(store = new IndexedDBStore()) {
   return store
 }
 
+// Click the header "Delete canvas" trigger and wait for the confirmation
+// dialog to appear.
+async function openDeleteDialog(): Promise<HTMLElement> {
+  screen.getByRole('button', { name: /delete canvas/i }).click()
+  return screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+}
+
 describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB)', () => {
   beforeEach(async () => {
     await clearDb()
@@ -32,8 +39,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
 
   it('opening the delete dialog does not delete the canvas yet', async () => {
     const store = await renderLoaded()
-    screen.getByRole('button', { name: /delete canvas/i }).click()
-    await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    await openDeleteDialog()
 
     // Not yet deleted: the cleanup-completed screen has not been shown, and the
     // canvas row is still present in the store.
@@ -47,8 +53,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
     const beforeIds = (await store.listCanvases()).map((c) => c.id)
     expect(beforeIds.length).toBeGreaterThan(0)
 
-    screen.getByRole('button', { name: /delete canvas/i }).click()
-    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    const dialog = await openDeleteDialog()
     within(dialog)
       .getByRole('button', { name: /^delete$/i })
       .click()
@@ -64,8 +69,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
 
   it('cancelling via the Cancel button keeps the canvas intact', async () => {
     await renderLoaded()
-    screen.getByRole('button', { name: /delete canvas/i }).click()
-    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    const dialog = await openDeleteDialog()
     within(dialog)
       .getByRole('button', { name: /cancel/i })
       .click()
@@ -78,8 +82,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
 
   it('cancelling via Escape keeps the canvas intact', async () => {
     await renderLoaded()
-    screen.getByRole('button', { name: /delete canvas/i }).click()
-    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    const dialog = await openDeleteDialog()
     fireEvent.keyDown(dialog, { key: 'Escape' })
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
@@ -89,8 +92,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
 
   it('dialog exposes an accessible name and description tied to the destructive action', async () => {
     await renderLoaded()
-    screen.getByRole('button', { name: /delete canvas/i }).click()
-    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    const dialog = await openDeleteDialog()
 
     expect(dialog).toHaveAccessibleName('Delete this canvas?')
     expect(dialog).toHaveAccessibleDescription(/permanently removes the canvas.*cannot be undone/i)
@@ -122,8 +124,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Pending edit' } })
 
-    screen.getByRole('button', { name: /delete canvas/i }).click()
-    const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
+    const dialog = await openDeleteDialog()
     within(dialog)
       .getByRole('button', { name: /^delete$/i })
       .click()
