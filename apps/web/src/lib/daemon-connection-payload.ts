@@ -28,6 +28,12 @@ export const daemonConnectionPayloadSchema = z
     fullscreen: z.boolean().optional(),
   })
   .strict()
+  // ADR-0002's bootstrap pairing exchange has no meaning without a token to
+  // exchange, so the schema — not just the docs — enforces the pairing.
+  .refine((payload) => payload.authMode !== 'bootstrap' || payload.bootstrapToken !== undefined, {
+    message: 'bootstrapToken is required when authMode is "bootstrap"',
+    path: ['bootstrapToken'],
+  })
 
 export type DaemonConnectionPayload = z.infer<typeof daemonConnectionPayloadSchema>
 
@@ -110,11 +116,23 @@ export function encodeDaemonConnectionFragment(payload: DaemonConnectionPayload)
   return `#${FRAGMENT_KEY}=${encodeBase64Url(json)}`
 }
 
-// Strips the `#wb=...` fragment from the current URL via history.replaceState so a
+// Removes only the `wb=...` segment from a location.hash-shaped string, leaving any
+// other '&'-joined segments (e.g. `fullscreen`) untouched and in their original form.
+function removeFragmentKey(hash: string): string {
+  const withoutHash = hash.startsWith('#') ? hash.slice(1) : hash
+  return withoutHash
+    .split('&')
+    .filter((segment) => segment.split('=')[0] !== FRAGMENT_KEY)
+    .join('&')
+}
+
+// Strips the `wb=...` segment from the current URL's hash via history.replaceState so a
 // consumed bootstrapToken never lingers in browser history or a shared/screen-recorded URL.
+// Other hash segments sharing the fragment (e.g. `#fullscreen&wb=...`) are preserved —
+// mirrors the hash-ownership pattern in canvas-fullscreen-hash.ts.
 export function consumeDaemonConnectionFragment(): void {
   if (window.location.hash.length === 0) return
   const url = new URL(window.location.href)
-  url.hash = ''
+  url.hash = removeFragmentKey(url.hash)
   window.history.replaceState(window.history.state, '', url.toString())
 }

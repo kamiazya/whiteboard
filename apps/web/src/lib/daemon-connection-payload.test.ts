@@ -69,6 +69,22 @@ describe('daemonConnectionPayloadSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('rejects authMode "bootstrap" with no bootstrapToken', () => {
+    const result = daemonConnectionPayloadSchema.safeParse({
+      baseUrl: 'http://127.0.0.1:3099',
+      authMode: 'bootstrap',
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('accepts authMode "none" with no bootstrapToken', () => {
+    const result = daemonConnectionPayloadSchema.safeParse({
+      baseUrl: 'http://127.0.0.1:3099',
+      authMode: 'none',
+    })
+    expect(result.success).toBe(true)
+  })
 })
 
 describe('parseDaemonConnectionFragment', () => {
@@ -167,6 +183,20 @@ describe('consumeDaemonConnectionFragment', () => {
     consumeDaemonConnectionFragment()
     expect(window.location.hash).toBe('')
     expect(window.location.pathname).toBe('/some/path')
+  })
+
+  it('preserves an unrelated fragment segment sharing the hash with wb', () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/some/path?query=1#fullscreen&wb=${encodeRawBase64Url('{}')}`,
+    )
+
+    consumeDaemonConnectionFragment()
+
+    expect(window.location.hash).toBe('#fullscreen')
+    expect(window.location.pathname).toBe('/some/path')
+    expect(window.location.search).toBe('?query=1')
   })
 })
 
