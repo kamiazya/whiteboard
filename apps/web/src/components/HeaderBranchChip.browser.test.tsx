@@ -92,7 +92,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     const deleteItem = await screen.findByText(/Delete/)
     await userEvent.click(deleteItem)
 
-    await screen.findByText(/unmerged commits remain/)
+    await screen.findByText(/changes not yet combined remain/)
 
     const confirmButton = await screen.findByRole('button', { name: 'Delete' })
     await userEvent.click(confirmButton)
@@ -100,15 +100,15 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     expect(stateHolder.current.deleteBranch).toHaveBeenCalledWith('feature-x')
   })
 
-  it('inline "New branch…" form submits createBranch with the typed name', async () => {
+  it('inline "New variation…" form submits createBranch with the typed name', async () => {
     render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
     const chip = screen.getByTestId('header-branch-chip')
     await userEvent.click(chip)
 
-    const newBranchItem = await screen.findByText(/New branch/)
+    const newBranchItem = await screen.findByText(/New variation/)
     await userEvent.click(newBranchItem)
 
-    const input = await screen.findByPlaceholderText('New branch name')
+    const input = await screen.findByPlaceholderText('New variation name')
     await userEvent.type(input, 'my-new-branch{Enter}')
 
     expect(stateHolder.current.createBranch).toHaveBeenCalledWith({ name: 'my-new-branch' })
@@ -120,10 +120,10 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     const chip = screen.getByTestId('header-branch-chip')
     await userEvent.click(chip)
 
-    const newBranchItem = await screen.findByText(/New branch/)
+    const newBranchItem = await screen.findByText(/New variation/)
     await userEvent.click(newBranchItem)
 
-    const input = await screen.findByPlaceholderText('New branch name')
+    const input = await screen.findByPlaceholderText('New variation name')
     await userEvent.type(input, 'my-new-branch{Enter}')
 
     // The dropdown stays open on error so the user can retry; the error must
@@ -131,7 +131,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     // aria-hidden'd background wrapper — a plain (non-hidden) query proves
     // it is actually visible/announced.
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('Failed to create branch')
+    expect(alert.textContent).toContain('Failed to create variation')
   })
 
   it('surfaces setHead rejection as a role=alert with the safe error copy', async () => {
@@ -144,7 +144,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     await userEvent.click(option)
 
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('Failed to switch branch')
+    expect(alert.textContent).toContain('Failed to switch variation')
   })
 
   it('surfaces renameBranch rejection as a role=alert with the safe error copy', async () => {
@@ -164,7 +164,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     // The rename dialog stays open on error; the error must render inside the
     // still-open dialog content, so a plain (non-hidden) query must find it.
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('Failed to rename branch')
+    expect(alert.textContent).toContain('Failed to rename variation')
   })
 
   it('surfaces deleteBranch rejection as a role=alert with the safe error copy', async () => {
@@ -181,7 +181,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     await userEvent.click(confirmButton)
 
     const alert = await screen.findByRole('alert', { hidden: true })
-    expect(alert.textContent).toContain('Failed to delete branch')
+    expect(alert.textContent).toContain('Failed to delete variation')
   })
 
   it('kebab -> merge opens MergeDialog with the chosen source and current HEAD as target', async () => {
@@ -210,7 +210,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     const kebab = screen.getByTestId('header-branch-kebab')
     await userEvent.click(kebab)
 
-    const unavailable = await screen.findByText('Merge unavailable')
+    const unavailable = await screen.findByText('Combine unavailable')
     expect(unavailable.getAttribute('data-disabled')).not.toBeNull()
 
     // The branch that would normally be a mergeable source must not appear
@@ -269,7 +269,7 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     await userEvent.click(deleteItem)
 
     await screen.findByText(/Delete «feature-x»\?/)
-    expect(screen.queryByText(/unmerged commits remain/)).toBeNull()
+    expect(screen.queryByText(/changes not yet combined remain/)).toBeNull()
 
     const confirmButton = await screen.findByRole('button', { name: 'Delete' })
     await userEvent.click(confirmButton)

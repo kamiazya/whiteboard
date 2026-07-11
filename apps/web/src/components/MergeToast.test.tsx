@@ -40,7 +40,7 @@ describe('MergeToast', () => {
     expect(screen.queryByTestId('merge-toast')).toBeNull()
     act(() => dispatchMergeCommitted(baseDetail))
     expect(screen.getByTestId('merge-toast')).toBeTruthy()
-    expect(screen.getByText(/Merged changes from «feature-a»/)).toBeTruthy()
+    expect(screen.getByText(/Combined changes from «feature-a»/)).toBeTruthy()
     expect(screen.getByText(/2 added · 1 changed/)).toBeTruthy()
   })
 

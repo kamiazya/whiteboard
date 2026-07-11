@@ -9,6 +9,7 @@ import {
 import { isDirectEntryPoint } from './entrypoint.js'
 import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
+import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
 import { getLogger } from './log.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
@@ -44,8 +45,57 @@ export function resolveToken(
 export { createApp } from './app.js'
 export { startHttpServer } from './http-server.js'
 
+// Loads the nearest whiteboard config file (if any) and layers its values
+// under process.env before any other startup reads (allowlist, token,
+// logLevel). Must run first: log.ts freezes its level at import time, so a
+// file-provided logLevel needs the explicit setLogLevel call below, and
+// every other env reader in this function reads process.env directly.
+// dataDir is deliberately NOT applied here — DATA_DIR (shared/data-dir-secure.ts)
+// is a static-import-time snapshot on this entrypoint, so a file dataDir key
+// would be silently too-late; warn instead of pretending it worked.
+//
+// loadConfigFile throws on a malformed file (by design). Catch it here and
+// fail the same way the WHITEBOARD_ALLOWED_WEB_ORIGINS gate below does
+// (structured getLogger record + process.exit(1)) instead of letting the
+// throw propagate to the generic top-level `main().catch` at the bottom of
+// this file, which would echo the raw error/stack on stderr unredacted.
+function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
+  let loaded: ReturnType<typeof loadConfigFile>
+  try {
+    loaded = loadConfigFile()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    getLogger('server-index').error(
+      { message },
+      'invalid whiteboard config file; refusing to start',
+    )
+    process.exit(1)
+  }
+  if (loaded === null) return undefined
+
+  // dataDir is dropped before applying: DATA_DIR (shared/data-dir-secure.ts)
+  // was resolved at module import time on this entrypoint, so writing the
+  // file value into the env would hand later env readers a dataDir the
+  // running server is not actually using.
+  const { dataDir: _ignoredDataDir, ...applicableConfig } = loaded.config
+  applyConfigFileToEnvAndLogLevel(applicableConfig, process.env)
+  const log = getLogger('server-index')
+  log.info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
+
+  if (loaded.config.dataDir !== undefined) {
+    log.warning(
+      { filepath: loaded.filepath },
+      'config file dataDir is not honored on this entrypoint; set WHITEBOARD_DATA_DIR instead',
+    )
+  }
+
+  return loaded.config.port
+}
+
 export async function main() {
-  const port = parseInt(readArg('port', '3099') ?? '3099', 10)
+  const configFilePort = applyLoadedConfigFileForServerEntrypoint()
+
+  const port = parseInt(readArg('port') ?? String(configFilePort ?? 3099), 10)
   const host = readArg('host', '127.0.0.1') ?? '127.0.0.1'
   const token = resolveToken(process.argv, process.env)
   const idleTimeoutMs = parseInt(
