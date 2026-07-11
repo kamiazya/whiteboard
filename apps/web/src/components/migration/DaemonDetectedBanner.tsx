@@ -137,7 +137,8 @@ export function DaemonDetectedBanner({
           className="flex shrink-0 items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
         >
           <span>
-            A local whiteboard daemon is running. Connect to unlock versions, branches, and merge.
+            A local whiteboard daemon is running. Ask your AI agent for a pairing link
+            (create_pairing_link) to unlock versions, branches, and merge.
           </span>
           <a
             href={HOW_TO_CONNECT_URL}
