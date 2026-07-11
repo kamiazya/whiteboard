@@ -104,7 +104,12 @@ for (const entry of entries) {
       let wasPublished = false
       try {
         const mergeRef = git(['config', '--get', `branch.${branch}.merge`])
-        wasPublished = mergeRef === `refs/heads/${branch}`
+        // Also require the upstream REMOTE to be origin: in a fork workflow
+        // the upstream may live on another remote, whose refs we neither
+        // fetch nor prune here — treating its absence under origin/ as
+        // "deleted" would force-delete a live lane.
+        const remote = git(['config', '--get', `branch.${branch}.remote`])
+        wasPublished = mergeRef === `refs/heads/${branch}` && remote === 'origin'
       } catch {
         /* never published */
       }
