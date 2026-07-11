@@ -1,15 +1,22 @@
+import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useState } from 'react'
 import { BetaBanner } from './components/BetaBanner.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
-import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
+import {
+  BROWSER_LOCAL_CAPABILITIES,
+  type ProviderState,
+  resolveHostedProviderStateFromRaw,
+} from './lib/provider.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { BrowserLocalCanvasPage } from './pages/BrowserLocalCanvasPage.js'
 
 // Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
-// of the entry chunk — only sessions arriving via a #wb= pairing fragment pay
-// for it, keeping the browser-local entry under the bundle-size budget.
+// of the entry chunk — sessions arriving via a #wb= pairing fragment AND
+// sessions with a runtime-config local-daemon provider state pay for it;
+// pure browser-local sessions never import it, keeping that entry under the
+// bundle-size budget.
 const DaemonCanvasPage = lazy(() =>
   import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
 )
@@ -135,17 +142,47 @@ export function App({ providerState }: AppProps) {
     )
   }
 
-  if (state.kind === 'local-daemon') {
+  // The 'Continue in browser-local' escape hatch collapses a local-daemon
+  // state to browser-local capabilities, so every downstream consumer (chip,
+  // banner, canvas page) reads this effective state rather than the raw one
+  // — otherwise the escape could leave daemon capabilities or copy leaking
+  // into a mode the user explicitly opted out of.
+  const effectiveState =
+    forcedBrowserLocal && state.kind === 'local-daemon'
+      ? { kind: 'browser-local' as const, capabilities: BROWSER_LOCAL_CAPABILITIES }
+      : state
+
+  if (effectiveState.kind === 'local-daemon') {
     return (
       <ErrorBoundary>
-        <main data-provider="local-daemon" data-status="placeholder">
+        <div className="flex h-dvh flex-col">
           <BetaBanner
             store={userSettingsStore}
             message="Beta preview — features may be incomplete."
           />
-          <BackendConfigChip state={state} />
-          <h1>Whiteboard</h1>
-        </main>
+          <BackendConfigChip state={effectiveState} />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <Suspense
+              fallback={
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="flex h-full items-center justify-center text-sm text-muted-foreground"
+                >
+                  Connecting to daemon…
+                </div>
+              }
+            >
+              <DaemonCanvasPage
+                daemonBaseUrl={effectiveState.daemonBaseUrl}
+                capabilities={effectiveState.capabilities}
+                token={readDaemonTokenOnce() ?? undefined}
+                browserLocalStore={browserLocalStore}
+                onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+              />
+            </Suspense>
+          </div>
+        </div>
       </ErrorBoundary>
     )
   }
@@ -161,9 +198,12 @@ export function App({ providerState }: AppProps) {
           store={userSettingsStore}
           message="Beta preview — your data is stored only in this browser."
         />
-        <BackendConfigChip state={state} />
+        <BackendConfigChip state={effectiveState} />
         <div className="min-h-0 flex-1 overflow-hidden">
-          <BrowserLocalCanvasPage store={browserLocalStore} capabilities={state.capabilities} />
+          <BrowserLocalCanvasPage
+            store={browserLocalStore}
+            capabilities={effectiveState.capabilities}
+          />
         </div>
       </div>
     </ErrorBoundary>

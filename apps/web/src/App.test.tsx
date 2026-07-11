@@ -1,9 +1,14 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { resetTokenStoreForTests } from '@kamiazya/whiteboard-mcp/api-client'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
-import type { ProviderState, WhiteboardCapabilities } from './lib/provider.js'
+import {
+  BROWSER_LOCAL_CAPABILITIES,
+  type ProviderState,
+  type WhiteboardCapabilities,
+} from './lib/provider.js'
 
 afterEach(cleanup)
 
@@ -178,6 +183,75 @@ describe('App daemon-pairing routing', () => {
     render(<App providerState={BROWSER_LOCAL_STATE} />)
     expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+  })
+})
+
+describe('App local-daemon provider state', () => {
+  beforeEach(() => {
+    receivedDaemonPageProps = undefined
+    resetTokenStoreForTests()
+    delete (window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__
+  })
+  afterEach(() => {
+    resetTokenStoreForTests()
+    delete (window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__
+  })
+
+  it('mounts DaemonCanvasPage instead of the placeholder, with no workspaceId/slug', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
+    expect(screen.queryByText('Whiteboard')).toBeNull()
+    expect(receivedDaemonPageProps?.daemonBaseUrl).toBe(LOCAL_DAEMON_STATE.daemonBaseUrl)
+    expect(receivedDaemonPageProps?.workspaceId).toBeUndefined()
+    expect(receivedDaemonPageProps?.slug).toBeUndefined()
+    expect(receivedDaemonPageProps?.capabilities).toEqual(LOCAL_DAEMON_STATE.capabilities)
+    expect(receivedDaemonPageProps?.browserLocalStore).toBeDefined()
+    expect(receivedDaemonPageProps?.onContinueBrowserLocal).toBeInstanceOf(Function)
+  })
+
+  it('passes the daemon-injected token when present', async () => {
+    ;(window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__ = 'tok-x'
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(receivedDaemonPageProps?.token).toBe('tok-x')
+  })
+
+  it('mounts gracefully with token undefined when the daemon has not injected one', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(receivedDaemonPageProps?.token).toBeUndefined()
+  })
+
+  it('escapes to browser-local with BROWSER_LOCAL_CAPABILITIES and neutral chip/banner copy', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-canvas-page')
+    const onContinueBrowserLocal = receivedDaemonPageProps?.onContinueBrowserLocal as () => void
+    act(() => {
+      onContinueBrowserLocal()
+    })
+    expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+    expect(receivedCapabilities).toEqual(BROWSER_LOCAL_CAPABILITIES)
+    expect(screen.getByText('Browser only')).toBeTruthy()
+    expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
+    expect(
+      screen.getByText('Beta preview — your data is stored only in this browser.'),
+    ).toBeTruthy()
+    expect(screen.queryByText('Beta preview — features may be incomplete.')).toBeNull()
+  })
+
+  it('catches an error surfacing through the local-daemon lazy path (boundary outside Suspense)', async () => {
+    throwInDaemonCanvasPage = true
+    const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
+    try {
+      render(<App providerState={LOCAL_DAEMON_STATE} />)
+      expect(await screen.findByText('Something went wrong')).toBeTruthy()
+      expect(reportSpy).toHaveBeenCalled()
+    } finally {
+      throwInDaemonCanvasPage = false
+      reportSpy.mockRestore()
+    }
   })
 })
 
