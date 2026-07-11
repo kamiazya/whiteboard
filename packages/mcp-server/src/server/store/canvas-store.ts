@@ -342,7 +342,11 @@ const inFlightAutoCompacts = new Set<Promise<unknown>>()
 // compaction that wins that race, so this was never a leak, but the outcome
 // was nondeterministic. Refusing new timers for the whole disposal removes
 // the race instead of relying on winning it.
-let disposingAutoCompact = false
+// A counter rather than a boolean: overlapping disposeAutoCompact() calls
+// (parallel DB dispose hooks, test teardown racing an explicit call) must not
+// let the first finisher drop the guard while another disposal is still
+// draining.
+let disposingAutoCompactCount = 0
 
 export function scheduleAutoCompact(
   workspaceId: string,
@@ -350,7 +354,7 @@ export function scheduleAutoCompact(
   versionStore: VersionStore,
   options: { debounceMs?: number } = {},
 ): void {
-  if (disposingAutoCompact) return
+  if (disposingAutoCompactCount > 0) return
   const key = `${workspaceId}/${slug}`
   const existing = autoCompactTimers.get(key)
   if (existing) clearTimeout(existing)
@@ -396,13 +400,13 @@ export function scheduleAutoCompact(
 // nothing pending simply resolves immediately, and scheduleAutoCompact works
 // again afterward (a fresh call re-populates both trackers).
 export async function disposeAutoCompact(): Promise<void> {
-  disposingAutoCompact = true
+  disposingAutoCompactCount++
   try {
     // A single clear-then-await pass is not enough: an in-flight compaction's
     // loadCanvas() can run legacy migration, which calls saveCanvas(), which
     // re-invokes the registered auto-compact trigger *while we are still
     // awaiting the first batch*. scheduleAutoCompact refuses that reschedule
-    // outright (disposingAutoCompact is true for this whole call), so this
+    // outright (the guard counter is non-zero for this whole call), so this
     // loop's job is just to drain whatever was already in flight or already
     // timer-scheduled before disposal began.
     for (;;) {
@@ -412,7 +416,7 @@ export async function disposeAutoCompact(): Promise<void> {
       await Promise.allSettled(inFlight)
     }
   } finally {
-    disposingAutoCompact = false
+    disposingAutoCompactCount--
   }
 }
 
@@ -428,7 +432,7 @@ export function _inFlightAutoCompactCountForTests(): number {
 // before triggering a reschedule attempt, instead of racing a wall-clock
 // delay against dispose's await window.
 export function _isDisposingAutoCompactForTests(): boolean {
-  return disposingAutoCompact
+  return disposingAutoCompactCount > 0
 }
 
 registerDbDisposeHook(disposeAutoCompact)
