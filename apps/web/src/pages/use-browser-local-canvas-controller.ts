@@ -22,7 +22,10 @@ export interface BrowserLocalCanvasController {
   persistence: BrowserLocalPersistenceState
   cleanupCompleted: boolean
   cleanupError: string | null
-  renameCanvas(name: string): void
+  // Resolves once the rename is flushed, rejects if the underlying save
+  // failed — callers (e.g. WorkspaceTopBar) rely on the rejection to keep a
+  // rename input open for retry instead of silently closing it.
+  renameCanvas(name: string): Promise<void>
   triggerCleanup(): Promise<void>
   startFresh(): Promise<void>
   listCanvases(): Promise<CanvasSnapshot[]>
@@ -162,13 +165,13 @@ export function useBrowserLocalCanvasController(
   // Discrete edit — flush immediately (no debounce) so a rename
   // never lingers as "Unsaved changes" and survives a fast reload.
   const renameCanvas = useCallback(
-    (name: string) => {
+    (name: string): Promise<void> => {
       // Merge with the freshest pending snapshot instead of committed state, so
       // a concurrent edit in flight is never clobbered. Computed
       // from refs (not a setState updater) so pendingSnapshotRef is guaranteed
       // current before the immediate flushSave below reads it.
       const base = pendingSnapshotRef.current ?? snapshotRef.current
-      if (base === null) return
+      if (base === null) return Promise.resolve()
       const normalized = name.trim() || 'untitled'
       const updated: CanvasSnapshot = {
         ...base,
@@ -183,7 +186,9 @@ export function useBrowserLocalCanvasController(
       snapshotRef.current = updated
       setSnapshot(updated)
       setPersistenceRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt ?? null }))
-      void flushSave()
+      return flushSave().then((ok) => {
+        if (!ok) throw new Error('Failed to save the renamed canvas.')
+      })
     },
     [flushSave],
   )
