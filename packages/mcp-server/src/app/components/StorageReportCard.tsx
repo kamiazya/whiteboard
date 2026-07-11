@@ -109,19 +109,37 @@ export function StorageReportCard() {
   // the callback resumes (e.g. end-of-test-file jsdom teardown racing a
   // pending setTimeout), the same call throws.
   const mountedRef = useRef(true)
+  // Tracks every window.setTimeout id this component has scheduled but not
+  // yet seen fire (status-clear timers from four independent call sites,
+  // plus refresh()'s MIN_REFRESH_MS delay). A single scalar ref cannot hold
+  // this: two actions (e.g. Optimize then Prune logs) can each have their
+  // own status-clear timer pending at once, and a scalar would silently
+  // overwrite the first id, leaking it. Cleared on unmount so no timer
+  // survives to fire after the surrounding test/page environment is torn
+  // down.
+  const pendingTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      // Bare clearTimeout (not window.clearTimeout) for the same reason as
+      // the MIN_REFRESH_MS scheduling below — it must not assume `window`
+      // is still around.
+      for (const id of pendingTimersRef.current) {
+        clearTimeout(id)
+      }
+      pendingTimersRef.current.clear()
     }
   }, [])
 
   // Clear a transient action status after STATUS_CLEAR_MS, skipping the
   // setState if the component unmounted while the timer was pending.
   const scheduleStatusClear = useCallback((clear: () => void) => {
-    window.setTimeout(() => {
+    const id = setTimeout(() => {
+      pendingTimersRef.current.delete(id)
       if (mountedRef.current) clear()
     }, STATUS_CLEAR_MS)
+    pendingTimersRef.current.add(id)
   }, [])
 
   // Coarse tick so the "Updated …" / "Auto-optimised …" lines stay live
@@ -155,7 +173,27 @@ export function StorageReportCard() {
       const elapsed = Date.now() - start
       const remaining = MIN_REFRESH_MS - elapsed
       if (remaining > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remaining))
+        // This setTimeout is scheduled inside `finally`, so it always runs
+        // even when refresh() was invoked on a since-unmounted component
+        // (unmount cannot pre-empt the finally block of an already-awaited
+        // try) — this scheduling can happen well after unmount, once the
+        // environment itself (jsdom `window`) may already be torn down.
+        // Use the bare global setTimeout/clearTimeout here, NOT
+        // `window.setTimeout` — referencing `window` at call time throws
+        // "window is not defined" once it has been torn down, whereas the
+        // global timer functions do not depend on `window` existing. Track
+        // the id in the same pendingTimersRef Set so a just-in-time unmount
+        // still clears it. If unmount races ahead of this line, the promise
+        // below is left forever-pending — harmless, since the resumed
+        // setLoading(false) is guarded by mountedRef and the whole closure
+        // becomes GC-eligible once unreachable.
+        await new Promise<void>((resolve) => {
+          const id = setTimeout(() => {
+            pendingTimersRef.current.delete(id)
+            resolve()
+          }, remaining)
+          pendingTimersRef.current.add(id)
+        })
       }
       if (mountedRef.current) {
         setLoading(false)
