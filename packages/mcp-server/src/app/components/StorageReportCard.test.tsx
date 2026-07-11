@@ -209,6 +209,17 @@ describe('StorageReportCard', () => {
     await withWindowTornDown(() => vi.advanceTimersByTimeAsync(500))
   })
 
+  it('clears the pending min-refresh-delay timer on unmount instead of leaking it', async () => {
+    const { unmount } = render(<StorageReportCard />)
+    // The initial mount-time refresh() has an in-flight MIN_REFRESH_MS
+    // setTimeout at this point.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it(
     'does not call setState after unmount while the optimizeAll status-clear timer is still pending',
     async () => {
@@ -255,6 +266,50 @@ describe('StorageReportCard', () => {
       await withWindowTornDown(
         () => new Promise((resolve) => setTimeout(resolve, STATUS_CLEAR_MS + 200)),
       )
+    },
+    STATUS_CLEAR_MS + 5000,
+  )
+
+  it(
+    'clears the pending status-clear timer on unmount instead of leaking it',
+    async () => {
+      const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+      fetchMock.mockImplementation((input: RequestInfo | URL) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (url === '/api/runtime/storage') {
+          return Promise.resolve(jsonResponse(PAYLOAD))
+        }
+        if (url === '/api/workspaces') {
+          return Promise.resolve(jsonResponse({ workspaces: [] }))
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`))
+      })
+
+      // Real timers — same reasoning as the sibling unmount test above.
+      vi.useRealTimers()
+
+      const { container, unmount } = render(<StorageReportCard />)
+      await waitFor(() => {
+        expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+      })
+
+      const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
+      const button = blobsActions.querySelector('button')!
+      fireEvent.click(button)
+
+      // Wait for optimizeAll to settle — its finally block now holds a
+      // pending STATUS_CLEAR_MS setTimeout id in pendingTimeoutIdsRef.
+      await waitFor(() => {
+        expect(blobsActions.textContent ?? '').toMatch(/optimal|saved/i)
+      })
+
+      const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
+      unmount()
+      // Unmount must actively cancel the still-pending status-clear timer
+      // rather than leaving it scheduled with a now-orphaned callback.
+      expect(clearTimeoutSpy).toHaveBeenCalled()
+      clearTimeoutSpy.mockRestore()
     },
     STATUS_CLEAR_MS + 5000,
   )

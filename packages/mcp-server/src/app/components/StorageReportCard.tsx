@@ -109,19 +109,31 @@ export function StorageReportCard() {
   // the callback resumes (e.g. end-of-test-file jsdom teardown racing a
   // pending setTimeout), the same call throws.
   const mountedRef = useRef(true)
+  // Every setTimeout this component schedules (status-clear timers, the
+  // min-refresh-delay floor) is tracked here so unmount can clear it —
+  // otherwise the timer keeps the event loop (and, in tests, fake-timer
+  // bookkeeping) alive past teardown even though mountedRef already makes
+  // its callback a no-op.
+  const pendingTimeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      for (const id of pendingTimeoutIdsRef.current) {
+        clearTimeout(id)
+      }
+      pendingTimeoutIdsRef.current.clear()
     }
   }, [])
 
   // Clear a transient action status after STATUS_CLEAR_MS, skipping the
   // setState if the component unmounted while the timer was pending.
   const scheduleStatusClear = useCallback((clear: () => void) => {
-    window.setTimeout(() => {
+    const id = setTimeout(() => {
+      pendingTimeoutIdsRef.current.delete(id)
       if (mountedRef.current) clear()
     }, STATUS_CLEAR_MS)
+    pendingTimeoutIdsRef.current.add(id)
   }, [])
 
   // Coarse tick so the "Updated …" / "Auto-optimised …" lines stay live
@@ -155,7 +167,18 @@ export function StorageReportCard() {
       const elapsed = Date.now() - start
       const remaining = MIN_REFRESH_MS - elapsed
       if (remaining > 0) {
-        await new Promise((resolve) => setTimeout(resolve, remaining))
+        // Bare `setTimeout`, not `window.setTimeout` — this line can resume
+        // after a suspended await once jsdom's `window` has already been
+        // torn down (see the sibling unmount test), and referencing the
+        // `window` identifier at that point throws "window is not defined".
+        // The global `setTimeout` binding survives that teardown.
+        await new Promise<void>((resolve) => {
+          const id = setTimeout(() => {
+            pendingTimeoutIdsRef.current.delete(id)
+            resolve()
+          }, remaining)
+          pendingTimeoutIdsRef.current.add(id)
+        })
       }
       if (mountedRef.current) {
         setLoading(false)
