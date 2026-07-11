@@ -102,6 +102,7 @@ export function DaemonCanvasPage({
     kind: 'success' | 'error'
     text: string
   } | null>(null)
+  const [importSectionOpen, setImportSectionOpen] = useState(false)
 
   // Backend identity is keyed on (workspaceId, slug, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
@@ -295,20 +296,28 @@ export function DaemonCanvasPage({
           {!capabilities.merge && <CapabilityTeaser label="Merge" enabled={false} />}
         </div>
         {canvas && browserLocalStore && (
-          <details className="border-b bg-background px-4 py-2 text-sm">
+          <details
+            className="border-b bg-background px-4 py-2 text-sm"
+            onToggle={(event) => setImportSectionOpen(event.currentTarget.open)}
+          >
             <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
               Import from this browser
             </summary>
-            <div className="pt-2">
-              <Suspense fallback={null}>
-                <LazyImportSection
-                  workspaceId={canvas.workspaceId}
-                  daemonFetch={daemonFetch}
-                  daemonBaseUrl={daemonBaseUrl}
-                  browserLocalStore={browserLocalStore}
-                />
-              </Suspense>
-            </div>
+            {/* <details> only hides collapsed children visually — React still
+                mounts them. Gate on the open state so the lazy chunk and its
+                IndexedDB read are deferred until the user expands the section. */}
+            {importSectionOpen && (
+              <div className="pt-2">
+                <Suspense fallback={null}>
+                  <LazyImportSection
+                    workspaceId={canvas.workspaceId}
+                    daemonFetch={daemonFetch}
+                    daemonBaseUrl={daemonBaseUrl}
+                    browserLocalStore={browserLocalStore}
+                  />
+                </Suspense>
+              </div>
+            )}
           </details>
         )}
         {controller.canvases.length === 0 ? (

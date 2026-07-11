@@ -1583,6 +1583,36 @@ describe('DaemonCanvasPage', () => {
       await waitFor(() => expect(screen.getByText('My local canvas')).toBeTruthy())
     })
 
+    it('does not touch the browser-local store until the disclosure is opened', async () => {
+      const browserLocalStore = new MemoryStore()
+      const listSpy = vi.spyOn(browserLocalStore, 'listCanvases')
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            browserLocalStore={browserLocalStore}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await screen.findByText('Import from this browser')
+
+      // <details> only hides collapsed content visually; the section (and its
+      // IndexedDB read) must not mount until the user actually expands it.
+      // Settle any pending dynamic imports first so an eagerly-mounted lazy
+      // section cannot hide behind unresolved import timing.
+      await act(async () => {
+        await vi.dynamicImportSettled()
+      })
+      expect(listSpy).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByText('Import from this browser'))
+      await waitFor(() => expect(listSpy).toHaveBeenCalled())
+    })
+
     it('does not render the import disclosure when browserLocalStore is not provided', async () => {
       await act(async () => {
         render(
