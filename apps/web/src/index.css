@@ -70,3 +70,16 @@
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
 }
+
+/*
+ * Without this, page chrome text (canvas title, header, teaser buttons)
+ * falls back to the UA-default black regardless of --foreground, since
+ * nothing else applies the design tokens to the actual page root. In dark
+ * mode that reads as unreadable black-on-black.
+ */
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+}
