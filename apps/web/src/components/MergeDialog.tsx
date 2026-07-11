@@ -17,7 +17,7 @@ import { type JSX, useEffect, useMemo, useState } from 'react'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { safeErrorCopy } from '@/lib/error-copy'
 import { dispatchMergeCommitted } from '@/lib/merge-committed-event'
-import { cn } from '@/lib/utils'
+import { cn, displayBranchName } from '@/lib/utils'
 import { Button } from './ui/button.js'
 import {
   Dialog,
@@ -325,7 +325,7 @@ export function MergeDialog({
       }
       onClose()
     } catch (err) {
-      setError(safeErrorCopy(err, 'Merge failed.'))
+      setError(safeErrorCopy(err, 'Combine failed.'))
     } finally {
       setCommitting(false)
     }
@@ -361,13 +361,13 @@ export function MergeDialog({
           <DialogTitle className="flex items-center gap-2">
             <GitMerge className="h-4 w-4" />
             <span>
-              Merge changes from{' '}
+              Combine{' '}
               <span style={{ color: source?.color ?? undefined }} className="font-semibold">
-                «{source?.name ?? '?'}»
+                «{source ? displayBranchName(source.name) : '?'}»
               </span>{' '}
               into{' '}
               <span style={{ color: target?.color ?? undefined }} className="font-semibold">
-                «{target?.name ?? '?'}»
+                «{target ? displayBranchName(target.name) : '?'}»
               </span>
             </span>
           </DialogTitle>
@@ -428,7 +428,7 @@ export function MergeDialog({
                   className="inline-block size-2 shrink-0 rounded-full bg-emerald-500"
                 />
                 <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">
-                  Merged preview
+                  Combined preview
                 </span>
               </div>
               <div className="text-xs text-muted-foreground">{previewCount ?? '—'} elements</div>
@@ -454,7 +454,8 @@ export function MergeDialog({
                   <div className="text-center text-xs">
                     <div>{previewElementCount > 0 ? 'No preview image yet' : 'No elements'}</div>
                     <div className="mt-1 text-[10px] opacity-80">
-                      Save «{source?.name ?? '?'}» with ⌘S to generate a preview image
+                      Save «{source ? displayBranchName(source.name) : '?'}» with ⌘S to generate a
+                      preview image
                     </div>
                   </div>
                 </div>
@@ -478,7 +479,8 @@ export function MergeDialog({
               <div className="flex items-center gap-2 text-sm">
                 <CheckCircle2 className="size-4 text-emerald-600" />
                 <span>
-                  <strong className="text-emerald-700">No conflicts</strong> - ready to merge as-is
+                  <strong className="text-emerald-700">No conflicts</strong> - ready to combine
+                  as-is
                 </span>
               </div>
             ) : (
@@ -524,9 +526,9 @@ export function MergeDialog({
               className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-900"
               data-testid="merge-side-effect-notice"
             >
-              <strong>After merge:</strong> switch automatically to "
-              <span className="font-semibold">{target.name}</span>" and delete "
-              <span className="font-semibold">{source.name}</span>
+              <strong>After combining:</strong> switch automatically to "
+              <span className="font-semibold">{displayBranchName(target.name)}</span>" and delete "
+              <span className="font-semibold">{displayBranchName(source.name)}</span>
               ".
             </div>
           )}
@@ -545,12 +547,12 @@ export function MergeDialog({
             {committing ? (
               <>
                 <Loader2 className="size-3.5 animate-spin" />
-                Merging…
+                Combining…
               </>
             ) : (
               <>
                 <GitMerge className="size-3.5" />
-                Merge
+                Combine
               </>
             )}
           </Button>

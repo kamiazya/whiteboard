@@ -138,7 +138,7 @@ export function DaemonDetectedBanner({
         >
           <span>
             A local whiteboard daemon is running. Ask your AI agent for a pairing link
-            (create_pairing_link) to unlock versions, branches, and merge.
+            (create_pairing_link) to unlock versions, variations, and combining changes.
           </span>
           <a
             href={HOW_TO_CONNECT_URL}

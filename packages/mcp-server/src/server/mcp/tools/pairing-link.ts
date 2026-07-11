@@ -141,7 +141,7 @@ function isLoopbackOrigin(origin: string): boolean {
 }
 
 export const PAIRING_LINK_CREDENTIAL_NOTE =
-  'SECURITY: this URL embeds the daemon bootstrap token — treat it like a credential and share it only with the intended recipient. Hosted (non-loopback) webOrigin values must be added to WHITEBOARD_ALLOWED_WEB_ORIGINS on the daemon; loopback origins need no allowlist entry.'
+  'SECURITY: this URL embeds the daemon bootstrap token — treat it like a credential and share it only with the intended recipient. Hosted (non-loopback) webOrigin values must be added to WHITEBOARD_ALLOWED_WEB_ORIGINS on the daemon (an exact origin or a https://*.example.com wildcard subdomain pattern); loopback origins need no allowlist entry.'
 
 // The MCP process cannot read the daemon's WHITEBOARD_ALLOWED_WEB_ORIGINS
 // configuration, so this warning is deliberate best-effort: it reminds the

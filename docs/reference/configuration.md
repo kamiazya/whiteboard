@@ -13,7 +13,7 @@ Runtime environment variables and sandbox quirks.
 | `WHITEBOARD_MCP_RESOURCE` | Canonical MCP resource URL exposed in metadata. If unset, `/mcp` is derived from the incoming request URL. | unset |
 | `WHITEBOARD_MCP_SCOPES_SUPPORTED` | Comma-separated list of scopes exposed in metadata. | unset |
 | `MCP_HTTP_DEBUG` | When set to `1`, the HTTP MCP server logs `[mcp-http:init]` / `[mcp-http]` events to help diagnose request flow. | unset |
-| `WHITEBOARD_ALLOWED_WEB_ORIGINS` | Comma-separated list of extra hosted origins admitted alongside the fixed loopback set (`localhost`, `127.0.0.1`, `::1`) on `/api/*` CORS, `/mcp`, and WS upgrade — **local-daemon mode only**. Each entry must be an exact `https://` origin (no path/query/fragment/credentials); wildcards are rejected. Matching is case-insensitive on the host and normalizes the default `:443` port, but any other port is significant. An invalid entry aborts daemon startup with a logged error naming the offending entry's index (the raw value is never echoed). Can also be set via a [config file](#config-file-local-daemon)'s `allowedWebOrigins` key; this env var always wins. | unset (loopback-only, unchanged) |
+| `WHITEBOARD_ALLOWED_WEB_ORIGINS` | Comma-separated list of extra hosted origins admitted alongside the fixed loopback set (`localhost`, `127.0.0.1`, `::1`) on `/api/*` CORS, `/mcp`, and WS upgrade — **local-daemon mode only**. Each entry must be an exact `https://` origin (no path/query/fragment/credentials) **or** a `https://*.example.com` wildcard subdomain pattern (see below); bare `*` is rejected. Matching is case-insensitive on the host and normalizes the default `:443` port, but any other port is significant. An invalid entry aborts daemon startup with a logged error naming the offending entry's index (the raw value is never echoed). Can also be set via a [config file](#config-file-local-daemon)'s `allowedWebOrigins` key; this env var always wins. | unset (loopback-only, unchanged) |
 
 Setting `WHITEBOARD_ALLOWED_WEB_ORIGINS` only widens which browser *origins*
 the daemon will talk to over CORS/WS — it does not change authentication.
@@ -23,12 +23,39 @@ control; the hosted pairing flow this enables also depends on the browser's
 own Local Network Access permission prompt (Chrome), which is a separate,
 per-user consent step.
 
+### Wildcard subdomain patterns
+
+Both `WHITEBOARD_ALLOWED_WEB_ORIGINS` and `WHITEBOARD_SERVER_ALLOWED_ORIGINS`
+accept a `https://*.example.com`-shaped entry alongside exact origins. This is
+meant for deployment-preview shapes such as Cloudflare Pages branch previews
+(`https://*.your-project.pages.dev`), where every branch gets its own
+subdomain and listing each one explicitly is impractical.
+
+Rules:
+
+- The wildcard `*` must be the **entire leftmost label** and nothing else —
+  `https://*.example.com` is valid; `https://foo*.example.com`,
+  `https://*.*.example.com`, and bare `*` are all rejected.
+- Only **one label** is matched: `https://preview.example.com` matches
+  `https://*.example.com`, but `https://a.b.example.com` does not.
+- The pattern must be `https://` — wildcards are never accepted for
+  loopback `http://` origins.
+- The static suffix after the wildcard must retain at least two labels
+  (`example.com`, not `.dev` or `.com` alone). This is a structural check,
+  not a public-suffix-list lookup — **`https://*.pages.dev` passes it but
+  admits every Cloudflare Pages project**, not just yours. Always scope the
+  pattern to your own project label, e.g.
+  `https://*.your-project.pages.dev`.
+
 ## Config file (local daemon)
 
 As an alternative to exporting env vars by hand, the local daemon (`whiteboard
 daemon run`, and the `server/index.ts` HTTP entrypoint) auto-loads a config
-file. The first match wins, searched in this order while walking up from the
-current directory:
+file. Only the current working directory is searched — ancestor directories
+are deliberately NOT walked up, so a config file planted in a parent
+directory (e.g. the root of an untrusted cloned repo) can never inject a
+token or widen the CORS allowlist. The first match wins, searched in this
+order in the current directory:
 
 1. `.whiteboardrc`
 2. `.whiteboardrc.json`
@@ -39,7 +66,7 @@ current directory:
 7. `whiteboard.config.json`
 8. `package.json` (`"whiteboard"` field)
 
-If nothing is found from the current directory upward, `~/.whiteboard/config.yaml`
+If nothing is found in the current directory, `~/.whiteboard/config.yaml`
 is consulted as a per-machine fallback. Only declarative JSON/YAML/rc formats
 are supported — `whiteboard.config.js` and similar JS loaders are deliberately
 NOT searched, so a config file can never execute code at daemon startup.

@@ -67,6 +67,31 @@ describe('parseAllowedWebOriginsEnv', () => {
       entryIndex: 0,
     })
   })
+
+  it('accepts a wildcard subdomain pattern alongside an exact origin', () => {
+    expect(
+      parseAllowedWebOriginsEnv('https://*.kamiazya-whiteboard.pages.dev, https://second.example'),
+    ).toEqual({
+      ok: true,
+      origins: ['https://*.kamiazya-whiteboard.pages.dev', 'https://second.example'],
+    })
+  })
+
+  it('fails with the entry index for an invalid wildcard pattern', () => {
+    expect(parseAllowedWebOriginsEnv('https://a.example, https://foo*.b.example')).toEqual({
+      ok: false,
+      code: 'web_origins.invalid_wildcard_pattern',
+      entryIndex: 1,
+    })
+  })
+
+  it('fails for a suffix too short to admit a wildcard pattern', () => {
+    expect(parseAllowedWebOriginsEnv('https://*.dev')).toEqual({
+      ok: false,
+      code: 'web_origins.invalid_wildcard_pattern',
+      entryIndex: 0,
+    })
+  })
 })
 
 describe('isAllowedWebOrigin', () => {
@@ -108,6 +133,21 @@ describe('isAllowedWebOrigin', () => {
 
   it('is false for an undefined origin header', () => {
     expect(isAllowedWebOrigin(undefined, allowlist)).toBe(false)
+  })
+
+  it('admits an origin matched by a wildcard pattern', () => {
+    const wildcardAllowlist = ['https://*.kamiazya-whiteboard.pages.dev']
+    expect(
+      isAllowedWebOrigin('https://preview-42.kamiazya-whiteboard.pages.dev', wildcardAllowlist),
+    ).toBe(true)
+  })
+
+  it('rejects an origin not matched by any wildcard pattern', () => {
+    const wildcardAllowlist = ['https://*.kamiazya-whiteboard.pages.dev']
+    expect(isAllowedWebOrigin('https://kamiazya-whiteboard.pages.dev', wildcardAllowlist)).toBe(
+      false,
+    )
+    expect(isAllowedWebOrigin('https://evil.com', wildcardAllowlist)).toBe(false)
   })
 })
 

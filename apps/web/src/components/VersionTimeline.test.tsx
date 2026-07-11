@@ -18,7 +18,7 @@ vi.mock('@/lib/app-logger', () => ({
 // Cover the current VersionTimeline contract:
 // - filter versions by the active branch (HEAD)
 // - render the mini-graph lane for each row
-// - place the "branched ->" label at the matching baseVersionId row
+// - place the "variation ->" label at the matching baseVersionId row
 //
 // Branch actions and save controls live in the header now, so VersionTimeline should not render tabs or save buttons.
 
@@ -260,9 +260,9 @@ describe('VersionTimeline', () => {
 
   it('renders the branchOut label on the row matching baseVersionId', async () => {
     render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
-    // "branched -> feature" should appear on the v-mid row.
+    // "variation -> feature" should appear on the v-mid row.
     await waitFor(() => {
-      expect(screen.getByText(/branched → feature/)).toBeTruthy()
+      expect(screen.getByText(/variation → feature/)).toBeTruthy()
     })
   })
 

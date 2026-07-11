@@ -1152,7 +1152,7 @@ describe('DaemonCanvasPage', () => {
           ),
         ).toBe(true)
       })
-      expect(screen.queryByText('Branches')).toBeNull()
+      expect(screen.queryByText('Variations')).toBeNull()
 
       vi.unstubAllGlobals()
     })
@@ -1179,8 +1179,8 @@ describe('DaemonCanvasPage', () => {
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
       expect(screen.queryByTestId('header-branch-chip')).toBeNull()
-      expect(screen.getByText('Branches')).toBeTruthy()
-      expect(screen.getByText('Merge')).toBeTruthy()
+      expect(screen.getByText('Variations')).toBeTruthy()
+      expect(screen.getByText('Combine')).toBeTruthy()
     })
 
     it('refetches the branch list when the backend reports an externally observed HEAD change', async () => {

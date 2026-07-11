@@ -4,6 +4,7 @@ import { Button } from './ui/button.js'
 import { MergeDialog } from './MergeDialog.js'
 import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
 import { useBranches } from '../hooks/useBranches.js'
+import { displayBranchName } from '@/lib/utils'
 
 // Show a banner under the header when the current branch is ahead of main.
 // - Condition: HEAD !== 'main' and getBranchStats(HEAD).unmergedCommits > 0
@@ -85,8 +86,8 @@ export function HeaderBranchBanner({
       >
         <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-hidden />
         <span className="min-w-0 flex-1 truncate">
-          Branch «<strong>{head}</strong>» has <strong>{unmergedCommits}</strong> changes not yet merged into
-          {' '}main
+          Variation «<strong>{displayBranchName(head)}</strong>» has{' '}
+          <strong>{unmergedCommits}</strong> changes not yet combined into «Main»
         </span>
         <Button
           type="button"
@@ -97,7 +98,7 @@ export function HeaderBranchBanner({
           onClick={() => setMergeOpen(true)}
         >
           <GitMerge className="size-3.5" />
-          Merge into main
+          Combine into «Main»
         </Button>
       </div>
       <MergeDialog
