@@ -6,6 +6,11 @@ covers what happens once a local daemon (started via `whiteboard mcp` or an
 MCP client) is also running on the same machine, and how to move a
 browser-local canvas onto it.
 
+The web app UI calls these "variations" and "combining changes," but the
+underlying MCP tools your AI agent calls (`create_branch`, `merge`, and so
+on) intentionally keep their git-derived names — the UI vocabulary is a
+presentation-layer choice and does not change the tool contract.
+
 ## How detection works
 
 The web app probes `GET /api/runtime/ping` on the daemon's default loopback
@@ -69,7 +74,10 @@ the token is rotated. Share it only with the intended recipient, and prefer
 loopback (`http://127.0.0.1:...`) origins for purely local use.
 
 For hosted (non-loopback) `webOrigin` values, the daemon must also be
-configured to accept that origin via `WHITEBOARD_ALLOWED_WEB_ORIGINS` —
+configured to accept that origin via `WHITEBOARD_ALLOWED_WEB_ORIGINS` — either
+as an exact match or via a `https://*.example.com` wildcard subdomain pattern
+that covers it (see
+[Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)).
 `create_pairing_link` cannot confirm that allowlist coverage on its own, so
 verify it yourself before sharing a hosted pairing link. Loopback origins
 need no allowlist entry.

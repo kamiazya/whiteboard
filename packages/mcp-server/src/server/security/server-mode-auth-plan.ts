@@ -11,10 +11,14 @@
 //
 // allowedOrigins normalization:
 //   server-mode-exposure.ts validates the input origins but stores them as-is.
-//   This layer normalizes each accepted origin via new URL(o).origin before
-//   placing it in the decision. This strips default ports (https :443, http :80)
-//   so stored origins always match the scheme+host+port format that browsers
-//   send in the Origin request header.
+//   This layer re-canonicalizes each accepted origin via
+//   origin-pattern.ts's canonicalizeOriginPatternEntry before placing it in
+//   the decision. For exact origins this strips default ports (https :443,
+//   http :80) so stored origins always match the scheme+host+port format
+//   browsers send in the Origin request header; wildcard subdomain patterns
+//   pass through unchanged in their canonical "https://*.<suffix>[:port]"
+//   form. Never use `new URL(o).origin` directly here — it does not throw on
+//   a wildcard entry and would silently treat it as an opaque literal string.
 //
 // Failure contract:
 //   All failure decisions are code-only — no raw URL, credential, path, stack
@@ -84,22 +88,20 @@ export type ServerModeAuthPlanDecision =
 //     (touch is separated from runtime-read because it mutates daemon state;
 //      shutdown is destructive — both require the admin scope, not the read scope)
 const SERVER_MODE_ROUTE_AUTH_PLAN: readonly RouteGroupAuthPlan[] = [
-  { group: 'canvas-read',    requiredScopes: ['canvas:read'] },
+  { group: 'canvas-read', requiredScopes: ['canvas:read'] },
   { group: 'workspace-read', requiredScopes: ['workspace:read'] },
-  { group: 'versions-read',  requiredScopes: ['versions:read'] },
-  { group: 'files-read',     requiredScopes: ['files:read'] },
-  { group: 'canvas-write',   requiredScopes: ['canvas:write'] },
-  { group: 'workspace-write',requiredScopes: ['workspace:write'] },
+  { group: 'versions-read', requiredScopes: ['versions:read'] },
+  { group: 'files-read', requiredScopes: ['files:read'] },
+  { group: 'canvas-write', requiredScopes: ['canvas:write'] },
+  { group: 'workspace-write', requiredScopes: ['workspace:write'] },
   { group: 'versions-write', requiredScopes: ['versions:write'] },
-  { group: 'files-write',    requiredScopes: ['files:write'] },
-  { group: 'runtime-read',   requiredScopes: ['runtime:read'] },
-  { group: 'runtime-admin',  requiredScopes: ['runtime:admin'] },
-  { group: 'mcp',            requiredScopes: ['mcp:call'] },
+  { group: 'files-write', requiredScopes: ['files:write'] },
+  { group: 'runtime-read', requiredScopes: ['runtime:read'] },
+  { group: 'runtime-admin', requiredScopes: ['runtime:admin'] },
+  { group: 'mcp', requiredScopes: ['mcp:call'] },
 ]
 
-export function planServerModeAuth(
-  input: ServerModeExposureInput,
-): ServerModeAuthPlanDecision {
+export function planServerModeAuth(input: ServerModeExposureInput): ServerModeAuthPlanDecision {
   const exposure = resolveServerModeExposure(input)
 
   if (!exposure.ok) {
@@ -118,9 +120,12 @@ export function planServerModeAuth(
     }
   }
 
-  // Normalize each allowed origin to URL.origin (strips default ports,
-  // ensures consistent comparison with the Origin header browsers send).
-  const normalizedOrigins = exposure.allowedOrigins.map((o) => new URL(o).origin)
+  // Normalize each allowed origin to its canonical string form (strips
+  // exposure.allowedOrigins is already canonicalized by
+  // server-mode-exposure.ts via origin-pattern.ts (which — unlike
+  // `new URL(o).origin` — handles wildcard entries instead of silently
+  // treating '*' as a literal hostname character). No re-normalization here.
+  const normalizedOrigins = exposure.allowedOrigins
 
   return {
     ok: true,

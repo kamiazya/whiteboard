@@ -192,11 +192,12 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     timeoutMs: number,
   ): Promise<Buffer> {
     const requestId = nanoid()
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
       const base64Data = await new Promise<string>((resolve, reject) => {
         pendingExports.set(requestId, { resolve, reject })
         sendExportRequest(workspaceId, slug, requestId, hasOptions ? options : undefined)
-        setTimeout(() => {
+        timer = setTimeout(() => {
           if (pendingExports.has(requestId)) {
             pendingExports.delete(requestId)
             reject(new Error('timeout'))
@@ -204,6 +205,7 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
         }, timeoutMs)
       }).finally(() => {
         pendingExports.delete(requestId)
+        clearTimeout(timer)
       })
       return Buffer.from(base64Data.replace(/^data:image\/\w+;base64,/, ''), 'base64')
     } catch (err) {

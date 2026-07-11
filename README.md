@@ -160,6 +160,10 @@ version history, branches, and merge, with live sync over WebSocket.
   reads the separate `WHITEBOARD_SERVER_ALLOWED_ORIGINS` variable instead.
 - Treat the pairing link like a credential: anyone who has it can pair with
   your daemon until the token is rotated.
+- Prefer a config file over exporting env vars by hand? See
+  [Configuration → Config file](docs/reference/configuration.md#config-file-local-daemon)
+  for the `.whiteboardrc` / `.whiteboard/config.yaml` auto-load and
+  precedence rules.
 
 See [Connect to a local daemon](docs/how-to/connect-to-local-daemon.md) for
 the full flow, including copy-first import of browser-local canvases.

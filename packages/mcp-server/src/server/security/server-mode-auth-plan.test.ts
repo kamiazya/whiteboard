@@ -161,9 +161,7 @@ describe('planServerModeAuth — server-mode config validation', () => {
 // ── Server-mode plan content ─────────────────────────────────────────────────
 
 describe('planServerModeAuth — server-mode plan content', () => {
-  function makeServerPlan(
-    overrides: Partial<Parameters<typeof planServerModeAuth>[0]> = {},
-  ) {
+  function makeServerPlan(overrides: Partial<Parameters<typeof planServerModeAuth>[0]> = {}) {
     return planServerModeAuth({
       mode: 'server-mode',
       bindHost: '0.0.0.0',
@@ -200,6 +198,20 @@ describe('planServerModeAuth — server-mode plan content', () => {
     }
   })
 
+  it('wildcard allowedOrigin survives normalization as a matchable pattern', () => {
+    // Regression: new URL('https://*.example.com').origin does NOT throw —
+    // it round-trips to the same string — but the plan must still carry the
+    // pattern so isOriginAllowedForServerMode can admit real subdomains
+    // downstream, not just tolerate the literal string.
+    const result = makeServerPlan({
+      allowedOrigins: ['https://*.example.com'],
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.allowedOrigins).toEqual(['https://*.example.com'])
+  })
+
   it('routeAuthPlan uses only AuthScope vocabulary', () => {
     const result = makeServerPlan()
 
@@ -220,17 +232,17 @@ describe('planServerModeAuth — server-mode plan content', () => {
     if (!result.ok) return
 
     const expected = {
-      'canvas-read':     ['canvas:read'],
-      'workspace-read':  ['workspace:read'],
-      'versions-read':   ['versions:read'],
-      'files-read':      ['files:read'],
-      'canvas-write':    ['canvas:write'],
+      'canvas-read': ['canvas:read'],
+      'workspace-read': ['workspace:read'],
+      'versions-read': ['versions:read'],
+      'files-read': ['files:read'],
+      'canvas-write': ['canvas:write'],
       'workspace-write': ['workspace:write'],
-      'versions-write':  ['versions:write'],
-      'files-write':     ['files:write'],
-      'runtime-read':    ['runtime:read'],
-      'runtime-admin':   ['runtime:admin'],
-      'mcp':             ['mcp:call'],
+      'versions-write': ['versions:write'],
+      'files-write': ['files:write'],
+      'runtime-read': ['runtime:read'],
+      'runtime-admin': ['runtime:admin'],
+      mcp: ['mcp:call'],
     }
 
     // Length check catches duplicate group entries that Object.fromEntries would silently collapse
@@ -315,9 +327,15 @@ describe('planServerModeAuth — server-mode plan content', () => {
     expect(serialized).not.toContain('bindHost')
     // Verify only expected top-level fields are present
     if (result.ok) {
-      expect(Object.keys(result).sort()).toEqual(
-        ['allowedOrigins', 'kind', 'ok', 'pnaHeader', 'publicBaseUrl', 'routeAuthPlan', 'trustedProxy'],
-      )
+      expect(Object.keys(result).sort()).toEqual([
+        'allowedOrigins',
+        'kind',
+        'ok',
+        'pnaHeader',
+        'publicBaseUrl',
+        'routeAuthPlan',
+        'trustedProxy',
+      ])
     }
   })
 })
@@ -395,46 +413,39 @@ describe('planServerModeAuth — non-leak', () => {
 fcTest.prop(
   [
     fc.array(
-      fc.oneof(
-        fc.constant(443),
-        fc.integer({ min: 1024, max: 65535 }),
-      ).map((port) => `https://host-example.com:${port}`),
+      fc
+        .oneof(fc.constant(443), fc.integer({ min: 1024, max: 65535 }))
+        .map((port) => `https://host-example.com:${port}`),
       { minLength: 1, maxLength: 4 },
     ),
   ],
   withDefaults(),
-)(
-  'every accepted allowedOrigin in server-mode plan equals its own URL.origin',
-  (origins) => {
-    const result = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: 'https://app.example.com',
-      allowedOrigins: origins,
-    })
+)('every accepted allowedOrigin in server-mode plan equals its own URL.origin', (origins) => {
+  const result = planServerModeAuth({
+    mode: 'server-mode',
+    bindHost: '0.0.0.0',
+    externalUrl: 'https://app.example.com',
+    allowedOrigins: origins,
+  })
 
-    if (!result.ok) return
-    for (const origin of result.allowedOrigins) {
-      expect(origin).toBe(new URL(origin).origin)
-      expect(origin.startsWith('https://')).toBe(true)
-    }
-  },
-)
+  if (!result.ok) return
+  for (const origin of result.allowedOrigins) {
+    expect(origin).toBe(new URL(origin).origin)
+    expect(origin.startsWith('https://')).toBe(true)
+  }
+})
 
 fcTest.prop(
   [fc.integer({ min: 10000000, max: 99999999 }).map((n) => `CANARY${n}`)],
   withDefaults(),
-)(
-  'canary embedded in rejected externalUrl query does not appear in failure decision',
-  (canary) => {
-    const result = planServerModeAuth({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl: `https://app.example.com?secret=${canary}`,
-    })
+)('canary embedded in rejected externalUrl query does not appear in failure decision', (canary) => {
+  const result = planServerModeAuth({
+    mode: 'server-mode',
+    bindHost: '0.0.0.0',
+    externalUrl: `https://app.example.com?secret=${canary}`,
+  })
 
-    expect(result.ok).toBe(false)
-    const serialized = JSON.stringify(result)
-    expect(serialized).not.toContain(canary)
-  },
-)
+  expect(result.ok).toBe(false)
+  const serialized = JSON.stringify(result)
+  expect(serialized).not.toContain(canary)
+})

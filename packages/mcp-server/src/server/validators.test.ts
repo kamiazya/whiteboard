@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  validateBranchName,
   validateExternalUrl,
   validateFileId,
   validateWorkspaceId,
@@ -29,6 +30,20 @@ describe('shared validators', () => {
     expect(() => validateVersionId('bad.id')).toThrow(/Invalid version id/)
     expect(() => validateFileId('bad/id')).toThrow(/Invalid file id/)
     expect(() => validateUserLibraryName('../icons')).toThrow(/Invalid user library name/)
+  })
+
+  it('accepts the canonical "main" branch name and normal branch names', () => {
+    expect(validateBranchName('main')).toBe('main')
+    expect(validateBranchName('feature-1')).toBe('feature-1')
+  })
+
+  it('rejects branch names that only differ from "main" by letter case', () => {
+    // displayBranchName() renders exactly 'main' as 'Main'; a real branch
+    // literally named 'Main' (or 'MAIN') would render identically and be
+    // indistinguishable from the default branch in switch/rename/delete UI.
+    expect(() => validateBranchName('Main')).toThrow(/Invalid branch name/)
+    expect(() => validateBranchName('MAIN')).toThrow(/Invalid branch name/)
+    expect(() => validateBranchName('mAin')).toThrow(/Invalid branch name/)
   })
 
   it('rejects unsafe external urls before fetch', async () => {

@@ -78,9 +78,15 @@ try {
 
   await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'networkidle' })
 
+  // Wait for the element rather than sampling count() immediately after
+  // networkidle: React mounts <main> asynchronously (and the page components
+  // are lazy-loaded), so an instant count races the hydration and flakes.
   const invalidConfig = page.locator('main[data-provider="invalid-config"]')
-  const count = await invalidConfig.count()
-  if (count > 0) {
+  const appeared = await invalidConfig
+    .waitFor({ state: 'attached', timeout: 15_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (appeared) {
     console.log('  pass  App renders data-provider="invalid-config" for preview publicOrigin')
   } else {
     const provider = await page
