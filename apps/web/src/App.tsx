@@ -14,8 +14,8 @@ const DaemonCanvasPage = lazy(() =>
   import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
 )
 
-const _browserLocalStore = new IndexedDBStore()
-const _userSettingsStore = createUserSettingsStore()
+const browserLocalStore = new IndexedDBStore()
+const userSettingsStore = createUserSettingsStore()
 
 const _defaultProviderState: ProviderState = resolveHostedProviderStateFromRaw(
   typeof window !== 'undefined'
@@ -91,7 +91,7 @@ export function App({ providerState }: AppProps) {
               slug={payload.slug}
               token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
               onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
-              browserLocalStore={_browserLocalStore}
+              browserLocalStore={browserLocalStore}
             />
           </Suspense>
         </ErrorBoundary>
@@ -140,7 +140,7 @@ export function App({ providerState }: AppProps) {
       <ErrorBoundary>
         <main data-provider="local-daemon" data-status="placeholder">
           <BetaBanner
-            store={_userSettingsStore}
+            store={userSettingsStore}
             message="Beta preview — features may be incomplete."
           />
           <BackendConfigChip state={state} />
@@ -158,12 +158,12 @@ export function App({ providerState }: AppProps) {
     <ErrorBoundary>
       <div className="flex h-dvh flex-col">
         <BetaBanner
-          store={_userSettingsStore}
+          store={userSettingsStore}
           message="Beta preview — your data is stored only in this browser."
         />
         <BackendConfigChip state={state} />
         <div className="min-h-0 flex-1 overflow-hidden">
-          <BrowserLocalCanvasPage store={_browserLocalStore} capabilities={state.capabilities} />
+          <BrowserLocalCanvasPage store={browserLocalStore} capabilities={state.capabilities} />
         </div>
       </div>
     </ErrorBoundary>
