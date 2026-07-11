@@ -67,7 +67,13 @@ describe('useDaemonCanvasController', () => {
     expect(result.current.canvases).toEqual([])
   })
 
-  it('respects an explicit workspaceId/slug without calling listWorkspaces', async () => {
+  it('still fetches the workspace list when an explicit workspaceId/slug is given, populating controller.workspaces', async () => {
+    // The real pairing-payload caller always supplies a non-null workspaceId,
+    // so listWorkspaces must run unconditionally for the switcher to have
+    // anything to list — it must not be gated behind the wid===null branch.
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w-explicit' }, { workspaceId: 'w-other' }],
+    })
     mockListCanvases.mockResolvedValue({
       canvases: [{ slug: 'explicit', updatedAt: '2026-01-01' }],
     })
@@ -82,9 +88,123 @@ describe('useDaemonCanvasController', () => {
     )
 
     await waitFor(() => expect(result.current.loading).toBe(false))
-    expect(mockListWorkspaces).not.toHaveBeenCalled()
+    expect(mockListWorkspaces).toHaveBeenCalledTimes(1)
     expect(result.current.workspaceId).toBe('w-explicit')
     expect(result.current.slug).toBe('explicit')
+    expect(result.current.workspaces).toEqual([
+      { workspaceId: 'w-explicit' },
+      { workspaceId: 'w-other' },
+    ])
+  })
+
+  it('populates controller.workspaces via a single listWorkspaces call when no workspaceId is given', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+    })
+    mockListCanvases.mockResolvedValue({ canvases: [{ slug: 'main', updatedAt: '2026-01-01' }] })
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockListWorkspaces).toHaveBeenCalledTimes(1)
+    expect(result.current.workspaces).toEqual([{ workspaceId: 'w1' }, { workspaceId: 'w2' }])
+  })
+
+  it('switchWorkspace re-fetches canvases for the new workspace and selects the first canvas', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+    })
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01' }],
+    })
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.workspaceId).toBe('w1')
+    expect(result.current.slug).toBe('w1-canvas')
+
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'w2-canvas', updatedAt: '2026-01-02' }],
+    })
+
+    await act(async () => {
+      await result.current.switchWorkspace('w2')
+    })
+
+    expect(mockListCanvases).toHaveBeenLastCalledWith(fetchFn, DAEMON_BASE_URL, 'w2')
+    expect(result.current.workspaceId).toBe('w2')
+    expect(result.current.slug).toBe('w2-canvas')
+    expect(result.current.canvases).toEqual([{ slug: 'w2-canvas', updatedAt: '2026-01-02' }])
+  })
+
+  it('switchWorkspace resolves to a null slug (empty state) when the target workspace has zero canvases', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+    })
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01' }],
+    })
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    mockListCanvases.mockResolvedValueOnce({ canvases: [] })
+
+    await act(async () => {
+      await result.current.switchWorkspace('w2')
+    })
+
+    expect(result.current.slug).toBeNull()
+    expect(result.current.canvases).toEqual([])
+  })
+
+  it('discards a stale switchWorkspace response when a later switch resolves first (race guard)', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }, { workspaceId: 'w3' }],
+    })
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01' }],
+    })
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    let resolveW2: (value: { canvases: { slug: string; updatedAt: string }[] }) => void = () => {}
+    const w2Promise = new Promise<{ canvases: { slug: string; updatedAt: string }[] }>(
+      (resolve) => {
+        resolveW2 = resolve
+      },
+    )
+    mockListCanvases.mockReturnValueOnce(w2Promise)
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'w3-canvas', updatedAt: '2026-01-03' }],
+    })
+
+    let switchW2Done: Promise<void> = Promise.resolve()
+    await act(async () => {
+      switchW2Done = result.current.switchWorkspace('w2')
+      await result.current.switchWorkspace('w3')
+    })
+
+    expect(result.current.workspaceId).toBe('w3')
+    expect(result.current.slug).toBe('w3-canvas')
+
+    // The stale w2 response resolves after w3 already won; it must be discarded.
+    await act(async () => {
+      resolveW2({ canvases: [{ slug: 'w2-canvas', updatedAt: '2026-01-02' }] })
+      await switchW2Done
+    })
+
+    expect(result.current.workspaceId).toBe('w3')
+    expect(result.current.slug).toBe('w3-canvas')
   })
 
   it('switchCanvas updates the selected slug synchronously', async () => {

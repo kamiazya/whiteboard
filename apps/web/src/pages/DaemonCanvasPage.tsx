@@ -165,7 +165,22 @@ export function DaemonCanvasPage({
               // feature needs a daemon connection it already has.
               <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
             )}
-            <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
+            {capabilities.workspaces && controller.workspaces.length > 0 ? (
+              <select
+                aria-label="Workspaces"
+                value={controller.workspaceId ?? ''}
+                onChange={(event) => void controller.switchWorkspace(event.target.value)}
+                className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
+              >
+                {controller.workspaces.map((w) => (
+                  <option key={w.workspaceId} value={w.workspaceId}>
+                    {w.workspaceId}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
+            )}
             {capabilities.branches &&
             controller.workspaceId !== null &&
             controller.slug !== null ? (
