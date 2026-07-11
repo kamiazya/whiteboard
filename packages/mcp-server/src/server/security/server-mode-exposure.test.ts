@@ -9,23 +9,27 @@ import {
 // ── local-daemon: loopback-only policy ──────────────────────────────────────
 
 describe('resolveServerModeExposure — local-daemon loopback policy', () => {
-  it.each(['127.0.0.1', 'localhost', '::1', '[::1]'])(
-    'loopback bind %j → ok, kind local-loopback',
-    (bindHost) => {
-      const d = resolveServerModeExposure({ mode: 'local-daemon', bindHost })
-      expect(d.ok).toBe(true)
-      if (d.ok) expect(d.kind).toBe('local-loopback')
-    },
-  )
+  it.each([
+    '127.0.0.1',
+    'localhost',
+    '::1',
+    '[::1]',
+  ])('loopback bind %j → ok, kind local-loopback', (bindHost) => {
+    const d = resolveServerModeExposure({ mode: 'local-daemon', bindHost })
+    expect(d.ok).toBe(true)
+    if (d.ok) expect(d.kind).toBe('local-loopback')
+  })
 
-  it.each(['0.0.0.0', '10.0.0.1', '192.168.1.100', 'example.com'])(
-    'non-loopback bind %j → local_daemon.non_loopback_forbidden',
-    (bindHost) => {
-      const d = resolveServerModeExposure({ mode: 'local-daemon', bindHost })
-      expect(d.ok).toBe(false)
-      if (!d.ok) expect(d.code).toBe('local_daemon.non_loopback_forbidden')
-    },
-  )
+  it.each([
+    '0.0.0.0',
+    '10.0.0.1',
+    '192.168.1.100',
+    'example.com',
+  ])('non-loopback bind %j → local_daemon.non_loopback_forbidden', (bindHost) => {
+    const d = resolveServerModeExposure({ mode: 'local-daemon', bindHost })
+    expect(d.ok).toBe(false)
+    if (!d.ok) expect(d.code).toBe('local_daemon.non_loopback_forbidden')
+  })
 
   it('non-loopback + externalUrl https → still local_daemon.non_loopback_forbidden (externalUrl does not unlock non-loopback)', () => {
     const d = resolveServerModeExposure({
@@ -76,14 +80,16 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
     if (!d.ok) expect(d.code).toBe('server_mode.external_url_required')
   })
 
-  it.each(['http://example.com', 'http://example.com/path', 'ftp://example.com', 'not-a-url'])(
-    'non-https externalUrl %j → server_mode.external_url_must_be_https',
-    (externalUrl) => {
-      const d = resolveServerModeExposure({ mode: 'server-mode', bindHost: '0.0.0.0', externalUrl })
-      expect(d.ok).toBe(false)
-      if (!d.ok) expect(d.code).toBe('server_mode.external_url_must_be_https')
-    },
-  )
+  it.each([
+    'http://example.com',
+    'http://example.com/path',
+    'ftp://example.com',
+    'not-a-url',
+  ])('non-https externalUrl %j → server_mode.external_url_must_be_https', (externalUrl) => {
+    const d = resolveServerModeExposure({ mode: 'server-mode', bindHost: '0.0.0.0', externalUrl })
+    expect(d.ok).toBe(false)
+    if (!d.ok) expect(d.code).toBe('server_mode.external_url_must_be_https')
+  })
 
   it.each([
     'https://user:pass@example.com',
@@ -94,14 +100,11 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
     'https://example.com?q=1',
     'https://example.com#fragment',
     'https://example.com/path?q=1#frag',
-  ])(
-    'non-origin externalUrl %j → server_mode.external_url_must_be_origin',
-    (externalUrl) => {
-      const d = resolveServerModeExposure({ mode: 'server-mode', bindHost: '0.0.0.0', externalUrl })
-      expect(d.ok).toBe(false)
-      if (!d.ok) expect(d.code).toBe('server_mode.external_url_must_be_origin')
-    },
-  )
+  ])('non-origin externalUrl %j → server_mode.external_url_must_be_origin', (externalUrl) => {
+    const d = resolveServerModeExposure({ mode: 'server-mode', bindHost: '0.0.0.0', externalUrl })
+    expect(d.ok).toBe(false)
+    if (!d.ok) expect(d.code).toBe('server_mode.external_url_must_be_origin')
+  })
 
   it('wildcard * in allowedOrigins → server_mode.wildcard_origin_forbidden', () => {
     const d = resolveServerModeExposure({
@@ -132,19 +135,16 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
     'https://user@app.example.com',
     'https://app.example.com?token=secret',
     'https://app.example.com#frag',
-  ])(
-    'non-origin allowedOrigin %j → server_mode.external_url_must_be_origin',
-    (badOrigin) => {
-      const d = resolveServerModeExposure({
-        mode: 'server-mode',
-        bindHost: '0.0.0.0',
-        externalUrl: 'https://example.com',
-        allowedOrigins: [badOrigin],
-      })
-      expect(d.ok).toBe(false)
-      if (!d.ok) expect(d.code).toBe('server_mode.external_url_must_be_origin')
-    },
-  )
+  ])('non-origin allowedOrigin %j → server_mode.external_url_must_be_origin', (badOrigin) => {
+    const d = resolveServerModeExposure({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: 'https://example.com',
+      allowedOrigins: [badOrigin],
+    })
+    expect(d.ok).toBe(false)
+    if (!d.ok) expect(d.code).toBe('server_mode.external_url_must_be_origin')
+  })
 
   it('valid https origin + https allowedOrigins → ok, kind server-mode', () => {
     const d = resolveServerModeExposure({
@@ -159,6 +159,32 @@ describe('resolveServerModeExposure — server-mode externalUrl validation', () 
       expect(d.publicBaseUrl).toBe('https://example.com')
       expect(d.allowedOrigins).toEqual(['https://app.example.com'])
     }
+  })
+
+  it('accepts a wildcard subdomain pattern in allowedOrigins as a pattern, not a literal exact origin', () => {
+    const d = resolveServerModeExposure({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: 'https://example.com',
+      allowedOrigins: ['https://*.example.com'],
+    })
+    expect(d.ok).toBe(true)
+    if (d.ok) {
+      expect(d.allowedOrigins).toEqual(['https://*.example.com'])
+      expect(isOriginAllowedForServerMode('https://preview.example.com', d.allowedOrigins)).toBe(
+        true,
+      )
+    }
+  })
+
+  it('rejects a structurally invalid wildcard pattern in allowedOrigins', () => {
+    const d = resolveServerModeExposure({
+      mode: 'server-mode',
+      bindHost: '0.0.0.0',
+      externalUrl: 'https://example.com',
+      allowedOrigins: ['https://foo*.example.com'],
+    })
+    expect(d.ok).toBe(false)
   })
 
   it('allowedOrigins are URL-normalised (explicit :443 / uppercase host) for canonical exact-match', () => {
@@ -304,8 +330,9 @@ describe('resolveServerModeExposure — non-leak guard on failure decisions', ()
 
 describe('isOriginAllowedForServerMode', () => {
   it('listed https origin → allowed', () => {
-    expect(isOriginAllowedForServerMode('https://app.example.com', ['https://app.example.com']))
-      .toBe(true)
+    expect(
+      isOriginAllowedForServerMode('https://app.example.com', ['https://app.example.com']),
+    ).toBe(true)
   })
 
   it('unlisted origin → not allowed', () => {
@@ -320,11 +347,22 @@ describe('isOriginAllowedForServerMode', () => {
 
   it('exact match required — subdomain mismatch is rejected', () => {
     expect(
-      isOriginAllowedForServerMode(
-        'https://sub.app.example.com',
-        ['https://app.example.com'],
-      ),
+      isOriginAllowedForServerMode('https://sub.app.example.com', ['https://app.example.com']),
     ).toBe(false)
+  })
+
+  it('wildcard subdomain pattern admits a matching origin', () => {
+    // Regression: a wildcard entry surviving resolveServerModeExposure as a
+    // pattern string must actually admit real subdomains, not silently
+    // never-match the way a naive new URL(entry).origin + exact-Set lookup
+    // would (new URL('https://*.example.com') parses without throwing).
+    expect(
+      isOriginAllowedForServerMode('https://preview.example.com', ['https://*.example.com']),
+    ).toBe(true)
+  })
+
+  it('wildcard subdomain pattern rejects a non-matching origin', () => {
+    expect(isOriginAllowedForServerMode('https://evil.com', ['https://*.example.com'])).toBe(false)
   })
 })
 
@@ -430,25 +468,22 @@ fcTest.prop(
     }),
   ],
   withDefaults(),
-)(
-  'accepted server-mode decision always has an https origin-only publicBaseUrl',
-  ({ host }) => {
-    const externalUrl = `https://${host}`
-    const d: ServerModeExposureDecision = resolveServerModeExposure({
-      mode: 'server-mode',
-      bindHost: '0.0.0.0',
-      externalUrl,
-    })
-    if (!d.ok) return // some generated hostnames may produce invalid URLs — skip
-    expect(d.publicBaseUrl).toMatch(/^https:\/\//)
-    // publicBaseUrl must be origin-only: no path beyond /, no query, no hash
-    const parsed = new URL(d.publicBaseUrl)
-    expect(parsed.username).toBe('')
-    expect(parsed.password).toBe('')
-    expect(parsed.pathname).toBe('/')
-    expect(parsed.search).toBe('')
-    expect(parsed.hash).toBe('')
-    // publicBaseUrl must equal the URL's own origin
-    expect(d.publicBaseUrl).toBe(parsed.origin)
-  },
-)
+)('accepted server-mode decision always has an https origin-only publicBaseUrl', ({ host }) => {
+  const externalUrl = `https://${host}`
+  const d: ServerModeExposureDecision = resolveServerModeExposure({
+    mode: 'server-mode',
+    bindHost: '0.0.0.0',
+    externalUrl,
+  })
+  if (!d.ok) return // some generated hostnames may produce invalid URLs — skip
+  expect(d.publicBaseUrl).toMatch(/^https:\/\//)
+  // publicBaseUrl must be origin-only: no path beyond /, no query, no hash
+  const parsed = new URL(d.publicBaseUrl)
+  expect(parsed.username).toBe('')
+  expect(parsed.password).toBe('')
+  expect(parsed.pathname).toBe('/')
+  expect(parsed.search).toBe('')
+  expect(parsed.hash).toBe('')
+  // publicBaseUrl must equal the URL's own origin
+  expect(d.publicBaseUrl).toBe(parsed.origin)
+})

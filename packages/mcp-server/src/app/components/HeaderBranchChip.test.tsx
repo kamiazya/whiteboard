@@ -34,9 +34,8 @@ const state: { current: UseBranchesResult } = {
 }
 
 vi.mock('../hooks/useBranches.js', async () => {
-  const actual = await vi.importActual<typeof import('../hooks/useBranches.js')>(
-    '../hooks/useBranches.js',
-  )
+  const actual =
+    await vi.importActual<typeof import('../hooks/useBranches.js')>('../hooks/useBranches.js')
   return {
     ...actual,
     useBranches: () => state.current,
@@ -59,10 +58,10 @@ afterEach(() => {
 })
 
 describe('HeaderBranchChip', () => {
-  it('renders the HEAD name in the chip trigger', () => {
+  it('renders the HEAD name in the chip trigger, capitalized for the default variation', () => {
     renderChip()
     const chip = screen.getByTestId('header-branch-chip')
-    expect(chip.textContent).toContain('main')
+    expect(chip.textContent).toContain('Main')
   })
 
   it('updates chip text when HEAD changes', () => {
@@ -88,13 +87,13 @@ describe('HeaderBranchChip', () => {
   it('uses an English aria-label on the chip trigger', () => {
     renderChip()
     const chip = screen.getByTestId('header-branch-chip')
-    expect(chip.getAttribute('aria-label')).toContain('Switch branch')
+    expect(chip.getAttribute('aria-label')).toContain('Switch variation')
     expect(chip.getAttribute('aria-label')).toContain('current: main')
   })
 
   it('uses an English aria-label on the kebab trigger', () => {
     renderChip()
     const kebab = screen.getByTestId('header-branch-kebab')
-    expect(kebab.getAttribute('aria-label')).toBe('Branch actions')
+    expect(kebab.getAttribute('aria-label')).toBe('Variation actions')
   })
 })

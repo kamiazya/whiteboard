@@ -24,9 +24,10 @@ type MockedExportOptions = {
   theme?: 'light' | 'dark'
 }
 const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
-const mockSendExportRequest = vi.fn<
-  (workspaceId: string, slug: string, requestId: string, options?: MockedExportOptions) => void
->()
+const mockSendExportRequest =
+  vi.fn<
+    (workspaceId: string, slug: string, requestId: string, options?: MockedExportOptions) => void
+  >()
 
 vi.mock('./ws.js', () => ({
   getClientCount: (workspaceId: string, slug: string) => mockGetClientCount(workspaceId, slug),
@@ -152,6 +153,29 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     expect(body.message).toMatch(/0s|timed out/i)
   })
 
+  it('clears the timeout timer once the WS client resolves early', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
+      queueMicrotask(() => {
+        resolveExportRequest(
+          requestId,
+          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+        )
+      })
+    })
+    const app = makeApp({ timeoutMs: 5_000 })
+
+    vi.useFakeTimers()
+    try {
+      const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+      expect(res.status).toBe(200)
+      // A leaked timer would still be pending here, ticking until timeoutMs.
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('passes padding through to sendExportRequest options', async () => {
     mockGetClientCount.mockReturnValue(1)
     mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
@@ -170,12 +194,9 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       body: JSON.stringify({ padding: 48 }),
     })
     expect(res.status).toBe(200)
-    expect(mockSendExportRequest).toHaveBeenCalledWith(
-      's1',
-      'canvas-a',
-      expect.any(String),
-      { padding: 48 },
-    )
+    expect(mockSendExportRequest).toHaveBeenCalledWith('s1', 'canvas-a', expect.any(String), {
+      padding: 48,
+    })
   })
 
   it('leaves options undefined when the body is missing or padding is omitted', async () => {
@@ -389,7 +410,9 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     const app = makeApp()
 
     // MCP sends the slug through encodeURIComponent, so it arrives as one segment with `%2F`.
-    const res = await app.request('/api/canvas/s1/architecture%2Foverview/export', { method: 'POST' })
+    const res = await app.request('/api/canvas/s1/architecture%2Foverview/export', {
+      method: 'POST',
+    })
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
     expect(body.filePath).toMatch(/exports\/architecture\/overview-.*\.png$/)
@@ -489,7 +512,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }),
     })
     expect(res.status).toBe(400)
-    const body = await res.json() as { error: string; message: string }
+    const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('invalid_output_path')
     expect(body.message).not.toContain(tempDir)
     expect(body.message).not.toContain('daemon.json')
@@ -507,7 +530,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       body: JSON.stringify({ outputPath }),
     })
     expect(res.status).toBe(409)
-    const body = await res.json() as { error: string; message: string }
+    const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('output_exists')
     expect(body.message).not.toContain(tempDir)
     expect(body.message).not.toContain('exists.png')

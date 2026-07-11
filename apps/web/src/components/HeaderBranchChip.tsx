@@ -42,7 +42,7 @@ import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
 import { safeErrorCopy } from '@/lib/error-copy'
-import { cn } from '@/lib/utils'
+import { cn, displayBranchName } from '@/lib/utils'
 
 // MergeDialog pulls in its own thumbnail-fetch effect and a second Dialog
 // surface; loading it on demand keeps it out of the daemon-canvas chunk
@@ -50,14 +50,17 @@ import { cn } from '@/lib/utils'
 const MergeDialog = lazy(() => import('./MergeDialog').then((m) => ({ default: m.MergeDialog })))
 
 // Consolidate branch operations into a single `●branch▾` chip in the header.
+// UI copy uses the Variation/Combine vocabulary; the underlying data model,
+// hook, and MCP tool calls keep their git-derived identifiers (branch, merge)
+// unchanged.
 //
 // Behavior:
-//   - Left trigger: switch branches from a dropdown
-//   - Right kebab: rename, delete, or merge from another branch
-//   - New branch: inline form inside the dropdown
+//   - Left trigger: switch variations from a dropdown
+//   - Right kebab: rename, delete, or combine from another variation
+//   - New variation: inline form inside the dropdown
 //
 // Unlike the old tab layout, there is always exactly one visible chip for HEAD.
-// Other branches are managed through the dropdown and kebab menu.
+// Other variations are managed through the dropdown and kebab menu.
 
 export interface HeaderBranchChipProps {
   workspaceId: string
@@ -129,7 +132,7 @@ export function HeaderBranchChip({
       setCreateOpen(false)
       setErrorMessage(null)
     } catch (err) {
-      setErrorMessage(safeErrorCopy(err, 'Failed to create branch'))
+      setErrorMessage(safeErrorCopy(err, 'Failed to create variation'))
     }
   }
 
@@ -160,7 +163,7 @@ export function HeaderBranchChip({
       setRenameOpen(false)
       setErrorMessage(null)
     } catch (err) {
-      setErrorMessage(safeErrorCopy(err, 'Failed to rename branch'))
+      setErrorMessage(safeErrorCopy(err, 'Failed to rename variation'))
     }
   }
 
@@ -240,7 +243,7 @@ export function HeaderBranchChip({
               <button
                 type="button"
                 disabled={disabled}
-                aria-label={`Switch branch (current: ${head})`}
+                aria-label={`Switch variation (current: ${head})`}
                 data-testid="header-branch-chip"
                 className={cn(
                   'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
@@ -254,27 +257,27 @@ export function HeaderBranchChip({
                   style={{ background: chipColor }}
                 />
                 <span className="truncate" title={head}>
-                  {head}
+                  {displayBranchName(head)}
                 </span>
                 <ChevronDown className="size-3 shrink-0 opacity-70" aria-hidden />
               </button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Branch</TooltipContent>
+          <TooltipContent>Variation</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="start" className="w-[240px]">
           <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
             <GitBranch className="size-3" />
-            Switch branch
+            Switch variation
           </DropdownMenuLabel>
-          {/* Show HEAD first and mark it as the current branch. */}
+          {/* Show HEAD first and mark it as the current variation. */}
           <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="gap-2" disabled>
             <span
               aria-hidden
               className="inline-block size-2 rounded-full"
               style={{ background: chipColor }}
             />
-            <span className="truncate">{head}</span>
+            <span className="truncate">{displayBranchName(head)}</span>
             <span className="ml-auto text-[10px] text-muted-foreground">Current</span>
           </DropdownMenuItem>
           {otherBranches.map((b) => (
@@ -282,7 +285,7 @@ export function HeaderBranchChip({
               key={b.name}
               onSelect={() => {
                 setHead(b.name).catch((err: unknown) => {
-                  setErrorMessage(safeErrorCopy(err, 'Failed to switch branch'))
+                  setErrorMessage(safeErrorCopy(err, 'Failed to switch variation'))
                 })
               }}
               className="gap-2"
@@ -293,7 +296,7 @@ export function HeaderBranchChip({
                 style={{ background: b.color }}
               />
               <span className="truncate" title={b.name}>
-                {b.name}
+                {displayBranchName(b.name)}
               </span>
             </DropdownMenuItem>
           ))}
@@ -310,9 +313,9 @@ export function HeaderBranchChip({
                 <Input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="New branch name"
+                  placeholder="New variation name"
                   autoFocus
-                  aria-label="New branch name"
+                  aria-label="New variation name"
                   className="h-7 text-xs"
                   maxLength={80}
                 />
@@ -349,7 +352,7 @@ export function HeaderBranchChip({
               className="gap-2"
             >
               <Plus className="size-3.5" />
-              New branch…
+              New variation…
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -363,7 +366,7 @@ export function HeaderBranchChip({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="Branch actions"
+            aria-label="Variation actions"
             data-testid="header-branch-kebab"
             disabled={disabled}
             className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
@@ -374,15 +377,15 @@ export function HeaderBranchChip({
         <DropdownMenuContent align="end" className="w-[240px]">
           <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
             <GitMerge className="size-3" />
-            Merge into «{head}»
+            Combine into «{displayBranchName(head)}»
           </DropdownMenuLabel>
           {!mergeEnabled ? (
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-              Merge unavailable
+              Combine unavailable
             </DropdownMenuItem>
           ) : otherBranches.length === 0 ? (
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-              No other branches
+              No other variations
             </DropdownMenuItem>
           ) : (
             otherBranches.map((b) => (
@@ -402,7 +405,7 @@ export function HeaderBranchChip({
                   className="inline-block size-2 rounded-full"
                   style={{ background: b.color }}
                 />
-                <span className="truncate">{b.name}</span>
+                <span className="truncate">{displayBranchName(b.name)}</span>
               </DropdownMenuItem>
             ))
           )}
@@ -416,7 +419,7 @@ export function HeaderBranchChip({
             className="gap-2"
           >
             <Pencil className="size-3.5" />
-            Rename «{head}»…
+            Rename «{displayBranchName(head)}»…
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={head === 'main'}
@@ -431,7 +434,7 @@ export function HeaderBranchChip({
             }}
           >
             <Trash2 className="size-3.5" />
-            Delete «{head}»…
+            Delete «{displayBranchName(head)}»…
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -452,9 +455,9 @@ export function HeaderBranchChip({
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Rename «{renameTarget?.name ?? head}»</DialogTitle>
+            <DialogTitle>Rename «{displayBranchName(renameTarget?.name ?? head)}»</DialogTitle>
             <DialogDescription>
-              Enter a new name. Every saved version on this branch will be relinked to it.
+              Enter a new name. Every saved version on this variation will be relinked to it.
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -494,15 +497,17 @@ export function HeaderBranchChip({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete «{pendingDelete?.name ?? ''}»?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete «{displayBranchName(pendingDelete?.name ?? '')}»?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This deletes the branch. Saved versions stay in version history, but the branch will
-              no longer be reachable from branch navigation.
+              This deletes the variation. Saved versions stay in version history, but the variation
+              will no longer be reachable from variation navigation.
               {pendingStats && pendingStats.unmergedCommits > 0 ? (
                 <>
                   <br />
                   <strong className="text-destructive">
-                    ⚠ {pendingStats.unmergedCommits} unmerged commits remain
+                    ⚠ {pendingStats.unmergedCommits} changes not yet combined remain
                   </strong>
                 </>
               ) : null}
@@ -521,7 +526,7 @@ export function HeaderBranchChip({
                   setErrorMessage(null)
                   setPendingDelete(null)
                 } catch (err) {
-                  setErrorMessage(safeErrorCopy(err, 'Failed to delete branch'))
+                  setErrorMessage(safeErrorCopy(err, 'Failed to delete variation'))
                   setPendingDelete(null)
                 } finally {
                   setDeleting(false)
