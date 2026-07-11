@@ -157,6 +157,12 @@ describe('create_pairing_link tool', () => {
     expect(() => createPairingLinkInputSchema.parse({ webOrigin: 'ftp://example.com' })).toThrow()
   })
 
+  it('rejects a wildcard webOrigin at the input schema layer — a pairing link targets one concrete origin', () => {
+    expect(() =>
+      createPairingLinkInputSchema.parse({ webOrigin: 'https://*.example.com' }),
+    ).toThrow()
+  })
+
   it('omits expiresHint entirely — no real expiry source exists today', async () => {
     const tool = pairingLinkTool()
     const client = stubClient()
@@ -168,6 +174,10 @@ describe('create_pairing_link tool', () => {
     const tool = pairingLinkTool()
     expect(tool.description).toContain('bootstrap token')
     expect(tool.description).toContain('WHITEBOARD_ALLOWED_WEB_ORIGINS')
+  })
+
+  it('credential note mentions the wildcard subdomain pattern option', () => {
+    expect(PAIRING_LINK_CREDENTIAL_NOTE).toContain('https://*.example.com')
   })
 
   it('text output warns about the allowlist for non-loopback webOrigin, not for loopback', async () => {
