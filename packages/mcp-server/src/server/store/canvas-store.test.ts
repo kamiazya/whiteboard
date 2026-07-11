@@ -689,10 +689,16 @@ describe('auto-compact', () => {
     // Nothing has fired yet.
     expect(await readLastCompactedAt()).toBeNull()
 
-    // Wait past the debounce + the async compactCanvas write.
-    await new Promise((r) => setTimeout(r, 250))
-    const stamp = await readLastCompactedAt()
-    expect(stamp).not.toBeNull()
+    // Wait past the debounce + the async compactCanvas write. Poll instead of
+    // a fixed sleep so this does not flake on a slow CI runner.
+    const stamp = await vi.waitFor(
+      async () => {
+        const value = await readLastCompactedAt()
+        expect(value).not.toBeNull()
+        return value
+      },
+      { timeout: 2000 },
+    )
     const settled = stamp!
 
     // Further idle time without a new trigger must NOT re-compact.
@@ -734,11 +740,16 @@ describe('auto-compact', () => {
     expect(peekDoc('session1', 'cached')).toBeDefined()
 
     scheduleAutoCompact('session1', 'cached', store, { debounceMs: 50 })
-    await new Promise((r) => setTimeout(r, 250))
 
-    // The whole point of this test: after the scheduled compaction lands,
-    // the cache must be empty for that key so the next save reloads the
-    // compacted file as its base.
-    expect(peekDoc('session1', 'cached')).toBeUndefined()
+    // Poll instead of a fixed sleep so this does not flake on a slow CI
+    // runner. The whole point of this test: after the scheduled compaction
+    // lands, the cache must be empty for that key so the next save reloads
+    // the compacted file as its base.
+    await vi.waitFor(
+      () => {
+        expect(peekDoc('session1', 'cached')).toBeUndefined()
+      },
+      { timeout: 2000 },
+    )
   })
 })
