@@ -1,4 +1,3 @@
-import { useEffect, useMemo, useState, type JSX } from 'react'
 import {
   AlertTriangle,
   ArrowDown,
@@ -8,6 +7,12 @@ import {
   Info,
   Loader2,
 } from 'lucide-react'
+import { type JSX, useEffect, useMemo, useState } from 'react'
+import { cn } from '@/lib/utils'
+import { listVersionsResponseSchema } from '../../shared/api-contracts/canvas.js'
+import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
+import { apiFetch } from '../lib/api-client.js'
+import { safeErrorCopy } from '../lib/error-copy.js'
 import { Button } from './ui/button.js'
 import {
   Dialog,
@@ -17,11 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog.js'
-import { cn } from '@/lib/utils'
-import { listVersionsResponseSchema } from '../../shared/api-contracts/canvas.js'
-import { apiFetch } from '../lib/api-client.js'
-import { safeErrorCopy } from '../lib/error-copy.js'
-import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
 
 // Note: this originally tried to embed a read-only <Excalidraw> preview, but Excalidraw does not
 // recommend multi-instance usage and it destabilized the main canvas scene state.
@@ -58,7 +58,8 @@ function badgeLabel(badge: Record<string, unknown>): BadgeView {
       key: `${type}:${elementId}`,
       label: `Deleted element restored: ${elementId}`,
       tone: 'warning',
-      title: 'This element was deleted on the target canvas but edited on the incoming branch, so it will be restored.',
+      title:
+        'This element was deleted on the target canvas but edited on the incoming branch, so it will be restored.',
     }
   }
   if (type === 'orphan_ref') {
@@ -67,7 +68,8 @@ function badgeLabel(badge: Record<string, unknown>): BadgeView {
       key: `${type}:${elementId}:${missing}`,
       label: `Missing reference: ${elementId} -> ${missing}`,
       tone: 'danger',
-      title: 'A referenced target such as an arrow binding was deleted, so this item will be orphaned after merge.',
+      title:
+        'A referenced target such as an arrow binding was deleted, so this item will be orphaned after merge.',
     }
   }
   if (type === 'field_merge') {
@@ -76,7 +78,8 @@ function badgeLabel(badge: Record<string, unknown>): BadgeView {
       key: `${type}:${elementId}`,
       label: `Edited on both sides: ${elementId} (${fields})`,
       tone: 'info',
-      title: 'The same element was edited on both branches, so the last-write-wins result will be kept.',
+      title:
+        'The same element was edited on both branches, so the last-write-wins result will be kept.',
     }
   }
   return {
@@ -87,7 +90,10 @@ function badgeLabel(badge: Record<string, unknown>): BadgeView {
   }
 }
 
-const TONE_STYLE: Record<BadgeView['tone'], { fg: string; bg: string; border: string; icon: typeof AlertTriangle }> = {
+const TONE_STYLE: Record<
+  BadgeView['tone'],
+  { fg: string; bg: string; border: string; icon: typeof AlertTriangle }
+> = {
   danger: { fg: '#dc2626', bg: '#fee2e2', border: '#fecaca', icon: AlertTriangle },
   warning: { fg: '#d97706', bg: '#fef3c7', border: '#fde68a', icon: AlertTriangle },
   info: { fg: '#1971c2', bg: '#dbeafe', border: '#bfdbfe', icon: Info },
@@ -102,7 +108,14 @@ interface CompareCardProps {
   loading: boolean
 }
 
-function CompareCard({ kind, branch, count, delta, thumbUrl, loading }: CompareCardProps): JSX.Element {
+function CompareCard({
+  kind,
+  branch,
+  count,
+  delta,
+  thumbUrl,
+  loading,
+}: CompareCardProps): JSX.Element {
   const accent = branch?.color ?? '#64748b'
   const title = kind === 'target' ? 'Current canvas (target)' : 'Incoming changes'
   const deltaVisible = typeof delta === 'number' && delta !== 0 ? delta : null
@@ -113,8 +126,15 @@ function CompareCard({ kind, branch, count, delta, thumbUrl, loading }: CompareC
       data-testid={`merge-branch-card-${kind}`}
     >
       <div className="flex items-center gap-2">
-        <span aria-hidden className="inline-block size-2 shrink-0 rounded-full" style={{ background: accent }} />
-        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: accent }}>
+        <span
+          aria-hidden
+          className="inline-block size-2 shrink-0 rounded-full"
+          style={{ background: accent }}
+        />
+        <span
+          className="text-[10px] font-semibold uppercase tracking-wider"
+          style={{ color: accent }}
+        >
           {title}
         </span>
       </div>
@@ -148,7 +168,9 @@ function CompareCard({ kind, branch, count, delta, thumbUrl, loading }: CompareC
             <span
               className={cn(
                 'rounded-full px-1.5 font-medium tabular-nums',
-                deltaVisible > 0 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600',
+                deltaVisible > 0
+                  ? 'bg-emerald-500/10 text-emerald-600'
+                  : 'bg-amber-500/10 text-amber-600',
               )}
             >
               {deltaVisible > 0 ? '+' : ''}
@@ -313,7 +335,7 @@ export function MergeDialog({
 
   return (
     <Dialog open={open} onOpenChange={(next) => (!next ? onClose() : undefined)}>
-      <DialogContent className="max-w-5xl">
+      <DialogContent className="grid max-h-[90dvh] max-w-5xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <GitMerge className="h-4 w-4" />
@@ -329,143 +351,157 @@ export function MergeDialog({
             </span>
           </DialogTitle>
           <DialogDescription>
-            Content conflicts are resolved automatically. Use the badges below to review changes that may need attention.
+            Content conflicts are resolved automatically. Use the badges below to review changes
+            that may need attention.
           </DialogDescription>
         </DialogHeader>
 
-        {error ? (
-          <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <span className="break-all">{error}</span>
-          </div>
-        ) : null}
-
-        {/* Keep source on the left and target on the right to match the dialog title reading order. */}
-        <div className="grid grid-cols-2 gap-3">
-          <CompareCard
-            kind="source"
-            branch={source}
-            count={sourceCount}
-            delta={sourceDelta}
-            thumbUrl={thumbs.source}
-            loading={thumbsLoading}
-          />
-          <CompareCard
-            kind="target"
-            branch={target}
-            count={targetCount}
-            thumbUrl={thumbs.target}
-            loading={thumbsLoading}
-          />
-        </div>
-
-        {/* Arrow showing the flow into the merged preview below. */}
-        <div className="flex items-center justify-center text-muted-foreground">
-          <ArrowDown className="size-4" aria-hidden />
-        </div>
-
-        {/* Main merged preview. */}
-        <div
-          className="flex flex-col gap-2 rounded-lg border-2 bg-card p-3 ring-1 ring-emerald-500/20"
-          style={{ borderColor: '#2f9e44' }}
-          data-testid="merge-branch-card-preview"
-        >
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span aria-hidden className="inline-block size-2 shrink-0 rounded-full bg-emerald-500" />
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">
-                Merged preview
-              </span>
+        {/* Scrollable body: the confirm footer below must stay reachable even when
+            the preview panes and badge list grow taller than the viewport. */}
+        <div className="flex min-h-0 flex-col gap-4 overflow-y-auto" data-slot="merge-dialog-body">
+          {error ? (
+            <div className="flex items-start gap-2 rounded border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="break-all">{error}</span>
             </div>
-            <div className="text-xs text-muted-foreground">{previewCount ?? '—'} elements</div>
+          ) : null}
+
+          {/* Keep source on the left and target on the right to match the dialog title reading order. */}
+          <div className="grid grid-cols-2 gap-3">
+            <CompareCard
+              kind="source"
+              branch={source}
+              count={sourceCount}
+              delta={sourceDelta}
+              thumbUrl={thumbs.source}
+              loading={thumbsLoading}
+            />
+            <CompareCard
+              kind="target"
+              branch={target}
+              count={targetCount}
+              thumbUrl={thumbs.target}
+              loading={thumbsLoading}
+            />
           </div>
-          <div className="relative h-[340px] overflow-hidden rounded border bg-white">
-            {loading ? (
-              <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" />
-                Calculating preview…
+
+          {/* Arrow showing the flow into the merged preview below. */}
+          <div className="flex items-center justify-center text-muted-foreground">
+            <ArrowDown className="size-4" aria-hidden />
+          </div>
+
+          {/* Main merged preview. */}
+          <div
+            className="flex flex-col gap-2 rounded-lg border-2 bg-card p-3 ring-1 ring-emerald-500/20"
+            style={{ borderColor: '#2f9e44' }}
+            data-testid="merge-branch-card-preview"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden
+                  className="inline-block size-2 shrink-0 rounded-full bg-emerald-500"
+                />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-600">
+                  Merged preview
+                </span>
               </div>
-            ) : thumbs.source ? (
-              // Show the latest source-branch thumbnail as a practical preview fallback.
-              <img
-                src={thumbs.source}
-                alt={`${source?.name ?? ''} merged preview`}
-                className="h-full w-full object-contain"
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
-                <FileText className="size-6 opacity-40" />
-                <div className="text-center text-xs">
-                  <div>
-                    {previewElementCount > 0 ? 'No preview image yet' : 'No elements'}
-                  </div>
-                  <div className="mt-1 text-[10px] opacity-80">
-                    Save «{source?.name ?? '?'}» with ⌘S to generate a preview image
+              <div className="text-xs text-muted-foreground">{previewCount ?? '—'} elements</div>
+            </div>
+            <div className="relative h-[340px] overflow-hidden rounded border bg-white">
+              {loading ? (
+                <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" />
+                  Calculating preview…
+                </div>
+              ) : thumbs.source ? (
+                // Show the latest source-branch thumbnail as a practical preview fallback.
+                <img
+                  src={thumbs.source}
+                  alt={`${source?.name ?? ''} merged preview`}
+                  className="h-full w-full object-contain"
+                />
+              ) : (
+                <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                  <FileText className="size-6 opacity-40" />
+                  <div className="text-center text-xs">
+                    <div>{previewElementCount > 0 ? 'No preview image yet' : 'No elements'}</div>
+                    <div className="mt-1 text-[10px] opacity-80">
+                      Save «{source?.name ?? '?'}» with ⌘S to generate a preview image
+                    </div>
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+
+          {/* Badges / conflict summary */}
+          <div className="rounded-lg border bg-muted/30 p-3">
+            {loading ? (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Checking conflicts…
+              </div>
+            ) : badgeViews.length === 0 ? (
+              <div className="flex items-center gap-2 text-sm">
+                <CheckCircle2 className="size-4 text-emerald-600" />
+                <span>
+                  <strong className="text-emerald-700">No conflicts</strong> - ready to merge as-is
+                </span>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 text-sm">
+                  <AlertTriangle className="size-4 text-amber-600" />
+                  <strong>{badgeViews.length} changes to review</strong>
+                  <span className="text-xs text-muted-foreground">
+                    {(['danger', 'warning', 'info'] as const)
+                      .filter((t) => (badgeByTone[t] ?? 0) > 0)
+                      .map(
+                        (t) =>
+                          `${badgeByTone[t]} ${t === 'danger' ? 'critical' : t === 'warning' ? 'warning' : 'info'}`,
+                      )
+                      .join(' · ')}
+                  </span>
+                </div>
+                <ul className="flex flex-wrap gap-1.5">
+                  {badgeViews.map((view) => {
+                    const tone = TONE_STYLE[view.tone]
+                    const Icon = tone.icon
+                    return (
+                      <li
+                        key={view.key}
+                        title={view.title}
+                        className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
+                        style={{
+                          borderColor: tone.border,
+                          backgroundColor: tone.bg,
+                          color: tone.fg,
+                        }}
+                      >
+                        <Icon className="size-3" aria-hidden />
+                        {view.label}
+                      </li>
+                    )
+                  })}
+                </ul>
               </div>
             )}
           </div>
-        </div>
 
-        {/* Badges / conflict summary */}
-        <div className="rounded-lg border bg-muted/30 p-3">
-          {loading ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Loader2 className="size-3.5 animate-spin" />
-              Checking conflicts…
-            </div>
-          ) : badgeViews.length === 0 ? (
-            <div className="flex items-center gap-2 text-sm">
-              <CheckCircle2 className="size-4 text-emerald-600" />
-              <span>
-                <strong className="text-emerald-700">No conflicts</strong> - ready to merge as-is
-              </span>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center gap-3 text-sm">
-                <AlertTriangle className="size-4 text-amber-600" />
-                <strong>{badgeViews.length} changes to review</strong>
-                <span className="text-xs text-muted-foreground">
-                  {(['danger', 'warning', 'info'] as const)
-                    .filter((t) => (badgeByTone[t] ?? 0) > 0)
-                    .map((t) => `${badgeByTone[t]} ${t === 'danger' ? 'critical' : t === 'warning' ? 'warning' : 'info'}`)
-                    .join(' · ')}
-                </span>
-              </div>
-              <ul className="flex flex-wrap gap-1.5">
-                {badgeViews.map((view) => {
-                  const tone = TONE_STYLE[view.tone]
-                  const Icon = tone.icon
-                  return (
-                    <li
-                      key={view.key}
-                      title={view.title}
-                      className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px]"
-                      style={{ borderColor: tone.border, backgroundColor: tone.bg, color: tone.fg }}
-                    >
-                      <Icon className="size-3" aria-hidden />
-                      {view.label}
-                    </li>
-                  )
-                })}
-              </ul>
+          {/* Make the post-merge side effects explicit before the user confirms. */}
+          {source && target && source.name !== target.name && source.name !== 'main' && (
+            <div
+              className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-900"
+              data-testid="merge-side-effect-notice"
+            >
+              <strong>After merge:</strong> switch automatically to "
+              <span className="font-semibold">{target.name}</span>" and delete "
+              <span className="font-semibold">{source.name}</span>
+              ".
             </div>
           )}
         </div>
-
-        {/* Make the post-merge side effects explicit before the user confirms. */}
-        {source && target && source.name !== target.name && source.name !== 'main' && (
-          <div
-            className="rounded-md border border-sky-300 bg-sky-50 px-3 py-2 text-xs text-sky-900"
-            data-testid="merge-side-effect-notice"
-          >
-            <strong>After merge:</strong> switch automatically to "<span className="font-semibold">{target.name}</span>" and delete "
-            <span className="font-semibold">{source.name}</span>
-            ".
-          </div>
-        )}
 
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose} disabled={committing}>
