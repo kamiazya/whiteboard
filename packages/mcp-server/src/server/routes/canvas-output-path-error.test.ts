@@ -14,25 +14,30 @@ describe('toCanvasOutputPathErrorBody', () => {
     expect(body.message).not.toContain(RAW_PATH)
   })
 
-  it('maps invalid_output_path → 400 with fixed message', () => {
+  it('maps invalid_output_path → 400 naming the allowed workspace exports root, without leaking the rejected path', () => {
     const err = new OutputPathError('invalid_output_path', `${RAW_PATH} is outside allowed dir`)
-    const { status, body } = toCanvasOutputPathErrorBody(err)
+    const { status, body } = toCanvasOutputPathErrorBody(err, 'ws1')
     expect(status).toBe(400)
     expect(body.error).toBe('invalid_output_path')
-    expect(body.message).toBe('Invalid output path.')
+    expect(body.message).toContain('ws1/exports')
     expect(body.message).not.toContain(RAW_PATH)
   })
 
   it('falls back to 400 + generic message for an unrecognized code', () => {
     const err = { code: 'future_code', message: RAW_PATH } as unknown as OutputPathError
-    const { status, body } = toCanvasOutputPathErrorBody(err)
+    const { status, body } = toCanvasOutputPathErrorBody(err, 'ws1')
     expect(status).toBe(400)
     expect(body.message).toBe('Export output path rejected.')
     expect(body.message).not.toContain(RAW_PATH)
   })
 
   it('preserves err.code in body.error for each known code', () => {
-    expect(toCanvasOutputPathErrorBody(new OutputPathError('output_exists', 'x')).body.error).toBe('output_exists')
-    expect(toCanvasOutputPathErrorBody(new OutputPathError('invalid_output_path', 'x')).body.error).toBe('invalid_output_path')
+    expect(
+      toCanvasOutputPathErrorBody(new OutputPathError('output_exists', 'x'), 'ws1').body.error,
+    ).toBe('output_exists')
+    expect(
+      toCanvasOutputPathErrorBody(new OutputPathError('invalid_output_path', 'x'), 'ws1').body
+        .error,
+    ).toBe('invalid_output_path')
   })
 })

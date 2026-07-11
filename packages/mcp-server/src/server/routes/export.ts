@@ -85,10 +85,14 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
     let outputPath: string | undefined
     if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
       try {
-        await validateOutputPath(body.outputPath, body.overwrite === true, join(DATA_DIR, workspaceId, 'exports'))
+        await validateOutputPath(
+          body.outputPath,
+          body.overwrite === true,
+          join(DATA_DIR, workspaceId, 'exports'),
+        )
       } catch (err) {
         if (err instanceof OutputPathError) {
-          const { status, body: errBody } = toCanvasOutputPathErrorBody(err)
+          const { status, body: errBody } = toCanvasOutputPathErrorBody(err, workspaceId)
           return c.json(errBody as ExportErrorBody, status)
         }
         throw err
@@ -217,7 +221,10 @@ function defaultExportPath(workspaceId: string, slug: string): string {
 }
 
 class ExportError extends Error {
-  constructor(public readonly kind: 'browser_export_failed' | 'headless_export_failed', cause: unknown) {
+  constructor(
+    public readonly kind: 'browser_export_failed' | 'headless_export_failed',
+    cause: unknown,
+  ) {
     const inner = cause instanceof Error ? cause.message : String(cause)
     super(inner)
     this.name = 'ExportError'
@@ -238,7 +245,11 @@ function toErrorBody(err: unknown, timeoutMs: number): ExportErrorBody {
 }
 
 function errorStatus(err: unknown): 500 | 504 {
-  if (err instanceof ExportError && err.kind === 'browser_export_failed' && err.message === 'timeout') {
+  if (
+    err instanceof ExportError &&
+    err.kind === 'browser_export_failed' &&
+    err.message === 'timeout'
+  ) {
     return 504
   }
   return 500
