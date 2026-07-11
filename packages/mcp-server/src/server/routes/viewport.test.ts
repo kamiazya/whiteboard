@@ -17,14 +17,10 @@ vi.mock('../config.js', () => ({
 
 // Mock ws.ts so each test can control getClientCount and sendViewportRequest.
 const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
-const mockSendViewportRequest = vi.fn<
-  (
-    workspaceId: string,
-    slug: string,
-    requestId: string,
-    params: Record<string, unknown>,
-  ) => void
->()
+const mockSendViewportRequest =
+  vi.fn<
+    (workspaceId: string, slug: string, requestId: string, params: Record<string, unknown>) => void
+  >()
 
 vi.mock('./ws.js', () => ({
   getClientCount: (workspaceId: string, slug: string) => mockGetClientCount(workspaceId, slug),
@@ -112,12 +108,12 @@ describe('POST /api/canvas/:workspaceId/:slug/viewport - error handling', () => 
     const body = (await res.json()) as { ok: boolean }
     expect(body.ok).toBe(true)
 
-    expect(mockSendViewportRequest).toHaveBeenCalledWith(
-      's1',
-      'canvas-a',
-      expect.any(String),
-      { mode: 'fit', elementIds: ['a', 'b'], padding: 40, animate: true },
-    )
+    expect(mockSendViewportRequest).toHaveBeenCalledWith('s1', 'canvas-a', expect.any(String), {
+      mode: 'fit',
+      elementIds: ['a', 'b'],
+      padding: 40,
+      animate: true,
+    })
   })
 
   it('forwards mode="move", scrollX, scrollY, and zoom to sendViewportRequest', async () => {
@@ -156,6 +152,24 @@ describe('POST /api/canvas/:workspaceId/:slug/viewport - error handling', () => 
     expect(call[1]).toBe('canvas-a')
     // At minimum, an empty object should be forwarded.
     expect(call[3]).toBeDefined()
+  })
+
+  it('clears the timeout timer once the WS client resolves early', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    mockSendViewportRequest.mockImplementation((_sid, _slug, requestId) => {
+      queueMicrotask(() => resolveViewportRequest(requestId))
+    })
+    const app = makeApp({ timeoutMs: 5_000 })
+
+    vi.useFakeTimers()
+    try {
+      const res = await app.request('/api/canvas/s1/canvas-a/viewport', { method: 'POST' })
+      expect(res.status).toBe(200)
+      // A leaked timer would still be pending here, ticking until timeoutMs.
+      expect(vi.getTimerCount()).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('returns 400 for invalid workspaceId or slug without reaching WS', async () => {
