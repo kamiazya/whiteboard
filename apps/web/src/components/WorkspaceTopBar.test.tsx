@@ -387,6 +387,154 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
   })
 })
 
+// Each of these locks in that a specific call site was actually rewired to
+// the injected daemonFetch (not just the /names effect covered above) — a
+// regression that left one of these five still calling the stale
+// module-level apiFetch would fall back to same-origin requests silently.
+describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (RED-first)', () => {
+  function renderBarWithDaemonFetch(overrides?: {
+    getThumbnailBlob?: () => Promise<Blob | null>
+    onNavigateToCanvas?: (slug: string) => void
+  }) {
+    const daemonFetch = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes('/names')) return mkNamesOk()
+      return new Response('{}', { status: 200 })
+    })
+
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <WorkspaceTopBar
+          workspaceId="ws_1"
+          slug="canvas-a"
+          canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          onEnterFullscreen={() => {}}
+          onNavigateBack={() => {}}
+          onNavigateToCanvas={overrides?.onNavigateToCanvas ?? (() => {})}
+          getThumbnailBlob={overrides?.getThumbnailBlob}
+        />
+      </DaemonApiContext.Provider>,
+      { container: document.body },
+    )
+
+    return daemonFetch
+  }
+
+  function mkSaveVersionOk(id = 'v1') {
+    return new Response(
+      JSON.stringify({
+        version: {
+          id,
+          slug: 'canvas-a',
+          createdAt: '2026-04-23T00:00:00Z',
+          elementCount: 0,
+          auto: false,
+          hasThumbnail: false,
+          branchName: 'main',
+        },
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+  }
+
+  it('quick-saves a version through the injected daemon fetch on Cmd/Ctrl+S', async () => {
+    const daemonFetch = renderBarWithDaemonFetch()
+    daemonFetch.mockImplementation(async (url: string | URL | Request) => {
+      const u = String(url)
+      if (u.includes('/names')) return mkNamesOk()
+      if (u.includes('/versions')) return mkSaveVersionOk()
+      return new Response('{}', { status: 200 })
+    })
+
+    act(() => {
+      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+    })
+
+    await waitFor(() => {
+      expect(daemonFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/versions'),
+        expect.objectContaining({ method: 'POST' }),
+      )
+    })
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('uploads the version thumbnail through the injected daemon fetch after a successful save', async () => {
+    const blob = new Blob(['x'], { type: 'image/png' })
+    const daemonFetch = renderBarWithDaemonFetch({ getThumbnailBlob: async () => blob })
+    daemonFetch.mockImplementation(async (url: string | URL | Request) => {
+      const u = String(url)
+      if (u.includes('/names')) return mkNamesOk()
+      if (u.includes('/versions')) return mkSaveVersionOk('v1')
+      return new Response('{}', { status: 200 })
+    })
+
+    act(() => {
+      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+    })
+
+    await waitFor(() => {
+      expect(daemonFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/versions/v1/thumbnail'),
+        expect.objectContaining({ method: 'PUT' }),
+      )
+    })
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('commits a canvas rename through the injected daemon fetch', async () => {
+    const daemonFetch = renderBarWithDaemonFetch()
+
+    const canvasActions = screen.getByLabelText('Canvas actions')
+    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    const renameItem = await screen.findByText('Rename canvas')
+    fireEvent.pointerUp(renameItem)
+    const input = await screen.findByPlaceholderText('canvas-a')
+    fireEvent.change(input, { target: { value: 'renamed' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => {
+      expect(daemonFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/canvases/canvas-a/name'),
+        expect.objectContaining({ method: 'PUT' }),
+      )
+    })
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('toggles pin through the injected daemon fetch', async () => {
+    const daemonFetch = renderBarWithDaemonFetch()
+
+    const switcher = screen.getByRole('button', { name: /canvas-a/i })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    const pinButton = await screen.findByRole('button', { name: 'Pin canvas' })
+    fireEvent.click(pinButton)
+
+    await waitFor(() => {
+      expect(daemonFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/canvases/canvas-a/pin'),
+        expect.objectContaining({ method: 'PUT' }),
+      )
+    })
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('creates a canvas through the injected daemon fetch', async () => {
+    const onNavigateToCanvas = vi.fn()
+    const daemonFetch = renderBarWithDaemonFetch({ onNavigateToCanvas })
+
+    await openNewCanvasDialog()
+    await submitSlug('new-one')
+
+    await waitFor(() => {
+      expect(daemonFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/workspaces/ws_1/canvases'),
+        expect.objectContaining({ method: 'POST' }),
+      )
+    })
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+})
+
 describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
   it('marks the exposed right-side action group and the More-actions kebab trigger with responsive collapse classes', () => {
     renderBar()
