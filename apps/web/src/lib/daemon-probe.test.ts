@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_DAEMON_BASE_URL, probeDaemon } from './daemon-probe.js'
+import { DEFAULT_DAEMON_BASE_URL, daemonProbeResultSchema, probeDaemon } from './daemon-probe.js'
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -67,10 +67,68 @@ describe('probeDaemon', () => {
     expect(result).toEqual({ detected: false, reason: 'malformed' })
   })
 
+  it('returns not-detected with reason malformed on a 200 response with a non-JSON body', async () => {
+    // e.g. a captive portal or misconfigured proxy answering with HTML. The
+    // HTTP response itself proves the transport path is reachable, so this
+    // must classify as 'malformed' (tier1 evidence), never as a fetch-level
+    // 'refused'/'network' failure.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('<html>not json</html>', { status: 200 }))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, { fetch: fetchMock })
+
+    expect(result).toEqual({ detected: false, reason: 'malformed' })
+  })
+
   it('returns not-detected with reason network when fetch rejects with a network error', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
 
     const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, { fetch: fetchMock })
+
+    expect(result).toEqual({ detected: false, reason: 'network' })
+  })
+
+  it('returns not-detected with reason refused when a fetch rejects on an http/loopback page origin', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'http',
+    })
+
+    expect(result).toEqual({ detected: false, reason: 'refused' })
+  })
+
+  it('classifies a WebKit mixed-content rejection as blocked on an https page origin', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Load failed'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'https',
+    })
+
+    expect(result).toEqual({ detected: false, reason: 'blocked' })
+  })
+
+  it('never classifies a Load failed rejection as blocked on an http/loopback page origin', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Load failed'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'http',
+    })
+
+    expect(result).toEqual({ detected: false, reason: 'refused' })
+  })
+
+  it('keeps an https-origin CORS-shaped rejection as network, not blocked (F4: CORS failure is not a proven browser block)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'https',
+    })
 
     expect(result).toEqual({ detected: false, reason: 'network' })
   })
@@ -147,5 +205,21 @@ describe('probeDaemon', () => {
     ])
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('exports the persisted-memo schema as the single source of truth for DaemonProbeResult', () => {
+    // Locks DaemonProbeResult to z.infer<typeof daemonProbeResultSchema> —
+    // a hand-written type alongside this schema is exactly the drift shape
+    // that shipped the create_frame assignedMembers bug.
+    expect(
+      daemonProbeResultSchema.safeParse({ detected: true, instanceId: 'inst-1' }).success,
+    ).toBe(true)
+    expect(daemonProbeResultSchema.safeParse({ detected: false, reason: 'timeout' }).success).toBe(
+      true,
+    )
+    expect(daemonProbeResultSchema.safeParse({ detected: true }).success).toBe(false)
+    expect(
+      daemonProbeResultSchema.safeParse({ detected: false, reason: 'not-a-reason' }).success,
+    ).toBe(false)
   })
 })

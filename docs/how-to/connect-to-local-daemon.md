@@ -23,6 +23,28 @@ If a daemon is detected, a banner offers to connect. Dismissing it hides the
 banner for 14 days or until a different daemon instance is detected,
 whichever comes first.
 
+## Browser support for daemon pairing
+
+Whether your browser can reach a loopback daemon from a hosted `https:` page
+depends on capability, not a fixed version list:
+
+- **Any browser on an `http:` loopback page origin** (the common local
+  development setup) can always reach the daemon — there is no cross-scheme
+  restriction to work around.
+- **Chromium-based browsers on a hosted `https:` origin** can reach the
+  daemon once you grant the Local Network Access permission prompt.
+- **Firefox on a hosted `https:` origin** can reach the daemon without an
+  extra permission prompt, because Firefox does not yet gate loopback
+  fetches behind Local Network Access.
+- **Safari/WebKit on a hosted `https:` origin cannot reach the daemon.**
+  WebKit blocks the request as mixed content with no override. On this
+  browser, canvases stay in this browser (IndexedDB) — the app shows an
+  explicit notice instead of a silently missing "connect" option.
+
+This is determined by probing the daemon, not by inspecting your browser's
+identity string: the app only shows the "not supported" notice once a probe
+has actually proven the browser blocked the request.
+
 ## How pairing works
 
 Detecting a daemon is not the same as pairing with it. Actually connecting
