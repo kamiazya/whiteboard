@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   DEFAULT_DAEMON_BASE_URL,
   type DaemonProbeResult,
@@ -41,7 +41,12 @@ export function DaemonDetectedBanner({
   )
   const abortRef = useRef<AbortController | null>(null)
 
-  const baseUrl = settingsStore.load().storage.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL
+  // load() round-trips localStorage synchronously; the probe target is fixed
+  // for the store's lifetime, so read it once instead of on every render.
+  const baseUrl = useMemo(
+    () => settingsStore.load().storage.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL,
+    [settingsStore],
+  )
 
   function runProbe(forceRecheck?: boolean) {
     abortRef.current?.abort()
@@ -76,17 +81,21 @@ export function DaemonDetectedBanner({
 
   const showManualAffordance = result === null || !result.detected
 
-  const showBanner =
-    result !== null &&
-    result.detected &&
-    shouldShowDaemonCta(
+  // Every mutation path that affects visibility flows through `result` or
+  // `dismissedAt` state, so the memo stays correct while skipping the
+  // synchronous localStorage load() on unrelated re-renders.
+  const showBanner = useMemo(() => {
+    if (result === null || !result.detected) return false
+    const currentSettings = settingsStore.load()
+    return shouldShowDaemonCta(
       {
-        ...settingsStore.load(),
-        storage: { ...settingsStore.load().storage, dismissedDaemonCtaAt: dismissedAt },
+        ...currentSettings,
+        storage: { ...currentSettings.storage, dismissedDaemonCtaAt: dismissedAt },
       },
       result,
       new Date(),
     )
+  }, [result, settingsStore, dismissedAt])
 
   return (
     <>
