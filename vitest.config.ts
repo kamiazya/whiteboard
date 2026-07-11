@@ -8,6 +8,7 @@ export default defineConfig({
       'packages/mcp-server/vitest.browser.config.ts',
       'packages/mcp-server/vitest.smoke.config.ts',
       'apps/web/vitest.config.ts',
+      'apps/web/vitest.node.config.ts',
       'apps/web/vitest.browser.config.ts',
     ],
   },

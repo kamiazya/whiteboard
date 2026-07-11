@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
+import { VitePWA } from 'vite-plugin-pwa'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
+import { pwaOptions } from './vite-pwa-options.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -94,6 +96,15 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/index.ts',
       ),
+      // loro-crdt's export map resolves the production browser build to its
+      // `browser/` entry, which loads the WASM via a SYNCHRONOUS XHR. Sync
+      // XHR bypasses the service worker, so the precached WASM is never
+      // served offline and the PWA dies on reload without network. Pin the
+      // `bundler/` entry (an ESM `import ... from '*.wasm'` handled by
+      // vite-plugin-wasm as an async, SW-interceptable fetch) — the same
+      // entry vite already uses in dev via the `browser.development`
+      // condition, so dev and prod behavior converge.
+      'loro-crdt': 'loro-crdt/bundler',
     },
   },
   build: {
@@ -119,6 +130,11 @@ export default defineConfig({
     // Required for the browser bundle that includes the Loro CRDT WASM build.
     wasm(),
     topLevelAwait(),
+    // Must run after excalidrawFontsPlugin (declaration-order hint only —
+    // Rollup does not guarantee closeBundle execution order; the real
+    // guard is scripts/check-pwa-precache.mjs, which fails the build if the
+    // generated precache manifest is missing font entries).
     excalidrawFontsPlugin(),
+    VitePWA(pwaOptions),
   ],
 })
