@@ -259,6 +259,87 @@ describe('StorageReportCard', () => {
     STATUS_CLEAR_MS + 5000,
   )
 
+  it('clears the pending status-clear timer on unmount so no fake timer survives teardown', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') return Promise.resolve(jsonResponse(PAYLOAD))
+      if (url === '/api/workspaces') return Promise.resolve(jsonResponse({ workspaces: [] }))
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    const { container, unmount } = render(<StorageReportCard />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+
+    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
+    const button = blobsActions.querySelector('button')!
+    fireEvent.click(button)
+    await act(async () => {
+      // Let optimizeAll settle (empty workspace list resolves immediately)
+      // so its finally block schedules a STATUS_CLEAR_MS timer.
+      await vi.advanceTimersByTimeAsync(500)
+    })
+
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('clears every in-flight status-clear timer on unmount, even when multiple actions overlap', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') return Promise.resolve(jsonResponse(PAYLOAD))
+      if (url === '/api/workspaces') return Promise.resolve(jsonResponse({ workspaces: [] }))
+      if (init?.method === 'POST' && url === '/api/runtime/logs/prune') {
+        return Promise.resolve(jsonResponse({ purgedCount: 0, purgedBytes: 0 }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    const { container, unmount } = render(<StorageReportCard />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+
+    // Trigger two independent status-clear call sites (Optimize + Prune
+    // logs) before either one's timer has fired, so two pending
+    // STATUS_CLEAR_MS timeouts are in flight simultaneously. A single
+    // scalar ref for the last-scheduled id would overwrite the first and
+    // leak it — this test fails against that shape.
+    const blobsButton = container.querySelector('[data-storage-actions="blobs"] button')!
+    fireEvent.click(blobsButton)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    const logsButton = container.querySelector('[data-storage-actions="logs"] button')!
+    fireEvent.click(logsButton)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('clears the in-flight min-refresh timer immediately on unmount, before it would naturally fire', async () => {
+    const { unmount } = render(<StorageReportCard />)
+    // Flush the initial mount-time refresh()'s fetch microtask so it
+    // reaches the finally block and schedules the MIN_REFRESH_MS delay
+    // timer, without letting that delay elapse yet.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    unmount()
+    // The MIN_REFRESH_MS delay has not elapsed yet — without an explicit
+    // clearTimeout on unmount this timer would still be pending here.
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
   it('humanises the "Updated …" line and ticks across humanise boundaries without per-second flicker', async () => {
     const { container } = render(<StorageReportCard />)
     // Settle the initial fetch + min-refresh delay. The fresh fetch lands
