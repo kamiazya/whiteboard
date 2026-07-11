@@ -1658,9 +1658,15 @@ export function registerAllTools(
     },
     async (args) => {
       const result = await withDaemon((client) => pairingLink.execute(args, client))
+      // content[0] stays JSON (the structuredJsonResult convention every other
+      // tool follows, and what callers/smoke parse as the primary payload); the
+      // credential note travels as a second text block instead of overwriting it.
       return {
         structuredContent: result,
-        content: [{ type: 'text' as const, text: buildPairingLinkText(result, result.webOrigin) }],
+        content: [
+          { type: 'text' as const, text: JSON.stringify(result) },
+          { type: 'text' as const, text: buildPairingLinkText(result, result.webOrigin) },
+        ],
       }
     },
   )

@@ -587,6 +587,49 @@ async function main() {
     `[e2e] library_list_items → itemCount=${libListed.itemCount} name=${libListed.items[0].name}`,
   )
 
+  // create_pairing_link: the MCP SDK validates structuredContent against the
+  // tool's outputSchema at runtime, so this exercises drift the type system
+  // can't see. Decode the emitted fragment and structurally check it against
+  // the daemon-connection-payload contract (baseUrl matches the live daemon,
+  // authMode/bootstrapToken coherent).
+  const workspaceId = created.id.split('/')[0]
+  const pairing = await callTool('create_pairing_link', {
+    workspaceId,
+    slug: sourceSlug,
+  })
+  if (!pairing.url || !pairing.webOrigin || !pairing.authMode) {
+    throw new Error(`create_pairing_link returned unexpected shape: ${JSON.stringify(pairing)}`)
+  }
+  const expectedPrefix = `${pairing.webOrigin}/#wb=`
+  if (!pairing.url.startsWith(expectedPrefix)) {
+    throw new Error(
+      `create_pairing_link url does not start with "${expectedPrefix}": ${pairing.url}`,
+    )
+  }
+  const fragmentB64 = pairing.url.slice(expectedPrefix.length)
+  const decodedPayload = JSON.parse(Buffer.from(fragmentB64, 'base64url').toString('utf-8'))
+  if (decodedPayload.baseUrl !== daemonOrigin) {
+    throw new Error(
+      `create_pairing_link payload baseUrl ${decodedPayload.baseUrl} ≠ live daemon origin ${daemonOrigin}`,
+    )
+  }
+  if (decodedPayload.workspaceId !== workspaceId || decodedPayload.slug !== sourceSlug) {
+    throw new Error(
+      `create_pairing_link payload workspaceId/slug mismatch: ${JSON.stringify(decodedPayload)}`,
+    )
+  }
+  if (
+    decodedPayload.authMode === 'bootstrap' &&
+    (typeof decodedPayload.bootstrapToken !== 'string' || decodedPayload.bootstrapToken.length < 8)
+  ) {
+    throw new Error(
+      `create_pairing_link bootstrap payload missing a valid token: ${JSON.stringify(decodedPayload)}`,
+    )
+  }
+  console.log(
+    `[e2e] create_pairing_link → ${pairing.authMode} url for baseUrl=${decodedPayload.baseUrl}`,
+  )
+
   console.log('\n[e2e] ALL OK')
 }
 
