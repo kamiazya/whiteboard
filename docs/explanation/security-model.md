@@ -54,8 +54,13 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   not issue or manage user credentials.
 - Cross-origin access is restricted by `WHITEBOARD_SERVER_ALLOWED_ORIGINS`,
   an explicit `https://` allowlist (defaulting to
-  `WHITEBOARD_SERVER_EXTERNAL_URL` when unset) — wildcards are rejected.
-  This is a distinct setting from the local daemon's
+  `WHITEBOARD_SERVER_EXTERNAL_URL` when unset). Entries may be exact origins
+  or a `https://*.example.com` leftmost-label wildcard subdomain pattern for
+  deployment-preview shapes (e.g. Cloudflare Pages branch previews); bare `*`
+  is always rejected. See
+  [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)
+  for the exact matching rules and the residual `*.pages.dev`-style breadth
+  risk. This is a distinct setting from the local daemon's
   `WHITEBOARD_ALLOWED_WEB_ORIGINS` above; the two are read by different
   code paths and never consult each other.
 - The container binds plain HTTP to **all interfaces (`0.0.0.0`) by

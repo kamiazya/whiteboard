@@ -39,7 +39,7 @@ non-zero exit code if any are missing or invalid.
 | `WHITEBOARD_SERVER_JWT_ISSUER` | Token issuer claim (`iss`) expected in every JWT. |
 | `WHITEBOARD_SERVER_JWT_AUDIENCE` | Token audience claim (`aud`) expected in every JWT. |
 | `WHITEBOARD_SERVER_JWKS_URI` | HTTPS URL of your IdP's JWKS endpoint. Must use `https://` with no credentials, query parameters, or URL fragments. |
-| `WHITEBOARD_SERVER_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins. Must be explicit `https://` origins — wildcards (`*`) are not permitted. |
+| `WHITEBOARD_SERVER_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins. Each entry must be an explicit `https://` origin **or** a `https://*.example.com` leftmost-label wildcard subdomain pattern (e.g. for Cloudflare Pages branch previews); bare `*` is never permitted. See [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns). |
 
 See `.env.server.example` for a filled-in template.
 

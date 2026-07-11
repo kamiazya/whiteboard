@@ -69,7 +69,10 @@ the token is rotated. Share it only with the intended recipient, and prefer
 loopback (`http://127.0.0.1:...`) origins for purely local use.
 
 For hosted (non-loopback) `webOrigin` values, the daemon must also be
-configured to accept that origin via `WHITEBOARD_ALLOWED_WEB_ORIGINS` —
+configured to accept that origin via `WHITEBOARD_ALLOWED_WEB_ORIGINS` — either
+as an exact match or via a `https://*.example.com` wildcard subdomain pattern
+that covers it (see
+[Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)).
 `create_pairing_link` cannot confirm that allowlist coverage on its own, so
 verify it yourself before sharing a hosted pairing link. Loopback origins
 need no allowlist entry.

@@ -7,6 +7,17 @@
 //
 // Non-leak contract: no failure result field contains raw env var values,
 // URLs, credentials, or hostnames — failure codes and field names only.
+//
+// allowedOrigins invariant: entries may be exact https origins OR leftmost-
+// label wildcard subdomain patterns (see origin-pattern.ts). Never
+// re-normalize an entry via `new URL(entry).origin` or a plain string
+// compare downstream — `new URL('https://*.example.com')` parses without
+// throwing (the '*' becomes a literal hostname character), so naive
+// normalization silently produces a canonical form that never matches a
+// real subdomain rather than failing loudly. Always route matching through
+// origin-pattern.ts's parseOriginPatternEntry / matchOrigin.
+
+import { parseOriginPatternEntry } from './origin-pattern.js'
 
 export const ENV_KEYS = {
   EXTERNAL_URL: 'WHITEBOARD_SERVER_EXTERNAL_URL',
@@ -60,6 +71,7 @@ export type ServerModeEnvConfigFailureCode =
   | 'server_mode_env.jwks_uri_query_forbidden'
   | 'server_mode_env.jwks_uri_fragment_forbidden'
   | 'server_mode_env.allowed_origins_wildcard_forbidden'
+  | 'server_mode_env.allowed_origins_invalid_wildcard'
   | 'server_mode_env.port_out_of_range'
   | 'server_mode_env.trusted_proxy_invalid'
   | 'server_mode_env.jwt_clock_skew_invalid'
@@ -155,6 +167,13 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
     allowedOrigins = splitComma(allowedOriginsRaw)
     if (allowedOrigins.some((o) => o === '*')) {
       return fail('server_mode_env.allowed_origins_wildcard_forbidden', ENV_KEYS.ALLOWED_ORIGINS)
+    }
+    for (const o of allowedOrigins) {
+      if (!o.includes('*')) continue
+      const result = parseOriginPatternEntry(o)
+      if (!result.ok || result.pattern.kind !== 'wildcard-subdomain') {
+        return fail('server_mode_env.allowed_origins_invalid_wildcard', ENV_KEYS.ALLOWED_ORIGINS)
+      }
     }
   } else {
     allowedOrigins = [externalUrl]

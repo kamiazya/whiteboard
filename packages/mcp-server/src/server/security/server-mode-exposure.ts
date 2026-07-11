@@ -17,7 +17,9 @@
 //   - externalUrl must be origin-only: no username, password, path beyond /,
 //     query string, or fragment. Sensitive pieces are never echoed in failure
 //     decisions — the code alone reaches the caller.
-//   - allowedOrigins must be exact https:// origins; wildcard * is forbidden.
+//   - allowedOrigins must be exact https:// origins or leftmost-label
+//     wildcard subdomain patterns (https://*.example.com); bare '*' is
+//     forbidden (see origin-pattern.ts for the full matching contract).
 //   - trustedProxy is an explicit opt-in (default false). Proxy header reading
 //     in actual routes is a future concern; this flag is the policy record.
 //
@@ -26,7 +28,11 @@
 // them without a flag day.
 
 import { isLoopbackHost } from '../daemon-auth-binding.js'
-import { validateOriginEntry } from './origin-validation.js'
+import {
+  canonicalizeOriginPatternEntry,
+  matchOrigin,
+  parseOriginPatternEntry,
+} from './origin-pattern.js'
 
 function bracketIpv6(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host
@@ -130,14 +136,20 @@ export function resolveServerModeExposure(
   }
 
   // Same origin-only rules as externalUrl (https required, no
-  // credentials/path/query/fragment) via the shared neutral validator; the
-  // neutral reason is mapped back onto this module's own failure-code
-  // namespace so existing callers see byte-identical codes. The raw origin
-  // string is never echoed in the failure decision.
+  // credentials/path/query/fragment) via the shared pattern parser — entries
+  // may be exact origins or leftmost-label wildcard subdomain patterns (see
+  // origin-pattern.ts). The neutral reason is mapped back onto this module's
+  // own failure-code namespace so existing callers see byte-identical codes.
+  // The raw origin string is never echoed in the failure decision. Storing
+  // the canonicalized entry string (rather than `new URL(origin).origin`)
+  // matters here: `new URL('https://*.example.com')` does not throw, so a
+  // naive normalization would silently keep the wildcard as an inert literal
+  // string that isOriginAllowedForServerMode's matcher must still be able to
+  // re-parse back into a pattern.
   const allowedOrigins = input.allowedOrigins ?? []
   const normalizedOrigins: string[] = []
   for (const origin of allowedOrigins) {
-    const result = validateOriginEntry(origin)
+    const result = parseOriginPatternEntry(origin)
     if (!result.ok) {
       return {
         ok: false,
@@ -147,7 +159,7 @@ export function resolveServerModeExposure(
             : 'server_mode.external_url_must_be_origin',
       }
     }
-    normalizedOrigins.push(result.origin)
+    normalizedOrigins.push(canonicalizeOriginPatternEntry(origin))
   }
 
   return {
@@ -163,11 +175,17 @@ export function resolveServerModeExposure(
 }
 
 // Per-request origin allowlist check for server-mode. Config-level validation
-// (wildcard rejection, https requirement) happens in `resolveServerModeExposure`;
-// this function is the hot-path per-request gate.
+// (wildcard-shape rejection, https requirement) happens in
+// `resolveServerModeExposure`; this function re-parses the already-validated
+// canonical entries into OriginPattern values and delegates matching to the
+// shared matcher so exact and wildcard-subdomain entries are both admitted.
 export function isOriginAllowedForServerMode(
   requestOrigin: string,
   allowedOrigins: readonly string[],
 ): boolean {
-  return allowedOrigins.includes(requestOrigin)
+  const patterns = allowedOrigins
+    .map((entry) => parseOriginPatternEntry(entry))
+    .filter((result) => result.ok)
+    .map((result) => result.pattern)
+  return matchOrigin(patterns, requestOrigin)
 }
