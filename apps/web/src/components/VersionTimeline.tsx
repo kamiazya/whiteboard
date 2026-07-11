@@ -30,6 +30,11 @@ interface Props {
   slug: string
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
+  // Bumped by the caller (e.g. after a manual "Save version" action, or a WS
+  // version_created broadcast) to force a refetch without waiting for the
+  // 15s poll. Only a value CHANGE triggers a refetch, matching
+  // HeaderBranchChip's refreshSignal contract.
+  refreshSignal?: number
 }
 
 // Render an ISO string as a short relative timestamp.
@@ -64,7 +69,7 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 
 // Branch operations and save controls live in the header.
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
-export default function VersionTimeline({ workspaceId, slug, onRestored }: Props) {
+export default function VersionTimeline({ workspaceId, slug, onRestored, refreshSignal }: Props) {
   const fetchFn = useDaemonApi()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -147,6 +152,17 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     }, 15_000)
     return () => clearInterval(h)
   }, [refresh, refetchBranches])
+
+  // Only a CHANGE in refreshSignal triggers a refetch — the mount-triggered
+  // refresh() effect above already covers the initial load, and this ref
+  // guard keeps an unrelated re-render (e.g. a parent state update) from
+  // refetching when the signal value itself hasn't moved.
+  const prevRefreshSignalRef = useRef(refreshSignal)
+  useEffect(() => {
+    if (prevRefreshSignalRef.current === refreshSignal) return
+    prevRefreshSignalRef.current = refreshSignal
+    refresh()
+  }, [refreshSignal, refresh])
 
   const confirmRestore = useCallback(async () => {
     // Guard against a double-click or repeated keyboard activation firing a

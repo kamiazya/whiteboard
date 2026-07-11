@@ -434,6 +434,109 @@ describe('DaemonCanvasPage', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/slug already exists/i)
   })
 
+  describe('manual save version', () => {
+    it('POSTs a version via the daemon fetch and shows an inline success message', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            return Promise.resolve(
+              new Response(JSON.stringify({ id: 'v-manual' }), { status: 200 }),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([reqInput, init]) =>
+              String(reqInput).startsWith(DAEMON_BASE_URL) &&
+              String(reqInput).includes('/workspaces/w1/canvases/main/versions') &&
+              init?.method === 'POST',
+          ),
+        ).toBe(true)
+      })
+      await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('shows an inline error when the save request fails', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            return Promise.resolve(new Response('nope', { status: 500 }))
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('disables the save button while a save is in flight and when no canvas is selected', async () => {
+      mockListCanvases.mockResolvedValue({ canvases: [] })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+
+      await waitFor(() =>
+        expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      )
+      expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
+    })
+  })
+
   describe('version history panel', () => {
     it('opens the panel and lists versions for the current (workspaceId, slug) via the daemon fetch', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(

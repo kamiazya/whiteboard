@@ -161,6 +161,46 @@ describe('VersionTimeline', () => {
     })
   })
 
+  it('refetches versions when refreshSignal changes (e.g. after a manual save)', async () => {
+    const { rerender } = render(
+      <VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />,
+    )
+    await screen.findByText('🤖 Assistant')
+
+    const fetchMock = vi.mocked(globalThis.fetch)
+    const versionsCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
+      String(reqInput).includes('/versions'),
+    ).length
+
+    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={1} />)
+
+    await waitFor(() => {
+      const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
+        String(reqInput).includes('/versions'),
+      ).length
+      expect(versionsCallCountAfter).toBeGreaterThan(versionsCallCountBefore)
+    })
+  })
+
+  it('does not refetch when re-rendered with an unchanged refreshSignal', async () => {
+    const { rerender } = render(
+      <VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />,
+    )
+    await screen.findByText('🤖 Assistant')
+
+    const fetchMock = vi.mocked(globalThis.fetch)
+    const versionsCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
+      String(reqInput).includes('/versions'),
+    ).length
+
+    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />)
+
+    const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
+      String(reqInput).includes('/versions'),
+    ).length
+    expect(versionsCallCountAfter).toBe(versionsCallCountBefore)
+  })
+
   it('clamps relative timestamps to "0s ago" when the server clock is ahead', async () => {
     vi.unstubAllGlobals()
     const future = new Date(Date.now() + 30_000).toISOString()

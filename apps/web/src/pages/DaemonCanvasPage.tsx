@@ -66,6 +66,15 @@ export function DaemonCanvasPage({
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
   const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
+  // Bumped on any version_created broadcast (covers this button's own save,
+  // MCP tool saves, and other peers) so an open VersionTimeline updates
+  // without waiting for its 15s poll.
+  const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  const [savingVersion, setSavingVersion] = useState(false)
+  const [saveVersionMessage, setSaveVersionMessage] = useState<{
+    kind: 'success' | 'error'
+    text: string
+  } | null>(null)
 
   // Backend identity is keyed on (workspaceId, slug, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
@@ -88,7 +97,34 @@ export function DaemonCanvasPage({
   const { setExcalidrawAPI, onChange, clearLocalUndo } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
+    onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
   })
+
+  const saveVersion = async (): Promise<void> => {
+    if (controller.workspaceId === null || controller.slug === null || savingVersion) return
+    setSavingVersion(true)
+    setSaveVersionMessage(null)
+    try {
+      const res = await daemonFetch(
+        `${daemonBaseUrl}/api/workspaces/${controller.workspaceId}/canvases/${encodeURIComponent(controller.slug)}/versions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      )
+      if (!res.ok) {
+        setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
+        return
+      }
+      setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
+      setVersionRefreshSignal((n) => n + 1)
+    } catch {
+      setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
+    } finally {
+      setSavingVersion(false)
+    }
+  }
 
   if (controller.loading) {
     return (
@@ -165,6 +201,29 @@ export function DaemonCanvasPage({
               // feature needs a daemon connection it already has.
               <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
             )}
+            {controller.workspaceId !== null && controller.slug !== null && (
+              <button
+                type="button"
+                onClick={() => void saveVersion()}
+                disabled={savingVersion}
+                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {savingVersion ? 'Saving…' : 'Save version'}
+              </button>
+            )}
+            {saveVersionMessage && (
+              <span
+                role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
+                aria-live="polite"
+                className={
+                  saveVersionMessage.kind === 'error'
+                    ? 'text-xs text-destructive'
+                    : 'text-xs text-muted-foreground'
+                }
+              >
+                {saveVersionMessage.text}
+              </span>
+            )}
             {capabilities.workspaces && controller.workspaces.length > 0 ? (
               <select
                 aria-label="Workspaces"
@@ -221,6 +280,7 @@ export function DaemonCanvasPage({
                 workspaceId={controller.workspaceId}
                 slug={controller.slug}
                 onRestored={clearLocalUndo}
+                refreshSignal={versionRefreshSignal}
               />
             </div>
           </div>
