@@ -50,7 +50,10 @@ describe('authorizeWsUpgrade', () => {
     ).toEqual({ accept: true, protocol: undefined })
   })
 
-  it('rejects browser origins that are not same-host localhost addresses', () => {
+  it('admits cross-name loopback origins but rejects non-loopback ones', () => {
+    // Loopback-to-loopback name mismatch (localhost page, 127.0.0.1 daemon)
+    // is admitted — same policy as the HTTP CORS middleware; the token is
+    // still required and offered here.
     expect(
       authorizeWsUpgrade(
         {
@@ -60,7 +63,7 @@ describe('authorizeWsUpgrade', () => {
         },
         'secret',
       ),
-    ).toEqual({ accept: false, statusCode: 403 })
+    ).toEqual({ accept: true, protocol: 'excalidraw-v1' })
 
     expect(
       authorizeWsUpgrade(

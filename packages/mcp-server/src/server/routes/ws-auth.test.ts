@@ -94,35 +94,42 @@ describe('authorizeWsUpgrade', () => {
     expect(decision.accept).toBe(true)
   })
 
-  describe('loopback Origin/Host mismatch regression (allowlist must not loosen it)', () => {
-    // A localhost Origin against a 127.0.0.1 Host is still a loopback-origin/
-    // loopback-host MISMATCH under the originHost === requestHost rule. The
-    // allowedOrigins allowlist widens admission for exact non-loopback
-    // matches only — it must not accidentally loosen this rule for loopback
-    // origins.
-    it('rejects with an empty allowlist', () => {
+  describe('cross-name loopback Origin admission (parity with the HTTP CORS policy)', () => {
+    // Loopback names (localhost / 127.0.0.1 / ::1) all resolve to the same
+    // interface, and any local page can trivially target the daemon under
+    // its own loopback name — so requiring originHost === requestHost never
+    // blocked a local attacker, it only broke legitimate cross-name pairs
+    // (a localhost:5173 page pairing with a 127.0.0.1 daemon). The policy is
+    // therefore loopback-OR-allowlist, identical to the HTTP CORS middleware;
+    // the real guards remain the loopback Host check (DNS rebinding) and the
+    // token requirement below.
+    it('admits a localhost Origin against a 127.0.0.1 Host without an allowlist entry', () => {
       const decision = authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
         undefined,
         [],
       )
-      expect(decision).toEqual({ accept: false, statusCode: 403 })
+      expect(decision.accept).toBe(true)
     })
 
-    it('rejects when the allowlist has unrelated entries', () => {
+    it('still requires the token for a cross-name loopback Origin when token auth is on', () => {
       const decision = authorizeWsUpgrade(
         { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
-        undefined,
-        ['https://kamiazya-whiteboard.pages.dev'],
+        'secret-token',
+        [],
       )
-      expect(decision).toEqual({ accept: false, statusCode: 403 })
+      expect(decision).toEqual({ accept: false, statusCode: 401 })
     })
 
-    it('only accepts once that exact origin is itself allowlisted', () => {
+    it('admits a cross-name loopback Origin offering the correct token', () => {
       const decision = authorizeWsUpgrade(
-        { host: '127.0.0.1:3099', origin: 'http://localhost:5173' },
-        undefined,
-        ['http://localhost:5173'],
+        {
+          host: '127.0.0.1:3099',
+          origin: 'http://localhost:5173',
+          'sec-websocket-protocol': 'excalidraw-v1, daemon-token.secret-token',
+        },
+        'secret-token',
+        [],
       )
       expect(decision.accept).toBe(true)
     })
