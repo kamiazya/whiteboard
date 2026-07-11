@@ -113,10 +113,7 @@ export function DaemonCanvasPage({
           body: JSON.stringify({}),
         },
       )
-      if (!res.ok) {
-        setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
-        return
-      }
+      if (!res.ok) throw new Error(`save failed: ${res.status}`)
       setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
       setVersionRefreshSignal((n) => n + 1)
     } catch {
