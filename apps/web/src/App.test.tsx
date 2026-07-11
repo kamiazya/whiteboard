@@ -34,9 +34,16 @@ vi.mock('./hooks/useDaemonConnection.js', () => ({
 }))
 
 let receivedDaemonPageProps: Record<string, unknown> | undefined
+// Toggled by the error-boundary test: throwing from the lazily-resolved page
+// exercises the paired branch's boundary, which must sit OUTSIDE Suspense to
+// catch errors surfacing through the lazy path.
+let throwInDaemonCanvasPage = false
 vi.mock('./pages/DaemonCanvasPage.js', () => ({
   DaemonCanvasPage: (props: Record<string, unknown>) => {
     receivedDaemonPageProps = props
+    if (throwInDaemonCanvasPage) {
+      throw new Error('boom-daemon')
+    }
     return <div data-testid="daemon-canvas-page" />
   },
 }))
@@ -190,5 +197,31 @@ describe('App error boundary', () => {
     expect(screen.getByText('Something went wrong')).toBeTruthy()
     expect(reportSpy).toHaveBeenCalled()
     reportSpy.mockRestore()
+  })
+
+  it('catches an error surfacing through the paired branch lazy path (boundary sits outside Suspense)', async () => {
+    throwInDaemonCanvasPage = true
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
+    try {
+      render(<App providerState={BROWSER_LOCAL_STATE} />)
+      // The lazy module resolves after a microtask; the throw then propagates
+      // through Suspense's error path to the boundary outside it.
+      expect(await screen.findByText('Something went wrong')).toBeTruthy()
+      expect(reportSpy).toHaveBeenCalled()
+    } finally {
+      throwInDaemonCanvasPage = false
+      mockDaemonConnectionResult = { status: 'none' }
+      reportSpy.mockRestore()
+    }
   })
 })
