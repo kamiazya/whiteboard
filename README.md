@@ -145,6 +145,25 @@ Add to `~/.gemini/settings.json`:
 
 In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The first call opens a Chromium tab pointed at the canvas and creates `~/.whiteboard/{workspaceId}/`.
 
+## Pair with your local daemon
+
+Already have the browser canvas open (see [Get started](docs/tutorials/getting-started.md))
+and a local daemon running? Ask your AI agent to call the `create_pairing_link`
+MCP tool. It mints a `#wb=` link that carries a short-lived bootstrap token —
+open it in your browser to connect that tab to the daemon's workspaces,
+version history, branches, and merge, with live sync over WebSocket.
+
+- Loopback web origins (`http://127.0.0.1:...`) need no extra configuration.
+- HTTPS hosted origins must be added to `WHITEBOARD_ALLOWED_WEB_ORIGINS`
+  (exact-match, no wildcards) before they can pair. This setting governs
+  local-daemon pairing only; [server mode](docs/how-to/self-host-with-docker.md)
+  reads the separate `WHITEBOARD_SERVER_ALLOWED_ORIGINS` variable instead.
+- Treat the pairing link like a credential: anyone who has it can pair with
+  your daemon until the token is rotated.
+
+See [Connect to a local daemon](docs/how-to/connect-to-local-daemon.md) for
+the full flow, including copy-first import of browser-local canvases.
+
 ## Bundled skills
 
 Three opinionated `SKILL.md` packs ship inside the npm package. The recommended **plugin install above wires them up automatically** — no manual linking. If you instead used `claude mcp add`, the Codex CLI snippet, or `npx`, link them yourself per [docs/contributing/development.md#bundled-skills-install](docs/contributing/development.md#bundled-skills-install).
@@ -183,7 +202,8 @@ The agent returns the `export_png` result as an MCP `ImageContent`, so the next 
 | Components, data flow, MCP tool surface, design boundaries | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
 | Custom template fragment JSON format used by `template_insert` | [docs/reference/templates.md](docs/reference/templates.md) |
 | MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
-| Token-gated local HTTP, daemon trust model | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
+| Trust model for all three runtimes (browser-local, local daemon, server mode) | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
+| Pairing a browser tab to a local daemon, copy-first import | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
 | WebSocket message shapes between daemon and browser | [docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md) |
 | Test layers, commit conventions, release process | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
