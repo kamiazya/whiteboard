@@ -895,6 +895,49 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(docKeyup).not.toHaveBeenCalled()
   })
 
+  it('guards against a second in-flight onCreateCanvas call when "New canvas…" is invoked twice before the first resolves', async () => {
+    let resolveCreate: () => void = () => {}
+    const onCreateCanvas = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCreate = resolve
+        }),
+    )
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={onCreateCanvas}
+      />,
+      { container: document.body },
+    )
+
+    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    const item = await screen.findByTestId('new-canvas-menu-item')
+    fireEvent.pointerUp(item)
+
+    expect(onCreateCanvas).toHaveBeenCalledTimes(1)
+
+    // Reopen the switcher and fire "New canvas…" again before the first
+    // onCreateCanvas call resolves — the newCanvasBusy guard must skip this
+    // second invocation instead of minting a duplicate canvas.
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    const item2 = await screen.findByTestId('new-canvas-menu-item')
+    fireEvent.pointerUp(item2)
+
+    expect(onCreateCanvas).toHaveBeenCalledTimes(1)
+
+    resolveCreate()
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    expect(onCreateCanvas).toHaveBeenCalledTimes(1)
+  })
+
   it('never renders the daemon-only thumbnail <img> or the pin affordance in the canvas switcher', async () => {
     render(
       <WorkspaceTopBar
