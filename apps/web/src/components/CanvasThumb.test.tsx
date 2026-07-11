@@ -5,6 +5,13 @@ import { CanvasThumb } from './CanvasThumb.js'
 
 afterEach(() => cleanup())
 
+// React's warning text for a same-component setState-during-render violation
+// (as opposed to the sanctioned "adjust state during render for the current
+// component" pattern, which never triggers this). Wording has drifted across
+// React 18/19 point releases, so the match stays tolerant of both phrasings.
+const REACT_SETSTATE_IN_RENDER_RE =
+  /Cannot update a component (\(`[^`]*`\) )?while rendering a different component|Warning:.*setState.*during.*render/i
+
 describe('CanvasThumb', () => {
   it('renders an img pointed at the latest-thumbnail route, url-encoding the slug', () => {
     const { container } = render(<CanvasThumb workspaceId="ws-1" slug="my canvas/x" />)
@@ -50,6 +57,20 @@ describe('CanvasThumb', () => {
     const wrapper = container.firstElementChild as HTMLElement
     expect(wrapper.className).toContain('h-9')
     expect(wrapper.className).toContain('w-14')
+  })
+
+  it('does not trigger a React setState-in-render warning when the guarded prevSrc reset runs on a src change', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { rerender } = render(<CanvasThumb workspaceId="ws-1" slug="canvas-a" />)
+    // Changing slug changes `src`, which drives the guarded prevSrc reset
+    // (CanvasThumb.tsx L37-41) during this render — the React-sanctioned
+    // "adjust state during render" form, not the cross-component violation.
+    rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
+    const matchingCalls = errorSpy.mock.calls.filter((args) =>
+      args.some((arg) => typeof arg === 'string' && REACT_SETSTATE_IN_RENDER_RE.test(arg)),
+    )
+    expect(matchingCalls).toEqual([])
+    errorSpy.mockRestore()
   })
 
   it('renders the fallback placeholder instead of an <img> when a DaemonApiContext provider is mounted (cross-origin)', () => {

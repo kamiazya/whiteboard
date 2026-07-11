@@ -78,6 +78,21 @@ const snap: CanvasSnapshot = {
   updatedAt: '2026-05-24T00:00:00.000Z',
 }
 
+// React's warning text for an unguarded/cross-component setState-during-render
+// violation. Distinct from the sanctioned "adjust state during render for the
+// current component" pattern (see CanvasThumb's guarded prevSrc reset), which
+// never triggers this. Wording has drifted across React 18/19 point releases,
+// so the match stays tolerant of both phrasings.
+const REACT_SETSTATE_IN_RENDER_RE =
+  /Cannot update a component (\(`[^`]*`\) )?while rendering a different component|Warning:.*setState.*during.*render/i
+
+function assertNoSetStateInRenderWarning(errorSpy: ReturnType<typeof vi.spyOn>): void {
+  const matchingCalls = (errorSpy.mock.calls as unknown[][]).filter((args) =>
+    args.some((arg) => typeof arg === 'string' && REACT_SETSTATE_IN_RENDER_RE.test(arg)),
+  )
+  expect(matchingCalls).toEqual([])
+}
+
 describe('BrowserLocalCanvasPage', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => {
@@ -601,6 +616,39 @@ describe('BrowserLocalCanvasPage', () => {
     // The stale (generation 2) resolution must not clobber the fresh one.
     const optionNames = screen.getAllByRole('option').map((o) => o.textContent)
     expect(optionNames).toEqual(['untitled (fresh)'])
+  })
+
+  it('never triggers a React setState-in-render warning across mount, canvas switch, and create-canvas', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+    })
+    await act(async () => {
+      await vi.runAllTimersAsync()
+    })
+    assertNoSetStateInRenderWarning(errorSpy)
+
+    // Canvas switch re-renders CanvasTitle with a new key/props.
+    const switcher = screen.getByRole('combobox', { name: /canvases/i })
+    await act(async () => {
+      fireEvent.change(switcher, { target: { value: 'c2' } })
+      await vi.runAllTimersAsync()
+    })
+    assertNoSetStateInRenderWarning(errorSpy)
+
+    // Create-canvas flow drives another switch + re-render.
+    const newBtn = screen.getByRole('button', { name: /new canvas/i })
+    await act(async () => {
+      newBtn.click()
+      await vi.runAllTimersAsync()
+    })
+    assertNoSetStateInRenderWarning(errorSpy)
+
+    errorSpy.mockRestore()
   })
 
   describe('daemon-only capability teasers', () => {
