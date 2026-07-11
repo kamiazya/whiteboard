@@ -22,6 +22,10 @@ export interface DaemonIndexPageProps {
   daemonBaseUrl: string
   token?: string
   capabilities?: WhiteboardCapabilities
+  // A workspace-level pairing link (#wb= with workspaceId but no slug) names
+  // a specific workspace to land on; falls back to the daemon's first-listed
+  // workspace when absent, or when the named workspace isn't in the list.
+  initialWorkspaceId?: string
   onOpenCanvas: (workspaceId: string, slug: string) => void
 }
 
@@ -85,7 +89,12 @@ function formatRelative(iso: string): string {
 
 type TabKey = 'canvases' | 'storage'
 
-export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIndexPageProps) {
+export function DaemonIndexPage({
+  daemonBaseUrl,
+  token,
+  initialWorkspaceId,
+  onOpenCanvas,
+}: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
 
   const [tab, setTab] = useState<TabKey>('canvases')
@@ -104,7 +113,9 @@ export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIn
         if (cancelled) return
         const ids = res.workspaces.map((w) => w.workspaceId)
         setWorkspaces(ids)
-        setSelectedWorkspace((current) => current ?? ids[0] ?? null)
+        const targeted =
+          initialWorkspaceId && ids.includes(initialWorkspaceId) ? initialWorkspaceId : undefined
+        setSelectedWorkspace((current) => current ?? targeted ?? ids[0] ?? null)
       })
       .catch(() => {
         if (!cancelled) setLoadError('Failed to load workspaces.')
@@ -112,6 +123,9 @@ export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIn
     return () => {
       cancelled = true
     }
+    // initialWorkspaceId is fixed for the page's lifetime (set once from the
+    // pairing payload App.tsx resolved at mount) — it deliberately isn't a
+    // dependency so this effect stays load-once, matching daemonBaseUrl.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonBaseUrl])
 

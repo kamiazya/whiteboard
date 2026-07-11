@@ -380,6 +380,22 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
   })
+
+  it('forwards the payload workspaceId as initialWorkspaceId when the #wb= payload has a workspace but no slug', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'workspace-b',
+        slug: undefined,
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+  })
 })
 
 describe('App error boundary', () => {

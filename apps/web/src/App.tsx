@@ -32,7 +32,9 @@ const DaemonIndexPage = lazy(() =>
 // and slug-less pairing start on 'index'. `key` on the DaemonCanvasPage mount
 // forces a clean remount (fresh controller/backend) on every index -> canvas
 // transition instead of reusing a previous canvas's identity.
-type DaemonView = { kind: 'index' } | { kind: 'canvas'; workspaceId: string; slug: string }
+type DaemonView =
+  | { kind: 'index'; workspaceId?: string }
+  | { kind: 'canvas'; workspaceId: string; slug: string }
 
 const browserLocalStore = new IndexedDBStore()
 const userSettingsStore = createUserSettingsStore()
@@ -105,24 +107,19 @@ export function App({ providerState }: AppProps) {
   const [daemonToken] = useState(() => readDaemonTokenOnce() ?? undefined)
 
   // A #wb= fragment carrying both workspaceId+slug skips straight to the
-  // canvas (the existing deep-link contract); a slug-less fragment (or
-  // local-daemon's runtime-config path, which never has a fragment at all)
-  // starts on the gallery. Lazy initializer: daemonConnection's payload is
-  // fixed for the life of the mount, so this never needs to react to it
-  // changing after the fact.
+  // canvas (the existing deep-link contract); a workspace-only fragment is
+  // still a valid target (see daemon-connection-payload.ts's refine) and
+  // starts on the gallery pre-scoped to that workspace rather than
+  // whichever workspace the daemon happens to list first. A slug-less AND
+  // workspace-less fragment (or local-daemon's runtime-config path, which
+  // never has a fragment at all) starts on the gallery unscoped. Lazy
+  // initializer: daemonConnection's payload is fixed for the life of the
+  // mount, so this never needs to react to it changing after the fact.
   const [daemonView, setDaemonView] = useState<DaemonView>(() => {
-    if (
-      daemonConnection.status === 'paired' &&
-      daemonConnection.payload.workspaceId &&
-      daemonConnection.payload.slug
-    ) {
-      return {
-        kind: 'canvas',
-        workspaceId: daemonConnection.payload.workspaceId,
-        slug: daemonConnection.payload.slug,
-      }
-    }
-    return { kind: 'index' }
+    if (daemonConnection.status !== 'paired') return { kind: 'index' }
+    const { workspaceId, slug } = daemonConnection.payload
+    if (workspaceId && slug) return { kind: 'canvas', workspaceId, slug }
+    return { kind: 'index', workspaceId }
   })
 
   // The 'Continue in browser-local' escape hatch opts out of the pairing
@@ -141,6 +138,7 @@ export function App({ providerState }: AppProps) {
               <DaemonIndexPage
                 daemonBaseUrl={payload.baseUrl}
                 token={pairedToken}
+                initialWorkspaceId={daemonView.workspaceId}
                 onOpenCanvas={(workspaceId, slug) =>
                   setDaemonView({ kind: 'canvas', workspaceId, slug })
                 }

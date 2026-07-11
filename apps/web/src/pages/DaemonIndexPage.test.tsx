@@ -79,6 +79,48 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByText('beta')).toBeNull()
   })
 
+  it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ slug: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        initialWorkspaceId="ws-b"
+        onOpenCanvas={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('beta')).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
+    expect((screen.getByLabelText('Workspace') as HTMLSelectElement).value).toBe('ws-b')
+  })
+
+  it('falls back to the first-listed workspace when initialWorkspaceId is not in the daemon list', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ slug: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        initialWorkspaceId="stale-deleted-workspace"
+        onOpenCanvas={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('alpha')).toBeTruthy()
+  })
+
   it('switching the workspace selector replaces the visible cards', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
