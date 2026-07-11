@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { deriveCapabilityTier } from '../../lib/capability-tier.js'
 import {
   DEFAULT_DAEMON_BASE_URL,
   type DaemonProbeResult,
@@ -7,6 +8,12 @@ import {
 } from '../../lib/daemon-probe.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
+
+// Shown only once a probe PROVES the browser blocked the request (tier
+// 'tier2-blocked') — never on a merely inconclusive failure. Honesty
+// discipline: an unproven guess is worse than no notice at all.
+export const UNSUPPORTED_BROWSER_NOTICE =
+  'Your browser cannot connect to a local daemon; canvases stay in this browser.'
 
 // Docs are not served from apps/web (no /docs route), so the banner links to
 // the source-of-truth GitHub blob rather than fabricating a local route.
@@ -48,11 +55,22 @@ export function DaemonDetectedBanner({
     [settingsStore],
   )
 
+  // 'http:'/'https:' -> 'http'/'https'; any other scheme (e.g. jsdom's
+  // default 'about:' outside these injected-prop tests) falls back to
+  // 'https' — the conservative choice since it never claims a loopback
+  // path is open without evidence.
+  const pageOriginScheme = locationProtocol === 'http:' ? 'http' : 'https'
+
   function runProbe(forceRecheck?: boolean) {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
-    probeFn(baseUrl, { fetch, forceRecheck, signal: controller.signal }).then((next) => {
+    probeFn(baseUrl, {
+      fetch,
+      forceRecheck,
+      signal: controller.signal,
+      pageOriginScheme,
+    }).then((next) => {
       if (controller.signal.aborted) return
       setResult(next)
     })
@@ -79,7 +97,9 @@ export function DaemonDetectedBanner({
     setDismissedAt(now)
   }
 
-  const showManualAffordance = result === null || !result.detected
+  const tier = deriveCapabilityTier({ pageOriginScheme, probe: result })
+  const showUnsupportedNotice = tier === 'tier2-blocked'
+  const showManualAffordance = (result === null || !result.detected) && !showUnsupportedNotice
 
   // Every mutation path that affects visibility flows through `result` or
   // `dismissedAt` state, so the memo stays correct while skipping the
@@ -99,6 +119,9 @@ export function DaemonDetectedBanner({
 
   return (
     <>
+      {showUnsupportedNotice && (
+        <span className="text-xs text-muted-foreground">{UNSUPPORTED_BROWSER_NOTICE}</span>
+      )}
       {showManualAffordance && (
         <button
           type="button"

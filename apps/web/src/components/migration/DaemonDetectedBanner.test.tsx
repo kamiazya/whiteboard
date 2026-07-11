@@ -126,6 +126,47 @@ describe('DaemonDetectedBanner', () => {
     expect(saved.storage.dismissedDaemonCtaAt).toEqual(expect.any(String))
   })
 
+  it('shows the honest unsupported notice instead of the CTA when the probe proves the browser blocked it', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'blocked' })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(
+      'Your browser cannot connect to a local daemon; canvases stay in this browser.',
+    )
+    expect(screen.queryByRole('button', { name: /check for local daemon/i })).toBeNull()
+  })
+
+  it('keeps the CTA affordance when the probe fails inconclusively (not proven blocked)', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'network' })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('button', { name: /check for local daemon/i })).not.toBeNull()
+    expect(
+      screen.queryByText(
+        'Your browser cannot connect to a local daemon; canvases stay in this browser.',
+      ),
+    ).toBeNull()
+  })
+
   it('aborts the in-flight probe on unmount and never sets state after unmount', async () => {
     let capturedSignal: AbortSignal | undefined
     const probeFn = vi.fn().mockImplementation(
