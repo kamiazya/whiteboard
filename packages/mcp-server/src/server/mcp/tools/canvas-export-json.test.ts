@@ -87,10 +87,13 @@ describe('canvas_export_json', () => {
   it('surfaces invalid_output_path errors from the daemon route as a clear message', async () => {
     const tool = canvasExportJsonTool()
     globalThis.fetch = vi.fn(async () => {
+      // Mirrors the real daemon body: toCanvasOutputPathErrorBody maps
+      // invalid_output_path to the workspace-scoped exports-directory message.
       return new Response(
         JSON.stringify({
           error: 'invalid_output_path',
-          message: 'outputPath must be an absolute path (received: relative.json)',
+          message:
+            "Invalid output path. outputPath must be inside this workspace's exports directory (~/.whiteboard/sid/exports, or $WHITEBOARD_DATA_DIR/sid/exports if that env var is set). Omit outputPath to write there automatically.",
         }),
         { status: 400 },
       )
@@ -98,7 +101,7 @@ describe('canvas_export_json', () => {
 
     await expect(
       tool.execute({ canvasId: 'sid/canvas-a', outputPath: 'relative.json' }, client),
-    ).rejects.toThrow(/absolute path/)
+    ).rejects.toThrow(/exports directory/)
   })
 
   it("documents the outputPath sandbox constraint in the tool's inputSchema description", () => {

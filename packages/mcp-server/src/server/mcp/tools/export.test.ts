@@ -374,24 +374,6 @@ describe('exportPngTool execute', () => {
     })
   })
 
-  it('surfaces invalid_output_path errors from the export route', async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          error: 'invalid_output_path',
-          message: 'outputPath must be an absolute path (received: relative.png)',
-        }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } },
-      ),
-    )
-
-    const { exportPngTool } = await import('./export.js')
-    const tool = exportPngTool()
-    await expect(
-      tool.execute({ canvasId: 'sid/slug', outputPath: 'relative.png' }, client),
-    ).rejects.toThrow(/absolute path/)
-  })
-
   it('surfaces an invalid_output_path rejection that names the allowed exports root', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
