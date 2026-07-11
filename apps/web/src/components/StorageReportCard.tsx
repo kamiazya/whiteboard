@@ -1,4 +1,3 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import {
   listWorkspacesResponseSchema,
   optimizeAllCanvasesResponseSchema,
@@ -19,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { formatBytes } from '../lib/format-bytes.js'
 
 // Mirrors userLibrarySummarySchema / listUserLibrariesResponseSchema in
@@ -120,6 +120,9 @@ function humanizeAge(seconds: number): string {
 }
 
 export function StorageReportCard() {
+  // Falls back to the same-origin apiFetch when no DaemonApiContext provider
+  // is mounted, so mcp-server / same-origin usage is unchanged.
+  const fetchApi = useDaemonApi()
   const [report, setReport] = useState<StorageReportPayload | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -164,7 +167,7 @@ export function StorageReportCard() {
     setError(null)
     const start = Date.now()
     try {
-      const res = await apiFetch('/api/runtime/storage')
+      const res = await fetchApi('/api/runtime/storage')
       if (!mountedRef.current) return
       if (!res.ok) {
         setError(`HTTP ${res.status}`)
@@ -188,7 +191,7 @@ export function StorageReportCard() {
         setLoading(false)
       }
     }
-  }, [])
+  }, [fetchApi])
 
   useEffect(() => {
     void refresh()
@@ -204,7 +207,7 @@ export function StorageReportCard() {
     setOptimizing(true)
     setOptimizeStatus('Optimizing…')
     try {
-      const wsRes = await apiFetch('/api/workspaces')
+      const wsRes = await fetchApi('/api/workspaces')
       if (!mountedRef.current) return
       if (!wsRes.ok) {
         setOptimizeStatus('Optimize failed')
@@ -214,7 +217,7 @@ export function StorageReportCard() {
       let savings = 0
       let failedWorkspaces = 0
       for (const { workspaceId } of workspaces) {
-        const res = await apiFetch(`/api/workspaces/${workspaceId}/canvases/optimize-all`, {
+        const res = await fetchApi(`/api/workspaces/${workspaceId}/canvases/optimize-all`, {
           method: 'POST',
         })
         if (!res.ok) {
@@ -244,7 +247,7 @@ export function StorageReportCard() {
         scheduleStatusClear(() => setOptimizeStatus(null))
       }
     }
-  }, [refresh, scheduleStatusClear])
+  }, [refresh, scheduleStatusClear, fetchApi])
 
   // User libraries management dialog. Surfaces installed libraries with
   // per-pack size and item count, plus a per-row Remove that maps to the
@@ -257,7 +260,7 @@ export function StorageReportCard() {
     setLibsLoading(true)
     setLibsError(null)
     try {
-      const res = await apiFetch('/api/user-libraries')
+      const res = await fetchApi('/api/user-libraries')
       if (!mountedRef.current) return
       if (!res.ok) {
         setLibsError(`HTTP ${res.status}`)
@@ -273,13 +276,13 @@ export function StorageReportCard() {
     } finally {
       if (mountedRef.current) setLibsLoading(false)
     }
-  }, [])
+  }, [fetchApi])
   const removeLib = useCallback(
     async (name: string) => {
       // Callers fire-and-forget this (void removeLib(...)), so a thrown fetch
       // must be converted to state here or it becomes an unhandled rejection.
       try {
-        const res = await apiFetch(`/api/user-libraries/${encodeURIComponent(name)}`, {
+        const res = await fetchApi(`/api/user-libraries/${encodeURIComponent(name)}`, {
           method: 'DELETE',
         })
         if (!mountedRef.current) return
@@ -299,7 +302,7 @@ export function StorageReportCard() {
         }
       }
     },
-    [fetchLibs, refresh],
+    [fetchLibs, refresh, fetchApi],
   )
 
   // Daemon-log rotation override. Logs are also pruned fire-and-forget
@@ -311,7 +314,7 @@ export function StorageReportCard() {
     setPruningLogs(true)
     setPruneLogsStatus('Pruning…')
     try {
-      const res = await apiFetch('/api/runtime/logs/prune', { method: 'POST' })
+      const res = await fetchApi('/api/runtime/logs/prune', { method: 'POST' })
       if (!mountedRef.current) return
       if (!res.ok) {
         setPruneLogsStatus('Prune failed')
@@ -333,7 +336,7 @@ export function StorageReportCard() {
         scheduleStatusClear(() => setPruneLogsStatus(null))
       }
     }
-  }, [refresh, scheduleStatusClear])
+  }, [refresh, scheduleStatusClear, fetchApi])
 
   // Sandwiched auto-version prune. Manual versions are explicit user
   // save-points; autos between any two manuals add no rollback value and
@@ -344,7 +347,7 @@ export function StorageReportCard() {
     setPruningVersions(true)
     setPruneVersionsStatus('Cleaning…')
     try {
-      const wsRes = await apiFetch('/api/workspaces')
+      const wsRes = await fetchApi('/api/workspaces')
       if (!mountedRef.current) return
       if (!wsRes.ok) {
         setPruneVersionsStatus('Cleanup failed')
@@ -354,7 +357,7 @@ export function StorageReportCard() {
       let totalDeleted = 0
       let failedWorkspaces = 0
       for (const { workspaceId } of workspaces) {
-        const res = await apiFetch(`/api/workspaces/${workspaceId}/versions/prune-sandwiched`, {
+        const res = await fetchApi(`/api/workspaces/${workspaceId}/versions/prune-sandwiched`, {
           method: 'POST',
         })
         if (!res.ok) {
@@ -380,7 +383,7 @@ export function StorageReportCard() {
         scheduleStatusClear(() => setPruneVersionsStatus(null))
       }
     }
-  }, [refresh, scheduleStatusClear])
+  }, [refresh, scheduleStatusClear, fetchApi])
 
   // Dangling-files cleanup. Same workspace-iterating pattern as Optimize
   // all — call the per-workspace purge endpoint, sum the freed bytes, and
@@ -391,7 +394,7 @@ export function StorageReportCard() {
     setCleaningFiles(true)
     setCleanFilesStatus('Cleaning…')
     try {
-      const wsRes = await apiFetch('/api/workspaces')
+      const wsRes = await fetchApi('/api/workspaces')
       if (!mountedRef.current) return
       if (!wsRes.ok) {
         setCleanFilesStatus('Cleanup failed')
@@ -402,7 +405,7 @@ export function StorageReportCard() {
       let purgedCount = 0
       let failedWorkspaces = 0
       for (const { workspaceId } of workspaces) {
-        const res = await apiFetch(`/api/workspaces/${workspaceId}/files/purge-dangling`, {
+        const res = await fetchApi(`/api/workspaces/${workspaceId}/files/purge-dangling`, {
           method: 'POST',
         })
         if (!res.ok) {
@@ -431,7 +434,7 @@ export function StorageReportCard() {
         scheduleStatusClear(() => setCleanFilesStatus(null))
       }
     }
-  }, [refresh, scheduleStatusClear])
+  }, [refresh, scheduleStatusClear, fetchApi])
 
   const ageSeconds = updatedAt === null ? null : Math.max(0, Math.floor((now - updatedAt) / 1000))
 

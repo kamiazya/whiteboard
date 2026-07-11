@@ -50,6 +50,10 @@ export interface DaemonCanvasPageProps {
   // previously worked browser-local can copy those canvases onto this
   // daemon workspace. Absent in tests/embedders that don't need the flow.
   browserLocalStore?: BrowserLocalStore
+  // Wired to WorkspaceTopBar's own "Back to canvas list" button. Absent
+  // (the default) hides that button — callers that own an index view (the
+  // daemon gallery) pass this to return there.
+  onNavigateBack?: () => void
 }
 
 export function DaemonCanvasPage({
@@ -61,6 +65,7 @@ export function DaemonCanvasPage({
   onContinueBrowserLocal,
   createBackend,
   browserLocalStore,
+  onNavigateBack,
 }: DaemonCanvasPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
@@ -286,6 +291,7 @@ export function DaemonCanvasPage({
             versionRefreshSignal={versionRefreshSignal}
             onRestored={clearLocalUndo}
             versionPanelExtra={versionPanelExtra}
+            onNavigateBack={onNavigateBack}
           />
         )}
         {capabilities.branches && canvas && (
@@ -357,6 +363,19 @@ export function DaemonCanvasPage({
         )}
         {controller.canvases.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+            {/* WorkspaceTopBar (the usual home for this button) only mounts once
+                a canvas is selected, so a workspace that resolves to zero
+                canvases — an empty workspace, or a gallery row whose canvas was
+                deleted by another client — needs its own back affordance here. */}
+            {onNavigateBack && (
+              <button
+                type="button"
+                onClick={onNavigateBack}
+                className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <span aria-hidden="true">← </span>Back to canvas list
+              </button>
+            )}
             <p className="text-sm text-muted-foreground">This workspace has no canvases yet.</p>
             {controller.createError && (
               <div role="alert" aria-live="assertive" className="text-xs text-destructive">
