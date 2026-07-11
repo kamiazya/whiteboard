@@ -1480,6 +1480,30 @@ describe('DaemonCanvasPage', () => {
       expect(onNavigateBack).toHaveBeenCalledTimes(1)
     })
 
+    it('renders "Back to canvas list" in the zero-canvases branch, where WorkspaceTopBar does not mount', async () => {
+      mockListCanvases.mockResolvedValue({ canvases: [] })
+      const onNavigateBack = vi.fn()
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            onNavigateBack={onNavigateBack}
+          />,
+          { container: document.body },
+        )
+      })
+
+      await waitFor(() =>
+        expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      )
+
+      const button = screen.getByRole('button', { name: 'Back to canvas list' })
+      fireEvent.click(button)
+      expect(onNavigateBack).toHaveBeenCalledTimes(1)
+    })
+
     it('performs exactly one POST /versions on a single Cmd/Ctrl+S keydown', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
