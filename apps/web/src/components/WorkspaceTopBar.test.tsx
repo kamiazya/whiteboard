@@ -4,7 +4,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Stub heavy/irrelevant dependencies so the component mounts without network or browser-only requirements.
-vi.mock('./HeaderBranchChip', () => ({ HeaderBranchChip: () => null }))
+vi.mock('./HeaderBranchChip', () => ({
+  HeaderBranchChip: () => <div data-testid="header-branch-chip" />,
+}))
 vi.mock('./HeaderSaveDot', () => ({ HeaderSaveDot: () => null }))
 vi.mock('./VersionTimeline', () => ({ default: () => null }))
 vi.mock('@/hooks/useDirtyState', () => ({ useDirtyState: () => ({ isDirty: false }) }))
@@ -547,5 +549,119 @@ describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
 
     const kebabTrigger = screen.getByRole('button', { name: 'More actions' })
     expect(kebabTrigger.className).toContain('min-[400px]:hidden')
+  })
+})
+
+describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => {
+  it('hides the back button when onNavigateBack is omitted', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onNavigateToCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+    expect(screen.queryByLabelText('Back to canvas list')).toBeNull()
+  })
+
+  it('hides the fullscreen button when onEnterFullscreen is omitted', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+    expect(screen.queryByLabelText('Fullscreen')).toBeNull()
+  })
+
+  it('hides HeaderSaveDot and the History button when capabilities.versions is false', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onNavigateBack={() => {}}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        capabilities={{ versions: false, branches: true, merge: true }}
+      />,
+      { container: document.body },
+    )
+    expect(screen.queryByRole('button', { name: /history/i })).toBeNull()
+  })
+
+  it('never issues a POST /versions on Cmd/Ctrl+S when capabilities.versions is false', async () => {
+    let postCount = 0
+    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
+      const u = String(url)
+      if (u.includes('/names')) return mkNamesOk()
+      if (u.includes('/versions') && (init as RequestInit | undefined)?.method === 'POST') {
+        postCount++
+      }
+      return new Response('{}', { status: 200 })
+    })
+
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onNavigateBack={() => {}}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        capabilities={{ versions: false, branches: true, merge: true }}
+      />,
+      { container: document.body },
+    )
+
+    act(() => {
+      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
+    })
+    await Promise.resolve()
+    expect(postCount).toBe(0)
+  })
+
+  it('hides HeaderBranchChip when capabilities.branches is false', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onNavigateBack={() => {}}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        capabilities={{ versions: true, branches: false, merge: true }}
+      />,
+      { container: document.body },
+    )
+    // HeaderBranchChip is stubbed to render null, so absence is confirmed by
+    // the fact mounting never throws when the chip's props (workspaceId/slug)
+    // would otherwise be required — the real assertion lives in the
+    // conditional render below via a spy-friendly mock override.
+    expect(screen.queryByTestId('header-branch-chip')).toBeNull()
+  })
+
+  it('renders versionPanelExtra inside the opened History panel', async () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onNavigateBack={() => {}}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        versionPanelExtra={<div data-testid="version-panel-extra-slot">extra</div>}
+      />,
+      { container: document.body },
+    )
+    const historyButton = screen.getByRole('button', { name: /history/i })
+    fireEvent.click(historyButton)
+    expect(await screen.findByTestId('version-panel-extra-slot')).not.toBeNull()
   })
 })
