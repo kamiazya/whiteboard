@@ -26,6 +26,7 @@ import {
   flushPendingExportRequests,
   handleIncomingExportRequest,
 } from './canvas-sync-export.js'
+import type { DirtyEventDetail } from './useDirtyState.js'
 
 export type SyncStatus = 'idle' | 'connected' | 'error'
 
@@ -43,6 +44,15 @@ export interface UseCanvasSyncOptions {
   // transition on a WS auth failure (close 1008), so a daemon-backed page
   // can surface a dedicated banner instead of the generic error state.
   onAuthError?: () => void
+  // When set, drives the window-event contract that useDirtyState/HeaderSaveDot
+  // listen for: 'excalidraw:doc_changed' on local/remote doc edits and
+  // 'excalidraw:version_saved' on a version_created broadcast. Read via
+  // optionsRef (never in the connect effect's dep array) so passing a fresh
+  // identity object every render never forces a reconnect. Only dispatched
+  // when both fields are present — a browser-local caller that never sets
+  // this option (or a daemon caller whose identity is still resolving)
+  // dispatches nothing, leaving its dirty-state behavior unchanged.
+  identity?: { workspaceId: string; slug: string }
 }
 
 export interface UseCanvasSyncResult {
@@ -58,6 +68,20 @@ export interface UseCanvasSyncResult {
 // putFile would otherwise block the commit chain (and every later scene edit)
 // indefinitely; upload failure is non-fatal, so falling through is safe.
 const PUT_FILE_TIMEOUT_MS = 15_000
+
+// Dispatches a window event carrying { workspaceId, slug } as detail, but only
+// when identity is fully resolved — a partial or absent identity means the
+// caller (browser-local, or a daemon page whose identity is still loading)
+// never wired the dirty-state contract and must see no events at all.
+function dispatchIdentityEvent(
+  eventName: string,
+  identity: UseCanvasSyncOptions['identity'],
+): void {
+  if (typeof window === 'undefined') return
+  if (!identity || !identity.workspaceId || !identity.slug) return
+  const detail: DirtyEventDetail = { workspaceId: identity.workspaceId, slug: identity.slug }
+  window.dispatchEvent(new CustomEvent(eventName, { detail }))
+}
 
 // Small debounce helper with no external dependency.
 function debounce<T extends (...args: Parameters<T>) => void>(
@@ -486,7 +510,14 @@ export function useCanvasSync(
         })
 
         doc.subscribe((e) => {
-          if (e.by === 'import' && !isStale()) {
+          if (isStale()) return
+          // Fires for both a local commit (onSceneChange -> doc.commit()) and
+          // a remote import (onRemoteUpdate), matching MCP-app parity for
+          // what counts as "the doc changed" — but never for the initial
+          // snapshot import above, since that happens before this listener
+          // is registered.
+          dispatchIdentityEvent('excalidraw:doc_changed', optionsRef.current.identity)
+          if (e.by === 'import') {
             void applyLoroToExcalidraw(doc, bk)
           }
         })
@@ -501,6 +532,7 @@ export function useCanvasSync(
 
       onVersionCreated(payload) {
         if (isStale()) return
+        dispatchIdentityEvent('excalidraw:version_saved', optionsRef.current.identity)
         try {
           optionsRef.current.onVersionCreated?.(payload)
         } catch (err) {
