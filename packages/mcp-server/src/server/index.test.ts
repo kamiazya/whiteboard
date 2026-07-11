@@ -135,6 +135,29 @@ describe('server/index main() config-file wiring', () => {
     }
   })
 
+  it('aborts cleanly with a structured log record on an invalid config file, instead of an unhandled throw', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
+    originalCwd = process.cwd()
+    process.chdir(dir)
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 'not-a-number' }))
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const capture = captureLogsForTests()
+    try {
+      await expect(main()).rejects.toThrow('process.exit called')
+      expect(exitSpy).toHaveBeenCalledWith(1)
+      expect(startHttpServerMock).not.toHaveBeenCalled()
+      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'error')
+      expect(record).toBeDefined()
+      expect(JSON.stringify(capture.records)).not.toMatch(/\n\s*at /)
+    } finally {
+      capture.restore()
+      exitSpy.mockRestore()
+    }
+  })
+
   it('warns instead of honoring a config-file dataDir on this entrypoint', async () => {
     dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
     originalCwd = process.cwd()

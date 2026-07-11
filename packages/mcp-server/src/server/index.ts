@@ -53,8 +53,24 @@ export { startHttpServer } from './http-server.js'
 // dataDir is deliberately NOT applied here — DATA_DIR (shared/data-dir-secure.ts)
 // is a static-import-time snapshot on this entrypoint, so a file dataDir key
 // would be silently too-late; warn instead of pretending it worked.
+//
+// loadConfigFile throws on a malformed file (by design). Catch it here and
+// fail the same way the WHITEBOARD_ALLOWED_WEB_ORIGINS gate below does
+// (structured getLogger record + process.exit(1)) instead of letting the
+// throw propagate to the generic top-level `main().catch` at the bottom of
+// this file, which would echo the raw error/stack on stderr unredacted.
 function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
-  const loaded = loadConfigFile()
+  let loaded: ReturnType<typeof loadConfigFile>
+  try {
+    loaded = loadConfigFile()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    getLogger('server-index').error(
+      { message },
+      'invalid whiteboard config file; refusing to start',
+    )
+    process.exit(1)
+  }
   if (loaded === null) return undefined
 
   applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
