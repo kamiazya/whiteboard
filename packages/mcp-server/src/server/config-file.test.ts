@@ -72,12 +72,18 @@ describe('loadConfigFile', () => {
     expect(loaded?.config.port).toBe(1)
   })
 
-  it('walks up from a nested cwd to find a config in a parent directory', () => {
+  it('does NOT walk up to a parent directory: a config file above cwd is ignored', () => {
+    // An ancestor directory (e.g. the root of an untrusted cloned repo) must
+    // not be able to plant a config that a nested cwd picks up implicitly.
     writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 4004 }))
     const nested = join(dir, 'a', 'b', 'c')
     mkdirSync(nested, { recursive: true })
-    const loaded = loadConfigFile(nested)
-    expect(loaded?.config.port).toBe(4004)
+    const homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
+    try {
+      expect(loadConfigFile(nested, { homeDir })).toBeNull()
+    } finally {
+      rmSync(homeDir, { recursive: true, force: true })
+    }
   })
 
   it('falls back to ~/.whiteboard/config.yaml when nothing is found from cwd', () => {

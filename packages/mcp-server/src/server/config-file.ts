@@ -8,12 +8,17 @@
 // lilconfig does not. JS loaders (whiteboard.config.js/.cjs/.mjs) are
 // deliberately EXCLUDED from searchPlaces below, but that alone does not stop
 // code execution: cosmiconfig's `$import` key resolves through its `loaders`
-// map regardless of searchPlaces, and `searchStrategy: 'global'` additionally
-// probes an OS-level global config directory whose default search places
-// include `config.js`. SAFE_LOADERS below is what actually enforces "a
-// config file can never execute code" — omitting `.js`/`.cjs`/`.mjs`/`.ts`
-// from the loaders map makes cosmiconfig throw rather than execute whenever
-// any of those paths is reached.
+// map regardless of searchPlaces. SAFE_LOADERS below is what actually
+// enforces "a config file can never execute code" — omitting
+// `.js`/`.cjs`/`.mjs`/`.ts` from the loaders map makes cosmiconfig throw
+// rather than execute whenever any of those paths is reached.
+//
+// Trust boundary: `loadConfigFile` only ever consults the given `cwd`
+// itself (searchStrategy 'none', no ancestor walk-up, no OS-level global
+// config directory) and the explicit `~/.whiteboard/config.yaml` fallback.
+// An ancestor of cwd — e.g. the root of an untrusted cloned repo — must
+// never be able to plant a config that injects `token` or
+// `allowedWebOrigins` into a nested project's daemon.
 //
 // Server-mode env config (security/server-mode-env-config.ts) is out of
 // scope here: that surface is env-first by design for hosted operators.
@@ -25,8 +30,9 @@ import { getLogger, LOG_LEVELS, parseLogLevel, setLogLevel } from './log.js'
 
 const log = getLogger('config-file')
 
-// Order matters: cosmiconfig checks these, in this order, in each directory
-// while walking up from cwd. JSON/YAML/rc-without-extension formats only.
+// Order matters: cosmiconfig checks these, in this order, in the single
+// directory searched (cwd; no ancestor walk-up). JSON/YAML/rc-without-extension
+// formats only.
 export const CONFIG_FILE_SEARCH_PLACES = [
   '.whiteboardrc',
   '.whiteboardrc.json',
@@ -136,21 +142,24 @@ function validateLoadedConfig(rawConfig: unknown, filepath: string): WhiteboardC
   return parseKnownConfig(known, filepath)
 }
 
-// Loads the nearest whiteboard config file, walking up from `cwd`. Falls
-// back to `~/.whiteboard/config.yaml` when nothing is found. Returns null
-// when no file exists anywhere — daemon behavior must stay byte-identical
-// in that case.
+// Loads a whiteboard config file from `cwd` itself (no ancestor walk-up).
+// Falls back to `~/.whiteboard/config.yaml` when nothing is found there.
+// Returns null when no file exists anywhere — daemon behavior must stay
+// byte-identical in that case.
 export function loadConfigFile(
   cwd: string = process.cwd(),
   options: LoadConfigFileOptions = {},
 ): LoadedConfigFile | null {
-  // cosmiconfig v9 defaults to searchStrategy 'none' (single directory, no
-  // walk-up) unless a stopDir is given. Passing the filesystem root opts
-  // back into walking up from cwd, matching the spec's "walking up" ask.
+  // searchStrategy 'none' checks ONLY the given directory: no walk-up
+  // through ancestors and no probe of an OS-level global config directory.
+  // This is a deliberate trust-boundary choice, not cosmiconfig's default —
+  // an ancestor of cwd (e.g. the root of an untrusted cloned repo) must not
+  // be able to plant a config that injects `token` / `allowedWebOrigins`
+  // into a nested project's daemon. The only other place consulted is the
+  // explicit home-directory fallback below.
   const explorer = cosmiconfigSync('whiteboard', {
     searchPlaces: [...CONFIG_FILE_SEARCH_PLACES],
-    searchStrategy: 'global',
-    stopDir: '/',
+    searchStrategy: 'none',
     loaders: SAFE_LOADERS,
   })
 
@@ -162,8 +171,7 @@ export function loadConfigFile(
   const homeDir = options.homeDir ?? homedir()
   const homeConfigExplorer = cosmiconfigSync('whiteboard', {
     searchPlaces: [HOME_CONFIG_FILE_RELATIVE_PATH],
-    searchStrategy: 'global',
-    stopDir: homeDir,
+    searchStrategy: 'none',
     loaders: SAFE_LOADERS,
   })
   // No try/catch here, matching the cwd-side explorer above: cosmiconfig
