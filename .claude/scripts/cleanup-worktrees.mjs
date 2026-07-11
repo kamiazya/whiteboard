@@ -15,7 +15,11 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const repoRoot = resolve(__dirname, '../..')
+// Overridable so tests can point the script at a throwaway git repo instead
+// of the real one this file lives in.
+const repoRoot = process.env.CLEANUP_WORKTREES_REPO_ROOT
+  ? resolve(process.env.CLEANUP_WORKTREES_REPO_ROOT)
+  : resolve(__dirname, '../..')
 const worktreesDir = join(repoRoot, '.claude', 'worktrees')
 const dryRun = process.argv.includes('--dry-run')
 const storePrune = process.argv.includes('--store-prune')
@@ -72,55 +76,60 @@ for (const entry of entries) {
     continue
   }
 
-  // A tip that is an ancestor of origin/main means the lane has NO unique
-  // commits — either freshly created from the current tip, or created from
-  // an older main that has since advanced. This repo squash-merges, so
-  // ancestry is NEVER evidence of a fold: a genuinely merged lane's tip is
-  // not reachable from main. Such no-unique-work lanes may still host a
-  // RUNNING dev-loop that just hasn't committed yet, so keep them unless
+  // A tip that is an ancestor of origin/main (including tip === mainTip) has
+  // no unique commits ahead of main — that covers both a freshly-created
+  // lane with no work yet AND a "stale-base" lane branched from an older
+  // origin/main that has since advanced. Either way there may still be a
+  // RUNNING dev-loop that just hasn't committed yet, so keep it unless
   // --include-fresh explicitly opts in.
-  let isAncestor = false
+  let noUniqueCommits = false
   try {
-    git(['merge-base', '--is-ancestor', tip, 'origin/main'])
-    isAncestor = true
+    execFileSync('git', ['merge-base', '--is-ancestor', tip, 'origin/main'], { cwd: repoRoot })
+    noUniqueCommits = true
   } catch {
-    /* has unique commits */
+    noUniqueCommits = false
   }
-  if (isAncestor && !includeFresh) {
-    console.log(
-      `keep ${entry.name}: no unique commits (fresh/stale-base lane; use --include-fresh to remove)`,
-    )
+
+  if (noUniqueCommits && !includeFresh) {
+    console.log(`keep ${entry.name}: no unique commits ahead of origin/main (fresh/stale-base lane; use --include-fresh to remove)`)
     kept++
     continue
   }
 
-  let merged = isAncestor // only reachable with --include-fresh
-  if (!merged && branch) {
-    // The only trustworthy fold signal in a squash-merge flow: the branch was
-    // published (git push -u records upstream = its own name on origin) and
-    // the remote side has since been deleted (gh merge --delete-branch and
-    // our PR flow both do that on merge). A lane that was NEVER published
-    // also has no remote ref — deleting it would destroy
-    // committed-but-unpushed work, so it does not count.
-    let wasPublished = false
-    try {
-      const mergeRef = git(['config', '--get', `branch.${branch}.merge`])
-      // Also require the upstream REMOTE to be origin: in a fork workflow
-      // the upstream may live on another remote, whose refs we neither
-      // fetch nor prune here — treating its absence under origin/ as
-      // "deleted" would force-delete a live lane. (Creating a lane from
+  let merged = noUniqueCommits
+  if (!merged) {
+    // Squash-merged branches are not ancestors of main; fall back to
+    // "remote branch deleted" as the merged signal (gh merge --delete-branch
+    // and our PR flow both delete the remote ref on merge). But a lane that
+    // was NEVER published (new-worktree.mjs creates the branch locally; only
+    // `git push -u` sets an upstream) also has no remote ref — deleting it
+    // would destroy committed-but-unpushed work. Only treat a missing remote
+    // ref as "folded" when the branch had an upstream configured, i.e. it
+    // was pushed at some point and the remote side has since been deleted.
+    if (branch) {
+      // "Published" means the upstream points at the branch's own name on the
+      // remote (what `git push -u` records). Creating a lane from
       // origin/main auto-sets upstream to refs/heads/main via
-      // branch.autoSetupMerge, so a bare "has upstream" check is not enough.)
-      const remote = git(['config', '--get', `branch.${branch}.remote`])
-      wasPublished = mergeRef === `refs/heads/${branch}` && remote === 'origin'
-    } catch {
-      /* never published */
-    }
-    if (wasPublished) {
+      // branch.autoSetupMerge, so a bare "has upstream" check would misread
+      // every never-pushed lane as published.
+      let wasPublished = false
       try {
-        git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+        const mergeRef = git(['config', '--get', `branch.${branch}.merge`])
+        // Also require the upstream REMOTE to be origin: in a fork workflow
+        // the upstream may live on another remote, whose refs we neither
+        // fetch nor prune here — treating its absence under origin/ as
+        // "deleted" would force-delete a live lane.
+        const remote = git(['config', '--get', `branch.${branch}.remote`])
+        wasPublished = mergeRef === `refs/heads/${branch}` && remote === 'origin'
       } catch {
-        merged = true // was published, remote gone → folded
+        /* never published */
+      }
+      if (wasPublished) {
+        try {
+          git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+        } catch {
+          merged = true // was published, remote gone → folded
+        }
       }
     }
   }
