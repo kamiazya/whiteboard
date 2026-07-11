@@ -84,7 +84,7 @@ for (const entry of entries) {
   // --include-fresh explicitly opts in.
   let noUniqueCommits = false
   try {
-    execFileSync('git', ['merge-base', '--is-ancestor', tip, 'origin/main'], { cwd: repoRoot })
+    git(['merge-base', '--is-ancestor', tip, 'origin/main'])
     noUniqueCommits = true
   } catch {
     noUniqueCommits = false
