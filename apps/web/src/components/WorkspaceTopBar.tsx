@@ -1,4 +1,3 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import {
   problemDetailsErrorSchema,
   saveVersionResponseSchema,
@@ -36,6 +35,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { DirtyEventDetail } from '@/hooks/useDirtyState'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import type { ThemeMode } from '@/hooks/useThemeMode'
@@ -163,6 +163,7 @@ export default function WorkspaceTopBar({
   onNavigateToCanvas,
 }: Props) {
   const log = getAppLogger('workspace-top-bar')
+  const daemonFetch = useDaemonApi()
   const [names, setNames] = useState<WorkspaceNames>({ canvases: {}, pinned: [] })
   const [renamingCanvas, setRenamingCanvas] = useState(false)
   const [draft, setDraft] = useState('')
@@ -195,7 +196,7 @@ export default function WorkspaceTopBar({
       savingRef.current = true
       setSaving(true)
       try {
-        const res = await apiFetch(
+        const res = await daemonFetch(
           `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
           {
             method: 'POST',
@@ -220,7 +221,7 @@ export default function WorkspaceTopBar({
           try {
             const blob = await getThumbnailBlob()
             if (blob) {
-              await apiFetch(
+              await daemonFetch(
                 `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
                 {
                   method: 'PUT',
@@ -239,7 +240,7 @@ export default function WorkspaceTopBar({
         setSaving(false)
       }
     },
-    [workspaceId, slug, getThumbnailBlob, log],
+    [workspaceId, slug, getThumbnailBlob, log, daemonFetch],
   )
 
   // Cmd/Ctrl+S performs a quick save.
@@ -271,7 +272,7 @@ export default function WorkspaceTopBar({
     let active = true
     ;(async () => {
       try {
-        const res = await apiFetch(`/api/workspaces/${workspaceId}/names`)
+        const res = await daemonFetch(`/api/workspaces/${workspaceId}/names`)
         if (res.ok && active) setNames(workspaceNamesSchema.parse(await res.json()))
       } catch {
         /* best-effort */
@@ -280,12 +281,16 @@ export default function WorkspaceTopBar({
     return () => {
       active = false
     }
+    // daemonFetch is either the stable module-level apiFetch (no provider) or
+    // the daemon page's memoized createDaemonFetch(...) result; it must not
+    // retrigger this effect on its own to avoid refetching on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceId])
 
   const commitCanvasName = async () => {
     const name = draft.trim()
     try {
-      const res = await apiFetch(
+      const res = await daemonFetch(
         `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/name`,
         {
           method: 'PUT',
@@ -312,7 +317,7 @@ export default function WorkspaceTopBar({
   const togglePin = useCallback(
     async (targetSlug: string, pinned: boolean) => {
       try {
-        const res = await apiFetch(
+        const res = await daemonFetch(
           `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(targetSlug)}/pin`,
           {
             method: 'PUT',
@@ -325,7 +330,7 @@ export default function WorkspaceTopBar({
         /* Pin failures stay silent; the UX does not need explicit retry handling here. */
       }
     },
-    [workspaceId],
+    [workspaceId, daemonFetch],
   )
 
   // ---- canvas switcher data ----
@@ -423,7 +428,7 @@ export default function WorkspaceTopBar({
     setNewCanvasBusy(true)
     setNewCanvasError(null)
     try {
-      const res = await apiFetch(`/api/workspaces/${workspaceId}/canvases`, {
+      const res = await daemonFetch(`/api/workspaces/${workspaceId}/canvases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: target }),

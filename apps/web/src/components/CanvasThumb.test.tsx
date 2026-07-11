@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { CanvasThumb } from './CanvasThumb.js'
 
 afterEach(() => cleanup())
@@ -49,5 +50,16 @@ describe('CanvasThumb', () => {
     const wrapper = container.firstElementChild as HTMLElement
     expect(wrapper.className).toContain('h-9')
     expect(wrapper.className).toContain('w-14')
+  })
+
+  it('renders the fallback placeholder instead of an <img> when a DaemonApiContext provider is mounted (cross-origin)', () => {
+    const daemonFetch = vi.fn()
+    const { container } = render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <CanvasThumb workspaceId="ws-1" slug="a" />
+      </DaemonApiContext.Provider>,
+    )
+    expect(container.querySelector('img')).toBeNull()
+    expect(container.querySelector('svg')).not.toBeNull()
   })
 })

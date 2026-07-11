@@ -11,6 +11,7 @@ vi.mock('@/hooks/useDirtyState', () => ({ useDirtyState: () => ({ isDirty: false
 vi.mock('@kamiazya/whiteboard-mcp/api-client', () => ({ apiFetch: vi.fn() }))
 
 import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
 function mkNamesOk() {
@@ -343,6 +344,46 @@ describe('WorkspaceTopBar — new-canvas double submission (RED-first)', () => {
 
     resolvePost(new Response('{}', { status: 200 }))
     await waitFor(() => expect(postCount).toBe(1))
+  })
+})
+
+describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
+  it('with no DaemonApiContext provider mounted, loads names through the default apiFetch (fallback stays byte-identical)', async () => {
+    renderBar()
+
+    await waitFor(() => {
+      expect(vi.mocked(apiFetch)).toHaveBeenCalledWith(
+        expect.stringContaining('/api/workspaces/ws_1/names'),
+      )
+    })
+  })
+
+  it('with a DaemonApiContext provider mounted, loads names through the injected daemon fetch instead of apiFetch', async () => {
+    const daemonFetch = vi.fn(async (url: string | URL | Request) => {
+      if (String(url).includes('/names')) return mkNamesOk()
+      return new Response('{}', { status: 200 })
+    })
+
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <WorkspaceTopBar
+          workspaceId="ws_1"
+          slug="canvas-a"
+          canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          onEnterFullscreen={() => {}}
+          onNavigateBack={() => {}}
+          onNavigateToCanvas={() => {}}
+        />
+      </DaemonApiContext.Provider>,
+      { container: document.body },
+    )
+
+    await waitFor(() => {
+      expect(daemonFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/workspaces/ws_1/names'),
+      )
+    })
+    expect(apiFetch).not.toHaveBeenCalled()
   })
 })
 
