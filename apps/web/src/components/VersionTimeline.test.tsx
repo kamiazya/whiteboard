@@ -161,6 +161,46 @@ describe('VersionTimeline', () => {
     })
   })
 
+  it('refetches versions when refreshSignal changes (e.g. after a manual save)', async () => {
+    const { rerender } = render(
+      <VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />,
+    )
+    await screen.findByText('🤖 Assistant')
+
+    const fetchMock = vi.mocked(globalThis.fetch)
+    const versionsCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
+      String(reqInput).includes('/versions'),
+    ).length
+
+    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={1} />)
+
+    await waitFor(() => {
+      const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
+        String(reqInput).includes('/versions'),
+      ).length
+      expect(versionsCallCountAfter).toBeGreaterThan(versionsCallCountBefore)
+    })
+  })
+
+  it('does not refetch when re-rendered with an unchanged refreshSignal', async () => {
+    const { rerender } = render(
+      <VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />,
+    )
+    await screen.findByText('🤖 Assistant')
+
+    const fetchMock = vi.mocked(globalThis.fetch)
+    const versionsCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
+      String(reqInput).includes('/versions'),
+    ).length
+
+    rerender(<VersionTimeline workspaceId="sess_1" slug="canvas-a" refreshSignal={0} />)
+
+    const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
+      String(reqInput).includes('/versions'),
+    ).length
+    expect(versionsCallCountAfter).toBe(versionsCallCountBefore)
+  })
+
   it('clamps relative timestamps to "0s ago" when the server clock is ahead', async () => {
     vi.unstubAllGlobals()
     const future = new Date(Date.now() + 30_000).toISOString()
@@ -798,11 +838,21 @@ describe('VersionTimeline via DaemonApiContext', () => {
     })
   })
 
-  it('does not render the thumbnail <img> when a daemon provider is active', async () => {
+  it('fetches the thumbnail through the authorized daemon fetch and renders it via an objectURL, when a daemon provider is active', async () => {
+    const createObjectURL = vi.fn(() => 'blob:mock-1')
+    const revokeObjectURL = vi.fn()
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    URL.createObjectURL = createObjectURL
+    URL.revokeObjectURL = revokeObjectURL
+
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions/v-thumb/thumbnail')) {
+        return Promise.resolve(new Response(new Blob(['png']), { status: 200 }))
+      }
       if (url.includes('/versions')) return Promise.resolve(mkThumbnailVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -816,7 +866,40 @@ describe('VersionTimeline via DaemonApiContext', () => {
     )
 
     await screen.findByText('🤖 Assistant')
+    await waitFor(() => expect(document.querySelector('img')).not.toBeNull())
+    expect(document.querySelector('img')?.getAttribute('src')).toBe('blob:mock-1')
+    expect(
+      underlyingFetch.mock.calls.some(([reqInput]) =>
+        String(reqInput).includes('/versions/v-thumb/thumbnail'),
+      ),
+    ).toBe(true)
+
+    URL.createObjectURL = originalCreateObjectURL
+    URL.revokeObjectURL = originalRevokeObjectURL
+  })
+
+  it('a version with hasThumbnail=false renders the placeholder without fetching a thumbnail, in daemon mode', async () => {
+    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
+      return Promise.resolve(new Response('{}', { status: 200 }))
+    })
+    vi.stubGlobal('fetch', underlyingFetch)
+    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
+
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <VersionTimeline workspaceId="sess_1" slug="canvas-a" />
+      </DaemonApiContext.Provider>,
+    )
+
+    await screen.findByText('🤖 Assistant')
     expect(document.querySelector('img')).toBeNull()
+    expect(
+      underlyingFetch.mock.calls.some(([reqInput]) => String(reqInput).includes('/thumbnail')),
+    ).toBe(false)
   })
 
   it('renders the thumbnail <img> for the same-origin fallback (no provider)', async () => {

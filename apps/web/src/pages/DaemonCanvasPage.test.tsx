@@ -118,7 +118,165 @@ describe('DaemonCanvasPage', () => {
     })
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
     expect(screen.getByText('Version history')).toBeTruthy()
-    expect(screen.getByText('Workspaces')).toBeTruthy()
+    // Workspaces is now a real switcher (not a static teaser) once
+    // capabilities.workspaces is true and the daemon has workspaces to list.
+    expect(screen.getByLabelText('Workspaces')).toBeTruthy()
+  })
+
+  describe('workspace switcher', () => {
+    it('lists workspaces from GET /api/workspaces even though the page supplies an initial workspaceId', async () => {
+      mockListWorkspaces.mockResolvedValue({
+        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            workspaceId="w1"
+            slug="main"
+            createBackend={makeCreateBackend()}
+          />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      expect(Array.from(workspaceSelect.options).map((o) => o.value)).toEqual(['w1', 'w2'])
+    })
+
+    it('selecting another workspace re-resolves the canvas and re-keys the backend', async () => {
+      mockListWorkspaces.mockResolvedValue({
+        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+      })
+      mockListCanvases.mockImplementation((_fetch, _base, workspaceId) => {
+        if (workspaceId === 'w2') {
+          return Promise.resolve({ canvases: [{ slug: 'w2-main', updatedAt: '2026-02-01' }] })
+        }
+        return Promise.resolve({
+          canvases: [
+            { slug: 'main', updatedAt: '2026-01-01' },
+            { slug: 'second', updatedAt: '2026-01-02' },
+          ],
+        })
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      expect(createdBackends).toHaveLength(1)
+      expect(createdBackends[0]?.workspaceId).toBe('w1')
+
+      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      await act(async () => {
+        workspaceSelect.value = 'w2'
+        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+
+      await waitFor(() => {
+        const select = screen.getByLabelText('Canvases') as HTMLSelectElement
+        expect(Array.from(select.options).map((o) => o.value)).toEqual(['w2-main'])
+      })
+      expect(createdBackends).toHaveLength(2)
+      expect(createdBackends[1]?.workspaceId).toBe('w2')
+      expect(createdBackends[0]?.disconnectCount).toBe(1)
+    })
+
+    it('shows the empty-state create form when the switched-to workspace has zero canvases', async () => {
+      mockListWorkspaces.mockResolvedValue({
+        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+      })
+      mockListCanvases.mockImplementation((_fetch, _base, workspaceId) => {
+        if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
+        return Promise.resolve({
+          canvases: [
+            { slug: 'main', updatedAt: '2026-01-01' },
+            { slug: 'second', updatedAt: '2026-01-02' },
+          ],
+        })
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      await act(async () => {
+        workspaceSelect.value = 'w2'
+        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+
+      await waitFor(() =>
+        expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      )
+    })
+
+    it('keeps the editor mounted and shows an inline error when switching workspace fails', async () => {
+      mockListWorkspaces.mockResolvedValue({
+        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+      })
+      mockListCanvases.mockResolvedValueOnce({
+        canvases: [
+          { slug: 'main', updatedAt: '2026-01-01' },
+          { slug: 'second', updatedAt: '2026-01-02' },
+        ],
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      expect(createdBackends).toHaveLength(1)
+
+      mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
+
+      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      await act(async () => {
+        workspaceSelect.value = 'w2'
+        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert').textContent).toMatch(/daemon unreachable/i),
+      )
+      // A transient switch failure must not tear down the still-valid editor session.
+      expect(screen.getByTestId('excalidraw-container')).toBeTruthy()
+      expect(createdBackends).toHaveLength(1)
+      expect(createdBackends[0]?.disconnectCount).toBe(0)
+    })
+
+    it('shows the static disabled teaser instead of the switcher when capabilities.workspaces is false', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: false,
+              versions: true,
+              branches: true,
+              merge: true,
+            }}
+          />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByLabelText('Workspaces')).toBeNull()
+      const teaser = screen.getByText('Workspaces')
+      expect(teaser.getAttribute('aria-disabled')).toBe('true')
+    })
   })
 
   it('disconnects the old backend before the new one is observed on canvas switch', async () => {
@@ -310,6 +468,188 @@ describe('DaemonCanvasPage', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     expect(screen.getByRole('alert').textContent).toMatch(/slug already exists/i)
+  })
+
+  describe('manual save version', () => {
+    it('POSTs a version via the daemon fetch and shows an inline success message', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  version: {
+                    id: 'v-manual',
+                    slug: 'main',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    elementCount: 3,
+                    auto: false,
+                    hasThumbnail: false,
+                    branchName: 'main',
+                  },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => {
+        expect(
+          fetchMock.mock.calls.some(
+            ([reqInput, init]) =>
+              String(reqInput).startsWith(DAEMON_BASE_URL) &&
+              String(reqInput).includes('/workspaces/w1/canvases/main/versions') &&
+              init?.method === 'POST',
+          ),
+        ).toBe(true)
+      })
+      await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('shows an inline error when the save response does not match saveVersionResponseSchema', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            // Malformed 200: missing the `version` envelope the schema requires.
+            return Promise.resolve(
+              new Response(JSON.stringify({ id: 'v-manual' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('does not render the save button when capabilities.versions is false', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: false,
+              branches: true,
+              merge: true,
+            }}
+          />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
+    })
+
+    it('shows an inline error when the save request fails', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            return Promise.resolve(new Response('nope', { status: 500 }))
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('disables the save button while a save is in flight and when no canvas is selected', async () => {
+      mockListCanvases.mockResolvedValue({ canvases: [] })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+
+      await waitFor(() =>
+        expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+      )
+      expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
+    })
   })
 
   describe('version history panel', () => {

@@ -187,11 +187,15 @@ describe('DaemonBackend', () => {
       backend.disconnect()
     })
 
-    it('doubles delay on each consecutive close: 500, 1000, 2000, 4000, 8000, caps at 8000', async () => {
+    it('doubles delay on each consecutive close up to the never-opened failure cap: 500, 1000', async () => {
+      // Only 2 delays are assertable without opening: the 3rd consecutive
+      // close of a socket that never opened trips
+      // MAX_CONSECUTIVE_IMMEDIATE_FAILURES (see daemon-backend.reconnect.test.ts),
+      // which stops reconnecting instead of scheduling a 3rd backoff delay.
       const backend = makeBackend()
       backend.connect(makeHandlers())
 
-      const expectedDelays = [500, 1000, 2000, 4000, 8000, 8000]
+      const expectedDelays = [500, 1000]
       for (const delay of expectedDelays) {
         const countBefore = FakeWebSocket.instances.length
         FakeWebSocket.instances[countBefore - 1].onclose?.(new Event('close') as CloseEvent)
@@ -199,6 +203,27 @@ describe('DaemonBackend', () => {
         expect(FakeWebSocket.instances).toHaveLength(countBefore) // not yet
         await vi.advanceTimersByTimeAsync(1)
         expect(FakeWebSocket.instances).toHaveLength(countBefore + 1) // reconnected
+      }
+      backend.disconnect()
+    })
+
+    it('continues doubling delay (2000, 4000, 8000, caps at 8000) when sockets open before dropping', async () => {
+      // onopen resets both `attempt` and the never-opened failure counter, so
+      // a connection that opens successfully every time before dropping keeps
+      // reconnecting at the base 500ms delay each cycle rather than tripping
+      // the auth-failure cap, regardless of how many cycles occur.
+      const backend = makeBackend()
+      backend.connect(makeHandlers())
+
+      for (let cycle = 0; cycle < 4; cycle++) {
+        const countBefore = FakeWebSocket.instances.length
+        const socket = FakeWebSocket.instances[countBefore - 1]
+        socket.onopen?.(new Event('open'))
+        socket.onclose?.(new Event('close') as CloseEvent)
+        await vi.advanceTimersByTimeAsync(499)
+        expect(FakeWebSocket.instances).toHaveLength(countBefore)
+        await vi.advanceTimersByTimeAsync(1)
+        expect(FakeWebSocket.instances).toHaveLength(countBefore + 1)
       }
       backend.disconnect()
     })

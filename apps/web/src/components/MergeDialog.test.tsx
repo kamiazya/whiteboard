@@ -465,11 +465,27 @@ describe('MergeDialog', () => {
     )
   })
 
-  it('skips the versions fetch entirely and suppresses thumbnails in cross-origin daemon mode', async () => {
-    // Thumbnails are suppressed cross-origin (an <img> cannot carry the bearer
-    // token), so fetching the versions list only to discard it would be a
-    // wasted network round-trip — the dialog must not issue it at all.
-    const daemonFetch = vi.fn()
+  it('fetches versions and renders thumbnails through the authorized daemon fetch in cross-origin daemon mode', async () => {
+    // Thumbnails are fetchable in daemon mode via VersionThumbnail's
+    // authorized fetch + objectURL — the dialog's own versions fetch (used to
+    // resolve which version id has the latest thumbnail per branch) must run
+    // through the same daemon-provided fetch, not the global one.
+    const originalCreateObjectURL = URL.createObjectURL
+    const originalRevokeObjectURL = URL.revokeObjectURL
+    const createObjectURL = vi.fn(() => 'blob:mock-1')
+    URL.createObjectURL = createObjectURL
+    URL.revokeObjectURL = vi.fn()
+
+    const versions: VersionEntry[] = [
+      versionEntry({ id: 'feature-v1', branchName: 'feature', createdAt: '2026-04-23T05:00:00Z' }),
+    ]
+    const daemonFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/thumbnail')) {
+        return Promise.resolve(new Response(new Blob(['png']), { status: 200 }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ versions }), { status: 200 }))
+    })
     const globalFetch = vi.mocked(fetch)
     const runMerge = vi
       .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
@@ -488,9 +504,15 @@ describe('MergeDialog', () => {
       </DaemonApiContext.Provider>,
     )
     await screen.findByText(/5 elements/)
-    expect(daemonFetch).not.toHaveBeenCalled()
+    expect(
+      daemonFetch.mock.calls.some(([reqInput]) => String(reqInput).includes('/versions')),
+    ).toBe(true)
     expect(globalFetch).not.toHaveBeenCalled()
-    const sourceCard = screen.getByTestId('merge-branch-card-source')
-    expect(sourceCard.querySelector('img')).toBeNull()
+    const sourceCard = await screen.findByTestId('merge-branch-card-source')
+    await waitFor(() => expect(sourceCard.querySelector('img')).not.toBeNull())
+    expect(sourceCard.querySelector('img')?.getAttribute('src')).toBe('blob:mock-1')
+
+    URL.createObjectURL = originalCreateObjectURL
+    URL.revokeObjectURL = originalRevokeObjectURL
   })
 })

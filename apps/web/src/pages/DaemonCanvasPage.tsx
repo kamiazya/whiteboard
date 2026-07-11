@@ -1,5 +1,6 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
+import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { useEffect, useMemo, useState } from 'react'
@@ -9,9 +10,12 @@ import { MergeToast } from '../components/MergeToast.js'
 import VersionTimeline from '../components/VersionTimeline.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
+import { getAppLogger } from '../lib/app-logger.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
+
+const log = getAppLogger('daemon-canvas-page')
 
 export interface DaemonCanvasPageProps {
   daemonBaseUrl: string
@@ -66,6 +70,15 @@ export function DaemonCanvasPage({
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
   const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
+  // Bumped on any version_created broadcast (covers this button's own save,
+  // MCP tool saves, and other peers) so an open VersionTimeline updates
+  // without waiting for its 15s poll.
+  const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  const [savingVersion, setSavingVersion] = useState(false)
+  const [saveVersionMessage, setSaveVersionMessage] = useState<{
+    kind: 'success' | 'error'
+    text: string
+  } | null>(null)
 
   // Backend identity is keyed on (workspaceId, slug, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
@@ -88,7 +101,42 @@ export function DaemonCanvasPage({
   const { setExcalidrawAPI, onChange, clearLocalUndo } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
+    onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
   })
+
+  const saveVersion = async (): Promise<void> => {
+    if (
+      !capabilities.versions ||
+      controller.workspaceId === null ||
+      controller.slug === null ||
+      savingVersion
+    )
+      return
+    setSavingVersion(true)
+    setSaveVersionMessage(null)
+    try {
+      const res = await daemonFetch(
+        `${daemonBaseUrl}/api/workspaces/${controller.workspaceId}/canvases/${encodeURIComponent(controller.slug)}/versions`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      )
+      if (!res.ok) throw new Error(`save failed: ${res.status}`)
+      const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+      if (!parsed.success) {
+        log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
+        throw new Error('save response did not match schema')
+      }
+      setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
+      setVersionRefreshSignal((n) => n + 1)
+    } catch {
+      setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
+    } finally {
+      setSavingVersion(false)
+    }
+  }
 
   if (controller.loading) {
     return (
@@ -119,6 +167,11 @@ export function DaemonCanvasPage({
       <main className="relative flex h-dvh w-full flex-col">
         <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
           <h1 className="sr-only">Whiteboard (daemon)</h1>
+          {controller.switchError && (
+            <div role="alert" aria-live="assertive" className="flex items-center gap-2">
+              <span className="text-xs text-destructive">{controller.switchError}</span>
+            </div>
+          )}
           {authError && (
             <div role="alert" aria-live="assertive" className="flex items-center gap-2">
               <span className="text-xs text-destructive">
@@ -165,7 +218,47 @@ export function DaemonCanvasPage({
               // feature needs a daemon connection it already has.
               <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
             )}
-            <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
+            {capabilities.versions &&
+              controller.workspaceId !== null &&
+              controller.slug !== null && (
+                <button
+                  type="button"
+                  onClick={() => void saveVersion()}
+                  disabled={savingVersion}
+                  className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingVersion ? 'Saving…' : 'Save version'}
+                </button>
+              )}
+            {saveVersionMessage && (
+              <span
+                role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
+                aria-live="polite"
+                className={
+                  saveVersionMessage.kind === 'error'
+                    ? 'text-xs text-destructive'
+                    : 'text-xs text-muted-foreground'
+                }
+              >
+                {saveVersionMessage.text}
+              </span>
+            )}
+            {capabilities.workspaces && controller.workspaces.length > 0 ? (
+              <select
+                aria-label="Workspaces"
+                value={controller.workspaceId ?? ''}
+                onChange={(event) => void controller.switchWorkspace(event.target.value)}
+                className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
+              >
+                {controller.workspaces.map((w) => (
+                  <option key={w.workspaceId} value={w.workspaceId}>
+                    {w.workspaceId}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
+            )}
             {capabilities.branches &&
             controller.workspaceId !== null &&
             controller.slug !== null ? (
@@ -206,6 +299,7 @@ export function DaemonCanvasPage({
                 workspaceId={controller.workspaceId}
                 slug={controller.slug}
                 onRestored={clearLocalUndo}
+                refreshSignal={versionRefreshSignal}
               />
             </div>
           </div>

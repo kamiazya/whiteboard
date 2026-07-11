@@ -17,10 +17,11 @@ import {
 } from '@/components/ui/alert-dialog'
 import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
+import { VersionThumbnail } from './VersionThumbnail.js'
 
 const log = getAppLogger('VersionTimeline')
 
@@ -29,6 +30,11 @@ interface Props {
   slug: string
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
+  // Bumped by the caller (e.g. after a manual "Save version" action, or a WS
+  // version_created broadcast) to force a refetch without waiting for the
+  // 15s poll. Only a value CHANGE triggers a refetch, matching
+  // HeaderBranchChip's refreshSignal contract.
+  refreshSignal?: number
 }
 
 // Render an ISO string as a short relative timestamp.
@@ -63,9 +69,8 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 
 // Branch operations and save controls live in the header.
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
-export default function VersionTimeline({ workspaceId, slug, onRestored }: Props) {
+export default function VersionTimeline({ workspaceId, slug, onRestored, refreshSignal }: Props) {
   const fetchFn = useDaemonApi()
-  const hasDaemonApi = useHasDaemonApi()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
@@ -147,6 +152,17 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
     }, 15_000)
     return () => clearInterval(h)
   }, [refresh, refetchBranches])
+
+  // Only a CHANGE in refreshSignal triggers a refetch — the mount-triggered
+  // refresh() effect above already covers the initial load, and this ref
+  // guard keeps an unrelated re-render (e.g. a parent state update) from
+  // refetching when the signal value itself hasn't moved.
+  const prevRefreshSignalRef = useRef(refreshSignal)
+  useEffect(() => {
+    if (prevRefreshSignalRef.current === refreshSignal) return
+    prevRefreshSignalRef.current = refreshSignal
+    refresh()
+  }, [refreshSignal, refresh])
 
   const confirmRestore = useCallback(async () => {
     // Guard against a double-click or repeated keyboard activation firing a
@@ -275,16 +291,13 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
                       setPendingRestore(v)
                     }}
                   >
-                    {/* A plain <img src> cannot carry the daemon origin or bearer
-                        token, so thumbnails only render for the same-origin
-                        mcp-server app (no DaemonApiContext provider mounted). */}
-                    {v.hasThumbnail && !hasDaemonApi && (
+                    {v.hasThumbnail && (
                       <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
-                        <img
-                          src={`/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`}
-                          alt=""
-                          className="w-full h-20 object-contain"
-                          loading="lazy"
+                        <VersionThumbnail
+                          workspaceId={workspaceId}
+                          slug={slug}
+                          versionId={v.id}
+                          hasThumbnail={v.hasThumbnail}
                         />
                       </div>
                     )}
