@@ -163,6 +163,53 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByRole('alert')).toBeTruthy()
   })
 
+  it('shows an alert when the initial workspace list fails to load', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(jsonResponse({ message: 'boom' }, 500))),
+    )
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Failed to load workspaces.')
+  })
+
+  it('does not apply a slower, stale workspace response after switching to a newer workspace', async () => {
+    let resolveA: ((res: Response) => void) | undefined
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(
+          jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] }),
+        )
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        return new Promise<Response>((resolve) => {
+          resolveA = resolve
+        })
+      }
+      if (url.endsWith('/api/workspaces/ws-b/canvases')) {
+        return Promise.resolve(
+          jsonResponse({ canvases: [{ slug: 'beta', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+
+    await waitFor(() => expect(screen.getByLabelText('Workspace')).toBeTruthy())
+    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
+    expect(await screen.findByText('beta')).toBeTruthy()
+
+    resolveA?.(jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }))
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByText('alpha')).toBeNull()
+    expect(screen.getByText('beta')).toBeTruthy()
+  })
+
   it('calls onOpenCanvas with the card identity on click', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -196,6 +243,33 @@ describe('DaemonIndexPage', () => {
 
     await waitFor(() => expect(onOpenCanvas).toHaveBeenCalledWith('ws-a', 'fresh'))
     expect(created).toEqual([['ws-a', 'fresh']])
+  })
+
+  it('shows an alert when create canvas fails', async () => {
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ message: 'boom' }, 500))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases')) {
+        return Promise.resolve(jsonResponse({ canvases: [] }))
+      }
+      return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    await waitFor(() => expect(screen.getByLabelText('New canvas name')).toBeTruthy())
+
+    fireEvent.change(screen.getByLabelText('New canvas name'), { target: { value: 'fresh' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create canvas' }))
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Failed to create canvas.')
+    expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 
   it('mounts StorageReportCard when the Storage tab is selected', async () => {

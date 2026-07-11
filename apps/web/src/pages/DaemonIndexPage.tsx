@@ -1,4 +1,5 @@
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { z } from 'zod'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
@@ -41,7 +42,7 @@ async function fetchWorkspaceNames(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-): Promise<{ canvases: Record<string, string>; pinned: string[] } | null> {
+): Promise<z.infer<typeof workspaceNamesSchema> | null> {
   try {
     const res = await fetchFn(
       `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/names`,
@@ -115,13 +116,14 @@ export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIn
   }, [daemonBaseUrl])
 
   const loadWorkspace = useCallback(
-    async (workspaceId: string) => {
+    async (workspaceId: string, isStale: () => boolean) => {
       setLoadError(null)
       try {
         const [canvasesRes, names] = await Promise.all([
           listCanvases(daemonFetch, daemonBaseUrl, workspaceId),
           fetchWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId),
         ])
+        if (isStale()) return
         const pinIndex = new Map((names?.pinned ?? []).map((slug, i) => [slug, i]))
         const nextRows: CanvasRow[] = canvasesRes.canvases.map((c) => {
           const pinOrder = pinIndex.get(c.slug)
@@ -135,6 +137,7 @@ export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIn
         })
         setRows(sortRows(nextRows))
       } catch {
+        if (isStale()) return
         setRows([])
         setLoadError('Failed to load canvases for this workspace.')
       }
@@ -143,7 +146,12 @@ export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIn
   )
 
   useEffect(() => {
-    if (selectedWorkspace) void loadWorkspace(selectedWorkspace)
+    if (!selectedWorkspace) return
+    let cancelled = false
+    void loadWorkspace(selectedWorkspace, () => cancelled)
+    return () => {
+      cancelled = true
+    }
   }, [selectedWorkspace, loadWorkspace])
 
   const visible = useMemo(() => filterRows(rows, search), [rows, search])
