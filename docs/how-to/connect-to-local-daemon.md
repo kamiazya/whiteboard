@@ -48,13 +48,31 @@ has actually proven the browser blocked the request.
 ## How pairing works
 
 Detecting a daemon is not the same as pairing with it. Actually connecting
-the web app's canvas editor to a specific workspace requires a pairing link
-issued from the **daemon or MCP side** — for example, an MCP tool call or the
-daemon CLI generates a URL carrying a `#wb=` fragment with a short-lived
-bootstrap token (see [ADR-0002](../contributing/adr/0002-browser-to-daemon-transport.md)
-for the transport design). The web app has no way to mint that token itself;
-it can only detect that *a* daemon is reachable and prompt you toward the
-pairing flow that produced the link.
+the web app's canvas editor to a specific workspace requires a pairing link,
+which the web app cannot mint itself — it can only detect that *a* daemon is
+reachable and prompt you toward the pairing flow below.
+
+1. Ask your AI agent (Claude, Codex, or any MCP client connected to the
+   whiteboard daemon) to call the `create_pairing_link` MCP tool. Optionally
+   pass `workspaceId` / `slug` to target a specific canvas, or `webOrigin` to
+   point at a non-default web app deployment.
+2. The tool returns a URL carrying a `#wb=` fragment with a short-lived
+   bootstrap token (see [ADR-0002](../contributing/adr/0002-browser-to-daemon-transport.md)
+   for the transport design). Open that URL in your browser.
+3. On a hosted `https:` origin, the browser's Local Network Access permission
+   prompt appears — grant it to let the page reach your loopback daemon.
+4. The web app consumes the fragment and connects to the paired workspace.
+
+**Treat the pairing link like a credential.** It embeds the daemon's
+bootstrap token, so anyone who has the link can pair with your daemon until
+the token is rotated. Share it only with the intended recipient, and prefer
+loopback (`http://127.0.0.1:...`) origins for purely local use.
+
+For hosted (non-loopback) `webOrigin` values, the daemon must also be
+configured to accept that origin via `WHITEBOARD_ALLOWED_WEB_ORIGINS` —
+`create_pairing_link` cannot confirm that allowlist coverage on its own, so
+verify it yourself before sharing a hosted pairing link. Loopback origins
+need no allowlist entry.
 
 ## Copy-first import
 
