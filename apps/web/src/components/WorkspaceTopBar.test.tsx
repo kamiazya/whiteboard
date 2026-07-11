@@ -762,4 +762,98 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(apiFetch).not.toHaveBeenCalled()
   })
+
+  it('commits a local-mode rename through onRenameCanvas and closes the rename input', async () => {
+    const onRenameCanvas = vi.fn().mockResolvedValue(undefined)
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={onRenameCanvas}
+        onCreateCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    const canvasActions = screen.getByLabelText('Canvas actions')
+    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    const renameItem = await screen.findByText('Rename canvas')
+    fireEvent.pointerUp(renameItem)
+    // Query and edit synchronously in the same tick as the pointerUp that
+    // mounts this input (no intervening `await`) — Radix asynchronously
+    // returns focus to the dropdown trigger after the menu closes, which
+    // races with (and can steal) this input's `autoFocus`. Editing before
+    // yielding to that gap keeps the interaction deterministic.
+    const input = screen.getByPlaceholderText('canvas-a')
+    fireEvent.change(input, { target: { value: 'renamed canvas' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(onRenameCanvas).toHaveBeenCalledWith('renamed canvas'))
+    await waitFor(() => expect(screen.queryByPlaceholderText('canvas-a')).toBeNull())
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a rejected onRenameCanvas as a visible error and keeps the rename input open', async () => {
+    const onRenameCanvas = vi.fn().mockRejectedValue(new Error('boom'))
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={onRenameCanvas}
+        onCreateCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    const canvasActions = screen.getByLabelText('Canvas actions')
+    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    const renameItem = await screen.findByText('Rename canvas')
+    fireEvent.pointerUp(renameItem)
+    // See the comment in the success-path test above: edit synchronously,
+    // in the same tick, to avoid Radix's async focus-return-to-trigger
+    // blurring the input first.
+    const input = screen.getByPlaceholderText('canvas-a')
+    fireEvent.change(input, { target: { value: 'renamed canvas' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    await waitFor(() => expect(onRenameCanvas).toHaveBeenCalledWith('renamed canvas'))
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed to rename canvas.')
+    // The input stays mounted so the user can retry without retyping.
+    expect(screen.queryByPlaceholderText('canvas-a')).not.toBeNull()
+  })
+
+  it('surfaces a rejected onCreateCanvas as a visible error since local mode has no slug dialog', async () => {
+    const onCreateCanvas = vi.fn().mockRejectedValue(new Error('boom'))
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={onCreateCanvas}
+      />,
+      { container: document.body },
+    )
+
+    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    const item = await screen.findByTestId('new-canvas-menu-item')
+    fireEvent.pointerUp(item)
+
+    await waitFor(() => expect(onCreateCanvas).toHaveBeenCalledTimes(1))
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed to create canvas.')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
 })

@@ -216,6 +216,10 @@ export default function WorkspaceTopBar({
   const [names, setNames] = useState<WorkspaceNames>({ canvases: {}, pinned: [] })
   const [renamingCanvas, setRenamingCanvas] = useState(false)
   const [draft, setDraft] = useState('')
+  // Local-mode-only: surfaces a rejected onRenameCanvas to the user. The
+  // daemon-mode branch has no equivalent because a failed PUT just leaves
+  // the previous name in `names` with no separate error channel.
+  const [renameError, setRenameError] = useState<string | null>(null)
   const [versionOpen, setVersionOpen] = useState(false)
   const [canvasSearch, setCanvasSearch] = useState('')
   const versionPanelRef = useRef<HTMLDivElement | null>(null)
@@ -367,11 +371,15 @@ export default function WorkspaceTopBar({
     if (isLocalMode) {
       try {
         await onRenameCanvas?.(name)
-      } finally {
         if (mountedRef.current) {
           setRenamingCanvas(false)
           setDraft('')
+          setRenameError(null)
         }
+      } catch {
+        // Keep the input open on failure (mirrors openNewCanvas) so the
+        // user can retry without retyping the name.
+        if (mountedRef.current) setRenameError('Failed to rename canvas.')
       }
       return
     }
@@ -396,6 +404,7 @@ export default function WorkspaceTopBar({
   const cancelRename = () => {
     setRenamingCanvas(false)
     setDraft('')
+    setRenameError(null)
   }
 
   // Toggle pin state and replace local state with the server response.
@@ -502,6 +511,7 @@ export default function WorkspaceTopBar({
     if (isLocalMode) {
       if (newCanvasBusy) return
       setNewCanvasBusy(true)
+      setNewCanvasError(null)
       void (async () => {
         try {
           await onCreateCanvas?.()
@@ -734,18 +744,34 @@ export default function WorkspaceTopBar({
 
         {/* Inline canvas rename input. */}
         {renamingCanvas && (
-          <Input
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitCanvasName}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') commitCanvasName()
-              else if (e.key === 'Escape') cancelRename()
-            }}
-            placeholder={slug}
-            className="h-7 max-w-[220px] text-sm"
-          />
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <Input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commitCanvasName}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitCanvasName()
+                else if (e.key === 'Escape') cancelRename()
+              }}
+              placeholder={slug}
+              className="h-7 max-w-[220px] text-sm"
+            />
+            {renameError && (
+              <span className="truncate text-xs text-destructive" role="alert">
+                {renameError}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Local-mode-only: onCreateCanvas has no dialog to surface its error
+            in (local mode skips the daemon slug dialog entirely), so show it
+            here instead. */}
+        {isLocalMode && newCanvasError && (
+          <span className="truncate text-xs text-destructive" role="alert">
+            {newCanvasError}
+          </span>
         )}
 
         {/* Branch chip with switch, create, rename, delete, and merge actions.
