@@ -104,11 +104,14 @@ async function importOneCanvasUnsafe(
   for (let attempt = 0; attempt < MAX_CREATE_ATTEMPTS; attempt++) {
     const candidateSlug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`
     const body = createCanvasRequestSchema.parse({ slug: candidateSlug })
-    const res = await fetch(`${daemonBaseUrl}/api/workspaces/${workspaceId}/canvases`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
+    const res = await fetch(
+      `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    )
 
     if (res.status === 409) continue
 
@@ -135,7 +138,7 @@ async function importOneCanvasUnsafe(
   const mergedSnapshot = mergeToSnapshot(loroLoad.snapshot, loroLoad.deltas ?? [])
 
   const updateRes = await fetch(
-    `${daemonBaseUrl}/api/canvas/${workspaceId}/${createdSlug}/update`,
+    `${daemonBaseUrl}/api/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(createdSlug)}/update`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },

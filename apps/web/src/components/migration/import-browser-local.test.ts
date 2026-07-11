@@ -83,10 +83,13 @@ describe('importOneCanvas', () => {
       .mockResolvedValueOnce(jsonResponse({ slug: 'my-canvas' }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
 
+    // workspaceId deliberately needs percent-encoding: the shared api-contracts
+    // type it as an unconstrained string, so URL construction must encode it
+    // exactly like daemon-api-client.ts does for the same routes.
     const result = await importOneCanvas({
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
-      workspaceId: 'ws1',
+      workspaceId: 'ws 1#x',
       canvasName: 'My Canvas',
       loroLoad: loroOkResult(),
     })
@@ -94,12 +97,13 @@ describe('importOneCanvas', () => {
     expect(result).toEqual({ kind: 'ok', slug: 'my-canvas' })
     expect(fetchMock).toHaveBeenCalledTimes(2)
 
+    const encodedWs = encodeURIComponent('ws 1#x')
     const [createUrl, createInit] = fetchMock.mock.calls[0] as [string, RequestInit]
-    expect(createUrl).toBe('http://127.0.0.1:3099/api/workspaces/ws1/canvases')
+    expect(createUrl).toBe(`http://127.0.0.1:3099/api/workspaces/${encodedWs}/canvases`)
     expect(JSON.parse(createInit.body as string)).toEqual({ slug: 'my-canvas' })
 
     const [updateUrl, updateInit] = fetchMock.mock.calls[1] as [string, RequestInit]
-    expect(updateUrl).toBe('http://127.0.0.1:3099/api/canvas/ws1/my-canvas/update')
+    expect(updateUrl).toBe(`http://127.0.0.1:3099/api/canvas/${encodedWs}/my-canvas/update`)
     expect((updateInit.headers as Record<string, string>)['Content-Type']).toBe(
       'application/octet-stream',
     )
