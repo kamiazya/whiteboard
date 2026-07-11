@@ -10,7 +10,6 @@ import {
   resolveHostedProviderStateFromRaw,
 } from './lib/provider.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
-import { BrowserLocalCanvasPage } from './pages/BrowserLocalCanvasPage.js'
 
 // Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
 // of the entry chunk — sessions arriving via a #wb= pairing fragment AND
@@ -19,6 +18,18 @@ import { BrowserLocalCanvasPage } from './pages/BrowserLocalCanvasPage.js'
 // bundle-size budget.
 const DaemonCanvasPage = lazy(() =>
   import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
+)
+
+// Lazy for the same reason: BrowserLocalCanvasPage statically imports
+// Excalidraw + useCanvasSync (which imports loro-crdt), and it is the
+// default render path (no daemon, no pairing fragment) — so it was the one
+// making Excalidraw/loro-crdt part of every session's initial paint even
+// though DaemonCanvasPage above was already lazy. Module-scope side effects
+// that must run before React lifecycle begins (browserLocalStore,
+// userSettingsStore, provider-state resolution just below) stay at THIS
+// file's module scope, unaffected by which page component is lazy.
+const BrowserLocalCanvasPage = lazy(() =>
+  import('./pages/BrowserLocalCanvasPage.js').then((m) => ({ default: m.BrowserLocalCanvasPage })),
 )
 
 // Same lazy-chunk rationale as DaemonCanvasPage above — the gallery only
@@ -57,18 +68,20 @@ interface BackendConfigChipProps {
   state: Exclude<ProviderState, { kind: 'invalid-config' }>
 }
 
-// Suspense fallback while the lazy daemon chunk loads. The height class
-// differs by mount site (root fills the viewport; the local-daemon branch
-// fills the flex row under the banner), so it's a prop; the copy stays shared
-// so the two mount sites can't drift.
-function DaemonConnectingFallback({ heightClass }: { heightClass: string }) {
+// Suspense fallback shared by every lazy page chunk (DaemonCanvasPage and
+// BrowserLocalCanvasPage). The height class differs by mount site (root
+// fills the viewport; the in-banner branches fill the flex row under it), so
+// it's a prop; message is also a prop so the daemon-specific and
+// backend-agnostic mount sites show accurate copy without duplicating this
+// component.
+function LazyPageFallback({ heightClass, message }: { heightClass: string; message: string }) {
   return (
     <div
       role="status"
       aria-live="polite"
       className={`flex ${heightClass} items-center justify-center text-sm text-muted-foreground`}
     >
-      Connecting to daemon…
+      {message}
     </div>
   )
 }
@@ -133,7 +146,9 @@ export function App({ providerState }: AppProps) {
         // propagates through Suspense's own error path to the nearest
         // boundary, which must be here to catch it.
         <ErrorBoundary>
-          <Suspense fallback={<DaemonConnectingFallback heightClass="h-dvh" />}>
+          <Suspense
+            fallback={<LazyPageFallback heightClass="h-dvh" message="Connecting to daemon…" />}
+          >
             {daemonView.kind === 'index' ? (
               <DaemonIndexPage
                 daemonBaseUrl={payload.baseUrl}
@@ -220,7 +235,9 @@ export function App({ providerState }: AppProps) {
           />
           <BackendConfigChip state={effectiveState} />
           <div className="min-h-0 flex-1 overflow-hidden">
-            <Suspense fallback={<DaemonConnectingFallback heightClass="h-full" />}>
+            <Suspense
+              fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
+            >
               {daemonView.kind === 'index' ? (
                 <DaemonIndexPage
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
@@ -265,10 +282,12 @@ export function App({ providerState }: AppProps) {
         />
         <BackendConfigChip state={effectiveState} />
         <div className="min-h-0 flex-1 overflow-hidden">
-          <BrowserLocalCanvasPage
-            store={browserLocalStore}
-            capabilities={effectiveState.capabilities}
-          />
+          <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
+            <BrowserLocalCanvasPage
+              store={browserLocalStore}
+              capabilities={effectiveState.capabilities}
+            />
+          </Suspense>
         </div>
       </div>
     </ErrorBoundary>
