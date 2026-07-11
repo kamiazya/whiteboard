@@ -381,8 +381,18 @@ export function scheduleAutoCompact(
 // nothing pending simply resolves immediately, and scheduleAutoCompact works
 // again afterward (a fresh call re-populates both trackers).
 export async function disposeAutoCompact(): Promise<void> {
-  clearAllAutoCompactTimers()
-  await Promise.allSettled(Array.from(inFlightAutoCompacts))
+  // A single clear-then-await pass is not enough: an in-flight compaction's
+  // loadCanvas() can run legacy migration, which calls saveCanvas(), which
+  // re-invokes the registered auto-compact trigger and schedules a fresh
+  // timer *while we are still awaiting the first batch*. Loop until a pass
+  // starts with nothing in flight, so the timer map and in-flight set are
+  // both guaranteed empty by the time this resolves.
+  for (;;) {
+    clearAllAutoCompactTimers()
+    const inFlight = Array.from(inFlightAutoCompacts)
+    if (inFlight.length === 0) break
+    await Promise.allSettled(inFlight)
+  }
 }
 
 // Test-only introspection, matching the `_destinationCountForTests` pattern

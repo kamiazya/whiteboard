@@ -877,6 +877,95 @@ describe('auto-compact disposal', () => {
     expect(await readLastCompactedAt()).not.toBeNull()
   })
 
+  it('disposeAutoCompact cancels a timer rescheduled by an in-flight compaction instead of leaving it dangling', async () => {
+    const store = await buildCompactableCanvas('reentrant')
+
+    // Simulates loadCanvas()'s legacy-migration path resuming mid-compaction
+    // and calling saveCanvas(), which re-invokes the auto-compact trigger and
+    // schedules a fresh timer *while disposeAutoCompact is already awaiting
+    // this in-flight compaction*. A single clear-then-await pass would clear
+    // the timer map before this reschedule happens and miss it.
+    const rescheduleCallCount = { count: 0 }
+    const countingStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestFrontiers') {
+          return async (workspaceId: string, slug: string) => {
+            rescheduleCallCount.count += 1
+            return target.earliestFrontiers(workspaceId, slug)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+    const reentrantStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestFrontiers') {
+          return async (workspaceId: string, slug: string) => {
+            await new Promise((r) => setTimeout(r, 50))
+            scheduleAutoCompact('session1', 'reentrant', countingStore, { debounceMs: 20 })
+            return target.earliestFrontiers(workspaceId, slug)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+
+    scheduleAutoCompact('session1', 'reentrant', reentrantStore, { debounceMs: 1 })
+    await vi.waitFor(
+      () => {
+        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
+      },
+      { timeout: 2000 },
+    )
+
+    await disposeAutoCompact()
+
+    expect(_inFlightAutoCompactCountForTests()).toBe(0)
+    // Wait past the rescheduled timer's debounce window and confirm it was
+    // cancelled rather than merely not-yet-fired.
+    await new Promise((r) => setTimeout(r, 100))
+    expect(rescheduleCallCount.count).toBe(0)
+  })
+
+  it('disposes through the real DB lifecycle (createIsolatedDb().dispose()) without spinning up a replacement connection for a re-entrant getDb() call', async () => {
+    const store = await buildCompactableCanvas('lifecycle')
+    const { getDb } = await import('./db/index.js')
+    let reentrantDb: Awaited<ReturnType<typeof getDb>> | null = null
+
+    const reentrantStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestFrontiers') {
+          return async (workspaceId: string, slug: string) => {
+            await new Promise((r) => setTimeout(r, 100))
+            // Mirrors a compaction resuming and touching the DB again
+            // (e.g. via loadCanvas()) while teardown is draining hooks.
+            reentrantDb = await getDb(tempDir)
+            return target.earliestFrontiers(workspaceId, slug)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+
+    scheduleAutoCompact('session1', 'lifecycle', reentrantStore, { debounceMs: 1 })
+    await vi.waitFor(
+      () => {
+        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
+      },
+      { timeout: 2000 },
+    )
+
+    const disposingDb = handle.db
+    // Exercise the actual DB lifecycle API (createIsolatedDb().dispose(),
+    // mirroring closeDb() in production) rather than calling
+    // disposeAutoCompact() directly, so the cache-removal-vs-hook-ordering
+    // fix in db/index.ts is covered from this store's perspective too.
+    await teardownIsolatedDb()
+    disposedDb = true
+
+    expect(reentrantDb).toBe(disposingDb)
+  })
+
   it('is idempotent, and scheduleAutoCompact still works after a dispose', async () => {
     const store = await buildCompactableCanvas('again')
     const { getDb } = await import('./db/index.js')
