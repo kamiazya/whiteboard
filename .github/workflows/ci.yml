@@ -45,6 +45,12 @@ jobs:
       - name: Secret scan (secretlint)
         run: pnpm secretlint
 
+      # cleanup-worktrees.mjs can force-remove worktrees and delete local
+      # branches; keep its regression test enforced in the same gate as the
+      # other repo-hygiene tooling checks.
+      - name: Test dev scripts (node --test)
+        run: pnpm test:scripts
+
       # Staged biome adoption: enforce the AGENTS.md "no console.* in server
       # runtime" rule in CI. Full biome check is not wired yet (the repo still
       # carries pre-existing format/organizeImports violations); this gate stops
