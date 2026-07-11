@@ -55,14 +55,18 @@ vi.mock('../lib/api-client.js', () => ({
 
 const { default: CanvasPage } = await import('./CanvasPage.js')
 
-function renderCanvasPage() {
-  return render(
+function canvasPageTree() {
+  return (
     <MemoryRouter initialEntries={['/canvas/sess_1/canvas-a']}>
       <Routes>
         <Route path="/canvas/:workspaceId/*" element={(<CanvasPage />) as ReactNode} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   )
+}
+
+function renderCanvasPage() {
+  return render(canvasPageTree())
 }
 
 beforeEach(() => {
@@ -116,13 +120,7 @@ describe('CanvasPage main render path', () => {
 
     hookState.restoreInProgress = false
     hookState.restoreLabel = null
-    rerender(
-      <MemoryRouter initialEntries={['/canvas/sess_1/canvas-a']}>
-        <Routes>
-          <Route path="/canvas/:workspaceId/*" element={(<CanvasPage />) as ReactNode} />
-        </Routes>
-      </MemoryRouter>,
-    )
+    rerender(canvasPageTree())
     await act(async () => {})
 
     expect(screen.queryByText(/restoring version/i)).toBeNull()
