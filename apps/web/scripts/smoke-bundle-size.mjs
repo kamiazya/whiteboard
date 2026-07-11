@@ -27,7 +27,11 @@ const ASSETS = resolve(DIST, 'assets')
 
 const KB = 1024
 const BUDGETS = [
-  { label: 'entry JS (index-*.js)', pattern: /^index-.*\.js$/, limit: 560 * KB, required: true },
+  // The entry file itself is now a thin bootstrap (~5 KB gz) now that both
+  // canvas pages are React.lazy — 30 KB leaves headroom for App.tsx growth
+  // without going back to the old 560 KB ceiling, which stopped meaning
+  // anything once the entry stopped containing Excalidraw/loro-crdt.
+  { label: 'entry JS (index-*.js)', pattern: /^index-.*\.js$/, limit: 30 * KB, required: true },
   { label: 'CSS (index-*.css)', pattern: /^index-.*\.css$/, limit: 30 * KB, required: true },
   {
     label: 'daemon lazy chunk (daemon-canvas-*.js)',
@@ -37,12 +41,17 @@ const BUDGETS = [
   },
 ]
 
-// Regression stop at today's measured critical-path size (~555 KB, both
-// canvas pages statically imported — Excalidraw + loro-crdt ship in every
-// page load). This is deliberately NOT the <300 KB app-page target; it is
-// the honest current baseline plus headroom, tightened as
-// tmp/issues/apps-web-entry-bundle-over-budget.md's staged plan lands.
-const CRITICAL_PATH_BUDGET_KB = 570
+// Regression stop at today's measured critical-path size (~119 KB) after
+// Stage 2 of tmp/issues/apps-web-entry-bundle-over-budget.md's plan:
+// React.lazy on both canvas pages (BrowserLocalCanvasPage and the earlier
+// DaemonCanvasPage) keeps Excalidraw's ~400 KB out of the initial paint
+// entirely. vendor-loro-crdt (~23 KB) still ships eagerly — some module in
+// App.tsx's static import graph reaches it, and vite-plugin-top-level-await
+// propagates a synchronous import for any TLA-using chunk up to whichever
+// entry point reaches it, even through code that itself only calls into
+// loro-crdt from a lazy branch. ~10% headroom over the measured number, not
+// the aspirational floor.
+const CRITICAL_PATH_BUDGET_KB = 135
 
 let failures = 0
 
