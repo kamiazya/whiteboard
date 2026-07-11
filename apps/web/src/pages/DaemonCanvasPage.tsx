@@ -8,6 +8,7 @@ import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeas
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
+import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -308,14 +309,25 @@ export function DaemonCanvasPage({
                 IndexedDB read are deferred until the user expands the section. */}
             {importSectionOpen && (
               <div className="pt-2">
-                <Suspense fallback={null}>
-                  <LazyImportSection
-                    workspaceId={canvas.workspaceId}
-                    daemonFetch={daemonFetch}
-                    daemonBaseUrl={daemonBaseUrl}
-                    browserLocalStore={browserLocalStore}
-                  />
-                </Suspense>
+                {/* Local boundary: a chunk-load or render failure in this
+                    optional disclosure must degrade the section alone, not
+                    take the whole editor to the app-level boundary. */}
+                <ErrorBoundary
+                  fallback={() => (
+                    <p role="alert" className="text-xs text-destructive">
+                      Import is unavailable right now. Reopen this section to retry.
+                    </p>
+                  )}
+                >
+                  <Suspense fallback={null}>
+                    <LazyImportSection
+                      workspaceId={canvas.workspaceId}
+                      daemonFetch={daemonFetch}
+                      daemonBaseUrl={daemonBaseUrl}
+                      browserLocalStore={browserLocalStore}
+                    />
+                  </Suspense>
+                </ErrorBoundary>
               </div>
             )}
           </details>
