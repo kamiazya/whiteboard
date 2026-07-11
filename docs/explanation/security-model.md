@@ -53,13 +53,16 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   Provider (OAuth/JWT resource-server validation); the server itself does
   not issue or manage user credentials.
 - Cross-origin access is restricted by `WHITEBOARD_SERVER_ALLOWED_ORIGINS`,
-  an explicit `https://` allowlist — wildcards are rejected. This is a
-  distinct setting from the local daemon's `WHITEBOARD_ALLOWED_WEB_ORIGINS`
-  above; the two are read by different code paths and never consult each
-  other.
-- The container binds plain HTTP on loopback only; **TLS termination is the
-  operator's responsibility**, done by a reverse proxy in front of the
-  container (nginx, Caddy, Traefik, …). Server mode is not safe to expose
+  an explicit `https://` allowlist (defaulting to
+  `WHITEBOARD_SERVER_EXTERNAL_URL` when unset) — wildcards are rejected.
+  This is a distinct setting from the local daemon's
+  `WHITEBOARD_ALLOWED_WEB_ORIGINS` above; the two are read by different
+  code paths and never consult each other.
+- The container binds plain HTTP to **all interfaces (`0.0.0.0`) by
+  default** (`WHITEBOARD_SERVER_HOST` overrides this); **TLS termination is
+  the operator's responsibility**, done by a reverse proxy in front of the
+  container (nginx, Caddy, Traefik, …). Mapping the port straight to a
+  public interface exposes plain HTTP — server mode is not safe to expose
   directly to the internet without that proxy in place.
 - Server mode is only as secure as its operator's configuration: a
   correctly configured Identity Provider, a correctly scoped origin
