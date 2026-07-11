@@ -259,7 +259,8 @@ export function BrowserLocalCanvasPage({
           </div>
         )}
         <span className="ml-auto text-muted-foreground">
-          Connect a local daemon (MCP) to unlock version history, workspaces, branches, and merge
+          Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
+          combining changes
         </span>
         <AlertDialog>
           <AlertDialogTrigger asChild>

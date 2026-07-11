@@ -67,14 +67,58 @@ describe('CanvasThumb', () => {
     }
   })
 
-  it('renders the fallback placeholder instead of an <img> when a DaemonApiContext provider is mounted (cross-origin)', () => {
-    const daemonFetch = vi.fn()
+  it('fetches the thumbnail through the daemon fetch and renders a blob-backed <img> when a provider is mounted', async () => {
+    const blob = new Blob(['fake-png'], { type: 'image/png' })
+    const daemonFetch = vi.fn().mockResolvedValue(new Response(blob, { status: 200 }))
+    const createObjectURL = vi.fn().mockReturnValue('blob:mock-url')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+    try {
+      const { container, findByRole } = render(
+        <DaemonApiContext.Provider value={daemonFetch}>
+          <CanvasThumb workspaceId="ws-1" slug="a" />
+        </DaemonApiContext.Provider>,
+      )
+      const img = (await findByRole('presentation')) as HTMLImageElement
+      expect(img.getAttribute('src')).toBe('blob:mock-url')
+      expect(daemonFetch).toHaveBeenCalledWith('/api/workspaces/ws-1/canvases/a/latest-thumbnail')
+      expect(container.querySelector('svg')).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('renders the fallback icon when the daemon fetch fails', async () => {
+    const daemonFetch = vi.fn().mockResolvedValue(new Response(null, { status: 404 }))
     const { container } = render(
       <DaemonApiContext.Provider value={daemonFetch}>
         <CanvasThumb workspaceId="ws-1" slug="a" />
       </DaemonApiContext.Provider>,
     )
+    await vi.waitFor(() => expect(container.querySelector('svg')).not.toBeNull())
     expect(container.querySelector('img')).toBeNull()
-    expect(container.querySelector('svg')).not.toBeNull()
+  })
+
+  it('revokes the previous object URL when the slug identity changes', async () => {
+    const blob = new Blob(['fake-png'], { type: 'image/png' })
+    const daemonFetch = vi.fn().mockResolvedValue(new Response(blob, { status: 200 }))
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL: vi.fn(() => 'blob:mock-url'), revokeObjectURL })
+    try {
+      const { rerender, findByRole } = render(
+        <DaemonApiContext.Provider value={daemonFetch}>
+          <CanvasThumb workspaceId="ws-1" slug="canvas-a" />
+        </DaemonApiContext.Provider>,
+      )
+      await findByRole('presentation')
+      rerender(
+        <DaemonApiContext.Provider value={daemonFetch}>
+          <CanvasThumb workspaceId="ws-1" slug="canvas-b" />
+        </DaemonApiContext.Provider>,
+      )
+      await vi.waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url'))
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

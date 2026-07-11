@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
 const PAYLOAD = {
@@ -35,6 +36,31 @@ afterEach(() => {
 })
 
 describe('StorageReportCard', () => {
+  it('routes requests through the daemon fetch when a DaemonApiContext provider is mounted', async () => {
+    const daemonFetch = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/runtime/storage')) return Promise.resolve(jsonResponse(PAYLOAD))
+      if (url.endsWith('/api/runtime/logs/prune')) {
+        return Promise.resolve(jsonResponse({ purgedCount: 1, purgedBytes: 512 }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    const { getByRole } = render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <StorageReportCard />
+      </DaemonApiContext.Provider>,
+    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    expect(daemonFetch).toHaveBeenCalledWith('/api/runtime/storage')
+    fireEvent.click(getByRole('button', { name: 'Prune old daemon logs' }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500)
+    })
+    expect(daemonFetch).toHaveBeenCalledWith('/api/runtime/logs/prune', { method: 'POST' })
+  })
+
   it('renders each storage category as its own row so future actions can hang off objects', async () => {
     const { container } = render(<StorageReportCard />)
     // Eight rows render synchronously from the static descriptor list:

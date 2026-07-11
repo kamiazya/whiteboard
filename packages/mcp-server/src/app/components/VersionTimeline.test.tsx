@@ -5,7 +5,7 @@ import VersionTimeline from './VersionTimeline.js'
 // Cover the current VersionTimeline contract:
 // - filter versions by the active branch (HEAD)
 // - render the mini-graph lane for each row
-// - place the "branched ->" label at the matching baseVersionId row
+// - place the "variation ->" label at the matching baseVersionId row
 //
 // Branch actions and save controls live in the header now, so VersionTimeline should not render tabs or save buttons.
 
@@ -84,7 +84,8 @@ function mkVersionsResponse(): Response {
 
 beforeEach(() => {
   const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+    const url =
+      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(new Response('{}', { status: 200 }))
@@ -119,9 +120,9 @@ describe('VersionTimeline', () => {
 
   it('renders the branchOut label on the row matching baseVersionId', async () => {
     render(<VersionTimeline workspaceId="sess_1" slug="canvas-a" />)
-    // "branched -> feature" should appear on the v-mid row.
+    // "variation -> feature" should appear on the v-mid row.
     await waitFor(() => {
-      expect(screen.getByText(/branched → feature/)).toBeTruthy()
+      expect(screen.getByText(/variation → feature/)).toBeTruthy()
     })
   })
 
@@ -144,7 +145,8 @@ describe('VersionTimeline', () => {
   it('legacy row without operator renders system fallback', async () => {
     vi.unstubAllGlobals()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
@@ -179,15 +181,26 @@ describe('VersionTimeline', () => {
   it('renders the empty state when the active branch has no versions', async () => {
     vi.unstubAllGlobals()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) {
         return Promise.resolve(
           new Response(
             JSON.stringify({
               head: 'feature',
               branches: [
-                { name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '2026-04-23T00:00:00Z' },
-                { name: 'feature', tipFrontiers: '', color: '#9333ea', createdAt: '2026-04-23T01:00:00Z' },
+                {
+                  name: 'main',
+                  tipFrontiers: '',
+                  color: '#1971c2',
+                  createdAt: '2026-04-23T00:00:00Z',
+                },
+                {
+                  name: 'feature',
+                  tipFrontiers: '',
+                  color: '#9333ea',
+                  createdAt: '2026-04-23T01:00:00Z',
+                },
               ],
             }),
             { status: 200 },
@@ -195,12 +208,7 @@ describe('VersionTimeline', () => {
         )
       }
       if (url.includes('/versions')) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({ versions: [] }),
-            { status: 200 },
-          ),
-        )
+        return Promise.resolve(new Response(JSON.stringify({ versions: [] }), { status: 200 }))
       }
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -220,8 +228,8 @@ describe('VersionTimeline', () => {
     })
 
     expect(container.firstElementChild?.className).toContain('min-h-0')
-    expect(
-      container.querySelector('[data-slot="scroll-area"]')?.className ?? '',
-    ).toContain('min-h-0')
+    expect(container.querySelector('[data-slot="scroll-area"]')?.className ?? '').toContain(
+      'min-h-0',
+    )
   })
 })
