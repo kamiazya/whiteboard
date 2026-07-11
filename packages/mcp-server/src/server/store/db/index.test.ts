@@ -20,7 +20,9 @@ vi.mock('../../config.js', () => ({
   DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
-const { getDb, closeDb, clearDbCache, registerDbDisposeHook } = await import('./index.js')
+const { getDb, closeDb, clearDbCache, registerDbDisposeHook, runDbDisposeHooks } = await import(
+  './index.js'
+)
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
 
 // registerDbDisposeHook has no unregister counterpart, so this file registers
@@ -32,12 +34,26 @@ registerDbDisposeHook(async () => {
   if (activeHookRun) await activeHookRun()
 })
 
+// A second hook, registered without an `async` wrapper, so a configured throw
+// happens synchronously inside the `disposeHooks.map((fn) => fn())` call
+// rather than surfacing as a rejected promise. Kept separate from
+// activeHookRun above because that hook's own `async` keyword would convert
+// any throw inside it into a rejection before runDbDisposeHooks ever sees it.
+let throwSynchronouslyOnDispose = false
+registerDbDisposeHook(() => {
+  if (throwSynchronouslyOnDispose) {
+    throw new Error('sync dispose hook boom')
+  }
+  return Promise.resolve()
+})
+
 describe('getDb / closeDb', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-index-test-'))
     clearDbCache()
     clearPrepareCache()
     activeHookRun = null
+    throwSynchronouslyOnDispose = false
   })
 
   afterEach(async () => {
@@ -45,6 +61,7 @@ describe('getDb / closeDb', () => {
     clearDbCache()
     clearPrepareCache()
     activeHookRun = null
+    throwSynchronouslyOnDispose = false
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -143,6 +160,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
     clearDbCache()
     clearPrepareCache()
     activeHookRun = null
+    throwSynchronouslyOnDispose = false
   })
 
   afterEach(async () => {
@@ -150,6 +168,7 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
     clearDbCache()
     clearPrepareCache()
     activeHookRun = null
+    throwSynchronouslyOnDispose = false
     await rm(tempDir, { recursive: true, force: true })
   })
 
@@ -235,6 +254,26 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
     // runDbDisposeHooks() (Promise.allSettled internally) must swallow the
     // throw so clearDbCache's chain still reaches destroy() instead of
     // leaving the connection cached and alive forever.
+    await vi.waitFor(async () => {
+      await expect(sql`SELECT 1`.execute(db)).rejects.toThrow()
+    })
+  })
+
+  it('runDbDisposeHooks() swallows a hook that throws synchronously before returning a promise', async () => {
+    throwSynchronouslyOnDispose = true
+
+    await expect(runDbDisposeHooks()).resolves.toBeUndefined()
+  })
+
+  it('clearDbCache() still destroys the connection when a dispose hook throws synchronously', async () => {
+    const db = await getDb(tempDir)
+    throwSynchronouslyOnDispose = true
+
+    clearDbCache()
+
+    // A hook that throws synchronously (rather than returning a rejected
+    // promise) must not make clearDbCache's chain reject before reaching
+    // db.destroy() — that would leave the connection cached-but-orphaned.
     await vi.waitFor(async () => {
       await expect(sql`SELECT 1`.execute(db)).rejects.toThrow()
     })

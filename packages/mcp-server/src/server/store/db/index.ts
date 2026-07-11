@@ -70,8 +70,19 @@ export function registerDbDisposeHook(fn: () => Promise<void>): void {
 // so the test-only createIsolatedDb() teardown path (test-helpers.ts) can
 // run the same hooks before destroying its db, matching production's
 // closeDb()/clearDbCache() behavior.
+//
+// Hooks are invoked through a wrapper that catches synchronous throws, not
+// just rejected promises. A hook that throws before returning a promise would
+// otherwise make the `disposeHooks.map((fn) => fn())` call itself throw,
+// which propagates past Promise.allSettled entirely and breaks the
+// never-rejects contract for callers like clearDbCache() that depend on it to
+// still reach db.destroy().
 export async function runDbDisposeHooks(): Promise<void> {
-  await Promise.allSettled(disposeHooks.map((fn) => fn()))
+  await Promise.allSettled(
+    disposeHooks.map(async (fn) => {
+      await fn()
+    }),
+  )
 }
 
 export async function closeDb(dataDir: string = DATA_DIR): Promise<void> {
