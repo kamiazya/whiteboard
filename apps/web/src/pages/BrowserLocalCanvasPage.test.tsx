@@ -4,6 +4,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES } from '../lib/provider.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
 
@@ -76,21 +77,6 @@ const snap: CanvasSnapshot = {
   id: 'c1',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
-}
-
-// React's warning text for an unguarded/cross-component setState-during-render
-// violation. Distinct from the sanctioned "adjust state during render for the
-// current component" pattern (see CanvasThumb's guarded prevSrc reset), which
-// never triggers this. Wording has drifted across React 18/19 point releases,
-// so the match stays tolerant of both phrasings.
-const REACT_SETSTATE_IN_RENDER_RE =
-  /Cannot update a component (\(`[^`]*`\) )?while rendering a different component|Warning:.*setState.*during.*render/i
-
-function assertNoSetStateInRenderWarning(errorSpy: ReturnType<typeof vi.spyOn>): void {
-  const matchingCalls = (errorSpy.mock.calls as unknown[][]).filter((args) =>
-    args.some((arg) => typeof arg === 'string' && REACT_SETSTATE_IN_RENDER_RE.test(arg)),
-  )
-  expect(matchingCalls).toEqual([])
 }
 
 describe('BrowserLocalCanvasPage', () => {

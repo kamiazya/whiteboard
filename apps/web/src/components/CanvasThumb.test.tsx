@@ -1,16 +1,10 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
+import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { CanvasThumb } from './CanvasThumb.js'
 
 afterEach(() => cleanup())
-
-// React's warning text for a same-component setState-during-render violation
-// (as opposed to the sanctioned "adjust state during render for the current
-// component" pattern, which never triggers this). Wording has drifted across
-// React 18/19 point releases, so the match stays tolerant of both phrasings.
-const REACT_SETSTATE_IN_RENDER_RE =
-  /Cannot update a component (\(`[^`]*`\) )?while rendering a different component|Warning:.*setState.*during.*render/i
 
 describe('CanvasThumb', () => {
   it('renders an img pointed at the latest-thumbnail route, url-encoding the slug', () => {
@@ -66,10 +60,7 @@ describe('CanvasThumb', () => {
     // (CanvasThumb.tsx L37-41) during this render — the React-sanctioned
     // "adjust state during render" form, not the cross-component violation.
     rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
-    const matchingCalls = errorSpy.mock.calls.filter((args) =>
-      args.some((arg) => typeof arg === 'string' && REACT_SETSTATE_IN_RENDER_RE.test(arg)),
-    )
-    expect(matchingCalls).toEqual([])
+    assertNoSetStateInRenderWarning(errorSpy)
     errorSpy.mockRestore()
   })
 
