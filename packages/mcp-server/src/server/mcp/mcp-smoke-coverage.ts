@@ -39,6 +39,7 @@ export const ALL_REGISTERED_TOOLS = [
   'canvas_open',
   'create_embed',
   'create_frame',
+  'create_pairing_link',
   'delete_element',
   'delete_elements',
   'delete_group',
@@ -80,6 +81,7 @@ export const COVERED_TOOLS = [
   'canvas_list',
   'annotate',
   'create_frame',
+  'create_pairing_link',
   'canvas_inspect',
   'version_save',
   'version_restore',
@@ -92,9 +94,7 @@ export const COVERED_TOOLS = [
   'library_uninstall',
 ] as const
 
-export const ERROR_PATH_ONLY_TOOLS = [
-  'viewport_set',
-] as const
+export const ERROR_PATH_ONLY_TOOLS = ['viewport_set'] as const
 
 export const UNIT_ONLY_TOOLS = [
   'align_elements',
@@ -139,7 +139,9 @@ export type DeferredTool = {
 export const DEFERRED_TOOLS: DeferredTool[] = [
   {
     name: 'library_install',
-    reason: 'Success path calls fetchExternalLibraryPayload() → global fetch. Additionally, validateExternalUrl() rejects localhost and private-range IPs, so a plain node:http.createServer stub is blocked before the fetch even fires.',
-    unblock: 'Use nock or MSW to intercept fetch at the DNS/request level (bypasses validateExternalUrl), OR make the external-URL lookup injectable so the smoke can whitelist a loopback address.',
+    reason:
+      'Success path calls fetchExternalLibraryPayload() → global fetch. Additionally, validateExternalUrl() rejects localhost and private-range IPs, so a plain node:http.createServer stub is blocked before the fetch even fires.',
+    unblock:
+      'Use nock or MSW to intercept fetch at the DNS/request level (bypasses validateExternalUrl), OR make the external-URL lookup injectable so the smoke can whitelist a loopback address.',
   },
 ]

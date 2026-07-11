@@ -11,6 +11,7 @@ import { readFileSync, existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { TOOL_PROFILES } from './tool-profiles.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -56,5 +57,9 @@ describe('MCP tool annotations coverage', () => {
     for (const entry of entries) {
       expect(entry).toMatch(/title:/)
     }
+  })
+
+  it('never annotates create_pairing_link as read-only, since its response discloses the live daemon bearer token', () => {
+    expect(TOOL_PROFILES.create_pairing_link.profile.readOnlyHint).not.toBe(true)
   })
 })

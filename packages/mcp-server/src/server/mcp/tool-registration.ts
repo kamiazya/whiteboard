@@ -90,6 +90,12 @@ import {
   paletteSetTool,
 } from './tools/palette.js'
 import {
+  buildPairingLinkText,
+  createPairingLinkInputShape,
+  createPairingLinkOutputSchema,
+  pairingLinkTool,
+} from './tools/pairing-link.js'
+import {
   insertTemplateTool,
   listTemplatesTool,
   templateInsertOutputSchema,
@@ -151,6 +157,7 @@ export function registerAllTools(
   const versionSave = versionSaveTool()
   const versionRestore = versionRestoreTool()
   const versionList = versionListTool()
+  const pairingLink = pairingLinkTool()
 
   registerToolWithAnnotations(
     server,
@@ -1638,6 +1645,29 @@ export function registerAllTools(
         embedCreate.execute({ canvasId, url, x, y, width, height }, client),
       )
       return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    pairingLink.name,
+    {
+      description: pairingLink.description,
+      inputSchema: createPairingLinkInputShape,
+      outputSchema: createPairingLinkOutputSchema,
+    },
+    async (args) => {
+      const result = await withDaemon((client) => pairingLink.execute(args, client))
+      // content[0] stays JSON (the structuredJsonResult convention every other
+      // tool follows, and what callers/smoke parse as the primary payload); the
+      // credential note travels as a second text block instead of overwriting it.
+      return {
+        structuredContent: result,
+        content: [
+          { type: 'text' as const, text: JSON.stringify(result) },
+          { type: 'text' as const, text: buildPairingLinkText(result, result.webOrigin) },
+        ],
+      }
     },
   )
 }
