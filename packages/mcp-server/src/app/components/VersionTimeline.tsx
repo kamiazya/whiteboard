@@ -20,6 +20,7 @@ import {
 import { apiFetch } from '../lib/api-client.js'
 import { useBranches } from '../hooks/useBranches.js'
 import { buildMiniGraph } from '../lib/mini-graph.js'
+import { displayBranchName } from '@/lib/utils'
 
 interface Props {
   workspaceId: string
@@ -53,11 +54,7 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 
 // Branch operations and save controls live in the header.
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
-export default function VersionTimeline({
-  workspaceId,
-  slug,
-  onRestored,
-}: Props) {
+export default function VersionTimeline({ workspaceId, slug, onRestored }: Props) {
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
@@ -109,9 +106,7 @@ export default function VersionTimeline({
   const { state: branchesState } = useBranches(workspaceId, slug)
   const head = branchesState.head
 
-  const visibleVersions = versions.filter(
-    (v) => (v.branchName ?? 'main') === head,
-  )
+  const visibleVersions = versions.filter((v) => (v.branchName ?? 'main') === head)
   const miniGraphRows = buildMiniGraph({
     head,
     branches: branchesState.branches,
@@ -150,13 +145,7 @@ export default function VersionTimeline({
               return (
                 <div key={v.id} className="flex items-stretch gap-1.5">
                   {/* Mini-graph lane. */}
-                  <svg
-                    className="shrink-0"
-                    width={24}
-                    height={36}
-                    viewBox="0 0 24 36"
-                    aria-hidden
-                  >
+                  <svg className="shrink-0" width={24} height={36} viewBox="0 0 24 36" aria-hidden>
                     {row?.connectorBefore ? (
                       <line
                         x1={12}
@@ -215,7 +204,7 @@ export default function VersionTimeline({
                             <>
                               {' · '}
                               <span className="text-primary">
-                                branched → {row.branchOut}
+                                variation → {displayBranchName(row.branchOut)}
                               </span>
                             </>
                           ) : null}
@@ -235,17 +224,23 @@ export default function VersionTimeline({
         </div>
       </ScrollArea>
 
-      <AlertDialog open={!!pendingRestore} onOpenChange={(open) => !open && setPendingRestore(null)}>
+      <AlertDialog
+        open={!!pendingRestore}
+        onOpenChange={(open) => !open && setPendingRestore(null)}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Restore this version?</AlertDialogTitle>
             <AlertDialogDescription>
               {pendingRestore && (
                 <>
-                  Restoring <strong>{pendingRestore.label || (pendingRestore.auto ? 'Auto-save' : 'Manual')}</strong>{' '}
-                  ({formatRelative(pendingRestore.createdAt)}, {pendingRestore.elementCount} elements) will merge
-                  that state into the current canvas and broadcast the change to every connected tab. Per-peer
-                  Ctrl+Z history is cleared.
+                  Restoring{' '}
+                  <strong>
+                    {pendingRestore.label || (pendingRestore.auto ? 'Auto-save' : 'Manual')}
+                  </strong>{' '}
+                  ({formatRelative(pendingRestore.createdAt)}, {pendingRestore.elementCount}{' '}
+                  elements) will merge that state into the current canvas and broadcast the change
+                  to every connected tab. Per-peer Ctrl+Z history is cleared.
                 </>
               )}
             </AlertDialogDescription>

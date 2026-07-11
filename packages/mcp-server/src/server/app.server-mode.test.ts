@@ -335,6 +335,41 @@ describe('app — server-mode composition', () => {
       })
       expect(res.status).toBe(403)
     })
+
+    it('wildcard-matched Origin passes origin check; auth layer is reached next', async () => {
+      // Regression: createServerModeOriginMiddleware must be pattern-aware —
+      // a naive exact-Set lookup over new URL(o).origin never admits a real
+      // subdomain for a wildcard allowedOrigins entry.
+      const app = createApp(
+        makeServerModeOptions([], { allowedOrigins: ['https://*.example.com'] }),
+      )
+      const res = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          origin: 'https://preview.example.com',
+          authorization: BEARER,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'ping', id: 1 }),
+      })
+      expect(res.status).toBe(403) // origin gate passed; auth layer rejected (no scopes)
+    })
+
+    it('non-matching Origin still 403s under a wildcard allowedOrigins entry', async () => {
+      const app = createApp(
+        makeServerModeOptions(['mcp:call'], { allowedOrigins: ['https://*.example.com'] }),
+      )
+      const res = await app.request('/mcp', {
+        method: 'POST',
+        headers: {
+          origin: 'https://evil.com',
+          authorization: BEARER,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'ping', id: 1 }),
+      })
+      expect(res.status).toBe(403)
+    })
   })
 
   // Req 5: canvas scope through composed app

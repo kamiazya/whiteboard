@@ -445,6 +445,37 @@ describe('parseServerModeEnvConfig — type / enum validation', () => {
     if (result.ok) return
     expect(result.code).toBe('server_mode_env.allowed_origins_wildcard_forbidden')
   })
+
+  it('accepts a valid wildcard subdomain pattern in allowedOrigins', () => {
+    const result = parseServerModeEnvConfig({
+      ...VALID_ENV,
+      WHITEBOARD_SERVER_ALLOWED_ORIGINS: 'https://*.kamiazya-whiteboard.pages.dev',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.config.allowedOrigins).toEqual(['https://*.kamiazya-whiteboard.pages.dev'])
+  })
+
+  it('rejects a structurally invalid wildcard pattern → allowed_origins_invalid_wildcard', () => {
+    const result = parseServerModeEnvConfig({
+      ...VALID_ENV,
+      WHITEBOARD_SERVER_ALLOWED_ORIGINS: 'https://foo*.example.com',
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.code).toBe('server_mode_env.allowed_origins_invalid_wildcard')
+    expect(result.field).toBe(ENV_KEYS.ALLOWED_ORIGINS)
+  })
+
+  it('rejects a too-short wildcard suffix → allowed_origins_invalid_wildcard', () => {
+    const result = parseServerModeEnvConfig({
+      ...VALID_ENV,
+      WHITEBOARD_SERVER_ALLOWED_ORIGINS: 'https://*.dev',
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.code).toBe('server_mode_env.allowed_origins_invalid_wildcard')
+  })
 })
 
 // ---------------------------------------------------------------------------

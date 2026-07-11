@@ -348,7 +348,7 @@ describe('MergeDialog', () => {
     await screen.findByText(/branch already exists/i)
   })
 
-  it('renders a complete, correctly-ordered merge title', async () => {
+  it('renders a complete, correctly-ordered combine title, capitalizing the default variation', async () => {
     const runMerge = vi
       .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
       .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
@@ -361,8 +361,8 @@ describe('MergeDialog', () => {
         runMerge={runMerge}
       />,
     )
-    const title = await screen.findByText(/Merge changes from/)
-    expect(title.textContent).toBe('Merge changes from «feature» into «main»')
+    const title = await screen.findByText(/Combine.*into/)
+    expect(title.textContent).toBe('Combine «feature» into «Main»')
   })
 
   it('shows the post-merge side-effect notice for a non-main source', async () => {
@@ -379,7 +379,7 @@ describe('MergeDialog', () => {
       />,
     )
     const notice = await screen.findByTestId('merge-side-effect-notice')
-    expect(notice.textContent).toContain('main')
+    expect(notice.textContent).toContain('Main')
     expect(notice.textContent).toContain('feature')
   })
 

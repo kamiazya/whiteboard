@@ -1,5 +1,13 @@
 import { useEffect, useState, type JSX } from 'react'
-import { ChevronDown, GitBranch, GitMerge, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  ChevronDown,
+  GitBranch,
+  GitMerge,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { Button } from './ui/button.js'
 import {
   DropdownMenu,
@@ -29,21 +37,24 @@ import {
 } from './ui/dialog.js'
 import { Input } from './ui/input.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.js'
-import { cn } from '@/lib/utils'
+import { cn, displayBranchName } from '@/lib/utils'
 import { safeErrorCopy } from '../lib/error-copy.js'
 import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
 import { useBranches } from '../hooks/useBranches.js'
 import { MergeDialog } from './MergeDialog.js'
 
 // Consolidate branch operations into a single `●branch▾` chip in the header.
+// UI copy uses the Variation/Combine vocabulary; the underlying data model,
+// hook, and MCP tool calls keep their git-derived identifiers (branch, merge)
+// unchanged.
 //
 // Behavior:
-//   - Left trigger: switch branches from a dropdown
-//   - Right kebab: rename, delete, or merge from another branch
-//   - New branch: inline form inside the dropdown
+//   - Left trigger: switch variations from a dropdown
+//   - Right kebab: rename, delete, or combine from another variation
+//   - New variation: inline form inside the dropdown
 //
 // Unlike the old tab layout, there is always exactly one visible chip for HEAD.
-// Other branches are managed through the dropdown and kebab menu.
+// Other variations are managed through the dropdown and kebab menu.
 
 export interface HeaderBranchChipProps {
   workspaceId: string
@@ -85,7 +96,7 @@ export function HeaderBranchChip({
       setCreateOpen(false)
       setErrorMessage(null)
     } catch (err) {
-      setErrorMessage(safeErrorCopy(err, 'Failed to create branch'))
+      setErrorMessage(safeErrorCopy(err, 'Failed to create variation'))
     }
   }
 
@@ -107,7 +118,7 @@ export function HeaderBranchChip({
       setRenameOpen(false)
       setErrorMessage(null)
     } catch (err) {
-      setErrorMessage(safeErrorCopy(err, 'Failed to rename branch'))
+      setErrorMessage(safeErrorCopy(err, 'Failed to rename variation'))
     }
   }
 
@@ -150,7 +161,7 @@ export function HeaderBranchChip({
               <button
                 type="button"
                 disabled={disabled}
-                aria-label={`Switch branch (current: ${head})`}
+                aria-label={`Switch variation (current: ${head})`}
                 data-testid="header-branch-chip"
                 className={cn(
                   'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium',
@@ -158,27 +169,33 @@ export function HeaderBranchChip({
                 )}
                 style={{ borderColor: chipColor, color: chipColor }}
               >
-                <span aria-hidden className="inline-block size-2 shrink-0 rounded-full" style={{ background: chipColor }} />
-                <span className="truncate" title={head}>{head}</span>
+                <span
+                  aria-hidden
+                  className="inline-block size-2 shrink-0 rounded-full"
+                  style={{ background: chipColor }}
+                />
+                <span className="truncate" title={head}>
+                  {displayBranchName(head)}
+                </span>
                 <ChevronDown className="size-3 shrink-0 opacity-70" aria-hidden />
               </button>
             </DropdownMenuTrigger>
           </TooltipTrigger>
-          <TooltipContent>Branch</TooltipContent>
+          <TooltipContent>Variation</TooltipContent>
         </Tooltip>
         <DropdownMenuContent align="start" className="w-[240px]">
           <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
             <GitBranch className="size-3" />
-            Switch branch
+            Switch variation
           </DropdownMenuLabel>
-          {/* Show HEAD first and mark it as the current branch. */}
-          <DropdownMenuItem
-            onSelect={(e) => e.preventDefault()}
-            className="gap-2"
-            disabled
-          >
-            <span aria-hidden className="inline-block size-2 rounded-full" style={{ background: chipColor }} />
-            <span className="truncate">{head}</span>
+          {/* Show HEAD first and mark it as the current variation. */}
+          <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="gap-2" disabled>
+            <span
+              aria-hidden
+              className="inline-block size-2 rounded-full"
+              style={{ background: chipColor }}
+            />
+            <span className="truncate">{displayBranchName(head)}</span>
             <span className="ml-auto text-[10px] text-muted-foreground">Current</span>
           </DropdownMenuItem>
           {otherBranches.map((b) => (
@@ -186,13 +203,19 @@ export function HeaderBranchChip({
               key={b.name}
               onSelect={() => {
                 setHead(b.name).catch((err: unknown) => {
-                  setErrorMessage(safeErrorCopy(err, 'Failed to switch branch'))
+                  setErrorMessage(safeErrorCopy(err, 'Failed to switch variation'))
                 })
               }}
               className="gap-2"
             >
-              <span aria-hidden className="inline-block size-2 rounded-full" style={{ background: b.color }} />
-              <span className="truncate" title={b.name}>{b.name}</span>
+              <span
+                aria-hidden
+                className="inline-block size-2 rounded-full"
+                style={{ background: b.color }}
+              />
+              <span className="truncate" title={b.name}>
+                {displayBranchName(b.name)}
+              </span>
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
@@ -207,9 +230,9 @@ export function HeaderBranchChip({
               <Input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="New branch name"
+                placeholder="New variation name"
                 autoFocus
-                aria-label="New branch name"
+                aria-label="New variation name"
                 className="h-7 text-xs"
               />
               <Button type="submit" size="sm" variant="outline" className="h-7 px-2 text-xs">
@@ -237,7 +260,7 @@ export function HeaderBranchChip({
               className="gap-2"
             >
               <Plus className="size-3.5" />
-              New branch…
+              New variation…
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>
@@ -251,7 +274,7 @@ export function HeaderBranchChip({
         <DropdownMenuTrigger asChild>
           <button
             type="button"
-            aria-label="Branch actions"
+            aria-label="Variation actions"
             data-testid="header-branch-kebab"
             disabled={disabled}
             className="inline-flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
@@ -262,11 +285,11 @@ export function HeaderBranchChip({
         <DropdownMenuContent align="end" className="w-[240px]">
           <DropdownMenuLabel className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
             <GitMerge className="size-3" />
-            Merge into «{head}»
+            Combine into «{displayBranchName(head)}»
           </DropdownMenuLabel>
           {otherBranches.length === 0 ? (
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-              No other branches
+              No other variations
             </DropdownMenuItem>
           ) : (
             otherBranches.map((b) => (
@@ -275,8 +298,12 @@ export function HeaderBranchChip({
                 onSelect={() => setMergeSource(b)}
                 className="gap-2"
               >
-                <span aria-hidden className="inline-block size-2 rounded-full" style={{ background: b.color }} />
-                <span className="truncate">{b.name}</span>
+                <span
+                  aria-hidden
+                  className="inline-block size-2 rounded-full"
+                  style={{ background: b.color }}
+                />
+                <span className="truncate">{displayBranchName(b.name)}</span>
               </DropdownMenuItem>
             ))
           )}
@@ -290,7 +317,7 @@ export function HeaderBranchChip({
             className="gap-2"
           >
             <Pencil className="size-3.5" />
-            Rename «{head}»…
+            Rename «{displayBranchName(head)}»…
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={head === 'main'}
@@ -301,7 +328,7 @@ export function HeaderBranchChip({
             }}
           >
             <Trash2 className="size-3.5" />
-            Delete «{head}»…
+            Delete «{displayBranchName(head)}»…
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -312,7 +339,9 @@ export function HeaderBranchChip({
           className="flex max-w-[200px] items-center gap-1 text-[11px] text-destructive"
         >
           <span aria-hidden>⚠</span>
-          <span className="truncate" title={errorMessage}>{errorMessage}</span>
+          <span className="truncate" title={errorMessage}>
+            {errorMessage}
+          </span>
           <button
             type="button"
             className="ml-auto text-muted-foreground hover:text-foreground"
@@ -328,9 +357,9 @@ export function HeaderBranchChip({
       <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Rename «{head}»</DialogTitle>
+            <DialogTitle>Rename «{displayBranchName(head)}»</DialogTitle>
             <DialogDescription>
-              Enter a new name. Every saved version on this branch will be relinked to it.
+              Enter a new name. Every saved version on this variation will be relinked to it.
             </DialogDescription>
           </DialogHeader>
           <Input
@@ -364,15 +393,17 @@ export function HeaderBranchChip({
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete «{pendingDelete?.name ?? ''}»?</AlertDialogTitle>
+            <AlertDialogTitle>
+              Delete «{displayBranchName(pendingDelete?.name ?? '')}»?
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              This deletes the branch. Saved versions stay in version history, but the branch will no
-              longer be reachable from branch navigation.
+              This deletes the variation. Saved versions stay in version history, but the variation
+              will no longer be reachable from variation navigation.
               {pendingStats && pendingStats.unmergedCommits > 0 ? (
                 <>
                   <br />
                   <strong className="text-destructive">
-                    ⚠ {pendingStats.unmergedCommits} unmerged commits remain
+                    ⚠ {pendingStats.unmergedCommits} changes not yet combined remain
                   </strong>
                 </>
               ) : null}
@@ -391,7 +422,7 @@ export function HeaderBranchChip({
                   setErrorMessage(null)
                   setPendingDelete(null)
                 } catch (err) {
-                  setErrorMessage(safeErrorCopy(err, 'Failed to delete branch'))
+                  setErrorMessage(safeErrorCopy(err, 'Failed to delete variation'))
                   setPendingDelete(null)
                 } finally {
                   setDeleting(false)

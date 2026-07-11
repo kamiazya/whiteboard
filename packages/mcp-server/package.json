@@ -182,6 +182,7 @@
     "@opentelemetry/sdk-trace-web": "^2.8.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
     "@resvg/resvg-js": "^2.6.2",
+    "cosmiconfig": "^9.0.0",
     "happy-dom": "^20.9.0",
     "hono": "^4.12.27",
     "image-size": "^2",

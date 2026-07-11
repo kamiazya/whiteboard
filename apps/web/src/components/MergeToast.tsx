@@ -8,7 +8,7 @@ import {
   type MergeCommittedDetail,
   parseMergeCommittedEvent,
 } from '@/lib/merge-committed-event'
-import { cn } from '@/lib/utils'
+import { cn, displayBranchName } from '@/lib/utils'
 import { Button } from './ui/button.js'
 
 const log = getAppLogger('merge-toast')
@@ -143,7 +143,9 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
     >
       <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-emerald-600" aria-hidden />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="text-sm font-medium">Merged changes from «{sourceName}»</div>
+        <div className="text-sm font-medium">
+          Combined changes from «{displayBranchName(sourceName)}»
+        </div>
         <div className="text-xs text-muted-foreground">
           {[
             newCount > 0 ? `${newCount} added` : null,
@@ -155,9 +157,9 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
         </div>
         {(switchedHead || deletedSource) && (
           <div className="text-[11px] text-muted-foreground/90">
-            {switchedHead ? `Switched to "${switchedHead.to}"` : null}
+            {switchedHead ? `Switched to «${displayBranchName(switchedHead.to)}»` : null}
             {switchedHead && deletedSource ? ' · ' : null}
-            {deletedSource ? `Deleted "${deletedSource}"` : null}
+            {deletedSource ? `Deleted «${displayBranchName(deletedSource)}»` : null}
           </div>
         )}
         {canUndo && (

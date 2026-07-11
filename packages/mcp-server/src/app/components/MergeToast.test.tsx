@@ -18,7 +18,9 @@ const baseDetail: MergeToastEventDetail = {
 }
 
 beforeEach(() => {
-  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(new Response(JSON.stringify({ ok: true }), { status: 200 }))
   vi.stubGlobal('fetch', fetchMock)
 })
 
@@ -34,7 +36,7 @@ describe('MergeToast', () => {
     expect(screen.queryByTestId('merge-toast')).toBeNull()
     act(() => dispatchMergeCommitted(baseDetail))
     expect(screen.getByTestId('merge-toast')).toBeTruthy()
-    expect(screen.getByText(/Merged changes from «feature-a»/)).toBeTruthy()
+    expect(screen.getByText(/Combined changes from «feature-a»/)).toBeTruthy()
     expect(screen.getByText(/2 added · 1 changed/)).toBeTruthy()
   })
 
