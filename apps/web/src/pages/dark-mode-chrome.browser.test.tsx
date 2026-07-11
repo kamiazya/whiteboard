@@ -22,12 +22,14 @@ const DARK = 0.3
 // assert "light" vs "near-black" without depending on an exact color or
 // color-space representation.
 function lightness(color: string): number {
-  if (color.startsWith('oklch')) {
-    const match = color.match(/oklch\(\s*([\d.]+)/)
+  const normalized = color.trim().toLowerCase()
+  if (normalized === 'transparent') return 0
+  if (normalized.startsWith('oklch')) {
+    const match = normalized.match(/oklch\(\s*([\d.]+)/)
     if (!match) throw new Error(`unparsable oklch color: ${color}`)
     return Number(match[1])
   }
-  const match = color.match(/\d+(\.\d+)?/g)
+  const match = normalized.match(/\d+(\.\d+)?/g)
   if (!match) throw new Error(`unparsable color: ${color}`)
   const [r, g, b] = match.map(Number)
   return (r! + g! + b!) / (3 * 255)
@@ -91,10 +93,10 @@ describe('dark-mode chrome (root token application)', () => {
     expect(lightness(getComputedStyle(el).color)).toBeLessThan(DARK)
   })
 
-  it('WorkspaceTopBar (daemon-side chrome) inherits light text under .dark without any edit to that component', () => {
+  it('WorkspaceTopBar (daemon-side chrome) inherits light text under .dark without any edit to that component', async () => {
     document.documentElement.classList.add('dark')
 
-    const { getByText } = render(
+    const { findByText } = render(
       <WorkspaceTopBar
         workspaceId="sess_1"
         slug="design/login-flow"
@@ -105,7 +107,9 @@ describe('dark-mode chrome (root token application)', () => {
       />,
     )
 
-    const leaf = getByText('login-flow')
+    // Await the post-/names-fetch rename ('login-flow' → 'Login flow') so the
+    // async state update settles inside the test instead of warning after it.
+    const leaf = await findByText('Login flow')
     expect(lightness(getComputedStyle(leaf).color)).toBeGreaterThan(LIGHT)
   })
 })
