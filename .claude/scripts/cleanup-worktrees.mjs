@@ -4,20 +4,22 @@
 // it) and carries no uncommitted changes, delete the local branch, prune
 // worktree metadata, and optionally prune the pnpm store.
 //
-//   node .claude/scripts/cleanup-worktrees.mjs [--dry-run] [--store-prune]
+//   node .claude/scripts/cleanup-worktrees.mjs [--dry-run] [--store-prune] [--include-fresh]
 //
 // Safety: a worktree with uncommitted changes or an unmerged branch is always
 // left alone and reported — nothing here ever discards work.
 
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const repoRoot = resolve(fileURLToPath(import.meta.url), '../../..')
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const repoRoot = resolve(__dirname, '../..')
 const worktreesDir = join(repoRoot, '.claude', 'worktrees')
 const dryRun = process.argv.includes('--dry-run')
 const storePrune = process.argv.includes('--store-prune')
+const includeFresh = process.argv.includes('--include-fresh')
 
 function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: repoRoot, encoding: 'utf-8', ...opts }).trim()
@@ -28,7 +30,19 @@ if (!existsSync(worktreesDir)) {
   process.exit(0)
 }
 
-git(['fetch', 'origin', '--quiet'])
+try {
+  git(['fetch', 'origin', '--quiet'])
+} catch {
+  console.warn('warning: fetch from origin failed (offline?) — proceeding with local ref cache')
+}
+
+let mainTip
+try {
+  mainTip = git(['rev-parse', 'origin/main'])
+} catch {
+  console.error('error: origin/main ref not found — cannot determine merged status')
+  process.exit(1)
+}
 
 const entries = readdirSync(worktreesDir, { withFileTypes: true }).filter((e) => e.isDirectory())
 let removed = 0
@@ -59,8 +73,7 @@ for (const entry of entries) {
   // that is a freshly-created lane (possibly with an agent about to work in
   // it), not a folded one. The ancestor check below would misread it as
   // merged, so keep it unless --include-fresh is passed.
-  const mainTip = git(['rev-parse', 'origin/main'])
-  if (tip === mainTip && !process.argv.includes('--include-fresh')) {
+  if (tip === mainTip && !includeFresh) {
     console.log(`keep ${entry.name}: no commits yet (fresh lane; use --include-fresh to remove)`)
     kept++
     continue
@@ -73,11 +86,14 @@ for (const entry of entries) {
   } catch {
     // Squash-merged branches are not ancestors of main; fall back to
     // "remote branch deleted" as the merged signal (gh merge --delete-branch
-    // and our PR flow both delete the remote ref on merge).
-    try {
-      git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
-    } catch {
-      merged = branch !== '' // remote gone → treat as folded
+    // and our PR flow both delete the remote ref on merge). A detached HEAD
+    // (empty branch) has no remote ref to consult — leave it kept.
+    if (branch) {
+      try {
+        git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+      } catch {
+        merged = true // remote gone → treat as folded
+      }
     }
   }
 
@@ -109,7 +125,9 @@ git(['worktree', 'prune'])
 
 if (storePrune && !dryRun) {
   console.log('pruning pnpm store…')
-  execFileSync('pnpm', ['store', 'prune'], { cwd: repoRoot, stdio: 'inherit' })
+  // pnpm is a .cmd shim on Windows; execFileSync needs the exact filename.
+  const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+  execFileSync(pnpmCmd, ['store', 'prune'], { cwd: repoRoot, stdio: 'inherit' })
 }
 
 console.log(`done: ${removed} ${dryRun ? 'removable' : 'removed'}, ${kept} kept`)
