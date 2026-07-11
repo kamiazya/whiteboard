@@ -7,16 +7,23 @@
 // chunkFileNames so it can never leak into first paint unnoticed — this
 // budget is `required: true` because the chunk exists as of this gate.
 //
-// The entry ceiling is a regression stop at today's measured size (~541 KB),
-// not an endorsement: shrinking it toward the <300 KB app budget needs
-// loro/Excalidraw first-paint splitting, tracked separately.
+// The per-file entry-JS budget checks ONLY the literal index-*.js file, which
+// is misleading on its own: Vite/Rollup splits shared dependencies (React,
+// loro-crdt, Excalidraw...) into separate chunk files, and index.html
+// <link rel="modulepreload"> forces the browser to fetch every one of them
+// alongside the entry script before first paint — so they are part of the
+// same critical-path payload even though they live in different files. The
+// CRITICAL_PATH_BUDGET below sums entry + every modulepreloaded JS chunk
+// referenced from dist/index.html, which is the number that actually
+// reflects what a fresh visitor downloads before the app can render.
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const ASSETS = resolve(ROOT, 'dist', 'assets')
+const DIST = resolve(ROOT, 'dist')
+const ASSETS = resolve(DIST, 'assets')
 
 const KB = 1024
 const BUDGETS = [
@@ -29,6 +36,13 @@ const BUDGETS = [
     required: true,
   },
 ]
+
+// Regression stop at today's measured critical-path size (~555 KB, both
+// canvas pages statically imported — Excalidraw + loro-crdt ship in every
+// page load). This is deliberately NOT the <300 KB app-page target; it is
+// the honest current baseline plus headroom, tightened as
+// tmp/issues/apps-web-entry-bundle-over-budget.md's staged plan lands.
+const CRITICAL_PATH_BUDGET_KB = 570
 
 let failures = 0
 
@@ -63,6 +77,42 @@ for (const { label, pattern, limit, required } of BUDGETS) {
     } else {
       console.log(`  pass  ${label}: ${f} is ${sizeKb} KB gzip (budget ${limitKb} KB)`)
     }
+  }
+}
+
+// Critical-path total: entry script + every modulepreloaded JS chunk, as
+// listed in dist/index.html. This is what actually determines first-paint
+// transfer size — see the module comment above for why the per-file
+// entry-JS budget above cannot catch a regression here (e.g. a statically
+// imported Excalidraw/loro-crdt page would inflate this total without ever
+// growing index-*.js itself).
+const indexHtmlPath = join(DIST, 'index.html')
+if (!existsSync(indexHtmlPath)) {
+  console.error(`  FAIL  dist/index.html not found at ${indexHtmlPath} — run \`pnpm build\` first`)
+  failures++
+} else {
+  const html = readFileSync(indexHtmlPath, 'utf8')
+  const entryScripts = [...html.matchAll(/<script[^>]*\ssrc="(\/assets\/[^"]+\.js)"/g)].map(
+    (m) => m[1],
+  )
+  const modulepreloads = [
+    ...html.matchAll(/<link[^>]*\srel="modulepreload"[^>]*\shref="(\/assets\/[^"]+\.js)"/g),
+  ].map((m) => m[1])
+  const criticalPathFiles = [...new Set([...entryScripts, ...modulepreloads])]
+  let criticalPathBytes = 0
+  for (const href of criticalPathFiles) {
+    criticalPathBytes += gzipSize(join(DIST, href.replace(/^\//, '')))
+  }
+  const criticalPathKb = (criticalPathBytes / KB).toFixed(1)
+  if (criticalPathBytes > CRITICAL_PATH_BUDGET_KB * KB) {
+    console.error(
+      `  FAIL  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
+    )
+    failures++
+  } else {
+    console.log(
+      `  pass  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
+    )
   }
 }
 
