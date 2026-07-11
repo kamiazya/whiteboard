@@ -1132,6 +1132,53 @@ describe('createApp daemon mutation auth', () => {
     })
   })
 
+  describe('/api/* wildcard subdomain allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
+    const wildcardAllowedWebOrigins = ['https://*.kamiazya-whiteboard.pages.dev']
+
+    it('reflects ACAO for a wildcard-matched preview origin on GET', async () => {
+      const app = createApp({
+        ...createRuntimeOptions('secret'),
+        allowedWebOrigins: wildcardAllowedWebOrigins,
+      })
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://pr-42.kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://pr-42.kamiazya-whiteboard.pages.dev',
+      )
+    })
+
+    it('OPTIONS preflight for a wildcard-matched origin returns PNA + ALN headers', async () => {
+      const app = createApp({
+        ...createRuntimeOptions('secret'),
+        allowedWebOrigins: wildcardAllowedWebOrigins,
+      })
+      const res = await app.request('/api/runtime/ping', {
+        method: 'OPTIONS',
+        headers: { Origin: 'https://pr-42.kamiazya-whiteboard.pages.dev' },
+      })
+      expect(res.status).toBe(204)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBe(
+        'https://pr-42.kamiazya-whiteboard.pages.dev',
+      )
+      expect(res.headers.get('Access-Control-Allow-Private-Network')).toBe('true')
+      expect(res.headers.get('Access-Control-Allow-Local-Network')).toBe('true')
+    })
+
+    it('does NOT reflect ACAO for an origin outside the wildcard suffix', async () => {
+      const app = createApp({
+        ...createRuntimeOptions('secret'),
+        allowedWebOrigins: wildcardAllowedWebOrigins,
+      })
+      const res = await app.request('/api/runtime/ping', {
+        headers: { Origin: 'https://evil.com' },
+      })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('Access-Control-Allow-Origin')).toBeNull()
+    })
+  })
+
   describe('/mcp hosted-origin allowlist (WHITEBOARD_ALLOWED_WEB_ORIGINS)', () => {
     const allowedWebOrigins = ['https://kamiazya-whiteboard.pages.dev']
 
