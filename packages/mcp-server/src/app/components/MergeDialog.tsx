@@ -92,11 +92,23 @@ function badgeLabel(badge: Record<string, unknown>): BadgeView {
 
 const TONE_STYLE: Record<
   BadgeView['tone'],
-  { fg: string; bg: string; border: string; icon: typeof AlertTriangle }
+  { fg: string; bg: string; border: string; icon: typeof AlertTriangle; summaryLabel: string }
 > = {
-  danger: { fg: '#dc2626', bg: '#fee2e2', border: '#fecaca', icon: AlertTriangle },
-  warning: { fg: '#d97706', bg: '#fef3c7', border: '#fde68a', icon: AlertTriangle },
-  info: { fg: '#1971c2', bg: '#dbeafe', border: '#bfdbfe', icon: Info },
+  danger: {
+    fg: '#dc2626',
+    bg: '#fee2e2',
+    border: '#fecaca',
+    icon: AlertTriangle,
+    summaryLabel: 'critical',
+  },
+  warning: {
+    fg: '#d97706',
+    bg: '#fef3c7',
+    border: '#fde68a',
+    icon: AlertTriangle,
+    summaryLabel: 'warning',
+  },
+  info: { fg: '#1971c2', bg: '#dbeafe', border: '#bfdbfe', icon: Info, summaryLabel: 'info' },
 }
 
 interface CompareCardProps {
@@ -457,10 +469,7 @@ export function MergeDialog({
                   <span className="text-xs text-muted-foreground">
                     {(['danger', 'warning', 'info'] as const)
                       .filter((t) => (badgeByTone[t] ?? 0) > 0)
-                      .map(
-                        (t) =>
-                          `${badgeByTone[t]} ${t === 'danger' ? 'critical' : t === 'warning' ? 'warning' : 'info'}`,
-                      )
+                      .map((t) => `${badgeByTone[t]} ${TONE_STYLE[t].summaryLabel}`)
                       .join(' · ')}
                   </span>
                 </div>
