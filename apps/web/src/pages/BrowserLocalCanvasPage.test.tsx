@@ -4,6 +4,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES } from '../lib/provider.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
 
@@ -601,6 +602,41 @@ describe('BrowserLocalCanvasPage', () => {
     // The stale (generation 2) resolution must not clobber the fresh one.
     const optionNames = screen.getAllByRole('option').map((o) => o.textContent)
     expect(optionNames).toEqual(['untitled (fresh)'])
+  })
+
+  it('never triggers a React setState-in-render warning across mount, canvas switch, and create-canvas', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+      await act(async () => {
+        render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+      })
+      await act(async () => {
+        await vi.runAllTimersAsync()
+      })
+      assertNoSetStateInRenderWarning(errorSpy)
+
+      // Canvas switch re-renders CanvasTitle with a new key/props.
+      const switcher = screen.getByRole('combobox', { name: /canvases/i })
+      await act(async () => {
+        fireEvent.change(switcher, { target: { value: 'c2' } })
+        await vi.runAllTimersAsync()
+      })
+      assertNoSetStateInRenderWarning(errorSpy)
+
+      // Create-canvas flow drives another switch + re-render.
+      const newBtn = screen.getByRole('button', { name: /new canvas/i })
+      await act(async () => {
+        newBtn.click()
+        await vi.runAllTimersAsync()
+      })
+      assertNoSetStateInRenderWarning(errorSpy)
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   describe('daemon-only capability teasers', () => {
