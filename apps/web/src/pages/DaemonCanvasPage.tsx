@@ -5,9 +5,9 @@ import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { useEffect, useMemo, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
-import { HeaderBranchChip } from '../components/HeaderBranchChip.js'
+import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
-import VersionTimeline from '../components/VersionTimeline.js'
+import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -65,7 +65,6 @@ export function DaemonCanvasPage({
 
   const [authError, setAuthError] = useState(false)
   const [newCanvasSlug, setNewCanvasSlug] = useState('')
-  const [versionPanelOpen, setVersionPanelOpen] = useState(false)
   // Bumped on an externally observed HEAD change (another client, an MCP
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
@@ -102,6 +101,10 @@ export function DaemonCanvasPage({
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
+    identity:
+      controller.workspaceId !== null && controller.slug !== null
+        ? { workspaceId: controller.workspaceId, slug: controller.slug }
+        : undefined,
   })
 
   const saveVersion = async (): Promise<void> => {
@@ -162,148 +165,114 @@ export function DaemonCanvasPage({
     )
   }
 
+  const versionPanelExtra =
+    capabilities.versions && controller.workspaceId !== null && controller.slug !== null ? (
+      <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
+        <button
+          type="button"
+          onClick={() => void saveVersion()}
+          disabled={savingVersion}
+          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {savingVersion ? 'Saving…' : 'Save version'}
+        </button>
+        {saveVersionMessage && (
+          <span
+            role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
+            aria-live="polite"
+            className={
+              saveVersionMessage.kind === 'error'
+                ? 'text-xs text-destructive'
+                : 'text-xs text-muted-foreground'
+            }
+          >
+            {saveVersionMessage.text}
+          </span>
+        )}
+      </div>
+    ) : null
+
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <main className="relative flex h-dvh w-full flex-col">
-        <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
-          <h1 className="sr-only">Whiteboard (daemon)</h1>
-          {controller.switchError && (
-            <div role="alert" aria-live="assertive" className="flex items-center gap-2">
-              <span className="text-xs text-destructive">{controller.switchError}</span>
-            </div>
-          )}
-          {authError && (
-            <div role="alert" aria-live="assertive" className="flex items-center gap-2">
-              <span className="text-xs text-destructive">
-                The daemon rejected this session. Try re-pairing.
-              </span>
-              {onContinueBrowserLocal && (
-                <button
-                  type="button"
-                  onClick={onContinueBrowserLocal}
-                  className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
-                >
-                  Continue in browser-local
-                </button>
-              )}
-            </div>
-          )}
-          {controller.canvases.length > 0 && controller.slug !== null && (
+        <h1 className="sr-only">Whiteboard (daemon)</h1>
+        {controller.switchError && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="flex items-center gap-2 border-b bg-background px-4 py-1"
+          >
+            <span className="text-xs text-destructive">{controller.switchError}</span>
+          </div>
+        )}
+        {authError && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="flex items-center gap-2 border-b bg-background px-4 py-1"
+          >
+            <span className="text-xs text-destructive">
+              The daemon rejected this session. Try re-pairing.
+            </span>
+            {onContinueBrowserLocal && (
+              <button
+                type="button"
+                onClick={onContinueBrowserLocal}
+                className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
+              >
+                Continue in browser-local
+              </button>
+            )}
+          </div>
+        )}
+        {controller.workspaceId !== null && controller.slug !== null && (
+          <WorkspaceTopBar
+            workspaceId={controller.workspaceId}
+            slug={controller.slug}
+            canvases={controller.canvases}
+            onNavigateToCanvas={controller.switchCanvas}
+            capabilities={{
+              versions: capabilities.versions,
+              branches: capabilities.branches,
+              merge: capabilities.merge,
+            }}
+            branchRefreshSignal={branchRefreshSignal}
+            versionRefreshSignal={versionRefreshSignal}
+            onRestored={clearLocalUndo}
+            versionPanelExtra={versionPanelExtra}
+          />
+        )}
+        {capabilities.branches && controller.workspaceId !== null && controller.slug !== null && (
+          <HeaderBranchBanner workspaceId={controller.workspaceId} slug={controller.slug} />
+        )}
+        <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
+          {capabilities.workspaces && controller.workspaces.length > 0 ? (
             <select
-              aria-label="Canvases"
-              value={controller.slug}
-              onChange={(event) => controller.switchCanvas(event.target.value)}
+              aria-label="Workspaces"
+              value={controller.workspaceId ?? ''}
+              onChange={(event) => void controller.switchWorkspace(event.target.value)}
               className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
             >
-              {controller.canvases.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.slug}
+              {controller.workspaces.map((w) => (
+                <option key={w.workspaceId} value={w.workspaceId}>
+                  {w.workspaceId}
                 </option>
               ))}
             </select>
+          ) : (
+            <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            {capabilities.versions ? (
-              <button
-                type="button"
-                aria-pressed={versionPanelOpen}
-                onClick={() => setVersionPanelOpen((open) => !open)}
-                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent aria-pressed:bg-accent"
-              >
-                Version history
-              </button>
-            ) : (
-              // enabled reflects the CAPABILITY, not whether a canvas is
-              // selected yet — a fresh empty workspace must not claim the
-              // feature needs a daemon connection it already has.
-              <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
-            )}
-            {capabilities.versions &&
-              controller.workspaceId !== null &&
-              controller.slug !== null && (
-                <button
-                  type="button"
-                  onClick={() => void saveVersion()}
-                  disabled={savingVersion}
-                  className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {savingVersion ? 'Saving…' : 'Save version'}
-                </button>
-              )}
-            {saveVersionMessage && (
-              <span
-                role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
-                aria-live="polite"
-                className={
-                  saveVersionMessage.kind === 'error'
-                    ? 'text-xs text-destructive'
-                    : 'text-xs text-muted-foreground'
-                }
-              >
-                {saveVersionMessage.text}
-              </span>
-            )}
-            {capabilities.workspaces && controller.workspaces.length > 0 ? (
-              <select
-                aria-label="Workspaces"
-                value={controller.workspaceId ?? ''}
-                onChange={(event) => void controller.switchWorkspace(event.target.value)}
-                className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
-              >
-                {controller.workspaces.map((w) => (
-                  <option key={w.workspaceId} value={w.workspaceId}>
-                    {w.workspaceId}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
-            )}
-            {capabilities.branches &&
-            controller.workspaceId !== null &&
-            controller.slug !== null ? (
-              <HeaderBranchChip
-                workspaceId={controller.workspaceId}
-                slug={controller.slug}
-                refreshSignal={branchRefreshSignal}
-                mergeEnabled={capabilities.merge}
-              />
-            ) : (
-              <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
-            )}
-            {/* Merge lives inside HeaderBranchChip's per-branch "Merge into
-                HEAD" action (which embeds MergeDialog); there is no separate
-                merge entry point. The chip itself disables that action via
-                mergeEnabled, so this stays a static teaser only when merge
-                is unavailable, matching the other capability indicators. */}
-            {!capabilities.merge && <CapabilityTeaser label="Merge" enabled={false} />}
-          </div>
-        </header>
-        {versionPanelOpen && controller.workspaceId !== null && controller.slug !== null && (
-          <div className="w-72 shrink-0 border-l bg-background absolute right-0 top-0 bottom-0 z-10 shadow-lg overflow-hidden flex flex-col">
-            {/* The panel overlays the header (including the toggle that opened
-                it), so it needs its own close affordance rather than relying
-                on a control the panel itself may cover. */}
-            <div className="flex shrink-0 items-center justify-end border-b px-2 py-1">
-              <button
-                type="button"
-                aria-label="Close version history"
-                onClick={() => setVersionPanelOpen(false)}
-                className="rounded-md border px-2 py-0.5 text-xs font-medium transition-colors hover:bg-accent"
-              >
-                Close
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-hidden">
-              <VersionTimeline
-                workspaceId={controller.workspaceId}
-                slug={controller.slug}
-                onRestored={clearLocalUndo}
-                refreshSignal={versionRefreshSignal}
-              />
-            </div>
-          </div>
-        )}
+          {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
+              affordances once a canvas is selected; these page-level teasers only
+              surface guidance while the capability itself is unavailable. */}
+          {!capabilities.versions && (
+            <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
+          )}
+          {!capabilities.branches && (
+            <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
+          )}
+          {!capabilities.merge && <CapabilityTeaser label="Merge" enabled={false} />}
+        </div>
         {controller.canvases.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             <p className="text-sm text-muted-foreground">This workspace has no canvases yet.</p>
