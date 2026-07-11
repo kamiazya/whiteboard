@@ -31,7 +31,10 @@ if (!existsSync(worktreesDir)) {
 }
 
 try {
-  git(['fetch', 'origin', '--quiet'])
+  // --prune: the "remote branch deleted" fallback below reads remote-tracking
+  // refs, which plain fetch never removes — without pruning, a squash-merged
+  // lane whose remote branch was deleted still looks unmerged forever.
+  git(['fetch', 'origin', '--prune', '--quiet'])
 } catch {
   console.warn('warning: fetch from origin failed (offline?) — proceeding with local ref cache')
 }
@@ -86,13 +89,36 @@ for (const entry of entries) {
   } catch {
     // Squash-merged branches are not ancestors of main; fall back to
     // "remote branch deleted" as the merged signal (gh merge --delete-branch
-    // and our PR flow both delete the remote ref on merge). A detached HEAD
-    // (empty branch) has no remote ref to consult — leave it kept.
+    // and our PR flow both delete the remote ref on merge). But a lane that
+    // was NEVER published (new-worktree.mjs creates the branch locally; only
+    // `git push -u` sets an upstream) also has no remote ref — deleting it
+    // would destroy committed-but-unpushed work. Only treat a missing remote
+    // ref as "folded" when the branch had an upstream configured, i.e. it
+    // was pushed at some point and the remote side has since been deleted.
     if (branch) {
+      // "Published" means the upstream points at the branch's own name on the
+      // remote (what `git push -u` records). Creating a lane from
+      // origin/main auto-sets upstream to refs/heads/main via
+      // branch.autoSetupMerge, so a bare "has upstream" check would misread
+      // every never-pushed lane as published.
+      let wasPublished = false
       try {
-        git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+        const mergeRef = git(['config', '--get', `branch.${branch}.merge`])
+        // Also require the upstream REMOTE to be origin: in a fork workflow
+        // the upstream may live on another remote, whose refs we neither
+        // fetch nor prune here — treating its absence under origin/ as
+        // "deleted" would force-delete a live lane.
+        const remote = git(['config', '--get', `branch.${branch}.remote`])
+        wasPublished = mergeRef === `refs/heads/${branch}` && remote === 'origin'
       } catch {
-        merged = true // remote gone → treat as folded
+        /* never published */
+      }
+      if (wasPublished) {
+        try {
+          git(['rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`])
+        } catch {
+          merged = true // was published, remote gone → folded
+        }
       }
     }
   }
