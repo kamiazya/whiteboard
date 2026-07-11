@@ -105,6 +105,23 @@ describe('importOneCanvas', () => {
     )
   })
 
+  it('returns a structured failure instead of rejecting when fetch throws (daemon offline)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const result = await importOneCanvas({
+      fetch: fetchMock,
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+      workspaceId: 'ws1',
+      canvasName: 'My Canvas',
+      loroLoad: loroOkResult(),
+    })
+
+    expect(result.kind).toBe('failed')
+    if (result.kind === 'failed') {
+      expect(result.reason).toMatch(/daemon|network/i)
+    }
+  })
+
   it('retries with -2 then -3 suffixes on 409, bounded to 3 create attempts', async () => {
     const fetchMock = vi
       .fn()

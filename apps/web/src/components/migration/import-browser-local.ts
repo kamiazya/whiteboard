@@ -79,6 +79,19 @@ async function parseErrorTitle(res: Response): Promise<string> {
 export async function importOneCanvas(
   options: ImportOneCanvasOptions,
 ): Promise<ImportOneCanvasResult> {
+  try {
+    return await importOneCanvasUnsafe(options)
+  } catch {
+    // A thrown fetch (daemon offline, connection dropped mid-import) must
+    // surface as a structured per-canvas failure, never a rejected promise
+    // the batch loop has to defend against.
+    return { kind: 'failed', reason: 'Could not reach the daemon (network error).' }
+  }
+}
+
+async function importOneCanvasUnsafe(
+  options: ImportOneCanvasOptions,
+): Promise<ImportOneCanvasResult> {
   const { fetch, daemonBaseUrl, workspaceId, canvasName, loroLoad } = options
 
   if (loroLoad.kind !== 'ok') {
