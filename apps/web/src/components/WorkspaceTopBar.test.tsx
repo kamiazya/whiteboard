@@ -665,3 +665,28 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(await screen.findByTestId('version-panel-extra-slot')).not.toBeNull()
   })
 })
+
+describe('WorkspaceTopBar — workspaceId URL encoding', () => {
+  it('percent-encodes a workspaceId with reserved characters in the names fetch', async () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws 1#x"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+    await waitFor(() => {
+      const namesCall = vi
+        .mocked(apiFetch)
+        .mock.calls.find((call) => String(call[0]).includes('/names'))
+      expect(namesCall).toBeTruthy()
+      expect(String(namesCall?.[0])).toContain(
+        `/api/workspaces/${encodeURIComponent('ws 1#x')}/names`,
+      )
+    })
+  })
+})

@@ -135,7 +135,7 @@ export function DaemonCanvasPage({
     setSaveVersionMessage(null)
     try {
       const res = await daemonFetch(
-        `${daemonBaseUrl}/api/workspaces/${canvas.workspaceId}/canvases/${encodeURIComponent(canvas.slug)}/versions`,
+        `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(canvas.workspaceId)}/canvases/${encodeURIComponent(canvas.slug)}/versions`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

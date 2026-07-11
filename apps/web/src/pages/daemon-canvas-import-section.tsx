@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useState } from 'react'
 import { ImportBrowserLocalPanel } from '../components/migration/ImportBrowserLocalPanel.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -24,8 +24,10 @@ export function DaemonCanvasImportSection({
   daemonBaseUrl,
   browserLocalStore,
 }: DaemonCanvasImportSectionProps) {
-  const loroStore = useMemo(() => new LoroStore(), [])
-  const settingsStore = useMemo(() => createUserSettingsStore(), [])
+  // useState's lazy initializer guarantees exactly-once construction per
+  // mount; useMemo may legally re-run and would reset the stores' state.
+  const [loroStore] = useState(() => new LoroStore())
+  const [settingsStore] = useState(() => createUserSettingsStore())
 
   return (
     <ImportBrowserLocalPanel

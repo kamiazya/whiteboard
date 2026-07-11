@@ -230,7 +230,7 @@ export default function WorkspaceTopBar({
       setSaving(true)
       try {
         const res = await daemonFetch(
-          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
+          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -255,7 +255,7 @@ export default function WorkspaceTopBar({
             const blob = await getThumbnailBlob()
             if (blob) {
               await daemonFetch(
-                `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
+                `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
                 {
                   method: 'PUT',
                   headers: { 'Content-Type': 'image/png' },
@@ -306,7 +306,7 @@ export default function WorkspaceTopBar({
     let active = true
     ;(async () => {
       try {
-        const res = await daemonFetch(`/api/workspaces/${workspaceId}/names`)
+        const res = await daemonFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/names`)
         if (res.ok && active) setNames(workspaceNamesSchema.parse(await res.json()))
       } catch {
         /* best-effort */
@@ -315,17 +315,17 @@ export default function WorkspaceTopBar({
     return () => {
       active = false
     }
-    // daemonFetch is either the stable module-level apiFetch (no provider) or
-    // the daemon page's memoized createDaemonFetch(...) result; it must not
-    // retrigger this effect on its own to avoid refetching on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId])
+    // daemonFetch is stable per identity (module-level apiFetch, or the daemon
+    // page's memoized createDaemonFetch result), so including it does not
+    // refetch per render — and a genuinely new fetch identity (base URL or
+    // token change) must refetch to avoid serving stale names.
+  }, [workspaceId, daemonFetch])
 
   const commitCanvasName = async () => {
     const name = draft.trim()
     try {
       const res = await daemonFetch(
-        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/name`,
+        `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/name`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -352,7 +352,7 @@ export default function WorkspaceTopBar({
     async (targetSlug: string, pinned: boolean) => {
       try {
         const res = await daemonFetch(
-          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(targetSlug)}/pin`,
+          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(targetSlug)}/pin`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -462,7 +462,7 @@ export default function WorkspaceTopBar({
     setNewCanvasBusy(true)
     setNewCanvasError(null)
     try {
-      const res = await daemonFetch(`/api/workspaces/${workspaceId}/canvases`, {
+      const res = await daemonFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: target }),
