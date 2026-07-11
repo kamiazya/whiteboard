@@ -1,14 +1,28 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { type ReactNode, useEffect } from 'react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Excalidraw is heavy and not relevant to CanvasPage's own render logic;
 // stub it to a lightweight marker so tests can assert the editor mounted
-// without pulling in the real canvas engine.
+// without pulling in the real canvas engine. The stub DOES invoke the
+// excalidrawAPI callback on mount: CanvasPage polls apiRef for up to 5s,
+// and a never-set ref would leak that background timer loop into every
+// test in this file.
 vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: () => <div data-testid="excalidraw-stub" />,
+  Excalidraw: ({ excalidrawAPI }: { excalidrawAPI?: (api: unknown) => void }) => {
+    useEffect(() => {
+      excalidrawAPI?.({
+        updateScene: vi.fn(),
+        addFiles: vi.fn(),
+        getSceneElements: () => [],
+        getAppState: () => ({}),
+        getFiles: () => ({}),
+      })
+    }, [excalidrawAPI])
+    return <div data-testid="excalidraw-stub" />
+  },
   exportToBlob: vi.fn(),
   CaptureUpdateAction: { NEVER: 'never' },
   restoreElements: vi.fn(),
