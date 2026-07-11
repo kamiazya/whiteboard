@@ -35,16 +35,20 @@ function isAllowedBrowserOrigin(
   if (!requestHost) return false
   if (!isLoopbackHostname(requestHost)) return false
   if (!originHeader) return true
-  // Use the shared normalizer (strips IPv6 brackets) so this side agrees
-  // with normalizeHostHeader above — otherwise http://[::1] never matches
-  // a Host header normalized to bare "::1".
+  // Any loopback Origin is admitted, mirroring the HTTP CORS policy
+  // (createApiLoopbackCorsMiddleware). Loopback names (localhost /
+  // 127.0.0.1 / ::1) all resolve to the same interface and a local page can
+  // always target the daemon under its own loopback name, so requiring
+  // originHost === requestHost never blocked a local attacker — it only
+  // broke legitimate cross-name pairs (a localhost:5173 page against a
+  // 127.0.0.1 daemon). The real guards are the loopback Host check above
+  // (DNS rebinding) and the token check in authorizeWsUpgrade.
   const originHost = normalizeOriginHostname(originHeader)
-  if (originHost !== null && isLoopbackHostname(originHost) && originHost === requestHost) {
+  if (originHost !== null && isLoopbackHostname(originHost)) {
     return true
   }
   // A hosted pairing origin (e.g. https://kamiazya-whiteboard.pages.dev) is
-  // never loopback, so it cannot satisfy originHost === requestHost above —
-  // it is admitted only via an exact allowlist match instead.
+  // never loopback — it is admitted only via an exact allowlist match.
   return isAllowedWebOrigin(originHeader, allowedOrigins)
 }
 
