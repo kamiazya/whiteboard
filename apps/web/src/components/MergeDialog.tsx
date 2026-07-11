@@ -14,7 +14,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { type JSX, useEffect, useMemo, useState } from 'react'
-import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { safeErrorCopy } from '@/lib/error-copy'
 import { dispatchMergeCommitted } from '@/lib/merge-committed-event'
 import { cn } from '@/lib/utils'
@@ -27,6 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from './ui/dialog.js'
+import { VersionThumbnail } from './VersionThumbnail.js'
 
 // Note: this originally tried to embed a read-only <Excalidraw> preview, but Excalidraw does not
 // recommend multi-instance usage and it destabilized the main canvas scene state.
@@ -121,7 +122,9 @@ interface CompareCardProps {
   branch: BranchMeta | null
   count: number | undefined
   delta?: number
-  thumbUrl: string | null
+  workspaceId?: string
+  slug?: string
+  thumbVersionId: string | null
   loading: boolean
 }
 
@@ -130,7 +133,9 @@ function CompareCard({
   branch,
   count,
   delta,
-  thumbUrl,
+  workspaceId,
+  slug,
+  thumbVersionId,
   loading,
 }: CompareCardProps): JSX.Element {
   const accent = branch?.color ?? '#64748b'
@@ -160,12 +165,12 @@ function CompareCard({
           <div className="flex h-full items-center justify-center">
             <Loader2 className="size-4 animate-spin text-muted-foreground" />
           </div>
-        ) : thumbUrl ? (
-          <img
-            src={thumbUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
+        ) : thumbVersionId && workspaceId && slug ? (
+          <VersionThumbnail
+            workspaceId={workspaceId}
+            slug={slug}
+            versionId={thumbVersionId}
+            hasThumbnail
             className="h-full w-full object-contain"
           />
         ) : (
@@ -200,10 +205,6 @@ function CompareCard({
   )
 }
 
-function thumbUrlFor(workspaceId: string, slug: string, versionId: string): string {
-  return `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(versionId)}/thumbnail`
-}
-
 export function MergeDialog({
   open,
   source,
@@ -223,10 +224,6 @@ export function MergeDialog({
   })
   const [thumbsLoading, setThumbsLoading] = useState(false)
   const fetchFn = useDaemonApi()
-  // Thumbnail <img src> is a plain browser request that cannot carry the
-  // daemon's bearer token, so it only works same-origin (no provider
-  // mounted) — same precedent as VersionTimeline.
-  const hasDaemonApi = useHasDaemonApi()
 
   // Dry-run preview.
   useEffect(() => {
@@ -251,18 +248,13 @@ export function MergeDialog({
     }
   }, [open, source, target, runMerge])
 
-  // Thumbnail fallback.
+  // Thumbnail fallback — resolves the latest thumbnail-bearing version id per
+  // branch. Runs in both same-origin and daemon mode: VersionThumbnail (used
+  // by CompareCard below) handles the authorized fetch + objectURL in daemon
+  // mode, so this effect only needs the version id, never a raw <img> URL.
   useEffect(() => {
     if (!open || !source || !target || !workspaceId || !slug) {
       setThumbs({ target: null, source: null })
-      return
-    }
-    // Cross-origin daemon mode suppresses thumbnails outright (the <img>
-    // cannot carry the bearer token), so skip the versions fetch whose only
-    // purpose is resolving thumbnail URLs.
-    if (hasDaemonApi) {
-      setThumbs({ target: null, source: null })
-      setThumbsLoading(false)
       return
     }
     let cancelled = false
@@ -291,8 +283,8 @@ export function MergeDialog({
         const tgt = latestFor(target.name)
         const src = latestFor(source.name)
         setThumbs({
-          target: tgt ? thumbUrlFor(workspaceId, slug, tgt.id) : null,
-          source: src ? thumbUrlFor(workspaceId, slug, src.id) : null,
+          target: tgt?.id ?? null,
+          source: src?.id ?? null,
         })
       } catch {
         // Fall back to placeholders if thumbnail loading fails, so a stale pair from a
@@ -305,7 +297,7 @@ export function MergeDialog({
     return () => {
       cancelled = true
     }
-  }, [open, source, target, workspaceId, slug, fetchFn, hasDaemonApi])
+  }, [open, source, target, workspaceId, slug, fetchFn])
 
   const handleMerge = async () => {
     if (!source || !target) return
@@ -399,14 +391,18 @@ export function MergeDialog({
             branch={source}
             count={sourceCount}
             delta={sourceDelta}
-            thumbUrl={thumbs.source}
+            workspaceId={workspaceId}
+            slug={slug}
+            thumbVersionId={thumbs.source}
             loading={thumbsLoading}
           />
           <CompareCard
             kind="target"
             branch={target}
             count={targetCount}
-            thumbUrl={thumbs.target}
+            workspaceId={workspaceId}
+            slug={slug}
+            thumbVersionId={thumbs.target}
             loading={thumbsLoading}
           />
         </div>
@@ -440,11 +436,13 @@ export function MergeDialog({
                 <Loader2 className="size-4 animate-spin" />
                 Calculating preview…
               </div>
-            ) : thumbs.source ? (
+            ) : thumbs.source && workspaceId && slug ? (
               // Show the latest source-branch thumbnail as a practical preview fallback.
-              <img
-                src={thumbs.source}
-                alt={`${source?.name ?? ''} merged preview`}
+              <VersionThumbnail
+                workspaceId={workspaceId}
+                slug={slug}
+                versionId={thumbs.source}
+                hasThumbnail
                 className="h-full w-full object-contain"
               />
             ) : (

@@ -17,10 +17,11 @@ import {
 } from '@/components/ui/alert-dialog'
 import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
+import { VersionThumbnail } from './VersionThumbnail.js'
 
 const log = getAppLogger('VersionTimeline')
 
@@ -65,7 +66,6 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
 export default function VersionTimeline({ workspaceId, slug, onRestored }: Props) {
   const fetchFn = useDaemonApi()
-  const hasDaemonApi = useHasDaemonApi()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
@@ -275,16 +275,13 @@ export default function VersionTimeline({ workspaceId, slug, onRestored }: Props
                       setPendingRestore(v)
                     }}
                   >
-                    {/* A plain <img src> cannot carry the daemon origin or bearer
-                        token, so thumbnails only render for the same-origin
-                        mcp-server app (no DaemonApiContext provider mounted). */}
-                    {v.hasThumbnail && !hasDaemonApi && (
+                    {v.hasThumbnail && (
                       <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
-                        <img
-                          src={`/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${v.id}/thumbnail`}
-                          alt=""
-                          className="w-full h-20 object-contain"
-                          loading="lazy"
+                        <VersionThumbnail
+                          workspaceId={workspaceId}
+                          slug={slug}
+                          versionId={v.id}
+                          hasThumbnail={v.hasThumbnail}
                         />
                       </div>
                     )}
