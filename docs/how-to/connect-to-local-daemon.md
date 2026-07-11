@@ -6,6 +6,11 @@ covers what happens once a local daemon (started via `whiteboard mcp` or an
 MCP client) is also running on the same machine, and how to move a
 browser-local canvas onto it.
 
+The web app UI calls these "variations" and "combining changes," but the
+underlying MCP tools your AI agent calls (`create_branch`, `merge`, and so
+on) intentionally keep their git-derived names — the UI vocabulary is a
+presentation-layer choice and does not change the tool contract.
+
 ## How detection works
 
 The web app probes `GET /api/runtime/ping` on the daemon's default loopback

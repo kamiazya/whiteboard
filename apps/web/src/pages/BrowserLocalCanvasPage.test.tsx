@@ -560,7 +560,7 @@ describe('BrowserLocalCanvasPage', () => {
 
   describe('daemon-only capability messaging', () => {
     const CTA_TEXT =
-      'Connect a local daemon (MCP) to unlock version history, workspaces, branches, and merge'
+      'Connect a local daemon (MCP) to unlock version history, workspaces, variations, and combining changes'
 
     it('shows a single compact CTA line instead of the four daemon-only teaser buttons', async () => {
       const store = new MemoryStore()
