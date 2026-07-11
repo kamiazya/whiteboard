@@ -282,6 +282,24 @@ describe('App local-daemon provider state', () => {
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
   })
 
+  it('preserves the opened canvas workspaceId as initialWorkspaceId when navigating back to the index', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-index-page')
+    act(() => {
+      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
+        'workspace-b',
+        'main',
+      )
+    })
+    await screen.findByTestId('daemon-canvas-page')
+    const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
+    act(() => {
+      onNavigateBack()
+    })
+    await screen.findByTestId('daemon-index-page')
+    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+  })
+
   it('remounts DaemonCanvasPage cleanly when opening a different canvas after returning to the index', async () => {
     render(<App providerState={LOCAL_DAEMON_STATE} />)
     await screen.findByTestId('daemon-index-page')

@@ -152,7 +152,9 @@ export function App({ providerState }: AppProps) {
                 token={pairedToken}
                 onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
                 browserLocalStore={browserLocalStore}
-                onNavigateBack={() => setDaemonView({ kind: 'index' })}
+                onNavigateBack={() =>
+                  setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                }
               />
             )}
           </Suspense>
@@ -223,6 +225,7 @@ export function App({ providerState }: AppProps) {
                 <DaemonIndexPage
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   token={daemonToken}
+                  initialWorkspaceId={daemonView.workspaceId}
                   onOpenCanvas={(workspaceId, slug) =>
                     setDaemonView({ kind: 'canvas', workspaceId, slug })
                   }
@@ -237,7 +240,9 @@ export function App({ providerState }: AppProps) {
                   token={daemonToken}
                   browserLocalStore={browserLocalStore}
                   onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
-                  onNavigateBack={() => setDaemonView({ kind: 'index' })}
+                  onNavigateBack={() =>
+                    setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                  }
                 />
               )}
             </Suspense>
