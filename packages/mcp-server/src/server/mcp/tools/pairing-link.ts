@@ -110,7 +110,9 @@ function encodeBase64UrlJson(payload: unknown): string {
 // parser rejects outright.
 function resolveEnvWebOrigin(): string | undefined {
   const raw = process.env.WHITEBOARD_WEB_ORIGIN
-  if (raw === undefined) return undefined
+  // Empty string means "unset" (a cleared env var in shell scripts), not a
+  // misconfiguration — fall back to the default rather than failing loudly.
+  if (!raw) return undefined
 
   const parsed = bareHttpOriginSchema.safeParse(raw)
   if (!parsed.success) {
@@ -126,7 +128,10 @@ function isLoopbackOrigin(origin: string): boolean {
     const { hostname } = new URL(origin)
     return (
       hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
+      // The whole 127.0.0.0/8 block is loopback, not just 127.0.0.1.
+      /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+      // Node's WHATWG URL keeps the brackets ('[::1]'); the bare form is
+      // retained for runtimes that strip them.
       hostname === '::1' ||
       hostname === '[::1]'
     )
@@ -182,7 +187,10 @@ export function pairingLinkTool() {
       }
 
       const payload = mirroredDaemonConnectionPayloadSchema.parse({
-        baseUrl: client.baseUrl,
+        // Normalize to a bare origin: a trailing slash (or any non-normalized
+        // form) in the client's baseUrl would fail the strict mirror schema
+        // and turn a valid daemon into a tool error.
+        baseUrl: new URL(client.baseUrl).origin,
         workspaceId: args.workspaceId,
         slug: args.slug,
         fullscreen: args.fullscreen,

@@ -121,6 +121,21 @@ describe('create_pairing_link tool', () => {
     }
   })
 
+  it('treats an empty WHITEBOARD_WEB_ORIGIN as unset and falls back to the default origin', async () => {
+    const tool = pairingLinkTool()
+    const client = stubClient()
+
+    const previousEnv = process.env.WHITEBOARD_WEB_ORIGIN
+    try {
+      process.env.WHITEBOARD_WEB_ORIGIN = ''
+      const result = await tool.execute({}, client)
+      expect(result.webOrigin).toBe('https://kamiazya-whiteboard.pages.dev')
+    } finally {
+      if (previousEnv === undefined) delete process.env.WHITEBOARD_WEB_ORIGIN
+      else process.env.WHITEBOARD_WEB_ORIGIN = previousEnv
+    }
+  })
+
   it('rejects an invalid WHITEBOARD_WEB_ORIGIN env value instead of minting an unvalidated link', async () => {
     const tool = pairingLinkTool()
     const client = stubClient()
@@ -168,6 +183,29 @@ describe('create_pairing_link tool', () => {
     const loopbackText = buildPairingLinkText(loopbackResult, loopbackResult.webOrigin)
     expect(loopbackText).toContain(PAIRING_LINK_CREDENTIAL_NOTE)
     expect(loopbackText).not.toContain('cannot confirm it is present')
+  })
+
+  it('treats the whole 127.0.0.0/8 range (and bracketed IPv6) as loopback — no allowlist warning', async () => {
+    const tool = pairingLinkTool()
+    const client = stubClient()
+
+    for (const origin of ['http://127.0.0.5:5173', 'http://[::1]:5173']) {
+      const result = await tool.execute({ webOrigin: origin }, client)
+      const text = buildPairingLinkText(result, result.webOrigin)
+      expect(text, origin).not.toContain('cannot confirm it is present')
+    }
+  })
+
+  it('normalizes a trailing-slash daemon baseUrl instead of failing the payload parse', async () => {
+    const tool = pairingLinkTool()
+    const client = stubClient({ baseUrl: 'http://127.0.0.1:3099/' })
+
+    const result = await tool.execute({}, client)
+    const fragment = result.url.split('#wb=')[1]
+    const payload = JSON.parse(Buffer.from(fragment, 'base64url').toString('utf-8')) as {
+      baseUrl: string
+    }
+    expect(payload.baseUrl).toBe('http://127.0.0.1:3099')
   })
 })
 
