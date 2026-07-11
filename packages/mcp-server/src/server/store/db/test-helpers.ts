@@ -84,15 +84,17 @@ export async function createIsolatedDb(
   return {
     db,
     async dispose() {
+      // Drain registered dispose hooks (e.g. canvas-store's pending
+      // auto-compact timers/in-flight compactions) before removing the cache
+      // entry or destroying the driver, matching production's
+      // closeDb()/clearDbCache() ordering. Removing the cache entry first
+      // would let a hook's re-entrant getDb(dataDir) call race a replacement
+      // connection into the cache while this one is still being drained.
+      await runDbDisposeHooks()
       removeCachedDb(dataDir)
       // prepareDataDir memoizes per-dataDir; clearing keeps the next test free
       // to call prepareDataDir again without picking up the disposed promise.
       clearPrepareCache()
-      // Drain registered dispose hooks (e.g. canvas-store's pending
-      // auto-compact timers/in-flight compactions) before destroying the
-      // driver, matching production's closeDb()/clearDbCache() ordering so
-      // no hook can reach a destroyed connection.
-      await runDbDisposeHooks()
       await db.destroy()
     },
   }

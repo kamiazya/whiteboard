@@ -77,8 +77,12 @@ export async function runDbDisposeHooks(): Promise<void> {
 export async function closeDb(dataDir: string = DATA_DIR): Promise<void> {
   const pending = cache.get(dataDir)
   if (!pending) return
-  cache.delete(dataDir)
+  // Run hooks BEFORE removing the cache entry. A hook (e.g. an already-fired
+  // auto-compact) can re-enter getDb(dataDir) while draining; leaving the
+  // entry cached lets that re-entrant call reuse the connection being
+  // disposed instead of racing a replacement connection into the cache.
   await runDbDisposeHooks()
+  cache.delete(dataDir)
   const db = await pending.catch(() => null)
   if (db) await db.destroy()
 }
@@ -94,15 +98,22 @@ export async function closeDb(dataDir: string = DATA_DIR): Promise<void> {
 // createIsolatedDb's handle.dispose()) when the caller needs to await
 // teardown completing before proceeding.
 export function clearDbCache(): void {
-  for (const pending of cache.values()) {
+  // Snapshot the entries and remove each one only after its own dispose
+  // hooks have run (not eagerly via a synchronous cache.clear()). Clearing
+  // the whole cache up front would let a hook's re-entrant getDb() call for
+  // the same dataDir find no cached entry and build a replacement connection
+  // while the original is still being drained.
+  for (const [dataDir, pending] of cache.entries()) {
     void pending
       .then(async (db) => {
         await runDbDisposeHooks()
+        cache.delete(dataDir)
         await db.destroy()
       })
-      .catch(() => {})
+      .catch(() => {
+        cache.delete(dataDir)
+      })
   }
-  cache.clear()
 }
 
 // Test-only seam. `createIsolatedDb` registers a memory-backed Database under
