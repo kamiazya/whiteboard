@@ -157,9 +157,9 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
         </div>
         {(switchedHead || deletedSource) && (
           <div className="text-[11px] text-muted-foreground/90">
-            {switchedHead ? `Switched to "${displayBranchName(switchedHead.to)}"` : null}
+            {switchedHead ? `Switched to «${displayBranchName(switchedHead.to)}»` : null}
             {switchedHead && deletedSource ? ' · ' : null}
-            {deletedSource ? `Deleted "${displayBranchName(deletedSource)}"` : null}
+            {deletedSource ? `Deleted «${displayBranchName(deletedSource)}»` : null}
           </div>
         )}
         {canUndo && (

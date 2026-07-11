@@ -86,8 +86,8 @@ export function HeaderBranchBanner({
       >
         <AlertTriangle className="size-3.5 shrink-0 text-amber-600" aria-hidden />
         <span className="min-w-0 flex-1 truncate">
-          Variation “<strong>{displayBranchName(head)}</strong>” has{' '}
-          <strong>{unmergedCommits}</strong> changes not yet combined into “Main”
+          Variation «<strong>{displayBranchName(head)}</strong>» has{' '}
+          <strong>{unmergedCommits}</strong> changes not yet combined into «Main»
         </span>
         <Button
           type="button"
@@ -98,7 +98,7 @@ export function HeaderBranchBanner({
           onClick={() => setMergeOpen(true)}
         >
           <GitMerge className="size-3.5" />
-          Combine into “Main”
+          Combine into «Main»
         </Button>
       </div>
       <MergeDialog
