@@ -176,14 +176,15 @@ describe('server/index main() config-file wiring', () => {
     const capture = captureLogsForTests()
     try {
       await main()
-      // The env var may still be written (applyConfigFileToEnv is a general
-      // helper), but DATA_DIR (shared/data-dir-secure.ts) was already
-      // resolved at module import time, so it never sees this value — the
-      // warning below is the only signal an operator gets.
       const warning = capture.records.find(
         (r) => r.scope === 'server-index' && r.msg.includes('dataDir is not honored'),
       )
       expect(warning).toBeDefined()
+      // DATA_DIR (shared/data-dir-secure.ts) was resolved at module import
+      // time and never sees the file value, so writing it to the env anyway
+      // would give later env readers a dataDir the running server is NOT
+      // using. The entrypoint must not apply it at all.
+      expect(process.env.WHITEBOARD_DATA_DIR).toBeUndefined()
     } finally {
       capture.restore()
       exitSpy.mockRestore()

@@ -73,7 +73,12 @@ function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
   }
   if (loaded === null) return undefined
 
-  applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
+  // dataDir is dropped before applying: DATA_DIR (shared/data-dir-secure.ts)
+  // was resolved at module import time on this entrypoint, so writing the
+  // file value into the env would hand later env readers a dataDir the
+  // running server is not actually using.
+  const { dataDir: _ignoredDataDir, ...applicableConfig } = loaded.config
+  applyConfigFileToEnvAndLogLevel(applicableConfig, process.env)
   const log = getLogger('server-index')
   log.info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
 

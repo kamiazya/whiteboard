@@ -174,6 +174,23 @@ describe('applyConfigFileToEnv', () => {
     expect(env.WHITEBOARD_DATA_DIR).toBe('/tmp/whiteboard-data')
   })
 
+  it('leaves BOTH token seams alone when either one is already set in the env', () => {
+    // Filling only the unset seam would give the daemon and the server
+    // entrypoint two different tokens (env value on one side, file value on
+    // the other) — a mismatch worse than not applying the file token at all.
+    const tokenOnly: Record<string, string | undefined> = { WHITEBOARD_TOKEN: 'env-token' }
+    applyConfigFileToEnv({ token: 'file-token' }, tokenOnly)
+    expect(tokenOnly.WHITEBOARD_TOKEN).toBe('env-token')
+    expect(tokenOnly.WHITEBOARD_DAEMON_TOKEN).toBeUndefined()
+
+    const daemonOnly: Record<string, string | undefined> = {
+      WHITEBOARD_DAEMON_TOKEN: 'env-daemon-token',
+    }
+    applyConfigFileToEnv({ token: 'file-token' }, daemonOnly)
+    expect(daemonOnly.WHITEBOARD_DAEMON_TOKEN).toBe('env-daemon-token')
+    expect(daemonOnly.WHITEBOARD_TOKEN).toBeUndefined()
+  })
+
   it('never overwrites an already-set env key (env wins over file)', () => {
     const env: Record<string, string | undefined> = {
       WHITEBOARD_ALLOWED_WEB_ORIGINS: 'https://env.example',

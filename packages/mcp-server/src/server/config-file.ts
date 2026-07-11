@@ -203,9 +203,16 @@ export function applyConfigFileToEnv(
   if (config.allowedWebOrigins !== undefined && env.WHITEBOARD_ALLOWED_WEB_ORIGINS === undefined) {
     env.WHITEBOARD_ALLOWED_WEB_ORIGINS = config.allowedWebOrigins.join(',')
   }
-  if (config.token !== undefined) {
-    if (env.WHITEBOARD_TOKEN === undefined) env.WHITEBOARD_TOKEN = config.token
-    if (env.WHITEBOARD_DAEMON_TOKEN === undefined) env.WHITEBOARD_DAEMON_TOKEN = config.token
+  // The file token feeds BOTH env seams or NEITHER: filling only the unset
+  // one would leave the daemon and the server entrypoint holding two
+  // different tokens (env value on one side, file value on the other).
+  if (
+    config.token !== undefined &&
+    env.WHITEBOARD_TOKEN === undefined &&
+    env.WHITEBOARD_DAEMON_TOKEN === undefined
+  ) {
+    env.WHITEBOARD_TOKEN = config.token
+    env.WHITEBOARD_DAEMON_TOKEN = config.token
   }
   if (config.logLevel !== undefined && env.WHITEBOARD_LOG_LEVEL === undefined) {
     env.WHITEBOARD_LOG_LEVEL = config.logLevel
