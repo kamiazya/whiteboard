@@ -63,6 +63,14 @@ export function DaemonCanvasPage({
 
   const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, slug, daemonFetch })
 
+  // The selected (workspaceId, slug) pair once both are known, computed once so
+  // every downstream guard and child prop shares a single non-null narrowing
+  // instead of repeating `workspaceId !== null && slug !== null`.
+  const canvas =
+    controller.workspaceId !== null && controller.slug !== null
+      ? { workspaceId: controller.workspaceId, slug: controller.slug }
+      : null
+
   const [authError, setAuthError] = useState(false)
   const [newCanvasSlug, setNewCanvasSlug] = useState('')
   // Bumped on an externally observed HEAD change (another client, an MCP
@@ -101,25 +109,16 @@ export function DaemonCanvasPage({
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
-    identity:
-      controller.workspaceId !== null && controller.slug !== null
-        ? { workspaceId: controller.workspaceId, slug: controller.slug }
-        : undefined,
+    identity: canvas ?? undefined,
   })
 
   const saveVersion = async (): Promise<void> => {
-    if (
-      !capabilities.versions ||
-      controller.workspaceId === null ||
-      controller.slug === null ||
-      savingVersion
-    )
-      return
+    if (!capabilities.versions || canvas === null || savingVersion) return
     setSavingVersion(true)
     setSaveVersionMessage(null)
     try {
       const res = await daemonFetch(
-        `${daemonBaseUrl}/api/workspaces/${controller.workspaceId}/canvases/${encodeURIComponent(controller.slug)}/versions`,
+        `${daemonBaseUrl}/api/workspaces/${canvas.workspaceId}/canvases/${encodeURIComponent(canvas.slug)}/versions`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -166,7 +165,7 @@ export function DaemonCanvasPage({
   }
 
   const versionPanelExtra =
-    capabilities.versions && controller.workspaceId !== null && controller.slug !== null ? (
+    capabilities.versions && canvas ? (
       <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
         <button
           type="button"
@@ -225,10 +224,10 @@ export function DaemonCanvasPage({
             )}
           </div>
         )}
-        {controller.workspaceId !== null && controller.slug !== null && (
+        {canvas && (
           <WorkspaceTopBar
-            workspaceId={controller.workspaceId}
-            slug={controller.slug}
+            workspaceId={canvas.workspaceId}
+            slug={canvas.slug}
             canvases={controller.canvases}
             onNavigateToCanvas={controller.switchCanvas}
             capabilities={{
@@ -242,8 +241,8 @@ export function DaemonCanvasPage({
             versionPanelExtra={versionPanelExtra}
           />
         )}
-        {capabilities.branches && controller.workspaceId !== null && controller.slug !== null && (
-          <HeaderBranchBanner workspaceId={controller.workspaceId} slug={controller.slug} />
+        {capabilities.branches && canvas && (
+          <HeaderBranchBanner workspaceId={canvas.workspaceId} slug={canvas.slug} />
         )}
         <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
           {capabilities.workspaces && controller.workspaces.length > 0 ? (
@@ -308,10 +307,10 @@ export function DaemonCanvasPage({
             <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} />
           </div>
         )}
-        {capabilities.merge && controller.workspaceId !== null && controller.slug !== null && (
+        {capabilities.merge && canvas && (
           <MergeToast
-            workspaceId={controller.workspaceId}
-            slug={controller.slug}
+            workspaceId={canvas.workspaceId}
+            slug={canvas.slug}
             onRestored={clearLocalUndo}
           />
         )}
