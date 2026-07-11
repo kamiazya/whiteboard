@@ -582,6 +582,85 @@ describe('DaemonCanvasPage', () => {
       vi.unstubAllGlobals()
     })
 
+    it('clears HeaderSaveDot after a manual "Save version" click, not just a remote version_created broadcast', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  version: {
+                    id: 'v-manual',
+                    slug: 'main',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    elementCount: 3,
+                    auto: false,
+                    hasThumbnail: false,
+                    branchName: 'main',
+                  },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      // Dirty the doc via a remote update, exactly like the "drives
+      // HeaderSaveDot dirty/clean" test does, so this test isolates the
+      // manual-save clean path from the remote version_created broadcast path.
+      const backend = createdBackends[0]!
+      const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
+      const remoteDoc = new LoroDoc()
+      const list = remoteDoc.getMovableList('elements')
+      const map = list.insertContainer(0, new LoroMap())
+      map.set('id', 'el-1')
+      map.set('type', 'rectangle')
+      map.set('x', 0)
+      map.set('y', 0)
+      map.set('width', 10)
+      map.set('height', 10)
+      map.set('isDeleted', false)
+      remoteDoc.commit()
+      const update = remoteDoc.export({ mode: 'update' })
+
+      await act(async () => {
+        backend.handlers?.onRemoteUpdate?.(update)
+      })
+
+      await waitFor(() => expect(screen.getByTestId('header-save-dot')).toBeTruthy())
+
+      toggleHistoryPanel()
+      const saveButton = await screen.findByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
+      await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
+
+      vi.unstubAllGlobals()
+    })
+
     it('shows an inline error when the save response does not match saveVersionResponseSchema', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {

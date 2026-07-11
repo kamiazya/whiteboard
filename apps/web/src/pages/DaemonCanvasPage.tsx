@@ -9,7 +9,7 @@ import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { useCanvasSync } from '../hooks/useCanvasSync.js'
+import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -133,6 +133,12 @@ export function DaemonCanvasPage({
       }
       setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
       setVersionRefreshSignal((n) => n + 1)
+      // The server's manual POST /versions route does not broadcast
+      // version_created over the websocket (that only fires for auto-saves
+      // and other peers' saves), so this button must dispatch the same
+      // identity-scoped event useCanvasSync fires on a broadcast — otherwise
+      // HeaderSaveDot never learns this save happened and stays dirty.
+      dispatchIdentityEvent('excalidraw:version_saved', canvas ?? undefined)
     } catch {
       setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
     } finally {

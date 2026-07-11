@@ -73,7 +73,7 @@ const PUT_FILE_TIMEOUT_MS = 15_000
 // when identity is fully resolved — a partial or absent identity means the
 // caller (browser-local, or a daemon page whose identity is still loading)
 // never wired the dirty-state contract and must see no events at all.
-function dispatchIdentityEvent(
+export function dispatchIdentityEvent(
   eventName: string,
   identity: UseCanvasSyncOptions['identity'],
 ): void {
