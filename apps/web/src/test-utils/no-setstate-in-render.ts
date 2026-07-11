@@ -6,7 +6,7 @@ import { expect, vi } from 'vitest'
 // never triggers this. Wording has drifted across React 18/19 point releases,
 // so the match stays tolerant of both phrasings.
 const REACT_SETSTATE_IN_RENDER_RE =
-  /Cannot update a component (\(`[^`]*`\) )?while rendering a different component|Warning:.*setState.*during.*render/i
+  /Cannot update a component .*?while rendering a different component|Warning:.*setState.*during.*render/i
 
 /**
  * Asserts that none of the `console.error` calls captured by `errorSpy` were a

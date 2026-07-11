@@ -55,13 +55,16 @@ describe('CanvasThumb', () => {
 
   it('does not trigger a React setState-in-render warning when the guarded prevSrc reset runs on a src change', () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { rerender } = render(<CanvasThumb workspaceId="ws-1" slug="canvas-a" />)
-    // Changing slug changes `src`, which drives the guarded prevSrc reset
-    // (CanvasThumb.tsx L37-41) during this render — the React-sanctioned
-    // "adjust state during render" form, not the cross-component violation.
-    rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
-    assertNoSetStateInRenderWarning(errorSpy)
-    errorSpy.mockRestore()
+    try {
+      const { rerender } = render(<CanvasThumb workspaceId="ws-1" slug="canvas-a" />)
+      // Changing slug changes `src`, which drives the guarded prevSrc reset
+      // (CanvasThumb.tsx L37-41) during this render — the React-sanctioned
+      // "adjust state during render" form, not the cross-component violation.
+      rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
+      assertNoSetStateInRenderWarning(errorSpy)
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('renders the fallback placeholder instead of an <img> when a DaemonApiContext provider is mounted (cross-origin)', () => {
