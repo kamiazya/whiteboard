@@ -1144,6 +1144,127 @@ describe('DaemonCanvasPage', () => {
 
       vi.unstubAllGlobals()
     })
+
+    it('renders HeaderBranchBanner when capabilities.branches is true and the head branch is unmerged', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/branches/feature-x/stats')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ unmergedCommits: 2, isHead: true }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  head: 'feature-x',
+                  branches: [
+                    {
+                      name: 'main',
+                      color: '#1971c2',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                      name: 'feature-x',
+                      color: '#9333ea',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const banner = await screen.findByTestId('header-branch-banner')
+      expect(banner.textContent).toContain('feature-x')
+
+      vi.unstubAllGlobals()
+    })
+
+    it('does not render HeaderBranchBanner when capabilities.branches is false', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/branches/feature-x/stats')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ unmergedCommits: 2, isHead: true }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  head: 'feature-x',
+                  branches: [
+                    {
+                      name: 'main',
+                      color: '#1971c2',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                      name: 'feature-x',
+                      color: '#9333ea',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: true,
+              branches: false,
+              merge: false,
+            }}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByTestId('header-branch-banner')).toBeNull()
+
+      vi.unstubAllGlobals()
+    })
   })
 
   describe('MergeToast integration', () => {
