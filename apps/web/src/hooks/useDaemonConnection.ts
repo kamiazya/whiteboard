@@ -27,6 +27,14 @@ function getWindow(): WindowLike | undefined {
 // token global against the seed happening on the second mount. Computing
 // once at module scope — synchronously seeding the token before returning
 // 'paired' — makes both hazards impossible by construction.
+//
+// Consequence for pairing E2E coverage: a hash-only same-document
+// navigation (e.g. setting location.hash or a client-side router push)
+// never re-runs this module's top-level code, so `cached` keeps whatever
+// it was computed from on first load and a later `#wb=` fragment is never
+// consumed. Any end-to-end test exercising the pairing flow must force a
+// full navigation (a fresh document load) for the fragment to reach
+// computeDaemonConnection() at all.
 let cached: DaemonConnectionResult | null = null
 
 function computeDaemonConnection(): DaemonConnectionResult {
