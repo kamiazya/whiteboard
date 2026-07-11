@@ -9,7 +9,8 @@ import {
 import { isDirectEntryPoint } from './entrypoint.js'
 import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { getLogger } from './log.js'
+import { applyConfigFileToEnv, loadConfigFile } from './config-file.js'
+import { getLogger, parseLogLevel, setLogLevel } from './log.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
   const prefix = `--${name}=`
@@ -44,8 +45,42 @@ export function resolveToken(
 export { createApp } from './app.js'
 export { startHttpServer } from './http-server.js'
 
+// Loads the nearest whiteboard config file (if any) and layers its values
+// under process.env before any other startup reads (allowlist, token,
+// logLevel). Must run first: log.ts freezes its level at import time, so a
+// file-provided logLevel needs the explicit setLogLevel call below, and
+// every other env reader in this function reads process.env directly.
+// dataDir is deliberately NOT applied here — DATA_DIR (shared/data-dir-secure.ts)
+// is a static-import-time snapshot on this entrypoint, so a file dataDir key
+// would be silently too-late; warn instead of pretending it worked.
+function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
+  const loaded = loadConfigFile()
+  if (loaded === null) return undefined
+
+  const envLogLevelWasUnset = process.env.WHITEBOARD_LOG_LEVEL === undefined
+  applyConfigFileToEnv(loaded.config, process.env)
+  const log = getLogger('server-index')
+  log.info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
+
+  if (envLogLevelWasUnset && loaded.config.logLevel !== undefined) {
+    const level = parseLogLevel(loaded.config.logLevel)
+    if (level !== null) setLogLevel(level)
+  }
+
+  if (loaded.config.dataDir !== undefined) {
+    log.warning(
+      { filepath: loaded.filepath },
+      'config file dataDir is not honored on this entrypoint; set WHITEBOARD_DATA_DIR instead',
+    )
+  }
+
+  return loaded.config.port
+}
+
 export async function main() {
-  const port = parseInt(readArg('port', '3099') ?? '3099', 10)
+  const configFilePort = applyLoadedConfigFileForServerEntrypoint()
+
+  const port = parseInt(readArg('port') ?? String(configFilePort ?? 3099), 10)
   const host = readArg('host', '127.0.0.1') ?? '127.0.0.1'
   const token = resolveToken(process.argv, process.env)
   const idleTimeoutMs = parseInt(

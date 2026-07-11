@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from './log.js'
 
@@ -95,6 +98,73 @@ describe('server/index main() WHITEBOARD_ALLOWED_WEB_ORIGINS startup gate', () =
       exitSpy.mockRestore()
       stdoutSpy.mockRestore()
       delete process.env.WHITEBOARD_TOKEN
+    }
+  })
+})
+
+describe('server/index main() config-file wiring', () => {
+  let dir: string
+  let originalCwd: string
+
+  afterEach(() => {
+    vi.clearAllMocks()
+    delete process.env.WHITEBOARD_TOKEN
+    delete process.env.WHITEBOARD_DATA_DIR
+    if (originalCwd) process.chdir(originalCwd)
+    if (dir) rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('loads a config-file token into WHITEBOARD_TOKEN (env still wins if set)', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
+    originalCwd = process.cwd()
+    process.chdir(dir)
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ token: 'file-token' }))
+    delete process.env.WHITEBOARD_TOKEN
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await main()
+      expect(exitSpy).not.toHaveBeenCalled()
+      expect(process.env.WHITEBOARD_TOKEN).toBe('file-token')
+    } finally {
+      exitSpy.mockRestore()
+      stdoutSpy.mockRestore()
+    }
+  })
+
+  it('warns instead of honoring a config-file dataDir on this entrypoint', async () => {
+    dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
+    originalCwd = process.cwd()
+    process.chdir(dir)
+    writeFileSync(
+      join(dir, '.whiteboardrc.json'),
+      JSON.stringify({ token: 'file-token', dataDir: join(dir, 'data') }),
+    )
+    delete process.env.WHITEBOARD_TOKEN
+    delete process.env.WHITEBOARD_DATA_DIR
+
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const capture = captureLogsForTests()
+    try {
+      await main()
+      // The env var may still be written (applyConfigFileToEnv is a general
+      // helper), but DATA_DIR (shared/data-dir-secure.ts) was already
+      // resolved at module import time, so it never sees this value — the
+      // warning below is the only signal an operator gets.
+      const warning = capture.records.find(
+        (r) => r.scope === 'server-index' && r.msg.includes('dataDir is not honored'),
+      )
+      expect(warning).toBeDefined()
+    } finally {
+      capture.restore()
+      exitSpy.mockRestore()
+      stdoutSpy.mockRestore()
     }
   })
 })

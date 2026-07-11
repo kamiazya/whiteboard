@@ -16,6 +16,8 @@
 
 import { resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { applyConfigFileToEnv, loadConfigFile } from '../server/config-file.js'
+import { getLogger, parseLogLevel, setLogLevel } from '../server/log.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
   parseDaemonRunArgs,
@@ -385,6 +387,29 @@ async function dispatchServerSupportBundle(rest: readonly string[]): Promise<num
   return exitCode
 }
 
+// Loads the nearest whiteboard config file (if any), layers its values
+// under process.env (env-over-file precedence, see config-file.ts), logs
+// the file path at info level, and returns the file's `port` (if set) so
+// the caller can thread it into daemon-run's own port precedence — file
+// port is otherwise NOT a set-if-unset env key, unlike the other fields.
+function applyLoadedConfigFileToDispatcherEnv(): number | undefined {
+  const loaded = loadConfigFile()
+  if (loaded === null) return undefined
+
+  const envLogLevelWasUnset = process.env.WHITEBOARD_LOG_LEVEL === undefined
+  applyConfigFileToEnv(loaded.config, process.env)
+  getLogger('cli-dispatcher').info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
+
+  // log.ts freezes its level at import time, so a file-provided logLevel
+  // must be applied explicitly rather than relying on the env write above.
+  if (envLogLevelWasUnset && loaded.config.logLevel !== undefined) {
+    const level = parseLogLevel(loaded.config.logLevel)
+    if (level !== null) setLogLevel(level)
+  }
+
+  return loaded.config.port
+}
+
 async function dispatchRun(rest: readonly string[]): Promise<number> {
   const parsed = parseDaemonRunArgs(rest)
   if (parsed.kind === 'usage-error') {
@@ -402,12 +427,21 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   if (runDataDir !== undefined) {
     process.env.WHITEBOARD_DATA_DIR = runDataDir
   }
+
+  // Load+apply the config file AFTER the --data-dir env write above and
+  // BEFORE the dynamic daemon-run import below, so file dataDir only wins
+  // when neither --data-dir nor WHITEBOARD_DATA_DIR is already set, and the
+  // shared/data-dir-secure.ts import-time DATA_DIR snapshot (pulled in via
+  // daemon-run.js) sees the layered value. Config-file port is threaded
+  // through separately (below) since --port and env don't share one seam.
+  const configFilePort = applyLoadedConfigFileToDispatcherEnv()
+
   // Dynamic import keeps `server/config` (and its mkdirSync probe
   // at module load) out of the read-only command path.
   const { runDaemonRun } = await import('./daemon-run.js')
   const outcome = await runDaemonRun({
     host: parsed.host,
-    port: parsed.port,
+    port: parsed.port ?? configFilePort,
     dataDir: runDataDir,
     tokenStdin: parsed.tokenStdin,
   })
