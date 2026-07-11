@@ -45,6 +45,8 @@ const storageSettingsSchema = z
     localDaemonBaseUrl: z.string().optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
     dismissedBetaBannerAt: z.string().optional(),
+    dismissedDaemonCtaAt: z.string().optional(),
+    dismissedDaemonCtaInstanceId: z.string().optional(),
   })
   .strict()
 

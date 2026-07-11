@@ -1,6 +1,6 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +18,7 @@ import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-local-page-state.js'
 import {
@@ -25,6 +26,16 @@ import {
   type LoroStoreLike,
   useBrowserLocalCanvasController,
 } from './use-browser-local-canvas-controller.js'
+
+// React.lazy: DaemonDetectedBanner pulls in daemon-probe.ts + Zod parsing
+// that would otherwise ship in the entry chunk, which is already close to
+// its gzip budget (apps/web/scripts/smoke-bundle-size.mjs). Deferred load
+// keeps first paint unaffected by a feature most sessions never render.
+const DaemonDetectedBanner = lazy(() =>
+  import('../components/migration/DaemonDetectedBanner.js').then((m) => ({
+    default: m.DaemonDetectedBanner,
+  })),
+)
 
 interface BrowserLocalCanvasPageProps {
   store: BrowserLocalStore
@@ -69,6 +80,10 @@ export function BrowserLocalCanvasPage({
     createCanvas,
     switchCanvas,
   } = useBrowserLocalCanvasController(store, loro)
+
+  // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
+  // re-read from localStorage on every render.
+  const [settingsStore] = useState(() => createUserSettingsStore())
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
@@ -202,6 +217,9 @@ export function BrowserLocalCanvasPage({
         <span className="text-xs text-muted-foreground">
           {persistenceLabel(pageState.persistence)}
         </span>
+        <Suspense fallback={null}>
+          <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
+        </Suspense>
         {cleanupError && (
           <div role="alert" aria-live="assertive" className="text-xs text-destructive">
             {cleanupError}
