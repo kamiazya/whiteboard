@@ -34,6 +34,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   user_library_metadata_get: { profile: READ_ONLY, title: 'Get user library metadata' },
   library_list_items: { profile: READ_ONLY, title: 'List library items' },
   library_list_installed: { profile: READ_ONLY, title: 'List installed libraries' },
+  create_pairing_link: { profile: READ_ONLY, title: 'Create daemon pairing link' },
 
   // Read-only (external fetch)
   library_catalog_list: { profile: READ_ONLY_EXTERNAL, title: 'Search official library catalog' },

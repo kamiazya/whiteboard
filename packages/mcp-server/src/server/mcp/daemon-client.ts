@@ -3,6 +3,7 @@ import { injectContextIntoHeaders } from '../observability/tracing.js'
 export interface DaemonClient {
   port: number
   baseUrl: string
+  token: string
   request: (path: string, init?: RequestInit) => Promise<Response>
   touch: () => Promise<void>
 }
@@ -40,6 +41,7 @@ export function createDaemonClient(input: {
   return {
     port: input.port,
     baseUrl: input.baseUrl,
+    token: input.token,
     request(path, init) {
       return fetch(buildUrl(input.baseUrl, path), withBearerToken(init, input.token))
     },
