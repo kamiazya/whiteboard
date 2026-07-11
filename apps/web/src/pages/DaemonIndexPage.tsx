@@ -196,50 +196,50 @@ export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIn
               Storage
             </button>
           </div>
-          {tab === 'canvases' && workspaces.length > 0 && (
-            <select
-              aria-label="Workspace"
-              value={selectedWorkspace ?? ''}
-              onChange={(event) => setSelectedWorkspace(event.target.value)}
-              className="rounded-md border bg-background px-2 py-1 text-sm"
-            >
-              {workspaces.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
-          )}
           {tab === 'canvases' && (
-            <input
-              aria-label="Search canvases"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search…"
-              className="rounded-md border bg-background px-2 py-1 text-sm"
-            />
-          )}
-          {tab === 'canvases' && (
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void handleCreate()
-              }}
-            >
+            <>
+              {workspaces.length > 0 && (
+                <select
+                  aria-label="Workspace"
+                  value={selectedWorkspace ?? ''}
+                  onChange={(event) => setSelectedWorkspace(event.target.value)}
+                  className="rounded-md border bg-background px-2 py-1 text-sm"
+                >
+                  {workspaces.map((w) => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+              )}
               <input
-                aria-label="New canvas name"
-                value={newCanvasSlug}
-                onChange={(event) => setNewCanvasSlug(event.target.value)}
+                aria-label="Search canvases"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search…"
                 className="rounded-md border bg-background px-2 py-1 text-sm"
               />
-              <button
-                type="submit"
-                className="rounded-md border px-3 py-1 text-sm font-medium hover:bg-accent"
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void handleCreate()
+                }}
               >
-                Create canvas
-              </button>
-            </form>
+                <input
+                  aria-label="New canvas name"
+                  value={newCanvasSlug}
+                  onChange={(event) => setNewCanvasSlug(event.target.value)}
+                  className="rounded-md border bg-background px-2 py-1 text-sm"
+                />
+                <button
+                  type="submit"
+                  className="rounded-md border px-3 py-1 text-sm font-medium hover:bg-accent"
+                >
+                  Create canvas
+                </button>
+              </form>
+            </>
           )}
         </div>
 
@@ -259,35 +259,38 @@ export function DaemonIndexPage({ daemonBaseUrl, token, onOpenCanvas }: DaemonIn
           <p className="text-sm text-muted-foreground">No canvases match.</p>
         ) : (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-            {visible.map((row) => (
-              <button
-                key={row.slug}
-                type="button"
-                data-testid="daemon-index-canvas-card"
-                onClick={() => selectedWorkspace && onOpenCanvas(selectedWorkspace, row.slug)}
-                className="flex flex-col gap-2 rounded-lg border p-2 text-left hover:bg-accent"
-              >
-                <CanvasThumb workspaceId={selectedWorkspace ?? ''} slug={row.slug} size="card" />
-                <div className="min-w-0">
-                  {row.displayName !== row.slug && (
-                    <div className="truncate text-sm font-medium">{row.displayName}</div>
-                  )}
-                  <div
-                    data-testid="canvas-slug"
-                    className={
-                      row.displayName !== row.slug
-                        ? 'truncate text-xs text-muted-foreground'
-                        : 'truncate text-sm font-medium'
-                    }
-                  >
-                    {row.slug}
+            {visible.map((row) => {
+              const hasDisplayName = row.displayName !== row.slug
+              return (
+                <button
+                  key={row.slug}
+                  type="button"
+                  data-testid="daemon-index-canvas-card"
+                  onClick={() => selectedWorkspace && onOpenCanvas(selectedWorkspace, row.slug)}
+                  className="flex flex-col gap-2 rounded-lg border p-2 text-left hover:bg-accent"
+                >
+                  <CanvasThumb workspaceId={selectedWorkspace ?? ''} slug={row.slug} size="card" />
+                  <div className="min-w-0">
+                    {hasDisplayName && (
+                      <div className="truncate text-sm font-medium">{row.displayName}</div>
+                    )}
+                    <div
+                      data-testid="canvas-slug"
+                      className={
+                        hasDisplayName
+                          ? 'truncate text-xs text-muted-foreground'
+                          : 'truncate text-sm font-medium'
+                      }
+                    >
+                      {row.slug}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatRelative(row.updatedAt)}
+                    </div>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatRelative(row.updatedAt)}
-                  </div>
-                </div>
-              </button>
-            ))}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
