@@ -103,6 +103,24 @@ function encodeBase64UrlJson(payload: unknown): string {
   return Buffer.from(JSON.stringify(payload), 'utf-8').toString('base64url')
 }
 
+// The explicit webOrigin input is constrained by bareHttpOriginSchema at the
+// schema layer; the env var fallback bypasses that layer entirely unless it is
+// re-validated here, so a misconfigured WHITEBOARD_WEB_ORIGIN would otherwise
+// silently mint a link with a path/query/wrong-scheme origin the web app
+// parser rejects outright.
+function resolveEnvWebOrigin(): string | undefined {
+  const raw = process.env.WHITEBOARD_WEB_ORIGIN
+  if (raw === undefined) return undefined
+
+  const parsed = bareHttpOriginSchema.safeParse(raw)
+  if (!parsed.success) {
+    throw new Error(
+      `create_pairing_link: WHITEBOARD_WEB_ORIGIN is not a bare http(s) origin: ${raw}`,
+    )
+  }
+  return parsed.data
+}
+
 function isLoopbackOrigin(origin: string): boolean {
   try {
     const { hostname } = new URL(origin)
@@ -152,8 +170,7 @@ export function pairingLinkTool() {
         throw new Error('create_pairing_link: workspaceId is required when slug is set')
       }
 
-      const webOrigin =
-        args.webOrigin ?? process.env.WHITEBOARD_WEB_ORIGIN ?? PROVISIONAL_PRODUCTION_ORIGIN
+      const webOrigin = args.webOrigin ?? resolveEnvWebOrigin() ?? PROVISIONAL_PRODUCTION_ORIGIN
 
       const hasToken = client.token.length > 0
       if (hasToken && client.token.length < MIN_BOOTSTRAP_TOKEN_LENGTH) {

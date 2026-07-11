@@ -121,6 +121,20 @@ describe('create_pairing_link tool', () => {
     }
   })
 
+  it('rejects an invalid WHITEBOARD_WEB_ORIGIN env value instead of minting an unvalidated link', async () => {
+    const tool = pairingLinkTool()
+    const client = stubClient()
+
+    const previousEnv = process.env.WHITEBOARD_WEB_ORIGIN
+    try {
+      process.env.WHITEBOARD_WEB_ORIGIN = 'https://example.com/some/path'
+      await expect(tool.execute({}, client)).rejects.toThrow(/WHITEBOARD_WEB_ORIGIN/)
+    } finally {
+      if (previousEnv === undefined) delete process.env.WHITEBOARD_WEB_ORIGIN
+      else process.env.WHITEBOARD_WEB_ORIGIN = previousEnv
+    }
+  })
+
   it('rejects a non-bare-origin webOrigin at the input schema layer', () => {
     expect(() =>
       createPairingLinkInputSchema.parse({ webOrigin: 'https://example.com/some/path' }),
