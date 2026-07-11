@@ -1,8 +1,8 @@
 import {
   problemDetailsErrorSchema,
   saveVersionResponseSchema,
-  workspaceNamesSchema,
   type WorkspaceNames,
+  workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
   ChevronDown,
@@ -10,6 +10,7 @@ import {
   Copy,
   EllipsisVertical,
   FilePlus2,
+  FileText,
   History,
   Maximize2,
   Pencil,
@@ -78,6 +79,7 @@ function CanvasItem({
   leafLabel,
   active,
   pinned,
+  isLocalMode,
   onNavigate,
   onTogglePin,
 }: {
@@ -87,6 +89,7 @@ function CanvasItem({
   leafLabel: string
   active: boolean
   pinned: boolean
+  isLocalMode: boolean
   onNavigate: () => void
   onTogglePin: (slug: string, nextPinned: boolean) => void
 }) {
@@ -95,7 +98,19 @@ function CanvasItem({
       onSelect={onNavigate}
       className={cn('group flex items-center gap-2', active && 'bg-accent')}
     >
-      <CanvasThumb workspaceId={workspaceId} slug={canvas.slug} />
+      {/* Local mode has no daemon to fetch /latest-thumbnail from — CanvasThumb's
+          only other branch (useHasDaemonApi) is false here (no provider is
+          mounted), so it would otherwise render a plain <img src="/api/...">
+          whose GET fires from the browser's image loader, invisible to any
+          fetch spy. Skip the component entirely rather than rely on that
+          fallback. */}
+      {isLocalMode ? (
+        <div className="flex h-9 w-14 shrink-0 items-center justify-center overflow-hidden rounded border bg-muted/40">
+          <FileText className="size-4 text-muted-foreground/50" />
+        </div>
+      ) : (
+        <CanvasThumb workspaceId={workspaceId} slug={canvas.slug} />
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span
           className={cn('truncate text-sm', active ? 'font-semibold text-primary' : 'font-medium')}
@@ -108,22 +123,26 @@ function CanvasItem({
           </span>
         )}
       </div>
-      <button
-        type="button"
-        aria-label={pinned ? 'Unpin canvas' : 'Pin canvas'}
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation()
-          e.preventDefault()
-          onTogglePin(canvas.slug, !pinned)
-        }}
-        className={cn(
-          'shrink-0 rounded p-1 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground transition-opacity',
-          pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
-        )}
-      >
-        <Pin className={cn('size-3.5', pinned && 'fill-current')} />
-      </button>
+      {/* Pin has no local-mode backend (no /pin endpoint to persist against),
+          so the affordance is hidden rather than shipped as a no-op button. */}
+      {!isLocalMode && (
+        <button
+          type="button"
+          aria-label={pinned ? 'Unpin canvas' : 'Pin canvas'}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            e.preventDefault()
+            onTogglePin(canvas.slug, !pinned)
+          }}
+          className={cn(
+            'shrink-0 rounded p-1 text-muted-foreground hover:bg-accent-foreground/10 hover:text-foreground transition-opacity',
+            pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100',
+          )}
+        >
+          <Pin className={cn('size-3.5', pinned && 'fill-current')} />
+        </button>
+      )}
     </DropdownMenuItem>
   )
 }
@@ -656,6 +675,7 @@ export default function WorkspaceTopBar({
                             leafLabel={effectiveNames.canvases[c.slug] ?? c.slug}
                             active={c.slug === slug}
                             pinned={true}
+                            isLocalMode={isLocalMode}
                             onNavigate={() => {
                               onNavigateToCanvas(c.slug)
                               setCanvasSearch('')
@@ -686,6 +706,7 @@ export default function WorkspaceTopBar({
                               leafLabel={effectiveNames.canvases[c.slug] ?? leafSlug}
                               active={c.slug === slug}
                               pinned={false}
+                              isLocalMode={isLocalMode}
                               onNavigate={() => {
                                 onNavigateToCanvas(c.slug)
                                 setCanvasSearch('')
@@ -747,13 +768,19 @@ export default function WorkspaceTopBar({
           <div className="flex min-w-0 flex-col gap-0.5">
             <Input
               autoFocus
+              aria-label="Canvas title"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={commitCanvasName}
+              // Excalidraw registers document-level keyboard shortcuts (Delete,
+              // Backspace, etc.) that must never fire while the user is typing
+              // a canvas name here.
               onKeyDown={(e) => {
+                e.stopPropagation()
                 if (e.key === 'Enter') commitCanvasName()
                 else if (e.key === 'Escape') cancelRename()
               }}
+              onKeyUp={(e) => e.stopPropagation()}
               placeholder={slug}
               className="h-7 max-w-[220px] text-sm"
             />

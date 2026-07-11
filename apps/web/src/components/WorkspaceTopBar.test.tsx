@@ -856,4 +856,68 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(apiFetch).not.toHaveBeenCalled()
   })
+
+  it('gives the rename input an accessible name and isolates it from document-level shortcut listeners', async () => {
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    const canvasActions = screen.getByLabelText('Canvas actions')
+    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    const renameItem = await screen.findByText('Rename canvas')
+    fireEvent.pointerUp(renameItem)
+
+    const input = screen.getByRole('textbox', { name: 'Canvas title' })
+
+    const docKeydown = vi.fn()
+    const docKeyup = vi.fn()
+    document.addEventListener('keydown', docKeydown)
+    document.addEventListener('keyup', docKeyup)
+    try {
+      fireEvent.keyDown(input, { key: 'Delete' })
+      fireEvent.keyUp(input, { key: 'Delete' })
+    } finally {
+      document.removeEventListener('keydown', docKeydown)
+      document.removeEventListener('keyup', docKeyup)
+    }
+
+    expect(docKeydown).not.toHaveBeenCalled()
+    expect(docKeyup).not.toHaveBeenCalled()
+  })
+
+  it('never renders the daemon-only thumbnail <img> or the pin affordance in the canvas switcher', async () => {
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[
+          { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
+          { slug: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
+        ]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    await screen.findByTestId('new-canvas-menu-item')
+
+    expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)
+    expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
+  })
 })

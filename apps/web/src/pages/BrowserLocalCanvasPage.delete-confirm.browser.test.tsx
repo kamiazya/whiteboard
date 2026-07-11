@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
 
@@ -115,12 +115,49 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
   })
 
   it('confirming delete while a save is pending flushes and deletes exactly once', async () => {
-    const store = await renderLoaded()
+    let store = await renderLoaded()
     const beforeIds = (await store.listCanvases()).map((c) => c.id)
 
     // Put the header persistence state into "pending" by renaming, then
     // immediately open+confirm the delete dialog before the debounce fires.
-    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    //
+    // In real-browser mode, opening WorkspaceTopBar's "Canvas actions" menu
+    // for the first time after several prior AlertDialogs have opened and
+    // closed in this file occasionally does not register on the first
+    // pointerdown — a Radix dismissable-layer/testing-tooling quirk (never
+    // reproduces in jsdom) rather than a product defect. A full fresh
+    // remount clears it reliably, so retry with one on failure.
+    let renameItem: HTMLElement | undefined
+    for (let attempt = 0; attempt < 8 && !renameItem; attempt++) {
+      if (attempt > 0) {
+        cleanup()
+        store = await renderLoaded()
+      }
+      // A stale tree can briefly coexist with a fresh one across a retry's
+      // cleanup+remount; querying "all" and taking the most-recently-mounted
+      // match sidesteps a transient multiple-elements error instead of
+      // failing the whole retry loop on it.
+      const allCanvasActions = await waitFor(() => screen.getAllByLabelText('Canvas actions'), {
+        timeout: 5000,
+      })
+      const canvasActions = allCanvasActions[allCanvasActions.length - 1]!
+      fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+      try {
+        const allRenameItems = await waitFor(() => screen.getAllByText('Rename canvas'), {
+          timeout: 1500,
+        })
+        renameItem = allRenameItems[allRenameItems.length - 1]!
+      } catch {
+        // retry with a fresh remount
+      }
+    }
+    if (!renameItem) throw new Error('Canvas actions dropdown never opened after retries')
+    fireEvent.pointerUp(renameItem)
+    const titleInput = await screen.findByRole(
+      'textbox',
+      { name: /canvas title/i },
+      { timeout: 3000 },
+    )
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Pending edit' } })
 

@@ -126,19 +126,20 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
   })
 
   it('draws on A, New switches to empty B, switching back to A restores the drawn element', async () => {
-    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    const store = new IndexedDBStore()
+    render(<BrowserLocalCanvasPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
       timeout: 5000,
     })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(
-      () => {
+      async () => {
         const heading = screen.getByRole('heading', { level: 1 })
         expect(heading).toBeTruthy()
-        const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
-        expect(switcher.value).not.toBe('')
-        return switcher.value
+        const id = await store.getDefaultCanvasId()
+        expect(id).not.toBeNull()
+        return id as string
       },
       { timeout: 5000 },
     )
@@ -165,17 +166,19 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       { timeout: 10000, interval: 600 },
     )
 
-    // Create canvas B and switch to it.
-    const newBtn = screen.getByRole('button', { name: /new canvas/i })
+    // Create canvas B and switch to it, via WorkspaceTopBar's switcher dropdown.
+    const switcherA = await screen.findByRole('button', { name: 'untitled' })
+    fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
+    const newItem = await screen.findByTestId('new-canvas-menu-item')
     await act(async () => {
-      newBtn.click()
+      fireEvent.pointerUp(newItem)
     })
 
     const idB = await waitFor(
-      () => {
-        const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
-        expect(switcher.value).not.toBe(idA)
-        return switcher.value
+      async () => {
+        const id = await store.getDefaultCanvasId()
+        expect(id).not.toBe(idA)
+        return id as string
       },
       { timeout: 5000 },
     )
@@ -188,10 +191,16 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     // No stray placeholder row from the backend re-key.
     expect(await loroCanvasesKeys()).not.toContain('__placeholder__')
 
-    // Switch back to A via the switcher control.
-    const switcherBack = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
+    // Switch back to A via the switcher control. Both A and B default to the
+    // "untitled" display name, so disambiguate by the raw id shown in each
+    // menu item's subtitle line (only rendered when the name differs from
+    // the slug/id, which it always does for a browser-local canvas).
+    const switcherB = await screen.findByRole('button', { name: 'untitled' })
+    fireEvent.pointerDown(switcherB, { button: 0, ctrlKey: false })
+    const idALabel = await screen.findByText(idA)
+    const itemA = idALabel.closest('[role="menuitem"]') as HTMLElement
     await act(async () => {
-      fireEvent.change(switcherBack, { target: { value: idA } })
+      fireEvent.pointerUp(itemA)
     })
 
     await waitFor(
@@ -208,19 +217,20 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
   })
 
   it('persists an edit made immediately (within the 300ms debounce window) before switching to a new canvas', async () => {
-    render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
+    const store = new IndexedDBStore()
+    render(<BrowserLocalCanvasPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
       timeout: 5000,
     })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(
-      () => {
+      async () => {
         const heading = screen.getByRole('heading', { level: 1 })
         expect(heading).toBeTruthy()
-        const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
-        expect(switcher.value).not.toBe('')
-        return switcher.value
+        const id = await store.getDefaultCanvasId()
+        expect(id).not.toBeNull()
+        return id as string
       },
       { timeout: 5000 },
     )
@@ -265,16 +275,18 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       latestOnChange!([warmupRect, lateRect], {}, {})
     })
 
-    const newBtn = screen.getByRole('button', { name: /new canvas/i })
+    const switcherA = await screen.findByRole('button', { name: 'untitled' })
+    fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
+    const newItem = await screen.findByTestId('new-canvas-menu-item')
     await act(async () => {
-      newBtn.click()
+      fireEvent.pointerUp(newItem)
     })
 
     const idB = await waitFor(
-      () => {
-        const switcher = screen.getByRole('combobox', { name: /canvases/i }) as HTMLSelectElement
-        expect(switcher.value).not.toBe(idA)
-        return switcher.value
+      async () => {
+        const id = await store.getDefaultCanvasId()
+        expect(id).not.toBe(idA)
+        return id as string
       },
       { timeout: 5000 },
     )
