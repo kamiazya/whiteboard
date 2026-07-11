@@ -293,4 +293,30 @@ describe('useDaemonCanvasController', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.loadError).toBe('network down')
   })
+
+  it('switchWorkspace surfaces a switchError (not loadError) and keeps the previous workspace/canvas selected on failure', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+    })
+    mockListCanvases.mockResolvedValueOnce({
+      canvases: [{ slug: 'w1-canvas', updatedAt: '2026-01-01' }],
+    })
+
+    const { result } = renderHook(() =>
+      useDaemonCanvasController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
+
+    await act(async () => {
+      await result.current.switchWorkspace('w2')
+    })
+
+    expect(result.current.switchError).toBe('daemon unreachable')
+    expect(result.current.loadError).toBeNull()
+    expect(result.current.workspaceId).toBe('w1')
+    expect(result.current.slug).toBe('w1-canvas')
+    expect(result.current.canvases).toEqual([{ slug: 'w1-canvas', updatedAt: '2026-01-01' }])
+  })
 })

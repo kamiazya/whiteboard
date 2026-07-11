@@ -17,6 +17,9 @@ export interface UseDaemonCanvasControllerOptions {
 
 export interface DaemonCanvasController {
   loading: boolean
+  // Fatal: the initial mount resolution never produced a usable
+  // workspace/canvas, so there is nothing on screen to fall back to. The page
+  // renders this as a full-page error state.
   loadError: string | null
   workspaceId: string | null
   slug: string | null
@@ -26,6 +29,12 @@ export interface DaemonCanvasController {
   switchWorkspace: (workspaceId: string) => Promise<void>
   createCanvas: (slug: string) => Promise<void>
   createError: string | null
+  // Non-fatal: switchWorkspace only commits the new workspaceId/canvases
+  // after listCanvases succeeds, so a failure here leaves the previous
+  // selection (and the still-connected editor) valid. Kept separate from
+  // loadError so the page can show an inline error instead of tearing down
+  // the current session.
+  switchError: string | null
 }
 
 function errorMessage(err: unknown): string {
@@ -50,6 +59,7 @@ export function useDaemonCanvasController(
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [switchError, setSwitchError] = useState<string | null>(null)
 
   // Monotonic sequence shared by the mount-resolve effect and switchWorkspace
   // so a slower earlier resolution (mount resolve or a stale switch) can
@@ -108,6 +118,7 @@ export function useDaemonCanvasController(
       switchSeqRef.current += 1
       const seq = switchSeqRef.current
       setCreateError(null)
+      setSwitchError(null)
       try {
         const { canvases: list } = await listCanvasesApi(
           daemonFetch,
@@ -119,7 +130,10 @@ export function useDaemonCanvasController(
         setCanvases(list)
         setSlug(list[0]?.slug ?? null)
       } catch (err) {
-        if (seq === switchSeqRef.current) setLoadError(errorMessage(err))
+        // Deliberately setSwitchError, not setLoadError: the previous
+        // workspace/canvas selection (and its live editor connection) is
+        // still valid, so this must not trip the page's fatal loadError path.
+        if (seq === switchSeqRef.current) setSwitchError(errorMessage(err))
       }
     },
     [daemonFetch, daemonBaseUrl],
@@ -156,5 +170,6 @@ export function useDaemonCanvasController(
     switchWorkspace,
     createCanvas,
     createError,
+    switchError,
   }
 }

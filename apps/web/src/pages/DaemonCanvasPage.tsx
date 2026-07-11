@@ -167,6 +167,11 @@ export function DaemonCanvasPage({
       <main className="relative flex h-dvh w-full flex-col">
         <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
           <h1 className="sr-only">Whiteboard (daemon)</h1>
+          {controller.switchError && (
+            <div role="alert" aria-live="assertive" className="flex items-center gap-2">
+              <span className="text-xs text-destructive">{controller.switchError}</span>
+            </div>
+          )}
           {authError && (
             <div role="alert" aria-live="assertive" className="flex items-center gap-2">
               <span className="text-xs text-destructive">

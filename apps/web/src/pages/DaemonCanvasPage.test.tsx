@@ -217,6 +217,42 @@ describe('DaemonCanvasPage', () => {
       )
     })
 
+    it('keeps the editor mounted and shows an inline error when switching workspace fails', async () => {
+      mockListWorkspaces.mockResolvedValue({
+        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+      })
+      mockListCanvases.mockResolvedValueOnce({
+        canvases: [
+          { slug: 'main', updatedAt: '2026-01-01' },
+          { slug: 'second', updatedAt: '2026-01-02' },
+        ],
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      expect(createdBackends).toHaveLength(1)
+
+      mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
+
+      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      await act(async () => {
+        workspaceSelect.value = 'w2'
+        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+      })
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert').textContent).toMatch(/daemon unreachable/i),
+      )
+      // A transient switch failure must not tear down the still-valid editor session.
+      expect(screen.getByTestId('excalidraw-container')).toBeTruthy()
+      expect(createdBackends).toHaveLength(1)
+      expect(createdBackends[0]?.disconnectCount).toBe(0)
+    })
+
     it('shows the static disabled teaser instead of the switcher when capabilities.workspaces is false', async () => {
       await act(async () => {
         render(
