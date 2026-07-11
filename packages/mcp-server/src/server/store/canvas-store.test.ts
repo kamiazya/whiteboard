@@ -25,7 +25,10 @@ const {
   compactCanvas,
   scheduleAutoCompact,
   setAutoCompactTrigger,
+  disposeAutoCompact,
+  _inFlightAutoCompactCountForTests,
 } = await import('./canvas-store.js')
+const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -631,6 +634,7 @@ describe('auto-compact', () => {
 
   afterEach(async () => {
     setAutoCompactTrigger(null)
+    await disposeAutoCompact()
     await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
@@ -689,13 +693,21 @@ describe('auto-compact', () => {
     // Nothing has fired yet.
     expect(await readLastCompactedAt()).toBeNull()
 
-    // Wait past the debounce + the async compactCanvas write.
-    await new Promise((r) => setTimeout(r, 250))
-    const stamp = await readLastCompactedAt()
-    expect(stamp).not.toBeNull()
+    // Wait past the debounce + the async compactCanvas write. Poll instead of
+    // a fixed sleep so this does not flake on a slow CI runner.
+    const stamp = await vi.waitFor(
+      async () => {
+        const value = await readLastCompactedAt()
+        expect(value).not.toBeNull()
+        return value
+      },
+      { timeout: 2000 },
+    )
     const settled = stamp!
 
-    // Further idle time without a new trigger must NOT re-compact.
+    // Further idle time without a new trigger must NOT re-compact. This half
+    // is an inherently bounded negative wait — keep it real rather than
+    // deleting the assertion.
     await new Promise((r) => setTimeout(r, 150))
     expect(await readLastCompactedAt()).toBe(settled)
   })
@@ -734,11 +746,283 @@ describe('auto-compact', () => {
     expect(peekDoc('session1', 'cached')).toBeDefined()
 
     scheduleAutoCompact('session1', 'cached', store, { debounceMs: 50 })
-    await new Promise((r) => setTimeout(r, 250))
 
-    // The whole point of this test: after the scheduled compaction lands,
-    // the cache must be empty for that key so the next save reloads the
-    // compacted file as its base.
-    expect(peekDoc('session1', 'cached')).toBeUndefined()
+    // Poll instead of a fixed sleep so this does not flake on a slow CI
+    // runner. The whole point of this test: after the scheduled compaction
+    // lands, the cache must be empty for that key so the next save reloads
+    // the compacted file as its base.
+    await vi.waitFor(
+      () => {
+        expect(peekDoc('session1', 'cached')).toBeUndefined()
+      },
+      { timeout: 2000 },
+    )
+  })
+})
+
+describe('auto-compact disposal', () => {
+  let disposedDb = false
+
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-auto-compact-dispose-test-'))
+    await setupIsolatedDb()
+    const { mkdir } = await import('node:fs/promises')
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    disposedDb = false
+  })
+
+  afterEach(async () => {
+    setAutoCompactTrigger(null)
+    await disposeAutoCompact()
+    if (!disposedDb) {
+      await teardownIsolatedDb()
+    }
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  async function buildCompactableCanvas(
+    slug: string,
+  ): Promise<InstanceType<typeof FileVersionStore>> {
+    const { LoroMap } = await import('loro-crdt')
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `e-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', slug, doc)
+    const store = new FileVersionStore()
+    await store.save('session1', slug, doc, { auto: true })
+    for (let i = 0; i < 30; i++) {
+      const m = list.insertContainer(list.length, new LoroMap())
+      m.set('id', `x-${i}`)
+    }
+    doc.commit()
+    await saveCanvas('session1', slug, doc, { overwrite: true })
+    return store
+  }
+
+  // compactCanvas normally settles fast enough (in-memory DB, tiny fixture)
+  // that polling for "in flight" would race the compaction to zero. Delay
+  // just the earliestFrontiers lookup — the first await compactCanvas makes
+  // — so tests can deterministically observe the in-flight window instead of
+  // depending on real-clock luck.
+  function withDelayedEarliestFrontiers(
+    store: InstanceType<typeof FileVersionStore>,
+    delayMs: number,
+  ): InstanceType<typeof FileVersionStore> {
+    return new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestFrontiers') {
+          return async (workspaceId: string, slug: string) => {
+            await new Promise((r) => setTimeout(r, delayMs))
+            return target.earliestFrontiers(workspaceId, slug)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+  }
+
+  it('cancels the pending debounce when the DB is disposed before it fires, instead of touching the destroyed driver', async () => {
+    const store = await buildCompactableCanvas('big')
+    const logs = captureLogsForTests('warning')
+
+    // Do NOT call setAutoCompactTrigger(null) here — the point of this test
+    // is that DB disposal alone (without that manual call) must cancel the
+    // pending timer.
+    scheduleAutoCompact('session1', 'big', store, { debounceMs: 20 })
+    await teardownIsolatedDb()
+    disposedDb = true
+
+    // Wait past the debounce window. If the timer was not cancelled, its
+    // fired compactCanvas call would hit the destroyed driver and log a
+    // 'failed' warning.
+    await new Promise((r) => setTimeout(r, 150))
+    logs.restore()
+
+    const autoCompactRecords = logs.records.filter((r) => r.scope === 'auto-compact')
+    expect(autoCompactRecords).toHaveLength(0)
+  })
+
+  it('disposeAutoCompact awaits an already-fired in-flight compaction before resolving', async () => {
+    const store = await buildCompactableCanvas('cached')
+    const { getDb } = await import('./db/index.js')
+
+    async function readLastCompactedAt(): Promise<number | null> {
+      const db = await getDb(tempDir)
+      const row = await db
+        .selectFrom('canvases')
+        .select(['lastCompactedAt'])
+        .where('workspaceId', '=', 'session1')
+        .where('slug', '=', 'cached')
+        .executeTakeFirst()
+      return row?.lastCompactedAt ?? null
+    }
+
+    scheduleAutoCompact('session1', 'cached', withDelayedEarliestFrontiers(store, 100), {
+      debounceMs: 1,
+    })
+    await vi.waitFor(
+      () => {
+        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
+      },
+      { timeout: 2000 },
+    )
+
+    await disposeAutoCompact()
+
+    expect(_inFlightAutoCompactCountForTests()).toBe(0)
+    expect(await readLastCompactedAt()).not.toBeNull()
+  })
+
+  it('disposeAutoCompact cancels a timer rescheduled by an in-flight compaction instead of leaving it dangling', async () => {
+    const store = await buildCompactableCanvas('reentrant')
+
+    // Simulates loadCanvas()'s legacy-migration path resuming mid-compaction
+    // and calling saveCanvas(), which re-invokes the auto-compact trigger and
+    // schedules a fresh timer *while disposeAutoCompact is already awaiting
+    // this in-flight compaction*. A single clear-then-await pass would clear
+    // the timer map before this reschedule happens and miss it.
+    const rescheduleCallCount = { count: 0 }
+    const countingStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestFrontiers') {
+          return async (workspaceId: string, slug: string) => {
+            rescheduleCallCount.count += 1
+            return target.earliestFrontiers(workspaceId, slug)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+    const reentrantStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestFrontiers') {
+          return async (workspaceId: string, slug: string) => {
+            await new Promise((r) => setTimeout(r, 50))
+            scheduleAutoCompact('session1', 'reentrant', countingStore, { debounceMs: 20 })
+            return target.earliestFrontiers(workspaceId, slug)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+
+    scheduleAutoCompact('session1', 'reentrant', reentrantStore, { debounceMs: 1 })
+    await vi.waitFor(
+      () => {
+        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
+      },
+      { timeout: 2000 },
+    )
+
+    await disposeAutoCompact()
+
+    expect(_inFlightAutoCompactCountForTests()).toBe(0)
+    // Wait past the rescheduled timer's debounce window and confirm it was
+    // cancelled rather than merely not-yet-fired.
+    await new Promise((r) => setTimeout(r, 100))
+    expect(rescheduleCallCount.count).toBe(0)
+  })
+
+  it('disposes through the real DB lifecycle (createIsolatedDb().dispose()) without spinning up a replacement connection for a re-entrant getDb() call', async () => {
+    const store = await buildCompactableCanvas('lifecycle')
+    const { getDb } = await import('./db/index.js')
+    let reentrantDb: Awaited<ReturnType<typeof getDb>> | null = null
+
+    const reentrantStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestFrontiers') {
+          return async (workspaceId: string, slug: string) => {
+            await new Promise((r) => setTimeout(r, 100))
+            // Mirrors a compaction resuming and touching the DB again
+            // (e.g. via loadCanvas()) while teardown is draining hooks.
+            reentrantDb = await getDb(tempDir)
+            return target.earliestFrontiers(workspaceId, slug)
+          }
+        }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
+
+    scheduleAutoCompact('session1', 'lifecycle', reentrantStore, { debounceMs: 1 })
+    await vi.waitFor(
+      () => {
+        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
+      },
+      { timeout: 2000 },
+    )
+
+    const disposingDb = handle.db
+    // Exercise the actual DB lifecycle API (createIsolatedDb().dispose(),
+    // mirroring closeDb() in production) rather than calling
+    // disposeAutoCompact() directly, so the cache-removal-vs-hook-ordering
+    // fix in db/index.ts is covered from this store's perspective too.
+    await teardownIsolatedDb()
+    disposedDb = true
+
+    expect(reentrantDb).toBe(disposingDb)
+  })
+
+  it('is idempotent, and scheduleAutoCompact still works after a dispose', async () => {
+    const store = await buildCompactableCanvas('again')
+    const { getDb } = await import('./db/index.js')
+
+    async function readLastCompactedAt(): Promise<number | null> {
+      const db = await getDb(tempDir)
+      const row = await db
+        .selectFrom('canvases')
+        .select(['lastCompactedAt'])
+        .where('workspaceId', '=', 'session1')
+        .where('slug', '=', 'again')
+        .executeTakeFirst()
+      return row?.lastCompactedAt ?? null
+    }
+
+    await disposeAutoCompact()
+    await disposeAutoCompact()
+
+    scheduleAutoCompact('session1', 'again', store, { debounceMs: 20 })
+    await vi.waitFor(
+      async () => {
+        expect(await readLastCompactedAt()).not.toBeNull()
+      },
+      { timeout: 2000 },
+    )
+  })
+
+  it('composes with setAutoCompactTrigger(null) in either order without dropping in-flight work', async () => {
+    const store = await buildCompactableCanvas('composed')
+    const { getDb } = await import('./db/index.js')
+
+    async function readLastCompactedAt(): Promise<number | null> {
+      const db = await getDb(tempDir)
+      const row = await db
+        .selectFrom('canvases')
+        .select(['lastCompactedAt'])
+        .where('workspaceId', '=', 'session1')
+        .where('slug', '=', 'composed')
+        .executeTakeFirst()
+      return row?.lastCompactedAt ?? null
+    }
+
+    scheduleAutoCompact('session1', 'composed', withDelayedEarliestFrontiers(store, 100), {
+      debounceMs: 1,
+    })
+    await vi.waitFor(
+      () => {
+        expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
+      },
+      { timeout: 2000 },
+    )
+
+    // setAutoCompactTrigger(null) stays synchronous and timer-only: it must
+    // not swallow the in-flight compaction that is already running.
+    setAutoCompactTrigger(null)
+    await disposeAutoCompact()
+
+    expect(await readLastCompactedAt()).not.toBeNull()
   })
 })
