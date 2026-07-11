@@ -62,8 +62,17 @@ export function getDb(dataDir: string = DATA_DIR): Promise<Database> {
 // inverts the dependency instead.
 const disposeHooks: Array<() => Promise<void>> = []
 
-export function registerDbDisposeHook(fn: () => Promise<void>): void {
+// Returns an unregister function so dynamically-registered hooks (tests,
+// short-lived owners) can remove themselves instead of accumulating in the
+// module-scope registry.
+export function registerDbDisposeHook(fn: () => Promise<void>): () => void {
   disposeHooks.push(fn)
+  return () => {
+    const index = disposeHooks.indexOf(fn)
+    if (index !== -1) {
+      disposeHooks.splice(index, 1)
+    }
+  }
 }
 
 // Never rejects: a misbehaving hook must not block driver teardown. Exported
