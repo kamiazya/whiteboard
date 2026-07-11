@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
+import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { CanvasThumb } from './CanvasThumb.js'
 
 afterEach(() => cleanup())
@@ -50,6 +51,20 @@ describe('CanvasThumb', () => {
     const wrapper = container.firstElementChild as HTMLElement
     expect(wrapper.className).toContain('h-9')
     expect(wrapper.className).toContain('w-14')
+  })
+
+  it('does not trigger a React setState-in-render warning when the guarded prevSrc reset runs on a src change', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const { rerender } = render(<CanvasThumb workspaceId="ws-1" slug="canvas-a" />)
+      // Changing slug changes `src`, which drives the guarded prevSrc reset
+      // (CanvasThumb.tsx L37-41) during this render — the React-sanctioned
+      // "adjust state during render" form, not the cross-component violation.
+      rerender(<CanvasThumb workspaceId="ws-1" slug="canvas-b" />)
+      assertNoSetStateInRenderWarning(errorSpy)
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   it('renders the fallback placeholder instead of an <img> when a DaemonApiContext provider is mounted (cross-origin)', () => {
