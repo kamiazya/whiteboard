@@ -75,6 +75,50 @@ describe('probeDaemon', () => {
     expect(result).toEqual({ detected: false, reason: 'network' })
   })
 
+  it('returns not-detected with reason refused when a fetch rejects on an http/loopback page origin', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'http',
+    })
+
+    expect(result).toEqual({ detected: false, reason: 'refused' })
+  })
+
+  it('classifies a WebKit mixed-content rejection as blocked on an https page origin', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Load failed'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'https',
+    })
+
+    expect(result).toEqual({ detected: false, reason: 'blocked' })
+  })
+
+  it('never classifies a Load failed rejection as blocked on an http/loopback page origin', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Load failed'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'http',
+    })
+
+    expect(result).toEqual({ detected: false, reason: 'refused' })
+  })
+
+  it('keeps an https-origin CORS-shaped rejection as network, not blocked (F4: CORS failure is not a proven browser block)', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, {
+      fetch: fetchMock,
+      pageOriginScheme: 'https',
+    })
+
+    expect(result).toEqual({ detected: false, reason: 'network' })
+  })
+
   it('never throws and never logs to the console', async () => {
     const consoleErrorSpy = vi.spyOn(console, 'error')
     const consoleWarnSpy = vi.spyOn(console, 'warn')

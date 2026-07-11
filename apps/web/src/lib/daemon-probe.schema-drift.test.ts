@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { daemonPingResponseSchema as serverDaemonPingResponseSchema } from '../../../../packages/mcp-server/src/shared/api-contracts/runtime.js'
-import { probeDaemon } from './daemon-probe.js'
+import { probeDaemon, probeFailureReasonSchema } from './daemon-probe.js'
 
 // Test-only deep import of the server's source of truth for the ping
 // response shape. apps/web keeps its own local Zod mirror (daemon-probe.ts)
@@ -29,5 +29,17 @@ describe('daemon-probe schema drift pin', () => {
     expect(serverDaemonPingResponseSchema.safeParse(clientObservedSuccessPayload).success).toBe(
       true,
     )
+  })
+
+  it('widens the probe failure reason enum additively — a legacy pre-tier memo value still parses', () => {
+    // Pins the reason set gained by the capability-tier slice ('blocked',
+    // 'refused') as additive: a sessionStorage memo written by a pre-tier
+    // build (reason: 'network') must still round-trip after the upgrade.
+    expect(probeFailureReasonSchema.safeParse('network').success).toBe(true)
+    expect(probeFailureReasonSchema.safeParse('timeout').success).toBe(true)
+    expect(probeFailureReasonSchema.safeParse('http-error').success).toBe(true)
+    expect(probeFailureReasonSchema.safeParse('malformed').success).toBe(true)
+    expect(probeFailureReasonSchema.safeParse('blocked').success).toBe(true)
+    expect(probeFailureReasonSchema.safeParse('refused').success).toBe(true)
   })
 })
