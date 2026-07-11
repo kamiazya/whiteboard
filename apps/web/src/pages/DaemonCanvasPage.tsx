@@ -315,9 +315,9 @@ export function DaemonCanvasPage({
             <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
           )}
           {!capabilities.branches && (
-            <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
+            <CapabilityTeaser label="Variations" enabled={capabilities.branches} />
           )}
-          {!capabilities.merge && <CapabilityTeaser label="Merge" enabled={false} />}
+          {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
         </div>
         {canvas && browserLocalStore && (
           <details
