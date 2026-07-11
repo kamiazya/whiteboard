@@ -690,3 +690,76 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
     })
   })
 })
+
+describe('WorkspaceTopBar — dataMode="local"', () => {
+  it('never calls the daemon fetch: mount, open the canvas switcher, and open the actions area', async () => {
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[
+          { slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
+          { slug: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
+        ]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    // Open the canvas switcher dropdown.
+    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    await screen.findByTestId('new-canvas-menu-item')
+
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('uses canvases[].name for display instead of fetching /names', async () => {
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    expect(await screen.findByText('Custom title')).not.toBeNull()
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+
+  it('routes "New canvas…" to onCreateCanvas instead of opening the slug dialog / POSTing', async () => {
+    const onCreateCanvas = vi.fn().mockResolvedValue(undefined)
+    render(
+      <WorkspaceTopBar
+        dataMode="local"
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateToCanvas={() => {}}
+        onRenameCanvas={() => {}}
+        onCreateCanvas={onCreateCanvas}
+      />,
+      { container: document.body },
+    )
+
+    const switcher = screen.getByRole('button', { name: 'Canvas A' })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    const item = await screen.findByTestId('new-canvas-menu-item')
+    fireEvent.pointerUp(item)
+
+    await waitFor(() => expect(onCreateCanvas).toHaveBeenCalledTimes(1))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(apiFetch).not.toHaveBeenCalled()
+  })
+})

@@ -51,6 +51,9 @@ import VersionTimeline from './VersionTimeline'
 interface CanvasInfo {
   slug: string
   updatedAt: string
+  // Local-mode display name, supplied by the caller instead of the daemon's
+  // /names endpoint (browser-local has no daemon to ask).
+  name?: string
 }
 
 // Mirrors ThemeToggleButton's cycle order (system → light → dark → system).
@@ -151,6 +154,15 @@ interface Props {
   // canvas-list route) — the button is hidden rather than rendered inert.
   onNavigateBack?: () => void
   onNavigateToCanvas: (slug: string) => void
+  // Defaults to 'daemon' so every existing caller keeps fetching /names and
+  // POSTing renames/new-canvas unchanged. 'local' is for hosts with no
+  // daemon data layer (browser-local): the names fetch never fires and
+  // rename/create route through onRenameCanvas/onCreateCanvas instead.
+  dataMode?: 'daemon' | 'local'
+  // Required in local mode; ignored in daemon mode. Awaited internally with
+  // an unmount guard — rejections are not swallowed.
+  onRenameCanvas?: (name: string) => void | Promise<void>
+  onCreateCanvas?: () => void | Promise<void>
   // Omitted when the host page has no fullscreen affordance of its own.
   onEnterFullscreen?: () => void
   // Gates HeaderSaveDot/Cmd+S/History (versions), HeaderBranchChip (branches),
@@ -187,11 +199,15 @@ export default function WorkspaceTopBar({
   getThumbnailBlob,
   onNavigateBack,
   onNavigateToCanvas,
+  dataMode = 'daemon',
+  onRenameCanvas,
+  onCreateCanvas,
   capabilities,
   branchRefreshSignal,
   versionRefreshSignal,
   versionPanelExtra,
 }: Props) {
+  const isLocalMode = dataMode === 'local'
   const versionsEnabled = capabilities?.versions ?? true
   const branchesEnabled = capabilities?.branches ?? true
   const mergeEnabled = capabilities?.merge ?? true
@@ -303,6 +319,9 @@ export default function WorkspaceTopBar({
   // Load display names. Guard against a stale response for a previous
   // workspaceId landing after a newer request already resolved.
   useEffect(() => {
+    // Local mode has no daemon to ask — display names come from
+    // canvases[].name instead (see localNames below).
+    if (isLocalMode) return
     let active = true
     ;(async () => {
       try {
@@ -319,10 +338,43 @@ export default function WorkspaceTopBar({
     // page's memoized createDaemonFetch result), so including it does not
     // refetch per render — and a genuinely new fetch identity (base URL or
     // token change) must refetch to avoid serving stale names.
-  }, [workspaceId, daemonFetch])
+  }, [workspaceId, daemonFetch, isLocalMode])
+
+  // Local-mode display names come straight from the caller-provided
+  // canvases array rather than the daemon's /names response.
+  const localNames = useMemo<WorkspaceNames>(() => {
+    if (!isLocalMode) return { canvases: {}, pinned: [] }
+    const byId: Record<string, string> = {}
+    for (const c of canvases) {
+      if (c.name) byId[c.slug] = c.name
+    }
+    return { canvases: byId, pinned: [] }
+  }, [isLocalMode, canvases])
+  const effectiveNames = isLocalMode ? localNames : names
+
+  // Guards async callbacks (onRenameCanvas/onCreateCanvas) against
+  // setState-after-unmount when a canvas switch/delete resolves mid-flight.
+  const mountedRef = useRef(true)
+  useEffect(
+    () => () => {
+      mountedRef.current = false
+    },
+    [],
+  )
 
   const commitCanvasName = async () => {
     const name = draft.trim()
+    if (isLocalMode) {
+      try {
+        await onRenameCanvas?.(name)
+      } finally {
+        if (mountedRef.current) {
+          setRenamingCanvas(false)
+          setDraft('')
+        }
+      }
+      return
+    }
     try {
       const res = await daemonFetch(
         `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/name`,
@@ -376,18 +428,18 @@ export default function WorkspaceTopBar({
     const q = canvasSearch.trim().toLowerCase()
     if (!q) return sortedCanvases
     return sortedCanvases.filter((c) => {
-      const n = names.canvases[c.slug]
+      const n = effectiveNames.canvases[c.slug]
       return c.slug.toLowerCase().includes(q) || (n?.toLowerCase().includes(q) ?? false)
     })
-  }, [sortedCanvases, canvasSearch, names.canvases])
+  }, [sortedCanvases, canvasSearch, effectiveNames.canvases])
 
   // Split canvases into pinned and regular sections.
   // Preserve the user-defined order in names.pinned instead of resorting those items by recency.
-  const pinnedSet = useMemo(() => new Set(names.pinned), [names.pinned])
+  const pinnedSet = useMemo(() => new Set(effectiveNames.pinned), [effectiveNames.pinned])
   const pinnedCanvases = useMemo(() => {
     const bySlug = new Map(filteredCanvases.map((c) => [c.slug, c]))
-    return names.pinned.map((s) => bySlug.get(s)).filter((c): c is CanvasInfo => !!c)
-  }, [filteredCanvases, names.pinned])
+    return effectiveNames.pinned.map((s) => bySlug.get(s)).filter((c): c is CanvasInfo => !!c)
+  }, [filteredCanvases, effectiveNames.pinned])
 
   // Group by slug prefix (the first segment). Canvases without "/" stay in the ungrouped bucket.
   // Preserve recency order within each group and exclude anything already shown in the pinned section.
@@ -410,7 +462,7 @@ export default function WorkspaceTopBar({
     })
   }, [filteredCanvases, pinnedSet])
 
-  const canvasCustomName = names.canvases[slug]
+  const canvasCustomName = effectiveNames.canvases[slug]
   // Prefer the custom name when present; otherwise split the slug into prefix and leaf.
   // Muting the prefix helps show that nearby canvases belong to the same group.
   const slashIndex = slug.indexOf('/')
@@ -445,8 +497,24 @@ export default function WorkspaceTopBar({
   // page navigate to it on success.
   // Reusing the current prefix makes it easier to keep related canvases grouped.
   const openNewCanvas = () => {
+    // Local mode has no slug to POST — hand off straight to the caller and
+    // skip the daemon-only slug dialog entirely.
+    if (isLocalMode) {
+      if (newCanvasBusy) return
+      setNewCanvasBusy(true)
+      void (async () => {
+        try {
+          await onCreateCanvas?.()
+        } catch {
+          if (mountedRef.current) setNewCanvasError('Failed to create canvas.')
+        } finally {
+          if (mountedRef.current) setNewCanvasBusy(false)
+        }
+      })()
+      return
+    }
     const ix = slug.indexOf('/')
-    const prefix = ix !== -1 ? slug.slice(0, ix) + '/' : ''
+    const prefix = ix !== -1 ? `${slug.slice(0, ix)}/` : ''
     setNewCanvasSlug(prefix)
     setNewCanvasError(null)
     setNewCanvasOpen(true)
@@ -573,9 +641,9 @@ export default function WorkspaceTopBar({
                             key={c.slug}
                             canvas={c}
                             workspaceId={workspaceId}
-                            customName={names.canvases[c.slug]}
+                            customName={effectiveNames.canvases[c.slug]}
                             // Keep the full slug in the pinned section so the original group context stays visible.
-                            leafLabel={names.canvases[c.slug] ?? c.slug}
+                            leafLabel={effectiveNames.canvases[c.slug] ?? c.slug}
                             active={c.slug === slug}
                             pinned={true}
                             onNavigate={() => {
@@ -604,8 +672,8 @@ export default function WorkspaceTopBar({
                               key={c.slug}
                               canvas={c}
                               workspaceId={workspaceId}
-                              customName={names.canvases[c.slug]}
-                              leafLabel={names.canvases[c.slug] ?? leafSlug}
+                              customName={effectiveNames.canvases[c.slug]}
+                              leafLabel={effectiveNames.canvases[c.slug] ?? leafSlug}
                               active={c.slug === slug}
                               pinned={false}
                               onNavigate={() => {
@@ -649,7 +717,7 @@ export default function WorkspaceTopBar({
           <DropdownMenuContent align="start">
             <DropdownMenuItem
               onSelect={() => {
-                setDraft(names.canvases[slug] ?? '')
+                setDraft(effectiveNames.canvases[slug] ?? '')
                 setRenamingCanvas(true)
               }}
               className="gap-2"
