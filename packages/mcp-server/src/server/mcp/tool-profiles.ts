@@ -74,6 +74,12 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   },
 
   // Mutating non-idempotent (side effects / new IDs / state changes)
+  //
+  // create_pairing_link never mutates canvas state, but its response embeds the
+  // live daemon bearer token (see pairing-link.ts). readOnlyHint drives client
+  // auto-run/approval policy, so annotating this as read-only would let a client
+  // silently disclose a full-access credential without a human approval step.
+  create_pairing_link: { profile: MUTATING, title: 'Create daemon pairing link' },
   canvas_create: { profile: MUTATING, title: 'Create canvas' },
   annotate: { profile: MUTATING, title: 'Add annotation element' },
   annotate_batch: { profile: MUTATING, title: 'Add multiple annotation elements' },
