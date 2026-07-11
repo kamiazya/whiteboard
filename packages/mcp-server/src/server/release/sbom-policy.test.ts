@@ -489,6 +489,12 @@ describe('cyclonedx-npm version policy', () => {
     // @cyclonedx/cyclonedx-npm@5.0.0 treats npm ls ELSPROBLEMS as fatal even with
     // --ignore-npm-errors, so SBOM generation fails on the pnpm-deployed prod tree
     // (devDependencies are intentionally absent there). v4 honours the flag.
+    // v6.0.0 reworked npm-cli detection but its release notes do not claim an
+    // --ignore-npm-errors fix, so the pin stands until one is verified.
+    // Accepted trade-off: GHSA-v75r-vx73-82pj (fixed only in >=5.0.0) is a
+    // shell-injection via the --workspace argument; this repo never passes
+    // --workspace and spawns cyclonedx-npm with a sanitized env on Linux CI,
+    // so the advisory is not exploitable here.
     // Remove this pin guard once an upstream release honours --ignore-npm-errors again.
     const rootPkg = JSON.parse(readFile('package.json')) as {
       devDependencies?: Record<string, string>
