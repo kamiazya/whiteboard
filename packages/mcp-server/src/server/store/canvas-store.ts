@@ -330,12 +330,31 @@ const autoCompactTimers = new Map<string, ReturnType<typeof setTimeout>>()
 // dropped by an unrelated compaction for the same key finishing first.
 const inFlightAutoCompacts = new Set<Promise<unknown>>()
 
+// True only for the duration of a disposeAutoCompact() call. An in-flight
+// compaction's loadCanvas() can run legacy migration, which calls
+// saveCanvas(), which re-invokes the registered auto-compact trigger and
+// tries to schedule a fresh timer for the same key — see disposeAutoCompact's
+// loop comment below. Without this guard, that reschedule's timer and
+// disposeAutoCompact's next clear-and-recheck pass race each other: whichever
+// one is scheduled first on the event loop wins, and under load the timer
+// can fire (starting a real compaction) before the loop gets back around to
+// cancel it. disposeAutoCompact's own loop still correctly waits for a
+// compaction that wins that race, so this was never a leak, but the outcome
+// was nondeterministic. Refusing new timers for the whole disposal removes
+// the race instead of relying on winning it.
+// A counter rather than a boolean: overlapping disposeAutoCompact() calls
+// (parallel DB dispose hooks, test teardown racing an explicit call) must not
+// let the first finisher drop the guard while another disposal is still
+// draining.
+let disposingAutoCompactCount = 0
+
 export function scheduleAutoCompact(
   workspaceId: string,
   slug: string,
   versionStore: VersionStore,
   options: { debounceMs?: number } = {},
 ): void {
+  if (disposingAutoCompactCount > 0) return
   const key = `${workspaceId}/${slug}`
   const existing = autoCompactTimers.get(key)
   if (existing) clearTimeout(existing)
@@ -381,17 +400,23 @@ export function scheduleAutoCompact(
 // nothing pending simply resolves immediately, and scheduleAutoCompact works
 // again afterward (a fresh call re-populates both trackers).
 export async function disposeAutoCompact(): Promise<void> {
-  // A single clear-then-await pass is not enough: an in-flight compaction's
-  // loadCanvas() can run legacy migration, which calls saveCanvas(), which
-  // re-invokes the registered auto-compact trigger and schedules a fresh
-  // timer *while we are still awaiting the first batch*. Loop until a pass
-  // starts with nothing in flight, so the timer map and in-flight set are
-  // both guaranteed empty by the time this resolves.
-  for (;;) {
-    clearAllAutoCompactTimers()
-    const inFlight = Array.from(inFlightAutoCompacts)
-    if (inFlight.length === 0) break
-    await Promise.allSettled(inFlight)
+  disposingAutoCompactCount++
+  try {
+    // A single clear-then-await pass is not enough: an in-flight compaction's
+    // loadCanvas() can run legacy migration, which calls saveCanvas(), which
+    // re-invokes the registered auto-compact trigger *while we are still
+    // awaiting the first batch*. scheduleAutoCompact refuses that reschedule
+    // outright (the guard counter is non-zero for this whole call), so this
+    // loop's job is just to drain whatever was already in flight or already
+    // timer-scheduled before disposal began.
+    for (;;) {
+      clearAllAutoCompactTimers()
+      const inFlight = Array.from(inFlightAutoCompacts)
+      if (inFlight.length === 0) break
+      await Promise.allSettled(inFlight)
+    }
+  } finally {
+    disposingAutoCompactCount--
   }
 }
 
@@ -400,6 +425,14 @@ export async function disposeAutoCompact(): Promise<void> {
 // without a bespoke gate inside compactCanvas itself.
 export function _inFlightAutoCompactCountForTests(): number {
   return inFlightAutoCompacts.size
+}
+
+// Test-only introspection: lets a test deterministically wait until
+// disposeAutoCompact() has begun (and is therefore refusing reschedules)
+// before triggering a reschedule attempt, instead of racing a wall-clock
+// delay against dispose's await window.
+export function _isDisposingAutoCompactForTests(): boolean {
+  return disposingAutoCompactCount > 0
 }
 
 registerDbDisposeHook(disposeAutoCompact)
