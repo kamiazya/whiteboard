@@ -40,7 +40,7 @@ export function VersionThumbnail({
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [failed, setFailed] = useState(false)
 
-  const path = `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${versionId}/thumbnail`
+  const path = `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions/${encodeURIComponent(versionId)}/thumbnail`
 
   useEffect(() => {
     if (!hasThumbnail || !hasDaemonApi) return
