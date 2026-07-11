@@ -80,7 +80,9 @@ function sortRows(rows: CanvasRow[]): CanvasRow[] {
 function formatRelative(iso: string): string {
   const t = new Date(iso).getTime()
   if (!Number.isFinite(t)) return ''
-  const diff = Math.floor((Date.now() - t) / 1000)
+  // Clock drift between client and daemon can make (now - t) negative;
+  // clamp so the label never reads "-5s ago".
+  const diff = Math.max(0, Math.floor((Date.now() - t) / 1000))
   if (diff < 60) return `${diff}s ago`
   if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
@@ -143,7 +145,7 @@ export function DaemonIndexPage({
           const pinOrder = pinIndex.get(c.slug)
           return {
             slug: c.slug,
-            displayName: names?.canvases[c.slug] ?? c.slug,
+            displayName: names?.canvases?.[c.slug] ?? c.slug,
             updatedAt: c.updatedAt,
             pinned: pinOrder !== undefined,
             pinOrder: pinOrder ?? Number.POSITIVE_INFINITY,
@@ -162,6 +164,11 @@ export function DaemonIndexPage({
   useEffect(() => {
     if (!selectedWorkspace) return
     let cancelled = false
+    // Clear synchronously BEFORE the async load: leaving the previous
+    // workspace's rows visible during the switch lets a click pair the new
+    // workspace id with an old workspace's slug — a mismatched identity.
+    setRows([])
+    setLoadError(null)
     void loadWorkspace(selectedWorkspace, () => cancelled)
     return () => {
       cancelled = true
@@ -182,8 +189,10 @@ export function DaemonIndexPage({
       )
       setNewCanvasSlug('')
       onOpenCanvas(selectedWorkspace, created.slug)
-    } catch {
-      setCreateError('Failed to create canvas.')
+    } catch (err) {
+      // daemon-api-client errors are already sanitized (Problem Details
+      // title or a generic status message) — safe to surface directly.
+      setCreateError(err instanceof Error ? err.message : 'Failed to create canvas.')
     }
   }, [daemonFetch, daemonBaseUrl, selectedWorkspace, newCanvasSlug, onOpenCanvas])
 

@@ -139,6 +139,52 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByText('alpha')).toBeNull()
   })
 
+  it("clears the previous workspace's cards immediately on switch, before the new load resolves", async () => {
+    // A stale card clicked in the switch window would pair the NEW workspace
+    // id with the OLD workspace's slug — a mismatched identity.
+    // Each pending call gets its own deferred + fresh Response (a Response
+    // body is single-use, and the load may retry/refire).
+    const waiters: Array<() => void> = []
+    const releaseB = () => {
+      for (const w of waiters.splice(0)) w()
+    }
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(
+          jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] }),
+        )
+      }
+      if (url.includes('/ws-a/canvases')) {
+        return Promise.resolve(
+          jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      if (url.includes('/ws-b/canvases')) {
+        return new Promise<Response>((resolve) => {
+          waiters.push(() =>
+            resolve(
+              jsonResponse({ canvases: [{ slug: 'beta', updatedAt: new Date().toISOString() }] }),
+            ),
+          )
+        })
+      }
+      return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    expect(await screen.findByText('alpha')).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
+
+    // ws-b's canvases request is still pending — the old grid must be gone NOW.
+    expect(screen.queryByText('alpha')).toBeNull()
+
+    releaseB()
+    expect(await screen.findByText('beta')).toBeTruthy()
+  })
+
   it('sorts pinned canvases before unpinned, and unpinned by updatedAt desc', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -310,7 +356,8 @@ describe('DaemonIndexPage', () => {
     fireEvent.change(screen.getByLabelText('New canvas name'), { target: { value: 'fresh' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create canvas' }))
 
-    expect((await screen.findByRole('alert')).textContent).toBe('Failed to create canvas.')
+    expect((await screen.findByRole('alert')).textContent).toBe('Request failed (500).')
+    expect(screen.queryByText(/boom/)).toBeNull()
     expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 

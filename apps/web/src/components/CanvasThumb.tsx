@@ -69,10 +69,10 @@ export function CanvasThumb({ workspaceId, slug, size = 'dropdown', className }:
       cancelled = true
       if (createdUrl) URL.revokeObjectURL(createdUrl)
     }
-    // daemonFetch is the context-provided function and is not expected to
-    // change identity independently of hasDaemonApi.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, hasDaemonApi])
+    // daemonFetch is stable per provider identity, so including it does not
+    // refetch per render — and a genuinely new fetch identity (base URL or
+    // token change) must refetch rather than reuse stale credentials.
+  }, [src, hasDaemonApi, daemonFetch])
 
   const wrapperClasses =
     size === 'card'
