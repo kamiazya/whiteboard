@@ -1461,6 +1461,25 @@ describe('DaemonCanvasPage', () => {
       expect(screen.queryByRole('button', { name: 'Back to canvas list' })).toBeNull()
     })
 
+    it('renders "Back to canvas list" and invokes onNavigateBack when provided', async () => {
+      const onNavigateBack = vi.fn()
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            onNavigateBack={onNavigateBack}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const button = screen.getByRole('button', { name: 'Back to canvas list' })
+      fireEvent.click(button)
+      expect(onNavigateBack).toHaveBeenCalledTimes(1)
+    })
+
     it('performs exactly one POST /versions on a single Cmd/Ctrl+S keydown', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {

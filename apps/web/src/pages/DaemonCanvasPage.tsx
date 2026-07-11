@@ -50,6 +50,10 @@ export interface DaemonCanvasPageProps {
   // previously worked browser-local can copy those canvases onto this
   // daemon workspace. Absent in tests/embedders that don't need the flow.
   browserLocalStore?: BrowserLocalStore
+  // Wired to WorkspaceTopBar's own "Back to canvas list" button. Absent
+  // (the default) hides that button — callers that own an index view (the
+  // daemon gallery) pass this to return there.
+  onNavigateBack?: () => void
 }
 
 export function DaemonCanvasPage({
@@ -61,6 +65,7 @@ export function DaemonCanvasPage({
   onContinueBrowserLocal,
   createBackend,
   browserLocalStore,
+  onNavigateBack,
 }: DaemonCanvasPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
@@ -286,6 +291,7 @@ export function DaemonCanvasPage({
             versionRefreshSignal={versionRefreshSignal}
             onRestored={clearLocalUndo}
             versionPanelExtra={versionPanelExtra}
+            onNavigateBack={onNavigateBack}
           />
         )}
         {capabilities.branches && canvas && (

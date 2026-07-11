@@ -21,6 +21,19 @@ const DaemonCanvasPage = lazy(() =>
   import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
 )
 
+// Same lazy-chunk rationale as DaemonCanvasPage above — the gallery only
+// matters once a daemon connection exists.
+const DaemonIndexPage = lazy(() =>
+  import('./pages/DaemonIndexPage.js').then((m) => ({ default: m.DaemonIndexPage })),
+)
+
+// Which daemon-mode view is showing: the canvas gallery, or a specific open
+// canvas. A #wb= fragment with a slug skips straight to 'canvas'; local-daemon
+// and slug-less pairing start on 'index'. `key` on the DaemonCanvasPage mount
+// forces a clean remount (fresh controller/backend) on every index -> canvas
+// transition instead of reusing a previous canvas's identity.
+type DaemonView = { kind: 'index' } | { kind: 'canvas'; workspaceId: string; slug: string }
+
 const browserLocalStore = new IndexedDBStore()
 const userSettingsStore = createUserSettingsStore()
 
@@ -91,25 +104,59 @@ export function App({ providerState }: AppProps) {
   // body would let StrictMode's double-render read-then-lose the token.
   const [daemonToken] = useState(() => readDaemonTokenOnce() ?? undefined)
 
+  // A #wb= fragment carrying both workspaceId+slug skips straight to the
+  // canvas (the existing deep-link contract); a slug-less fragment (or
+  // local-daemon's runtime-config path, which never has a fragment at all)
+  // starts on the gallery. Lazy initializer: daemonConnection's payload is
+  // fixed for the life of the mount, so this never needs to react to it
+  // changing after the fact.
+  const [daemonView, setDaemonView] = useState<DaemonView>(() => {
+    if (
+      daemonConnection.status === 'paired' &&
+      daemonConnection.payload.workspaceId &&
+      daemonConnection.payload.slug
+    ) {
+      return {
+        kind: 'canvas',
+        workspaceId: daemonConnection.payload.workspaceId,
+        slug: daemonConnection.payload.slug,
+      }
+    }
+    return { kind: 'index' }
+  })
+
   // The 'Continue in browser-local' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
   if (!forcedBrowserLocal) {
     if (daemonConnection.status === 'paired') {
       const { payload } = daemonConnection
+      const pairedToken = payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined
       return (
         // ErrorBoundary sits outside Suspense: a lazy-chunk load failure
         // propagates through Suspense's own error path to the nearest
         // boundary, which must be here to catch it.
         <ErrorBoundary>
           <Suspense fallback={<DaemonConnectingFallback heightClass="h-dvh" />}>
-            <DaemonCanvasPage
-              daemonBaseUrl={payload.baseUrl}
-              workspaceId={payload.workspaceId}
-              slug={payload.slug}
-              token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
-              onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
-              browserLocalStore={browserLocalStore}
-            />
+            {daemonView.kind === 'index' ? (
+              <DaemonIndexPage
+                daemonBaseUrl={payload.baseUrl}
+                token={pairedToken}
+                onOpenCanvas={(workspaceId, slug) =>
+                  setDaemonView({ kind: 'canvas', workspaceId, slug })
+                }
+              />
+            ) : (
+              <DaemonCanvasPage
+                key={`${daemonView.workspaceId}:${daemonView.slug}`}
+                daemonBaseUrl={payload.baseUrl}
+                workspaceId={daemonView.workspaceId}
+                slug={daemonView.slug}
+                token={pairedToken}
+                onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+                browserLocalStore={browserLocalStore}
+                onNavigateBack={() => setDaemonView({ kind: 'index' })}
+              />
+            )}
           </Suspense>
         </ErrorBoundary>
       )
@@ -174,13 +221,27 @@ export function App({ providerState }: AppProps) {
           <BackendConfigChip state={effectiveState} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense fallback={<DaemonConnectingFallback heightClass="h-full" />}>
-              <DaemonCanvasPage
-                daemonBaseUrl={effectiveState.daemonBaseUrl}
-                capabilities={effectiveState.capabilities}
-                token={daemonToken}
-                browserLocalStore={browserLocalStore}
-                onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
-              />
+              {daemonView.kind === 'index' ? (
+                <DaemonIndexPage
+                  daemonBaseUrl={effectiveState.daemonBaseUrl}
+                  token={daemonToken}
+                  onOpenCanvas={(workspaceId, slug) =>
+                    setDaemonView({ kind: 'canvas', workspaceId, slug })
+                  }
+                />
+              ) : (
+                <DaemonCanvasPage
+                  key={`${daemonView.workspaceId}:${daemonView.slug}`}
+                  daemonBaseUrl={effectiveState.daemonBaseUrl}
+                  workspaceId={daemonView.workspaceId}
+                  slug={daemonView.slug}
+                  capabilities={effectiveState.capabilities}
+                  token={daemonToken}
+                  browserLocalStore={browserLocalStore}
+                  onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+                  onNavigateBack={() => setDaemonView({ kind: 'index' })}
+                />
+              )}
             </Suspense>
           </div>
         </div>
