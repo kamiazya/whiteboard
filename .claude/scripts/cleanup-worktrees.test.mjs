@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Regression coverage for cleanup-worktrees.mjs's merged/fresh detection.
-// Run with: node --test .claude/scripts/cleanup-worktrees.test.mjs
+// Run with: pnpm test:scripts (also wired into the CI "check" job).
 //
 // Builds a throwaway "origin" + working repo pair per test (not the real
 // repo) and points the script at it via CLEANUP_WORKTREES_REPO_ROOT.
