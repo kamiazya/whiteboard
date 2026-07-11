@@ -387,19 +387,33 @@ async function dispatchServerSupportBundle(rest: readonly string[]): Promise<num
   return exitCode
 }
 
+type ConfigFileEnvResult =
+  | { kind: 'ok'; port: number | undefined }
+  | { kind: 'error'; message: string }
+
 // Loads the nearest whiteboard config file (if any), layers its values
 // under process.env (env-over-file precedence, see config-file.ts), logs
 // the file path at info level, and returns the file's `port` (if set) so
 // the caller can thread it into daemon-run's own port precedence — file
 // port is otherwise NOT a set-if-unset env key, unlike the other fields.
-function applyLoadedConfigFileToDispatcherEnv(): number | undefined {
-  const loaded = loadConfigFile()
-  if (loaded === null) return undefined
+// loadConfigFile throws on a malformed file (by design, see config-file.ts);
+// that throw is caught here and turned into the same structured
+// stderr + exit-1 contract every other startup validation failure in this
+// dispatcher follows, instead of an unhandled rejection with a raw stack.
+function applyLoadedConfigFileToDispatcherEnv(): ConfigFileEnvResult {
+  let loaded: ReturnType<typeof loadConfigFile>
+  try {
+    loaded = loadConfigFile()
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return { kind: 'error', message: `whiteboard config file error: ${message}` }
+  }
+  if (loaded === null) return { kind: 'ok', port: undefined }
 
   applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
   getLogger('cli-dispatcher').info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
 
-  return loaded.config.port
+  return { kind: 'ok', port: loaded.config.port }
 }
 
 async function dispatchRun(rest: readonly string[]): Promise<number> {
@@ -426,14 +440,18 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   // shared/data-dir-secure.ts import-time DATA_DIR snapshot (pulled in via
   // daemon-run.js) sees the layered value. Config-file port is threaded
   // through separately (below) since --port and env don't share one seam.
-  const configFilePort = applyLoadedConfigFileToDispatcherEnv()
+  const configFileResult = applyLoadedConfigFileToDispatcherEnv()
+  if (configFileResult.kind === 'error') {
+    process.stderr.write(`${configFileResult.message}\n`)
+    return 1
+  }
 
   // Dynamic import keeps `server/config` (and its mkdirSync probe
   // at module load) out of the read-only command path.
   const { runDaemonRun } = await import('./daemon-run.js')
   const outcome = await runDaemonRun({
     host: parsed.host,
-    port: parsed.port ?? configFilePort,
+    port: parsed.port ?? configFileResult.port,
     dataDir: runDataDir,
     tokenStdin: parsed.tokenStdin,
   })

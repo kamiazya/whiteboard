@@ -99,4 +99,19 @@ describe('whiteboard daemon run — config file wiring', () => {
     const options = runDaemonRun.mock.calls[0][0]
     expect(options.port).toBeUndefined()
   })
+
+  it('reports an invalid config file as a clean exit-1 error instead of an unhandled rejection', async () => {
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ port: 'not-a-number' }))
+    const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    try {
+      const exitCode = await main(['daemon', 'run', '--json'])
+      expect(exitCode).toBe(1)
+      expect(runDaemonRun).not.toHaveBeenCalled()
+      const written = stderrSpy.mock.calls.map((call) => String(call[0])).join('')
+      expect(written).toContain('.whiteboardrc.json')
+      expect(written).not.toMatch(/\n\s*at /) // no raw stack trace frame
+    } finally {
+      stderrSpy.mockRestore()
+    }
+  })
 })
