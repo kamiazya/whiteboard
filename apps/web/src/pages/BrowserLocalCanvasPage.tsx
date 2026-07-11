@@ -12,15 +12,13 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '../components/ui/alert-dialog.js'
-import { CanvasTitle } from '../components/canvas-title/CanvasTitle.js'
-import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
-import { ThemeToggleButton } from '../components/ThemeToggleButton.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { cn } from '../lib/utils.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-local-page-state.js'
 import {
@@ -38,6 +36,18 @@ const DaemonDetectedBanner = lazy(() =>
     default: m.DaemonDetectedBanner,
   })),
 )
+
+// WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
+// VersionTimeline, HeaderBranchChip, and the Zod-validated
+// @kamiazya/whiteboard-mcp/api-contracts client. None of that daemon-mode
+// weight is needed for the entry chunk of a page whose local mode never
+// exercises those affordances (see App.tsx's equivalent rationale for
+// lazy-loading DaemonCanvasPage).
+const WorkspaceTopBar = lazy(() => import('../components/WorkspaceTopBar.js'))
+
+// Fixed height so the lazy WorkspaceTopBar chunk resolving after first paint
+// causes no layout shift.
+const TOP_BAR_FALLBACK_HEIGHT = 'h-12'
 
 interface BrowserLocalCanvasPageProps {
   store: BrowserLocalStore
@@ -100,13 +110,10 @@ export function BrowserLocalCanvasPage({
   // The generation guard drops a stale resolution that would otherwise
   // clobber a newer refresh triggered by a fast switch.
   const [canvases, setCanvases] = useState<CanvasSnapshot[]>([])
-  // Surfaces a failed "New canvas" click — mirrors cleanupError so a create
-  // failure is visible instead of leaving the button a silent no-op.
-  const [createError, setCreateError] = useState<string | null>(null)
-  // Guards against rapid repeated "New canvas" clicks: without it, concurrent
-  // createCanvas() calls before the first resolves would mint orphaned rows.
-  const [isCreatingCanvas, setIsCreatingCanvas] = useState(false)
   const listGenerationRef = useRef(0)
+  // Fullscreen target for WorkspaceTopBar's onEnterFullscreen; the whole page
+  // (editor + chrome), not just the Excalidraw canvas.
+  const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
@@ -124,12 +131,6 @@ export function BrowserLocalCanvasPage({
         console.error('listCanvases failed', err)
       })
   }, [canvasId, currentUpdatedAt, listCanvases])
-
-  // Clear a stale "New canvas" failure once the active canvas changes, so the
-  // error banner doesn't linger after the user has moved on.
-  useEffect(() => {
-    setCreateError(null)
-  }, [canvasId])
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
   // re-connecting on re-renders when id is unchanged.
@@ -206,93 +207,66 @@ export function BrowserLocalCanvasPage({
   return (
     // h-dvh makes the page own its viewport height: without it the flex chain
     // has no sized ancestor and the editor area collapses to 0px.
-    <main className="flex h-dvh w-full flex-col">
-      {/* A plain div, not a second <header>: two sibling <header> landmarks
-          under <main> would both register as "banner" in accessibility
-          trees since <main> does not scope them the way sectioning content
-          does. */}
-      <div className="flex shrink-0 items-center justify-end border-b bg-background px-2 py-1">
-        <ThemeToggleButton theme={theme} onChange={setTheme} />
-      </div>
-      <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
-        {/* Visually-hidden heading landmark: the editable control below is the
-            visible title, but the page keeps a real <h1> for accessibility trees. */}
-        <h1 className="sr-only">{pageState.snapshot.name}</h1>
-        {/* Key by canvas id so switching canvases remounts the title editor and
-            reseeds its draft from the new canvas's name. CanvasTitle deliberately
-            does not resync its draft from a changed `value` (that would clobber
-            in-progress typing during async load), so without this key the field
-            would keep showing the previous canvas's name after a switch. */}
-        <CanvasTitle
-          key={pageState.snapshot.id}
-          value={pageState.snapshot.name}
-          onRename={renameCanvas}
+    <main ref={mainRef} className="flex h-dvh w-full flex-col">
+      {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
+          is the visible title control, but the page keeps a real <h1> for
+          accessibility trees. */}
+      <h1 className="sr-only">{pageState.snapshot.name}</h1>
+      <Suspense
+        fallback={
+          <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
+        }
+      >
+        <WorkspaceTopBar
+          dataMode="local"
+          workspaceId="local"
+          slug={pageState.snapshot.id}
+          canvases={switcherOptions.map((c) => ({
+            slug: c.id,
+            name: c.name,
+            updatedAt: c.updatedAt,
+          }))}
+          onNavigateToCanvas={(id) => void switchCanvas(id)}
+          onRenameCanvas={renameCanvas}
+          onCreateCanvas={async () => {
+            const created = await createCanvas()
+            await switchCanvas(created.id)
+          }}
+          theme={theme}
+          onToggleTheme={setTheme}
+          onEnterFullscreen={() => {
+            void mainRef.current?.requestFullscreen()
+          }}
+          capabilities={{
+            versions: capabilities.versions,
+            branches: capabilities.branches,
+            merge: capabilities.merge,
+          }}
         />
-        <span className="text-xs text-muted-foreground">
-          {persistenceLabel(pageState.persistence)}
-        </span>
+      </Suspense>
+      {/* Page-specific bits that WorkspaceTopBar has no slot for. A plain
+          div, not a second <header>: two sibling <header> landmarks under
+          <main> would both register as "banner" in accessibility trees
+          since <main> does not scope them the way sectioning content does. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-1 text-xs">
+        <span className="text-muted-foreground">{persistenceLabel(pageState.persistence)}</span>
         <Suspense fallback={null}>
           <DaemonDetectedBanner settingsStore={settingsStore} fetch={window.fetch.bind(window)} />
         </Suspense>
         {cleanupError && (
-          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
+          <div role="alert" aria-live="assertive" className="text-destructive">
             {cleanupError}
           </div>
         )}
-        {createError && (
-          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
-            {createError}
-          </div>
-        )}
-        <select
-          aria-label="Canvases"
-          value={pageState.snapshot.id}
-          disabled={isCreatingCanvas}
-          onChange={(event) => {
-            const id = event.target.value
-            if (id !== pageState.snapshot.id) void switchCanvas(id)
-          }}
-          className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
-        >
-          {switcherOptions.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={isCreatingCanvas}
-          onClick={() => {
-            setCreateError(null)
-            setIsCreatingCanvas(true)
-            createCanvas()
-              .then((created) => switchCanvas(created.id))
-              .catch(() => {
-                setCreateError('Could not create a new canvas. Please try again.')
-              })
-              .finally(() => setIsCreatingCanvas(false))
-          }}
-          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          New canvas
-        </button>
-        {/* Daemon-only feature teasers: Stage 2 will move these into real
-            enabled controls once the daemon UI is ported. flex-wrap on the
-            header keeps them from forcing horizontal scroll at narrow
-            viewports. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
-          <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
-          <CapabilityTeaser label="Branches" enabled={capabilities.branches} />
-          <CapabilityTeaser label="Merge" enabled={capabilities.merge} />
-        </div>
+        <span className="ml-auto text-muted-foreground">
+          Connect a local daemon (MCP) to unlock version history, workspaces, branches, and merge
+        </span>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <button
               type="button"
               aria-label="Delete canvas"
-              className="ml-auto rounded-md border px-3 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10"
+              className="rounded-md border px-3 py-1 font-medium text-destructive transition-colors hover:bg-destructive/10"
             >
               Delete
             </button>
@@ -316,7 +290,7 @@ export function BrowserLocalCanvasPage({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </header>
+      </div>
       <div data-testid="excalidraw-container" className="min-h-0 flex-1">
         <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} theme={resolvedTheme} />
       </div>

@@ -110,7 +110,7 @@ describe('useBrowserLocalCanvasController', () => {
     const { result } = renderHook(() => useBrowserLocalCanvasController(failingStore))
     await act(async () => {})
     await act(async () => {
-      result.current.renameCanvas('Renamed')
+      result.current.renameCanvas('Renamed').catch(() => {})
     })
     expect(result.current.persistence.kind).toBe('degraded')
     if (result.current.persistence.kind === 'degraded') {
@@ -161,8 +161,11 @@ describe('useBrowserLocalCanvasController', () => {
     shouldFailSave = true
     // renameCanvas flushes immediately; let that failing save settle to 'degraded'
     // before triggerCleanup runs, matching how a real prior save failure lingers.
+    // Its returned promise rejects on this failed save (see the dedicated
+    // rejection test below) — catch it here since this test only cares about
+    // the resulting persistence/cleanup state, not the rejection itself.
     await act(async () => {
-      result.current.renameCanvas('Renamed')
+      result.current.renameCanvas('Renamed').catch(() => {})
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -173,6 +176,42 @@ describe('useBrowserLocalCanvasController', () => {
     expect(result.current.cleanupError).not.toBeNull()
     expect(result.current.cleanupError).not.toMatch(/secret-credential-xyz/i)
     expect(result.current.cleanupError).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
+  })
+
+  it('renameCanvas returns a promise that rejects when the underlying save fails', async () => {
+    // Root cause: callers such as WorkspaceTopBar await onRenameCanvas and
+    // treat a rejection as "keep the rename input open for retry". Before this
+    // fix renameCanvas's return type was `void`, so a real save failure could
+    // never surface as a rejection — the caller always saw success.
+    const base = new MemoryStore()
+    await base.setDefaultCanvasId('c1')
+    await base.save(snap)
+    let shouldFailSave = false
+    const store: BrowserLocalStore = {
+      getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+      setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+      load: base.load.bind(base),
+      del: base.del.bind(base),
+      generateId: base.generateId.bind(base),
+      listCanvases: base.listCanvases.bind(base),
+      save: async (s) => {
+        if (shouldFailSave) throw new Error('disk full')
+        return base.save(s)
+      },
+    }
+    const { result } = renderHook(() => useBrowserLocalCanvasController(store))
+    await act(async () => {})
+    shouldFailSave = true
+    let caught: unknown
+    await act(async () => {
+      try {
+        await result.current.renameCanvas('Renamed')
+      } catch (err) {
+        caught = err
+      }
+    })
+    expect(caught).toBeInstanceOf(Error)
+    expect(result.current.persistence.kind).toBe('degraded')
   })
 
   it('cleanupError is null on successful cleanup', async () => {
@@ -210,8 +249,10 @@ describe('useBrowserLocalCanvasController', () => {
     shouldFailSave = true
     // renameCanvas flushes immediately and fails; let it settle to 'degraded'
     // before triggerCleanup runs, so triggerCleanup's own degraded-guard aborts.
+    // The returned promise rejects on this failed save — caught here since
+    // this test only cares about the resulting cleanup-abort state.
     await act(async () => {
-      result.current.renameCanvas('Renamed')
+      result.current.renameCanvas('Renamed').catch(() => {})
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -698,8 +739,10 @@ describe('useBrowserLocalCanvasController', () => {
       }
 
       // Fire-and-forget flush, exactly like renameCanvas triggers internally.
+      // The intercepted save rejects below, so catch here — this test only
+      // cares about switchCanvas's abort behavior, not this rejection.
       act(() => {
-        result.current.renameCanvas('Renamed before switch')
+        result.current.renameCanvas('Renamed before switch').catch(() => {})
       })
       expect(firstSaveStarted).toBe(true)
 
