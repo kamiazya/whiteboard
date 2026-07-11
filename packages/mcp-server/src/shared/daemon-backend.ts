@@ -49,6 +49,15 @@ export interface DaemonApiTransport {
   fetch: typeof globalThis.fetch
 }
 
+// Browsers surface a WS handshake rejection (e.g. HTTP 401 on the upgrade
+// request from a wrong/expired daemon token) as close code 1006, not 1008 —
+// the 1008 (Policy Violation) branch below only fires when the server itself
+// accepts the upgrade and then closes the application-level socket. A
+// consecutive run of sockets that never fire onopen is the only client-side
+// signal available for "this token cannot ever succeed"; retrying it forever
+// would silently spam reconnects with no way for the user to recover.
+const MAX_CONSECUTIVE_IMMEDIATE_FAILURES = 3
+
 export class DaemonBackend implements CanvasBackend {
   private readonly workspaceId: string
   private readonly slug: string
@@ -59,6 +68,11 @@ export class DaemonBackend implements CanvasBackend {
   private cancelled = false
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private attempt = 0
+  // Counts consecutive closes of a socket that never reached onopen. Reset to
+  // 0 whenever a socket opens, so a connection that flapped after actually
+  // connecting never trips the cap — only an unbroken run of immediate
+  // rejections does.
+  private consecutiveImmediateFailures = 0
   // Hoisted to instance scope so reconnects do not reset it. Only reset by
   // disconnect() or when the canvas (workspaceId/slug) changes via a new
   // connect() call after the hook tears down the previous backend.
@@ -79,12 +93,14 @@ export class DaemonBackend implements CanvasBackend {
   connect(handlers: CanvasBackendHandlers): void {
     this.cancelled = false
     this.attempt = 0
+    this.consecutiveImmediateFailures = 0
     this.openSocket(handlers)
   }
 
   disconnect(): void {
     this.cancelled = true
     this.snapshotReceived = false
+    this.consecutiveImmediateFailures = 0
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
@@ -154,8 +170,12 @@ export class DaemonBackend implements CanvasBackend {
     ws.binaryType = 'arraybuffer'
     this.ws = ws
 
+    let opened = false
+
     ws.onopen = () => {
+      opened = true
       this.attempt = 0
+      this.consecutiveImmediateFailures = 0
       handlers.onConnected()
     }
 
@@ -167,6 +187,13 @@ export class DaemonBackend implements CanvasBackend {
       if (event.code === 1008) {
         handlers.onAuthError?.()
         return
+      }
+      if (!opened) {
+        this.consecutiveImmediateFailures += 1
+        if (this.consecutiveImmediateFailures >= MAX_CONSECUTIVE_IMMEDIATE_FAILURES) {
+          handlers.onAuthError?.()
+          return
+        }
       }
       // 500ms, 1s, 2s, 4s, 8s, 8s, … capped at 8s.
       const delay = Math.min(8000, 500 * 2 ** this.attempt)

@@ -144,11 +144,15 @@ describe('exponential backoff delay sequence', () => {
     backend.disconnect()
   })
 
-  it('follows the 500 / 1000 / 2000 / 4000 / 8000 / 8000 cap sequence', async () => {
+  it('follows the 500 / 1000 exponential growth up to the never-opened failure cap', async () => {
+    // Only 2 delays are assertable here: the 3rd consecutive close of a socket
+    // that never opened trips MAX_CONSECUTIVE_IMMEDIATE_FAILURES (see the
+    // "never-opened failure cap" describe block below), which stops
+    // reconnecting instead of scheduling a 3rd backoff delay.
     const backend = makeBackend()
     backend.connect(makeHandlers())
 
-    const expectedDelays = [500, 1000, 2000, 4000, 8000, 8000]
+    const expectedDelays = [500, 1000]
 
     for (const delay of expectedDelays) {
       const countBefore = FakeWebSocket.instances.length
@@ -159,6 +163,32 @@ describe('exponential backoff delay sequence', () => {
       expect(FakeWebSocket.instances).toHaveLength(countBefore)
 
       // Exactly on time — reconnect must have fired.
+      await vi.advanceTimersByTimeAsync(1)
+      expect(FakeWebSocket.instances).toHaveLength(countBefore + 1)
+    }
+
+    backend.disconnect()
+  })
+
+  it('keeps reconnecting at the base 500ms delay across many opened-then-dropped cycles', async () => {
+    // onopen already resets `attempt` to 0 (see the "resets the attempt
+    // counter" test below), so a connection that opens successfully every
+    // time before dropping restarts backoff at 500ms each cycle. The
+    // never-opened failure counter must also reset on every open, so this
+    // must keep reconnecting indefinitely rather than tripping the
+    // auth-failure cap regardless of how many cycles occur.
+    const backend = makeBackend()
+    backend.connect(makeHandlers())
+
+    for (let cycle = 0; cycle < 6; cycle++) {
+      const countBefore = FakeWebSocket.instances.length
+      const socket = lastSocket()
+      socket.onopen?.(new Event('open'))
+      triggerClose(socket)
+
+      await vi.advanceTimersByTimeAsync(499)
+      expect(FakeWebSocket.instances).toHaveLength(countBefore)
+
       await vi.advanceTimersByTimeAsync(1)
       expect(FakeWebSocket.instances).toHaveLength(countBefore + 1)
     }
@@ -335,5 +365,110 @@ describe('disconnect() cancels the reconnect loop', () => {
     const ws = FakeWebSocket.instances[0]
     backend.disconnect()
     expect(ws.close).toHaveBeenCalledTimes(1)
+  })
+})
+
+// ── never-opened failure cap (WS auth-failure reconnect loop fix) ──────────
+//
+// A wrong/expired daemon token makes the WS handshake fail at the HTTP layer,
+// which browsers surface as close code 1006 (not 1008), so the 1008-based
+// onAuthError branch never fires and the backend reconnects forever. Track
+// consecutive closes of sockets that never opened; after
+// MAX_CONSECUTIVE_IMMEDIATE_FAILURES stop reconnecting and surface onAuthError
+// instead, since retrying with the same rejected token cannot succeed.
+
+describe('never-opened failure cap', () => {
+  it('stops reconnecting and invokes onAuthError after 3 consecutive never-opened closes', async () => {
+    const onAuthError = vi.fn()
+    const backend = makeBackend()
+    backend.connect(makeHandlers({ onAuthError }))
+
+    // Failure 1: schedules a reconnect as usual.
+    triggerClose(FakeWebSocket.instances[0])
+    await vi.advanceTimersByTimeAsync(500)
+    expect(FakeWebSocket.instances).toHaveLength(2)
+    expect(onAuthError).not.toHaveBeenCalled()
+
+    // Failure 2: still under the cap, keeps reconnecting.
+    triggerClose(FakeWebSocket.instances[1])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(FakeWebSocket.instances).toHaveLength(3)
+    expect(onAuthError).not.toHaveBeenCalled()
+
+    // Failure 3 (never opened again): trips the cap — no new socket, onAuthError fires.
+    triggerClose(FakeWebSocket.instances[2])
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(FakeWebSocket.instances).toHaveLength(3)
+    expect(onAuthError).toHaveBeenCalledTimes(1)
+
+    backend.disconnect()
+  })
+
+  it('keeps reconnecting for a single transient never-opened failure (does not trip the cap)', async () => {
+    const onAuthError = vi.fn()
+    const backend = makeBackend()
+    backend.connect(makeHandlers({ onAuthError }))
+
+    triggerClose(FakeWebSocket.instances[0])
+    await vi.advanceTimersByTimeAsync(500)
+    expect(FakeWebSocket.instances).toHaveLength(2)
+    expect(onAuthError).not.toHaveBeenCalled()
+
+    backend.disconnect()
+  })
+
+  it('resets the never-opened failure counter once a socket opens, so a later single blip does not trip the cap', async () => {
+    const onAuthError = vi.fn()
+    const backend = makeBackend()
+    backend.connect(makeHandlers({ onAuthError }))
+
+    // Two never-opened failures (one below the cap)...
+    triggerClose(FakeWebSocket.instances[0])
+    await vi.advanceTimersByTimeAsync(500)
+    triggerClose(FakeWebSocket.instances[1])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(FakeWebSocket.instances).toHaveLength(3)
+
+    // ...then a successful open resets the counter.
+    FakeWebSocket.instances[2].onopen?.(new Event('open'))
+    triggerClose(FakeWebSocket.instances[2])
+    await vi.advanceTimersByTimeAsync(500)
+    expect(FakeWebSocket.instances).toHaveLength(4)
+
+    // A single subsequent never-opened failure must not trip the cap.
+    triggerClose(FakeWebSocket.instances[3])
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(FakeWebSocket.instances).toHaveLength(5)
+    expect(onAuthError).not.toHaveBeenCalled()
+
+    backend.disconnect()
+  })
+
+  it('code 1008 still triggers onAuthError immediately regardless of the never-opened counter', async () => {
+    const onAuthError = vi.fn()
+    const backend = makeBackend()
+    backend.connect(makeHandlers({ onAuthError }))
+
+    const closeEvent = { code: 1008 } as unknown as CloseEvent
+    FakeWebSocket.instances[0].onclose?.(closeEvent)
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(onAuthError).toHaveBeenCalled()
+
+    backend.disconnect()
+  })
+
+  it('disconnect() during the never-opened failure window cancels the pending timer and never fires onAuthError afterwards', async () => {
+    const onAuthError = vi.fn()
+    const backend = makeBackend()
+    backend.connect(makeHandlers({ onAuthError }))
+
+    triggerClose(FakeWebSocket.instances[0])
+    backend.disconnect()
+
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(FakeWebSocket.instances).toHaveLength(1)
+    expect(onAuthError).not.toHaveBeenCalled()
   })
 })
