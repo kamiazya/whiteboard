@@ -9,6 +9,12 @@ import { BrowserLocalBackend } from './browser-local-backend.js'
 import { DB_VERSION } from './browser-idb.js'
 import type { CanvasBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 
+// Generous timeout: async IDB reads under CI load can take well over the
+// 200ms fixed sleeps this file used to rely on. Waiting on the concrete
+// handler call (instead of wall-clock time) keeps the test both fast on a
+// healthy machine and stable under CI load.
+const WAIT_TIMEOUT = 10_000
+
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
     const req = indexedDB.deleteDatabase('whiteboard')
@@ -51,8 +57,12 @@ describe('BrowserLocalBackend', () => {
     const handlers = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-1')
     backend.connect(handlers)
-    // Give async IDB reads a moment
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
     expect(handlers.onConnected).toHaveBeenCalledTimes(1)
     expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
     const snapshotBytes = (handlers.onSnapshot as ReturnType<typeof vi.fn>).mock.calls[0][0]
@@ -67,16 +77,26 @@ describe('BrowserLocalBackend', () => {
     const seedBackend = new BrowserLocalBackend('canvas-1')
     const seedHandlers = makeHandlers()
     seedBackend.connect(seedHandlers)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(seedHandlers.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
+    // pushLocalUpdate is awaited to completion, so the write is durable
+    // before disconnect() — no additional wait needed here.
     await seedBackend.pushLocalUpdate(initial)
     seedBackend.disconnect()
-
-    await new Promise((r) => setTimeout(r, 200))
 
     const handlers = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-1')
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
     expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
     expect(handlers.onRemoteUpdate).not.toHaveBeenCalled()
@@ -95,19 +115,29 @@ describe('BrowserLocalBackend', () => {
     const backend1 = new BrowserLocalBackend('canvas-1')
     const h1 = makeHandlers()
     backend1.connect(h1)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(h1.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
-    // Push snapshot then delta
+    // Push snapshot then delta — both awaited, so both writes are durable
+    // before disconnect().
     await backend1.pushLocalUpdate(snapshot)
     await backend1.pushLocalUpdate(delta)
     backend1.disconnect()
-    await new Promise((r) => setTimeout(r, 200))
 
     // Reload
     const backend2 = new BrowserLocalBackend('canvas-1')
     const h2 = makeHandlers()
     backend2.connect(h2)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(h2.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
     expect(h2.onSnapshot).toHaveBeenCalledTimes(1)
     // Delta replayed as onRemoteUpdate
@@ -128,14 +158,12 @@ describe('BrowserLocalBackend', () => {
     const handlers = makeHandlers()
     backend.connect(handlers)
     backend.disconnect()
-    await new Promise((r) => setTimeout(r, 300))
-    // onConnected fires synchronously before disconnect in this test,
-    // so we only assert onSnapshot does not fire after disconnect.
-    const snapshotCallCount = (handlers.onSnapshot as ReturnType<typeof vi.fn>).mock.calls.length
-    await new Promise((r) => setTimeout(r, 300))
-    expect((handlers.onSnapshot as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
-      snapshotCallCount,
-    )
+    // Absence assertion: vi.waitFor can only prove a callback DID fire, not
+    // that it never will, so this is the one deliberately bounded drain
+    // left in this file — long enough for the in-flight IDB read started
+    // by connect() to settle before we assert it produced no callback.
+    await new Promise((r) => setTimeout(r, 250))
+    expect(handlers.onSnapshot).not.toHaveBeenCalled()
   })
 
   it('getFile returns null (deferred OPFS — not implemented in 3-C)', async () => {
@@ -176,7 +204,12 @@ describe('BrowserLocalBackend', () => {
     const backend = new BrowserLocalBackend('canvas-1')
     const handlers = makeHandlers()
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
     // Empty bytes: early return, no throw, no onError
     await expect(backend.pushLocalUpdate(new Uint8Array(0))).resolves.toBeUndefined()
     expect(handlers.onError).not.toHaveBeenCalled()
@@ -190,9 +223,17 @@ describe('BrowserLocalBackend', () => {
     const handlers = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-corrupt')
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 200))
+    // connect()'s own load surfaces the corrupt record as onError first.
+    await vi.waitFor(
+      () => {
+        expect(handlers.onError).toHaveBeenCalled()
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
-    // Push a delta — should detect corrupt existing and route to onError
+    // Push a delta — should detect corrupt existing and route to onError.
+    // pushLocalUpdate is awaited, so the resulting onError call is
+    // synchronous with the resolved promise; no additional wait needed.
     const delta = new Uint8Array([1, 2, 3])
     await backend.pushLocalUpdate(delta)
     expect(handlers.onError).toHaveBeenCalledWith('storage-failure')
@@ -214,7 +255,12 @@ describe('BrowserLocalBackend', () => {
     const backend = new BrowserLocalBackend('canvas-race')
     const handlers = makeHandlers()
     backend.connect(handlers)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
     // Push snapshot first to establish the record
     await backend.pushLocalUpdate(snapshot)
@@ -226,7 +272,12 @@ describe('BrowserLocalBackend', () => {
     const backend2 = new BrowserLocalBackend('canvas-race')
     const h2 = makeHandlers()
     backend2.connect(h2)
-    await new Promise((r) => setTimeout(r, 300))
+    await vi.waitFor(
+      () => {
+        expect(h2.onRemoteUpdate).toHaveBeenCalledTimes(2)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
     expect(h2.onRemoteUpdate).toHaveBeenCalledTimes(2)
     backend2.disconnect()
   })
@@ -238,7 +289,12 @@ describe('BrowserLocalBackend', () => {
     const h2 = makeHandlers()
     const backend2 = new BrowserLocalBackend('canvas-v99')
     backend2.connect(h2)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(h2.onError).toHaveBeenCalledWith('unsupported-version')
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
     expect(h2.onError).toHaveBeenCalledWith('unsupported-version')
     expect(h2.onSnapshot).not.toHaveBeenCalled()
@@ -251,7 +307,12 @@ describe('BrowserLocalBackend', () => {
     const h = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-bad-bytes')
     backend.connect(h)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(h.onError).toHaveBeenCalledWith('corrupt-snapshot')
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
     expect(h.onError).toHaveBeenCalledWith('corrupt-snapshot')
     expect(h.onSnapshot).not.toHaveBeenCalled()
@@ -268,7 +329,12 @@ describe('BrowserLocalBackend', () => {
     const h = makeHandlers()
     const backend = new BrowserLocalBackend('canvas-bad-delta')
     backend.connect(h)
-    await new Promise((r) => setTimeout(r, 200))
+    await vi.waitFor(
+      () => {
+        expect(h.onError).toHaveBeenCalledWith('corrupt-delta')
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
 
     expect(h.onError).toHaveBeenCalledWith('corrupt-delta')
     expect(h.onSnapshot).not.toHaveBeenCalled()
