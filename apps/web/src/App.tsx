@@ -42,6 +42,22 @@ interface BackendConfigChipProps {
   state: Exclude<ProviderState, { kind: 'invalid-config' }>
 }
 
+// Suspense fallback while the lazy daemon chunk loads. The height class
+// differs by mount site (root fills the viewport; the local-daemon branch
+// fills the flex row under the banner), so it's a prop; the copy stays shared
+// so the two mount sites can't drift.
+function DaemonConnectingFallback({ heightClass }: { heightClass: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`flex ${heightClass} items-center justify-center text-sm text-muted-foreground`}
+    >
+      Connecting to daemon…
+    </div>
+  )
+}
+
 // Reports the configured storage backend only — this reflects runtime
 // config, not a live connection/detection probe. Do not claim 'Connected'
 // or 'Daemon unavailable' here; that needs an actual live probe.
@@ -81,17 +97,7 @@ export function App({ providerState }: AppProps) {
         // propagates through Suspense's own error path to the nearest
         // boundary, which must be here to catch it.
         <ErrorBoundary>
-          <Suspense
-            fallback={
-              <div
-                role="status"
-                aria-live="polite"
-                className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
-              >
-                Connecting to daemon…
-              </div>
-            }
-          >
+          <Suspense fallback={<DaemonConnectingFallback heightClass="h-dvh" />}>
             <DaemonCanvasPage
               daemonBaseUrl={payload.baseUrl}
               workspaceId={payload.workspaceId}
@@ -162,17 +168,7 @@ export function App({ providerState }: AppProps) {
           />
           <BackendConfigChip state={effectiveState} />
           <div className="min-h-0 flex-1 overflow-hidden">
-            <Suspense
-              fallback={
-                <div
-                  role="status"
-                  aria-live="polite"
-                  className="flex h-full items-center justify-center text-sm text-muted-foreground"
-                >
-                  Connecting to daemon…
-                </div>
-              }
-            >
+            <Suspense fallback={<DaemonConnectingFallback heightClass="h-full" />}>
               <DaemonCanvasPage
                 daemonBaseUrl={effectiveState.daemonBaseUrl}
                 capabilities={effectiveState.capabilities}
