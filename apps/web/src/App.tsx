@@ -91,6 +91,7 @@ export function App({ providerState }: AppProps) {
               slug={payload.slug}
               token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
               onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+              browserLocalStore={_browserLocalStore}
             />
           </Suspense>
         </ErrorBoundary>

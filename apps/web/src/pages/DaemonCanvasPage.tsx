@@ -3,7 +3,7 @@ import '@excalidraw/excalidraw/index.css'
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
-import { useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
@@ -11,11 +11,21 @@ import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
 
 const log = getAppLogger('daemon-canvas-page')
+
+// Lazy so IndexedDB/Loro code (pulled in by ImportBrowserLocalPanel's store
+// dependencies) only loads once a canvas is selected and this migration-time
+// disclosure is actually mounted, not on every daemon-page load.
+const LazyImportSection = lazy(() =>
+  import('./daemon-canvas-import-section.js').then((m) => ({
+    default: m.DaemonCanvasImportSection,
+  })),
+)
 
 export interface DaemonCanvasPageProps {
   daemonBaseUrl: string
@@ -34,6 +44,11 @@ export interface DaemonCanvasPageProps {
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, slug: string, daemonFetch: typeof fetch) => CanvasBackend
+  // Optional: when provided (the real App.tsx wiring always provides it),
+  // renders a collapsed "Import from this browser" disclosure so a user who
+  // previously worked browser-local can copy those canvases onto this
+  // daemon workspace. Absent in tests/embedders that don't need the flow.
+  browserLocalStore?: BrowserLocalStore
 }
 
 export function DaemonCanvasPage({
@@ -44,6 +59,7 @@ export function DaemonCanvasPage({
   capabilities = LOCAL_DAEMON_CAPABILITIES,
   onContinueBrowserLocal,
   createBackend,
+  browserLocalStore,
 }: DaemonCanvasPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
@@ -278,6 +294,23 @@ export function DaemonCanvasPage({
           )}
           {!capabilities.merge && <CapabilityTeaser label="Merge" enabled={false} />}
         </div>
+        {canvas && browserLocalStore && (
+          <details className="border-b bg-background px-4 py-2 text-sm">
+            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+              Import from this browser
+            </summary>
+            <div className="pt-2">
+              <Suspense fallback={null}>
+                <LazyImportSection
+                  workspaceId={canvas.workspaceId}
+                  daemonFetch={daemonFetch}
+                  daemonBaseUrl={daemonBaseUrl}
+                  browserLocalStore={browserLocalStore}
+                />
+              </Suspense>
+            </div>
+          </details>
+        )}
         {controller.canvases.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
             <p className="text-sm text-muted-foreground">This workspace has no canvases yet.</p>

@@ -4,6 +4,7 @@ import type {
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
@@ -1552,6 +1553,46 @@ describe('DaemonCanvasPage', () => {
       await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
       const wsUrl = new URL(FakeWebSocket.instances[0]!.url)
       expect(wsUrl.origin).toBe(new URL(DAEMON_BASE_URL).origin.replace('http:', 'ws:'))
+    })
+  })
+
+  describe('browser-local import panel', () => {
+    it('renders the import-from-this-browser disclosure and lists a local canvas once opened', async () => {
+      const browserLocalStore = new MemoryStore()
+      await browserLocalStore.save({
+        id: 'local-1',
+        name: 'My local canvas',
+        updatedAt: '2026-01-01T00:00:00Z',
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            browserLocalStore={browserLocalStore}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const summary = await screen.findByText('Import from this browser')
+      fireEvent.click(summary)
+
+      await waitFor(() => expect(screen.getByText('My local canvas')).toBeTruthy())
+    })
+
+    it('does not render the import disclosure when browserLocalStore is not provided', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByText('Import from this browser')).toBeNull()
     })
   })
 })
