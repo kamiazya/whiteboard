@@ -354,9 +354,79 @@ describe('DaemonCanvasPage', () => {
       backend.handlers?.onAuthError?.()
     })
 
-    expect(screen.getByRole('alert').textContent).toMatch(/daemon rejected/i)
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toMatch(/daemon rejected/i)
+    // Strengthened banner: an explicit "Live sync off" label, not just the
+    // re-pairing sentence, so the degraded state reads at a glance.
+    expect(alert.textContent).toMatch(/live sync off/i)
     // Editor chrome stays mounted — auth error is a banner, not a full-page replacement.
     expect(screen.getByTestId('excalidraw-container')).toBeTruthy()
+  })
+
+  it('shows a persistent "Sync off" indicator distinct from the alert banner while authError is true', async () => {
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+    expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
+
+    await act(async () => {
+      createdBackends[0]?.handlers?.onAuthError?.()
+    })
+
+    // Deliberately not role=alert — there must be exactly one alert on the
+    // page (the banner) so existing screen.getByRole('alert') calls stay
+    // unambiguous; the chip is a secondary, persistent status indicator.
+    const chip = screen.getByLabelText(/live sync off/i)
+    expect(chip.getAttribute('role')).not.toBe('alert')
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  it('renders the "Sync off" indicator even when no canvas is selected', async () => {
+    mockListWorkspaces.mockResolvedValue({
+      workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
+    })
+    mockListCanvases.mockImplementation((_fetch, _base, workspaceId) => {
+      if (workspaceId === 'w2') return Promise.resolve({ canvases: [] })
+      return Promise.resolve({
+        canvases: [
+          { slug: 'main', updatedAt: '2026-01-01' },
+          { slug: 'second', updatedAt: '2026-01-02' },
+        ],
+      })
+    })
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+    await act(async () => {
+      createdBackends[0]?.handlers?.onAuthError?.()
+    })
+    expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
+
+    // Switch into a workspace with zero canvases: the canvas backend tears
+    // down entirely (no WorkspaceTopBar mounts), but there genuinely is no
+    // live sync happening either way, so the indicator must not disappear
+    // just because the canvas-gated UI does.
+    const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
+    await act(async () => {
+      workspaceSelect.value = 'w2'
+      workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    await waitFor(() =>
+      expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
+    )
+    expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
   })
 
   it('clears the auth-error banner when switching to a new canvas (new backend identity)', async () => {
@@ -372,14 +442,16 @@ describe('DaemonCanvasPage', () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
     expect(screen.getByRole('alert').textContent).toMatch(/daemon rejected/i)
+    expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
 
     await act(async () => {
       await openCanvasSwitcher('main')
       await selectCanvasFromSwitcher('second')
     })
 
-    // The stale banner must not outlive the backend that produced it.
+    // The stale banner (and chip) must not outlive the backend that produced it.
     expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
   })
 
   it('renders a browser-local escape button in the auth banner and invokes the callback', async () => {

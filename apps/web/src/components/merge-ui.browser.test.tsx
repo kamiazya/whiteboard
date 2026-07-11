@@ -4,6 +4,7 @@ import type { BranchMeta, MergeResponse } from '@kamiazya/whiteboard-mcp/api-con
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import '../index.css'
 import { MERGE_COMMITTED_EVENT } from '@/lib/merge-committed-event'
 import { MergeDialog } from './MergeDialog.js'
 import { MergeHighlight } from './MergeHighlight.js'
@@ -76,6 +77,61 @@ describe('MergeDialog (browser — real Radix Dialog)', () => {
 
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(onClose).toHaveBeenCalled())
+  })
+})
+
+describe('MergeDialog layout (browser — confirm footer reachable below the fold)', () => {
+  afterEach(async () => {
+    // Restore the shared browser instance's default viewport so later tests
+    // in this project (default 1280x900) do not inherit this test's override.
+    await page.viewport(1280, 900)
+  })
+
+  it('keeps the Merge confirm button reachable at a ~1200x800 viewport', async () => {
+    await page.viewport(1200, 800)
+
+    // A wide badge set forces the merged-preview card, badge list, and
+    // side-effect notice to stack tall enough that the dialog exceeds an
+    // 800px-tall viewport.
+    const badges = Array.from({ length: 20 }, (_, index) => ({
+      type: 'field_merge',
+      elementId: `el-${index}`,
+      fields: ['strokeColor', 'backgroundColor'],
+    }))
+    const runMerge = vi.fn().mockResolvedValue({
+      badges,
+      preview: { elementCount: 240 },
+      target: { elementCount: 200 },
+      source: { elementCount: 220 },
+    } satisfies MergeResponse)
+
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+
+    // Real click fails with "element is outside of the viewport" if the
+    // footer falls below the fold and the body has no overflow-y.
+    await page.getByTestId('merge-confirm-button').click()
+
+    await waitFor(() => {
+      expect(runMerge).toHaveBeenLastCalledWith('feature', { into: 'main', dryRun: false })
+    })
+
+    // The dialog renders through a portal, so query the document rather
+    // than the render container.
+    const scrollBody = document.querySelector('[data-slot="merge-dialog-body"]')
+    expect(scrollBody).toBeInstanceOf(HTMLDivElement)
+    expect(scrollBody!.scrollHeight).toBeGreaterThan(scrollBody!.clientHeight)
+
+    const footer = document.querySelector('[data-slot="dialog-footer"]')
+    expect(footer).toBeInstanceOf(HTMLDivElement)
+    expect(scrollBody!.contains(footer)).toBe(false)
   })
 })
 
