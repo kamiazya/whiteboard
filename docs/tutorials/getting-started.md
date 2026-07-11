@@ -14,9 +14,11 @@ pnpm install
 pnpm dev          # open http://localhost:5173
 ```
 
-This is a minimal browser-local canvas: click **Add rectangle** to add an element
-and watch the counter go up, then reload the tab — the elements are still there.
-That's your canvas persisting in your own browser, with no server and no account.
+The page mounts a full Excalidraw canvas. Pick the rectangle tool from the
+toolbar (or press `r`) and draw a shape, then reload the tab — the shape is
+still there. That's your canvas persisting to IndexedDB in your own browser,
+with no server and no account. Draw, close the tab, and come back later: the
+same canvas is right where you left it.
 
 **Where to go next:** want your AI agent (Claude Code, Codex, Gemini) to draw with
 you, or durable canvases as files on disk? That's the **Local daemon** — see
