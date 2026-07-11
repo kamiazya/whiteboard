@@ -101,13 +101,36 @@ if (!existsSync(indexHtmlPath)) {
   failures++
 } else {
   const html = readFileSync(indexHtmlPath, 'utf8')
-  const entryScripts = [...html.matchAll(/<script[^>]*\ssrc="(\/assets\/[^"]+\.js)"/g)].map(
-    (m) => m[1],
-  )
-  const modulepreloads = [
-    ...html.matchAll(/<link[^>]*\srel="modulepreload"[^>]*\shref="(\/assets\/[^"]+\.js)"/g),
-  ].map((m) => m[1])
+  // Attribute-order- and quote-style-insensitive: extract each tag first,
+  // then match attributes independently, so a Vite/minifier formatting change
+  // cannot silently zero out the file list and let the budget pass vacuously.
+  const attr = (tag, name) => {
+    const m = tag.match(new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`))
+    return m ? (m[2] ?? m[3] ?? m[4]) : undefined
+  }
+  const entryScripts = []
+  for (const [tag] of html.matchAll(/<script\b[^>]*>/g)) {
+    const src = attr(tag, 'src')
+    if (src?.startsWith('/assets/') && src.endsWith('.js')) entryScripts.push(src)
+  }
+  const modulepreloads = []
+  for (const [tag] of html.matchAll(/<link\b[^>]*>/g)) {
+    const href = attr(tag, 'href')
+    if (
+      attr(tag, 'rel') === 'modulepreload' &&
+      href?.startsWith('/assets/') &&
+      href.endsWith('.js')
+    ) {
+      modulepreloads.push(href)
+    }
+  }
   const criticalPathFiles = [...new Set([...entryScripts, ...modulepreloads])]
+  if (criticalPathFiles.length === 0) {
+    console.error(
+      '  FAIL  no entry <script src> or <link rel="modulepreload"> JS found in dist/index.html — the parser is broken or the build output changed shape; refusing to pass a vacuous budget',
+    )
+    failures++
+  }
   let criticalPathBytes = 0
   for (const href of criticalPathFiles) {
     criticalPathBytes += gzipSize(join(DIST, href.replace(/^\//, '')))
