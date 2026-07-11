@@ -44,6 +44,173 @@ export const annotateOutputSchema = z.object({
   unknownPaletteKeys: z.array(z.string()).optional(),
 })
 
+// Single source of truth for the `annotate` tool's input contract: the raw
+// shape below is what registerToolWithAnnotations (tool-registration.ts)
+// hands to the MCP SDK for per-field validation and tools/list JSON Schema
+// generation, and annotateInputSchema (derived from it, below) adds the
+// cross-field check that a ZodRawShape cannot express on its own.
+export const annotateInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  type: z
+    .enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group'])
+    .describe(
+      'Annotation kind. arrow = directed arrow, text = standalone label, rectangle = empty box, highlight = filled background, box_with_label = box + auto-wrapped title/subText, group = bbox+title around existing memberIds.',
+    ),
+  imageId: z
+    .string()
+    .optional()
+    .describe(
+      'When set, target/endTarget are interpreted relative to the named image (use load_image first). Use with coords="relative".',
+    ),
+  coords: z
+    .enum(['absolute', 'relative', 'parent'])
+    .optional()
+    .describe(
+      'Coordinate space. "absolute" (default) = world coords. "relative" = offset from imageId. "parent" = offset from a parent element (defer-resolved at apply-time, used for sticky annotations on moving parents).',
+    ),
+  target: z
+    .object({ x: z.number(), y: z.number() })
+    .optional()
+    .describe(
+      'Top-left corner of the element in chosen coord space. For arrows this is the start point — required unless startBoxId is set (startBoxId snaps the start to an existing box edge instead). Ignored for type="group".',
+    ),
+  text: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe(
+      'Body text. string[] for explicit line breaks; long lines auto-wrap to box width when autoFit=true.',
+    ),
+  title: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe(
+      'Header text rendered larger than text. Used by box_with_label to separate title from body.',
+    ),
+  subText: z
+    .union([z.string(), z.array(z.string())])
+    .optional()
+    .describe(
+      'Smaller secondary text. Default position is below the box (inside-bottom). Use subTextPosition="top" for above-box captions.',
+    ),
+  subTextPosition: z
+    .enum(['top', 'inside-bottom'])
+    .optional()
+    .describe('Where subText is placed relative to box_with_label. Default "inside-bottom".'),
+  autoFit: z
+    .boolean()
+    .optional()
+    .describe(
+      'Auto-wrap long lines and auto-grow box height. Default true. Set false to honor explicit string[] line breaks strictly.',
+    ),
+  color: z
+    .string()
+    .optional()
+    .describe(
+      'Stroke / text color. Accepts semantic keys ("primary","success","danger","warning","neutral","info") or palette key (declared via palette_set) or hex (#RRGGBB).',
+    ),
+  backgroundColor: z
+    .string()
+    .optional()
+    .describe(
+      'Fill color (rectangle / highlight / box_with_label background). Same key vocabulary as `color`.',
+    ),
+  fillStyle: z
+    .enum(['solid', 'hachure', 'cross-hatch'])
+    .optional()
+    .describe('Fill pattern for box / highlight. Default Excalidraw default ("hachure").'),
+  strokeWidth: z.number().optional().describe('Line thickness in px. Default 2.'),
+  fontFamily: z
+    .union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(5),
+      z.literal(6),
+      z.literal(7),
+      z.literal(8),
+      z.literal(9),
+    ])
+    .optional()
+    .describe(
+      'Excalidraw font family enum (1=Virgil/hand-drawn, 2=Helvetica, 3=Cascadia/mono, 5-9 = additional families). Default 1.',
+    ),
+  fontSize: z.number().optional().describe('Text size in px. Default 20.'),
+  width: z
+    .number()
+    .optional()
+    .describe(
+      'Box width in px (rectangle / highlight / box_with_label). Required for accurate text wrap.',
+    ),
+  height: z
+    .number()
+    .optional()
+    .describe('Box height in px. With autoFit=true, used as a minimum (grows if text overflows).'),
+  align: z
+    .enum(['left', 'center', 'right'])
+    .optional()
+    .describe('Horizontal text alignment inside box_with_label / text. Default "left".'),
+  endTarget: z
+    .object({ x: z.number(), y: z.number() })
+    .optional()
+    .describe('Arrow end point. Required when type="arrow" and endBoxId is not set.'),
+  startBoxId: z
+    .string()
+    .optional()
+    .describe(
+      'Arrow start: snap to the named box edge instead of using `target`. Convenient for connecting existing elements.',
+    ),
+  endBoxId: z
+    .string()
+    .optional()
+    .describe('Arrow end: snap to the named box edge instead of using `endTarget`.'),
+  label: z.string().optional().describe('Inline label rendered along the arrow midpoint.'),
+  labelOffset: z
+    .number()
+    .optional()
+    .describe('Perpendicular offset (px) from arrow path for the label. Default 8.'),
+  labelSide: z
+    .enum(['auto', 'above', 'below', 'left', 'right'])
+    .optional()
+    .describe(
+      'Side of arrow path where label sits. "auto" picks the less-crowded side. Default "auto".',
+    ),
+  memberIds: z
+    .array(z.string())
+    .optional()
+    .describe('For type="group": ids of existing elements to wrap with a labeled bbox.'),
+  padding: z
+    .number()
+    .optional()
+    .describe('For type="group": extra padding (px) around the member bbox. Default 16.'),
+} satisfies z.ZodRawShape
+
+// Cross-field check a ZodRawShape cannot express: `target` is required
+// UNLESS the caller supplied a way to derive the start point without it
+// (startBoxId for arrows, or type="group" which ignores target entirely and
+// defaults it internally). Runs inside `execute` (see below) since the MCP
+// SDK validates only the raw per-field shape above, not this schema.
+export const annotateInputSchema = z.object(annotateInputShape).superRefine((data, ctx) => {
+  if (data.type === 'group') return
+  if (data.type === 'arrow') {
+    if (data.target === undefined && data.startBoxId === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['target'],
+        message:
+          'annotate type="arrow" requires either `target` (explicit start point) or `startBoxId` (snaps the start to an existing box edge).',
+      })
+    }
+    return
+  }
+  if (data.target === undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['target'],
+      message: `annotate type="${data.type}" requires \`target\`.`,
+    })
+  }
+})
+
 // box_with_label and group are composite types accepted only by the public
 // annotate API. Internally they are decomposed into primitive elements.
 export type AnnotatePublicType = AnnotationType | 'box_with_label' | 'group'
@@ -757,37 +924,16 @@ export function annotateTool() {
       required: ['canvasId', 'type'],
     },
     execute: async (
-      args: {
-        canvasId: string
-        type: AnnotatePublicType
-        imageId?: string
-        coords?: CoordsMode
-        target?: { x: number; y: number }
-        text?: string | string[]
-        title?: string | string[]
-        subText?: string | string[]
-        subTextPosition?: SubTextPosition
-        autoFit?: boolean
-        color?: string
-        backgroundColor?: string
-        fillStyle?: 'solid' | 'hachure' | 'cross-hatch'
-        strokeWidth?: number
-        width?: number
-        height?: number
-        align?: TextAlign
-        endTarget?: { x: number; y: number }
-        startBoxId?: string
-        endBoxId?: string
-        label?: string
-        labelOffset?: number
-        labelSide?: 'auto' | 'above' | 'below' | 'left' | 'right'
-        memberIds?: string[]
-        padding?: number
-        fontFamily?: 1 | 2 | 3 | 5 | 6 | 7 | 8 | 9
-        fontSize?: number
-      },
+      args: z.infer<typeof annotateInputSchema>,
       client: DaemonClient,
     ): Promise<z.infer<typeof annotateOutputSchema>> => {
+      // registerToolWithAnnotations only hands the MCP SDK annotateInputShape
+      // (a ZodRawShape, which cannot express cross-field constraints), so the
+      // "target required unless startBoxId/group" check runs here instead.
+      const validation = annotateInputSchema.safeParse(args)
+      if (!validation.success) {
+        throw new Error(validation.error.issues[0]?.message ?? 'Invalid annotate arguments')
+      }
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const sessionPalette = await apiGetPalette(client, workspaceId)
       const unknownPaletteKeySet = new Set<string>()
