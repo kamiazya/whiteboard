@@ -11,7 +11,7 @@ import {
   isCorruptStoredDataError,
   isMissingFileError,
 } from './corrupt-stored-data.js'
-import { getDb } from './db/index.js'
+import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import type { VersionStore } from './version-store.js'
@@ -73,73 +73,73 @@ export async function saveCanvas(
   // workspace lock ensures it sees this save as either fully applied or
   // not yet started.
   return withWorkspaceWriteLock(workspaceId, async () => {
-  const overwrite = options.overwrite ?? false
-  const db = await dbReady()
-  const existingCanvasId = await getCanvasIdBySlug(db, workspaceId, slug)
-  if (existingCanvasId && !overwrite) {
-    throw new ConflictError(
-      `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
-    )
-  }
-  // Pre-allocate the canvasId for new canvases so the blob can be written
-  // before any metadata row commits. If the FS write fails (ENOSPC, EACCES,
-  // transient corruption) we leave no DB row behind, so a retry can succeed
-  // instead of hitting a phantom ConflictError on the orphan.
-  const canvasId = existingCanvasId ?? nanoid(12)
-  const path = canvasBlobPath(workspaceId, canvasId)
-  await mkdir(dirname(path), { recursive: true })
-  const snapshot = doc.export({ mode: 'snapshot' })
-  await writeFile(path, snapshot)
-  await upsertWorkspaceRow(db, workspaceId)
-  if (existingCanvasId) {
-    await db
-      .updateTable('canvases')
-      .set({ updatedAt: Date.now() })
-      .where('id', '=', canvasId)
-      .execute()
-  } else {
-    const now = Date.now()
-    await db
-      .insertInto('canvases')
-      .values({
-        id: canvasId,
-        workspaceId,
-        slug,
-        displayName: null,
-        isPinned: 0,
-        pinOrder: null,
-        currentBranch: 'main',
-        createdAt: now,
-        updatedAt: now,
-      })
-      .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doUpdateSet({ updatedAt: now }))
-      .execute()
-  }
-  if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
-    const key = `${workspaceId}/${slug}`
-    if (!warnedSnapshots.has(key)) {
-      warnedSnapshots.add(key)
-      getLogger('canvas-store').warning(
-        {
-          workspaceId,
-          slug,
-          bytes: snapshot.byteLength,
-          thresholdBytes: SNAPSHOT_WARN_BYTES,
-        },
-        'snapshot exceeds soft cap; consider compactCanvas() to GC op-log',
+    const overwrite = options.overwrite ?? false
+    const db = await dbReady()
+    const existingCanvasId = await getCanvasIdBySlug(db, workspaceId, slug)
+    if (existingCanvasId && !overwrite) {
+      throw new ConflictError(
+        `Canvas "${workspaceId}/${slug}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
-  }
-  // Hand off to the auto-compact debouncer when one is registered. Wired
-  // by the route layer (where versionStore is in scope) so this module
-  // does not depend on the version-store concrete type.
-  if (autoCompactTrigger) {
-    try {
-      autoCompactTrigger(workspaceId, slug)
-    } catch (err) {
-      getLogger('canvas-store').warning({ workspaceId, slug, err }, 'autoCompactTrigger threw')
+    // Pre-allocate the canvasId for new canvases so the blob can be written
+    // before any metadata row commits. If the FS write fails (ENOSPC, EACCES,
+    // transient corruption) we leave no DB row behind, so a retry can succeed
+    // instead of hitting a phantom ConflictError on the orphan.
+    const canvasId = existingCanvasId ?? nanoid(12)
+    const path = canvasBlobPath(workspaceId, canvasId)
+    await mkdir(dirname(path), { recursive: true })
+    const snapshot = doc.export({ mode: 'snapshot' })
+    await writeFile(path, snapshot)
+    await upsertWorkspaceRow(db, workspaceId)
+    if (existingCanvasId) {
+      await db
+        .updateTable('canvases')
+        .set({ updatedAt: Date.now() })
+        .where('id', '=', canvasId)
+        .execute()
+    } else {
+      const now = Date.now()
+      await db
+        .insertInto('canvases')
+        .values({
+          id: canvasId,
+          workspaceId,
+          slug,
+          displayName: null,
+          isPinned: 0,
+          pinOrder: null,
+          currentBranch: 'main',
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflict((oc) => oc.columns(['workspaceId', 'slug']).doUpdateSet({ updatedAt: now }))
+        .execute()
     }
-  }
+    if (snapshot.byteLength > SNAPSHOT_WARN_BYTES) {
+      const key = `${workspaceId}/${slug}`
+      if (!warnedSnapshots.has(key)) {
+        warnedSnapshots.add(key)
+        getLogger('canvas-store').warning(
+          {
+            workspaceId,
+            slug,
+            bytes: snapshot.byteLength,
+            thresholdBytes: SNAPSHOT_WARN_BYTES,
+          },
+          'snapshot exceeds soft cap; consider compactCanvas() to GC op-log',
+        )
+      }
+    }
+    // Hand off to the auto-compact debouncer when one is registered. Wired
+    // by the route layer (where versionStore is in scope) so this module
+    // does not depend on the version-store concrete type.
+    if (autoCompactTrigger) {
+      try {
+        autoCompactTrigger(workspaceId, slug)
+      } catch (err) {
+        getLogger('canvas-store').warning({ workspaceId, slug, err }, 'autoCompactTrigger threw')
+      }
+    }
   })
 }
 
@@ -300,19 +300,35 @@ export async function readLatestCompactedAt(): Promise<number | null> {
 type AutoCompactTrigger = (workspaceId: string, slug: string) => void
 let autoCompactTrigger: AutoCompactTrigger | null = null
 
+// Shared by setAutoCompactTrigger(null) and disposeAutoCompact() so the two
+// cancellation paths can never drift out of sync with each other.
+function clearAllAutoCompactTimers(): void {
+  for (const t of autoCompactTimers.values()) clearTimeout(t)
+  autoCompactTimers.clear()
+}
+
 // Resetting the trigger to null also drains any pending debounced timers so
 // a subsequent test's tempDir is not surprised by a stray compactCanvas
-// firing on a removed directory.
+// firing on a removed directory. This stays synchronous by contract — it
+// cancels only timers that have not fired yet, and deliberately does not
+// await in-flight compactions (see disposeAutoCompact for that superset).
 export function setAutoCompactTrigger(fn: AutoCompactTrigger | null): void {
   if (fn === null) {
-    for (const t of autoCompactTimers.values()) clearTimeout(t)
-    autoCompactTimers.clear()
+    clearAllAutoCompactTimers()
   }
   autoCompactTrigger = fn
 }
 
 const AUTO_COMPACT_DEBOUNCE_MS = 30_000
 const autoCompactTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+// Tracks compactCanvas() calls that have already fired but not yet settled.
+// A Set of the promises themselves (not a Map keyed by workspaceId/slug) is
+// required: two overlapping compactions for the same key must both stay
+// tracked until they individually settle, since a keyed map with an
+// unconditional delete-on-settle would let a still-in-flight entry get
+// dropped by an unrelated compaction for the same key finishing first.
+const inFlightAutoCompacts = new Set<Promise<unknown>>()
 
 export function scheduleAutoCompact(
   workspaceId: string,
@@ -325,7 +341,7 @@ export function scheduleAutoCompact(
   if (existing) clearTimeout(existing)
   const timer = setTimeout(() => {
     autoCompactTimers.delete(key)
-    void compactCanvas(workspaceId, slug, versionStore)
+    const compaction = compactCanvas(workspaceId, slug, versionStore)
       .then((result) => {
         if (result.compacted) {
           getLogger('auto-compact').info(
@@ -342,6 +358,10 @@ export function scheduleAutoCompact(
       .catch((err) => {
         getLogger('auto-compact').warning({ workspaceId, slug, err }, 'failed')
       })
+      .finally(() => {
+        inFlightAutoCompacts.delete(compaction)
+      })
+    inFlightAutoCompacts.add(compaction)
   }, options.debounceMs ?? AUTO_COMPACT_DEBOUNCE_MS)
   // Do not keep the event loop alive just for this debounce. Node will
   // still flush the compaction if anything else (HTTP, WS) holds the
@@ -351,6 +371,38 @@ export function scheduleAutoCompact(
   }
   autoCompactTimers.set(key, timer)
 }
+
+// Awaitable superset of setAutoCompactTrigger(null): cancels every pending
+// timer AND waits for every already-fired compaction to settle, so a caller
+// that awaits this is guaranteed no compactCanvas call can still reach the
+// DB driver afterward. Registered as a DB dispose hook (below) so disposing
+// a store's DB always drains this state first, without every dispose call
+// site having to remember to call it manually. Idempotent: calling it with
+// nothing pending simply resolves immediately, and scheduleAutoCompact works
+// again afterward (a fresh call re-populates both trackers).
+export async function disposeAutoCompact(): Promise<void> {
+  // A single clear-then-await pass is not enough: an in-flight compaction's
+  // loadCanvas() can run legacy migration, which calls saveCanvas(), which
+  // re-invokes the registered auto-compact trigger and schedules a fresh
+  // timer *while we are still awaiting the first batch*. Loop until a pass
+  // starts with nothing in flight, so the timer map and in-flight set are
+  // both guaranteed empty by the time this resolves.
+  for (;;) {
+    clearAllAutoCompactTimers()
+    const inFlight = Array.from(inFlightAutoCompacts)
+    if (inFlight.length === 0) break
+    await Promise.allSettled(inFlight)
+  }
+}
+
+// Test-only introspection, matching the `_destinationCountForTests` pattern
+// in log.ts: lets tests poll for "a compaction has fired and is mid-flight"
+// without a bespoke gate inside compactCanvas itself.
+export function _inFlightAutoCompactCountForTests(): number {
+  return inFlightAutoCompacts.size
+}
+
+registerDbDisposeHook(disposeAutoCompact)
 
 // ── list workspaces from the workspaces table ──
 export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
