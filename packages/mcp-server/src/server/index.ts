@@ -9,8 +9,8 @@ import {
 import { isDirectEntryPoint } from './entrypoint.js'
 import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { applyConfigFileToEnv, loadConfigFile } from './config-file.js'
-import { getLogger, parseLogLevel, setLogLevel } from './log.js'
+import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
+import { getLogger } from './log.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
   const prefix = `--${name}=`
@@ -57,15 +57,9 @@ function applyLoadedConfigFileForServerEntrypoint(): number | undefined {
   const loaded = loadConfigFile()
   if (loaded === null) return undefined
 
-  const envLogLevelWasUnset = process.env.WHITEBOARD_LOG_LEVEL === undefined
-  applyConfigFileToEnv(loaded.config, process.env)
+  applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
   const log = getLogger('server-index')
   log.info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
-
-  if (envLogLevelWasUnset && loaded.config.logLevel !== undefined) {
-    const level = parseLogLevel(loaded.config.logLevel)
-    if (level !== null) setLogLevel(level)
-  }
 
   if (loaded.config.dataDir !== undefined) {
     log.warning(

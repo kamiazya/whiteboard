@@ -16,8 +16,8 @@
 
 import { resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
-import { applyConfigFileToEnv, loadConfigFile } from '../server/config-file.js'
-import { getLogger, parseLogLevel, setLogLevel } from '../server/log.js'
+import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from '../server/config-file.js'
+import { getLogger } from '../server/log.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import {
   parseDaemonRunArgs,
@@ -396,16 +396,8 @@ function applyLoadedConfigFileToDispatcherEnv(): number | undefined {
   const loaded = loadConfigFile()
   if (loaded === null) return undefined
 
-  const envLogLevelWasUnset = process.env.WHITEBOARD_LOG_LEVEL === undefined
-  applyConfigFileToEnv(loaded.config, process.env)
+  applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
   getLogger('cli-dispatcher').info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
-
-  // log.ts freezes its level at import time, so a file-provided logLevel
-  // must be applied explicitly rather than relying on the env write above.
-  if (envLogLevelWasUnset && loaded.config.logLevel !== undefined) {
-    const level = parseLogLevel(loaded.config.logLevel)
-    if (level !== null) setLogLevel(level)
-  }
 
   return loaded.config.port
 }

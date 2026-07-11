@@ -16,7 +16,7 @@
 import { homedir } from 'node:os'
 import { cosmiconfigSync } from 'cosmiconfig'
 import { z } from 'zod'
-import { getLogger, LOG_LEVELS } from './log.js'
+import { getLogger, LOG_LEVELS, parseLogLevel, setLogLevel } from './log.js'
 
 const log = getLogger('config-file')
 
@@ -173,5 +173,23 @@ export function applyConfigFileToEnv(
   }
   if (config.dataDir !== undefined && env.WHITEBOARD_DATA_DIR === undefined) {
     env.WHITEBOARD_DATA_DIR = config.dataDir
+  }
+}
+
+// Layers config-file values under env (via applyConfigFileToEnv) AND applies a
+// file-provided logLevel through setLogLevel. The explicit setLogLevel is
+// required because log.ts freezes its level at import time, so the env write
+// alone is too late for an already-loaded logger. `WHITEBOARD_LOG_LEVEL` must
+// be sampled BEFORE applyConfigFileToEnv (which sets it), so env-over-file
+// precedence still holds: a level already in the env wins over the file's.
+export function applyConfigFileToEnvAndLogLevel(
+  config: WhiteboardConfigFile,
+  env: Record<string, string | undefined> = process.env,
+): void {
+  const envLogLevelWasUnset = env.WHITEBOARD_LOG_LEVEL === undefined
+  applyConfigFileToEnv(config, env)
+  if (envLogLevelWasUnset && config.logLevel !== undefined) {
+    const level = parseLogLevel(config.logLevel)
+    if (level !== null) setLogLevel(level)
   }
 }
