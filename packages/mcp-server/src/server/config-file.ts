@@ -6,15 +6,20 @@
 // cosmiconfig (not lilconfig) is used deliberately: the user's actual ask was
 // YAML support, and cosmiconfig bundles a YAML loader out of the box while
 // lilconfig does not. JS loaders (whiteboard.config.js/.cjs/.mjs) are
-// deliberately EXCLUDED from searchPlaces below — loading arbitrary JS at
-// daemon startup would let a config file execute code, which a declarative
-// JSON/YAML/rc format must never do.
+// deliberately EXCLUDED from searchPlaces below, but that alone does not stop
+// code execution: cosmiconfig's `$import` key resolves through its `loaders`
+// map regardless of searchPlaces, and `searchStrategy: 'global'` additionally
+// probes an OS-level global config directory whose default search places
+// include `config.js`. SAFE_LOADERS below is what actually enforces "a
+// config file can never execute code" — omitting `.js`/`.cjs`/`.mjs`/`.ts`
+// from the loaders map makes cosmiconfig throw rather than execute whenever
+// any of those paths is reached.
 //
 // Server-mode env config (security/server-mode-env-config.ts) is out of
 // scope here: that surface is env-first by design for hosted operators.
 
 import { homedir } from 'node:os'
-import { cosmiconfigSync } from 'cosmiconfig'
+import { cosmiconfigSync, defaultLoadersSync, type LoadersSync } from 'cosmiconfig'
 import { z } from 'zod'
 import { getLogger, LOG_LEVELS, parseLogLevel, setLogLevel } from './log.js'
 
@@ -36,6 +41,30 @@ export const CONFIG_FILE_SEARCH_PLACES = [
 // Fallback file consulted when nothing is found walking up from cwd, so a
 // single per-user default can apply across every project on a machine.
 export const HOME_CONFIG_FILE_RELATIVE_PATH = '.whiteboard/config.yaml'
+
+// cosmiconfig merges a caller's `loaders` option ON TOP of its own defaults
+// (`{...defaults.loaders, ...options.loaders}`), so merely omitting the JS
+// extensions here would leave cosmiconfig's built-in JS loaders in place.
+// Each dangerous extension must be explicitly overridden with a loader that
+// refuses to run, so a path reaching it — via a search place, `$import`, or
+// the OS-level global config directory probed by `searchStrategy: 'global'`
+// — throws instead of executing.
+function refuseCodeLoader(filepath: string): never {
+  throw new Error(
+    `Refusing to load "${filepath}": whiteboard config files must be declarative JSON/YAML and must never execute code.`,
+  )
+}
+
+const SAFE_LOADERS: LoadersSync = {
+  '.json': defaultLoadersSync['.json'],
+  '.yaml': defaultLoadersSync['.yaml'],
+  '.yml': defaultLoadersSync['.yml'],
+  noExt: defaultLoadersSync.noExt,
+  '.js': refuseCodeLoader,
+  '.cjs': refuseCodeLoader,
+  '.mjs': refuseCodeLoader,
+  '.ts': refuseCodeLoader,
+}
 
 const KNOWN_KEYS = ['allowedWebOrigins', 'port', 'token', 'logLevel', 'dataDir'] as const
 type KnownKey = (typeof KNOWN_KEYS)[number]
@@ -122,6 +151,7 @@ export function loadConfigFile(
     searchPlaces: [...CONFIG_FILE_SEARCH_PLACES],
     searchStrategy: 'global',
     stopDir: '/',
+    loaders: SAFE_LOADERS,
   })
 
   const found = explorer.search(cwd)
@@ -134,13 +164,14 @@ export function loadConfigFile(
     searchPlaces: [HOME_CONFIG_FILE_RELATIVE_PATH],
     searchStrategy: 'global',
     stopDir: homeDir,
+    loaders: SAFE_LOADERS,
   })
-  let homeFound: ReturnType<typeof homeConfigExplorer.search>
-  try {
-    homeFound = homeConfigExplorer.search(homeDir)
-  } catch {
-    return null
-  }
+  // No try/catch here, matching the cwd-side explorer above: cosmiconfig
+  // already swallows "not found" errors (ENOENT/EISDIR/ENOTDIR/EACCES)
+  // internally, so anything that reaches this call site is a real parse or
+  // loader error that must abort startup, not be silently treated as "no
+  // config file".
+  const homeFound = homeConfigExplorer.search(homeDir)
   if (!homeFound || homeFound.isEmpty) return null
   return {
     filepath: homeFound.filepath,

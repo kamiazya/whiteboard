@@ -1,9 +1,13 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { captureLogsForTests } from './log.js'
-import { applyConfigFileToEnv, loadConfigFile } from './config-file.js'
+import { captureLogsForTests, getLogLevel, isLogLevelEnabled, setLogLevel } from './log.js'
+import {
+  applyConfigFileToEnv,
+  applyConfigFileToEnvAndLogLevel,
+  loadConfigFile,
+} from './config-file.js'
 
 let dir: string
 
@@ -121,6 +125,28 @@ describe('loadConfigFile', () => {
       expect(String(err)).not.toContain('super-secret-token')
     }
   })
+
+  it('never executes JS reached via a config $import, even though $import can point anywhere', () => {
+    const sentinel = join(dir, 'sentinel.txt')
+    writeFileSync(
+      join(dir, 'evil.js'),
+      `require('node:fs').writeFileSync(${JSON.stringify(sentinel)}, 'executed'); module.exports = { token: 'pwned' }`,
+    )
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ $import: './evil.js' }))
+    expect(() => loadConfigFile(dir)).toThrow()
+    expect(existsSync(sentinel)).toBe(false)
+  })
+
+  it('propagates a parse error from the home fallback config instead of silently returning null', () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'whiteboard-config-home-'))
+    try {
+      mkdirSync(join(homeDir, '.whiteboard'), { recursive: true })
+      writeFileSync(join(homeDir, '.whiteboard', 'config.yaml'), 'port: [1, 2\n')
+      expect(() => loadConfigFile(dir, { homeDir })).toThrow()
+    } finally {
+      rmSync(homeDir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe('applyConfigFileToEnv', () => {
@@ -170,5 +196,32 @@ describe('applyConfigFileToEnv', () => {
     const env: Record<string, string | undefined> = {}
     applyConfigFileToEnv({}, env)
     expect(env).toEqual({})
+  })
+})
+
+describe('applyConfigFileToEnvAndLogLevel', () => {
+  it('applies a file logLevel to the running logger when WHITEBOARD_LOG_LEVEL is unset', () => {
+    const env: Record<string, string | undefined> = {}
+    const previousLevel = getLogLevel()
+    try {
+      applyConfigFileToEnvAndLogLevel({ logLevel: 'debug' }, env)
+      expect(getLogLevel()).toBe('debug')
+      expect(isLogLevelEnabled('debug')).toBe(true)
+    } finally {
+      setLogLevel(previousLevel)
+    }
+  })
+
+  it('leaves the running logger level untouched when WHITEBOARD_LOG_LEVEL is already set (env wins)', () => {
+    const env: Record<string, string | undefined> = { WHITEBOARD_LOG_LEVEL: 'error' }
+    const previousLevel = getLogLevel()
+    setLogLevel('warning')
+    try {
+      applyConfigFileToEnvAndLogLevel({ logLevel: 'debug' }, env)
+      expect(getLogLevel()).toBe('warning')
+      expect(env.WHITEBOARD_LOG_LEVEL).toBe('error')
+    } finally {
+      setLogLevel(previousLevel)
+    }
   })
 })
