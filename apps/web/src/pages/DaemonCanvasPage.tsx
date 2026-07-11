@@ -118,9 +118,12 @@ export function DaemonCanvasPage({
 
   // A rejected session belongs to one backend identity — switching to a new
   // canvas opens a fresh connection, so a stale banner must not outlive the
-  // backend that produced it.
+  // backend that produced it. Only resets on a genuine new (non-null)
+  // connection: dropping to no backend at all (e.g. switching into a
+  // workspace with zero canvases) leaves authError as-is, because live sync
+  // is still off either way and the persistent indicator should stay lit.
   useEffect(() => {
-    setAuthError(false)
+    if (backend) setAuthError(false)
   }, [backend])
 
   const { setExcalidrawAPI, onChange, clearLocalUndo } = useCanvasSync(backend, {
@@ -232,8 +235,12 @@ export function DaemonCanvasPage({
           <div
             role="alert"
             aria-live="assertive"
-            className="flex items-center gap-2 border-b bg-background px-4 py-1"
+            className="flex items-center gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-1"
           >
+            <span aria-hidden="true" className="text-sm text-destructive">
+              ⚠
+            </span>
+            <span className="text-xs font-semibold text-destructive">Live sync off:</span>
             <span className="text-xs text-destructive">
               The daemon rejected this session. Try re-pairing.
             </span>
@@ -246,6 +253,22 @@ export function DaemonCanvasPage({
                 Continue in browser-local
               </button>
             )}
+          </div>
+        )}
+        {authError && (
+          // Rendered at the page level (not inside `{canvas && ...}`) so the
+          // degraded state stays visible even in the no-canvas/empty-workspace
+          // view where WorkspaceTopBar itself doesn't mount. Deliberately
+          // role="status" rather than role="alert": the page must keep
+          // exactly one alert (the banner above) so existing
+          // screen.getByRole('alert') assertions stay unambiguous, while this
+          // chip persists as a compact reminder once attention moves past it.
+          <div
+            role="status"
+            aria-label="Live sync off"
+            className="flex w-fit items-center gap-1 self-start rounded-full border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive"
+          >
+            Sync off
           </div>
         )}
         {canvas && (
