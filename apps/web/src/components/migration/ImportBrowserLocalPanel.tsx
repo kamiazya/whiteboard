@@ -46,9 +46,17 @@ export function ImportBrowserLocalPanel({
 
   useEffect(() => {
     let cancelled = false
-    browserLocalStore.listCanvases().then((list) => {
-      if (!cancelled) setCanvases(list)
-    })
+    browserLocalStore
+      .listCanvases()
+      .then((list) => {
+        if (!cancelled) setCanvases(list)
+      })
+      .catch((err: unknown) => {
+        // A blocked/corrupt IndexedDB must not leave the panel in the
+        // loading state forever — degrade to the empty state.
+        console.error('listCanvases failed', err)
+        if (!cancelled) setCanvases([])
+      })
     return () => {
       cancelled = true
     }
@@ -60,43 +68,64 @@ export function ImportBrowserLocalPanel({
     let anySuccess = false
     let lastSuccessCanvasId: string | undefined
 
-    // Sequential on purpose: each iteration merges a full Loro history into
-    // a throwaway doc, which is memory-heavy for large canvases.
-    for (const canvas of canvases) {
-      setResults((prev) => ({ ...prev, [canvas.id]: { status: 'pending' } }))
-      const loroLoad = await loroStore.load(canvas.id)
-      const result = await importOneCanvas({
-        fetch: daemonFetch,
-        daemonBaseUrl,
-        workspaceId,
-        canvasName: canvas.name,
-        loroLoad,
-      })
-      if (result.kind === 'ok') {
-        anySuccess = true
-        lastSuccessCanvasId = canvas.id
-        setResults((prev) => ({ ...prev, [canvas.id]: { status: 'success', slug: result.slug } }))
-      } else {
-        setResults((prev) => ({ ...prev, [canvas.id]: { status: 'error', reason: result.reason } }))
+    try {
+      // Sequential on purpose: each iteration merges a full Loro history into
+      // a throwaway doc, which is memory-heavy for large canvases.
+      for (const canvas of canvases) {
+        setResults((prev) => ({ ...prev, [canvas.id]: { status: 'pending' } }))
+        try {
+          const loroLoad = await loroStore.load(canvas.id)
+          const result = await importOneCanvas({
+            fetch: daemonFetch,
+            daemonBaseUrl,
+            workspaceId,
+            canvasName: canvas.name,
+            loroLoad,
+          })
+          if (result.kind === 'ok') {
+            anySuccess = true
+            lastSuccessCanvasId = canvas.id
+            setResults((prev) => ({
+              ...prev,
+              [canvas.id]: { status: 'success', slug: result.slug },
+            }))
+          } else {
+            setResults((prev) => ({
+              ...prev,
+              [canvas.id]: { status: 'error', reason: result.reason },
+            }))
+          }
+        } catch {
+          // One canvas throwing (IndexedDB read failure, unexpected error)
+          // must not abort the rest of the batch.
+          setResults((prev) => ({
+            ...prev,
+            [canvas.id]: {
+              status: 'error',
+              reason: 'Could not read this canvas from the browser.',
+            },
+          }))
+        }
       }
-    }
 
-    if (anySuccess) {
-      const now = new Date().toISOString()
-      settingsStore.update((current) => ({
-        ...current,
-        migration: {
-          ...current.migration,
-          browserLocalToDaemon: {
-            ...current.migration.browserLocalToDaemon,
-            lastImportedAt: now,
-            lastImportedCanvasId: lastSuccessCanvasId,
+      if (anySuccess) {
+        const now = new Date().toISOString()
+        settingsStore.update((current) => ({
+          ...current,
+          migration: {
+            ...current.migration,
+            browserLocalToDaemon: {
+              ...current.migration.browserLocalToDaemon,
+              lastImportedAt: now,
+              lastImportedCanvasId: lastSuccessCanvasId,
+            },
           },
-        },
-      }))
+        }))
+      }
+    } finally {
+      // The import button must never stay disabled after a failed batch.
+      setIsImporting(false)
     }
-
-    setIsImporting(false)
   }
 
   if (canvases === null) {

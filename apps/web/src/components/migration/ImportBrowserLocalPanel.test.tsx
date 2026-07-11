@@ -108,6 +108,65 @@ describe('ImportBrowserLocalPanel', () => {
     )
   })
 
+  it('recovers when a loro load throws mid-batch: later canvases still import, button re-enables', async () => {
+    const store = new MemoryStore()
+    await store.save(makeCanvas('c1', 'Thrower'))
+    await store.save(makeCanvas('c2', 'Good'))
+
+    const loroStore = {
+      load: vi.fn(async (id: string) => {
+        if (id === 'c1') throw new Error('IndexedDB read failed')
+        return { kind: 'ok', snapshot: snapshotFor('good') } as LoroLoadResult
+      }),
+    }
+    const daemonFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ slug: 'good' }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+    const settingsStore = createUserSettingsStore()
+
+    render(
+      <ImportBrowserLocalPanel
+        workspaceId="ws1"
+        daemonFetch={daemonFetch}
+        browserLocalStore={store}
+        loroStore={loroStore}
+        settingsStore={settingsStore}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /import/i }))
+
+    // c1 surfaces a per-canvas error, c2 still imports, and the button is
+    // usable again (isImporting must not get stuck when an iteration throws).
+    await screen.findByText(/imported as good/i)
+    await waitFor(() =>
+      expect((screen.getByRole('button', { name: /import/i }) as HTMLButtonElement).disabled).toBe(
+        false,
+      ),
+    )
+    expect(settingsStore.load().migration.browserLocalToDaemon?.lastImportedAt).toEqual(
+      expect.any(String),
+    )
+  })
+
+  it('shows the empty state instead of loading forever when listCanvases rejects', async () => {
+    const store = new MemoryStore()
+    store.listCanvases = vi.fn().mockRejectedValue(new Error('IndexedDB blocked'))
+
+    render(
+      <ImportBrowserLocalPanel
+        workspaceId="ws1"
+        daemonFetch={vi.fn()}
+        browserLocalStore={store}
+        loroStore={makeLoroStore({})}
+        settingsStore={createUserSettingsStore()}
+      />,
+    )
+
+    await screen.findByText(/no browser-local canvases/i)
+  })
+
   it('does not write lastImportedAt when every canvas fails', async () => {
     const store = new MemoryStore()
     await store.save(makeCanvas('c1', 'Bad'))
