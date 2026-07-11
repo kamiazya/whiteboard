@@ -14,7 +14,9 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { CanvasTitle } from '../components/canvas-title/CanvasTitle.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
+import { ThemeToggleButton } from '../components/ThemeToggleButton.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
+import { useThemeMode } from '../hooks/useThemeMode.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -84,6 +86,11 @@ export function BrowserLocalCanvasPage({
   // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
   // re-read from localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
+
+  // Owned locally rather than threaded down from App.tsx: useThemeMode already
+  // persists to localStorage and applies the <html class="dark"> toggle
+  // itself, so there is no App-level state this page needs to share.
+  const { theme, resolvedTheme, setTheme } = useThemeMode()
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
@@ -200,6 +207,13 @@ export function BrowserLocalCanvasPage({
     // h-dvh makes the page own its viewport height: without it the flex chain
     // has no sized ancestor and the editor area collapses to 0px.
     <main className="flex h-dvh w-full flex-col">
+      {/* A plain div, not a second <header>: two sibling <header> landmarks
+          under <main> would both register as "banner" in accessibility
+          trees since <main> does not scope them the way sectioning content
+          does. */}
+      <div className="flex shrink-0 items-center justify-end border-b bg-background px-2 py-1">
+        <ThemeToggleButton theme={theme} onChange={setTheme} />
+      </div>
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-2">
         {/* Visually-hidden heading landmark: the editable control below is the
             visible title, but the page keeps a real <h1> for accessibility trees. */}
@@ -304,7 +318,7 @@ export function BrowserLocalCanvasPage({
         </AlertDialog>
       </header>
       <div data-testid="excalidraw-container" className="min-h-0 flex-1">
-        <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} />
+        <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} theme={resolvedTheme} />
       </div>
     </main>
   )

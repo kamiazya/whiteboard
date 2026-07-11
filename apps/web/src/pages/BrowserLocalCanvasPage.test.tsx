@@ -686,4 +686,30 @@ describe('BrowserLocalCanvasPage', () => {
       expect(screen.getByRole('textbox', { name: /canvas title/i })).toBeTruthy()
     })
   })
+
+  describe('theme toggle', () => {
+    afterEach(() => {
+      localStorage.clear()
+      document.documentElement.classList.remove('dark')
+    })
+
+    it('renders a theme toggle that cycles system -> light -> dark on repeated clicks', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await act(async () => {
+        render(<BrowserLocalCanvasPage store={store} />)
+      })
+      const toggle = screen.getByRole('button', { name: /theme: system/i })
+      await act(async () => {
+        toggle.click()
+      })
+      expect(screen.getByRole('button', { name: /theme: light/i })).toBeTruthy()
+      const lightToggle = screen.getByRole('button', { name: /theme: light/i })
+      await act(async () => {
+        lightToggle.click()
+      })
+      expect(screen.getByRole('button', { name: /theme: dark/i })).toBeTruthy()
+    })
+  })
 })
