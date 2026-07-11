@@ -101,6 +101,21 @@ describe('App backend configuration chip', () => {
     expect(screen.queryByText('Browser only')).toBeNull()
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })
+
+  it('lets the browser-local escape override invalid-config after a failed pairing', () => {
+    // A pairing error can coexist with an invalid runtime config; clicking
+    // "Continue in browser-local" must land on the browser-local page, not
+    // bounce the user onto the invalid-config error page.
+    mockDaemonConnectionResult = { status: 'error', detail: 'malformed fragment' }
+    try {
+      render(<App providerState={INVALID_CONFIG_STATE} />)
+      fireEvent.click(screen.getByRole('button', { name: /continue in browser-local/i }))
+      expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
+      expect(screen.queryByText('Runtime configuration is invalid.')).toBeNull()
+    } finally {
+      mockDaemonConnectionResult = { status: 'none' }
+    }
+  })
 })
 
 describe('App capability wiring', () => {

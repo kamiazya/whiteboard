@@ -86,6 +86,10 @@ export function App({ providerState }: AppProps) {
   // fragment) falls through to that existing resolution unchanged.
   const daemonConnection = useDaemonConnection()
   const [forcedBrowserLocal, setForcedBrowserLocal] = useState(false)
+  // Lazy initializer: readDaemonTokenOnce() consumes (deletes) the injected
+  // global, so it must run exactly once per mount — calling it in the render
+  // body would let StrictMode's double-render read-then-lose the token.
+  const [daemonToken] = useState(() => readDaemonTokenOnce() ?? undefined)
 
   // The 'Continue in browser-local' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
@@ -138,25 +142,26 @@ export function App({ providerState }: AppProps) {
 
   const state = providerState ?? _defaultProviderState
 
-  if (state.kind === 'invalid-config') {
+  // The 'Continue in browser-local' escape hatch collapses a local-daemon OR
+  // invalid-config state to browser-local capabilities, so every downstream
+  // consumer (chip, banner, canvas page) reads this effective state rather
+  // than the raw one — otherwise the escape could leave daemon capabilities
+  // or copy leaking into a mode the user explicitly opted out of, or bounce
+  // a failed-pairing escape onto the invalid-config error page.
+  const effectiveState =
+    forcedBrowserLocal && (state.kind === 'local-daemon' || state.kind === 'invalid-config')
+      ? { kind: 'browser-local' as const, capabilities: BROWSER_LOCAL_CAPABILITIES }
+      : state
+
+  if (effectiveState.kind === 'invalid-config') {
     return (
       <ErrorBoundary>
         <main data-provider="invalid-config">
-          <p>{state.message}</p>
+          <p>{effectiveState.message}</p>
         </main>
       </ErrorBoundary>
     )
   }
-
-  // The 'Continue in browser-local' escape hatch collapses a local-daemon
-  // state to browser-local capabilities, so every downstream consumer (chip,
-  // banner, canvas page) reads this effective state rather than the raw one
-  // — otherwise the escape could leave daemon capabilities or copy leaking
-  // into a mode the user explicitly opted out of.
-  const effectiveState =
-    forcedBrowserLocal && state.kind === 'local-daemon'
-      ? { kind: 'browser-local' as const, capabilities: BROWSER_LOCAL_CAPABILITIES }
-      : state
 
   if (effectiveState.kind === 'local-daemon') {
     return (
@@ -172,7 +177,7 @@ export function App({ providerState }: AppProps) {
               <DaemonCanvasPage
                 daemonBaseUrl={effectiveState.daemonBaseUrl}
                 capabilities={effectiveState.capabilities}
-                token={readDaemonTokenOnce() ?? undefined}
+                token={daemonToken}
                 browserLocalStore={browserLocalStore}
                 onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
               />
