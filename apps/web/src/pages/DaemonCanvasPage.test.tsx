@@ -449,7 +449,20 @@ describe('DaemonCanvasPage', () => {
           }
           if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
-              new Response(JSON.stringify({ id: 'v-manual' }), { status: 200 }),
+              new Response(
+                JSON.stringify({
+                  version: {
+                    id: 'v-manual',
+                    slug: 'main',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    elementCount: 3,
+                    auto: false,
+                    hasThumbnail: false,
+                    branchName: 'main',
+                  },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
             )
           }
           return Promise.resolve(new Response('{}', { status: 200 }))
@@ -482,6 +495,72 @@ describe('DaemonCanvasPage', () => {
       await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
 
       vi.unstubAllGlobals()
+    })
+
+    it('shows an inline error when the save response does not match saveVersionResponseSchema', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            // Malformed 200: missing the `version` envelope the schema requires.
+            return Promise.resolve(
+              new Response(JSON.stringify({ id: 'v-manual' }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('does not render the save button when capabilities.versions is false', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: false,
+              branches: true,
+              merge: true,
+            }}
+          />,
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
     })
 
     it('shows an inline error when the save request fails', async () => {

@@ -1,5 +1,6 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
+import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { useEffect, useMemo, useState } from 'react'
@@ -9,9 +10,12 @@ import { MergeToast } from '../components/MergeToast.js'
 import VersionTimeline from '../components/VersionTimeline.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
+import { getAppLogger } from '../lib/app-logger.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
+
+const log = getAppLogger('daemon-canvas-page')
 
 export interface DaemonCanvasPageProps {
   daemonBaseUrl: string
@@ -101,7 +105,13 @@ export function DaemonCanvasPage({
   })
 
   const saveVersion = async (): Promise<void> => {
-    if (controller.workspaceId === null || controller.slug === null || savingVersion) return
+    if (
+      !capabilities.versions ||
+      controller.workspaceId === null ||
+      controller.slug === null ||
+      savingVersion
+    )
+      return
     setSavingVersion(true)
     setSaveVersionMessage(null)
     try {
@@ -114,6 +124,11 @@ export function DaemonCanvasPage({
         },
       )
       if (!res.ok) throw new Error(`save failed: ${res.status}`)
+      const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+      if (!parsed.success) {
+        log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
+        throw new Error('save response did not match schema')
+      }
       setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
       setVersionRefreshSignal((n) => n + 1)
     } catch {
@@ -198,16 +213,18 @@ export function DaemonCanvasPage({
               // feature needs a daemon connection it already has.
               <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
             )}
-            {controller.workspaceId !== null && controller.slug !== null && (
-              <button
-                type="button"
-                onClick={() => void saveVersion()}
-                disabled={savingVersion}
-                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {savingVersion ? 'Saving…' : 'Save version'}
-              </button>
-            )}
+            {capabilities.versions &&
+              controller.workspaceId !== null &&
+              controller.slug !== null && (
+                <button
+                  type="button"
+                  onClick={() => void saveVersion()}
+                  disabled={savingVersion}
+                  className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {savingVersion ? 'Saving…' : 'Save version'}
+                </button>
+              )}
             {saveVersionMessage && (
               <span
                 role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
