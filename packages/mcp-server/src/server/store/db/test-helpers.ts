@@ -18,14 +18,15 @@ import { Kysely, SqliteDialect, sql } from 'kysely'
 // open a fresh empty in-memory DB. The native Database keeps a single handle
 // for the lifetime of the instance, which is what `:memory:` needs.
 import LibsqlNativeDatabase from 'libsql'
-import { clearPrepareCache } from './prepare.js'
 import {
   type Database,
   DB_FILENAME,
   injectCachedDb,
   removeCachedDb,
+  runDbDisposeHooks,
 } from './index.js'
 import { runMigrations } from './migrator.js'
+import { clearPrepareCache } from './prepare.js'
 import type { DatabaseSchema } from './schema.js'
 
 export interface CreateIsolatedDbOptions {
@@ -87,6 +88,11 @@ export async function createIsolatedDb(
       // prepareDataDir memoizes per-dataDir; clearing keeps the next test free
       // to call prepareDataDir again without picking up the disposed promise.
       clearPrepareCache()
+      // Drain registered dispose hooks (e.g. canvas-store's pending
+      // auto-compact timers/in-flight compactions) before destroying the
+      // driver, matching production's closeDb()/clearDbCache() ordering so
+      // no hook can reach a destroyed connection.
+      await runDbDisposeHooks()
       await db.destroy()
     },
   }

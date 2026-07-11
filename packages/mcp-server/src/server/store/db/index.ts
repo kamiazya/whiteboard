@@ -53,10 +53,32 @@ export function getDb(dataDir: string = DATA_DIR): Promise<Database> {
   return pending
 }
 
+// ── dispose-hook registry ─────────────────────────────────────────────
+// Modules that own state keyed off a live DB connection (e.g. the
+// canvas-store auto-compact debouncer) register a hook here so their
+// pending timers / in-flight work are drained before the driver is
+// destroyed. db/index.ts cannot import those modules directly (they import
+// getDb from here, so importing back would create a cycle) — the registry
+// inverts the dependency instead.
+const disposeHooks: Array<() => Promise<void>> = []
+
+export function registerDbDisposeHook(fn: () => Promise<void>): void {
+  disposeHooks.push(fn)
+}
+
+// Never rejects: a misbehaving hook must not block driver teardown. Exported
+// so the test-only createIsolatedDb() teardown path (test-helpers.ts) can
+// run the same hooks before destroying its db, matching production's
+// closeDb()/clearDbCache() behavior.
+export async function runDbDisposeHooks(): Promise<void> {
+  await Promise.allSettled(disposeHooks.map((fn) => fn()))
+}
+
 export async function closeDb(dataDir: string = DATA_DIR): Promise<void> {
   const pending = cache.get(dataDir)
   if (!pending) return
   cache.delete(dataDir)
+  await runDbDisposeHooks()
   const db = await pending.catch(() => null)
   if (db) await db.destroy()
 }
@@ -65,9 +87,20 @@ export async function closeDb(dataDir: string = DATA_DIR): Promise<void> {
 // without awaiting destroy() so the test setup can swap DATA_DIR without leaking
 // connections. Production code should prefer closeDb() to release the underlying
 // libsql connection cleanly.
+//
+// This function is itself synchronous and fire-and-forget, so a caller that
+// only calls clearDbCache() still cannot await quiescence of the disposed
+// connections or their dispose hooks — use closeDb() (or, in tests,
+// createIsolatedDb's handle.dispose()) when the caller needs to await
+// teardown completing before proceeding.
 export function clearDbCache(): void {
   for (const pending of cache.values()) {
-    void pending.then((db) => db.destroy()).catch(() => {})
+    void pending
+      .then(async (db) => {
+        await runDbDisposeHooks()
+        await db.destroy()
+      })
+      .catch(() => {})
   }
   cache.clear()
 }
