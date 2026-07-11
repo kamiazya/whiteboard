@@ -7,7 +7,7 @@ const RAW_PATH = '/home/user/secret/project.excalidraw'
 describe('toCanvasOutputPathErrorBody', () => {
   it('maps output_exists → 409 with fixed message', () => {
     const err = new OutputPathError('output_exists', `${RAW_PATH} already exists`)
-    const { status, body } = toCanvasOutputPathErrorBody(err)
+    const { status, body } = toCanvasOutputPathErrorBody(err, 'ws1')
     expect(status).toBe(409)
     expect(body.error).toBe('output_exists')
     expect(body.message).toBe('Output file already exists.')
