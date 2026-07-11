@@ -67,15 +67,29 @@ export function parseAllowedWebOriginsEnv(value: string | undefined): ParseAllow
 
 // Per-request admission predicate shared by /api CORS, /mcp origin gate, and
 // WS upgrade. Each allowlist entry (already validated by
-// parseAllowedWebOriginsEnv) is re-parsed into an OriginPattern and matched
+// parseAllowedWebOriginsEnv) is parsed into an OriginPattern and matched
 // via the shared matcher, which normalizes the request Origin header's case,
 // IDN form, and default port identically to the pattern side.
+//
+// The allowlist array is parsed once at startup and reused by reference for
+// every request, so the compiled patterns are cached per array identity —
+// re-parsing on every CORS/mcp/WS request would be pure waste on a hot path.
+const compiledAllowlists = new WeakMap<readonly string[], ReturnType<typeof parseOriginPatterns>>()
+
+function compiledPatternsFor(allowlist: readonly string[]): ReturnType<typeof parseOriginPatterns> {
+  const cached = compiledAllowlists.get(allowlist)
+  if (cached) return cached
+  const patterns = parseOriginPatterns(allowlist)
+  compiledAllowlists.set(allowlist, patterns)
+  return patterns
+}
+
 export function isAllowedWebOrigin(
   originHeader: string | undefined,
   allowlist: readonly string[],
 ): boolean {
   if (!originHeader || allowlist.length === 0) return false
-  return matchOrigin(parseOriginPatterns(allowlist), originHeader)
+  return matchOrigin(compiledPatternsFor(allowlist), originHeader)
 }
 
 // Startup-time wiring helper shared by both entrypoints (cli/daemon-run.ts,

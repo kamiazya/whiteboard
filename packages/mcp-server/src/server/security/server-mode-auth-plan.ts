@@ -26,7 +26,6 @@
 //   server-mode-exposure.ts and are stable literal values.
 
 import type { AuthScope } from './auth-strategy.js'
-import { canonicalizeOriginPatternEntry } from './origin-pattern.js'
 import {
   type ServerModeExposureFailureCode,
   type ServerModeExposureInput,
@@ -122,15 +121,11 @@ export function planServerModeAuth(input: ServerModeExposureInput): ServerModeAu
   }
 
   // Normalize each allowed origin to its canonical string form (strips
-  // default ports on exact origins, ensures consistent comparison with the
-  // Origin header browsers send). Deliberately NOT `new URL(o).origin`: that
-  // does not throw on a wildcard entry like "https://*.example.com" — it
-  // parses '*' as a literal hostname character — so a naive normalization
-  // would silently keep the wildcard as an inert string here even though it
-  // happens to be a no-op for wildcard entries under WHATWG URL semantics.
-  // Routing through origin-pattern.ts keeps this call site and
-  // server-mode-exposure.ts using one shared normalization rule.
-  const normalizedOrigins = exposure.allowedOrigins.map(canonicalizeOriginPatternEntry)
+  // exposure.allowedOrigins is already canonicalized by
+  // server-mode-exposure.ts via origin-pattern.ts (which — unlike
+  // `new URL(o).origin` — handles wildcard entries instead of silently
+  // treating '*' as a literal hostname character). No re-normalization here.
+  const normalizedOrigins = exposure.allowedOrigins
 
   return {
     ok: true,

@@ -177,12 +177,26 @@ export function resolveServerModeExposure(
 
 // Per-request origin allowlist check for server-mode. Config-level validation
 // (wildcard-shape rejection, https requirement) happens in
-// `resolveServerModeExposure`; this function re-parses the already-validated
+// `resolveServerModeExposure`; this function parses the already-validated
 // canonical entries into OriginPattern values and delegates matching to the
 // shared matcher so exact and wildcard-subdomain entries are both admitted.
+//
+// The allowedOrigins array is resolved once at startup and reused by
+// reference for every request, so compiled patterns are cached per array
+// identity instead of re-parsing on each request.
+const compiledServerModePatterns = new WeakMap<
+  readonly string[],
+  ReturnType<typeof parseOriginPatterns>
+>()
+
 export function isOriginAllowedForServerMode(
   requestOrigin: string,
   allowedOrigins: readonly string[],
 ): boolean {
-  return matchOrigin(parseOriginPatterns(allowedOrigins), requestOrigin)
+  let patterns = compiledServerModePatterns.get(allowedOrigins)
+  if (!patterns) {
+    patterns = parseOriginPatterns(allowedOrigins)
+    compiledServerModePatterns.set(allowedOrigins, patterns)
+  }
+  return matchOrigin(patterns, requestOrigin)
 }
