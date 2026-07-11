@@ -29,7 +29,7 @@ export function CanvasThumb({ workspaceId, slug, size = 'dropdown', className }:
   // treatment where an authorized image is worth the extra bookkeeping.
   const hasDaemonApi = useHasDaemonApi()
   const [failed, setFailed] = useState(false)
-  const src = `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/latest-thumbnail`
+  const src = `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/latest-thumbnail`
   // Instances are reused across re-renders with a new slug/workspaceId (e.g.
   // the canvas switcher dropdown), so a stale `failed` flag from a previous
   // src must not leak into the next canvas's thumbnail. Reset during render
