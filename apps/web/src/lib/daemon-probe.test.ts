@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_DAEMON_BASE_URL, probeDaemon } from './daemon-probe.js'
+import { DEFAULT_DAEMON_BASE_URL, daemonProbeResultSchema, probeDaemon } from './daemon-probe.js'
 
 function jsonResponse(body: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(body), {
@@ -191,5 +191,21 @@ describe('probeDaemon', () => {
     ])
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('exports the persisted-memo schema as the single source of truth for DaemonProbeResult', () => {
+    // Locks DaemonProbeResult to z.infer<typeof daemonProbeResultSchema> —
+    // a hand-written type alongside this schema is exactly the drift shape
+    // that shipped the create_frame assignedMembers bug.
+    expect(
+      daemonProbeResultSchema.safeParse({ detected: true, instanceId: 'inst-1' }).success,
+    ).toBe(true)
+    expect(daemonProbeResultSchema.safeParse({ detected: false, reason: 'timeout' }).success).toBe(
+      true,
+    )
+    expect(daemonProbeResultSchema.safeParse({ detected: true }).success).toBe(false)
+    expect(
+      daemonProbeResultSchema.safeParse({ detected: false, reason: 'not-a-reason' }).success,
+    ).toBe(false)
   })
 })

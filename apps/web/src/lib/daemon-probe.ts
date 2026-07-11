@@ -32,9 +32,15 @@ export const probeFailureReasonSchema = z.enum([
 ])
 export type ProbeFailureReason = z.infer<typeof probeFailureReasonSchema>
 
-export type DaemonProbeResult =
-  | { detected: true; instanceId: string }
-  | { detected: false; reason: ProbeFailureReason }
+// Single source of truth for the probe result shape, shared by the
+// in-memory return value and the persisted sessionStorage memo (readMemo /
+// writeMemo below) — deriving the type via z.infer keeps a future field
+// addition from silently drifting between the two.
+export const daemonProbeResultSchema = z.union([
+  z.object({ detected: z.literal(true), instanceId: z.string() }),
+  z.object({ detected: z.literal(false), reason: probeFailureReasonSchema }),
+])
+export type DaemonProbeResult = z.infer<typeof daemonProbeResultSchema>
 
 export interface ProbeDaemonOptions {
   fetch: typeof globalThis.fetch
@@ -93,15 +99,7 @@ function readMemo(baseUrl: string): DaemonProbeResult | null {
 
   try {
     const parsed: unknown = JSON.parse(raw)
-    const result = z
-      .union([
-        z.object({ detected: z.literal(true), instanceId: z.string() }),
-        z.object({
-          detected: z.literal(false),
-          reason: probeFailureReasonSchema,
-        }),
-      ])
-      .safeParse(parsed)
+    const result = daemonProbeResultSchema.safeParse(parsed)
     return result.success ? result.data : null
   } catch {
     return null

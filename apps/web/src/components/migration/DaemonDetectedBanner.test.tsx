@@ -32,7 +32,10 @@ describe('DaemonDetectedBanner', () => {
     )
 
     await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
-    expect(probeFn.mock.calls[0]?.[1]).toMatchObject({ forceRecheck: undefined })
+    expect(probeFn.mock.calls[0]?.[1]).toMatchObject({
+      forceRecheck: undefined,
+      pageOriginScheme: 'http',
+    })
   })
 
   it('does not auto-probe on https: and renders a manual affordance instead', async () => {
@@ -63,7 +66,10 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
     await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
-    expect(probeFn.mock.calls[0]?.[1]).toMatchObject({ forceRecheck: true })
+    expect(probeFn.mock.calls[0]?.[1]).toMatchObject({
+      forceRecheck: true,
+      pageOriginScheme: 'https',
+    })
   })
 
   it('renders the manual affordance on http: too when the result is not-detected', async () => {
