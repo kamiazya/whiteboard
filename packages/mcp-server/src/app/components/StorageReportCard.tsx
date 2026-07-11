@@ -172,21 +172,21 @@ export function StorageReportCard() {
     } finally {
       const elapsed = Date.now() - start
       const remaining = MIN_REFRESH_MS - elapsed
-      if (remaining > 0) {
-        // This setTimeout is scheduled inside `finally`, so it always runs
-        // even when refresh() was invoked on a since-unmounted component
-        // (unmount cannot pre-empt the finally block of an already-awaited
-        // try) — this scheduling can happen well after unmount, once the
-        // environment itself (jsdom `window`) may already be torn down.
+      // The mountedRef guard matters: this `finally` can run AFTER unmount
+      // (unmount cannot pre-empt the finally of an already-awaited try), and
+      // by then the cleanup effect has already flushed pendingTimersRef — a
+      // timer scheduled here would never be cleared. Post-unmount the delay
+      // is pointless anyway (it only rate-limits visible refreshes), so skip
+      // straight through.
+      if (remaining > 0 && mountedRef.current) {
         // Use the bare global setTimeout/clearTimeout here, NOT
         // `window.setTimeout` — referencing `window` at call time throws
-        // "window is not defined" once it has been torn down, whereas the
+        // "window is not defined" once a jsdom env is torn down, whereas the
         // global timer functions do not depend on `window` existing. Track
         // the id in the same pendingTimersRef Set so a just-in-time unmount
-        // still clears it. If unmount races ahead of this line, the promise
-        // below is left forever-pending — harmless, since the resumed
-        // setLoading(false) is guarded by mountedRef and the whole closure
-        // becomes GC-eligible once unreachable.
+        // still clears it; the then-forever-pending promise is harmless
+        // (setLoading below is mountedRef-guarded, closure becomes
+        // GC-eligible).
         await new Promise<void>((resolve) => {
           const id = setTimeout(() => {
             pendingTimersRef.current.delete(id)
