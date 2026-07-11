@@ -65,10 +65,14 @@ export function deriveCapabilityTier({
         return 'unknown'
       case 'http-error':
       case 'malformed':
-        // Unreachable: handled by isProvenReachableFailure above. Listed
-        // here so adding a new ProbeFailureReason breaks this switch at
-        // compile time instead of silently falling through.
+        // Unreachable: handled by isProvenReachableFailure above.
         return 'tier1-confirmed'
+      default:
+        // Compile-time exhaustiveness: adding a new ProbeFailureReason fails
+        // typecheck here instead of silently falling through to 'unknown'
+        // (the post-switch fallback exists for the probe===null path and
+        // would otherwise mask a missing case).
+        return probe.reason satisfies never
     }
   }
 
