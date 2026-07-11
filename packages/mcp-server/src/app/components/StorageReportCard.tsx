@@ -109,20 +109,26 @@ export function StorageReportCard() {
   // the callback resumes (e.g. end-of-test-file jsdom teardown racing a
   // pending setTimeout), the same call throws.
   const mountedRef = useRef(true)
-  // Every setTimeout this component schedules (status-clear timers, the
-  // min-refresh-delay floor) is tracked here so unmount can clear it —
-  // otherwise the timer keeps the event loop (and, in tests, fake-timer
-  // bookkeeping) alive past teardown even though mountedRef already makes
-  // its callback a no-op.
-  const pendingTimeoutIdsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+  // Tracks every window.setTimeout id this component has scheduled but not
+  // yet seen fire (status-clear timers from four independent call sites,
+  // plus refresh()'s MIN_REFRESH_MS delay). A single scalar ref cannot hold
+  // this: two actions (e.g. Optimize then Prune logs) can each have their
+  // own status-clear timer pending at once, and a scalar would silently
+  // overwrite the first id, leaking it. Cleared on unmount so no timer
+  // survives to fire after the surrounding test/page environment is torn
+  // down.
+  const pendingTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      for (const id of pendingTimeoutIdsRef.current) {
+      // Bare clearTimeout (not window.clearTimeout) for the same reason as
+      // the MIN_REFRESH_MS scheduling below — it must not assume `window`
+      // is still around.
+      for (const id of pendingTimersRef.current) {
         clearTimeout(id)
       }
-      pendingTimeoutIdsRef.current.clear()
+      pendingTimersRef.current.clear()
     }
   }, [])
 
@@ -130,10 +136,10 @@ export function StorageReportCard() {
   // setState if the component unmounted while the timer was pending.
   const scheduleStatusClear = useCallback((clear: () => void) => {
     const id = setTimeout(() => {
-      pendingTimeoutIdsRef.current.delete(id)
+      pendingTimersRef.current.delete(id)
       if (mountedRef.current) clear()
     }, STATUS_CLEAR_MS)
-    pendingTimeoutIdsRef.current.add(id)
+    pendingTimersRef.current.add(id)
   }, [])
 
   // Coarse tick so the "Updated …" / "Auto-optimised …" lines stay live
@@ -166,18 +172,27 @@ export function StorageReportCard() {
     } finally {
       const elapsed = Date.now() - start
       const remaining = MIN_REFRESH_MS - elapsed
-      if (remaining > 0) {
-        // Bare `setTimeout`, not `window.setTimeout` — this line can resume
-        // after a suspended await once jsdom's `window` has already been
-        // torn down (see the sibling unmount test), and referencing the
-        // `window` identifier at that point throws "window is not defined".
-        // The global `setTimeout` binding survives that teardown.
+      // The mountedRef guard matters: this `finally` can run AFTER unmount
+      // (unmount cannot pre-empt the finally of an already-awaited try), and
+      // by then the cleanup effect has already flushed pendingTimersRef — a
+      // timer scheduled here would never be cleared. Post-unmount the delay
+      // is pointless anyway (it only rate-limits visible refreshes), so skip
+      // straight through.
+      if (remaining > 0 && mountedRef.current) {
+        // Use the bare global setTimeout/clearTimeout here, NOT
+        // `window.setTimeout` — referencing `window` at call time throws
+        // "window is not defined" once a jsdom env is torn down, whereas the
+        // global timer functions do not depend on `window` existing. Track
+        // the id in the same pendingTimersRef Set so a just-in-time unmount
+        // still clears it; the then-forever-pending promise is harmless
+        // (setLoading below is mountedRef-guarded, closure becomes
+        // GC-eligible).
         await new Promise<void>((resolve) => {
           const id = setTimeout(() => {
-            pendingTimeoutIdsRef.current.delete(id)
+            pendingTimersRef.current.delete(id)
             resolve()
           }, remaining)
-          pendingTimeoutIdsRef.current.add(id)
+          pendingTimersRef.current.add(id)
         })
       }
       if (mountedRef.current) {

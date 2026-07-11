@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
 
@@ -516,6 +517,45 @@ describe('BrowserLocalCanvasPage', () => {
     fireEvent.pointerDown(switcherButton, { button: 0, ctrlKey: false })
     await screen.findByTestId('new-canvas-menu-item')
     expect(screen.queryByText('Other canvas (stale)')).toBeNull()
+  })
+
+  it('never triggers a React setState-in-render warning across mount, canvas switch, and create-canvas', async () => {
+    // Ported to the WorkspaceTopBar chrome: switching and creating now go
+    // through the bar's switcher dropdown instead of the old combobox/button.
+    vi.useRealTimers()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+      await act(async () => {
+        render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
+      })
+      assertNoSetStateInRenderWarning(errorSpy)
+
+      // Canvas switch re-renders the title with new key/props.
+      const switcher = await screen.findByRole('button', { name: 'untitled' })
+      fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+      const otherItem = await screen.findByText('Other canvas')
+      fireEvent.pointerUp(otherItem)
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Other canvas')
+      })
+      assertNoSetStateInRenderWarning(errorSpy)
+
+      // Create-canvas flow drives another switch + re-render.
+      const switcher2 = await screen.findByRole('button', { name: 'Other canvas' })
+      fireEvent.pointerDown(switcher2, { button: 0, ctrlKey: false })
+      const newItem = await screen.findByTestId('new-canvas-menu-item')
+      fireEvent.pointerUp(newItem)
+      await waitFor(() => {
+        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+      })
+      assertNoSetStateInRenderWarning(errorSpy)
+    } finally {
+      errorSpy.mockRestore()
+    }
   })
 
   describe('daemon-only capability messaging', () => {

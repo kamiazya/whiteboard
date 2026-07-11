@@ -59,6 +59,7 @@
     "lint:fix": "biome check --write .",
     "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server",
     "secretlint": "secretlint --secretlintignore .secretlintignore \"**/*\"",
+    "test:scripts": "node --test .claude/scripts/*.test.mjs",
     "prepare": "lefthook install || true"
   },
   "devDependencies": {

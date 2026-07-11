@@ -1,15 +1,22 @@
+import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useState } from 'react'
 import { BetaBanner } from './components/BetaBanner.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
-import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
+import {
+  BROWSER_LOCAL_CAPABILITIES,
+  type ProviderState,
+  resolveHostedProviderStateFromRaw,
+} from './lib/provider.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { BrowserLocalCanvasPage } from './pages/BrowserLocalCanvasPage.js'
 
 // Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
-// of the entry chunk — only sessions arriving via a #wb= pairing fragment pay
-// for it, keeping the browser-local entry under the bundle-size budget.
+// of the entry chunk — sessions arriving via a #wb= pairing fragment AND
+// sessions with a runtime-config local-daemon provider state pay for it;
+// pure browser-local sessions never import it, keeping that entry under the
+// bundle-size budget.
 const DaemonCanvasPage = lazy(() =>
   import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
 )
@@ -33,6 +40,22 @@ interface BackendConfigChipProps {
   // excluding it here lets the compiler prove that instead of a silent
   // 'Browser only' fallback.
   state: Exclude<ProviderState, { kind: 'invalid-config' }>
+}
+
+// Suspense fallback while the lazy daemon chunk loads. The height class
+// differs by mount site (root fills the viewport; the local-daemon branch
+// fills the flex row under the banner), so it's a prop; the copy stays shared
+// so the two mount sites can't drift.
+function DaemonConnectingFallback({ heightClass }: { heightClass: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`flex ${heightClass} items-center justify-center text-sm text-muted-foreground`}
+    >
+      Connecting to daemon…
+    </div>
+  )
 }
 
 // Reports the configured storage backend only — this reflects runtime
@@ -63,6 +86,10 @@ export function App({ providerState }: AppProps) {
   // fragment) falls through to that existing resolution unchanged.
   const daemonConnection = useDaemonConnection()
   const [forcedBrowserLocal, setForcedBrowserLocal] = useState(false)
+  // Lazy initializer: readDaemonTokenOnce() consumes (deletes) the injected
+  // global, so it must run exactly once per mount — calling it in the render
+  // body would let StrictMode's double-render read-then-lose the token.
+  const [daemonToken] = useState(() => readDaemonTokenOnce() ?? undefined)
 
   // The 'Continue in browser-local' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
@@ -74,17 +101,7 @@ export function App({ providerState }: AppProps) {
         // propagates through Suspense's own error path to the nearest
         // boundary, which must be here to catch it.
         <ErrorBoundary>
-          <Suspense
-            fallback={
-              <div
-                role="status"
-                aria-live="polite"
-                className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
-              >
-                Connecting to daemon…
-              </div>
-            }
-          >
+          <Suspense fallback={<DaemonConnectingFallback heightClass="h-dvh" />}>
             <DaemonCanvasPage
               daemonBaseUrl={payload.baseUrl}
               workspaceId={payload.workspaceId}
@@ -125,27 +142,48 @@ export function App({ providerState }: AppProps) {
 
   const state = providerState ?? _defaultProviderState
 
-  if (state.kind === 'invalid-config') {
+  // The 'Continue in browser-local' escape hatch collapses a local-daemon OR
+  // invalid-config state to browser-local capabilities, so every downstream
+  // consumer (chip, banner, canvas page) reads this effective state rather
+  // than the raw one — otherwise the escape could leave daemon capabilities
+  // or copy leaking into a mode the user explicitly opted out of, or bounce
+  // a failed-pairing escape onto the invalid-config error page.
+  const effectiveState =
+    forcedBrowserLocal && (state.kind === 'local-daemon' || state.kind === 'invalid-config')
+      ? { kind: 'browser-local' as const, capabilities: BROWSER_LOCAL_CAPABILITIES }
+      : state
+
+  if (effectiveState.kind === 'invalid-config') {
     return (
       <ErrorBoundary>
         <main data-provider="invalid-config">
-          <p>{state.message}</p>
+          <p>{effectiveState.message}</p>
         </main>
       </ErrorBoundary>
     )
   }
 
-  if (state.kind === 'local-daemon') {
+  if (effectiveState.kind === 'local-daemon') {
     return (
       <ErrorBoundary>
-        <main data-provider="local-daemon" data-status="placeholder">
+        <div className="flex h-dvh flex-col">
           <BetaBanner
             store={userSettingsStore}
             message="Beta preview — features may be incomplete."
           />
-          <BackendConfigChip state={state} />
-          <h1>Whiteboard</h1>
-        </main>
+          <BackendConfigChip state={effectiveState} />
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <Suspense fallback={<DaemonConnectingFallback heightClass="h-full" />}>
+              <DaemonCanvasPage
+                daemonBaseUrl={effectiveState.daemonBaseUrl}
+                capabilities={effectiveState.capabilities}
+                token={daemonToken}
+                browserLocalStore={browserLocalStore}
+                onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+              />
+            </Suspense>
+          </div>
+        </div>
       </ErrorBoundary>
     )
   }
@@ -161,9 +199,12 @@ export function App({ providerState }: AppProps) {
           store={userSettingsStore}
           message="Beta preview — your data is stored only in this browser."
         />
-        <BackendConfigChip state={state} />
+        <BackendConfigChip state={effectiveState} />
         <div className="min-h-0 flex-1 overflow-hidden">
-          <BrowserLocalCanvasPage store={browserLocalStore} capabilities={state.capabilities} />
+          <BrowserLocalCanvasPage
+            store={browserLocalStore}
+            capabilities={effectiveState.capabilities}
+          />
         </div>
       </div>
     </ErrorBoundary>
