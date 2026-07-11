@@ -301,6 +301,26 @@ async function main() {
     if (!id) throw new Error(`layout annotate ${i} returned no id`)
     layoutIds.push(id)
   }
+
+  // Box-snapped arrow with NO target/endTarget at all — the documented
+  // startBoxId/endBoxId path (annotate's field descriptions say they replace
+  // target/endTarget). The Zod input schema previously required target
+  // unconditionally, so this call would fail with -32602 before the schema
+  // fix; catching that regression here is the point of this smoke step.
+  const snappedArrow = await callTool('annotate', {
+    canvasId: created.id,
+    type: 'arrow',
+    coords: 'absolute',
+    startBoxId: layoutIds[0],
+    endBoxId: layoutIds[1],
+  })
+  if (!snappedArrow.elementId && !snappedArrow.elementIds) {
+    throw new Error(
+      `annotate (targetless box-snapped arrow) returned unexpected shape: ${JSON.stringify(snappedArrow)}`,
+    )
+  }
+  console.log('[e2e] annotate → targetless box-snapped arrow (startBoxId/endBoxId, no target)')
+
   const aligned = await callTool('align_elements', {
     canvasId: created.id,
     elementIds: layoutIds,
