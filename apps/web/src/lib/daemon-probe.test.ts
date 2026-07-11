@@ -67,6 +67,20 @@ describe('probeDaemon', () => {
     expect(result).toEqual({ detected: false, reason: 'malformed' })
   })
 
+  it('returns not-detected with reason malformed on a 200 response with a non-JSON body', async () => {
+    // e.g. a captive portal or misconfigured proxy answering with HTML. The
+    // HTTP response itself proves the transport path is reachable, so this
+    // must classify as 'malformed' (tier1 evidence), never as a fetch-level
+    // 'refused'/'network' failure.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response('<html>not json</html>', { status: 200 }))
+
+    const result = await probeDaemon(DEFAULT_DAEMON_BASE_URL, { fetch: fetchMock })
+
+    expect(result).toEqual({ detected: false, reason: 'malformed' })
+  })
+
   it('returns not-detected with reason network when fetch rejects with a network error', async () => {
     const fetchMock = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
 

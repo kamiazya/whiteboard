@@ -134,7 +134,17 @@ async function runProbe(baseUrl: string, options: ProbeDaemonOptions): Promise<D
       return { detected: false, reason: 'http-error' }
     }
 
-    const body: unknown = await response.json()
+    // json() throwing (200 with an HTML/garbage body — captive portal,
+    // misconfigured proxy) must classify as 'malformed': the HTTP response
+    // itself proves the transport path is reachable, so letting it fall to
+    // the outer catch would misclassify it as a fetch-level failure and
+    // wrongly downgrade the capability tier.
+    let body: unknown
+    try {
+      body = await response.json()
+    } catch {
+      return { detected: false, reason: 'malformed' }
+    }
     const parsed = daemonPingResponseSchema.safeParse(body)
     if (!parsed.success) {
       return { detected: false, reason: 'malformed' }
