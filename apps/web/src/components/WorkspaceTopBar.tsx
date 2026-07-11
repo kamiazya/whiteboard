@@ -1,4 +1,3 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import {
   problemDetailsErrorSchema,
   saveVersionResponseSchema,
@@ -17,6 +16,7 @@ import {
   Pin,
   Search,
 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import {
@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { DirtyEventDetail } from '@/hooks/useDirtyState'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import type { ThemeMode } from '@/hooks/useThemeMode'
@@ -124,12 +125,20 @@ function CanvasItem({
   )
 }
 
+// Gates which pieces of daemon-only chrome render. Omitted entirely (the
+// default), every capability behaves as if it were `true` — this keeps every
+// pre-existing caller (all of which never pass `capabilities`) byte-identical.
+export interface WorkspaceTopBarCapabilities {
+  versions?: boolean
+  branches?: boolean
+  merge?: boolean
+}
+
 interface Props {
   workspaceId: string
   slug: string
   canvases: CanvasInfo[]
   onRestored?: () => void
-  onEnterFullscreen: () => void
   getThumbnailBlob?: () => Promise<Blob | null>
   // Theme preference is owned by the page so reloads can rehydrate from
   // localStorage and pass the resolved value to <Excalidraw theme=...>. The
@@ -137,9 +146,26 @@ interface Props {
   theme?: ThemeMode
   onToggleTheme?: (next: ThemeMode) => void
   // apps/web has no react-router-dom; the page owns navigation and passes it
-  // in as callbacks instead of the original Link/useNavigate.
-  onNavigateBack: () => void
+  // in as callbacks instead of the original Link/useNavigate. Omitted when
+  // the host page has no "back" destination (e.g. a daemon page with no
+  // canvas-list route) — the button is hidden rather than rendered inert.
+  onNavigateBack?: () => void
   onNavigateToCanvas: (slug: string) => void
+  // Omitted when the host page has no fullscreen affordance of its own.
+  onEnterFullscreen?: () => void
+  // Gates HeaderSaveDot/Cmd+S/History (versions), HeaderBranchChip (branches),
+  // and HeaderBranchChip's mergeEnabled passthrough (merge). Undefined means
+  // "all capabilities on", matching every existing caller's behavior.
+  capabilities?: WorkspaceTopBarCapabilities
+  // Bumped by the host page on an externally observed HEAD/version change
+  // (another client, an MCP tool call) so the chip/timeline refetch without
+  // waiting for their own poll interval.
+  branchRefreshSignal?: number
+  versionRefreshSignal?: number
+  // Slot rendered inside the opened History panel below VersionTimeline, so
+  // a host page can keep its own "Save version" button + status message
+  // without this component needing to know about it.
+  versionPanelExtra?: ReactNode
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -161,8 +187,16 @@ export default function WorkspaceTopBar({
   getThumbnailBlob,
   onNavigateBack,
   onNavigateToCanvas,
+  capabilities,
+  branchRefreshSignal,
+  versionRefreshSignal,
+  versionPanelExtra,
 }: Props) {
+  const versionsEnabled = capabilities?.versions ?? true
+  const branchesEnabled = capabilities?.branches ?? true
+  const mergeEnabled = capabilities?.merge ?? true
   const log = getAppLogger('workspace-top-bar')
+  const daemonFetch = useDaemonApi()
   const [names, setNames] = useState<WorkspaceNames>({ canvases: {}, pinned: [] })
   const [renamingCanvas, setRenamingCanvas] = useState(false)
   const [draft, setDraft] = useState('')
@@ -195,8 +229,8 @@ export default function WorkspaceTopBar({
       savingRef.current = true
       setSaving(true)
       try {
-        const res = await apiFetch(
-          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions`,
+        const res = await daemonFetch(
+          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -220,8 +254,8 @@ export default function WorkspaceTopBar({
           try {
             const blob = await getThumbnailBlob()
             if (blob) {
-              await apiFetch(
-                `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
+              await daemonFetch(
+                `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/versions/${id}/thumbnail`,
                 {
                   method: 'PUT',
                   headers: { 'Content-Type': 'image/png' },
@@ -239,7 +273,7 @@ export default function WorkspaceTopBar({
         setSaving(false)
       }
     },
-    [workspaceId, slug, getThumbnailBlob, log],
+    [workspaceId, slug, getThumbnailBlob, log, daemonFetch],
   )
 
   // Cmd/Ctrl+S performs a quick save.
@@ -247,6 +281,7 @@ export default function WorkspaceTopBar({
   // browser-level heuristics think the user is typing and can reopen the native Save Page dialog.
   // Capture the shortcut unconditionally here because the canvas has no competing native save meaning.
   useEffect(() => {
+    if (!versionsEnabled) return
     const onKey = (e: KeyboardEvent) => {
       const isSave = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's' && !e.shiftKey
       if (!isSave) return
@@ -257,7 +292,7 @@ export default function WorkspaceTopBar({
     window.addEventListener('keydown', onKey, { capture: true })
     return () =>
       window.removeEventListener('keydown', onKey, { capture: true } as EventListenerOptions)
-  }, [saveVersion])
+  }, [saveVersion, versionsEnabled])
 
   // New canvas dialog state. Seed the slug with the current group's prefix for faster repeated creation.
   const [newCanvasOpen, setNewCanvasOpen] = useState(false)
@@ -271,7 +306,7 @@ export default function WorkspaceTopBar({
     let active = true
     ;(async () => {
       try {
-        const res = await apiFetch(`/api/workspaces/${workspaceId}/names`)
+        const res = await daemonFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/names`)
         if (res.ok && active) setNames(workspaceNamesSchema.parse(await res.json()))
       } catch {
         /* best-effort */
@@ -280,13 +315,17 @@ export default function WorkspaceTopBar({
     return () => {
       active = false
     }
-  }, [workspaceId])
+    // daemonFetch is stable per identity (module-level apiFetch, or the daemon
+    // page's memoized createDaemonFetch result), so including it does not
+    // refetch per render — and a genuinely new fetch identity (base URL or
+    // token change) must refetch to avoid serving stale names.
+  }, [workspaceId, daemonFetch])
 
   const commitCanvasName = async () => {
     const name = draft.trim()
     try {
-      const res = await apiFetch(
-        `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(slug)}/name`,
+      const res = await daemonFetch(
+        `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/name`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -312,8 +351,8 @@ export default function WorkspaceTopBar({
   const togglePin = useCallback(
     async (targetSlug: string, pinned: boolean) => {
       try {
-        const res = await apiFetch(
-          `/api/workspaces/${workspaceId}/canvases/${encodeURIComponent(targetSlug)}/pin`,
+        const res = await daemonFetch(
+          `/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(targetSlug)}/pin`,
           {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -325,7 +364,7 @@ export default function WorkspaceTopBar({
         /* Pin failures stay silent; the UX does not need explicit retry handling here. */
       }
     },
-    [workspaceId],
+    [workspaceId, daemonFetch],
   )
 
   // ---- canvas switcher data ----
@@ -423,7 +462,7 @@ export default function WorkspaceTopBar({
     setNewCanvasBusy(true)
     setNewCanvasError(null)
     try {
-      const res = await apiFetch(`/api/workspaces/${workspaceId}/canvases`, {
+      const res = await daemonFetch(`/api/workspaces/${encodeURIComponent(workspaceId)}/canvases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: target }),
@@ -460,19 +499,21 @@ export default function WorkspaceTopBar({
     <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-3">
       {/* Left side: back button, workspace name, and canvas switcher. */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={onNavigateBack}
-              aria-label="Back to canvas list"
-              className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Back to canvas list</TooltipContent>
-        </Tooltip>
+        {onNavigateBack && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={onNavigateBack}
+                aria-label="Back to canvas list"
+                className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Back to canvas list</TooltipContent>
+          </Tooltip>
+        )}
 
         {/* canvas switcher dropdown — workspace identity is intentionally
             hidden in OSS Local; the back-button returns to the flat canvas
@@ -643,16 +684,27 @@ export default function WorkspaceTopBar({
             This is the top bar's only destructive control (branch delete,
             confirmed via AlertDialog inside HeaderBranchChip); it stays in
             this left-side group and is not part of the <400px collapse. */}
-        <span className="mx-1 hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
-        <HeaderBranchChip workspaceId={workspaceId} slug={slug} />
+        {branchesEnabled && (
+          <>
+            <span className="mx-1 hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
+            <HeaderBranchChip
+              workspaceId={workspaceId}
+              slug={slug}
+              refreshSignal={branchRefreshSignal}
+              mergeEnabled={mergeEnabled}
+            />
+          </>
+        )}
 
         {/* Save-state dot. */}
-        <HeaderSaveDot
-          dirty={isDirty}
-          saving={saving}
-          onSave={() => void saveVersion('')}
-          shortcutHint={shortcutHint}
-        />
+        {versionsEnabled && (
+          <HeaderSaveDot
+            dirty={isDirty}
+            saving={saving}
+            onSave={() => void saveVersion('')}
+            shortcutHint={shortcutHint}
+          />
+        )}
       </div>
 
       {/* Right side: version history, theme, and fullscreen. Hidden below
@@ -661,36 +713,40 @@ export default function WorkspaceTopBar({
         data-testid="topbar-right-actions-exposed"
         className="flex shrink-0 items-center gap-1 max-[400px]:hidden"
       >
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              data-version-trigger
-              variant="ghost"
-              size="sm"
-              className="h-8 gap-1.5"
-              onClick={() => setVersionOpen((v) => !v)}
-            >
-              <History className="size-3.5" />
-              <span className="text-xs">History</span>
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Version history</TooltipContent>
-        </Tooltip>
+        {versionsEnabled && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                data-version-trigger
+                variant="ghost"
+                size="sm"
+                className="h-8 gap-1.5"
+                onClick={() => setVersionOpen((v) => !v)}
+              >
+                <History className="size-3.5" />
+                <span className="text-xs">History</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Version history</TooltipContent>
+          </Tooltip>
+        )}
         {onToggleTheme && theme && <ThemeToggleButton theme={theme} onChange={onToggleTheme} />}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="size-8 p-0"
-              onClick={onEnterFullscreen}
-              aria-label="Fullscreen"
-            >
-              <Maximize2 className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Fullscreen (f)</TooltipContent>
-        </Tooltip>
+        {onEnterFullscreen && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="size-8 p-0"
+                onClick={onEnterFullscreen}
+                aria-label="Fullscreen"
+              >
+                <Maximize2 className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Fullscreen (f)</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       {/* "More actions" kebab: only visible below 400px, reusing the same
@@ -707,14 +763,16 @@ export default function WorkspaceTopBar({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            data-version-trigger
-            onSelect={() => setVersionOpen((v) => !v)}
-            className="gap-2"
-          >
-            <History className="size-3.5" />
-            History
-          </DropdownMenuItem>
+          {versionsEnabled && (
+            <DropdownMenuItem
+              data-version-trigger
+              onSelect={() => setVersionOpen((v) => !v)}
+              className="gap-2"
+            >
+              <History className="size-3.5" />
+              History
+            </DropdownMenuItem>
+          )}
           {onToggleTheme && theme && (
             <DropdownMenuItem
               onSelect={() => onToggleTheme(THEME_CYCLE[theme])}
@@ -724,10 +782,12 @@ export default function WorkspaceTopBar({
               Theme
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={onEnterFullscreen} className="gap-2">
-            <Maximize2 className="size-3.5" />
-            Fullscreen
-          </DropdownMenuItem>
+          {onEnterFullscreen && (
+            <DropdownMenuItem onSelect={onEnterFullscreen} className="gap-2">
+              <Maximize2 className="size-3.5" />
+              Fullscreen
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -775,7 +835,13 @@ export default function WorkspaceTopBar({
           className="absolute right-3 top-[calc(100%+6px)] z-40 w-[340px] overflow-hidden rounded-lg border bg-background shadow-lg"
         >
           <div className="flex h-[480px] min-h-0 flex-col">
-            <VersionTimeline workspaceId={workspaceId} slug={slug} onRestored={onRestored} />
+            <VersionTimeline
+              workspaceId={workspaceId}
+              slug={slug}
+              onRestored={onRestored}
+              refreshSignal={versionRefreshSignal}
+            />
+            {versionPanelExtra}
           </div>
         </div>
       )}

@@ -4,6 +4,7 @@ import type {
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
@@ -77,6 +78,32 @@ function makeCreateBackend() {
   return (workspaceId: string, slug: string) => new FakeBackend(workspaceId, slug)
 }
 
+// WorkspaceTopBar's canvas switcher dropdown is real Radix — open on
+// pointerDown, select on pointerUp (see WorkspaceTopBar.test.tsx for the
+// same pattern). Rendering into document.body (per every render() call in
+// this file) keeps the portal content inside React's event-delegation root.
+// Exact match: HeaderBranchChip's "Switch branch (current: <name>)" button
+// also contains the canvas slug as a substring, so a loose regex match is
+// ambiguous now that WorkspaceTopBar renders both in the same header.
+async function openCanvasSwitcher(currentLabel: string) {
+  const switcher = screen.getByRole('button', {
+    name: new RegExp(`^${currentLabel}$`),
+  })
+  fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+  await screen.findByTestId('new-canvas-menu-item')
+}
+
+async function selectCanvasFromSwitcher(label: string) {
+  const item = (await screen.findByText(label)).closest('[role="menuitem"]') as HTMLElement
+  fireEvent.pointerUp(item)
+}
+
+// The bar's History button opens the version popover, which now also
+// carries the page's own "Save version" button/message via versionPanelExtra.
+function toggleHistoryPanel() {
+  fireEvent.click(screen.getByRole('button', { name: /history/i }))
+}
+
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonCanvasPage', () => {
@@ -100,12 +127,17 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
 
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
-    const select = screen.getByLabelText('Canvases') as HTMLSelectElement
-    expect(Array.from(select.options).map((o) => o.value)).toEqual(['main', 'second'])
+    // WorkspaceTopBar's canvas switcher shows the current canvas and lists
+    // every entry from controller.canvases — this pins the CanvasSummary
+    // {slug, updatedAt} -> WorkspaceTopBar CanvasInfo mapping end to end.
+    expect(screen.getByRole('button', { name: /^main$/ })).toBeTruthy()
+    await openCanvasSwitcher('main')
+    expect(screen.getByText('second')).toBeTruthy()
     expect(createdBackends).toHaveLength(1)
     expect(createdBackends[0]?.connectCount).toBe(1)
   })
@@ -114,10 +146,13 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
-    expect(screen.getByText('Version history')).toBeTruthy()
+    // The bar's History button is the real versions-capability affordance
+    // now that WorkspaceTopBar owns it (see WorkspaceTopBar.tsx).
+    expect(screen.getByRole('button', { name: /history/i })).toBeTruthy()
     // Workspaces is now a real switcher (not a static teaser) once
     // capabilities.workspaces is true and the daemon has workspaces to list.
     expect(screen.getByLabelText('Workspaces')).toBeTruthy()
@@ -137,6 +172,7 @@ describe('DaemonCanvasPage', () => {
             slug="main"
             createBackend={makeCreateBackend()}
           />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -164,6 +200,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -177,8 +214,7 @@ describe('DaemonCanvasPage', () => {
       })
 
       await waitFor(() => {
-        const select = screen.getByLabelText('Canvases') as HTMLSelectElement
-        expect(Array.from(select.options).map((o) => o.value)).toEqual(['w2-main'])
+        expect(screen.getByRole('button', { name: /w2-main/i })).toBeTruthy()
       })
       expect(createdBackends).toHaveLength(2)
       expect(createdBackends[1]?.workspaceId).toBe('w2')
@@ -202,6 +238,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -231,6 +268,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -269,6 +307,7 @@ describe('DaemonCanvasPage', () => {
               merge: true,
             }}
           />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -283,16 +322,16 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
-    const select = screen.getByLabelText('Canvases') as HTMLSelectElement
     const oldBackend = createdBackends[0]!
 
     await act(async () => {
-      select.value = 'second'
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      await openCanvasSwitcher('main')
+      await selectCanvasFromSwitcher('second')
     })
 
     expect(oldBackend.disconnectCount).toBe(1)
@@ -305,6 +344,7 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -323,6 +363,7 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -332,10 +373,9 @@ describe('DaemonCanvasPage', () => {
     })
     expect(screen.getByRole('alert').textContent).toMatch(/daemon rejected/i)
 
-    const select = screen.getByLabelText('Canvases') as HTMLSelectElement
     await act(async () => {
-      select.value = 'second'
-      select.dispatchEvent(new Event('change', { bubbles: true }))
+      await openCanvasSwitcher('main')
+      await selectCanvasFromSwitcher('second')
     })
 
     // The stale banner must not outlive the backend that produced it.
@@ -351,6 +391,7 @@ describe('DaemonCanvasPage', () => {
           createBackend={makeCreateBackend()}
           onContinueBrowserLocal={onContinueBrowserLocal}
         />,
+        { container: document.body },
       )
     })
     await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -370,7 +411,10 @@ describe('DaemonCanvasPage', () => {
     // Never resolves during this test, so the page stays in the loading state.
     mockListWorkspaces.mockReturnValue(new Promise(() => {}))
 
-    render(<DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />)
+    render(
+      <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+      { container: document.body },
+    )
 
     expect(screen.getByRole('status').textContent).toMatch(/connecting to daemon/i)
   })
@@ -381,6 +425,7 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
 
@@ -395,6 +440,7 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
 
@@ -416,6 +462,7 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
 
@@ -449,6 +496,7 @@ describe('DaemonCanvasPage', () => {
     await act(async () => {
       render(
         <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
       )
     })
 
@@ -509,11 +557,13 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
-      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      toggleHistoryPanel()
+      const saveButton = await screen.findByRole('button', { name: 'Save version' })
       await act(async () => {
         saveButton.click()
       })
@@ -529,6 +579,85 @@ describe('DaemonCanvasPage', () => {
         ).toBe(true)
       })
       await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
+
+      vi.unstubAllGlobals()
+    })
+
+    it('clears HeaderSaveDot after a manual "Save version" click, not just a remote version_created broadcast', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  version: {
+                    id: 'v-manual',
+                    slug: 'main',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    elementCount: 3,
+                    auto: false,
+                    hasThumbnail: false,
+                    branchName: 'main',
+                  },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      // Dirty the doc via a remote update, exactly like the "drives
+      // HeaderSaveDot dirty/clean" test does, so this test isolates the
+      // manual-save clean path from the remote version_created broadcast path.
+      const backend = createdBackends[0]!
+      const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
+      const remoteDoc = new LoroDoc()
+      const list = remoteDoc.getMovableList('elements')
+      const map = list.insertContainer(0, new LoroMap())
+      map.set('id', 'el-1')
+      map.set('type', 'rectangle')
+      map.set('x', 0)
+      map.set('y', 0)
+      map.set('width', 10)
+      map.set('height', 10)
+      map.set('isDeleted', false)
+      remoteDoc.commit()
+      const update = remoteDoc.export({ mode: 'update' })
+
+      await act(async () => {
+        backend.handlers?.onRemoteUpdate?.(update)
+      })
+
+      await waitFor(() => expect(screen.getByTestId('header-save-dot')).toBeTruthy())
+
+      toggleHistoryPanel()
+      const saveButton = await screen.findByRole('button', { name: 'Save version' })
+      await act(async () => {
+        saveButton.click()
+      })
+
+      await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
+      await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
 
       vi.unstubAllGlobals()
     })
@@ -562,11 +691,13 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
-      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      toggleHistoryPanel()
+      const saveButton = await screen.findByRole('button', { name: 'Save version' })
       await act(async () => {
         saveButton.click()
       })
@@ -592,6 +723,7 @@ describe('DaemonCanvasPage', () => {
               merge: true,
             }}
           />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -622,11 +754,13 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
-      const saveButton = screen.getByRole('button', { name: 'Save version' })
+      toggleHistoryPanel()
+      const saveButton = await screen.findByRole('button', { name: 'Save version' })
       await act(async () => {
         saveButton.click()
       })
@@ -642,6 +776,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
 
@@ -693,11 +828,12 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
-      const toggle = screen.getByRole('button', { name: 'Version history' })
+      const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })
@@ -716,7 +852,7 @@ describe('DaemonCanvasPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('closes via an in-panel close button, without depending on the covered toggle', async () => {
+    it('closes the panel when the History toggle is clicked again', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
@@ -744,21 +880,22 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
-      const toggle = screen.getByRole('button', { name: 'Version history' })
+      const toggle = screen.getByRole('button', { name: 'History' })
+      await act(async () => {
+        toggle.click()
+      })
+      await screen.findByText(/no versions on/i)
+
       await act(async () => {
         toggle.click()
       })
 
-      const closeButton = await screen.findByRole('button', { name: 'Close version history' })
-      await act(async () => {
-        closeButton.click()
-      })
-
-      expect(screen.queryByRole('button', { name: 'Close version history' })).toBeNull()
+      expect(screen.queryByText(/no versions on/i)).toBeNull()
 
       vi.unstubAllGlobals()
     })
@@ -779,6 +916,7 @@ describe('DaemonCanvasPage', () => {
               merge: true,
             }}
           />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -833,11 +971,12 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
 
-      const toggle = screen.getByRole('button', { name: 'Version history' })
+      const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })
@@ -926,6 +1065,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -961,6 +1101,7 @@ describe('DaemonCanvasPage', () => {
               merge: false,
             }}
           />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -980,6 +1121,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -1000,6 +1142,127 @@ describe('DaemonCanvasPage', () => {
         ).length
         expect(branchCallCountAfter).toBeGreaterThan(branchCallCountBefore)
       })
+
+      vi.unstubAllGlobals()
+    })
+
+    it('renders HeaderBranchBanner when capabilities.branches is true and the head branch is unmerged', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/branches/feature-x/stats')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ unmergedCommits: 2, isHead: true }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  head: 'feature-x',
+                  branches: [
+                    {
+                      name: 'main',
+                      color: '#1971c2',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                      name: 'feature-x',
+                      color: '#9333ea',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const banner = await screen.findByTestId('header-branch-banner')
+      expect(banner.textContent).toContain('feature-x')
+
+      vi.unstubAllGlobals()
+    })
+
+    it('does not render HeaderBranchBanner when capabilities.branches is false', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/branches/feature-x/stats')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ unmergedCommits: 2, isHead: true }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  head: 'feature-x',
+                  branches: [
+                    {
+                      name: 'main',
+                      color: '#1971c2',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                    {
+                      name: 'feature-x',
+                      color: '#9333ea',
+                      tipFrontiers: '',
+                      createdAt: '2026-01-01T00:00:00Z',
+                    },
+                  ],
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            capabilities={{
+              canvasReadWrite: true,
+              migrationExport: false,
+              migrationImport: true,
+              workspaces: true,
+              versions: true,
+              branches: false,
+              merge: false,
+            }}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByTestId('header-branch-banner')).toBeNull()
 
       vi.unstubAllGlobals()
     })
@@ -1029,6 +1292,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -1059,6 +1323,7 @@ describe('DaemonCanvasPage', () => {
               merge: false,
             }}
           />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -1086,6 +1351,7 @@ describe('DaemonCanvasPage', () => {
       await act(async () => {
         render(
           <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
@@ -1105,6 +1371,143 @@ describe('DaemonCanvasPage', () => {
       expect(fetchMock.mock.calls.some(([reqInput]) => String(reqInput).includes('/restore'))).toBe(
         true,
       )
+
+      vi.unstubAllGlobals()
+    })
+  })
+
+  describe('WorkspaceTopBar chrome adoption', () => {
+    it('does not render a "Back to canvas list" button (onNavigateBack omitted)', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByRole('button', { name: 'Back to canvas list' })).toBeNull()
+    })
+
+    it('performs exactly one POST /versions on a single Cmd/Ctrl+S keydown', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input, init) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          if (url.includes('/workspaces/w1/canvases/main/versions') && init?.method === 'POST') {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  version: {
+                    id: 'v-cmd-s',
+                    slug: 'main',
+                    createdAt: '2026-01-01T00:00:00Z',
+                    elementCount: 0,
+                    auto: false,
+                    hasThumbnail: false,
+                    branchName: 'main',
+                  },
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      await act(async () => {
+        fireEvent.keyDown(window, { key: 's', metaKey: true })
+      })
+
+      await waitFor(() => {
+        const postCalls = fetchMock.mock.calls.filter(
+          ([reqInput, init]) =>
+            String(reqInput).includes('/workspaces/w1/canvases/main/versions') &&
+            init?.method === 'POST',
+        )
+        expect(postCalls).toHaveLength(1)
+      })
+
+      vi.unstubAllGlobals()
+    })
+
+    it('drives HeaderSaveDot dirty/clean via the identity-scoped doc_changed/version_saved events', async () => {
+      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+        (input) => {
+          const url = String(input)
+          if (url.includes('/branches')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          return Promise.resolve(new Response('{}', { status: 200 }))
+        },
+      )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByTestId('header-save-dot')).toBeNull()
+
+      const backend = createdBackends[0]!
+      const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
+      const remoteDoc = new LoroDoc()
+      const list = remoteDoc.getMovableList('elements')
+      const map = list.insertContainer(0, new LoroMap())
+      map.set('id', 'el-1')
+      map.set('type', 'rectangle')
+      map.set('x', 0)
+      map.set('y', 0)
+      map.set('width', 10)
+      map.set('height', 10)
+      map.set('isDeleted', false)
+      remoteDoc.commit()
+      const update = remoteDoc.export({ mode: 'update' })
+
+      await act(async () => {
+        backend.handlers?.onRemoteUpdate?.(update)
+      })
+
+      await waitFor(() => expect(screen.getByTestId('header-save-dot')).toBeTruthy())
+
+      await act(async () => {
+        backend.handlers?.onVersionCreated?.({
+          id: 'v-remote',
+          slug: 'main',
+          createdAt: '2026-01-01T00:00:00Z',
+          elementCount: 1,
+          auto: false,
+          hasThumbnail: false,
+        })
+      })
+
+      await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
 
       vi.unstubAllGlobals()
     })
@@ -1144,12 +1547,82 @@ describe('DaemonCanvasPage', () => {
 
     it('opens the WebSocket against the daemon origin, not the page origin', async () => {
       await act(async () => {
-        render(<DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} />)
+        render(<DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} />, { container: document.body })
       })
 
       await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
       const wsUrl = new URL(FakeWebSocket.instances[0]!.url)
       expect(wsUrl.origin).toBe(new URL(DAEMON_BASE_URL).origin.replace('http:', 'ws:'))
+    })
+  })
+
+  describe('browser-local import panel', () => {
+    it('renders the import-from-this-browser disclosure and lists a local canvas once opened', async () => {
+      const browserLocalStore = new MemoryStore()
+      await browserLocalStore.save({
+        id: 'local-1',
+        name: 'My local canvas',
+        updatedAt: '2026-01-01T00:00:00Z',
+      })
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            browserLocalStore={browserLocalStore}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const summary = await screen.findByText('Import from this browser')
+      fireEvent.click(summary)
+
+      await waitFor(() => expect(screen.getByText('My local canvas')).toBeTruthy())
+    })
+
+    it('does not touch the browser-local store until the disclosure is opened', async () => {
+      const browserLocalStore = new MemoryStore()
+      const listSpy = vi.spyOn(browserLocalStore, 'listCanvases')
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+            browserLocalStore={browserLocalStore}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await screen.findByText('Import from this browser')
+
+      // <details> only hides collapsed content visually; the section (and its
+      // IndexedDB read) must not mount until the user actually expands it.
+      // Settle any pending dynamic imports first so an eagerly-mounted lazy
+      // section cannot hide behind unresolved import timing.
+      await act(async () => {
+        await vi.dynamicImportSettled()
+      })
+      expect(listSpy).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByText('Import from this browser'))
+      await waitFor(() => expect(listSpy).toHaveBeenCalled())
+    })
+
+    it('does not render the import disclosure when browserLocalStore is not provided', async () => {
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      expect(screen.queryByText('Import from this browser')).toBeNull()
     })
   })
 })

@@ -1618,4 +1618,161 @@ describe('useCanvasSync', () => {
       expect(sendExportResponseSpyB).not.toHaveBeenCalled()
     })
   })
+
+  describe('identity events', () => {
+    const identity = { workspaceId: 'ws-1', slug: 'canvas-a' }
+
+    function listenFor(eventName: string): { calls: CustomEvent[] } {
+      const state = { calls: [] as CustomEvent[] }
+      window.addEventListener(eventName, ((e: Event) => {
+        state.calls.push(e as CustomEvent)
+      }) as EventListener)
+      return state
+    }
+
+    it('does not dispatch doc_changed for the initial snapshot import', async () => {
+      const backend = makeFakeBackend()
+      const docChanged = listenFor('excalidraw:doc_changed')
+      renderHook(() => useCanvasSync(backend, { identity }))
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      expect(docChanged.calls).toHaveLength(0)
+    })
+
+    it('dispatches doc_changed with identity detail on a remote update after the snapshot', async () => {
+      const backend = makeFakeBackend()
+      const docChanged = listenFor('excalidraw:doc_changed')
+      renderHook(() => useCanvasSync(backend, { identity }))
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const remoteDoc = new LoroDoc()
+      remoteDoc.getMovableList('elements').insertContainer(0, new LoroMap())
+      remoteDoc.commit()
+      const bytes = remoteDoc.export({ mode: 'update' })
+      await act(async () => {
+        backend._ctrl.handlers!.onRemoteUpdate(bytes)
+        await vi.runAllTimersAsync()
+      })
+
+      expect(docChanged.calls).toHaveLength(1)
+      expect(docChanged.calls[0].detail).toEqual(identity)
+    })
+
+    it('dispatches doc_changed on a local scene edit commit', async () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const docChanged = listenFor('excalidraw:doc_changed')
+      const { result } = renderHook(() => useCanvasSync(backend, { identity }))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const el = { type: 'rectangle', id: 'el-1', x: 0, y: 0, width: 5, height: 5 }
+      act(() => {
+        result.current.onChange([el as never], {} as never, {})
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      expect(docChanged.calls.length).toBeGreaterThan(0)
+      expect(docChanged.calls[docChanged.calls.length - 1].detail).toEqual(identity)
+    })
+
+    it('dispatches version_saved with identity detail when a version_created broadcast arrives', () => {
+      const backend = makeFakeBackend()
+      const versionSaved = listenFor('excalidraw:version_saved')
+      renderHook(() => useCanvasSync(backend, { identity }))
+
+      const payload: VersionCreatedPayload = {
+        id: 'v1',
+        slug: 'canvas-a',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        elementCount: 3,
+        auto: false,
+        hasThumbnail: false,
+      }
+      act(() => {
+        backend._ctrl.handlers!.onVersionCreated(payload)
+      })
+
+      expect(versionSaved.calls).toHaveLength(1)
+      expect(versionSaved.calls[0].detail).toEqual(identity)
+    })
+
+    it('does not dispatch any identity events when identity is absent', async () => {
+      const backend = makeFakeBackend()
+      const docChanged = listenFor('excalidraw:doc_changed')
+      const versionSaved = listenFor('excalidraw:version_saved')
+      renderHook(() => useCanvasSync(backend))
+
+      await act(async () => {
+        backend._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+      const remoteDoc = new LoroDoc()
+      await act(async () => {
+        backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
+        await vi.runAllTimersAsync()
+      })
+      act(() => {
+        backend._ctrl.handlers!.onVersionCreated({
+          id: 'v1',
+          slug: 'canvas-a',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          elementCount: 0,
+          auto: false,
+          hasThumbnail: false,
+        })
+      })
+
+      expect(docChanged.calls).toHaveLength(0)
+      expect(versionSaved.calls).toHaveLength(0)
+    })
+
+    it('does not dispatch any identity events when identity is partial', () => {
+      const backend = makeFakeBackend()
+      const versionSaved = listenFor('excalidraw:version_saved')
+      renderHook(() => useCanvasSync(backend, { identity: { workspaceId: 'ws-1' } as never }))
+
+      act(() => {
+        backend._ctrl.handlers!.onVersionCreated({
+          id: 'v1',
+          slug: 'canvas-a',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          elementCount: 0,
+          auto: false,
+          hasThumbnail: false,
+        })
+      })
+
+      expect(versionSaved.calls).toHaveLength(0)
+    })
+
+    it('changing the identity option between renders does not force a backend reconnect', () => {
+      const backend = makeFakeBackend()
+      const connectSpy = vi.spyOn(backend, 'connect')
+      const { rerender } = renderHook(({ id }) => useCanvasSync(backend, { identity: id }), {
+        initialProps: { id: identity },
+      })
+
+      rerender({ id: { workspaceId: 'ws-1', slug: 'canvas-b' } })
+      rerender({ id: { workspaceId: 'ws-2', slug: 'canvas-c' } })
+
+      expect(connectSpy).toHaveBeenCalledTimes(1)
+    })
+  })
 })

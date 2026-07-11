@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
+import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
 import type { ProviderState, WhiteboardCapabilities } from './lib/provider.js'
 
@@ -11,9 +12,15 @@ afterEach(cleanup)
 // page mounts. BrowserLocalCanvasPage pulls in Excalidraw/loro-crdt which
 // need a real browser (roughjs native bindings, WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
+// Toggled by the error-boundary test to force the mocked page to throw
+// during render, so App's ErrorBoundary wiring has something real to catch.
+let throwInBrowserLocalCanvasPage = false
 vi.mock('./pages/BrowserLocalCanvasPage.js', () => ({
   BrowserLocalCanvasPage: ({ capabilities }: { capabilities?: WhiteboardCapabilities }) => {
     receivedCapabilities = capabilities
+    if (throwInBrowserLocalCanvasPage) {
+      throw new Error('boom')
+    }
     return <div data-testid="browser-local-canvas-page" />
   },
 }))
@@ -27,9 +34,16 @@ vi.mock('./hooks/useDaemonConnection.js', () => ({
 }))
 
 let receivedDaemonPageProps: Record<string, unknown> | undefined
+// Toggled by the error-boundary test: throwing from the lazily-resolved page
+// exercises the paired branch's boundary, which must sit OUTSIDE Suspense to
+// catch errors surfacing through the lazy path.
+let throwInDaemonCanvasPage = false
 vi.mock('./pages/DaemonCanvasPage.js', () => ({
   DaemonCanvasPage: (props: Record<string, unknown>) => {
     receivedDaemonPageProps = props
+    if (throwInDaemonCanvasPage) {
+      throw new Error('boom-daemon')
+    }
     return <div data-testid="daemon-canvas-page" />
   },
 }))
@@ -164,5 +178,50 @@ describe('App daemon-pairing routing', () => {
     render(<App providerState={BROWSER_LOCAL_STATE} />)
     expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+  })
+})
+
+describe('App error boundary', () => {
+  beforeEach(() => {
+    throwInBrowserLocalCanvasPage = false
+  })
+  afterEach(() => {
+    throwInBrowserLocalCanvasPage = false
+  })
+
+  it('catches a render error from the active page and shows the fallback instead of crashing the app', () => {
+    throwInBrowserLocalCanvasPage = true
+    const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(screen.getByText('Something went wrong')).toBeTruthy()
+    expect(reportSpy).toHaveBeenCalled()
+    reportSpy.mockRestore()
+  })
+
+  it('catches an error surfacing through the paired branch lazy path (boundary sits outside Suspense)', async () => {
+    throwInDaemonCanvasPage = true
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
+    try {
+      render(<App providerState={BROWSER_LOCAL_STATE} />)
+      // The lazy module resolves after a microtask; the throw then propagates
+      // through Suspense's error path to the boundary outside it.
+      expect(await screen.findByText('Something went wrong')).toBeTruthy()
+      expect(reportSpy).toHaveBeenCalled()
+    } finally {
+      throwInDaemonCanvasPage = false
+      mockDaemonConnectionResult = { status: 'none' }
+      reportSpy.mockRestore()
+    }
   })
 })

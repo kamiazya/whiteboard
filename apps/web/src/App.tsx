@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { BetaBanner } from './components/BetaBanner.js'
+import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
@@ -13,8 +14,8 @@ const DaemonCanvasPage = lazy(() =>
   import('./pages/DaemonCanvasPage.js').then((m) => ({ default: m.DaemonCanvasPage })),
 )
 
-const _browserLocalStore = new IndexedDBStore()
-const _userSettingsStore = createUserSettingsStore()
+const browserLocalStore = new IndexedDBStore()
+const userSettingsStore = createUserSettingsStore()
 
 const _defaultProviderState: ProviderState = resolveHostedProviderStateFromRaw(
   typeof window !== 'undefined'
@@ -69,46 +70,55 @@ export function App({ providerState }: AppProps) {
     if (daemonConnection.status === 'paired') {
       const { payload } = daemonConnection
       return (
-        <Suspense
-          fallback={
-            <div
-              role="status"
-              aria-live="polite"
-              className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
-            >
-              Connecting to daemon…
-            </div>
-          }
-        >
-          <DaemonCanvasPage
-            daemonBaseUrl={payload.baseUrl}
-            workspaceId={payload.workspaceId}
-            slug={payload.slug}
-            token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
-            onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
-          />
-        </Suspense>
+        // ErrorBoundary sits outside Suspense: a lazy-chunk load failure
+        // propagates through Suspense's own error path to the nearest
+        // boundary, which must be here to catch it.
+        <ErrorBoundary>
+          <Suspense
+            fallback={
+              <div
+                role="status"
+                aria-live="polite"
+                className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
+              >
+                Connecting to daemon…
+              </div>
+            }
+          >
+            <DaemonCanvasPage
+              daemonBaseUrl={payload.baseUrl}
+              workspaceId={payload.workspaceId}
+              slug={payload.slug}
+              token={payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined}
+              onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+              browserLocalStore={browserLocalStore}
+            />
+          </Suspense>
+        </ErrorBoundary>
       )
     }
 
     if (daemonConnection.status === 'error') {
       return (
-        <div
-          role="alert"
-          aria-live="assertive"
-          className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
-        >
-          <p className="max-w-md text-sm text-destructive">
-            The daemon pairing link could not be used. You can continue without a daemon connection.
-          </p>
-          <button
-            type="button"
-            onClick={() => setForcedBrowserLocal(true)}
-            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+        <ErrorBoundary>
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
           >
-            Continue in browser-local
-          </button>
-        </div>
+            <p className="max-w-md text-sm text-destructive">
+              The daemon pairing link could not be used. You can continue without a daemon
+              connection.
+            </p>
+            <button
+              type="button"
+              onClick={() => setForcedBrowserLocal(true)}
+              className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+            >
+              Continue in browser-local
+            </button>
+          </div>
+        </ErrorBoundary>
       )
     }
   }
@@ -117,22 +127,26 @@ export function App({ providerState }: AppProps) {
 
   if (state.kind === 'invalid-config') {
     return (
-      <main data-provider="invalid-config">
-        <p>{state.message}</p>
-      </main>
+      <ErrorBoundary>
+        <main data-provider="invalid-config">
+          <p>{state.message}</p>
+        </main>
+      </ErrorBoundary>
     )
   }
 
   if (state.kind === 'local-daemon') {
     return (
-      <main data-provider="local-daemon" data-status="placeholder">
-        <BetaBanner
-          store={_userSettingsStore}
-          message="Beta preview — features may be incomplete."
-        />
-        <BackendConfigChip state={state} />
-        <h1>Whiteboard</h1>
-      </main>
+      <ErrorBoundary>
+        <main data-provider="local-daemon" data-status="placeholder">
+          <BetaBanner
+            store={userSettingsStore}
+            message="Beta preview — features may be incomplete."
+          />
+          <BackendConfigChip state={state} />
+          <h1>Whiteboard</h1>
+        </main>
+      </ErrorBoundary>
     )
   }
 
@@ -141,15 +155,17 @@ export function App({ providerState }: AppProps) {
   // would add a page scrollbar). The canvas fills the remaining height; the
   // wrapper clips the canvas page's own h-dvh to that remaining space.
   return (
-    <div className="flex h-dvh flex-col">
-      <BetaBanner
-        store={_userSettingsStore}
-        message="Beta preview — your data is stored only in this browser."
-      />
-      <BackendConfigChip state={state} />
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <BrowserLocalCanvasPage store={_browserLocalStore} capabilities={state.capabilities} />
+    <ErrorBoundary>
+      <div className="flex h-dvh flex-col">
+        <BetaBanner
+          store={userSettingsStore}
+          message="Beta preview — your data is stored only in this browser."
+        />
+        <BackendConfigChip state={state} />
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <BrowserLocalCanvasPage store={browserLocalStore} capabilities={state.capabilities} />
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   )
 }
