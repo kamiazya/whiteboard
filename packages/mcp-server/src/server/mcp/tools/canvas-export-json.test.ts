@@ -23,9 +23,7 @@ describe('canvas_export_json', () => {
   it('delegates export to the daemon route', async () => {
     const tool = canvasExportJsonTool()
     globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      expect(input.toString()).toBe(
-        'http://localhost:3099/api/canvas/sid/canvas-a/export-json',
-      )
+      expect(input.toString()).toBe('http://localhost:3099/api/canvas/sid/canvas-a/export-json')
       expect(init?.method).toBe('POST')
       expect(init?.headers).toEqual({ 'Content-Type': 'application/json' })
       expect(init?.body).toBe(JSON.stringify({ includeCustomFields: false }))
@@ -70,10 +68,9 @@ describe('canvas_export_json', () => {
     let captured: unknown
     globalThis.fetch = vi.fn(async (_input: string | URL, init?: RequestInit) => {
       captured = init?.body !== undefined ? JSON.parse(init.body as string) : undefined
-      return new Response(
-        JSON.stringify({ filePath: '/abs/out.excalidraw', elementCount: 0 }),
-        { status: 200 },
-      )
+      return new Response(JSON.stringify({ filePath: '/abs/out.excalidraw', elementCount: 0 }), {
+        status: 200,
+      })
     }) as typeof globalThis.fetch
 
     await tool.execute(
@@ -100,11 +97,15 @@ describe('canvas_export_json', () => {
     }) as typeof globalThis.fetch
 
     await expect(
-      tool.execute(
-        { canvasId: 'sid/canvas-a', outputPath: 'relative.json' },
-        client,
-      ),
+      tool.execute({ canvasId: 'sid/canvas-a', outputPath: 'relative.json' }, client),
     ).rejects.toThrow(/absolute path/)
+  })
+
+  it("documents the outputPath sandbox constraint in the tool's inputSchema description", () => {
+    const tool = canvasExportJsonTool()
+    const description = tool.inputSchema.properties.outputPath.description
+    expect(description).toMatch(/exports directory/)
+    expect(description).toMatch(/WHITEBOARD_DATA_DIR/)
   })
 
   it('surfaces output_exists errors when overwrite is omitted', async () => {
@@ -120,10 +121,7 @@ describe('canvas_export_json', () => {
     }) as typeof globalThis.fetch
 
     await expect(
-      tool.execute(
-        { canvasId: 'sid/canvas-a', outputPath: '/abs/out.json' },
-        client,
-      ),
+      tool.execute({ canvasId: 'sid/canvas-a', outputPath: '/abs/out.json' }, client),
     ).rejects.toThrow(/already exists/)
   })
 
