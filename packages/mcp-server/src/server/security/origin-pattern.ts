@@ -163,6 +163,18 @@ export function canonicalizeOriginPatternEntry(entry: string): string {
   return result.ok ? formatOriginPatternEntry(result.pattern) : entry
 }
 
+// Re-parses a validated allowlist (readonly string[]) back into OriginPattern
+// values for matchOrigin, dropping any entry that fails to re-parse. Callers
+// pass allowlists already validated by parseOriginPatternEntry, so a drop here
+// is defensive only. Shared by every per-request admission surface so the
+// parse-and-collect idiom is written once.
+export function parseOriginPatterns(entries: readonly string[]): OriginPattern[] {
+  return entries
+    .map((entry) => parseOriginPatternEntry(entry))
+    .filter((result) => result.ok)
+    .map((result) => result.pattern)
+}
+
 // Per-request matcher shared by every origin-admission surface. `patterns`
 // must already be parsed (via parseOriginPatternEntry) from a validated
 // allowlist — this function does no validation of its own.

@@ -15,6 +15,7 @@ import {
   canonicalizeOriginPatternEntry,
   matchOrigin,
   parseOriginPatternEntry,
+  parseOriginPatterns,
   type OriginPatternFailureReason,
 } from './origin-pattern.js'
 
@@ -74,11 +75,7 @@ export function isAllowedWebOrigin(
   allowlist: readonly string[],
 ): boolean {
   if (!originHeader || allowlist.length === 0) return false
-  const patterns = allowlist
-    .map((entry) => parseOriginPatternEntry(entry))
-    .filter((result) => result.ok)
-    .map((result) => result.pattern)
-  return matchOrigin(patterns, originHeader)
+  return matchOrigin(parseOriginPatterns(allowlist), originHeader)
 }
 
 // Startup-time wiring helper shared by both entrypoints (cli/daemon-run.ts,

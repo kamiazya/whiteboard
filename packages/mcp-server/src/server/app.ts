@@ -40,7 +40,7 @@ import {
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
-import { matchOrigin, parseOriginPatternEntry } from './security/origin-pattern.js'
+import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   BranchNotFoundError,
@@ -296,10 +296,7 @@ function createServerModeAsyncAuthMiddleware(
 // hostname character), so an exact-Set lookup would silently never admit a
 // real subdomain rather than fail loudly.
 function createServerModeOriginMiddleware(allowedOrigins: readonly string[]): MiddlewareHandler {
-  const patterns = allowedOrigins
-    .map((o) => parseOriginPatternEntry(o))
-    .filter((result) => result.ok)
-    .map((result) => result.pattern)
+  const patterns = parseOriginPatterns(allowedOrigins)
   return async (c, next) => {
     const origin = c.req.header('origin')
     if (!origin) {

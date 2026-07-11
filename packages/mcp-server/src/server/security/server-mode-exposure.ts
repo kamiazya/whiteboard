@@ -32,6 +32,7 @@ import {
   canonicalizeOriginPatternEntry,
   matchOrigin,
   parseOriginPatternEntry,
+  parseOriginPatterns,
 } from './origin-pattern.js'
 
 function bracketIpv6(host: string): string {
@@ -183,9 +184,5 @@ export function isOriginAllowedForServerMode(
   requestOrigin: string,
   allowedOrigins: readonly string[],
 ): boolean {
-  const patterns = allowedOrigins
-    .map((entry) => parseOriginPatternEntry(entry))
-    .filter((result) => result.ok)
-    .map((result) => result.pattern)
-  return matchOrigin(patterns, requestOrigin)
+  return matchOrigin(parseOriginPatterns(allowedOrigins), requestOrigin)
 }
