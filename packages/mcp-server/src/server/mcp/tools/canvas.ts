@@ -63,12 +63,6 @@ export const canvasCreateInputShape = {
     .describe(
       'URL-safe canvas slug (a-z, 0-9, hyphen). Used as the canvas identifier within the current workspace. Returned canvasId is "{workspaceId}/{slug}".',
     ),
-  issueNumber: z
-    .number()
-    .optional()
-    .describe(
-      'Optional GitHub issue number prefix. When set, the final slug becomes "{issueNumber}-{slug}" (e.g. issueNumber=42 + slug=login → "42-login").',
-    ),
   overwrite: z
     .boolean()
     .optional()
@@ -81,36 +75,29 @@ export function createCanvasTool() {
   return {
     name: 'canvas_create',
     description: 'Create a new whiteboard canvas',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        slug: { type: 'string', description: 'Canvas identifier (kebab-case)' },
-        issueNumber: { type: 'number', description: 'GitHub issue number (optional prefix)' },
-        overwrite: {
-          type: 'boolean',
-          description:
-            'When true, replace an existing canvas with the same slug. Default false — existing canvas causes a ConflictError.',
-        },
-      },
-      required: ['slug'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(canvasCreateInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
-      args: { slug: string; issueNumber?: number; overwrite?: boolean },
+      args: { slug: string; overwrite?: boolean },
       workspaceId: string,
       client: DaemonClient,
     ): Promise<z.infer<typeof canvasCreateOutputSchema>> => {
-      const finalSlug = args.issueNumber ? `${args.issueNumber}-${args.slug}` : args.slug
       const res = await client.request(`/api/workspaces/${workspaceId}/canvases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: finalSlug, overwrite: args.overwrite ?? false }),
+        body: JSON.stringify({ slug: args.slug, overwrite: args.overwrite ?? false }),
       })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { message?: string } | null
         throw new Error(body?.message ?? `Failed to create canvas: ${res.status}`)
       }
-      const url = daemonUrl(client, `/canvas/${workspaceId}/${finalSlug}`)
-      return { id: `${workspaceId}/${finalSlug}`, url }
+      const url = daemonUrl(client, `/canvas/${workspaceId}/${args.slug}`)
+      return { id: `${workspaceId}/${args.slug}`, url }
     },
   }
 }
@@ -129,15 +116,12 @@ export function listCanvasTool() {
     name: 'canvas_list',
     description:
       'List whiteboard canvases. Optional filters narrow the output when multiple workspaces / canvases pile up.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        slugContains: {
-          type: 'string',
-          description:
-            'Case-insensitive substring filter on canvas slug. Workspaces with 0 matching canvases are omitted from the output.',
-        },
-      },
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(canvasListInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { slugContains?: string },
@@ -210,27 +194,12 @@ export function openCanvasTool() {
   return {
     name: 'canvas_open',
     description: 'Open a canvas in the browser',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        fullscreen: {
-          type: 'boolean',
-          description:
-            'Open the canvas in fullscreen editing mode (sidebar hidden, Excalidraw fills the viewport). User can toggle with the sidebar button or press "f" / Escape.',
-        },
-        waitForClient: {
-          type: 'boolean',
-          description:
-            'Wait for the browser to connect via WebSocket before returning. Prevents no_client errors when chaining canvas_open → export_png / viewport_set. Default false.',
-        },
-        waitTimeoutMs: {
-          type: 'number',
-          description:
-            'Timeout (ms) for waitForClient polling. Default 5000. Ignored when waitForClient is false.',
-        },
-      },
-      required: ['id'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(canvasOpenInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { id: string; fullscreen?: boolean; waitForClient?: boolean; waitTimeoutMs?: number },
@@ -306,15 +275,12 @@ export function optimizeCanvasesTool() {
     name: 'optimize_canvases',
     description:
       'Compact Loro op-log history (shallow-snapshot) on one canvas (slug given) or every canvas in the current workspace (slug omitted). Idempotent — returns reason "no-versions" / "no-gain" / "ok" per canvas.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        slug: {
-          type: 'string',
-          description:
-            'Optional canvas slug. When omitted, every canvas in the current workspace is compacted in sequence.',
-        },
-      },
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(optimizeCanvasesInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { slug?: string },
