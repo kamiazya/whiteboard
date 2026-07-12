@@ -26,6 +26,7 @@ vi.mock('../store/doc-cache.js', async () => {
 const { clearCache, peekDoc, getDoc } = await import('../store/doc-cache.js')
 const { saveCanvas } = await import('../store/canvas-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
+const { setBroadcastFn } = await import('./canvas/shared.js')
 
 // Dynamically import the Hono app.
 const { createCanvasRouter, createAutoVersionTrigger } = await import('./canvas.js')
@@ -833,6 +834,62 @@ describe('versions API', () => {
     expect(ids).toEqual(['added-after-v1', 'keep-me'])
   })
 
+  it('evicts the cached doc when reconcile/commit itself fails during in-place restore, not only when saveCanvas fails', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+    const initial = new LoroDoc()
+    const vv0 = initial.version()
+    const list = initial.getMovableList('elements')
+    const m0 = list.insertContainer(0, new LoroMap())
+    m0.set('id', 'keep-me')
+    initial.commit()
+    await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: initial.export({ mode: 'update', from: vv0 }),
+    })
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+    const vv1 = initial.version()
+    const m1 = list.insertContainer(list.length, new LoroMap())
+    m1.set('id', 'added-after-v1')
+    initial.commit()
+    await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: initial.export({ mode: 'update', from: vv1 }),
+    })
+
+    expect(peekDoc('session1', 'canvas-a')).toBeDefined()
+
+    // reconcileElementsOnDoc already mutated the live cached doc by the time
+    // doc.commit() runs, so a throw here must still evict the cache -- not
+    // only the saveCanvas failure path further down.
+    const commitSpy = vi.spyOn(LoroDoc.prototype, 'commit').mockImplementationOnce(() => {
+      throw new Error('simulated commit failure')
+    })
+
+    const restoreRes = await app.request(
+      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+      { method: 'POST' },
+    )
+    commitSpy.mockRestore()
+
+    expect(restoreRes.status).toBe(500)
+    expect(peekDoc('session1', 'canvas-a')).toBeUndefined()
+
+    const reloaded = await getDoc('session1', 'canvas-a')
+    const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>)
+      .map((el) => el.id)
+      .sort()
+    expect(ids).toEqual(['added-after-v1', 'keep-me'])
+  })
+
   it('returns 404 when restoring a missing version id', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
@@ -849,6 +906,355 @@ describe('versions API', () => {
       { method: 'POST' },
     )
     expect(res.status).toBe(400)
+  })
+
+  // targetSlug + overwrite must reconcile onto the target's LIVE cached doc
+  // instead of replacing persistence, so connected clients stay on the same
+  // CRDT lineage and converge through the normal update broadcast.
+  describe('overwrite restore reconciles instead of replacing', () => {
+    afterEach(() => {
+      setBroadcastFn(() => {})
+    })
+
+    it('targetSlug === slug with overwrite:true reconciles the live doc in place and broadcasts an update', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      // v1: one element.
+      const initial = new LoroDoc()
+      const vv0 = initial.version()
+      const list = initial.getMovableList('elements')
+      const m0 = list.insertContainer(0, new LoroMap())
+      m0.set('id', 'keep-me')
+      initial.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: initial.export({ mode: 'update', from: vv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      // Add a second element after v1.
+      const vv1 = initial.version()
+      const m1 = list.insertContainer(list.length, new LoroMap())
+      m1.set('id', 'added-after-v1')
+      initial.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: initial.export({ mode: 'update', from: vv1 }),
+      })
+
+      const docBefore = peekDoc('session1', 'canvas-a')
+      expect(docBefore).toBeDefined()
+
+      const broadcastCalls: Array<{ workspaceId: string; slug: string; byteLength: number }> = []
+      setBroadcastFn((workspaceId, slug, update) => {
+        broadcastCalls.push({ workspaceId, slug, byteLength: update.byteLength })
+      })
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-a', overwrite: true }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+
+      // Same object identity: the cached doc was mutated in place, not
+      // replaced by a differently-lineaged document loaded from `past`.
+      expect(peekDoc('session1', 'canvas-a')).toBe(docBefore)
+
+      expect(broadcastCalls).toHaveLength(1)
+      expect(broadcastCalls[0]?.workspaceId).toBe('session1')
+      expect(broadcastCalls[0]?.slug).toBe('canvas-a')
+      expect(broadcastCalls[0]?.byteLength).toBeGreaterThan(0)
+
+      const elements = docBefore?.getMovableList('elements').toJSON() as Array<{
+        id: string
+        isDeleted?: boolean
+      }>
+      const alive = elements.filter((e) => !e.isDeleted).map((e) => e.id)
+      expect(alive).toEqual(['keep-me'])
+    })
+
+    it('targetSlug === slug WITHOUT overwrite still restores in place (same-slug is never treated as a distinct target)', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      const initial = new LoroDoc()
+      const vv0 = initial.version()
+      const list = initial.getMovableList('elements')
+      const m0 = list.insertContainer(0, new LoroMap())
+      m0.set('id', 'keep-me')
+      initial.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: initial.export({ mode: 'update', from: vv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-a' }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+      const body = (await restoreRes.json()) as { ok: boolean }
+      expect(body.ok).toBe(true)
+    })
+
+    it('restoring into a different existing canvas reconciles that canvas and broadcasts to it, not the source', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      // Source canvas-a: v1 has only "keep-me".
+      const sourceDoc = new LoroDoc()
+      const svv0 = sourceDoc.version()
+      const sourceList = sourceDoc.getMovableList('elements')
+      const sm0 = sourceList.insertContainer(0, new LoroMap())
+      sm0.set('id', 'keep-me')
+      sourceDoc.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      // Target canvas-b already exists with an unrelated element.
+      const targetDoc = new LoroDoc()
+      const tvv0 = targetDoc.version()
+      const targetList = targetDoc.getMovableList('elements')
+      const tm0 = targetList.insertContainer(0, new LoroMap())
+      tm0.set('id', 'b-only')
+      targetDoc.commit()
+      await app.request('/api/canvas/session1/canvas-b/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: targetDoc.export({ mode: 'update', from: tvv0 }),
+      })
+
+      const broadcastCalls: Array<{ slug: string }> = []
+      setBroadcastFn((_workspaceId, slug) => {
+        broadcastCalls.push({ slug })
+      })
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+      const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
+      expect(restoreBody.canvasId).toBe('session1/canvas-b')
+
+      expect(broadcastCalls).toHaveLength(1)
+      expect(broadcastCalls[0]?.slug).toBe('canvas-b')
+
+      clearCache()
+      const { loadCanvas } = await import('../store/canvas-store.js')
+      const reloadedTarget = await loadCanvas('session1', 'canvas-b')
+      const targetElements = reloadedTarget.getMovableList('elements').toJSON() as Array<{
+        id: string
+        isDeleted?: boolean
+      }>
+      const aliveTarget = targetElements.filter((e) => !e.isDeleted).map((e) => e.id)
+      expect(aliveTarget).toEqual(['keep-me'])
+
+      // Source canvas-a is untouched.
+      const reloadedSource = await loadCanvas('session1', 'canvas-a')
+      const sourceElements = reloadedSource.getMovableList('elements').toJSON() as Array<{
+        id: string
+        isDeleted?: boolean
+      }>
+      const aliveSource = sourceElements.filter((e) => !e.isDeleted).map((e) => e.id)
+      expect(aliveSource).toEqual(['keep-me'])
+    })
+
+    it('a stale client update applied after the overwrite does not resurrect the tombstoned element', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      const sourceDoc = new LoroDoc()
+      const svv0 = sourceDoc.version()
+      const sourceList = sourceDoc.getMovableList('elements')
+      const sm0 = sourceList.insertContainer(0, new LoroMap())
+      sm0.set('id', 'keep-me')
+      sourceDoc.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      const targetDoc = new LoroDoc()
+      const tvv0 = targetDoc.version()
+      const targetList = targetDoc.getMovableList('elements')
+      const tm0 = targetList.insertContainer(0, new LoroMap())
+      tm0.set('id', 'b-only')
+      targetDoc.commit()
+      await app.request('/api/canvas/session1/canvas-b/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: targetDoc.export({ mode: 'update', from: tvv0 }),
+      })
+
+      // Simulate a connected browser client's in-memory copy of canvas-b,
+      // captured just before the overwrite lands (same content, independent
+      // peer id via import — the same mechanism a real client uses to sync).
+      const staleClientDoc = new LoroDoc()
+      staleClientDoc.import(targetDoc.export({ mode: 'snapshot' }))
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+
+      // The stale client, unaware of the restore, edits the field it still
+      // believes is alive and sends its own incremental update.
+      const staleVV = staleClientDoc.version()
+      const staleList = staleClientDoc.getMovableList('elements')
+      const staleEl = staleList.get(0) as unknown as InstanceType<typeof LoroMap>
+      staleEl.set('x', 42)
+      staleClientDoc.commit()
+      const staleUpdate = staleClientDoc.export({ mode: 'update', from: staleVV })
+
+      const updateRes = await app.request('/api/canvas/session1/canvas-b/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: staleUpdate,
+      })
+      expect(updateRes.status).toBe(200)
+
+      clearCache()
+      const { loadCanvas } = await import('../store/canvas-store.js')
+      const reloadedTarget = await loadCanvas('session1', 'canvas-b')
+      const targetElements = reloadedTarget.getMovableList('elements').toJSON() as Array<{
+        id: string
+        isDeleted?: boolean
+      }>
+      const bOnly = targetElements.find((e) => e.id === 'b-only')
+      // Because the reconcile mutated the SAME live doc lineage (rather than
+      // swapping in a differently-lineaged replacement document), the stale
+      // client's field-level edit merges without reviving the tombstone the
+      // restore set. This is the exact resurrection the old
+      // replace-persistence path allowed: a stale client's update crossing
+      // into a foreign CRDT lineage has no well-defined merge and could
+      // silently undo the restore.
+      expect(bOnly?.isDeleted).toBe(true)
+    })
+
+    it('restoring into a new (non-existent) target slug still creates it', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      const sourceDoc = new LoroDoc()
+      const svv0 = sourceDoc.version()
+      const sourceList = sourceDoc.getMovableList('elements')
+      const sm0 = sourceList.insertContainer(0, new LoroMap())
+      sm0.set('id', 'keep-me')
+      sourceDoc.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-new' }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+      const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
+      expect(restoreBody.canvasId).toBe('session1/canvas-new')
+      expect(restoreBody.elementCount).toBe(1)
+
+      const { loadCanvas } = await import('../store/canvas-store.js')
+      const created = await loadCanvas('session1', 'canvas-new')
+      const createdElements = created.getMovableList('elements').toJSON() as Array<{ id: string }>
+      expect(createdElements.map((e) => e.id)).toEqual(['keep-me'])
+    })
+
+    it('restoring into an existing target slug WITHOUT overwrite returns 409 output_exists', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      const sourceDoc = new LoroDoc()
+      const svv0 = sourceDoc.version()
+      const sourceList = sourceDoc.getMovableList('elements')
+      const sm0 = sourceList.insertContainer(0, new LoroMap())
+      sm0.set('id', 'keep-me')
+      sourceDoc.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      await app.request('/api/canvas/session1/canvas-b/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: sourceDoc.export({ mode: 'update', from: svv0 }),
+      })
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-b' }),
+        },
+      )
+      expect(restoreRes.status).toBe(409)
+      const body = (await restoreRes.json()) as { error: string }
+      expect(body.error).toBe('output_exists')
+    })
   })
 
   // Thumbnail PUT/GET endpoint coverage.

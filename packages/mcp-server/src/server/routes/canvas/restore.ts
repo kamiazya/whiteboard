@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
 import { reconcileElementsOnDoc } from '../../../shared/reconcile-elements.js'
-import { ConflictError, saveCanvas } from '../../store/canvas-store.js'
+import { canvasExists, ConflictError, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import {
@@ -26,6 +26,45 @@ function countElements(doc: LoroDoc): number {
   }
 }
 
+// Reconciles `past` onto `doc` (the LIVE cached doc for workspaceId/targetSlug),
+// commits, persists, and broadcasts the resulting update. Shared by both the
+// in-place restore and the overwrite-an-existing-canvas restore, because both
+// must mutate the same document instance any connected client already holds:
+// a delta broadcast only means something against the doc it was diffed from,
+// so "overwrite" cannot be a file swap without breaking every connected peer.
+async function reconcileCommitSaveBroadcast(
+  workspaceId: string,
+  targetSlug: string,
+  doc: LoroDoc,
+  past: LoroDoc,
+  label: string | undefined,
+): Promise<void> {
+  const { sendRestoreEvent } = await import('../ws.js')
+  sendRestoreEvent(workspaceId, targetSlug, 'started', label)
+  try {
+    const prevVV = doc.version()
+    try {
+      reconcileElementsOnDoc(doc, past)
+      doc.commit()
+      await saveCanvas(workspaceId, targetSlug, doc, { overwrite: true })
+    } catch (err) {
+      // reconcileElementsOnDoc mutates the cached doc in place before
+      // commit/save run, so any failure in this block (reconcile, commit,
+      // or save) leaves the cache ahead of durable state. Evict it so the
+      // next read reloads the last successfully persisted snapshot.
+      evictDoc(workspaceId, targetSlug)
+      throw err
+    }
+    const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
+    if (update.byteLength > 0) {
+      getBroadcastFn()(workspaceId, targetSlug, update)
+    }
+  } finally {
+    // Always send complete, even on error, or the client overlay can stay locked forever.
+    sendRestoreEvent(workspaceId, targetSlug, 'complete')
+  }
+}
+
 // POST /api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore
 //
 // Two modes share this endpoint:
@@ -37,10 +76,15 @@ function countElements(doc: LoroDoc): number {
 //        only in current -> set isDeleted=true (tombstone)
 //        in both         -> copy differing fields from past onto current
 //
-//   2. Restore-as-new-canvas — body `{ targetSlug, overwrite? }`.
-//      Writes the past doc as a brand-new canvas under `targetSlug` in the
-//      same workspace. The original canvas / live doc / WS clients are not
-//      touched. Replaces the deleted `checkpoint_restore` flow.
+//   2. Restore into `targetSlug` — body `{ targetSlug, overwrite? }`.
+//      If `targetSlug` does not yet exist, this writes the past doc as a
+//      brand-new canvas; the source canvas is untouched. If `targetSlug`
+//      already exists, `overwrite: true` is required, and the restore goes
+//      through the SAME reconcile-onto-the-live-doc path as mode 1, applied
+//      to the target's live doc instead of the source's — never a straight
+//      file replacement. `targetSlug === slug` collapses into mode 1.
+//      Without `overwrite`, an existing target returns 409 `output_exists`.
+//      Replaces the deleted `checkpoint_restore` flow.
 export function createRestoreRouter(options: RestoreRouterOptions) {
   const app = new Hono()
   const { versionStore } = options
@@ -81,8 +125,11 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         return c.json({ error: 'not_found' }, 404)
       }
 
-      // Restore-as-new-canvas branch.
-      if (targetSlug !== undefined) {
+      // Restore-as-new-canvas / overwrite-existing-canvas branch.
+      // targetSlug === slug is the same document as the in-place restore
+      // below, so route it there directly instead of forcing callers to
+      // pass overwrite:true against their own canvas.
+      if (targetSlug !== undefined && targetSlug !== slug) {
         try {
           validateSlug(targetSlug)
         } catch (err) {
@@ -90,8 +137,36 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
           if (body) return c.json(body, 400)
           throw err
         }
+
+        const targetAlreadyExists = await canvasExists(workspaceId, targetSlug)
+        if (targetAlreadyExists && !overwrite) {
+          return c.json(
+            {
+              error: 'output_exists',
+              message: `Target canvas "${targetSlug}" already exists. Pass overwrite=true to replace it.`,
+            },
+            409,
+          )
+        }
+
+        if (targetAlreadyExists) {
+          // The version id belongs to the SOURCE canvas's history, so its
+          // label lives in the source's version list even though we are
+          // about to reconcile it onto the target.
+          const all = await versionStore.list(workspaceId, slug)
+          const label = all.find((v) => v.id === id)?.label
+          const targetDoc = await getDoc(workspaceId, targetSlug)
+          await reconcileCommitSaveBroadcast(workspaceId, targetSlug, targetDoc, past, label)
+          return c.json({
+            canvasId: `${workspaceId}/${targetSlug}`,
+            elementCount: countElements(targetDoc),
+          })
+        }
+
+        // Genuinely new canvas: no live doc and no connected clients, so
+        // there is nothing to reconcile against.
         try {
-          await saveCanvas(workspaceId, targetSlug, past, { overwrite })
+          await saveCanvas(workspaceId, targetSlug, past, { overwrite: false })
         } catch (err) {
           if (err instanceof ConflictError) {
             return c.json(
@@ -104,6 +179,8 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
           }
           throw err
         }
+        // Guard against a stale cache entry from a since-deleted canvas at
+        // this slug being served instead of the just-written snapshot.
         evictDoc(workspaceId, targetSlug)
         return c.json({
           canvasId: `${workspaceId}/${targetSlug}`,
@@ -114,30 +191,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
       // In-place reconcile branch (default).
       const all = await versionStore.list(workspaceId, slug)
       const label = all.find((v) => v.id === id)?.label
-      const { sendRestoreEvent } = await import('../ws.js')
-      sendRestoreEvent(workspaceId, slug, 'started', label)
-      try {
-        const prevVV = doc.version()
-        reconcileElementsOnDoc(doc, past)
-        doc.commit()
-        try {
-          await saveCanvas(workspaceId, slug, doc, { overwrite: true })
-        } catch (err) {
-          // reconcileElementsOnDoc + commit above already mutated the cached
-          // doc, so a failed save would otherwise leave the cache ahead of
-          // durable state. Evict it so the next read reloads the last
-          // successfully persisted snapshot.
-          evictDoc(workspaceId, slug)
-          throw err
-        }
-        const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
-        if (update.byteLength > 0) {
-          getBroadcastFn()(workspaceId, slug, update)
-        }
-      } finally {
-        // Always send complete, even on error, or the client overlay can stay locked forever.
-        sendRestoreEvent(workspaceId, slug, 'complete')
-      }
+      await reconcileCommitSaveBroadcast(workspaceId, slug, doc, past, label)
       return c.json({ ok: true })
     } catch (err) {
       const issue = handleCorruptStoredData(err)

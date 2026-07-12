@@ -43,8 +43,11 @@ export const saveVersionRequestSchema = z.object({
 // Body is optional. Two restore modes share the same endpoint:
 //   • body absent or `targetSlug` absent — in-place reconcile against the
 //     current canvas (default; what the History panel uses).
-//   • `targetSlug` set — write the past doc as a new canvas under that slug
-//     in the same workspace. Overwrites only when `overwrite: true`.
+//   • `targetSlug` set — restore into that slug in the same workspace. If it
+//     does not exist yet, this creates it. If it already exists, `overwrite:
+//     true` is required, and the restore reconciles onto the target's live
+//     doc (same semantics as the default mode, not a persistence swap) so
+//     any client connected to that canvas stays on the same CRDT lineage.
 //     Replaces what the now-removed `checkpoint_restore` flow did.
 export const restoreVersionRequestSchema = z.object({
   targetSlug: z.string().trim().min(1).optional(),
