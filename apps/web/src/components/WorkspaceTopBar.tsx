@@ -348,6 +348,10 @@ export default function WorkspaceTopBar({
   const [newCanvasError, setNewCanvasError] = useState<string | null>(null)
   const [newCanvasBusy, setNewCanvasBusy] = useState(false)
 
+  // Export has no dialog of its own (it's a plain dropdown action), so a
+  // failed or unavailable export is surfaced next to the trigger instead.
+  const [exportError, setExportError] = useState<string | null>(null)
+
   // Load display names. Guard against a stale response for a previous
   // workspaceId landing after a newer request already resolved.
   useEffect(() => {
@@ -607,17 +611,30 @@ export default function WorkspaceTopBar({
 
   const handleExport = async (format: 'png' | 'svg') => {
     if (!onExport) return
+    setExportError(null)
     try {
       const blob = await onExport(format)
-      if (!blob) return
+      if (!blob) {
+        setExportError(`Export as ${format.toUpperCase()} failed: no data to export.`)
+        return
+      }
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download = `${exportFilenameBase}.${format}`
+      // Firefox (and the HTML spec generally) will not start a download from
+      // a synthetic click() on an <a> that isn't attached to the document —
+      // it must be appended before clicking and can be removed right after.
+      document.body.appendChild(anchor)
       anchor.click()
-      URL.revokeObjectURL(url)
+      document.body.removeChild(anchor)
+      // Revoking synchronously can race the browser's download manager in
+      // Chrome/Safari before it has read the blob URL; deferring past the
+      // current task lets the download start first.
+      setTimeout(() => URL.revokeObjectURL(url), 0)
     } catch (err) {
       log.error('canvas export failed:', err)
+      setExportError(`Export as ${format.toUpperCase()} failed.`)
     }
   }
 
@@ -839,6 +856,14 @@ export default function WorkspaceTopBar({
         {isLocalMode && newCanvasError && (
           <span className="truncate text-xs text-destructive" role="alert">
             {newCanvasError}
+          </span>
+        )}
+
+        {/* Export is a plain dropdown action with no dialog of its own, so a
+            failed or unavailable export is surfaced here instead. */}
+        {exportError && (
+          <span className="truncate text-xs text-destructive" role="alert">
+            {exportError}
           </span>
         )}
 

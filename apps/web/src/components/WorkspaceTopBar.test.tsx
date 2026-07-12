@@ -636,6 +636,108 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
 
     await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
   })
+
+  it('surfaces a visible error when onExport resolves null (export unavailable)', async () => {
+    const onExport = vi.fn().mockResolvedValue(null)
+
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+        onExport={onExport}
+      />,
+      { container: document.body },
+    )
+
+    await openCanvasActions()
+    const pngItem = await screen.findByText('Export as PNG')
+    fireEvent.pointerUp(pngItem)
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/export/i)
+  })
+
+  it('surfaces a visible error when onExport rejects', async () => {
+    const onExport = vi.fn().mockRejectedValue(new Error('boom'))
+
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+        onExport={onExport}
+      />,
+      { container: document.body },
+    )
+
+    await openCanvasActions()
+    const pngItem = await screen.findByText('Export as PNG')
+    fireEvent.pointerUp(pngItem)
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
+    expect((await screen.findByRole('alert')).textContent).toMatch(/export/i)
+  })
+
+  // RED-first: Firefox (and per the HTML spec generally) does not start a
+  // download from a synthetic .click() on an <a> that was never attached to
+  // the document — the exact "looks like it worked but does nothing" defect
+  // this export affordance exists to avoid. Assert the anchor is actually in
+  // the document at click time, and removed again afterward.
+  it('attaches the download anchor to the document before clicking it, then removes it', async () => {
+    const blob = new Blob(['fake-png'], { type: 'image/png' })
+    const onExport = vi.fn().mockResolvedValue(blob)
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:mock-url'),
+      revokeObjectURL: vi.fn(),
+    })
+
+    let anchorConnectedAtClick: boolean | null = null
+    const realCreateElement = document.createElement.bind(document)
+    const createElementSpy = vi
+      .spyOn(document, 'createElement')
+      .mockImplementation((tagName: string, ...rest) => {
+        const el = realCreateElement(tagName, ...rest)
+        if (tagName === 'a') {
+          const realClick = el.click.bind(el)
+          el.click = () => {
+            anchorConnectedAtClick = el.isConnected
+            realClick()
+          }
+        }
+        return el
+      })
+
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+        onExport={onExport}
+      />,
+      { container: document.body },
+    )
+
+    await openCanvasActions()
+    const pngItem = await screen.findByText('Export as PNG')
+    fireEvent.pointerUp(pngItem)
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
+    await waitFor(() => expect(anchorConnectedAtClick).toBe(true))
+
+    createElementSpy.mockRestore()
+    vi.unstubAllGlobals()
+  })
 })
 
 describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
