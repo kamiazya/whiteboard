@@ -52,7 +52,7 @@ function startProbeServer() {
       socket.send('hello')
       socket.on('message', (data) => socket.send(data))
     })
-    server.listen(0, '127.0.0.1', () => resolvePromise(server))
+    server.listen(0, '127.0.0.1', () => resolvePromise({ server, wss }))
   })
 }
 
@@ -163,7 +163,7 @@ async function measureSimple(engine, probe) {
   }
 }
 
-const server = await startProbeServer()
+const { server, wss } = await startProbeServer()
 const probe = probeUrls(server)
 
 let failed = false
@@ -183,6 +183,10 @@ try {
   console.error('[mcp-lna-transport-smoke] FAIL: measurement threw', err)
   failed = true
 } finally {
+  // The probe sockets stay open, and `server.close()` only stops new
+  // connections — it waits for the live ones. Terminating the WebSocket server
+  // first is what lets this harness exit instead of hanging.
+  await new Promise((resolveClose) => wss.close(resolveClose))
   await new Promise((resolveClose) => server.close(resolveClose))
 }
 
