@@ -146,6 +146,18 @@ destinations.add(stderrDestination)
 // levels deep under a non-listed key would NOT be caught. Adding a new
 // secret-bearing field anywhere in the server means adding both its
 // top-level and its `*.<name>` path here.
+//
+// Capped at one level deliberately, not by oversight: every `log.*` call
+// site in this server (grep `src/server/**/*.ts` for `log\.(debug|info|
+// notice|warning|error|critical|alert|emergency)\(`) passes either a flat
+// field bag or an `{ err }`/`{ error }`/`{ cause }` object, and the error
+// serializer's own output is flat too — so today's deepest real secret
+// position is exactly one level (`err.token`, `client.token`). A third
+// tier (`*.*.<name>`) would double this list for a shape (`req.headers.
+// authorization`, `config.auth.token`) nothing here currently produces.
+// If a call site starts logging a wholesale two-level-nested object with a
+// credential in it, add the `*.*.<name>` tier for that field then — don't
+// pre-pay the per-path fast-redact cost for a shape that doesn't exist yet.
 const REDACTED_PATHS = [
   'token',
   'daemonToken',
