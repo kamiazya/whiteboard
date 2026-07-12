@@ -42,6 +42,26 @@ export type AuthScope =
   | 'runtime:admin'
   | 'mcp:call'
 
+// The full grant set a single-tenant local-token session holds today (see
+// `createLocalTokenAuthStrategy` below: the success path ignores
+// `requiredScopes` entirely). Kept as one literal array so every call site
+// that needs to express "this credential can do anything" — the WS upgrade
+// grant included — derives it from the same list instead of re-typing the
+// scope vocabulary and silently drifting from it.
+export const ALL_AUTH_SCOPES: readonly AuthScope[] = [
+  'canvas:read',
+  'canvas:write',
+  'workspace:read',
+  'workspace:write',
+  'versions:read',
+  'versions:write',
+  'files:read',
+  'files:write',
+  'runtime:read',
+  'runtime:admin',
+  'mcp:call',
+]
+
 export type AuthContext =
   | { kind: 'anonymous' }
   | { kind: 'local-token' }

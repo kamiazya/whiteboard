@@ -3,6 +3,7 @@ import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '../../shared/ws-protocol.js'
+import { ALL_AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'
 import {
   isLoopbackHostname,
   normalizeHostHeader,
@@ -56,6 +57,15 @@ export interface WsUpgradeDecision {
   accept: boolean
   statusCode?: number
   protocol?: string
+  // Present only when `accept` is true. Local-daemon's single shared token
+  // is the only credential this upgrade path issues today, and — matching
+  // `createLocalTokenAuthStrategy`'s documented single-tenant concession —
+  // it grants every scope. The field exists so the per-message enforcement
+  // in `routes/ws.ts` has something real to check against now, and so a
+  // future scoped credential (a server-mode connection ticket, per
+  // ADR-0005) has a seam to plug a narrower grant into without changing the
+  // enforcement call site.
+  scopes?: readonly AuthScope[]
 }
 
 export function authorizeWsUpgrade(
@@ -74,6 +84,7 @@ export function authorizeWsUpgrade(
     return {
       accept: true,
       protocol: offeredBaseProtocol ? WHITEBOARD_WS_PROTOCOL : undefined,
+      scopes: ALL_AUTH_SCOPES,
     }
   }
 
@@ -84,5 +95,5 @@ export function authorizeWsUpgrade(
     return { accept: false, statusCode: 401 }
   }
 
-  return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL }
+  return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
 }
