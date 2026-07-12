@@ -88,8 +88,15 @@ try {
     )
   }
 } finally {
-  await browser.close()
-  await running.close()
+  // Both must be attempted even if one throws — otherwise a browser.close()
+  // failure would leave the daemon's listening port open for the rest of
+  // the process's lifetime.
+  const [browserResult, serverResult] = await Promise.allSettled([browser.close(), running.close()])
+  for (const result of [browserResult, serverResult]) {
+    if (result.status === 'rejected') {
+      console.error('[mcp-daemon-origin-smoke] cleanup error:', result.reason)
+    }
+  }
 }
 
 if (failed) {
