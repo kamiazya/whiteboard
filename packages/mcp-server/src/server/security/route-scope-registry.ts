@@ -47,7 +47,7 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
 
   // File routes: reading/writing a canvas's attached binary file.
   if (/^\/api\/canvas\/[^/]+\/[^/]+\/file\//.test(path)) {
-    return { kind: 'scoped', scopes: [method === 'PUT' ? 'files:write' : 'files:read'] }
+    return { kind: 'scoped', scopes: [isWrite ? 'files:write' : 'files:read'] }
   }
 
   // Canvas write operations that arrive as POST but mutate state.
