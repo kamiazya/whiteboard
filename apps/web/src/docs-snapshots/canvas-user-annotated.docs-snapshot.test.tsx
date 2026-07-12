@@ -1,7 +1,6 @@
 import { describe, it, beforeEach, afterEach, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { cleanup, render, waitFor } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { Excalidraw, convertToExcalidrawElements } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import architectureRaw from '@docs-assets/architecture.excalidraw?raw'
@@ -63,7 +62,8 @@ beforeEach(() => {
         })
       }
       if (url.endsWith('/dirty')) return jsonResponse({ dirty: true })
-      if (url.endsWith('/branches')) return jsonResponse({ head: 'main', branches: [{ name: 'main' }] })
+      if (url.endsWith('/branches'))
+        return jsonResponse({ head: 'main', branches: [{ name: 'main' }] })
       return jsonResponse({})
     }),
   )
@@ -87,49 +87,46 @@ describe('docs snapshot — user added review notes', () => {
     const elements = [...(baseScene.elements as object[]), ...(annotations as object[])]
 
     const { container } = render(
-      <MemoryRouter initialEntries={['/canvas/ws_main/design/architecture']}>
-        <Routes>
-          <Route
-            path="/canvas/:workspaceId/*"
-            element={
-              <div
-                data-testid="canvas-user-annotated-frame"
-                style={{ width: '1100px', height: '640px', background: '#ffffff' }}
-              >
-                <WorkspaceTopBar
-                  workspaceId="ws_main"
-                  slug="design/architecture"
-                  canvases={[
-                    { slug: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' },
-                  ]}
-                  onEnterFullscreen={() => undefined}
-                  theme="light"
-                  onToggleTheme={() => undefined}
-                />
-                <div style={{ height: 'calc(100% - 48px)' }}>
-                  <Excalidraw
-                    initialData={{
-                      elements: elements as never,
-                      appState: {
-                        viewBackgroundColor: '#ffffff',
-                        ...((baseScene.appState as object | undefined) ?? {}),
-                      } as never,
-                      files: ((baseScene.files as object | undefined) ?? {}) as never,
-                      scrollToContent: true,
-                    }}
-                  />
-                </div>
-              </div>
-            }
+      <div
+        data-testid="canvas-user-annotated-frame"
+        style={{ width: '1100px', height: '640px', background: '#ffffff' }}
+      >
+        <WorkspaceTopBar
+          workspaceId="ws_main"
+          slug="design/architecture"
+          canvases={[{ slug: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' }]}
+          onNavigateToCanvas={() => undefined}
+          onEnterFullscreen={() => undefined}
+          theme="light"
+          onToggleTheme={() => undefined}
+        />
+        <div style={{ height: 'calc(100% - 48px)' }}>
+          <Excalidraw
+            initialData={{
+              elements: elements as never,
+              appState: {
+                viewBackgroundColor: '#ffffff',
+                ...((baseScene.appState as object | undefined) ?? {}),
+              } as never,
+              files: ((baseScene.files as object | undefined) ?? {}) as never,
+              scrollToContent: true,
+            }}
           />
-        </Routes>
-      </MemoryRouter>,
+        </div>
+      </div>,
     )
 
+    // These are independent async chains — waiting on the display name
+    // alone lets the branch chip's later-settling text or icon shift the
+    // top bar layout after the screenshot is taken, producing a
+    // byte-unstable capture across regenerations.
     await waitFor(() => {
       const titleText = container.textContent ?? ''
       if (!titleText.includes('System architecture')) {
         throw new Error('TopBar canvas display name not yet rendered')
+      }
+      if (!container.querySelector('[aria-label^="Switch variation"]')) {
+        throw new Error('HeaderBranchChip not yet rendered')
       }
       const canvas = container.querySelector('canvas')
       if (!canvas) throw new Error('Excalidraw canvas not yet mounted')
@@ -141,6 +138,21 @@ describe('docs snapshot — user added review notes', () => {
 
     const target = container.querySelector('[data-testid="canvas-user-annotated-frame"]')
     if (!(target instanceof HTMLElement)) throw new Error('preview wrapper not found')
+    // Force a fresh layout + repaint pass. The settled DOM is byte-identical
+    // run to run, yet the rendered pixels can still flip between two states
+    // — Chromium's incremental layout/paint converging to a slightly
+    // different sub-pixel rounding than a single fresh layout of the same
+    // final markup would (confirmed via repeated regenerations + a pixel
+    // diff). Toggling display off/on forces that fresh pass while
+    // preserving the Excalidraw <canvas>'s rasterised bitmap, which a
+    // cloneNode would silently wipe.
+    target.style.display = 'none'
+    void target.offsetHeight
+    target.style.display = ''
+    void target.offsetHeight
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)))
+    }
 
     await page.screenshot({
       path: resolveDocAssetPath('canvas-user-annotated.png'),
