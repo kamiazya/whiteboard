@@ -1,5 +1,8 @@
 import type { MiddlewareHandler } from 'hono'
 import { timingSafeEqual } from 'node:crypto'
+import { hasRequiredScopes } from '../security/auth-strategy.js'
+import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
+import { resolveApiRouteScope } from '../security/route-scope-registry.js'
 
 // Timing-safe string comparison. Even length mismatches avoid early return by doing
 // a dummy comparison so timing stays uniform.
@@ -61,14 +64,61 @@ export function requiresDaemonAuth(path: string): boolean {
   return true
 }
 
-export function createDaemonAuthMiddleware(token?: string): MiddlewareHandler {
+// Is this bearer an OAuth access token whose approved grant covers the route
+// being called? Two credentials reach /api/* in local-daemon mode:
+//
+//   - the shared daemon token, which is the machine-local operator's own
+//     credential and carries full authority (it is what the daemon-served app
+//     and the MCP server already hold);
+//   - an OAuth access token from a hosted origin the user explicitly approved
+//     (ADR-0005), which carries ONLY the scopes that approval granted.
+//
+// The second is the one that has to be scope-checked on every request. RFC
+// 6749 §7 puts this check on the resource server, and route-scope-registry is
+// where "what does this route need" is declared once. An undeclared route
+// resolves to `null` there and is refused: a route added later must be given
+// a scope deliberately, never inherit one by accident.
+function isAuthorizedOAuthGrant(
+  authorization: string | undefined,
+  grantStore: OAuthTransactionStore,
+  method: string,
+  path: string,
+): boolean {
+  const presented = parseBearerAuthorizationHeader(authorization)
+  if (presented === null) return false
+  const grant = grantStore.verifyAccessToken(presented)
+  if (grant === null) return false
+  const required = resolveApiRouteScope(method, path)
+  if (required === null) return false
+  if (required.kind === 'public') return true
+  return hasRequiredScopes(grant.scopes, required.scopes)
+}
+
+export function createDaemonAuthMiddleware(
+  token?: string,
+  // Absent unless the operator configured the hosted-origin OAuth surface, in
+  // which case /api/* is daemon-token-only exactly as before.
+  grantStore?: OAuthTransactionStore,
+): MiddlewareHandler {
   return async (c, next) => {
     if (!requiresDaemonAuth(c.req.path)) {
       return next()
     }
-    if (!isAuthorized(c.req.header('authorization'), token)) {
-      return c.json({ error: 'unauthorized' }, 401)
+    if (isAuthorized(c.req.header('authorization'), token)) {
+      return next()
     }
-    return next()
+    if (
+      grantStore !== undefined &&
+      isAuthorizedOAuthGrant(c.req.header('authorization'), grantStore, c.req.method, c.req.path)
+    ) {
+      return next()
+    }
+    // One rejection for every way a request can fail: no credential, a wrong
+    // daemon token, a forged/expired/revoked access token, and a valid access
+    // token whose grant does not cover this route. Distinguishing them —
+    // even by status code — would tell an attacker which of the two
+    // credentials they are close to holding, and would tell a hostile page
+    // whether a given bearer is a live grant at all.
+    return c.json({ error: 'unauthorized' }, 401)
   }
 }

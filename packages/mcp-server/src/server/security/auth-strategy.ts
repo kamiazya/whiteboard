@@ -58,6 +58,17 @@ export type AuthScope = (typeof AUTH_SCOPES)[number]
 // never leave this grant set silently under-provisioned.
 export const ALL_AUTH_SCOPES: readonly AuthScope[] = AUTH_SCOPES
 
+// RFC 6749 §3.3 leaves scope semantics to the resource server; ours is
+// conjunctive — a route that declares two scopes needs both, and a credential
+// that holds a superset of them is still fine. Absence of any required scope
+// is a decision (the route is public), not a wildcard.
+export function hasRequiredScopes(
+  granted: readonly AuthScope[],
+  required: readonly AuthScope[],
+): boolean {
+  return required.every((scope) => granted.includes(scope))
+}
+
 export type AuthContext =
   | { kind: 'anonymous' }
   | { kind: 'local-token' }
