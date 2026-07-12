@@ -22,6 +22,7 @@ const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest } = await im
 
 class FakeWebSocket {
   sent: Array<string | Uint8Array> = []
+  closes: Array<{ code?: number; reason?: string }> = []
   private listeners = new Map<string, Array<(...args: unknown[]) => void>>()
 
   send(data: string | Uint8Array | ArrayBuffer): void {
@@ -42,7 +43,9 @@ class FakeWebSocket {
     this.listeners.set(event, handlers)
   }
 
-  close(): void {}
+  close(code?: number, reason?: string): void {
+    this.closes.push({ code, reason })
+  }
 
   async emitMessage(data: Buffer, isBinary: boolean): Promise<void> {
     for (const handler of this.listeners.get('message') ?? []) {
@@ -466,6 +469,9 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
     const savedElements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(savedElements).toEqual([])
 
+    // And the socket is closed rather than silently swallowing further frames.
+    expect(ws.closes).toEqual([{ code: 1008, reason: 'Insufficient scope' }])
+
     ws.emitClose()
   })
 
@@ -513,6 +519,11 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     expect(getReadyClientCount('session1', 'canvas-noscope')).toBe(0)
+
+    // Scopes are fixed at upgrade, so a client that lacks the scope for a
+    // message can never succeed by retrying. Leaving the socket open would
+    // let it keep pushing rejected frames indefinitely; close it out.
+    expect(ws.closes).toEqual([{ code: 1008, reason: 'Insufficient scope' }])
     ws.emitClose()
   })
 })

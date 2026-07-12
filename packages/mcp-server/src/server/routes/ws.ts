@@ -241,6 +241,15 @@ export async function handleWsUpgrade(
   // in closure scope keeps the per-canvas connection map untouched.
   let pendingTraceContext: ReturnType<typeof extractContextFromHeaders> | null = null
 
+  // The connection's scopes are fixed at upgrade and cannot widen mid-session,
+  // so a client that sends a message it lacks the scope for can never succeed
+  // by retrying. Dropping the frame while leaving the socket open would let it
+  // keep pushing rejected traffic; RFC 6455 1008 (Policy Violation) is the
+  // close code for a message the peer is not permitted to send.
+  function closeForInsufficientScope(): void {
+    ws.close(1008, 'Insufficient scope')
+  }
+
   ws.on('message', async (data: RawData, isBinary: boolean) => {
     runtimeTouch()
     if (!isBinary) {
@@ -253,6 +262,7 @@ export async function handleWsUpgrade(
           { workspaceId, slug, messageType: msg.type },
           'ws message rejected: insufficient scope',
         )
+        closeForInsufficientScope()
         return
       }
       if (msg.type === 'client_ready') {
@@ -296,6 +306,7 @@ export async function handleWsUpgrade(
         { workspaceId, slug },
         'ws binary update rejected: insufficient scope',
       )
+      closeForInsufficientScope()
       return
     }
 
