@@ -12,7 +12,6 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
 // Mock ws.ts so each test can control getClientCount and sendExportRequest.

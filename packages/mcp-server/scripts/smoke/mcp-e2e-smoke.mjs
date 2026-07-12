@@ -212,18 +212,18 @@ async function main() {
     throw new Error('served HTML still carries daemonToken inside __WHITEBOARD_RUNTIME_CONFIG__')
   }
   if (canvasHtml.includes('__WHITEBOARD_RUNTIME_CONFIG__')) {
-    // The injection path ran (dist/app exists). ensureDaemon always generates
-    // a token (nanoid), so the dedicated token global must accompany the
-    // config script.
+    // The injection path ran (dist/web-app exists). ensureDaemon always
+    // generates a token (nanoid), so the dedicated token global must
+    // accompany the config script.
     if (!canvasHtml.includes('window.__WHITEBOARD_DAEMON_TOKEN__')) {
       throw new Error('served HTML is missing window.__WHITEBOARD_DAEMON_TOKEN__')
     }
     console.log('[e2e] served HTML: no daemonToken in config, dedicated token global present')
   } else {
-    // No injected config at all — dist/app is absent (CI runs this smoke
-    // before pnpm build), so there is no injection path to verify here.
+    // No injected config at all — dist/web-app is absent (CI runs this
+    // smoke before pnpm build), so there is no injection path to verify here.
     console.log(
-      '[e2e] served HTML has no runtime-config injection (dist/app absent) — token-global check skipped',
+      '[e2e] served HTML has no runtime-config injection (dist/web-app absent) — token-global check skipped',
     )
   }
 

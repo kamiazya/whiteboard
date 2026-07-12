@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { withTempDataDir } from './routes/_test-helpers.js'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -13,9 +13,6 @@ const tmp = withTempDataDir('whiteboard-app-test-')
 vi.mock('./config.js', () => ({
   get DATA_DIR() {
     return join(tmp.dir, 'data')
-  },
-  get DIST_APP_DIR() {
-    return join(tmp.dir, 'dist')
   },
   get DIST_WEB_APP_DIR() {
     return join(tmp.dir, 'web-app')
@@ -75,13 +72,13 @@ describe('createApp daemon mutation auth', () => {
   const originalFetch = globalThis.fetch
 
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'dist'), { recursive: true })
+    await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
     await mkdir(join(tmp.dir, 'data'), { recursive: true })
     process.env.WHITEBOARD_DEBUG = '1'
     clearCache()
     clearWorkspaceIdCache()
     await writeFile(
-      join(tmp.dir, 'dist', 'index.html'),
+      join(tmp.dir, 'web-app', 'index.html'),
       '<!DOCTYPE html><html><head><title>Whiteboard</title></head><body><div id="root"></div></body></html>',
     )
   })
@@ -1246,7 +1243,7 @@ describe('createApp daemon mutation auth', () => {
     it('apps/web strict runtimeConfigSchema REJECTS a payload that includes daemonToken', async () => {
       // apps/web/src/runtime-config.ts uses .strict() which forbids unknown keys.
       // daemonToken is NOT in the apps/web schema, so .parse({ daemonToken, daemonBaseUrl })
-      // must throw. This locks the DIST_APP_DIR cutover as a deliberate guarded step.
+      // must throw. This locks the token-channel split for apps/web as a deliberate guarded step.
       const { runtimeConfigSchema } = await import('../../../../apps/web/src/runtime-config.js')
       const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
       expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
@@ -1276,17 +1273,7 @@ describe('createApp daemon mutation auth', () => {
     })
   })
 
-  describe('local-daemon root serves the built apps/web (R3 UI retirement)', () => {
-    const originalLegacyUiFlag = process.env.WHITEBOARD_LEGACY_UI
-
-    afterEach(() => {
-      if (originalLegacyUiFlag === undefined) {
-        delete process.env.WHITEBOARD_LEGACY_UI
-      } else {
-        process.env.WHITEBOARD_LEGACY_UI = originalLegacyUiFlag
-      }
-    })
-
+  describe('local-daemon root serves the built apps/web (R3/R5 UI retirement)', () => {
     it('serves dist/web-app/index.html with runtime config injected when present', async () => {
       await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
       await writeFile(
@@ -1303,28 +1290,13 @@ describe('createApp daemon mutation auth', () => {
       expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
     })
 
-    it('falls back to the legacy dist/app UI when dist/web-app is absent', async () => {
+    it('returns the clean 404 (not a fallback UI) when dist/web-app is absent', async () => {
+      await rm(join(tmp.dir, 'web-app', 'index.html'), { force: true })
       const app = createApp(createRuntimeOptions('secret'))
       const res = await app.request('/')
-      expect(res.status).toBe(200)
-      const html = await res.text()
-      expect(html).toContain('<title>Whiteboard</title>')
-    })
-
-    it('WHITEBOARD_LEGACY_UI=1 keeps serving dist/app even when dist/web-app exists', async () => {
-      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
-      await writeFile(
-        join(tmp.dir, 'web-app', 'index.html'),
-        '<!DOCTYPE html><html><head><title>apps/web</title></head><body><div id="root">apps-web-marker</div></body></html>',
-      )
-      process.env.WHITEBOARD_LEGACY_UI = '1'
-
-      const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/')
-      expect(res.status).toBe(200)
-      const html = await res.text()
-      expect(html).not.toContain('apps-web-marker')
-      expect(html).toContain('<title>Whiteboard</title>')
+      expect(res.status).toBe(404)
+      const body = await res.text()
+      expect(body).toBe('Not found. Run `pnpm build` first.')
     })
 
     it('returns 404 (not the SPA HTML) for unmatched paths under reserved prefixes', async () => {

@@ -23,9 +23,9 @@ This project is split into three main runtime layers:
   - Serves `/api/*`, `/mcp`, static app assets, and WebSocket updates
   - Owns token-gated local HTTP transport and runtime lifecycle
   - Serves the canonical `apps/web` build (`dist/web-app`, copied in by its
-    postbuild step) as its own same-origin UI; `WHITEBOARD_LEGACY_UI=1` opts
-    back into the retired `dist/app` UI until it is removed (see
-    [ADR-0001](../contributing/adr/0001-apps-web-canonical-frontend.md))
+    postbuild step) as its own same-origin UI (see
+    [ADR-0001](../contributing/adr/0001-apps-web-canonical-frontend.md));
+    server-mode serves a minimal static placeholder at its root instead
 - **browser canvas**
   - React + Excalidraw app in `apps/web`, deployable standalone or served
     same-origin by the daemon

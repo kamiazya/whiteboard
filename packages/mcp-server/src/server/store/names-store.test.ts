@@ -11,7 +11,6 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/dist/app',
 }))
 
 const { loadWorkspaceNames, setWorkspaceName, setCanvasName, setCanvasPinned } = await import(
@@ -119,5 +118,4 @@ describe('names-store', () => {
     expect(names.workspace).toBe('WS')
     expect(names.canvases).toEqual({ c1: 'Canvas 1' })
   })
-
 })

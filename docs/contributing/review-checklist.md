@@ -12,7 +12,7 @@ Use this checklist when reviewing or self-reviewing a pull request in this repos
 
 - [ ] At least one nearest-layer test covers the root cause or new behavior.
 - [ ] Tests follow the red-first TDD loop (written before the implementation).
-- [ ] The correct test layer is used (`mcp-node` / `mcp-jsdom` / `mcp-browser` / `web-browser` / E2E).
+- [ ] The correct test layer is used (`mcp-node` / apps/web jsdom / `web-browser` / E2E).
 - [ ] No test has been weakened or deleted to make the build pass.
 
 ## Schema and contracts

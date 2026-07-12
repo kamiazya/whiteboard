@@ -18,7 +18,7 @@ Additional constraints from architecture and UX review:
   data-fetching shape, separate from the browser-local controller.
 - Mode is decided once at page load (config + probe result), not switched at
   runtime within a session.
-- `apps/web` has no router today; the daemon-served `src/app` already has one.
+- `apps/web` has no router today; the original daemon-served UI (since retired) already had one.
 
 ## Decision
 

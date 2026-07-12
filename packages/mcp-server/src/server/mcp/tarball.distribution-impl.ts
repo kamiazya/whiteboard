@@ -32,6 +32,35 @@ function spawnChecked(
   }
 }
 
+// R5 of the MCP-UI retirement (ADR 0001): the retired legacy browser-app
+// build output must never enter the published tarball again, and
+// dist/web-app (the canonical apps/web build) must always be present.
+// Checked directly against the packed tarball's file list rather than the
+// source tree, since `files`/`sideEffects` config drift or a stray build
+// artifact would otherwise only surface as a runtime 404 after publish.
+// Exported (and split from the `tar -tzf` invocation) so the two failure
+// branches can be exercised with a synthetic entry list, not just via the
+// end-to-end happy-path smoke.
+export function assertTarballFileList(entries: readonly string[]): void {
+  const distAppEntries = entries.filter((e) => e.startsWith('package/dist/app/'))
+  if (distAppEntries.length > 0) {
+    throw new Error(
+      `[tarball-smoke] packed tarball contains retired dist/app/ entries: ${distAppEntries.join(', ')}`,
+    )
+  }
+  if (!entries.includes('package/dist/web-app/index.html')) {
+    throw new Error('[tarball-smoke] packed tarball is missing dist/web-app/index.html')
+  }
+}
+
+function listTarballEntries(tarballPath: string): string[] {
+  const result = spawnSync('tar', ['-tzf', tarballPath], { encoding: 'utf-8' })
+  if (result.status !== 0) {
+    throw new Error(`[tarball-smoke] tar -tzf failed: ${(result.stderr as string)?.trim()}`)
+  }
+  return (result.stdout as string).split('\n').filter(Boolean)
+}
+
 export async function runPackedTarballSmoke({
   packageRoot,
   repoRoot,
@@ -87,6 +116,8 @@ export async function runPackedTarballSmoke({
     if (!existsSync(packedTarballPath)) {
       throw new Error(`[tarball-smoke] packed tarball was not created: ${packedTarballPath}`)
     }
+
+    assertTarballFileList(listTarballEntries(packedTarballPath))
 
     writeFileSync(
       resolve(installDir, 'package.json'),

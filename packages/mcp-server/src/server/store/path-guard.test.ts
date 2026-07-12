@@ -12,7 +12,6 @@ async function importWithRelaxedValidators<T>(modulePath: string): Promise<T> {
     },
     WHITEBOARD_ROOT: '/tmp',
     REPO_ROOT: '/tmp',
-    DIST_APP_DIR: '/tmp/dist/app',
   }))
   vi.doMock('../validators.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../validators.js')>()
@@ -70,5 +69,4 @@ describe('store path guards', () => {
       message: expect.stringMatching(/outside/i),
     })
   })
-
 })

@@ -12,7 +12,6 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
 const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
@@ -23,7 +22,12 @@ const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
-async function seedFile(workspaceId: string, fileId: string, ext: string, bytes: number): Promise<void> {
+async function seedFile(
+  workspaceId: string,
+  fileId: string,
+  ext: string,
+  bytes: number,
+): Promise<void> {
   const dir = join(tempDir, workspaceId, 'files')
   await mkdir(dir, { recursive: true })
   const path = join(dir, `${fileId}${ext}`)

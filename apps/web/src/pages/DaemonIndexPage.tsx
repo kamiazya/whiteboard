@@ -19,9 +19,9 @@ import type { WhiteboardCapabilities } from '../lib/provider.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
 // workspace selector picks which workspace's canvases populate the grid.
-// Modeled on packages/mcp-server/src/app/pages/IndexPage.tsx's
-// filter/sort/pin logic, but single-workspace rather than the all-workspace
-// flat list that IndexPage renders (see the design note for why).
+// Modeled on the original daemon-served UI's IndexPage filter/sort/pin logic
+// (since retired), but single-workspace rather than the all-workspace flat
+// list that IndexPage rendered (see the design note for why).
 
 export interface DaemonIndexPageProps {
   daemonBaseUrl: string
