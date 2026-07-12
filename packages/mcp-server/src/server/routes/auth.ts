@@ -1,10 +1,6 @@
 import type { MiddlewareHandler } from 'hono'
 import { timingSafeEqual } from 'node:crypto'
 
-function normalizeMethod(method: string): string {
-  return method.toUpperCase()
-}
-
 // Timing-safe string comparison. Even length mismatches avoid early return by doing
 // a dummy comparison so timing stays uniform.
 // The practical risk is low for loopback-only use, but this is still useful
@@ -41,21 +37,33 @@ export function isAuthorized(
   return parsed !== null && safeStringEqual(parsed, token)
 }
 
-function isMutationMethod(method: string): boolean {
-  const normalized = normalizeMethod(method)
-  return normalized === 'POST' || normalized === 'PUT' || normalized === 'DELETE' || normalized === 'PATCH'
-}
-
-export function requiresDaemonMutationAuth(method: string, path: string): boolean {
-  if (!isMutationMethod(method)) return false
+// Local-daemon mode requires the shared bearer token on every /api/* request,
+// read or write. `/api/runtime/ping` is the sole exception — it is the
+// availability probe apps/web calls before it knows whether a token is even
+// available (see ADR-0002) — everything else under /api/runtime/* re-checks
+// the bearer itself (runtime.ts), so double-gating it here is redundant but
+// harmless, not a hole.
+//
+// Canvas/asset GET used to be carved out entirely (ADR-0002's original
+// decision: loopback bind + Host-loopback check + hard-to-guess ids were
+// judged sufficient, and tokenizing reads looked like it would break <img
+// src> thumbnails for no real gain). That containment assumption breaks once
+// a hosted origin is an admitted CORS caller (ADR-0005): an admitted origin,
+// or anyone who gets past the allowlist, could then read every canvas with
+// no credential at all. The client-side cost of closing this turned out to
+// be zero — every read already goes through a bearer-carrying fetch
+// (shared/api-client.ts's apiFetch, and every thumbnail/file consumer
+// fetches bytes and renders an object URL instead of a bare <img src>) — so
+// there is no reason left to leave the server side open.
+export function requiresDaemonAuth(path: string): boolean {
   if (!path.startsWith('/api/')) return false
-  if (path.startsWith('/api/runtime/')) return false
+  if (path === '/api/runtime/ping') return false
   return true
 }
 
-export function createDaemonMutationAuthMiddleware(token?: string): MiddlewareHandler {
+export function createDaemonAuthMiddleware(token?: string): MiddlewareHandler {
   return async (c, next) => {
-    if (!requiresDaemonMutationAuth(c.req.method, c.req.path)) {
+    if (!requiresDaemonAuth(c.req.path)) {
       return next()
     }
     if (!isAuthorized(c.req.header('authorization'), token)) {

@@ -13,7 +13,7 @@ import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createExcalidrawMcpServer } from './mcp/index.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
-import { createDaemonMutationAuthMiddleware } from './routes/auth.js'
+import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createBranchesRouter } from './routes/branches.js'
 import { createCanvasRouter } from './routes/canvas.js'
 import { createDebugRouter } from './routes/debug.js'
@@ -450,11 +450,12 @@ export function createApp(options: AppOptions) {
     app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
     // In local-daemon mode, allow cross-origin loopback requests (e.g. apps/web
     // dev server on localhost:5173 → daemon on 127.0.0.1:3099).
-    // The CORS middleware is applied BEFORE the mutation-auth guard so that
+    // The CORS middleware is applied BEFORE the auth guard so that
     // OPTIONS preflights short-circuit to 204 without needing a bearer token,
-    // while non-OPTIONS methods fall through to the auth chain unchanged.
+    // while every other method (GET included — see auth.js) falls through to
+    // the auth chain unchanged.
     app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
-    app.use('/api/*', createDaemonMutationAuthMiddleware(token))
+    app.use('/api/*', createDaemonAuthMiddleware(token))
   }
 
   if (mcpAuth) {

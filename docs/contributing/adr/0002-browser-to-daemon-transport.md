@@ -196,3 +196,80 @@ lands.
   user-facing prompt UX (automation bypasses the prompt), WS behavior once
   Chromium gates it behind LNA, and LNA rollout changes (origin trial /
   enterprise policy knobs).
+
+## Addendum (accepted): the canvas/asset GET carve-out is retired
+
+The first addendum above left canvas/asset `GET` tokenless in local-daemon
+mode, accepting the residual risk that "a malicious page on another
+localhost port can still read canvas `GET` responses via reflected CORS."
+ADR-0005 names a Stage 4 origin allowlist as the mitigation for that risk,
+then goes further: once a *hosted* origin is an admitted CORS caller, the
+same tokenless surface lets that origin — or anyone who gets past the
+allowlist — read every canvas with no credential at all, making
+`canvas:read` theatre on the read path. ADR-0005 marked this "a prerequisite
+slice" rather than deciding it; this addendum is that decision.
+
+### The consumer audit
+
+Every place `apps/web` reads daemon-served canvas/asset bytes was audited
+for whether it goes through the bearer-carrying client or bypasses it with
+a bare `<img src>` / URL construction:
+
+- `shared/api-client.ts`'s `apiFetch` already attaches `Authorization:
+  Bearer <token>` to every same-origin `/api/*` request, GET included.
+- `VersionThumbnail.tsx` and `CanvasThumb.tsx` (the only two thumbnail
+  surfaces; every other consumer — `VersionTimeline`, `MergeDialog`,
+  `WorkspaceTopBar`, `DaemonIndexPage` — renders through one of these two)
+  already fetch the thumbnail bytes through the daemon-aware fetch and
+  render an object URL, falling back to a bare `<img src>` only when no
+  `DaemonApiContext.Provider` is mounted.
+- `shared/daemon-backend.ts`'s `getFile` (pasted/embedded canvas assets)
+  already fetches through the same transport, never `<img src>`.
+- Auditing where `DaemonApiContext.Provider` is mounted found it wraps
+  *every* real daemon-connected page (`DaemonCanvasPage`, `DaemonIndexPage`)
+  unconditionally — the "no provider" fallback branch in
+  `VersionThumbnail`/`CanvasThumb` has no reachable production caller today.
+  It is dormant defensive code, not a live tokenless path; it would need
+  reintroducing a same-origin, provider-less render path (e.g. a future
+  daemon-self-served UI distinct from apps/web) before it mattered again.
+
+### Decision
+
+The measured client-side cost of tokenizing every canvas/asset read is
+**zero** — it already shipped. So the carve-out is retired outright, not
+narrowed to "cross-origin callers only": local-daemon mode now requires the
+shared bearer token on every `/api/*` request, read or write, with the sole
+exception of `/api/runtime/ping` (the pre-authentication availability
+probe). See `requiresDaemonAuth` in `packages/mcp-server/src/server/routes/auth.ts`.
+
+This retires the second bullet under "Local-daemon read-path carve-out" in
+the first addendum above: canvas/asset `GET` is no longer tokenless.
+`/api/runtime/*` behavior (all but `ping` requires Bearer) is unchanged.
+
+### Consequences
+
+- `canvas:read` now means something on every code path, not just the
+  server-mode OAuth path.
+- An unauthenticated `GET` to any `/api/*` route other than
+  `/api/runtime/ping` now 401s instead of 404ing on an unmatched path —
+  auth runs ahead of routing, so route existence is not distinguishable
+  without a bearer either way.
+- If a future same-origin, provider-less render path is reintroduced (the
+  dormant `<img src>` fallback in `VersionThumbnail`/`CanvasThumb` becoming
+  reachable), it will 401 rather than silently degrade, because the server
+  no longer has a tokenless GET surface to fall back on. That is the
+  intended failure mode — a broken image is loud; a silent unauthenticated
+  read is not.
+
+### Alternatives considered (this addendum)
+
+- **Signed/query-token URLs for thumbnails** — rejected without needing to
+  argue past the query-parameter ban above: the fetch+blob path was already
+  shipped and free, so there was no cost left to justify reopening that
+  ADR-0002 prohibition for.
+- **Narrow the carve-out to cross-origin callers only, keep same-origin GET
+  open** — rejected: this is exactly the half-measure the task guarding
+  this change warned against. It would leave the matrix claiming protection
+  the code does not uniformly provide, and the same-origin case has no
+  weaker threat model once a hosted origin can be same-origin-equivalent
+  via LNA (ADR-0002's second addendum).
