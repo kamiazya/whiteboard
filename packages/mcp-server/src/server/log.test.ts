@@ -105,6 +105,94 @@ describe('getLogger (pino-backed)', () => {
   })
 })
 
+describe('redaction', () => {
+  let cap: CapturedLogsHandle
+  let writeSpy: ReturnType<typeof vi.spyOn> | null = null
+
+  beforeEach(() => {
+    cap = captureLogsForTests('debug')
+    writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+  })
+  afterEach(() => {
+    cap.restore()
+    writeSpy?.mockRestore()
+  })
+
+  // Every field name below is a real secret/PII carrier found in this
+  // codebase (bootstrap/pairing token, daemon bearer token, OAuth access
+  // token, Authorization header, cookie) or a common credential name a
+  // careless call site could introduce (password, secret, apiKey).
+  const secretFields: Record<string, string> = {
+    token: 'wb-secret-token',
+    daemonToken: 'daemon-secret-token',
+    bootstrapToken: 'bootstrap-secret-token',
+    accessToken: 'oauth-secret-token',
+    authorization: 'Bearer super-secret',
+    cookie: 'session=super-secret',
+    password: 'hunter2',
+    secret: 'shh',
+    apiKey: 'sk-secret',
+  }
+
+  it('redacts every known secret field at the top level, for both the stderr destination and the MCP-notification-style capture destination', () => {
+    const log = getLogger('redact-test')
+    log.warning(secretFields, 'wholesale object logged carelessly')
+
+    // MCP-notification-style destination (captureLogsForTests parses the
+    // same fanout line a wireMcpLogging subscriber would receive).
+    const record = cap.records[0]
+    for (const key of Object.keys(secretFields)) {
+      expect(record.data?.[key]).toBe('[redacted]')
+    }
+
+    // stderr destination — assert on the raw NDJSON line, not the parsed
+    // record, so redaction is proven before any consumer-side reshaping.
+    const line = String(writeSpy!.mock.calls.at(-1)?.[0])
+    for (const value of Object.values(secretFields)) {
+      expect(line).not.toContain(value)
+    }
+  })
+
+  it('redacts secret fields nested one level deep (e.g. a wholesale client/request object)', () => {
+    const log = getLogger('redact-test')
+    log.warning(
+      { client: { baseUrl: 'http://127.0.0.1:3099', token: 'daemon-secret-token' } },
+      'logged the whole daemon client by mistake',
+    )
+
+    const record = cap.records[0]
+    expect((record.data?.client as Record<string, unknown>)?.token).toBe('[redacted]')
+    // Non-sensitive sibling field must survive untouched.
+    expect((record.data?.client as Record<string, unknown>)?.baseUrl).toBe('http://127.0.0.1:3099')
+
+    const line = String(writeSpy!.mock.calls.at(-1)?.[0])
+    expect(line).not.toContain('daemon-secret-token')
+  })
+
+  it('does not let a token nested inside a logged Error leak through the err/error/cause serializers', () => {
+    const log = getLogger('redact-test')
+    const err = new Error('daemon request failed') as Error & { token?: string }
+    err.token = 'daemon-secret-token'
+    log.error({ err }, 'daemon request failed')
+
+    const record = cap.records[0]
+    const serialisedErr = record.data?.err as Record<string, unknown>
+    expect(serialisedErr.message).toBe('daemon request failed')
+    expect(serialisedErr.token).toBe('[redacted]')
+
+    const line = String(writeSpy!.mock.calls.at(-1)?.[0])
+    expect(line).not.toContain('daemon-secret-token')
+  })
+
+  it('leaves ordinary diagnostic fields untouched so redaction does not silently eat normal logs', () => {
+    const log = getLogger('redact-test')
+    log.warning({ workspaceId: 'ws_1', slug: 'a', durationMs: 12 }, 'normal diagnostic record')
+
+    const record = cap.records[0]
+    expect(record.data).toMatchObject({ workspaceId: 'ws_1', slug: 'a', durationMs: 12 })
+  })
+})
+
 describe('default destination', () => {
   let writeSpy: ReturnType<typeof vi.spyOn> | null = null
 
