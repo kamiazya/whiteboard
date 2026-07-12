@@ -42,6 +42,22 @@ export default defineConfig({
     alias: {
       '@': resolve(__dirname, 'src'),
       '@docs-assets': DOCS_ASSETS_DIR,
+      // Mirror vitest.config.ts's full workspace-subpath alias set: today's
+      // snapshot components only reach api-client/api-contracts, but any
+      // future snapshot pulling the other subpaths would otherwise resolve
+      // to built dist output (stale or absent) instead of source.
+      '@kamiazya/whiteboard-mcp/browser-shared': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/browser-shared-index.ts',
+      ),
+      '@kamiazya/whiteboard-mcp/migration-bundle': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/migration-bundle.ts',
+      ),
+      '@kamiazya/whiteboard-mcp/daemon-backend': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/daemon-backend.ts',
+      ),
       '@kamiazya/whiteboard-mcp/api-client': resolve(
         __dirname,
         '../../packages/mcp-server/src/shared/api-client.ts',

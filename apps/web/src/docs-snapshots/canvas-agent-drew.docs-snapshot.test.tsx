@@ -108,6 +108,16 @@ describe('docs snapshot — agent drew the architecture diagram', () => {
 
     const target = container.querySelector('[data-testid="canvas-agent-drew-frame"]')
     if (!(target instanceof HTMLElement)) throw new Error('preview wrapper not found')
+    // Force a fresh layout + repaint pass. Toggling display off/on (rather
+    // than cloning) preserves the Excalidraw <canvas>'s rasterised bitmap,
+    // which a cloneNode would silently wipe.
+    target.style.display = 'none'
+    void target.offsetHeight
+    target.style.display = ''
+    void target.offsetHeight
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)))
+    }
 
     await page.screenshot({
       path: resolveDocAssetPath('canvas-agent-drew.png'),

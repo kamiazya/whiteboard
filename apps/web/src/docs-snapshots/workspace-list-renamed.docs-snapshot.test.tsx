@@ -12,7 +12,16 @@ import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'
 
 const NOW = new Date('2026-05-02T12:00:00.000Z')
 
+// CanvasThumb fires its own daemonFetch(.../latest-thumbnail) per card and
+// calls setFailed(true) once the 404 response resolves. That render commit
+// happens on a microtask hop AFTER this counter increments, so waitFor
+// below also needs a settle tick (see the rAF loop) — counting requests
+// alone only proves the fetch started, not that the resulting re-render
+// and repaint have landed.
+let thumbnailFetchCount = 0
+
 beforeEach(() => {
+  thumbnailFetchCount = 0
   vi.useFakeTimers({ shouldAdvanceTime: true })
   vi.setSystemTime(NOW)
 
@@ -58,6 +67,7 @@ beforeEach(() => {
         })
       }
       if (url.includes('/latest-thumbnail')) {
+        thumbnailFetchCount += 1
         return new Response(null, { status: 404 })
       }
       return jsonResponse({})
@@ -94,14 +104,38 @@ describe('docs snapshot — workspace list (renamed)', () => {
       }
       const cards = container.querySelectorAll('[data-testid="daemon-index-canvas-card"]')
       if (cards.length !== 3) throw new Error('canvas grid not yet rendered')
+      if (thumbnailFetchCount < 3) throw new Error('thumbnail fetches not yet started')
     })
+    vi.useRealTimers()
 
     const target = container.querySelector('[data-testid="workspace-list-renamed-frame"]')
     if (!(target instanceof HTMLElement)) throw new Error('preview wrapper not found')
 
+    // The settled DOM is byte-identical run to run (confirmed by comparing
+    // outerHTML dumps across regenerations), yet the rendered pixels still
+    // flip between two states. DaemonIndexPage settles through several
+    // re-renders (empty -> workspace selected -> rows populated), and
+    // Chromium's incremental layout/paint can converge to a slightly
+    // different sub-pixel rounding than a single fresh layout of the same
+    // final markup would — a rendering-history artifact, not a DOM
+    // difference. Re-inserting a clone into a detached subtree forces a
+    // fresh layout+paint from scratch, matching the byte-stable behavior a
+    // statically-rendered version of this same markup already has.
+    const clone = target.cloneNode(true) as HTMLElement
+    clone.style.position = 'fixed'
+    clone.style.top = '0'
+    clone.style.left = '0'
+    document.body.appendChild(clone)
+    target.style.display = 'none'
+    void clone.offsetHeight
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)))
+    }
+
     await page.screenshot({
       path: resolveDocAssetPath('workspace-list-renamed.png'),
-      element: page.elementLocator(target),
+      element: page.elementLocator(clone),
     })
+    clone.remove()
   })
 })

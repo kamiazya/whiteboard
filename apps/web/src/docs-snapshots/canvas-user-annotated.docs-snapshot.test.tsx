@@ -138,6 +138,21 @@ describe('docs snapshot — user added review notes', () => {
 
     const target = container.querySelector('[data-testid="canvas-user-annotated-frame"]')
     if (!(target instanceof HTMLElement)) throw new Error('preview wrapper not found')
+    // Force a fresh layout + repaint pass. The settled DOM is byte-identical
+    // run to run, yet the rendered pixels can still flip between two states
+    // — Chromium's incremental layout/paint converging to a slightly
+    // different sub-pixel rounding than a single fresh layout of the same
+    // final markup would (confirmed via repeated regenerations + a pixel
+    // diff). Toggling display off/on forces that fresh pass while
+    // preserving the Excalidraw <canvas>'s rasterised bitmap, which a
+    // cloneNode would silently wipe.
+    target.style.display = 'none'
+    void target.offsetHeight
+    target.style.display = ''
+    void target.offsetHeight
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => requestAnimationFrame(() => r(undefined)))
+    }
 
     await page.screenshot({
       path: resolveDocAssetPath('canvas-user-annotated.png'),
