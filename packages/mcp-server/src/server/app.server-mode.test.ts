@@ -15,9 +15,8 @@ vi.mock('./config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
-  // Server-mode never reads DIST_WEB_APP_DIR (its root serving is pinned to
-  // the legacy dist/app UI until R5), but the binding must still exist.
+  // Server-mode never reads DIST_WEB_APP_DIR — its root serves a static
+  // inline placeholder (see app.ts), not the apps/web build.
   DIST_WEB_APP_DIR: '/tmp/whiteboard/dist/web-app',
 }))
 
@@ -71,7 +70,7 @@ function makeInternalStatus(): RuntimeStatusResponse {
     idleForMs: 0,
     auth: { mode: 'local-token', hasToken: true },
     storage: { dataDir: '/Users/internal/data-dir', dataDirWritable: true },
-    app: { served: true, buildPresent: false, ui: 'legacy' },
+    app: { served: true, buildPresent: true, ui: 'server-placeholder' },
     mcp: { httpEnabled: true, endpoint: 'http://0.0.0.0:3099/mcp' },
     clients: { connected: 0, ready: 0 },
   }
@@ -119,6 +118,31 @@ describe('app — server-mode composition', () => {
     })
     const res = await app.request('/api/workspaces')
     expect(res.status).toBe(200)
+  })
+
+  // R5 of the MCP-UI retirement (ADR 0001): server-mode's root serves a
+  // static placeholder, not apps/web — apps/web's provider model has no
+  // OAuth/JWT auth flow, only a local-daemon bearer token, so injecting the
+  // apps/web build here without a real token would 401 on every request.
+  describe('server-mode root serves a static placeholder (R5 UI retirement)', () => {
+    it('GET / returns 200 text/html with no token or runtime-config injection', async () => {
+      const app = createApp(makeServerModeOptions([]))
+      const res = await app.request('/')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toContain('text/html')
+      const html = await res.text()
+      expect(html).not.toContain('__WHITEBOARD_DAEMON_TOKEN__')
+      expect(html).not.toContain('__WHITEBOARD_RUNTIME_CONFIG__')
+      expect(html).toContain('/mcp')
+    })
+
+    it('reserved prefixes (/api, /mcp, /ws, /.well-known) do not fall through to the placeholder', async () => {
+      const app = createApp(makeServerModeOptions([]))
+      const apiRes = await app.request('/api/not-real')
+      expect(apiRes.status).not.toBe(200)
+      const wellKnownRes = await app.request('/.well-known/unknown')
+      expect(wellKnownRes.status).toBe(404)
+    })
   })
 
   // Req 2: server-mode config validation via planServerModeAuth

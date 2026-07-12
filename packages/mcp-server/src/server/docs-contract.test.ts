@@ -4,10 +4,10 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 // The user-facing docs/ tree is the contract surface for anything a real
-// operator needs to discover (env vars, escape hatches). A flag that ships
-// without a docs mention is undocumented by definition — this test fails the
-// build if WHITEBOARD_LEGACY_UI's docs mention is ever deleted without a
-// replacement.
+// operator needs to discover (env vars, escape hatches). R5 of the MCP-UI
+// retirement (ADR 0001) deletes the WHITEBOARD_LEGACY_UI escape hatch along
+// with the legacy UI it toggled — this test fails the build if the flag is
+// ever documented again without the code behind it existing.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const DOCS_ROOT = join(REPO_ROOT, 'docs')
 
@@ -20,11 +20,11 @@ function collectMarkdownFiles(dir: string): string[] {
 }
 
 describe('docs/ contract', () => {
-  it('documents the WHITEBOARD_LEGACY_UI escape hatch', () => {
+  it('no longer documents the retired WHITEBOARD_LEGACY_UI escape hatch', () => {
     const markdownFiles = collectMarkdownFiles(DOCS_ROOT)
     const mentioning = markdownFiles.filter((path) =>
       readFileSync(path, 'utf8').includes('WHITEBOARD_LEGACY_UI'),
     )
-    expect(mentioning.length).toBeGreaterThan(0)
+    expect(mentioning).toEqual([])
   })
 })

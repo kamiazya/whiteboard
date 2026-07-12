@@ -2,7 +2,11 @@ import { readFile } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
-import { annotateBatchOutputSchema, annotateBatchTool, type BatchAnnotationItem } from './annotate-batch.js'
+import {
+  annotateBatchOutputSchema,
+  annotateBatchTool,
+  type BatchAnnotationItem,
+} from './annotate-batch.js'
 import type { GridLayout } from './resolve-layout.js'
 import { boundsSchema } from './shared-schemas.js'
 import {
@@ -98,7 +102,11 @@ function interpolateText(
   return interpolateString(value, variables)
 }
 
-function scalePoint(point: { x: number; y: number }, scale: number, origin: { x: number; y: number }) {
+function scalePoint(
+  point: { x: number; y: number },
+  scale: number,
+  origin: { x: number; y: number },
+) {
   return {
     x: origin.x + point.x * scale,
     y: origin.y + point.y * scale,
@@ -132,8 +140,7 @@ function instantiateAnnotation(
     width: annotation.width !== undefined ? annotation.width * scale : undefined,
     height: annotation.height !== undefined ? annotation.height * scale : undefined,
     padding: annotation.padding !== undefined ? annotation.padding * scale : undefined,
-    labelOffset:
-      annotation.labelOffset !== undefined ? annotation.labelOffset * scale : undefined,
+    labelOffset: annotation.labelOffset !== undefined ? annotation.labelOffset * scale : undefined,
   }
 }
 
@@ -216,6 +223,8 @@ export async function resolveTemplateSource(args: {
   return { template: await loadTemplateFromPath(args.templatePath!), source: 'file' }
 }
 
+export const listTemplatesInputShape = {} satisfies z.ZodRawShape
+
 export function listTemplatesTool() {
   return {
     name: 'template_list',
@@ -241,6 +250,15 @@ export function listTemplatesTool() {
   }
 }
 
+export const insertTemplateInputShape = {
+  canvasId: z.string(),
+  templateId: z.string().optional(),
+  templatePath: z.string().optional(),
+  target: z.object({ x: z.number(), y: z.number() }),
+  scale: z.number().optional(),
+  variables: z.record(z.string(), z.string()).optional(),
+} satisfies z.ZodRawShape
+
 export function insertTemplateTool() {
   return {
     name: 'template_insert',
@@ -256,8 +274,7 @@ export function insertTemplateTool() {
         },
         templatePath: {
           type: 'string',
-          description:
-            'Absolute path to a custom template JSON file. Use instead of templateId.',
+          description: 'Absolute path to a custom template JSON file. Use instead of templateId.',
         },
         target: {
           type: 'object',

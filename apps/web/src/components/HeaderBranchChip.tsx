@@ -84,6 +84,18 @@ interface PendingMerge {
   target: BranchMeta | null
 }
 
+// Same ellipsis + title-attribute truncation the switch-variation dropdown
+// uses for branch names (below): a menu action whose label embeds a
+// user-chosen variation name must not push the menu wider than its fixed
+// width or wrap the destructive Delete label across several lines.
+function TruncatedMenuLabel({ text }: { text: string }): JSX.Element {
+  return (
+    <span className="min-w-0 flex-1 truncate" title={text}>
+      {text}
+    </span>
+  )
+}
+
 export function HeaderBranchChip({
   workspaceId,
   slug,
@@ -198,6 +210,24 @@ export function HeaderBranchChip({
 
   const chipColor = activeBranch?.color ?? '#64748b'
 
+  // The chip is both a TooltipTrigger and (nested) a DropdownMenuTrigger, so
+  // a hover-opened "Variation" tooltip has no reason on its own to close
+  // when the dropdown opens — the pointer never actually leaves the chip.
+  // Controlling Tooltip's open state (a standard Radix prop) lets the
+  // dropdown's own onOpenChange force it closed instead of leaving it to
+  // linger until a later hover-out.
+  const [chipTooltipOpen, setChipTooltipOpen] = useState(false)
+  // Radix also returns focus to a DropdownMenuTrigger when its menu closes
+  // (an accessibility default), and that focus event, on the same element
+  // also acting as the Tooltip's trigger, reopens the tooltip on its own —
+  // undoing the close above a moment later. Swallow exactly the next
+  // focus-driven open request after a close so it doesn't fight Radix's own
+  // return-focus behavior; real hover-driven opens are unaffected.
+  const suppressNextTooltipOpenRef = useRef(false)
+  // Only needed to detect, after a close, whether focus actually landed
+  // back on this trigger (see the safety-net check below).
+  const chipButtonRef = useRef<HTMLButtonElement>(null)
+
   // Radix marks background content inert/aria-hidden while a dropdown or
   // dialog is open, so an error raised inside one of those flows must render
   // *inside* the still-open surface to stay visible and announced — a copy
@@ -227,6 +257,11 @@ export function HeaderBranchChip({
       {/* Main chip: branch switching and creation live in this dropdown. */}
       <DropdownMenu
         onOpenChange={(open) => {
+          // Opening OR closing the dropdown both mean the hover tooltip is
+          // stale: either the chip just got clicked (open), or a selection
+          // just closed the menu with the pointer still resting near the
+          // chip (close).
+          setChipTooltipOpen(false)
           if (open) {
             // A stale error from the previous interaction shouldn't greet
             // the user when they re-open the menu.
@@ -234,13 +269,39 @@ export function HeaderBranchChip({
           } else {
             setCreateOpen(false)
             setNewName('')
+            suppressNextTooltipOpenRef.current = true
+            // A focus-driven reopen (the common case: Radix returns focus
+            // to this trigger on close) consumes the flag synchronously via
+            // the Tooltip's own onOpenChange, below. But if the close was
+            // itself caused by interacting with a DIFFERENT focusable
+            // element (e.g. the kebab trigger), focus never returns here at
+            // all, and nothing would ever consume the flag — permanently
+            // suppressing the next unrelated, genuine hover. Radix's own
+            // focus-return (if any) lands before this macrotask runs, so
+            // checking activeElement here reliably distinguishes the two
+            // cases instead of racing a blind timer against it.
+            setTimeout(() => {
+              if (document.activeElement !== chipButtonRef.current) {
+                suppressNextTooltipOpenRef.current = false
+              }
+            }, 50)
           }
         }}
       >
-        <Tooltip>
+        <Tooltip
+          open={chipTooltipOpen}
+          onOpenChange={(next) => {
+            if (next && suppressNextTooltipOpenRef.current) {
+              suppressNextTooltipOpenRef.current = false
+              return
+            }
+            setChipTooltipOpen(next)
+          }}
+        >
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <button
+                ref={chipButtonRef}
                 type="button"
                 disabled={disabled}
                 aria-label={`Switch variation (current: ${head})`}
@@ -418,8 +479,8 @@ export function HeaderBranchChip({
             }}
             className="gap-2"
           >
-            <Pencil className="size-3.5" />
-            Rename «{displayBranchName(head)}»…
+            <Pencil className="size-3.5 shrink-0" />
+            <TruncatedMenuLabel text={`Rename «${displayBranchName(head)}»…`} />
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={head === 'main'}
@@ -433,8 +494,8 @@ export function HeaderBranchChip({
               }
             }}
           >
-            <Trash2 className="size-3.5" />
-            Delete «{displayBranchName(head)}»…
+            <Trash2 className="size-3.5 shrink-0" />
+            <TruncatedMenuLabel text={`Delete «${displayBranchName(head)}»…`} />
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

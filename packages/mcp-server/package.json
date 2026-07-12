@@ -67,8 +67,7 @@
     "CHANGELOG.md"
   ],
   "sideEffects": [
-    "./dist/server/mcp/index.js",
-    "./dist/app/**/*.css"
+    "./dist/server/mcp/index.js"
   ],
   "engines": {
     "node": ">=22"
@@ -133,21 +132,18 @@
     "daemon": "node dist/server/index.js --daemon",
     "daemon:dev": "tsx watch src/server/index.ts --daemon",
     "build:server": "tsc -p tsconfig.server.json && chmod +x dist/cli/index.js",
-    "build:app": "vite build",
-    "build": "pnpm build:server && pnpm build:app",
-    "dev": "concurrently \"vite\" \"tsx watch src/server/index.ts\"",
+    "build": "pnpm build:server",
+    "dev": "tsx watch src/server/index.ts",
     "test": "vitest run",
     "test:all": "vitest run",
-    "test:coverage": "vitest run --coverage --project mcp-node --project mcp-jsdom",
-    "test:node": "vitest run --project mcp-node --project mcp-jsdom",
-    "test:browser": "vitest run --project mcp-browser",
-    "test:browser:trace": "vitest run --project mcp-browser --browser.trace=on",
+    "test:coverage": "vitest run --coverage --project mcp-node",
+    "test:node": "vitest run --project mcp-node",
     "test:smoke": "vitest run --project mcp-smoke",
     "test:distribution": "pnpm build && vitest run --config vitest.distribution.config.ts",
-    "test:watch": "vitest --project mcp-node --project mcp-jsdom",
+    "test:watch": "vitest --project mcp-node",
     "check:pr-title": "node ../../tools/check-pr-title.mjs",
     "check:release-artifacts": "node scripts/release/check-release-artifacts.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit",
     "smoke": "node scripts/smoke/mcp-smoke.mjs",
     "smoke:e2e": "node scripts/smoke/mcp-e2e-smoke.mjs",
     "smoke:packaged": "node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js",

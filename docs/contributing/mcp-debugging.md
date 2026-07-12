@@ -136,7 +136,7 @@ Log format:
 
 ### 5. Regression
 
-- After manual verification, preserve the scenario in `mcp-node`, `mcp-browser`, or E2E as appropriate
+- After manual verification, preserve the scenario in `mcp-node`, `web-browser`, or E2E as appropriate
 
 ## Database Migration Errors
 

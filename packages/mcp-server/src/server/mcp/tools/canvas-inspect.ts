@@ -1,10 +1,18 @@
 import { LoroDoc } from 'loro-crdt'
-import type { z } from 'zod'
+import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
 import { type canvasInspectOutputSchema, summarizeCanvas } from './summarize-canvas.js'
 
 export { canvasInspectOutputSchema } from './summarize-canvas.js'
+
+export const canvasInspectInputShape = {
+  canvasId: z
+    .string()
+    .describe(
+      'Canvas ID in "{workspaceId}/{slug}" form. Returns elementCount + per-element { id, type, x, y, width, height, ... } for inspecting structure / debugging.',
+    ),
+} satisfies z.ZodRawShape
 
 export function canvasInspectTool() {
   return {

@@ -33,11 +33,6 @@ No pairing link or Local Network Access prompt is needed for this path.
   the daemon — sync silently fails. This same-origin UI is intended for
   local, same-machine use; reach a daemon from another device through the
   pairing flow below instead.
-- **`WHITEBOARD_LEGACY_UI=1`** opts the daemon back into the retired
-  `packages/mcp-server/src/app` UI instead, for the remaining window before
-  that UI is removed (see [ADR-0001](../contributing/adr/0001-apps-web-canonical-frontend.md)
-  and [Configuration](../reference/configuration.md)). It stays available
-  only until that migration completes.
 
 ## How detection works
 

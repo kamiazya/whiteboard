@@ -50,6 +50,14 @@ interface VersionListArgs {
   canvasId: string
 }
 
+export const versionSaveInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  label: z
+    .string()
+    .optional()
+    .describe('Optional human-readable label shown in the History panel.'),
+} satisfies z.ZodRawShape
+
 export function versionSaveTool() {
   return {
     name: 'version_save',
@@ -96,6 +104,23 @@ export function versionSaveTool() {
   }
 }
 
+export const versionRestoreInputShape = {
+  canvasId: z.string().describe('Source canvas ID in "{workspaceId}/{slug}" form.'),
+  versionId: z.string().describe('Version id returned from version_save or version_list.'),
+  targetSlug: z
+    .string()
+    .optional()
+    .describe(
+      'When set, restore as a new canvas under this slug in the same workspace. Original canvas is left untouched.',
+    ),
+  overwrite: z
+    .boolean()
+    .optional()
+    .describe(
+      'Only used with targetSlug. When true, replace an existing canvas at targetSlug. Default false.',
+    ),
+} satisfies z.ZodRawShape
+
 export function versionRestoreTool() {
   return {
     name: 'version_restore',
@@ -104,7 +129,10 @@ export function versionRestoreTool() {
     inputSchema: {
       type: 'object' as const,
       properties: {
-        canvasId: { type: 'string', description: 'Source canvas ID in "{workspaceId}/{slug}" form.' },
+        canvasId: {
+          type: 'string',
+          description: 'Source canvas ID in "{workspaceId}/{slug}" form.',
+        },
         versionId: {
           type: 'string',
           description: 'Version id returned from version_save or listed via the History panel.',
@@ -156,6 +184,10 @@ export function versionRestoreTool() {
     },
   }
 }
+
+export const versionListInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+} satisfies z.ZodRawShape
 
 export function versionListTool() {
   return {

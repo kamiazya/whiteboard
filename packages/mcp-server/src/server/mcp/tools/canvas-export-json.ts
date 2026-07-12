@@ -14,6 +14,16 @@ interface CanvasExportJsonArgs {
   overwrite?: boolean
 }
 
+export const canvasExportJsonInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  includeCustomFields: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true, include custom Loro CRDT fields (parent/relX/relY etc.) in the output. Default false — exports a clean .excalidraw JSON compatible with Excalidraw desktop / excalidraw.com.',
+    ),
+} satisfies z.ZodRawShape
+
 export function canvasExportJsonTool() {
   return {
     name: 'canvas_export_json',

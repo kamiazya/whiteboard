@@ -15,7 +15,7 @@ Passing tests alone are not sufficient. The workflow is:
 1. Write the smallest failing test at the nearest layer.
 2. Make the smallest patch that turns it green.
 3. Manually verify the real behavior (browser, MCP smoke, or daemon log).
-4. Lock the verified flow into `mcp-browser` or E2E coverage.
+4. Lock the verified flow into `web-browser` or E2E coverage.
 
 Skip step 3 only for pure helper changes with no observable runtime effect. Skip step 4 only when the verified scenario is already covered by an existing automation.
 
@@ -26,12 +26,11 @@ Skip step 3 only for pure helper changes with no observable runtime effect. Skip
 ```bash
 # 1. Run the narrowest project first
 pnpm test --project mcp-node
-pnpm test --project mcp-jsdom
-pnpm test --project mcp-browser
+pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change touches UI
 
 # 2. After targeted test passes, run the broader gate for the touched area
 pnpm test
-pnpm test:browser        # for browser-mode changes (mcp-browser + web-browser)
+pnpm test:browser        # for browser-mode changes (apps/web web-browser)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
 ```
@@ -44,17 +43,18 @@ Choose the **narrowest** layer that can prove the behavior:
 
 | Layer | Config | When to use |
 |---|---|---|
-| `mcp-node` | `vitest.node.config.ts` | Pure functions, stores, routes, server behavior, persistence logic, schemas, CLI helpers |
-| `mcp-jsdom` | `vitest.jsdom.config.ts` | React components and hooks when real layout, focus, pointer, or browser APIs are **not** the core risk |
-| `mcp-browser` | `vitest.browser.config.ts` | Popovers, dialogs, scroll, focus, keyboard, pointer behavior, restore flows, and other real browser interactions |
-| `web-browser` | `apps/web/vitest.browser.config.ts` | `apps/web` tests that need real browser APIs unavailable in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`, and other platform APIs. File suffix: `.browser.test.tsx` |
+| `mcp-node` | `vitest.node.config.ts` (`packages/mcp-server`) | Pure functions, stores, routes, server behavior, persistence logic, schemas, CLI helpers |
+| apps/web jsdom | `apps/web/vitest.config.ts` | React components and hooks when real layout, focus, pointer, or browser APIs are **not** the core risk |
+| `web-browser` | `apps/web/vitest.browser.config.ts` | `apps/web` tests that need real browser APIs unavailable in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`, popovers/dialogs/focus/scroll/restore flows, and other platform APIs. File suffix: `.browser.test.tsx` |
 | E2E | `tests/e2e/` | Real routes, server composition, websocket timing, daemon process lifecycle, persistence order, packaging, or multi-step product journeys |
+
+The UI lives solely in `apps/web` since the MCP-UI retirement (ADR 0001); `packages/mcp-server` is backend-only and has no jsdom/browser layer of its own.
 
 **Promotion rules:**
 
 - Do not jump to broad E2E first if a smaller failing test can isolate the bug.
 - When an E2E catches a bug, add the nearest-layer test as well unless the root cause only exists at the composed-system boundary.
-- Prefer `mcp-browser` over `mcp-jsdom` whenever the scenario involves focus, pointer, dialog, popover, scroll, or restore behavior.
+- Prefer `web-browser` over apps/web jsdom whenever the scenario involves focus, pointer, dialog, popover, scroll, or restore behavior.
 
 ---
 
@@ -154,53 +154,48 @@ If a surviving mutant reveals a gap but the production fix is out of scope for t
 
 ### Current mutation target set
 
-The following 13 files are covered by `pnpm mutation:contracts`. This list must stay in sync with `packages/mcp-server/stryker.config.mjs`.
+The following files are covered by `pnpm mutation:contracts`. This list must stay in sync with `packages/mcp-server/stryker.config.mjs`.
 
 ```
-src/shared/api-contracts/problem-details.ts
 src/shared/diagnostics/redact.ts
 src/server/store/path-guard.ts
-src/shared/api-contracts/migration-bundle.ts
-src/app/lib/sanitize-filename.ts
 src/server/output-path.ts
 src/shared/api-contracts/libraries.ts
-src/shared/api-contracts/daemon-lifecycle.ts
 src/shared/api-contracts/daemon-doctor.ts
 src/shared/api-contracts/runtime.ts
 src/server/security/server-mode-env-config.ts
 src/server/security/server-mode-auth-plan.ts
 src/server/security/server-mode-exposure.ts
+src/server/security/server-mode-record.ts
+src/server/routes/canvas-thumbnail.ts
+src/server/routes/canvas-output-path-error.ts
 ```
 
 ---
 
 ## Browser Testing
 
-There are two real-browser Vitest projects:
+There is one real-browser Vitest project:
 
 | Project | Package | Purpose |
 |---|---|---|
-| `mcp-browser` | `packages/mcp-server` | mcp-server app browser regressions: popovers, dialogs, focus, keyboard, restore flows |
-| `web-browser` | `apps/web` | `apps/web` tests requiring real browser APIs unavailable in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker` |
-
-`pnpm test:browser` runs **both** projects:
+| `web-browser` | `apps/web` | `apps/web` app browser regressions: popovers, dialogs, focus, keyboard, restore flows, and tests requiring real browser APIs unavailable in jsdom (IndexedDB, OPFS, `window.showOpenFilePicker`) |
 
 ```bash
-pnpm run test:browser         # mcp-browser + web-browser
+pnpm run test:browser         # web-browser
 pnpm run test:browser:trace   # same, with trace artifacts on failure
 ```
 
-**jsdom exclude policy**: Every jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in the matching browser project, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
+**jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
-Failure traces are stored under `<package>/tmp/vitest-traces`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
+Failure traces are stored under `apps/web/tmp/vitest-traces`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
 
-Prefer `mcp-browser` over `mcp-jsdom` whenever the scenario involves:
+Prefer `web-browser` over apps/web jsdom whenever the scenario involves:
 - Focus, pointer, keyboard, or scroll behavior
 - Popover or dialog lifecycle (opening, closing, trap focus)
 - Restore flows that depend on real DOM timing
 - Any behavior where jsdom silently falls back to no-op
-
-Use `web-browser` for `apps/web` components or hooks that depend on IndexedDB or other real browser APIs not available in jsdom.
+- IndexedDB, OPFS, or other real browser APIs not available in jsdom
 
 ---
 
@@ -216,7 +211,7 @@ Use E2E when the behavior depends on real app composition rather than an isolate
 - MCP protocol smoke flows that must validate the real server entrypoint
 - User journeys where mocks would hide routing, runtime config injection, or process-boundary behavior
 
-**Do not use E2E** for pure parsing, schema validation, isolated store logic, or component state testable in `mcp-node`, `mcp-jsdom`, or `mcp-browser`.
+**Do not use E2E** for pure parsing, schema validation, isolated store logic, or component state testable in `mcp-node`, apps/web jsdom, or `web-browser`.
 
 **E2E placement:**
 
@@ -234,7 +229,7 @@ MCP startup, protocol, and distribution-artifact smokes run as Vitest projects. 
 
 ### `mcp-smoke` — included in `pnpm test`
 
-Runs alongside `mcp-node`, `mcp-jsdom`, and `mcp-browser` during normal `pnpm test`. No build prerequisite. Tests run sequentially to avoid daemon port conflicts.
+Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. Tests run sequentially to avoid daemon port conflicts.
 
 | Script | What it covers |
 |---|---|
@@ -354,8 +349,8 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#q
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # mcp-node + mcp-jsdom + mcp-browser + mcp-smoke + apps/web jsdom + web-browser
-pnpm test:browser   # mcp-browser + web-browser (both real-browser projects)
+pnpm test           # mcp-node + mcp-smoke + apps/web jsdom + web-browser
+pnpm test:browser   # web-browser (the real-browser project)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 ```
 

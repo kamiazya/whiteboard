@@ -1,6 +1,6 @@
 # ADR-0001: apps/web as the canonical frontend
 
-**Status:** Accepted
+**Status:** Implemented — Stage 5 (deleting `packages/mcp-server/src/app` and its build pipeline) shipped; server-mode serves a minimal static placeholder at its root instead of `apps/web` (see Consequences).
 
 ## Context
 
@@ -26,8 +26,8 @@ The migration proceeds in stages so each stage ships as a working increment:
 ## Consequences
 
 - `apps/web` can be deployed as a static site (Cloudflare Pages, any CDN) and works offline via `BrowserLocalBackend`.
-- The daemon is simplified to backend-only concerns; its `src/app` UI is removed after migration.
-- Stages 1–5 are non-trivial; the daemon UI remains live until Stage 2 completes.
+- The daemon is simplified to backend-only concerns; its `src/app` UI is deleted.
+- Server-mode (OAuth/JWT auth) serves a minimal static placeholder at its root rather than `apps/web`: apps/web's provider model only knows browser-local and local-daemon-bearer-token auth, and injecting it without a real token would 401 on every request. A server-mode-aware `apps/web` auth flow is a separate follow-up.
 - The `CanvasBackend` interface is an intentionally hand-written behavioral seam (methods and callbacks) for in-process use; it is not a JSON shape that crosses a process boundary. The payload field types it references are derived from `z.infer<>` in `ws-messages.ts` per the Zod-schema discipline, so there is no parallel re-declaration of those shapes.
 - Excalidraw enters the `apps/web` bundle; the bundle size must stay within the project's performance budget.
 

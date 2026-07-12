@@ -12,7 +12,6 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
 const { clearCache } = await import('../store/doc-cache.js')
@@ -206,9 +205,7 @@ describe('handleWsUpgrade viewport replay', () => {
   })
 
   function textFrames(ws: FakeWebSocket): unknown[] {
-    return ws.sent
-      .filter((m): m is string => typeof m === 'string')
-      .map((m) => JSON.parse(m))
+    return ws.sent.filter((m): m is string => typeof m === 'string').map((m) => JSON.parse(m))
   }
 
   it('replays the most recent viewport_request to a client that connects after the broadcast', async () => {
@@ -361,9 +358,7 @@ describe('handleWsUpgrade ws_trace propagation', () => {
       )
       await new Promise((r) => setTimeout(r, 30))
 
-      const wsSpan = exporter
-        .getFinishedSpans()
-        .find((s) => s.name === 'ws.message.binary')
+      const wsSpan = exporter.getFinishedSpans().find((s) => s.name === 'ws.message.binary')
       expect(wsSpan).toBeDefined()
       // Locked: ws.message.binary must inherit the W3C trace_id and
       // adopt the client span as its parent.
@@ -407,9 +402,7 @@ describe('handleWsUpgrade ws_trace propagation', () => {
       )
       await new Promise((r) => setTimeout(r, 30))
 
-      const wsSpan = exporter
-        .getFinishedSpans()
-        .find((s) => s.name === 'ws.message.binary')
+      const wsSpan = exporter.getFinishedSpans().find((s) => s.name === 'ws.message.binary')
       expect(wsSpan).toBeDefined()
       expect(wsSpan!.parentSpanContext?.spanId).toBeUndefined()
       ws.emitClose()

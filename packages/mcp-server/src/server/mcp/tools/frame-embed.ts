@@ -139,6 +139,35 @@ export interface CreateFrameArgs {
 
 export type CreateFrameResult = z.infer<typeof createFrameOutputSchema>
 
+export const createFrameInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  x: z
+    .number()
+    .optional()
+    .describe(
+      'Frame top-left x (world coords). Ignored when memberIds is provided (auto-fits to bbox).',
+    ),
+  y: z.number().optional().describe('Frame top-left y. Ignored when memberIds is provided.'),
+  width: z.number().optional().describe('Frame width (px). Ignored when memberIds is provided.'),
+  height: z.number().optional().describe('Frame height (px). Ignored when memberIds is provided.'),
+  name: z
+    .string()
+    .optional()
+    .describe(
+      'Frame label rendered at the top edge. Treat this as a section heading; avoid duplicating it inside the frame.',
+    ),
+  memberIds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Existing element ids to enclose. Frame auto-fits to their bounding box at creation time. Children get their frameId set.',
+    ),
+  padding: z
+    .number()
+    .optional()
+    .describe('Padding (px) around the member bbox when memberIds is set. Default 24.'),
+} satisfies z.ZodRawShape
+
 export function createFrameTool() {
   return {
     name: 'create_frame',
@@ -248,6 +277,19 @@ export interface CreateEmbedArgs {
 
 export type CreateEmbedResult = z.infer<typeof createEmbedOutputSchema>
 
+export const createEmbedInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  url: z
+    .string()
+    .describe(
+      'External URL to embed (YouTube / Figma / CodeSandbox / etc.). Excalidraw allowlist-checks at render time; non-allowlisted URLs require user approval in the browser. The element is created either way, so you can stack annotations on it before validation.',
+    ),
+  x: z.number().optional().describe('Embed top-left x. Default centered on viewport.'),
+  y: z.number().optional().describe('Embed top-left y. Default centered on viewport.'),
+  width: z.number().optional().describe('Embed width (px). Default 480.'),
+  height: z.number().optional().describe('Embed height (px). Default 320.'),
+} satisfies z.ZodRawShape
+
 // Excalidraw only renders allowlisted URLs as iframes. This tool just stores the
 // URL in link; non-allowlisted targets show the usual validation placeholder.
 export function createEmbedTool() {
@@ -318,6 +360,29 @@ export interface UpdateFrameMembersArgs {
   padding?: number
 }
 export type UpdateFrameMembersResult = z.infer<typeof updateFrameMembersOutputSchema>
+
+export const updateFrameMembersInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  frameId: z
+    .string()
+    .describe('Existing frame element id (returned by create_frame). Throws if not a frame.'),
+  add: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Element ids to add to the frame. Their frameId is set, and the frame bbox auto-grows to contain them.',
+    ),
+  remove: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Element ids to remove from the frame (frameId cleared). Frame bbox shrinks to fit remaining members.',
+    ),
+  padding: z
+    .number()
+    .optional()
+    .describe('Padding (px) around the resulting member bbox. Default 24.'),
+} satisfies z.ZodRawShape
 
 export function updateFrameMembersTool() {
   return {

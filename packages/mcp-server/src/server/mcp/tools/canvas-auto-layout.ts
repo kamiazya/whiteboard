@@ -4,11 +4,7 @@ import { getLogger } from '../../log.js'
 import type { DaemonClient } from '../daemon-client.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
 import { parseCanvasId } from './canvas-id.js'
-import {
-  resolveAutoLayout,
-  type LayoutEdge,
-  type LayoutNode,
-} from './resolve-auto-layout.js'
+import { resolveAutoLayout, type LayoutEdge, type LayoutNode } from './resolve-auto-layout.js'
 import { snapArrowEndpoints } from './snap-arrow.js'
 import { resolveArrowLabelPosition } from './resolve-arrow-label-position.js'
 import { resolveArrowRoute } from './resolve-arrow-route.js'
@@ -176,6 +172,38 @@ function buildArrowObstacles(
     .map((el) => ({ x: el.x, y: el.y, width: el.width, height: el.height }))
 }
 
+export const canvasAutoLayoutInputShape = {
+  canvasId: z.string(),
+  direction: z.enum(['TB', 'LR']).optional(),
+  layerGap: z.number().optional(),
+  nodeGap: z.number().optional(),
+  origin: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+    })
+    .optional(),
+  pins: z
+    .array(
+      z.object({
+        id: z.string(),
+        rank: z.number().optional(),
+        anchor: z.enum(['left', 'right', 'top', 'bottom', 'center']).optional(),
+        column: z.number().optional(),
+      }),
+    )
+    .optional(),
+  groups: z
+    .array(
+      z.object({
+        id: z.string(),
+        elementIds: z.array(z.string()),
+      }),
+    )
+    .optional(),
+  groupGap: z.number().optional(),
+} satisfies z.ZodRawShape
+
 export function canvasAutoLayoutTool() {
   return {
     name: 'canvas_auto_layout',
@@ -248,7 +276,8 @@ export function canvasAutoLayoutTool() {
         },
         groupGap: {
           type: 'number',
-          description: 'Gap between groups on the cross axis (default 80). Only used when groups is set.',
+          description:
+            'Gap between groups on the cross axis (default 80). Only used when groups is set.',
         },
       },
       required: ['canvasId'],
@@ -425,7 +454,11 @@ export function canvasAutoLayoutTool() {
         arrowMap.set('points', newPoints as unknown as Parameters<LoroMap['set']>[1])
         arrowMap.set('width', Math.max(...xs) - Math.min(...xs))
         arrowMap.set('height', Math.max(...ys) - Math.min(...ys))
-        const label = findArrowLabelCandidate(originalLiveElements, { x: oldMidX, y: oldMidY }, usedLabelIds)
+        const label = findArrowLabelCandidate(
+          originalLiveElements,
+          { x: oldMidX, y: oldMidY },
+          usedLabelIds,
+        )
         if (!label) continue
         const labelIdx = indexById.get(label.id)
         if (labelIdx === undefined) continue

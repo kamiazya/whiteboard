@@ -24,13 +24,14 @@ export const runtimeStatusResponseSchema = z.object({
   idleForMs: z.number(),
   auth: z.object({ mode: z.string(), hasToken: z.boolean() }),
   storage: z.object({ dataDir: z.string(), dataDirWritable: z.boolean() }),
-  // 'web-app' is the canonical apps/web build (dist/web-app); 'legacy' is the
-  // retired packages/mcp-server/src/app UI (dist/app), served only in
-  // server-mode or behind the WHITEBOARD_LEGACY_UI escape hatch until R5.
+  // 'web-app' is the canonical apps/web build (dist/web-app), served by the
+  // local daemon. 'server-placeholder' is the minimal static page served at
+  // server-mode's root (apps/web is not served there — server-mode has no
+  // token/session-acquisition flow apps/web's provider model can use).
   app: z.object({
     served: z.boolean(),
     buildPresent: z.boolean(),
-    ui: z.enum(['web-app', 'legacy']),
+    ui: z.enum(['web-app', 'server-placeholder']),
   }),
   mcp: z.object({ httpEnabled: z.boolean(), endpoint: z.string() }),
   clients: z.object({ connected: z.number(), ready: z.number() }),

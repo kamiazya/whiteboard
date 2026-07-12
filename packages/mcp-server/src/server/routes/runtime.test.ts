@@ -25,7 +25,6 @@ vi.mock('../config.js', () => ({
   DATA_DIR: '/__test__/runtime-routes-must-not-touch-real-disk',
   WHITEBOARD_ROOT: '/__test__',
   REPO_ROOT: '/__test__',
-  DIST_APP_DIR: '/__test__/dist/app',
 }))
 vi.mock('./runtime-storage.js', () => ({
   computeStorageReport: (dir: string) => mockComputeStorageReport(dir),

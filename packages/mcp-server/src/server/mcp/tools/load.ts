@@ -43,13 +43,31 @@ async function apiPostLoroUpdate(
   slug: string,
   update: Uint8Array,
 ): Promise<void> {
-  const res = await client.request(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/update`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: update,
-  })
+  const res = await client.request(
+    `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/update`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: update,
+    },
+  )
   if (!res.ok) throw new Error(`POST /update failed: ${res.status}`)
 }
+
+export const loadImageInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  imagePath: z
+    .string()
+    .describe(
+      'Absolute path to a local image file (PNG / JPEG / GIF / WEBP / SVG). Image is uploaded to the canvas file store and inserted as an Excalidraw image element.',
+    ),
+  position: z
+    .enum(['center', 'left', 'right'])
+    .optional()
+    .describe(
+      'Where to place the image relative to the existing canvas content. Default "center".',
+    ),
+} satisfies z.ZodRawShape
 
 export function loadImageTool() {
   return {

@@ -108,6 +108,136 @@ export type BatchAnnotationItem = Omit<AnnotationSpec, 'target'> & {
   endBoxName?: string
 }
 
+export const annotateBatchInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  layout: z
+    .object({
+      cols: z.number().describe('Number of grid columns.'),
+      rows: z.number().describe('Number of grid rows.'),
+      cellW: z
+        .number()
+        .optional()
+        .describe('Default cell width (px). Used when colWidths is not specified.'),
+      cellH: z
+        .number()
+        .optional()
+        .describe('Default cell height (px). Used when rowHeights is not specified.'),
+      colWidths: z
+        .array(z.number())
+        .optional()
+        .describe(
+          'Per-column widths (px). Length must match cols. Use for unequal column widths in comparison matrices.',
+        ),
+      rowHeights: z
+        .array(z.number())
+        .optional()
+        .describe('Per-row heights (px). Length must match rows.'),
+      gap: z.number().describe('Gap between cells (px).'),
+      origin: z
+        .object({ x: z.number(), y: z.number() })
+        .describe('Top-left corner of the grid in world coords.'),
+    })
+    .optional()
+    .describe(
+      'Optional grid layout. When set, items use row/col/rowSpan/colSpan to position. When omitted, items use absolute target coords. Avoid mixing layout with banner/footer extras (use absolute coords for those).',
+    ),
+  dryRun: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true, return placements + warnings without committing to canvas. Use to preview overlaps before applying. Default false.',
+    ),
+  overlapThreshold: z
+    .number()
+    .optional()
+    .describe(
+      'IoU threshold (0..1) above which placements are flagged as overlapping in warnings. Default 0.05.',
+    ),
+  groupAs: z
+    .string()
+    .optional()
+    .describe(
+      'Optional batch-level group label applied to all created elements. Per-item annotations[].groupAs overrides.',
+    ),
+  annotations: z
+    .array(
+      z.object({
+        type: z
+          .enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group'])
+          .describe('Annotation kind. Same vocabulary as annotate tool.'),
+        imageId: z.string().optional(),
+        coords: z
+          .enum(['absolute', 'relative'])
+          .optional()
+          .describe(
+            'Coord space. With grid layout, ignored (row/col is used). Default "absolute".',
+          ),
+        target: z
+          .object({ x: z.number(), y: z.number() })
+          .optional()
+          .describe('Absolute / relative position when not using grid layout.'),
+        row: z
+          .number()
+          .optional()
+          .describe('Grid row index (0-based). Required when layout is set.'),
+        col: z
+          .number()
+          .optional()
+          .describe('Grid column index (0-based). Required when layout is set.'),
+        rowSpan: z.number().optional().describe('Number of rows this cell spans. Default 1.'),
+        colSpan: z.number().optional().describe('Number of columns this cell spans. Default 1.'),
+        text: z.union([z.string(), z.array(z.string())]).optional(),
+        title: z.union([z.string(), z.array(z.string())]).optional(),
+        subText: z.union([z.string(), z.array(z.string())]).optional(),
+        subTextPosition: z.enum(['top', 'inside-bottom']).optional(),
+        autoFit: z.boolean().optional(),
+        color: z.string().optional(),
+        backgroundColor: z.string().optional(),
+        fillStyle: z.enum(['solid', 'hachure', 'cross-hatch']).optional(),
+        strokeWidth: z.number().optional(),
+        fontFamily: z
+          .union([
+            z.literal(1),
+            z.literal(2),
+            z.literal(3),
+            z.literal(5),
+            z.literal(6),
+            z.literal(7),
+            z.literal(8),
+            z.literal(9),
+          ])
+          .optional(),
+        fontSize: z.number().optional(),
+        width: z.number().optional(),
+        height: z.number().optional(),
+        align: z.enum(['left', 'center', 'right']).optional(),
+        endTarget: z.object({ x: z.number(), y: z.number() }).optional(),
+        startBoxId: z.string().optional(),
+        endBoxId: z.string().optional(),
+        label: z.string().optional(),
+        labelOffset: z.number().optional(),
+        labelSide: z.enum(['auto', 'above', 'below', 'left', 'right']).optional(),
+        memberIds: z.array(z.string()).optional(),
+        padding: z.number().optional(),
+        name: z
+          .string()
+          .optional()
+          .describe(
+            'Logical name for this item within the batch (referenced by other items as startBoxName / endBoxName). Required for cross-item arrow snap.',
+          ),
+        startBoxName: z
+          .string()
+          .optional()
+          .describe('Refer to a sibling item by its `name` to snap arrow start to that box edge.'),
+        endBoxName: z.string().optional().describe('Same as startBoxName but for arrow end.'),
+      }),
+    )
+    .min(1)
+    .describe(
+      'Annotation items in this batch. Created in 1 snapshot/commit/broadcast. Each item has the same fields as `annotate` plus row/col/rowSpan/colSpan for grid layout and name/startBoxName/endBoxName for cross-item snap.',
+    ),
+} satisfies z.ZodRawShape
+
 // Apply many annotations with one snapshot fetch, one commit, and one update POST.
 // This is much cheaper than calling annotate repeatedly for diagram-heavy flows.
 export function annotateBatchTool() {
