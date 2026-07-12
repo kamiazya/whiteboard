@@ -26,7 +26,7 @@ import {
   distributeElementsTool,
   updateElementTool,
 } from './tools/element-ops-tools.js'
-import { exportPngTool } from './tools/export.js'
+import { exportCanvasTool } from './tools/export-canvas.js'
 import { loadImageTool } from './tools/load.js'
 import { insertTemplateTool, listTemplatesTool } from './tools/template.js'
 import { createFrameTool, createEmbedTool } from './tools/frame-embed.js'
@@ -92,7 +92,7 @@ const tools: AnyTool[] = [
   alignElementsTool(),
   distributeElementsTool(),
   canvasClearTool(),
-  exportPngTool(),
+  exportCanvasTool(),
   createFrameTool(),
   createEmbedTool(),
   reorderElementsTool(),
@@ -128,7 +128,7 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
       'align_elements',
       'distribute_elements',
       'canvas_clear',
-      'export_png',
+      'export_canvas',
       'create_frame',
       'create_embed',
       'reorder_elements',
@@ -141,22 +141,22 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
     }
   })
 
-  // 2. export_png parameter integrity.
+  // 2. export_canvas parameter integrity.
   // Every parameter documented in the SKILL must exist in inputSchema, and every
   // schema parameter must be documented in the SKILL.
-  describe('export_png params', () => {
-    const tool = toolByName.get('export_png')!
+  describe('export_canvas params', () => {
+    const tool = toolByName.get('export_canvas')!
     const schemaKeys = Object.keys(tool.inputSchema.properties)
-    const paramsDocumented = ['padding', 'scale', 'minFontPx']
+    const paramsDocumented = ['format', 'padding', 'scale', 'minFontPx']
 
     for (const p of paramsDocumented) {
-      it(`includes documented export_png.${p} in inputSchema`, () => {
+      it(`includes documented export_canvas.${p} in inputSchema`, () => {
         expect(skillMentions(p)).toBe(true)
         expect(schemaKeys).toContain(p)
       })
     }
 
-    it('documents every export_png inputSchema parameter except canvasId in the SKILL', () => {
+    it('documents every export_canvas inputSchema parameter except canvasId in the SKILL', () => {
       const optional = schemaKeys.filter((k) => k !== 'canvasId')
       for (const k of optional) {
         expect(skillText, `SKILL.md is missing ${k}`).toContain(k)
@@ -265,7 +265,7 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
   // 8. Tool count invariant.
   // If a tool is added or removed, toolNames and SKILL.md must be updated too.
   describe('tool count invariants', () => {
-    it('keeps tools[] and toolByName at 20 entries', () => {
+    it('keeps tools[] and toolByName at 22 entries', () => {
       expect(tools.length).toBe(22)
       expect(toolByName.size).toBe(22)
     })

@@ -2,7 +2,11 @@ import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
 
-export const canvasExportJsonOutputSchema = z.object({
+// Internal to canvasExportJsonTool()'s inputSchema/outputSchema construction
+// and its z.infer-typed execute() return below — export_canvas is the only
+// tool this is reachable through now, so this schema is intentionally not
+// registered on its own.
+const canvasExportJsonOutputSchema = z.object({
   filePath: z.string(),
   elementCount: z.number(),
 })
@@ -14,7 +18,7 @@ interface CanvasExportJsonArgs {
   overwrite?: boolean
 }
 
-export const canvasExportJsonInputShape = {
+const canvasExportJsonInputShape = {
   canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
   includeCustomFields: z
     .boolean()
@@ -36,6 +40,11 @@ export const canvasExportJsonInputShape = {
     ),
 } satisfies z.ZodRawShape
 
+// JSON-specific export implementation, delegated to by export_canvas({format:
+// 'json'}) in export-canvas.ts. Not registered as its own MCP tool — name/
+// description/inputSchema here exist only so export-canvas.ts has a
+// self-describing unit to call and unit tests can exercise this path in
+// isolation from the format switch.
 export function canvasExportJsonTool() {
   return {
     name: 'canvas_export_json',

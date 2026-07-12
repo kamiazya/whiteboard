@@ -54,4 +54,4 @@
 
 The format reuses `annotate_batch`'s recipes (boxes, arrows, frames, groups, layouts) directly, so a template insert and a regular agent annotation produce structurally identical elements on the canvas. There is no special "template object" — the inserted elements are normal Excalidraw shapes that the user and the agent can keep editing.
 
-For Excalidraw's native library format (`.excalidrawlib`), use the canvas itself plus `canvas_export_json` to round-trip with excalidraw.com or the desktop app.
+For Excalidraw's native library format (`.excalidrawlib`), use the canvas itself plus `export_canvas({ format: "json" })` to round-trip with excalidraw.com or the desktop app.

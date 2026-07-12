@@ -3,7 +3,7 @@
 // inside `headless-renderer.ts` itself surfaces in the unit-test suite.
 
 import { describe, expect, it } from 'vitest'
-import { renderSceneToPng } from './headless-renderer.js'
+import { renderSceneToPng, renderSceneToSvg } from './headless-renderer.js'
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -11,7 +11,10 @@ const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 // are normally outside any element so they reflect the theme background.
 async function cornerLuminance(png: Buffer): Promise<number> {
   const { createCanvas, loadImage } = (await import('@napi-rs/canvas')) as unknown as {
-    createCanvas(w: number, h: number): {
+    createCanvas(
+      w: number,
+      h: number,
+    ): {
       getContext(kind: '2d'): {
         drawImage(img: unknown, x: number, y: number): void
         getImageData(x: number, y: number, w: number, h: number): { data: Uint8ClampedArray }
@@ -154,6 +157,68 @@ describe('headless-renderer', () => {
     expect(darkLuma).toBeLessThan(80)
   })
 
+  it('renders a rectangle scene to real SVG markup with an <svg> root', async () => {
+    const scene = {
+      type: 'excalidraw' as const,
+      version: 2,
+      source: '@kamiazya/whiteboard-test',
+      appState: { viewBackgroundColor: '#ffffff' },
+      elements: [
+        baseEl({
+          id: 'rect-1',
+          type: 'rectangle',
+          x: 50,
+          y: 50,
+          width: 200,
+          height: 100,
+          backgroundColor: '#a5d8ff',
+          roundness: { type: 3 },
+        }),
+      ],
+    }
+    const result = await renderSceneToSvg(scene)
+    expect(result.svg.trim().startsWith('<svg')).toBe(true)
+    expect(result.svg).toContain('</svg>')
+  })
+
+  it('honours frameId when rendering to SVG by excluding elements outside the frame', async () => {
+    const frameId = 'frame-1'
+    const scene = {
+      type: 'excalidraw' as const,
+      version: 2,
+      source: '@kamiazya/whiteboard-test',
+      appState: { viewBackgroundColor: '#ffffff' },
+      elements: [
+        baseEl({ id: frameId, type: 'frame', x: 100, y: 100, width: 300, height: 200, name: 'In' }),
+        baseEl({
+          id: 'inside',
+          type: 'rectangle',
+          x: 130,
+          y: 140,
+          width: 240,
+          height: 80,
+          backgroundColor: '#a5d8ff',
+          fillStyle: 'solid',
+          frameId,
+          roundness: { type: 3 },
+        }),
+        baseEl({
+          id: 'outside',
+          type: 'rectangle',
+          x: 800,
+          y: 800,
+          width: 200,
+          height: 200,
+          backgroundColor: '#fecaca',
+          fillStyle: 'solid',
+        }),
+      ],
+    }
+    const wholeSceneSvg = await renderSceneToSvg(scene)
+    const onlyFrameSvg = await renderSceneToSvg(scene, { frameId })
+    expect(onlyFrameSvg.svg.length).toBeLessThan(wholeSceneSvg.svg.length)
+  })
+
   it('does not replace globalThis.fetch (would break DaemonClient.request, ensureDaemon ping, library tools)', async () => {
     // Pin the original Node fetch BEFORE forcing renderer init — anything
     // touching the renderer must not flip this reference, otherwise
@@ -170,8 +235,8 @@ describe('headless-renderer', () => {
     expect(globalThis.fetch).toBe(originalFetch)
     // And the original is still callable as a real fetch (in particular
     // it does not throw the headless-renderer guard).
-    await expect(globalThis.fetch('http://127.0.0.1:1/__never__').catch((e) => String(e))).resolves.not.toMatch(
-      /fetch is disabled in headless-renderer/,
-    )
+    await expect(
+      globalThis.fetch('http://127.0.0.1:1/__never__').catch((e) => String(e)),
+    ).resolves.not.toMatch(/fetch is disabled in headless-renderer/)
   })
 })

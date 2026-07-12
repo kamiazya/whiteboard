@@ -68,7 +68,7 @@ export const exportRequestMessageSchema = z.object({
   // Forces the exported scene into 'light' or 'dark' regardless of the
   // connected client's current theme. Must be carried through here too —
   // omitting it from the schema causes the WebSocket parser to silently
-  // strip the field, so a forced-theme export_png request would render in
+  // strip the field, so a forced-theme export_canvas request would render in
   // whatever theme the browser tab happens to be in.
   theme: z.enum(['light', 'dark']).optional(),
 })

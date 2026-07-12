@@ -10,7 +10,7 @@ import { validationErrorBody, validateWorkspaceId, validateSlug } from '../valid
 //   GET /api/canvas/:workspaceId/:slug/client-count → { count: number }
 //
 // When canvas_open uses waitForClient=true, poll this endpoint every 100 ms until
-// count >= 1 or timeout. That avoids the canvas_open -> export_png race where
+// count >= 1 or timeout. That avoids the canvas_open -> export_canvas race where
 // export fails immediately with no_client.
 
 export function createStatusRouter() {

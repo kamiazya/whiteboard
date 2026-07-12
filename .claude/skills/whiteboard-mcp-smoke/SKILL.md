@@ -68,7 +68,7 @@ pnpm smoke:e2e
 - `version_restore` (with and without `targetSlug`)
 - `version_list`
 - `viewport_set` returning `no_client`
-- `export_png` returning `no_client`
+- `export_canvas` (format:png/svg/json) succeeding via headless rendering with no browser connected
 
 If the final line is `[e2e] ALL OK`, the MCP wrapper and route wiring are basically connected correctly.
 

@@ -180,7 +180,7 @@ export const canvasOpenInputShape = {
     .boolean()
     .optional()
     .describe(
-      'Block until the browser establishes a WebSocket connection. Prevents no_client errors when chaining canvas_open → export_png / viewport_set. Default false.',
+      'Block until the browser establishes a WebSocket connection. Prevents no_client errors when chaining canvas_open → export_canvas / viewport_set. Default false.',
     ),
   waitTimeoutMs: z
     .number()

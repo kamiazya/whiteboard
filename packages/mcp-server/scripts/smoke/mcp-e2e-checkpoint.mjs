@@ -12,7 +12,7 @@
 //   2. checkpoint_save -> checkpoint_restore -> canvas_inspect element recovery
 //   3. checkpoint_restore branches for overwrite=true and validation errors
 //   4. viewport_set rejects immediately with no_client when no browser is connected
-//   5. export_png rejects immediately with no_client when no browser is connected
+//   5. export_canvas(format:png/svg/json) succeeds via headless rendering with no browser connected
 //
 // For 4 and 5 there is no browser WS client, so success behavior is not
 // observed. Instead, the smoke proves that both route wiring and MCP wrapping
@@ -27,7 +27,10 @@ import { fileURLToPath } from 'node:url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
 const entryArg = process.argv.find((arg) => arg.startsWith('--entry='))
-const entry = resolve(root, entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts')
+const entry = resolve(
+  root,
+  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts',
+)
 
 process.on('SIGINT', () => process.exit(130))
 

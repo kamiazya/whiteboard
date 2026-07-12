@@ -281,7 +281,7 @@ Even confirming that no suitable icon exists is useful.
 **When item names are unclear**
 - treat it as a trial-insert case
 - arrange 4-8 candidate indices on a scratch canvas
-- inspect via `viewport_set` and `export_png`
+- inspect via `viewport_set` and `export_canvas({ format: "png" })`
 - only place confirmed items into production
 
 ## Layout patterns
@@ -419,7 +419,7 @@ Read the relevant recipe before drawing so you know the shell, the must-have pie
 
 ## After Drawing
 
-1. use `export_png` and inspect overflow / overlap / directionality
+1. use `export_canvas({ format: "png" })` and inspect overflow / overlap / directionality
 2. use `canvas_inspect` to verify element counts and types
 3. if refinement is needed, use `update_element` / `move_elements` / `delete_element` locally before considering full rebuild
 

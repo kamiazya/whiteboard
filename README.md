@@ -189,13 +189,13 @@ Agent  cid = canvas_create({ slug: "auth-flow" }).id
        annotate({ canvasId: cid, type: "text",
                   target: { x: 240, y: 360 },
                   text: "cache lives here" })
-       export_png({ canvasId: cid })
+       export_canvas({ canvasId: cid, format: "png" })
 
        Drew a 4-stage flow on the auth-flow canvas. Cache callout placed
        between API gateway and token service. PNG attached.
 ```
 
-The agent returns the `export_png` result as an MCP `ImageContent`, so the next turn can reason about what was actually drawn — closing the loop between prompt and pixels.
+The agent returns the `export_canvas` PNG result as an MCP `ImageContent`, so the next turn can reason about what was actually drawn — closing the loop between prompt and pixels.
 
 ## Documentation
 
