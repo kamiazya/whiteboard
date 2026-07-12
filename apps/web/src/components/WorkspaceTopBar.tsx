@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -257,6 +258,11 @@ export default function WorkspaceTopBar({
   // canvas actions menu) and a transient label swap is enough signal.
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
   const copyStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Anchor for the portaled copy-error fallback box below — it can no longer
+  // rely on CSS `position: absolute` relative to this wrapper once it's
+  // portaled to document.body, so its on-screen position is computed from
+  // this element's own rect instead.
+  const canvasActionsRef = useRef<HTMLDivElement | null>(null)
 
   // Save state: dirty dot + Cmd/Ctrl+S only.
   // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
@@ -809,7 +815,7 @@ export default function WorkspaceTopBar({
         </DropdownMenu>
 
         {/* Canvas-specific actions such as rename and copy URL. */}
-        <div className="relative">
+        <div ref={canvasActionsRef} className="relative">
           <DropdownMenu
             onOpenChange={(open) => {
               // Every fresh open starts from a clean confirmation state rather
@@ -868,36 +874,67 @@ export default function WorkspaceTopBar({
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          {/* Rendered as a sibling of the Radix menu (role="menu"), not a
-              descendant of it: the WAI-ARIA menu pattern only allows
-              menuitem/menuitemcheckbox/menuitemradio/group as owned elements,
-              and a live region nested directly inside role="menu" fails that
-              contract (axe/AccessLint: aria-required-children). aria-live and
-              role="alert" are announced wherever they sit in the document, so
-              moving them outside the menu subtree does not silence them. */}
-          <div aria-live="polite" role="status" className="sr-only">
-            {copyStatus === 'copied' && 'Canvas URL copied to clipboard.'}
-            {copyStatus === 'error' && "Couldn't copy the canvas URL automatically."}
-          </div>
-          {copyStatus === 'error' && (
-            <div
-              role="alert"
-              className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border bg-popover px-2 py-1.5 text-xs text-destructive shadow-md"
-            >
-              <p>Couldn't copy automatically. Select and copy the link below:</p>
-              <Input
-                readOnly
-                value={canvasUrl}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  e.currentTarget.select()
-                }}
-                onFocus={(e) => e.currentTarget.select()}
-                aria-label="Canvas URL"
-                className="mt-1 h-7 font-mono text-[11px]"
-              />
-            </div>
-          )}
+          {/* Both the live-region announcement and the error fallback below
+              are portaled straight to document.body rather than rendered as
+              siblings in this subtree, for two independent reasons:
+              1. WAI-ARIA menu pattern: an element with role="menu" may only
+                 own menuitem/menuitemcheckbox/menuitemradio/group
+                 descendants, so neither can live inside the Radix menu
+                 content (axe/AccessLint: aria-required-children).
+              2. copyCanvasUrl's onSelect handler below deliberately keeps
+                 this menu open on both success and failure so the
+                 confirmation is visible, and Radix's DismissableLayer inerts
+                 (aria-hides) the rest of the page for as long as the menu
+                 stays open. Rendering these two as ordinary siblings here —
+                 i.e. nested under this page's own <header>/<main> — meant
+                 their on-again-off-again presence changed *which* ancestor
+                 chain that inerting walk kept visible on every open/close of
+                 this menu, which went on to corrupt the hide/unhide
+                 bookkeeping for unrelated siblings elsewhere on the page
+                 (observed as BrowserLocalCanvasPage's destructive-action
+                 toolbar staying permanently aria-hidden after this menu had
+                 already closed). Portaling both directly to body gives each
+                 an ancestor chain of just `document.body`, so they can never
+                 again be nested inside — or, by omission, un-inert — any of
+                 this page's own DOM. */}
+          {typeof document !== 'undefined' &&
+            createPortal(
+              <div aria-live="polite" role="status" className="sr-only">
+                {copyStatus === 'copied' && 'Canvas URL copied to clipboard.'}
+                {copyStatus === 'error' && "Couldn't copy the canvas URL automatically."}
+              </div>,
+              document.body,
+            )}
+          {typeof document !== 'undefined' &&
+            copyStatus === 'error' &&
+            createPortal(
+              <div
+                role="alert"
+                style={(() => {
+                  const rect = canvasActionsRef.current?.getBoundingClientRect()
+                  return {
+                    position: 'fixed',
+                    top: (rect?.bottom ?? 0) + 4,
+                    left: rect?.left ?? 0,
+                  }
+                })()}
+                className="z-50 w-72 rounded-md border bg-popover px-2 py-1.5 text-xs text-destructive shadow-md"
+              >
+                <p>Couldn't copy automatically. Select and copy the link below:</p>
+                <Input
+                  readOnly
+                  value={canvasUrl}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.currentTarget.select()
+                  }}
+                  onFocus={(e) => e.currentTarget.select()}
+                  aria-label="Canvas URL"
+                  className="mt-1 h-7 font-mono text-[11px]"
+                />
+              </div>,
+              document.body,
+            )}
         </div>
 
         {/* Inline canvas rename input. */}
