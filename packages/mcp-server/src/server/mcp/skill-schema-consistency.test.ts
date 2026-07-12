@@ -326,8 +326,10 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
       expect(items.items.properties).toHaveProperty('groupAs')
       expect(items.items.properties).toHaveProperty('scale')
       expect(mcpIndexText).toContain('libInsertBatch.name')
-      expect(mcpIndexText).toContain('groupAs: z.string().optional()')
-      expect(mcpIndexText).toContain('scale: z.number().optional()')
+      // Match `<key>: z.` loosely (description chains vary in length/wrapping)
+      // rather than the exact zod call, so this survives .describe() edits.
+      expect(mcpIndexText).toMatch(/\bgroupAs\s*:\s*z\s*\.\s*string\s*\(\s*\)\s*\.optional\s*\(/)
+      expect(mcpIndexText).toMatch(/\bscale\s*:\s*z\s*\.\s*number\s*\(\s*\)\s*\.optional\s*\(/)
       expect(skillText).toContain('library_insert_batch')
     })
 
