@@ -42,3 +42,55 @@ minimumReleaseAgeStrict: true
 # files, which is why warm cache runs succeed even with the postinstall blocked.
 onlyBuiltDependencies:
   - esbuild
+
+# Patched versions for known-vulnerable transitive deps. Moved here from the
+# package.json "pnpm.overrides" key: pnpm v11 no longer reads settings from
+# package.json's "pnpm" field (see https://pnpm.io/settings).
+overrides:
+  lodash-es@<4.18.0: ^4.18.0
+  nanoid@<3.3.8: ^3.3.8
+  nanoid@>=4.0.0 <5.0.9: ^5.0.9
+  protobufjs@<8.6.0: ^8.6.0
+  fast-uri@<3.1.2: ^3.1.2
+  kysely@<0.28.17: ^0.28.17
+  "@grpc/grpc-js@<1.14.4": ^1.14.4
+  shell-quote@<1.8.4: ^1.8.4
+  uuid@<11.1.1: ^11.1.1
+  qs@>=6.11.1 <6.15.2: ^6.15.2
+  ip-address@<=10.1.0: ^10.1.1
+  mermaid@<11.15.0: ^11.16.0
+  dompurify@<3.4.11: ^3.4.11
+
+# Multiple concurrent agent-driven git worktrees are routine in this repo;
+# without this, pnpm materializes a full node_modules/.pnpm copy per
+# worktree (~1GB each), which has caused real disk exhaustion. A shared
+# global virtual store lets every worktree's node_modules symlink into one
+# on-disk store instead of duplicating it. Requires pnpm >= 11.
+#
+# Currently left OFF: enabling it makes `apps/web` node_modules resolve
+# through a much deeper external symlink chain (into
+# ~/Library/pnpm/store/v11/links/...), and TypeScript's "bundler"
+# moduleResolution then reports a spurious structural mismatch for
+# useCanvasSync.ts's Excalidraw AppState mapped type (TS2740), even though
+# the underlying package files are byte-identical and not duplicated
+# (verified: single physical instance of every package involved). The same
+# tsc run passes cleanly with this flag off, and also passes with
+# moduleResolution switched to node16 (an unrelated wider change, not
+# adopted here). Re-enable once this TypeScript/pnpm interaction is
+# understood or fixed upstream.
+enableGlobalVirtualStore: false
+
+# pnpm already ignored build scripts for these transitive deps under pnpm 10
+# (verified: same "Ignored build scripts" warning appears on a clean pnpm 10
+# install). Only esbuild's postinstall is load-bearing (see above), so only
+# esbuild is allowed here — this preserves existing behavior rather than
+# newly enabling native builds pnpm was already skipping.
+allowBuilds:
+  '@swc/core': false
+  canvas: false
+  esbuild: true
+  lefthook: false
+  libxmljs2: false
+  msw: false
+  sharp: false
+  workerd: false
