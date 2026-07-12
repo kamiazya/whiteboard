@@ -158,3 +158,49 @@ describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
     )
   })
 })
+
+describe('runDaemonRun WHITEBOARD_OAUTH_CLIENT_REGISTRY wiring', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('fails fast with a structured outcome on an invalid env value and never calls startHttpServer', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_OAUTH_CLIENT_REGISTRY: 'not json' },
+    })
+    expect(outcome).toEqual({
+      kind: 'input-error',
+      message: expect.stringContaining('WHITEBOARD_OAUTH_CLIENT_REGISTRY'),
+      code: 'invalid_oauth_client_registry',
+    })
+    expect(startHttpServerMock).not.toHaveBeenCalled()
+  })
+
+  it('threads a valid registry through to startHttpServer', async () => {
+    const registry = [{ clientId: 'test-client', redirectUris: ['https://example.com/callback'] }]
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_OAUTH_CLIENT_REGISTRY: JSON.stringify(registry) },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ oauthClientRegistry: registry }),
+    )
+  })
+
+  it('defaults to an empty registry when the env var is unset', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: {},
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ oauthClientRegistry: [] }),
+    )
+  })
+})

@@ -102,6 +102,53 @@ describe('server/index main() WHITEBOARD_ALLOWED_WEB_ORIGINS startup gate', () =
   })
 })
 
+describe('server/index main() WHITEBOARD_OAUTH_CLIENT_REGISTRY startup gate', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllEnvs()
+    delete process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY
+    delete process.env.WHITEBOARD_TOKEN
+  })
+
+  it('aborts before startHttpServer and logs a structured record on an invalid env value', async () => {
+    process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY = 'not json'
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const capture = captureLogsForTests('debug')
+    try {
+      await expect(main()).rejects.toThrow('process.exit called')
+      expect(exitSpy).toHaveBeenCalledWith(1)
+      expect(startHttpServerMock).not.toHaveBeenCalled()
+      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'error')
+      expect(record).toBeDefined()
+    } finally {
+      capture.restore()
+      exitSpy.mockRestore()
+    }
+  })
+
+  it('threads a valid registry through to startHttpServer and never exits', async () => {
+    const registry = [{ clientId: 'test-client', redirectUris: ['https://example.com/callback'] }]
+    process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY = JSON.stringify(registry)
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await main()
+      expect(exitSpy).not.toHaveBeenCalled()
+      expect(startHttpServerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ oauthClientRegistry: registry }),
+      )
+    } finally {
+      exitSpy.mockRestore()
+      stdoutSpy.mockRestore()
+    }
+  })
+})
+
 describe('server/index main() config-file wiring', () => {
   let dir: string
   let originalCwd: string
