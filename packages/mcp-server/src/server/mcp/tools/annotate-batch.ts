@@ -106,6 +106,7 @@ export type BatchAnnotationItem = Omit<AnnotationSpec, 'target'> & {
   name?: string
   startBoxName?: string
   endBoxName?: string
+  groupAs?: string
 }
 
 export const annotateBatchInputShape = {
@@ -157,7 +158,7 @@ export const annotateBatchInputShape = {
     .string()
     .optional()
     .describe(
-      'Optional batch-level group label applied to all created elements. Per-item annotations[].groupAs overrides.',
+      'Optional batch-level group label applied to all created elements. Per-item annotations[].groupAs adds an additional, item-scoped group on top of this one (not a replacement).',
     ),
   annotations: z
     .array(
@@ -165,7 +166,12 @@ export const annotateBatchInputShape = {
         type: z
           .enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group'])
           .describe('Annotation kind. Same vocabulary as annotate tool.'),
-        imageId: z.string().optional(),
+        imageId: z
+          .string()
+          .optional()
+          .describe(
+            'When set, target/endTarget are interpreted relative to the named image (use load_image first). Use with coords="relative".',
+          ),
         coords: z
           .enum(['absolute', 'relative'])
           .optional()
@@ -186,15 +192,58 @@ export const annotateBatchInputShape = {
           .describe('Grid column index (0-based). Required when layout is set.'),
         rowSpan: z.number().optional().describe('Number of rows this cell spans. Default 1.'),
         colSpan: z.number().optional().describe('Number of columns this cell spans. Default 1.'),
-        text: z.union([z.string(), z.array(z.string())]).optional(),
-        title: z.union([z.string(), z.array(z.string())]).optional(),
-        subText: z.union([z.string(), z.array(z.string())]).optional(),
-        subTextPosition: z.enum(['top', 'inside-bottom']).optional(),
-        autoFit: z.boolean().optional(),
-        color: z.string().optional(),
-        backgroundColor: z.string().optional(),
-        fillStyle: z.enum(['solid', 'hachure', 'cross-hatch']).optional(),
-        strokeWidth: z.number().optional(),
+        text: z
+          .union([z.string(), z.array(z.string())])
+          .optional()
+          .describe(
+            'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width/cellW. For arrow type, text is an alias for label (midpoint label text node); label takes precedence when both are supplied.',
+          ),
+        title: z
+          .union([z.string(), z.array(z.string())])
+          .optional()
+          .describe(
+            'box_with_label/group only: title text. box_with_label renders it above the body inside the box; group renders it above the bounding rect.',
+          ),
+        subText: z
+          .union([z.string(), z.array(z.string())])
+          .optional()
+          .describe(
+            'box_with_label only: caption rendered as a separate 14px text element. Placement controlled by subTextPosition. string for single line, string[] for multi-line.',
+          ),
+        subTextPosition: z
+          .enum(['top', 'inside-bottom'])
+          .optional()
+          .describe(
+            'box_with_label only: subText placement. Default is "inside-bottom" = bottom half inside the rect (main/sub both free-floating, center-aligned). Use "top" for a caption above the rect.',
+          ),
+        autoFit: z
+          .boolean()
+          .optional()
+          .describe(
+            'box_with_label only: auto-fit box height to text. Default true (ON). Pass false to opt out — box keeps the caller-specified height and overflow is reported as a warning.',
+          ),
+        color: z
+          .string()
+          .optional()
+          .describe(
+            'Stroke color. Accepts hex (#rrggbb) or semantic key: primary / success / danger / warning / neutral / info (case-insensitive).',
+          ),
+        backgroundColor: z
+          .string()
+          .optional()
+          .describe(
+            'Fill color for rectangle / box_with_label / highlight / arrow. Hex or semantic key. Default: transparent for rect/box, strokeColor for highlight. Pair with fillStyle=solid for filled box.',
+          ),
+        fillStyle: z
+          .enum(['solid', 'hachure', 'cross-hatch'])
+          .optional()
+          .describe(
+            'Fill pattern for rectangle / box_with_label / highlight. Default: hachure (rect/box) / solid (highlight).',
+          ),
+        strokeWidth: z
+          .number()
+          .optional()
+          .describe('Stroke line width. Default 2. Useful on arrow to emphasize flow.'),
         fontFamily: z
           .union([
             z.literal(1),
@@ -206,30 +255,97 @@ export const annotateBatchInputShape = {
             z.literal(8),
             z.literal(9),
           ])
-          .optional(),
-        fontSize: z.number().optional(),
-        width: z.number().optional(),
-        height: z.number().optional(),
-        align: z.enum(['left', 'center', 'right']).optional(),
-        endTarget: z.object({ x: z.number(), y: z.number() }).optional(),
-        startBoxId: z.string().optional(),
-        endBoxId: z.string().optional(),
-        label: z.string().optional(),
-        labelOffset: z.number().optional(),
-        labelSide: z.enum(['auto', 'above', 'below', 'left', 'right']).optional(),
-        memberIds: z.array(z.string()).optional(),
-        padding: z.number().optional(),
+          .optional()
+          .describe(
+            'Text font family. Current: 5 = Excalifont (hand-drawn, default), 6 = Nunito (sans), 7 = "Lilita One" (display), 8 = "Comic Shanns" (monospace, for paths / identifiers / code), 9 = "Liberation Sans". Legacy: 1 = Virgil, 2 = Helvetica, 3 = Cascadia (UI marks "old"). Use 8 for system paths and 5 for human annotations to create visual contrast.',
+          ),
+        fontSize: z.number().optional().describe('text only: explicit font size in px.'),
+        width: z
+          .number()
+          .optional()
+          .describe(
+            'Box width in px (rectangle / highlight / box_with_label). Required for accurate text wrap. With grid layout, defaults to the cell width when omitted.',
+          ),
+        height: z
+          .number()
+          .optional()
+          .describe(
+            'Box height in px. With autoFit=true, used as a minimum (grows if text overflows). With grid layout, defaults to the cell height when omitted.',
+          ),
+        align: z
+          .enum(['left', 'center', 'right'])
+          .optional()
+          .describe(
+            'text only: horizontal alignment. With width, target becomes the anchor (center → target.x is the block center, right → target.x is the right edge).',
+          ),
+        endTarget: z
+          .object({ x: z.number(), y: z.number() })
+          .optional()
+          .describe('Arrow end point. Required when type="arrow" and endBoxId is not set.'),
+        startBoxId: z
+          .string()
+          .optional()
+          .describe(
+            'arrow only: element id whose rect is used to snap the start point to its nearest edge.',
+          ),
+        endBoxId: z
+          .string()
+          .optional()
+          .describe(
+            'arrow only: element id whose rect is used to snap the end point to its nearest edge.',
+          ),
+        label: z
+          .string()
+          .optional()
+          .describe(
+            'arrow only: label text placed at the midpoint of the (snap-applied) arrow. Adds a text element above the line.',
+          ),
+        labelOffset: z
+          .number()
+          .optional()
+          .describe(
+            'arrow.label only: perpendicular distance from the line to the label center (default 6).',
+          ),
+        labelSide: z
+          .enum(['auto', 'above', 'below', 'left', 'right'])
+          .optional()
+          .describe(
+            'arrow.label only: which side of the line to place the label. "auto" (default) = upper side. Geometrically indeterminate combinations (horizontal + left/right, vertical + above/below) fall back to auto.',
+          ),
+        memberIds: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'group only: element ids to enclose. The bounding rect is computed from existing non-deleted members (missing/deleted ids reported in warnings).',
+          ),
+        padding: z
+          .number()
+          .optional()
+          .describe('group only: padding (px) added around the bbox (default 20).'),
         name: z
           .string()
           .optional()
           .describe(
-            'Logical name for this item within the batch (referenced by other items as startBoxName / endBoxName). Required for cross-item arrow snap.',
+            'Label this annotation so later arrows can reference it via startBoxName/endBoxName without knowing the generated id. For box_with_label resolves to rectId; for rectangle/text/highlight resolves to elementId.',
           ),
         startBoxName: z
           .string()
           .optional()
-          .describe('Refer to a sibling item by its `name` to snap arrow start to that box edge.'),
-        endBoxName: z.string().optional().describe('Same as startBoxName but for arrow end.'),
+          .describe(
+            'arrow only: resolve to the rectId of a preceding annotation with the matching name. Takes precedence over startBoxId. Unresolved names are reported in warnings[].unresolvedBindingName.',
+          ),
+        endBoxName: z
+          .string()
+          .optional()
+          .describe(
+            'arrow only: resolve to the rectId of a preceding annotation with the matching name. Takes precedence over endBoxId. Unresolved names are reported in warnings[].unresolvedBindingName.',
+          ),
+        groupAs: z
+          .string()
+          .optional()
+          .describe(
+            'Per-item group label, applied in addition to the batch-level groupAs (if both are set, this item ends up in both groups). Use to carve out a sub-group within a larger batch, e.g. one row of a comparison grid.',
+          ),
       }),
     )
     .min(1)
@@ -245,208 +361,12 @@ export function annotateBatchTool() {
     name: 'annotate_batch',
     description:
       'Add multiple annotations in one request (single snapshot fetch, single commit, single broadcast). Supports optional grid layout for matrix/comparison diagrams. IMPORTANT: box_with_label does NOT auto-wrap long text; the caller must pre-split long lines by passing text as string[] (each element = 1 line) so the label fits within width/cellW.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        dryRun: {
-          type: 'boolean',
-          description:
-            'When true, computes placements/warnings without persisting the annotations.',
-        },
-        overlapThreshold: {
-          type: 'number',
-          description: 'IoU threshold used to report overlaps in placements. Default 0.1.',
-        },
-        groupAs: {
-          type: 'string',
-          description: 'Optional logical group id assigned to all created elements in this batch.',
-        },
-        layout: {
-          type: 'object',
-          description:
-            'Optional grid layout. When set, items can specify row/col (0-indexed) instead of target. Cell top-left becomes target. Use with box_with_label (width=cellW, height=cellH) or text (align=center, width=cellW).',
-          properties: {
-            cols: { type: 'number' },
-            rows: { type: 'number' },
-            cellW: { type: 'number' },
-            cellH: { type: 'number' },
-            colWidths: { type: 'array', items: { type: 'number' } },
-            rowHeights: { type: 'array', items: { type: 'number' } },
-            gap: { type: 'number' },
-            origin: {
-              type: 'object',
-              properties: { x: { type: 'number' }, y: { type: 'number' } },
-              required: ['x', 'y'],
-            },
-          },
-          required: ['cols', 'rows', 'gap', 'origin'],
-        },
-        annotations: {
-          type: 'array',
-          minItems: 1,
-          description: 'Annotation specs to add in order.',
-          items: {
-            type: 'object',
-            properties: {
-              type: {
-                type: 'string',
-                enum: ['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group'],
-              },
-              imageId: { type: 'string' },
-              coords: { type: 'string', enum: ['absolute', 'relative'] },
-              target: {
-                type: 'object',
-                description: 'Explicit position. Omit when using row/col with layout.',
-                properties: { x: { type: 'number' }, y: { type: 'number' } },
-                required: ['x', 'y'],
-              },
-              row: {
-                type: 'number',
-                description:
-                  'Grid row (0-indexed). Requires layout + col, mutually exclusive with target.',
-              },
-              col: {
-                type: 'number',
-                description:
-                  'Grid column (0-indexed). Requires layout + row, mutually exclusive with target.',
-              },
-              rowSpan: {
-                type: 'number',
-                description:
-                  'Grid row span. Default 1. When width/height are omitted, spanned track sizes are used.',
-              },
-              colSpan: {
-                type: 'number',
-                description:
-                  'Grid column span. Default 1. When width/height are omitted, spanned track sizes are used.',
-              },
-              text: {
-                description:
-                  'Text content. string for single line, string[] for multi-line (joined with "\\n"). box_with_label centers multi-line vertically and does NOT auto-wrap — pre-split long text into string[] to fit within width/cellW. For arrow type, text is an alias for label (midpoint label text node); label takes precedence when both are supplied.',
-                oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-              },
-              title: {
-                description:
-                  'box_with_label/group only: title text. box_with_label renders it above the body inside the box; group renders it above the bounding rect.',
-                oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-              },
-              subText: {
-                description:
-                  'box_with_label only: caption rendered as a separate 14px text element. Placement controlled by subTextPosition. string for single line, string[] for multi-line.',
-                oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
-              },
-              subTextPosition: {
-                type: 'string',
-                enum: ['top', 'inside-bottom'],
-                description:
-                  'box_with_label only: subText placement. Default is "inside-bottom" = bottom half inside the rect (main/sub both free-floating, center-aligned). Use "top" for a caption above the rect.',
-              },
-              autoFit: {
-                type: 'boolean',
-                description:
-                  'box_with_label only: auto-fit box height to text. Default true (ON). Pass false to opt out — box keeps the caller-specified height and overflow is reported as a warning.',
-              },
-              color: {
-                type: 'string',
-                description:
-                  'Stroke color. Accepts hex (#rrggbb) or semantic key: primary / success / danger / warning / neutral / info (case-insensitive).',
-              },
-              backgroundColor: {
-                type: 'string',
-                description:
-                  'Fill color for rectangle / box_with_label / highlight / arrow. Hex or semantic key. Default: transparent for rect/box, strokeColor for highlight. Pair with fillStyle=solid for filled box.',
-              },
-              fillStyle: {
-                type: 'string',
-                enum: ['solid', 'hachure', 'cross-hatch'],
-                description:
-                  'Fill pattern for rectangle / box_with_label / highlight. Default: hachure (rect/box) / solid (highlight).',
-              },
-              strokeWidth: {
-                type: 'number',
-                description: 'Stroke line width. Default 2. Useful on arrow to emphasize flow.',
-              },
-              fontFamily: {
-                type: 'number',
-                enum: [1, 2, 3, 5, 6, 7, 8, 9],
-                description:
-                  'Text font family. Current: 5 = Excalifont (hand-drawn, default), 6 = Nunito (sans), 7 = "Lilita One" (display), 8 = "Comic Shanns" (monospace, for paths / identifiers / code), 9 = "Liberation Sans". Legacy: 1 = Virgil, 2 = Helvetica, 3 = Cascadia (UI marks "old"). Use 8 for system paths and 5 for human annotations to create visual contrast.',
-              },
-              fontSize: {
-                type: 'number',
-                description: 'text only: explicit font size in px.',
-              },
-              width: { type: 'number' },
-              height: { type: 'number' },
-              align: {
-                type: 'string',
-                enum: ['left', 'center', 'right'],
-                description:
-                  'text only: horizontal alignment. With width, target becomes the anchor (center → target.x is the block center, right → target.x is the right edge).',
-              },
-              endTarget: {
-                type: 'object',
-                properties: { x: { type: 'number' }, y: { type: 'number' } },
-                required: ['x', 'y'],
-              },
-              startBoxId: {
-                type: 'string',
-                description:
-                  'arrow only: element id whose rect is used to snap the start point to its nearest edge.',
-              },
-              endBoxId: {
-                type: 'string',
-                description:
-                  'arrow only: element id whose rect is used to snap the end point to its nearest edge.',
-              },
-              label: {
-                type: 'string',
-                description:
-                  'arrow only: label text placed at the midpoint of the (snap-applied) arrow. Adds a text element above the line.',
-              },
-              labelOffset: {
-                type: 'number',
-                description:
-                  'arrow.label only: perpendicular distance from the line to the label center (default 6).',
-              },
-              labelSide: {
-                type: 'string',
-                enum: ['auto', 'above', 'below', 'left', 'right'],
-                description:
-                  'arrow.label only: which side of the line to place the label. "auto" (default) = upper side. Geometrically indeterminate combinations (horizontal + left/right, vertical + above/below) fall back to auto.',
-              },
-              memberIds: {
-                type: 'array',
-                items: { type: 'string' },
-                description:
-                  'group only: element ids to enclose. The bounding rect is computed from existing non-deleted members (missing/deleted ids reported in warnings).',
-              },
-              padding: {
-                type: 'number',
-                description: 'group only: padding (px) added around the bbox (default 20).',
-              },
-              name: {
-                type: 'string',
-                description:
-                  'Binding name (Task #60). Label this annotation so later arrows can reference it via startBoxName/endBoxName without knowing the generated id. For box_with_label resolves to rectId; for rectangle/text/highlight resolves to elementId.',
-              },
-              startBoxName: {
-                type: 'string',
-                description:
-                  'arrow only: resolve to the rectId of a preceding annotation with the matching name. Takes precedence over startBoxId. Unresolved names are reported in warnings[].unresolvedBindingName.',
-              },
-              endBoxName: {
-                type: 'string',
-                description:
-                  'arrow only: resolve to the rectId of a preceding annotation with the matching name. Takes precedence over endBoxId. Unresolved names are reported in warnings[].unresolvedBindingName.',
-              },
-            },
-            required: ['type'],
-          },
-        },
-      },
-      required: ['canvasId', 'annotations'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(annotateBatchInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {
@@ -477,7 +397,12 @@ export function annotateBatchTool() {
       // Fail fast before fetching a snapshot if layout resolution fails.
       // group does not use target, so skip resolveLayout and supply a fallback.
       // Preserve name/startBoxName/endBoxName for later binding-name resolution.
-      const bindings: Array<{ name?: string; startBoxName?: string; endBoxName?: string }> = []
+      const bindings: Array<{
+        name?: string
+        startBoxName?: string
+        endBoxName?: string
+        groupAs?: string
+      }> = []
       const occupiedCells = new Set<string>()
       const resolvedSpecs: AnnotationSpec[] = args.annotations.map((item, index) => {
         // arrow + box binding (startBoxId / endBoxId / startBoxName / endBoxName)
@@ -542,9 +467,10 @@ export function annotateBatchTool() {
           name,
           startBoxName,
           endBoxName,
+          groupAs: itemGroupAs,
           ...rest
         } = item
-        bindings.push({ name, startBoxName, endBoxName })
+        bindings.push({ name, startBoxName, endBoxName, groupAs: itemGroupAs })
         return { ...rest, target, width, height, sessionPalette } as AnnotationSpec
       })
       // Layer 2: collect box_with_label overflow diagnostics without touching the doc.
@@ -645,6 +571,15 @@ export function annotateBatchTool() {
       const elementIds = annotations.flatMap(flattenAnnotationResult)
       if (args.groupAs) {
         applyAssignToGroup(workingDoc, args.groupAs, elementIds)
+      }
+      // Per-item groupAs is additive on top of the batch-level group: an item
+      // with its own groupAs ends up in both the shared batch group and its
+      // own sub-group, mirroring library_insert_batch's batch+item grouping.
+      for (let index = 0; index < annotations.length; index++) {
+        const itemGroupAs = bindings[index]?.groupAs
+        if (!itemGroupAs) continue
+        const itemElementIds = flattenAnnotationResult(annotations[index])
+        applyAssignToGroup(workingDoc, itemGroupAs, itemElementIds)
       }
       const snapshotElements = workingDoc.getMovableList('elements').toJSON() as Array<
         Record<string, unknown>
