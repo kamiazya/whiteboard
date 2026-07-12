@@ -18,6 +18,14 @@
 
 import { z } from 'zod'
 
+// RFC 8252 §7.3 / §8.3: `http` is admissible only for a loopback *IP literal*
+// redirect. `localhost` is included alongside them because the hosted web
+// client is itself developed against a loopback dev server, and an operator
+// who could not register that callback could never exercise the flow before
+// deploying it. The host is compared against this exact set — never a suffix
+// — so `localhost.evil.com` and `127.0.0.1.evil.com` do not qualify.
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '[::1]', 'localhost'])
+
 // `new URL('https://*.pages.dev/callback')` parses successfully — WHATWG
 // URL parsing treats '*' as a literal (if unusual) hostname character
 // rather than rejecting it — so `z.string().url()` alone does NOT
@@ -31,6 +39,31 @@ const exactRedirectUriSchema = z
   .refine((value) => !value.includes('*'), {
     message: 'redirect_uri entries must be exact URIs; wildcards are not supported',
   })
+  // RFC 6749 §3.1.2: "The redirection endpoint URI MUST be an absolute URI …
+  // The endpoint URI MUST NOT include a fragment component." The authorization
+  // response appends its own fragment/query; a registered fragment would make
+  // the delivered URI un-derivable and, worse, byte-for-byte comparison against
+  // a fragment-bearing entry silently diverges from what the browser sends
+  // (the fragment never leaves the client).
+  .refine((value) => !value.includes('#'), {
+    message: 'redirect_uri entries must not include a fragment component (RFC 6749 §3.1.2)',
+  })
+  // RFC 6749 §3.1.2.1: the redirection endpoint SHOULD require TLS. An
+  // authorization code delivered over cleartext to a non-loopback host is
+  // readable by any network observer, and PKCE does not protect the code's
+  // confidentiality on the wire — it only stops a stolen code being redeemed
+  // without the verifier.
+  .refine(
+    (value) => {
+      const url = new URL(value)
+      if (url.protocol === 'https:') return true
+      if (url.protocol !== 'http:') return false
+      return LOOPBACK_HOSTNAMES.has(url.hostname)
+    },
+    {
+      message: 'redirect_uri entries must use https, or http only on a loopback host',
+    },
+  )
 
 export const oauthClientRegistryEntrySchema = z.object({
   clientId: z.string().min(1),

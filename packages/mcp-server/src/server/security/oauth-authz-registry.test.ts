@@ -72,6 +72,42 @@ describe('isRegisteredRedirectUri', () => {
   })
 })
 
+describe('oauthClientRegistryEntrySchema redirect_uri constraints', () => {
+  function parseUri(uri: string) {
+    return oauthClientRegistrySchema.safeParse([{ clientId: 'x', redirectUris: [uri] }])
+  }
+
+  it('rejects a redirect_uri carrying a fragment — RFC 6749 §3.1.2', () => {
+    expect(parseUri('https://whiteboard.pages.dev/oauth/callback#wb=token').success).toBe(false)
+    expect(parseUri('https://whiteboard.pages.dev/oauth/callback#').success).toBe(false)
+  })
+
+  it('rejects a non-loopback http redirect_uri', () => {
+    expect(parseUri('http://whiteboard.pages.dev/oauth/callback').success).toBe(false)
+  })
+
+  it('rejects a non-http(s) scheme', () => {
+    expect(parseUri('javascript:alert(1)').success).toBe(false)
+    expect(parseUri('whiteboard://callback').success).toBe(false)
+  })
+
+  it('admits https and the loopback http carve-out', () => {
+    expect(parseUri('https://whiteboard.pages.dev/oauth/callback').success).toBe(true)
+    expect(parseUri('http://127.0.0.1:5173/oauth/callback').success).toBe(true)
+    expect(parseUri('http://localhost:5173/oauth/callback').success).toBe(true)
+    expect(parseUri('http://[::1]:5173/oauth/callback').success).toBe(true)
+  })
+
+  it('does not let a loopback-lookalike host through the carve-out', () => {
+    expect(parseUri('http://localhost.evil.com/oauth/callback').success).toBe(false)
+    expect(parseUri('http://127.0.0.1.evil.com/oauth/callback').success).toBe(false)
+  })
+
+  it('still rejects a wildcard entry', () => {
+    expect(parseUri('https://*.pages.dev/callback').success).toBe(false)
+  })
+})
+
 describe('parseOAuthClientRegistryEnv', () => {
   it('returns an empty registry for unset/empty input (feature off by default)', () => {
     expect(parseOAuthClientRegistryEnv(undefined)).toEqual({ ok: true, registry: [] })
