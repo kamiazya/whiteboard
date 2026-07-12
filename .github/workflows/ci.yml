@@ -198,6 +198,9 @@ jobs:
       - name: Web app preview-origin behavioral smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
 
+      - name: Daemon-origin real-browser smoke (R3 UI retirement)
+        run: pnpm --filter @kamiazya/whiteboard-mcp smoke:daemon-origin
+
       - name: Packaged stdio smoke
         run: pnpm smoke:packaged
 
