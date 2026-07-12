@@ -98,6 +98,25 @@ export function BrowserLocalCanvasPage({
   // re-read from localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
+  // duplicateCanvas() rejects on failure (see the controller hook) rather
+  // than carrying its own error/pending state, so this page owns both: a
+  // disable-while-in-flight guard (a second click during the async
+  // read-then-write must not start a second copy) and the error surface.
+  const [isDuplicating, setIsDuplicating] = useState(false)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  const handleDuplicate = async () => {
+    if (isDuplicating) return
+    setIsDuplicating(true)
+    setDuplicateError(null)
+    try {
+      await duplicateCanvas()
+    } catch (err) {
+      setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
+    } finally {
+      setIsDuplicating(false)
+    }
+  }
+
   // Owned locally rather than threaded down from App.tsx: useThemeMode already
   // persists to localStorage and applies the <html class="dark"> toggle
   // itself, so there is no App-level state this page needs to share.
@@ -259,6 +278,11 @@ export function BrowserLocalCanvasPage({
             {cleanupError}
           </div>
         )}
+        {duplicateError && (
+          <div role="alert" aria-live="assertive" className="text-destructive">
+            {duplicateError}
+          </div>
+        )}
         <span className="ml-auto text-muted-foreground">
           Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
           combining changes
@@ -266,8 +290,9 @@ export function BrowserLocalCanvasPage({
         <button
           type="button"
           aria-label="Duplicate canvas"
-          onClick={() => void duplicateCanvas()}
-          className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent"
+          disabled={isDuplicating}
+          onClick={() => void handleDuplicate()}
+          className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
         >
           Duplicate
         </button>

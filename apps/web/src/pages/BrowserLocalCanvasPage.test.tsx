@@ -247,6 +247,65 @@ describe('BrowserLocalCanvasPage', () => {
     })
   })
 
+  it('disables the Duplicate button while a duplicate is in flight, and double-clicking produces exactly one copy', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const loro = new FakeLoroStore()
+    const seed = new Loro()
+    seed.getList('elements').push({ id: 'rect-1' })
+    await loro.save('c1', seed.export({ mode: 'snapshot' }))
+    // Defer the Loro read so the in-flight window is observable and long
+    // enough for a second click to land before the first duplicate resolves.
+    let releaseLoad: (() => void) | undefined
+    const realLoad = loro.load.bind(loro)
+    loro.load = async (id: string) => {
+      await new Promise<void>((resolve) => {
+        releaseLoad = resolve
+      })
+      return realLoad(id)
+    }
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={loro} />)
+    })
+    const duplicateBtn = screen.getByRole('button', { name: /duplicate/i }) as HTMLButtonElement
+    fireEvent.click(duplicateBtn)
+    await waitFor(() => expect(duplicateBtn.disabled).toBe(true))
+    // A second click while disabled must not start a second duplicate.
+    fireEvent.click(duplicateBtn)
+    await act(async () => {
+      releaseLoad?.()
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
+    })
+    expect(duplicateBtn.disabled).toBe(false)
+    const list = await store.listCanvases()
+    expect(list.filter((c) => c.name === 'untitled (copy)')).toHaveLength(1)
+  })
+
+  it('shows an alert and re-enables the Duplicate button when duplicateCanvas fails', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const loro = new FakeLoroStore()
+    await loro.save('c1', new Loro().export({ mode: 'snapshot' }))
+    loro.load = async () => ({ kind: 'corrupt-snapshot' })
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={loro} />)
+    })
+    const duplicateBtn = screen.getByRole('button', { name: /duplicate/i }) as HTMLButtonElement
+    await act(async () => {
+      duplicateBtn.click()
+    })
+    expect((await screen.findByRole('alert')).textContent).toMatch(/duplicat/i)
+    expect(duplicateBtn.disabled).toBe(false)
+    // No switch happened — still on the source canvas.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+  })
+
   it('renders a human-readable save status instead of the raw state enum', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
