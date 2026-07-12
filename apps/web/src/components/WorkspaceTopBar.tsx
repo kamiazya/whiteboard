@@ -5,6 +5,7 @@ import {
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   Copy,
@@ -251,6 +252,11 @@ export default function WorkspaceTopBar({
   const [versionOpen, setVersionOpen] = useState(false)
   const [canvasSearch, setCanvasSearch] = useState('')
   const versionPanelRef = useRef<HTMLDivElement | null>(null)
+  // Copy-URL confirmation: the button itself reports success/failure instead
+  // of a separate toast, since the affordance already has a fixed home (the
+  // canvas actions menu) and a transient label swap is enough signal.
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
+  const copyStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Save state: dirty dot + Cmd/Ctrl+S only.
   // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
@@ -394,6 +400,7 @@ export default function WorkspaceTopBar({
   useEffect(
     () => () => {
       mountedRef.current = false
+      if (copyStatusTimeoutRef.current) clearTimeout(copyStatusTimeoutRef.current)
     },
     [],
   )
@@ -596,12 +603,33 @@ export default function WorkspaceTopBar({
     }
   }
 
+  // Kept outside copyCanvasUrl so the failure-path fallback can render the
+  // same URL as selectable text without recomputing it.
+  const canvasUrl = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
+
+  const scheduleCopyStatusReset = (delayMs: number) => {
+    if (copyStatusTimeoutRef.current) clearTimeout(copyStatusTimeoutRef.current)
+    copyStatusTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) setCopyStatus('idle')
+    }, delayMs)
+  }
+
   const copyCanvasUrl = async () => {
     try {
-      const url = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
-      await navigator.clipboard.writeText(url)
-    } catch {
-      /* ignore */
+      await navigator.clipboard.writeText(canvasUrl)
+      if (!mountedRef.current) return
+      setCopyStatus('copied')
+      scheduleCopyStatusReset(2000)
+    } catch (err) {
+      // A silent catch here is exactly the bug this fixes — clipboard access
+      // can be denied (permissions, insecure context, browser refusal) and
+      // must surface as a visible failure, not a false "copied" success.
+      log.error('failed to copy canvas URL to clipboard:', err)
+      if (!mountedRef.current) return
+      setCopyStatus('error')
+      // Longer than the success state: the user needs time to read the
+      // fallback instructions and select the URL manually.
+      scheduleCopyStatusReset(8000)
     }
   }
 
@@ -781,7 +809,13 @@ export default function WorkspaceTopBar({
         </DropdownMenu>
 
         {/* Canvas-specific actions such as rename and copy URL. */}
-        <DropdownMenu>
+        <DropdownMenu
+          onOpenChange={(open) => {
+            // Every fresh open starts from a clean confirmation state rather
+            // than showing a stale "Copied!"/error from a previous visit.
+            if (open) setCopyStatus('idle')
+          }}
+        >
           <DropdownMenuTrigger asChild>
             <button
               type="button"
@@ -802,9 +836,22 @@ export default function WorkspaceTopBar({
               <Pencil className="size-3.5" />
               Rename canvas
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={copyCanvasUrl} className="gap-2">
-              <Copy className="size-3.5" />
-              Copy canvas URL
+            <DropdownMenuItem
+              onSelect={(e) => {
+                // Keep the menu open so the "Copied!"/error confirmation is
+                // actually visible — Radix closes the menu on select by
+                // default, which is exactly the silent-feedback bug.
+                e.preventDefault()
+                void copyCanvasUrl()
+              }}
+              className="gap-2"
+            >
+              {copyStatus === 'copied' ? (
+                <Check className="size-3.5 text-emerald-600" />
+              ) : (
+                <Copy className="size-3.5" />
+              )}
+              {copyStatus === 'copied' ? 'Copied!' : 'Copy canvas URL'}
             </DropdownMenuItem>
             {onExport && (
               <>
@@ -817,6 +864,28 @@ export default function WorkspaceTopBar({
                   Export as SVG
                 </DropdownMenuItem>
               </>
+            )}
+            {/* Visually hidden so screen readers announce the outcome even
+                though focus stays on the menu item above. */}
+            <div aria-live="polite" role="status" className="sr-only">
+              {copyStatus === 'copied' && 'Canvas URL copied to clipboard.'}
+              {copyStatus === 'error' && "Couldn't copy the canvas URL automatically."}
+            </div>
+            {copyStatus === 'error' && (
+              <div className="px-2 py-1.5 text-xs text-destructive" role="alert">
+                <p>Couldn't copy automatically. Select and copy the link below:</p>
+                <Input
+                  readOnly
+                  value={canvasUrl}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.currentTarget.select()
+                  }}
+                  onFocus={(e) => e.currentTarget.select()}
+                  aria-label="Canvas URL"
+                  className="mt-1 h-7 font-mono text-[11px]"
+                />
+              </div>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
