@@ -100,9 +100,16 @@ export function authorizeWsUpgrade(
     protocol.startsWith(TICKET_WS_PROTOCOL_PREFIX),
   )
   if (offeredTicketProtocol !== undefined) {
+    // Redemption is single-use, so it must only be attempted once the
+    // request is otherwise well-formed: a malformed request missing the base
+    // protocol is rejected without ever touching the store, so a still-valid
+    // ticket survives to be retried with a correctly-formed request.
+    if (!offeredBaseProtocol) {
+      return { accept: false, statusCode: 401 }
+    }
     const rawTicket = offeredTicketProtocol.slice(TICKET_WS_PROTOCOL_PREFIX.length)
     const redeemed = redeemTicket?.(rawTicket) ?? null
-    if (!offeredBaseProtocol || redeemed === null) {
+    if (redeemed === null) {
       return { accept: false, statusCode: 401 }
     }
     // Never ALL_AUTH_SCOPES here: a ticket carries exactly the scopes its

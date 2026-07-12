@@ -363,5 +363,37 @@ describe('authorizeWsUpgrade', () => {
       )
       expect(replay).toEqual({ accept: false, statusCode: 401 })
     })
+
+    it('does not redeem the ticket when the base protocol is missing, so the ticket stays usable for a valid retry', () => {
+      const ticketStore = createWsTicketStore()
+      const { ticket } = ticketStore.mintTicket(['canvas:write'], 'client-a')
+
+      const malformed = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          // Base protocol (WHITEBOARD_WS_PROTOCOL) omitted, ticket only.
+          'sec-websocket-protocol': `${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
+        },
+        undefined,
+        [],
+        ticketStore.redeemTicket,
+      )
+      expect(malformed).toEqual({ accept: false, statusCode: 401 })
+
+      const retry = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
+        },
+        undefined,
+        [],
+        ticketStore.redeemTicket,
+      )
+      expect(retry).toEqual({
+        accept: true,
+        protocol: WHITEBOARD_WS_PROTOCOL,
+        scopes: ['canvas:write'],
+      })
+    })
   })
 })
