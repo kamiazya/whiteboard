@@ -1,5 +1,5 @@
 import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { UseBranchesResult } from '@/hooks/useBranches'
@@ -358,5 +358,42 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     // that focus return must not itself reopen the hover tooltip.
     await waitFor(() => expect(stateHolder.current.setHead).toHaveBeenCalledWith('feature-x'))
     await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
+  })
+
+  it('does not poison the next genuine hover when the dropdown closes without returning focus to the chip', async () => {
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const chip = screen.getByTestId('header-branch-chip')
+    const kebab = screen.getByTestId('header-branch-kebab')
+
+    // Open the switch-variation dropdown, then click the (separate) kebab
+    // trigger. To the switch-variation dropdown this is an outside
+    // interaction (closing it, since Radix's dismissable layer detects
+    // outside interactions via pointerdown); the kebab's own click handler
+    // then opens ITS OWN dropdown and takes focus — so the chip's dropdown
+    // closes WITHOUT focus ever returning to the chip itself. Dispatch the
+    // full pointerdown -> click sequence directly (bypassing the
+    // actionability retry loop userEvent.click gets stuck in while the
+    // first dropdown's overlay still intercepts pointer events).
+    const clickThrough = (el: Element) => {
+      fireEvent.pointerDown(el)
+      fireEvent.mouseDown(el)
+      fireEvent.pointerUp(el)
+      fireEvent.mouseUp(el)
+      fireEvent.click(el)
+    }
+    await userEvent.click(chip)
+    await screen.findByText('Switch variation')
+    clickThrough(kebab)
+    await waitFor(() => expect(screen.queryByText('Switch variation')).toBeNull())
+    await screen.findByText(/Combine into/)
+    clickThrough(kebab) // close the kebab menu too, leaving focus off the chip
+
+    // A later, entirely genuine hover on the chip must still show the
+    // tooltip — the earlier close must not have permanently suppressed it.
+    // (A brief pause first — a real user's next hover is never literally
+    // the very next microtask after clicking elsewhere.)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await userEvent.hover(chip)
+    await screen.findByRole('tooltip')
   })
 })
