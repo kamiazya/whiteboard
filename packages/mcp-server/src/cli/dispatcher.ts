@@ -42,7 +42,7 @@ whiteboard daemon doctor         --json [--data-dir=<path>]
 whiteboard daemon stop           --json [--data-dir=<path>]
 whiteboard daemon logs           --json [--data-dir=<path>]
 whiteboard daemon support-bundle --json --output-dir=<path> [--data-dir=<path>]
-whiteboard daemon run            --json [--host=<host>] [--port=<port>] [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env]
+whiteboard daemon run            --json [--host=<host>] [--port=<port>] [--data-dir=<path>] [--token-stdin | WHITEBOARD_DAEMON_TOKEN env] [--no-open]
 whiteboard server status         --json [--data-dir=<path>]
 whiteboard server doctor         --json [--external-url=<url>] [--auth-strategy=oauth-jwt] [--jwt-issuer=<url>] [--jwt-audience=<aud>] [--jwks-uri=<url>] [options...]
 whiteboard server stop           --json [--data-dir=<path>]
@@ -388,14 +388,16 @@ async function dispatchServerSupportBundle(rest: readonly string[]): Promise<num
 }
 
 type ConfigFileEnvResult =
-  | { kind: 'ok'; port: number | undefined }
+  | { kind: 'ok'; port: number | undefined; openBrowser: boolean | undefined }
   | { kind: 'error'; message: string }
 
 // Loads the nearest whiteboard config file (if any), layers its values
 // under process.env (env-over-file precedence, see config-file.ts), logs
-// the file path at info level, and returns the file's `port` (if set) so
-// the caller can thread it into daemon-run's own port precedence — file
-// port is otherwise NOT a set-if-unset env key, unlike the other fields.
+// the file path at info level, and returns the file's `port` and
+// `openBrowser` (if set) so the caller can thread them into daemon-run's
+// own precedence chains — neither is a simple set-if-unset env key like the
+// other fields (port already had its own chain; openBrowser is a boolean
+// with a `--no-open`-first override, not an env var at all).
 // loadConfigFile throws on a malformed file (by design, see config-file.ts);
 // that throw is caught here and turned into the same structured
 // stderr + exit-1 contract every other startup validation failure in this
@@ -408,12 +410,12 @@ function applyLoadedConfigFileToDispatcherEnv(): ConfigFileEnvResult {
     const message = err instanceof Error ? err.message : String(err)
     return { kind: 'error', message: `whiteboard config file error: ${message}` }
   }
-  if (loaded === null) return { kind: 'ok', port: undefined }
+  if (loaded === null) return { kind: 'ok', port: undefined, openBrowser: undefined }
 
   applyConfigFileToEnvAndLogLevel(loaded.config, process.env)
   getLogger('cli-dispatcher').info({ filepath: loaded.filepath }, 'loaded whiteboard config file')
 
-  return { kind: 'ok', port: loaded.config.port }
+  return { kind: 'ok', port: loaded.config.port, openBrowser: loaded.config.openBrowser }
 }
 
 async function dispatchRun(rest: readonly string[]): Promise<number> {
@@ -467,6 +469,17 @@ async function dispatchRun(rest: readonly string[]): Promise<number> {
   // — installDaemonSignalHandlers (called from runDaemonRun) takes
   // over the lifecycle from here.
   writeJsonObject(outcome.result)
+  // Best-effort UX on top of an already-successful startup: a browser that
+  // fails to open (no display, sandboxed environment, …) must never affect
+  // the ready-JSON contract or the daemon's exit code, so this runs after
+  // the JSON line above and its own errors are only logged, never thrown.
+  const { maybeOpenDaemonBrowser } = await import('./daemon-run-auto-open.js')
+  await maybeOpenDaemonBrowser({
+    host: outcome.result.host,
+    port: outcome.result.port,
+    noOpenFlag: parsed.noOpen,
+    configOpenBrowser: configFileResult.openBrowser,
+  })
   // Returning a Promise that never resolves keeps the caller's
   // top-level then-chain pinned, so process.exit isn't called
   // until SIGTERM/SIGINT lands and the signal handler exits 0.

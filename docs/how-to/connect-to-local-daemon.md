@@ -19,6 +19,15 @@ renders the same canvas gallery and editor as a standalone `apps/web` deploy,
 already same-origin with the daemon's `/api/*`, `/mcp`, and WebSocket routes.
 No pairing link or Local Network Access prompt is needed for this path.
 
+Running `whiteboard daemon run` interactively opens this URL in your default
+browser automatically once the daemon is listening, so there is no separate
+step even for a human with no AI agent in the loop. Pass `--no-open` (or set
+`openBrowser: false` in a [config file](../reference/configuration.md#config-file-local-daemon))
+to disable this. See
+[Auto-opening the browser](../reference/configuration.md#auto-opening-the-browser-whiteboard-daemon-run)
+for the full list of conditions under which it is suppressed (CI, containers,
+non-interactive shells, non-loopback binds).
+
 - **No service worker on this origin.** The daemon injects a per-request
   `__WHITEBOARD_RUNTIME_CONFIG__` and `__WHITEBOARD_DAEMON_TOKEN__` into every
   response; a Workbox-precached shell would pin a stale token across daemon
