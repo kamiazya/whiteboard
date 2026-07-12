@@ -2,7 +2,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DaemonProbeResult, ProbeDaemonOptions } from '../../lib/daemon-probe.js'
 import { createUserSettingsStore, type UserSettingsStore } from '../../lib/user-settings-store.js'
-import { DaemonDetectedBanner, HOW_TO_CONNECT_URL } from './DaemonDetectedBanner.js'
+import {
+  DaemonDetectedBanner,
+  HOW_TO_CONNECT_URL,
+  UNSUPPORTED_BROWSER_NOTICE,
+} from './DaemonDetectedBanner.js'
 
 function makeStore(): UserSettingsStore {
   localStorage.clear()
@@ -238,7 +242,7 @@ describe('DaemonDetectedBanner', () => {
     expect(screen.queryByRole('button', { name: /forget this daemon/i })).toBeNull()
   })
 
-  it('shows the honest unsupported notice instead of the CTA when the probe proves the browser blocked it', async () => {
+  it('shows the honest unsupported notice with an escape-hatch link when the probe proves the browser blocked it', async () => {
     const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'blocked' })
     render(
       <DaemonDetectedBanner
@@ -251,10 +255,39 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
 
-    await screen.findByText(
-      'Your browser cannot connect to a local daemon; canvases stay in this browser.',
-    )
+    await screen.findByText(UNSUPPORTED_BROWSER_NOTICE)
     expect(screen.queryByRole('button', { name: /check for local daemon/i })).toBeNull()
+
+    // The way out: a normal top-level navigation to the daemon's own origin
+    // is not subject to the fetch-level block that produced this notice.
+    const openLink = screen.getByRole('link', { name: /open the local app/i })
+    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099')
+  })
+
+  it('deep-links the unsupported-notice escape hatch to the last-connected workspace when known', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'blocked' })
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        lastConnectedWorkspaceId: 'w1',
+        lastConnectedSlug: 'main',
+      },
+    }))
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    const openLink = await screen.findByRole('link', { name: /open the local app/i })
+    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
   })
 
   it('keeps the CTA affordance when the probe fails inconclusively (not proven blocked)', async () => {
@@ -272,11 +305,8 @@ describe('DaemonDetectedBanner', () => {
 
     await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('button', { name: /check for local daemon/i })).not.toBeNull()
-    expect(
-      screen.queryByText(
-        'Your browser cannot connect to a local daemon; canvases stay in this browser.',
-      ),
-    ).toBeNull()
+    expect(screen.queryByText(UNSUPPORTED_BROWSER_NOTICE)).toBeNull()
+    expect(screen.queryByRole('link', { name: /open the local app/i })).toBeNull()
   })
 
   it('aborts the in-flight probe on unmount and never sets state after unmount', async () => {

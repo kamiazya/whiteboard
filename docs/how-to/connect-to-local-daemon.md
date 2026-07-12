@@ -76,11 +76,23 @@ depends on capability, not a fixed version list:
 - **Safari/WebKit on a hosted `https:` origin cannot reach the daemon.**
   WebKit blocks the request as mixed content with no override. On this
   browser, canvases stay in this browser (IndexedDB) — the app shows an
-  explicit notice instead of a silently missing "connect" option.
+  explicit notice instead of a silently missing "connect" option, with a
+  link to open the local app directly (see below).
 
 This is determined by probing the daemon, not by inspecting your browser's
 identity string: the app only shows the "not supported" notice once a probe
 has actually proven the browser blocked the request.
+
+**The way out on an unsupported browser: open the daemon's own origin.** The
+mixed-content/private-network block above applies only to the background
+`fetch` the app uses to detect a daemon — it does not apply to a normal
+top-level navigation. So on Safari (or any future engine with the same
+restriction), click the "Open the local app" link in the notice, or type the
+daemon's address directly into the address bar (`http://127.0.0.1:3099` by
+default). That loads the same `apps/web` build served same-origin by the
+daemon, described in
+[Opening the daemon's own UI directly](#opening-the-daemons-own-ui-directly)
+above, where every feature — including live daemon sync — works normally.
 
 ## How pairing works
 
