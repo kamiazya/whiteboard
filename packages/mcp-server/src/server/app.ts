@@ -20,7 +20,11 @@ import { createDebugRouter } from './routes/debug.js'
 import { createExportRouter, resolveExportRequest } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import { createLibrariesRouter } from './routes/libraries.js'
-import { createOAuthAuthzRouter, OAUTH_AUTHZ_PATHS } from './routes/oauth-authz.js'
+import {
+  createOAuthAuthzRouter,
+  OAUTH_AUTHZ_CORS_PATHS,
+  OAUTH_AUTHZ_PATHS,
+} from './routes/oauth-authz.js'
 import { createPaletteRouter } from './routes/palette.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
@@ -86,8 +90,15 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+// A floor, not a ceiling. This runs after every route, so `set`ting a header a
+// route already chose would silently *downgrade* it — the OAuth approval page
+// ships a `default-src 'none'` CSP that this baseline would otherwise replace
+// with the far weaker frame-ancestors-only policy. Every header below is
+// applied unconditionally except CSP, whose value is route-specific by nature.
 function setBaselineSecurityHeaders(headers: Headers): void {
-  headers.set('Content-Security-Policy', "frame-ancestors 'none'")
+  if (!headers.has('Content-Security-Policy')) {
+    headers.set('Content-Security-Policy', "frame-ancestors 'none'")
+  }
   headers.set('X-Frame-Options', 'DENY')
   headers.set('X-Content-Type-Options', 'nosniff')
   headers.set('Referrer-Policy', 'no-referrer')
@@ -441,12 +452,18 @@ export function createApp(options: AppOptions) {
     // an OPTIONS preflight for /mcp would be answered here before
     // createMcpHttpOriginMiddleware ever ran.
     for (const path of OAUTH_AUTHZ_PATHS) {
-      // Host guard first, ahead of CORS, for the same DNS-rebinding reason as
-      // /api/*: a spoofed non-loopback Host must be rejected before an
-      // OPTIONS preflight could short-circuit past it.
+      // Host guard on EVERY path of the surface, including /authorize: a
+      // spoofed non-loopback Host is a DNS-rebinding vector here exactly as
+      // on /api/*, and it must be rejected before an OPTIONS preflight could
+      // short-circuit past it.
       app.use(path, createApiHostGuardMiddleware(options.authMode))
-      // This surface's own CORS handling — it inherits nothing from /api/*'s
-      // middleware chain merely by being mounted nearby.
+    }
+    // CORS covers only OAUTH_AUTHZ_CORS_PATHS — the metadata documents and
+    // /token — never the /authorize pair. Reflecting an allowed web origin on
+    // the approval endpoints would let the requesting page read the approval
+    // screen and script its POST cross-site, which is the whole thing the
+    // approval step exists to prevent. See oauth-authz.ts.
+    for (const path of OAUTH_AUTHZ_CORS_PATHS) {
       app.use(path, createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
     }
     app.route('/', oauthAuthzRoutes)
