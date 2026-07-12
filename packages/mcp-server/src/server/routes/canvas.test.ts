@@ -23,7 +23,7 @@ vi.mock('../store/doc-cache.js', async () => {
   return actual
 })
 
-const { clearCache } = await import('../store/doc-cache.js')
+const { clearCache, peekDoc, getDoc } = await import('../store/doc-cache.js')
 const { saveCanvas } = await import('../store/canvas-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 
@@ -456,6 +456,54 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
     expect(elements).toHaveLength(1)
     expect(elements[0].id).toBe('elem-from-client')
     expect(elements[0].type).toBe('ellipse')
+  })
+
+  it('evicts the cached doc when saveCanvas fails, so a subsequent read does not serve the unpersisted update', async () => {
+    const app = createCanvasRouter()
+
+    // Persist an initial one-element state directly.
+    const initial = new LoroDoc()
+    const initialList = initial.getMovableList('elements')
+    const initialElem = initialList.insertContainer(0, new LoroMap())
+    initialElem.set('id', 'persisted')
+    initial.commit()
+    await saveCanvas('session1', 'canvas-a', initial)
+
+    // Pull it into the doc-cache so there is a live cached doc to poison.
+    await app.request('/api/canvas/session1/canvas-a/snapshot')
+    expect(peekDoc('session1', 'canvas-a')).toBeDefined()
+
+    // Build a client update that adds a second element.
+    const clientDoc = LoroDoc.fromSnapshot(initial.export({ mode: 'snapshot' }))
+    const prevVV = clientDoc.version()
+    const clientList = clientDoc.getMovableList('elements')
+    const clientElem = clientList.insertContainer(clientList.length, new LoroMap())
+    clientElem.set('id', 'unpersisted')
+    clientDoc.commit()
+    const update = clientDoc.export({ mode: 'update', from: prevVV })
+
+    // Force the persistence step inside saveCanvas to fail after doc.import()
+    // has already mutated the cached doc.
+    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
+      throw new Error('simulated snapshot failure')
+    })
+    const res = await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: update,
+    })
+    exportSpy.mockRestore()
+
+    expect(res.status).toBe(500)
+    // The cache must be evicted: without eviction, the in-memory doc already
+    // absorbed the update even though saveCanvas never persisted it.
+    expect(peekDoc('session1', 'canvas-a')).toBeUndefined()
+
+    const reloaded = await getDoc('session1', 'canvas-a')
+    const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
+      (el) => el.id,
+    )
+    expect(ids).toEqual(['persisted'])
   })
 })
 

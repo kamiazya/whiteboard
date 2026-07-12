@@ -3,7 +3,7 @@ import type { LoroDoc } from 'loro-crdt'
 import type { UpdateCanvasResponse } from '../../../shared/api-contracts/canvas.js'
 import { getLogger } from '../../log.js'
 import { saveCanvas } from '../../store/canvas-store.js'
-import { getDoc } from '../../store/doc-cache.js'
+import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionEntry } from '../../store/version-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { getBroadcastFn } from './shared.js'
@@ -52,7 +52,15 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
 
     const doc = await getDoc(workspaceId, slug)
     doc.import(bytes)
-    await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+    try {
+      await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+    } catch (err) {
+      // doc.import() above already mutated the cached doc, so a failed save
+      // would otherwise leave the cache ahead of durable state. Evict it so
+      // the next read reloads the last successfully persisted snapshot.
+      evictDoc(workspaceId, slug)
+      throw err
+    }
 
     // Broadcast to all WS clients because the originating WS context is unknown on HTTP requests.
     getBroadcastFn()(workspaceId, slug, bytes)
