@@ -37,9 +37,15 @@ runs:
     # operator to search for 'integrity' in undefined"). corepack never
     # invokes pnpm's self-update — it fetches and shims the target version
     # directly — so it sidesteps the bug entirely.
+    #
+    # Corepack is being unbundled from Node (nodejs/node#57825): Node 25+
+    # ships without it. This action must keep working once the runner's
+    # Node no longer includes it, so install corepack from npm first when
+    # the runner doesn't already have it on PATH.
     - name: Activate pnpm via corepack
       shell: bash
       run: |
+        command -v corepack >/dev/null 2>&1 || npm install -g corepack
         corepack enable
         corepack prepare --activate
 
