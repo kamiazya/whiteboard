@@ -15,6 +15,7 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
+import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
@@ -50,6 +51,8 @@ const WorkspaceTopBar = lazy(() => import('../components/WorkspaceTopBar.js'))
 // Fixed height so the lazy WorkspaceTopBar chunk resolving after first paint
 // causes no layout shift.
 const TOP_BAR_FALLBACK_HEIGHT = 'h-12'
+
+const log = getAppLogger('browser-local-canvas-page')
 
 interface BrowserLocalCanvasPageProps {
   store: BrowserLocalStore
@@ -206,7 +209,7 @@ export function BrowserLocalCanvasPage({
       .catch((err: unknown) => {
         // A stale/failed list refresh must not surface as an unhandled
         // rejection; the switcher just keeps showing its last-known list.
-        console.error('listCanvases failed', err)
+        log.error('listCanvases failed', err)
       })
   }, [canvasId, currentUpdatedAt, listCanvases])
 
