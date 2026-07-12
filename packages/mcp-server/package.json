@@ -153,6 +153,7 @@
     "smoke:claude": "node scripts/smoke/mcp-claude-cli-smoke.mjs",
     "smoke:codex": "node scripts/smoke/mcp-codex-cli-smoke.mjs",
     "smoke:daemon-origin": "node --import tsx/esm scripts/smoke/mcp-daemon-origin-smoke.mjs",
+    "smoke:lna-transport": "node scripts/smoke/mcp-lna-transport-smoke.mjs",
     "smoke:all": "pnpm smoke:e2e && pnpm smoke:template && pnpm smoke:claude",
     "prepublishOnly": "test -x dist/cli/index.js",
     "prepack": "node scripts/verify-web-app-dist.mjs"
