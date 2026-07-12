@@ -48,12 +48,36 @@ export function DaemonDetectedBanner({
   )
   const abortRef = useRef<AbortController | null>(null)
 
-  // load() round-trips localStorage synchronously; the probe target is fixed
-  // for the store's lifetime, so read it once instead of on every render.
-  const baseUrl = useMemo(
-    () => settingsStore.load().storage.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL,
-    [settingsStore],
-  )
+  // The store object identity never changes, so anything derived from it has
+  // to be recomputed explicitly when we write to it — a useMemo keyed on the
+  // store would keep serving pre-Forget values until a reload.
+  const [storedTarget, setStoredTarget] = useState(() => {
+    const { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedSlug } =
+      settingsStore.load().storage
+    return { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedSlug }
+  })
+
+  // Trailing slashes would otherwise produce `http://host:3099//canvas/...`.
+  const baseUrl = (storedTarget.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL).replace(/\/+$/, '')
+
+  // Whether a reconnect target was ever actually persisted (as opposed to
+  // baseUrl above, which always resolves to DEFAULT_DAEMON_BASE_URL even with
+  // nothing stored) — this gates whether "Forget this daemon" has anything
+  // to forget.
+  const hasStoredTarget = storedTarget.localDaemonBaseUrl !== undefined
+
+  // Since R3 the daemon serves the canonical apps/web build at its own
+  // origin with no pairing needed at all, so the primary CTA is a plain
+  // top-level link rather than a pairing instruction. Deep-link to the
+  // last-connected canvas when known so the link lands the user back where
+  // they were instead of just the daemon's root.
+  const openLocalAppUrl = useMemo(() => {
+    const { lastConnectedWorkspaceId, lastConnectedSlug } = storedTarget
+    if (lastConnectedWorkspaceId && lastConnectedSlug) {
+      return `${baseUrl}/canvas/${encodeURIComponent(lastConnectedWorkspaceId)}/${encodeURIComponent(lastConnectedSlug)}`
+    }
+    return baseUrl
+  }, [storedTarget, baseUrl])
 
   // 'http:'/'https:' -> 'http'/'https'; any other scheme (e.g. jsdom's
   // default 'about:' outside these injected-prop tests) falls back to
@@ -97,6 +121,29 @@ export function DaemonDetectedBanner({
     setDismissedAt(now)
   }
 
+  // Clears the persisted reconnect target only (never touches dismissal
+  // state, which governs an unrelated concern) so a future load stops
+  // offering to reconnect here. Also dismisses this session's banner
+  // instance immediately — "forget" implies "stop asking", not just "forget
+  // for next time".
+  function handleForget() {
+    settingsStore.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: undefined,
+        lastConnectedWorkspaceId: undefined,
+        lastConnectedSlug: undefined,
+      },
+    }))
+    setStoredTarget({
+      localDaemonBaseUrl: undefined,
+      lastConnectedWorkspaceId: undefined,
+      lastConnectedSlug: undefined,
+    })
+    handleDismiss()
+  }
+
   const tier = deriveCapabilityTier({ pageOriginScheme, probe: result })
   const showUnsupportedNotice = tier === 'tier2-blocked'
   const showManualAffordance = (result === null || !result.detected) && !showUnsupportedNotice
@@ -136,18 +183,30 @@ export function DaemonDetectedBanner({
           data-testid="daemon-detected-banner"
           className="flex shrink-0 items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
         >
-          <span>
-            A local whiteboard daemon is running. Ask your AI agent for a pairing link
-            (create_pairing_link) to unlock versions, variations, and combining changes.
-          </span>
+          <span>A local whiteboard daemon is running at {baseUrl}.</span>
+          <a
+            href={openLocalAppUrl}
+            className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent"
+          >
+            Open the local app
+          </a>
           <a
             href={HOW_TO_CONNECT_URL}
             target="_blank"
             rel="noreferrer"
             className="font-medium underline"
           >
-            Learn how to connect
+            Learn more
           </a>
+          {hasStoredTarget && (
+            <button
+              type="button"
+              onClick={handleForget}
+              className="shrink-0 rounded px-1.5 py-0.5 font-medium hover:bg-background/60"
+            >
+              Forget this daemon
+            </button>
+          )}
           <button
             type="button"
             onClick={handleDismiss}
