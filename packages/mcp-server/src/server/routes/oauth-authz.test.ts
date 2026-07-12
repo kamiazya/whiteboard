@@ -73,6 +73,71 @@ describe('POST /token', () => {
     expect(typeof body.access_token).toBe('string')
   })
 
+  it('exchanges a form-encoded request — the wire format RFC 6749 §4.1.3 actually mandates', async () => {
+    const { app, store } = buildApp()
+    const code = issueCode(store)
+    const res = await app.request('http://127.0.0.1:3099/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: CLIENT_ID,
+        code_verifier: PKCE_VERIFIER,
+      }).toString(),
+    })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject({ token_type: 'Bearer' })
+    expect(typeof body.access_token).toBe('string')
+  })
+
+  it('rejects a form-encoded request missing code_verifier', async () => {
+    const { app, store } = buildApp()
+    const code = issueCode(store)
+    const res = await app.request('http://127.0.0.1:3099/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: CLIENT_ID,
+      }).toString(),
+    })
+    expect(res.status).toBe(400)
+  })
+
+  it('sets Cache-Control: no-store on a successful token response — RFC 6749 §5.1', async () => {
+    const { app, store } = buildApp()
+    const code = issueCode(store)
+    const res = await app.request('http://127.0.0.1:3099/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: CLIENT_ID,
+        code_verifier: PKCE_VERIFIER,
+      }).toString(),
+    })
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
+  it('sets Cache-Control: no-store on an error token response too — RFC 6749 §5.2', async () => {
+    const { app } = buildApp()
+    const res = await app.request('http://127.0.0.1:3099/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=authorization_code',
+    })
+    expect(res.status).toBe(400)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+  })
+
   it('rejects a request with no code_verifier at all — trap #3, enforced server-side', async () => {
     const { app, store } = buildApp()
     const code = issueCode(store)

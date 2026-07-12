@@ -6,7 +6,7 @@
 // (see api-host-guard.ts's header comment: middleware does not extend to
 // a new mount point just by being registered "near" it).
 
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { z } from 'zod'
 import { AUTH_SCOPES } from '../security/auth-strategy.js'
 import {
@@ -71,6 +71,29 @@ function tokenError(error: TokenErrorResponse['error']) {
   return { status: 400 as const, body: tokenErrorResponseSchema.parse({ error }) }
 }
 
+// RFC 6749 §5.1/§5.2: the token endpoint's responses carry credentials and
+// MUST NOT be stored. `Pragma: no-cache` is omitted deliberately — it is an
+// HTTP/1.0 request-header artifact that RFC 7234 §5.4 gives no defined
+// meaning as a response header, and no HTTP/1.1 cache consults it.
+const TOKEN_CACHE_CONTROL = { 'Cache-Control': 'no-store' } as const
+
+// RFC 6749 §4.1.3 / OAuth 2.1 §4.1.3: the token request body is
+// `application/x-www-form-urlencoded`; a spec-compliant client (including the
+// MCP SDK's own OAuth client) sends nothing else. JSON is additionally
+// accepted because this daemon's other POST surfaces are JSON and a
+// hand-rolled local client reaching for `fetch(..., {json})` failing with an
+// opaque `invalid_request` would be a needless trap — the parsed shape is
+// validated by the same Zod schema either way, so accepting both widens the
+// wire format, not the contract.
+async function readTokenRequestBody(c: Context): Promise<unknown> {
+  const contentType = c.req.header('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    return await c.req.json()
+  }
+  const params = new URLSearchParams(await c.req.text())
+  return Object.fromEntries(params.entries())
+}
+
 export interface OAuthAuthzRouterOptions {
   store: OAuthTransactionStore
   registry: OAuthClientRegistry
@@ -90,16 +113,16 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
   app.post(OAUTH_TOKEN_PATH, async (c) => {
     let rawBody: unknown
     try {
-      rawBody = await c.req.json()
+      rawBody = await readTokenRequestBody(c)
     } catch {
       const { status, body } = tokenError('invalid_request')
-      return c.json(body, status)
+      return c.json(body, status, TOKEN_CACHE_CONTROL)
     }
 
     const parsedRequest = tokenRequestSchema.safeParse(rawBody)
     if (!parsedRequest.success) {
       const { status, body } = tokenError('invalid_request')
-      return c.json(body, status)
+      return c.json(body, status, TOKEN_CACHE_CONTROL)
     }
     const { code, redirect_uri, client_id, code_verifier } = parsedRequest.data
 
@@ -107,7 +130,7 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
     // allowlist. See oauth-authz-registry.ts.
     if (!isRegisteredRedirectUri(options.registry, client_id, redirect_uri)) {
       const { status, body } = tokenError('invalid_grant')
-      return c.json(body, status)
+      return c.json(body, status, TOKEN_CACHE_CONTROL)
     }
 
     const result = options.store.redeemAuthorizationCode({
@@ -120,7 +143,7 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
       const { status, body } = tokenError(
         result.reason === 'invalid_request' ? 'invalid_request' : 'invalid_grant',
       )
-      return c.json(body, status)
+      return c.json(body, status, TOKEN_CACHE_CONTROL)
     }
 
     const minted = options.store.mintAccessToken(result.scopes, result.clientId)
@@ -130,7 +153,7 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
       expires_in: minted.expiresIn,
       scope: result.scopes.join(' '),
     })
-    return c.json(response, 200)
+    return c.json(response, 200, TOKEN_CACHE_CONTROL)
   })
 
   return app
