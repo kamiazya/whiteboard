@@ -68,4 +68,20 @@ describe('maybeOpenDaemonBrowser', () => {
     const input = baseInput({ openFn: vi.fn(async () => Promise.reject(new Error('no display'))) })
     await expect(maybeOpenDaemonBrowser(input)).resolves.toBeUndefined()
   })
+
+  // A best-effort UX nicety must never be able to take the daemon down.
+  // decideAutoOpenBrowser and the container probe are both synchronous
+  // calls inside maybeOpenDaemonBrowser's own body (not just openFn), so a
+  // throw from either of them has to be caught at the same boundary as an
+  // openFn rejection — otherwise a bug in the policy/detection code crashes
+  // an otherwise fully-started daemon.
+  it('swallows a throw from the container-detection probe instead of crashing the daemon', async () => {
+    const input = baseInput({
+      isContainerFn: () => {
+        throw new Error('cgroup read exploded')
+      },
+    })
+    await expect(maybeOpenDaemonBrowser(input)).resolves.toBeUndefined()
+    expect(input.openFn).not.toHaveBeenCalled()
+  })
 })

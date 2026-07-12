@@ -40,30 +40,39 @@ function resolveOpenOption(noOpenFlag: boolean, configOpenBrowser: boolean | und
 }
 
 export async function maybeOpenDaemonBrowser(input: MaybeOpenDaemonBrowserInput): Promise<void> {
-  const env = input.env ?? process.env
-  const decision = decideAutoOpenBrowser({
-    host: input.host,
-    isTTY: input.isTTY ?? Boolean(process.stdout.isTTY),
-    isContainer: (
-      input.isContainerFn ?? (() => isRunningInContainer(env, defaultContainerDetectionDeps))
-    )(),
-    env,
-    openOption: resolveOpenOption(input.noOpenFlag, input.configOpenBrowser),
-  })
-
-  if (!decision.shouldOpen) {
-    log.debug({ reason: decision.reason }, 'skipped auto-opening the browser')
-    return
-  }
-
+  // The daemon has already started successfully and emitted its ready JSON
+  // by the time this runs — everything below is a best-effort UX nicety on
+  // top of that success. A throw ANYWHERE in this function (the policy
+  // decision, the container probe, or the actual open() call) must never
+  // propagate: the caller does not — and must not have to — wrap this call
+  // in its own try/catch. The URL is computed up front so every failure
+  // path below can tell the user what to open manually.
   const url = `http://${input.host}:${input.port}`
   try {
+    const env = input.env ?? process.env
+    const decision = decideAutoOpenBrowser({
+      host: input.host,
+      isTTY: input.isTTY ?? Boolean(process.stdout.isTTY),
+      isContainer: (
+        input.isContainerFn ?? (() => isRunningInContainer(env, defaultContainerDetectionDeps))
+      )(),
+      env,
+      openOption: resolveOpenOption(input.noOpenFlag, input.configOpenBrowser),
+    })
+
+    if (!decision.shouldOpen) {
+      log.debug({ reason: decision.reason }, 'skipped auto-opening the browser')
+      return
+    }
+
     await (input.openFn ?? open)(url)
     log.info({ url }, 'opened the default browser at the daemon origin')
   } catch (err) {
     // A failed browser launch (no display, sandboxed environment, missing
-    // `xdg-open`, …) must never take the daemon down with it — the daemon
-    // itself started fine and the ready JSON has already been emitted.
-    log.warning({ url, err }, 'failed to auto-open the default browser')
+    // `xdg-open`, a bug in the policy/container-detection code, …) must
+    // never take the daemon down with it. Logging the URL here is the
+    // actionable part: it's the one thing that leaves the human with a
+    // path forward (open it themselves) instead of a dead end.
+    log.warning({ url, err }, 'failed to auto-open the default browser — open it manually')
   }
 }
