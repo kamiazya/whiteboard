@@ -24,3 +24,43 @@ export function browserLocalIndexPath(): string {
 export function browserLocalCanvasPath(canvasId: string): string {
   return `/local/${encodeURIComponent(canvasId)}`
 }
+
+export type DaemonRoute =
+  | { kind: 'index'; workspaceId?: string }
+  | { kind: 'canvas'; workspaceId: string; slug: string }
+
+// Deliberately regex-based rather than react-router's matchPath: App.tsx
+// needs this result inside a useState lazy initializer (before any Route
+// tree exists to match against), and keeping it framework-agnostic lets it
+// be unit-tested without a Router context.
+export function parseDaemonRoute(pathname: string): DaemonRoute | null {
+  const canvasMatch = pathname.match(/^\/canvas\/([^/]+)\/([^/]+)\/?$/)
+  if (canvasMatch) {
+    return {
+      kind: 'canvas',
+      workspaceId: decodeURIComponent(canvasMatch[1]),
+      slug: decodeURIComponent(canvasMatch[2]),
+    }
+  }
+  const workspaceMatch = pathname.match(/^\/w\/([^/]+)\/?$/)
+  if (workspaceMatch) {
+    return { kind: 'index', workspaceId: decodeURIComponent(workspaceMatch[1]) }
+  }
+  if (pathname === '/' || pathname === '') {
+    return { kind: 'index' }
+  }
+  return null
+}
+
+// Inverse of parseDaemonRoute — the single place that turns a DaemonView
+// back into the URL it should be addressable at, so App.tsx's state->URL
+// sync and parseDaemonRoute can never drift from each other.
+export function daemonRoutePath(route: DaemonRoute): string {
+  if (route.kind === 'canvas') return canvasPath(route.workspaceId, route.slug)
+  return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
+}
+
+export function parseBrowserLocalRoute(pathname: string): { canvasId: string } | null {
+  const match = pathname.match(/^\/local\/([^/]+)\/?$/)
+  return match ? { canvasId: decodeURIComponent(match[1]) } : null
+}
