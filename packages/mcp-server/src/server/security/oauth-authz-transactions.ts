@@ -92,6 +92,14 @@ const approvalViewSchema = z.object({
 
 export type ApprovalView = z.infer<typeof approvalViewSchema>
 
+const redirectTargetSchema = z.object({
+  clientId: z.string().min(1),
+  redirectUri: z.string().min(1),
+  state: z.string().min(1),
+})
+
+export type RedirectTarget = z.infer<typeof redirectTargetSchema>
+
 export type RedeemAuthorizationCodeInput = {
   code: string
   clientId: string
@@ -148,6 +156,14 @@ export interface OAuthTransactionStore {
   // rendered HTML, and only a 'pending', unexpired transaction is
   // renderable at all — a screen cannot outlive its transaction.
   getTransactionForApproval(transactionId: string): ApprovalView | null
+  // Where an authorization response for this transaction may be delivered,
+  // and the `state` RFC 6749 §4.1.2 requires it to echo. Separate from
+  // ApprovalView because that view feeds the rendered HTML and must not
+  // carry `state`; this one feeds only a Location header. Pending-only, so
+  // the decision route must read it *before* it approves or denies — a
+  // transaction that has already been decided has no further response to
+  // deliver.
+  getTransactionRedirect(transactionId: string): RedirectTarget | null
   // Per-client sliding-window limiter for GET /authorize, gating attempts
   // before a transaction exists at all. Returns true when the attempt is
   // allowed (and is recorded), false when the client is over the limit.
@@ -251,6 +267,12 @@ export function createOAuthTransactionStore(options?: {
       status: 'pending',
       expiresAt: record.expiresAt,
     }
+  }
+
+  function getTransactionRedirect(transactionId: string): RedirectTarget | null {
+    const record = getPendingTransaction(transactionId)
+    if (!record) return null
+    return { clientId: record.clientId, redirectUri: record.redirectUri, state: record.state }
   }
 
   function recordAuthorizeAttempt(clientId: string): boolean {
@@ -364,6 +386,7 @@ export function createOAuthTransactionStore(options?: {
     mintAccessToken,
     verifyApprovalBinding,
     getTransactionForApproval,
+    getTransactionRedirect,
     recordAuthorizeAttempt,
     size,
   }

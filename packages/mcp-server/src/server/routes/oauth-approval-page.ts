@@ -28,6 +28,11 @@ export type AuthorizeErrorReason =
   | 'redirect_uri_mismatch'
   | 'transaction_not_found'
   | 'rate_limited'
+  // The approval POST failed its cross-site / double-submit checks. Rendered
+  // rather than returned as a bare 403 so a user who hit it by navigating
+  // oddly (stale tab, cleared cookies) is told what to do, not shown what
+  // reads like a server bug.
+  | 'csrf_check_failed'
 
 // Human copy for every scope in the vocabulary. `Record<AuthScope, string>`
 // makes omitting a scope here a compile error rather than a silent gap in
@@ -103,6 +108,8 @@ const ERROR_COPY: Record<AuthorizeErrorReason, string> = {
   transaction_not_found:
     'This approval request no longer exists, most likely because the daemon restarted. Start the authorization request again.',
   rate_limited: 'Too many authorization attempts. Please wait a minute and try again.',
+  csrf_check_failed:
+    'This approval could not be verified as coming from this page. Start the authorization request again.',
 }
 
 export function renderAuthorizeErrorPage(reason: AuthorizeErrorReason): string {
