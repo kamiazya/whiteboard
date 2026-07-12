@@ -118,7 +118,10 @@ export function createDaemonAuthMiddleware(
     // token whose grant does not cover this route. Distinguishing them —
     // even by status code — would tell an attacker which of the two
     // credentials they are close to holding, and would tell a hostile page
-    // whether a given bearer is a live grant at all.
+    // whether a given bearer is a live grant at all. (The bodies match; a
+    // valid-but-out-of-scope token does run one extra O(1) hash lookup, a
+    // timing delta that only matters if this daemon is ever exposed beyond
+    // loopback — at which point the grant check needs a constant-time floor.)
     return c.json({ error: 'unauthorized' }, 401)
   }
 }
