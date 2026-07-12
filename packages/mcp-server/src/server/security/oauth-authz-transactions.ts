@@ -111,6 +111,9 @@ export interface OAuthTransactionStore {
     scopes: readonly AuthScope[],
     clientId: string,
   ): { accessToken: string; expiresIn: number }
+  // Live entry counts. The store's only unbounded-growth risk is retained
+  // dead records, so its occupancy has to be observable to be assertable.
+  size(): { transactions: number; codes: number }
 }
 
 export function createOAuthTransactionStore(options?: {
@@ -123,10 +126,26 @@ export function createOAuthTransactionStore(options?: {
   // never the map key either; only its hash ever lives in memory.
   const codeHashIndex = new Map<string, string>()
 
+  // Lazy sweep, not a timer. A `setInterval` would keep the Node event loop
+  // alive for the daemon's whole lifetime and would have to be torn down by
+  // every construction site; sweeping on write bounds the maps by the same
+  // TTL without owning a handle. A record past `expiresAt` can never again
+  // be approved, code-issued, or redeemed (every transition re-checks it),
+  // so dropping it is not observable to a caller — only its memory is.
+  function pruneExpired(): void {
+    const cutoff = now()
+    for (const [id, record] of transactions) {
+      if (record.expiresAt >= cutoff) continue
+      transactions.delete(id)
+      if (record.codeHash !== undefined) codeHashIndex.delete(record.codeHash)
+    }
+  }
+
   function createTransaction(input: CreateTransactionInput): {
     transactionId: string
     expiresAt: number
   } {
+    pruneExpired()
     const parsed = createTransactionInputSchema.parse(input)
     const id = randomBytes(16).toString('base64url')
     const createdAt = now()
@@ -226,11 +245,16 @@ export function createOAuthTransactionStore(options?: {
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS }
   }
 
+  function size(): { transactions: number; codes: number } {
+    return { transactions: transactions.size, codes: codeHashIndex.size }
+  }
+
   return {
     createTransaction,
     approveTransaction,
     issueAuthorizationCode,
     redeemAuthorizationCode,
     mintAccessToken,
+    size,
   }
 }

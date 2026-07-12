@@ -1,6 +1,100 @@
 import { describe, expect, it } from 'vitest'
 import { createOAuthTransactionStore } from './oauth-authz-transactions.js'
 
+describe('expired-entry pruning', () => {
+  const TRANSACTION_TTL_MS = 5 * 60_000
+
+  it('reclaims an expired transaction on the next write instead of leaking it', () => {
+    let clock = 1_000_000
+    const store = createOAuthTransactionStore({ now: () => clock })
+    store.createTransaction({
+      clientId: 'c',
+      redirectUri: 'https://example.test/cb',
+      scopes: ['workspace:read'],
+      state: 's',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    })
+    expect(store.size()).toEqual({ transactions: 1, codes: 0 })
+
+    clock += TRANSACTION_TTL_MS + 1
+    store.createTransaction({
+      clientId: 'c',
+      redirectUri: 'https://example.test/cb',
+      scopes: ['workspace:read'],
+      state: 's2',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    })
+
+    // The first transaction is gone, not merely unusable: a long-lived daemon
+    // must not accumulate one record per abandoned/attacker-driven attempt.
+    expect(store.size()).toEqual({ transactions: 1, codes: 0 })
+  })
+
+  it('reclaims the code-hash index entry of an expired code-issued transaction', () => {
+    let clock = 1_000_000
+    const store = createOAuthTransactionStore({ now: () => clock })
+    const { transactionId } = store.createTransaction({
+      clientId: 'c',
+      redirectUri: 'https://example.test/cb',
+      scopes: ['workspace:read'],
+      state: 's',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    })
+    store.approveTransaction(transactionId)
+    expect(store.issueAuthorizationCode(transactionId)).not.toBeNull()
+    expect(store.size()).toEqual({ transactions: 1, codes: 1 })
+
+    clock += TRANSACTION_TTL_MS + 1
+    store.createTransaction({
+      clientId: 'c',
+      redirectUri: 'https://example.test/cb',
+      scopes: ['workspace:read'],
+      state: 's2',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    })
+
+    expect(store.size()).toEqual({ transactions: 1, codes: 0 })
+  })
+
+  it('reclaims a redeemed transaction once its window has passed', () => {
+    let clock = 1_000_000
+    const store = createOAuthTransactionStore({ now: () => clock })
+    const { transactionId } = store.createTransaction({
+      clientId: 'c',
+      redirectUri: 'https://example.test/cb',
+      scopes: ['workspace:read'],
+      state: 's',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    })
+    store.approveTransaction(transactionId)
+    const issued = store.issueAuthorizationCode(transactionId)
+    if (!issued) throw new Error('expected issuance')
+    store.redeemAuthorizationCode({
+      code: issued.code,
+      clientId: 'c',
+      redirectUri: 'https://example.test/cb',
+      codeVerifier: 'v',
+    })
+    expect(store.size().transactions).toBe(1)
+
+    clock += TRANSACTION_TTL_MS + 1
+    store.createTransaction({
+      clientId: 'c',
+      redirectUri: 'https://example.test/cb',
+      scopes: ['workspace:read'],
+      state: 's2',
+      codeChallenge: 'challenge',
+      codeChallengeMethod: 'S256',
+    })
+    expect(store.size().transactions).toBe(1)
+  })
+})
+
 const baseInput = {
   clientId: 'whiteboard-hosted-web',
   redirectUri: 'https://whiteboard.pages.dev/oauth/callback',
