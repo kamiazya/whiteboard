@@ -9,6 +9,7 @@ import {
   type ProviderState,
   type WhiteboardCapabilities,
 } from './lib/provider.js'
+import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
 
 afterEach(cleanup)
 
@@ -206,6 +207,59 @@ describe('App daemon-pairing routing', () => {
     render(<App providerState={BROWSER_LOCAL_STATE} />)
     expect(screen.getByTestId('browser-local-canvas-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+  })
+})
+
+describe('App reconnect-target persistence', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    mockDaemonConnectionResult = { status: 'none' }
+  })
+  afterEach(() => {
+    mockDaemonConnectionResult = { status: 'none' }
+  })
+
+  it('persists baseUrl/workspaceId/slug to user settings on a successful #wb= pairing', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    await screen.findByTestId('daemon-canvas-page')
+
+    const saved = createUserSettingsStore().load()
+    expect(saved.storage.localDaemonBaseUrl).toBe('http://127.0.0.1:3099')
+    expect(saved.storage.lastConnectedWorkspaceId).toBe('w1')
+    expect(saved.storage.lastConnectedSlug).toBe('main')
+  })
+
+  it('never persists the bootstrapToken alongside the connection target', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'super-secret-token',
+      },
+    }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    await screen.findByTestId('daemon-canvas-page')
+
+    expect(localStorage.getItem(STORAGE_KEY) ?? '').not.toContain('super-secret-token')
+  })
+
+  it('does not persist a target when there is no #wb= pairing (plain browser-local session)', () => {
+    mockDaemonConnectionResult = { status: 'none' }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBeUndefined()
   })
 })
 

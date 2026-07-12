@@ -1,5 +1,5 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { BetaBanner } from './components/BetaBanner.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
@@ -134,6 +134,29 @@ export function App({ providerState }: AppProps) {
     if (workspaceId && slug) return { kind: 'canvas', workspaceId, slug }
     return { kind: 'index', workspaceId }
   })
+
+  // Persists ONLY the reconnect target (baseUrl/workspaceId/slug), never the
+  // bootstrapToken — the token stays in-memory via readDaemonTokenOnce's
+  // existing semantics. This lets a later hosted-app load (a fresh tab with
+  // no #wb= fragment) offer a one-click reconnect via DaemonDetectedBanner
+  // instead of silently landing on browser-local with no path back.
+  useEffect(() => {
+    if (daemonConnection.status !== 'paired') return
+    const { baseUrl, workspaceId, slug } = daemonConnection.payload
+    userSettingsStore.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: baseUrl,
+        lastConnectedWorkspaceId: workspaceId,
+        lastConnectedSlug: slug,
+      },
+    }))
+    // daemonConnection is a stable module-scope singleton for the life of the
+    // tab (see useDaemonConnection.ts) — this effect is meant to run once per
+    // successful pairing, not on every unrelated re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daemonConnection.status])
 
   // The 'Continue in browser-local' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
