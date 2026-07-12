@@ -1,0 +1,141 @@
+import { Hono } from 'hono'
+import type { LoroDoc } from 'loro-crdt'
+import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
+import { reconcileElementsOnDoc } from '../../../shared/reconcile-elements.js'
+import { ConflictError, saveCanvas } from '../../store/canvas-store.js'
+import { evictDoc, getDoc } from '../../store/doc-cache.js'
+import type { VersionStore } from '../../store/version-store.js'
+import {
+  validateSlug,
+  validateVersionId,
+  validateWorkspaceId,
+  validationErrorBody,
+} from '../../validators.js'
+import { getBroadcastFn, handleCorruptStoredData } from './shared.js'
+
+export interface RestoreRouterOptions {
+  versionStore: VersionStore
+}
+
+function countElements(doc: LoroDoc): number {
+  try {
+    const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
+    return list.filter((el) => el.isDeleted !== true).length
+  } catch {
+    return 0
+  }
+}
+
+// POST /api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore
+//
+// Two modes share this endpoint:
+//
+//   1. In-place reconcile (default; History panel uses this).
+//      CRDTs cannot forget history, so restore commits new ops that
+//      represent the past state:
+//        only in past    -> insert into current, or un-tombstone + restore fields
+//        only in current -> set isDeleted=true (tombstone)
+//        in both         -> copy differing fields from past onto current
+//
+//   2. Restore-as-new-canvas — body `{ targetSlug, overwrite? }`.
+//      Writes the past doc as a brand-new canvas under `targetSlug` in the
+//      same workspace. The original canvas / live doc / WS clients are not
+//      touched. Replaces the deleted `checkpoint_restore` flow.
+export function createRestoreRouter(options: RestoreRouterOptions) {
+  const app = new Hono()
+  const { versionStore } = options
+
+  app.post('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/restore', async (c) => {
+    const { workspaceId, slug, id } = c.req.param()
+    try {
+      validateWorkspaceId(workspaceId)
+      validateSlug(slug)
+      validateVersionId(id)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    // Body is optional. Empty body / non-JSON ⇒ in-place mode.
+    const rawText = await c.req.text()
+    let targetSlug: string | undefined
+    let overwrite = false
+    if (rawText.length > 0) {
+      let parsedJson: unknown
+      try {
+        parsedJson = JSON.parse(rawText)
+      } catch {
+        return c.json({ error: 'invalid_body', message: 'malformed JSON' }, 400)
+      }
+      const parsed = restoreVersionRequestSchema.safeParse(parsedJson)
+      if (!parsed.success) {
+        return c.json({ error: 'invalid_body', message: 'invalid restore options' }, 400)
+      }
+      targetSlug = parsed.data.targetSlug
+      overwrite = parsed.data.overwrite === true
+    }
+    try {
+      const doc = await getDoc(workspaceId, slug)
+      const past = await versionStore.load(workspaceId, id, doc)
+      if (!past) {
+        return c.json({ error: 'not_found' }, 404)
+      }
+
+      // Restore-as-new-canvas branch.
+      if (targetSlug !== undefined) {
+        try {
+          validateSlug(targetSlug)
+        } catch (err) {
+          const body = validationErrorBody(err)
+          if (body) return c.json(body, 400)
+          throw err
+        }
+        try {
+          await saveCanvas(workspaceId, targetSlug, past, { overwrite })
+        } catch (err) {
+          if (err instanceof ConflictError) {
+            return c.json(
+              {
+                error: 'output_exists',
+                message: `Target canvas "${targetSlug}" already exists. Pass overwrite=true to replace it.`,
+              },
+              409,
+            )
+          }
+          throw err
+        }
+        evictDoc(workspaceId, targetSlug)
+        return c.json({
+          canvasId: `${workspaceId}/${targetSlug}`,
+          elementCount: countElements(past),
+        })
+      }
+
+      // In-place reconcile branch (default).
+      const all = await versionStore.list(workspaceId, slug)
+      const label = all.find((v) => v.id === id)?.label
+      const { sendRestoreEvent } = await import('../ws.js')
+      sendRestoreEvent(workspaceId, slug, 'started', label)
+      try {
+        const prevVV = doc.version()
+        reconcileElementsOnDoc(doc, past)
+        doc.commit()
+        await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+        const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
+        if (update.byteLength > 0) {
+          getBroadcastFn()(workspaceId, slug, update)
+        }
+      } finally {
+        // Always send complete, even on error, or the client overlay can stay locked forever.
+        sendRestoreEvent(workspaceId, slug, 'complete')
+      }
+      return c.json({ ok: true })
+    } catch (err) {
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+  })
+
+  return app
+}

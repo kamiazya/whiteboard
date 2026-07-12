@@ -1,0 +1,110 @@
+import { Hono } from 'hono'
+import type { VersionStore } from '../../store/version-store.js'
+import {
+  validateSlug,
+  validateVersionId,
+  validateWorkspaceId,
+  validationErrorBody,
+} from '../../validators.js'
+import { isValidPngSignature } from '../canvas-thumbnail.js'
+import { handleCorruptStoredData } from './shared.js'
+
+export interface ThumbnailsRouterOptions {
+  versionStore: VersionStore
+}
+
+// PUT /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
+// GET /api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail
+// GET /api/workspaces/:workspaceId/canvases/:slug/latest-thumbnail
+export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
+  const app = new Hono()
+  const { versionStore } = options
+
+  // Body is PNG binary from the browser exportToBlob result. Validate the PNG signature minimally.
+  app.put('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
+    const { workspaceId, slug, id } = c.req.param()
+    try {
+      validateWorkspaceId(workspaceId)
+      validateSlug(slug)
+      validateVersionId(id)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    const bytes = new Uint8Array(await c.req.arrayBuffer())
+    if (!isValidPngSignature(bytes)) {
+      return c.json({ error: 'invalid_png' }, 400)
+    }
+    try {
+      await versionStore.saveThumbnail(workspaceId, id, bytes)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'save failed'
+      return c.json({ error: 'save_failed', message: msg }, 400)
+    }
+    return c.json({ ok: true })
+  })
+
+  // Return the PNG with cache headers, or 404 if it has not been saved.
+  app.get('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
+    const { workspaceId, slug, id } = c.req.param()
+    try {
+      validateWorkspaceId(workspaceId)
+      validateSlug(slug)
+      validateVersionId(id)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    try {
+      const bytes = await versionStore.loadThumbnail(workspaceId, id)
+      if (!bytes) return c.json({ error: 'not_found' }, 404)
+      return c.body(bytes.buffer as ArrayBuffer, 200, {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=3600, immutable',
+      })
+    } catch (err) {
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+  })
+
+  // Return the newest version thumbnail for canvas-switcher previews.
+  // "Newest" means the first hasThumbnail=true entry in version list order (createdAt desc).
+  // Keep max-age short (5 min) so fresh auto-save thumbnails replace cached ones promptly.
+  app.get('/api/workspaces/:workspaceId/canvases/:slug/latest-thumbnail', async (c) => {
+    const { workspaceId, slug } = c.req.param()
+    try {
+      validateWorkspaceId(workspaceId)
+      validateSlug(slug)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    try {
+      const versions = await versionStore.list(workspaceId, slug)
+      const latestWithThumb = versions.find((v) => v.hasThumbnail)
+      // No thumbnail yet is a normal state (e.g. a brand-new canvas). This
+      // endpoint backs CanvasThumb's <img src>, so a 404 would make the browser
+      // log "Failed to load resource: 404" as console noise. Return 204 No
+      // Content instead: a success status (no console error) whose empty body
+      // still trips the <img> onError handler → the FileText placeholder.
+      if (!latestWithThumb) return c.body(null, 204)
+      const bytes = await versionStore.loadThumbnail(workspaceId, latestWithThumb.id)
+      if (!bytes) return c.body(null, 204)
+      return c.body(bytes.buffer as ArrayBuffer, 200, {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'public, max-age=300',
+      })
+    } catch (err) {
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+  })
+
+  return app
+}
