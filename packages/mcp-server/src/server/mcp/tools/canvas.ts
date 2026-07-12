@@ -63,12 +63,6 @@ export const canvasCreateInputShape = {
     .describe(
       'URL-safe canvas slug (a-z, 0-9, hyphen). Used as the canvas identifier within the current workspace. Returned canvasId is "{workspaceId}/{slug}".',
     ),
-  issueNumber: z
-    .number()
-    .optional()
-    .describe(
-      'Optional GitHub issue number prefix. When set, the final slug becomes "{issueNumber}-{slug}" (e.g. issueNumber=42 + slug=login → "42-login").',
-    ),
   overwrite: z
     .boolean()
     .optional()
@@ -85,7 +79,6 @@ export function createCanvasTool() {
       type: 'object' as const,
       properties: {
         slug: { type: 'string', description: 'Canvas identifier (kebab-case)' },
-        issueNumber: { type: 'number', description: 'GitHub issue number (optional prefix)' },
         overwrite: {
           type: 'boolean',
           description:
@@ -95,22 +88,21 @@ export function createCanvasTool() {
       required: ['slug'],
     },
     execute: async (
-      args: { slug: string; issueNumber?: number; overwrite?: boolean },
+      args: { slug: string; overwrite?: boolean },
       workspaceId: string,
       client: DaemonClient,
     ): Promise<z.infer<typeof canvasCreateOutputSchema>> => {
-      const finalSlug = args.issueNumber ? `${args.issueNumber}-${args.slug}` : args.slug
       const res = await client.request(`/api/workspaces/${workspaceId}/canvases`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: finalSlug, overwrite: args.overwrite ?? false }),
+        body: JSON.stringify({ slug: args.slug, overwrite: args.overwrite ?? false }),
       })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { message?: string } | null
         throw new Error(body?.message ?? `Failed to create canvas: ${res.status}`)
       }
-      const url = daemonUrl(client, `/canvas/${workspaceId}/${finalSlug}`)
-      return { id: `${workspaceId}/${finalSlug}`, url }
+      const url = daemonUrl(client, `/canvas/${workspaceId}/${args.slug}`)
+      return { id: `${workspaceId}/${args.slug}`, url }
     },
   }
 }

@@ -272,9 +272,9 @@ export function registerAllTools(
       description: canvasTool.description,
       inputSchema: canvasCreateInputShape,
       outputSchema: canvasCreateOutputSchema,
-      handler: async ({ slug, issueNumber, overwrite }) => {
+      handler: async ({ slug, overwrite }) => {
         const result = await withDaemon((client) =>
-          canvasTool.execute({ slug, issueNumber, overwrite }, workspaceId, client),
+          canvasTool.execute({ slug, overwrite }, workspaceId, client),
         )
         return structuredJsonResult(result)
       },

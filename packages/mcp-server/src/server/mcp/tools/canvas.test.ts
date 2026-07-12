@@ -49,27 +49,12 @@ describe('canvas_create', () => {
     }) as typeof globalThis.fetch
 
     try {
-      await expect(tool.execute({ slug: 'test-canvas' }, 'test-session-id', client)).resolves.toEqual({
+      await expect(
+        tool.execute({ slug: 'test-canvas' }, 'test-session-id', client),
+      ).resolves.toEqual({
         id: 'test-session-id/test-canvas',
         url: 'http://localhost:3099/canvas/test-session-id/test-canvas',
       })
-    } finally {
-      globalThis.fetch = originalFetch
-    }
-  })
-
-  it('case 98', async () => {
-    const tool = createCanvasTool()
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = vi.fn(async (_input: string | URL, init?: RequestInit) => {
-      expect(init?.body).toBe(JSON.stringify({ slug: '123-my-canvas', overwrite: false }))
-      return new Response(JSON.stringify({ slug: '123-my-canvas' }), { status: 200 })
-    }) as typeof globalThis.fetch
-
-    try {
-      await expect(
-        tool.execute({ slug: 'my-canvas', issueNumber: 123 }, 'test-session-id', client),
-      ).resolves.toMatchObject({ id: 'test-session-id/123-my-canvas' })
     } finally {
       globalThis.fetch = originalFetch
     }
@@ -79,7 +64,10 @@ describe('canvas_create', () => {
     const tool = createCanvasTool()
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn(
-      async () => new Response(JSON.stringify({ message: 'Canvas "duplicate" already exists' }), { status: 409 }),
+      async () =>
+        new Response(JSON.stringify({ message: 'Canvas "duplicate" already exists' }), {
+          status: 409,
+        }),
     ) as typeof globalThis.fetch
 
     try {
@@ -108,10 +96,7 @@ describe('canvas_list', () => {
       if (input.toString() === 'http://localhost:3099/api/workspaces') {
         return new Response(
           JSON.stringify({
-            workspaces: [
-              { workspaceId: 'active-session' },
-              { workspaceId: 'stale-session' },
-            ],
+            workspaces: [{ workspaceId: 'active-session' }, { workspaceId: 'stale-session' }],
           }),
           { status: 200 },
         )
@@ -196,9 +181,7 @@ describe('canvas_open', () => {
     let polls = 0
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn(async (url: string | URL) => {
-      expect(url.toString()).toBe(
-        'http://localhost:3099/api/canvas/sid/slug/client-count',
-      )
+      expect(url.toString()).toBe('http://localhost:3099/api/canvas/sid/slug/client-count')
       polls += 1
       const readyCount = polls >= 3 ? 1 : 0
       return new Response(JSON.stringify({ count: 1, readyCount }), { status: 200 })
@@ -335,8 +318,7 @@ describe('optimize_canvases', () => {
     const tool = optimizeCanvasesTool()
     const originalFetch = globalThis.fetch
     globalThis.fetch = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ message: 'workspace missing' }), { status: 404 }),
+      async () => new Response(JSON.stringify({ message: 'workspace missing' }), { status: 404 }),
     ) as typeof globalThis.fetch
     try {
       await expect(tool.execute({}, 'sid', client)).rejects.toThrow(/optimize|workspace missing/)
