@@ -9,7 +9,7 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { createApp } from './app.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
-import { DATA_DIR, DIST_APP_DIR } from './config.js'
+import { DATA_DIR, DIST_APP_DIR, DIST_WEB_APP_DIR } from './config.js'
 import { handleWsUpgrade, getConnectionStats, setRuntimeTouchFn } from './routes/ws.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
@@ -61,6 +61,10 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   })
 
   const touch = () => idleTimer.touch()
+  // Mirrors app.ts's own useLegacyUiRoot decision so the status endpoint
+  // reports the UI that is actually being served, not always the legacy one.
+  const useLegacyUiRoot = process.env.WHITEBOARD_LEGACY_UI === '1'
+  const activeUiRootDir = useLegacyUiRoot ? DIST_APP_DIR : DIST_WEB_APP_DIR
   const getRuntimeStatus = (): RuntimeStatusResponse => {
     const stats = getConnectionStats()
     return {
@@ -85,7 +89,11 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           }
         })(),
       },
-      app: { served: true, buildPresent: existsSync(join(DIST_APP_DIR, 'index.html')) },
+      app: {
+        served: true,
+        buildPresent: existsSync(join(activeUiRootDir, 'index.html')),
+        ui: useLegacyUiRoot ? 'legacy' : 'web-app',
+      },
       mcp: { httpEnabled: true, endpoint: `http://${host}:${options.port}/mcp` },
       clients: { connected: stats.connectedClients, ready: stats.readyClients },
     }

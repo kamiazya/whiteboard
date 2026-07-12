@@ -17,6 +17,9 @@ vi.mock('./config.js', () => ({
   get DIST_APP_DIR() {
     return join(tmp.dir, 'dist')
   },
+  get DIST_WEB_APP_DIR() {
+    return join(tmp.dir, 'web-app')
+  },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
 
@@ -59,7 +62,7 @@ function createRuntimeOptions(
       idleForMs: 10,
       auth: { mode: 'local-token', hasToken: Boolean(token) },
       storage: { dataDir: '/tmp', dataDirWritable: true },
-      app: { served: true, buildPresent: false },
+      app: { served: true, buildPresent: false, ui: 'web-app' },
       mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
       clients: { connected: 0, ready: 0 },
     }),
@@ -767,8 +770,14 @@ describe('createApp daemon mutation auth', () => {
         .post('/api/test-probe', (c) => c.json({ ok: true })),
     )
 
+    // The GET route registered here after createApp() is shadowed by the
+    // reserved-prefix catch-all (registration order: the wildcard was added
+    // first, and Hono runs matched GET handlers in registration order), so
+    // it now correctly 404s as an unrecognized /api/* route rather than
+    // silently falling back to the SPA HTML — the assertion this test cares
+    // about is that the POST route below stays auth-gated.
     const getRes = await app.request('/api/test-probe')
-    expect(getRes.status).toBe(200)
+    expect(getRes.status).toBe(404)
 
     const unauthedPostRes = await app.request('/api/test-probe', {
       method: 'POST',
@@ -1264,6 +1273,127 @@ describe('createApp daemon mutation auth', () => {
       const bodyB = await (await appB.request('/api/runtime/ping')).json()
       expect(bodyA.pid).toBeUndefined()
       expect(bodyA.instanceId).not.toBe(bodyB.instanceId)
+    })
+  })
+
+  describe('local-daemon root serves the built apps/web (R3 UI retirement)', () => {
+    const originalLegacyUiFlag = process.env.WHITEBOARD_LEGACY_UI
+
+    afterEach(() => {
+      if (originalLegacyUiFlag === undefined) {
+        delete process.env.WHITEBOARD_LEGACY_UI
+      } else {
+        process.env.WHITEBOARD_LEGACY_UI = originalLegacyUiFlag
+      }
+    })
+
+    it('serves dist/web-app/index.html with runtime config injected when present', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head><title>apps/web</title></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/')
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toContain('apps-web-marker')
+      expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
+      expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
+    })
+
+    it('falls back to the legacy dist/app UI when dist/web-app is absent', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/')
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).toContain('<title>Whiteboard</title>')
+    })
+
+    it('WHITEBOARD_LEGACY_UI=1 keeps serving dist/app even when dist/web-app exists', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head><title>apps/web</title></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+      process.env.WHITEBOARD_LEGACY_UI = '1'
+
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/')
+      expect(res.status).toBe(200)
+      const html = await res.text()
+      expect(html).not.toContain('apps-web-marker')
+      expect(html).toContain('<title>Whiteboard</title>')
+    })
+
+    it('returns 404 (not the SPA HTML) for unmatched paths under reserved prefixes', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+
+      const app = createApp(createRuntimeOptions('secret'))
+
+      const apiRes = await app.request('/api/not-real')
+      expect(apiRes.status).toBe(404)
+      expect(await apiRes.text()).not.toContain('apps-web-marker')
+
+      const wsRes = await app.request('/ws/foo')
+      expect(wsRes.status).toBe(404)
+
+      const wellKnownRes = await app.request('/.well-known/unknown')
+      expect(wellKnownRes.status).toBe(404)
+    })
+
+    it('still serves the SPA for a deep, non-reserved route', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/canvas/session1/demo')
+      expect(res.status).toBe(200)
+      expect(await res.text()).toContain('apps-web-marker')
+    })
+
+    it('returns 404 (not the SPA HTML) for the bare /api path with no trailing segment', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api')
+      expect(res.status).toBe(404)
+      expect(await res.text()).not.toContain('apps-web-marker')
+    })
+
+    it('does not re-invoke getStatus (and its buildPresent existsSync check) on every SPA page request', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+
+      const baseOptions = createRuntimeOptions('secret')
+      const getStatus = vi.fn(baseOptions.getStatus)
+      const app = createApp({ ...baseOptions, getStatus })
+
+      // The catch-all HTML route only needs the daemon's port (fixed for the
+      // app instance's lifetime) to build daemonBaseUrl — it must not pull
+      // this from a fresh getStatus() call on every page load, since
+      // getStatus() also computes app.buildPresent via a synchronous
+      // existsSync() the real http-server.ts implementation performs.
+      const callsBeforeRequests = getStatus.mock.calls.length
+      await app.request('/canvas/session1/demo')
+      await app.request('/canvas/session2/other')
+      await app.request('/')
+      expect(getStatus.mock.calls.length).toBe(callsBeforeRequests)
     })
   })
 })
