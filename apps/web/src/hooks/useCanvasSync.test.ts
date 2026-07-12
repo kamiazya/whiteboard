@@ -1014,13 +1014,18 @@ describe('useCanvasSync', () => {
         }),
       ).resolves.not.toThrow()
 
-      // Routed through app-logger, which prefixes the message with its
-      // '[canvas-sync]' name tag.
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[canvas-sync] onExportRequest failed',
-        expect.any(Error),
-      )
-      consoleErrorSpy.mockRestore()
+      try {
+        // Routed through app-logger, which prefixes the message with its
+        // '[canvas-sync]' name tag.
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[canvas-sync] onExportRequest failed',
+          expect.any(Error),
+        )
+      } finally {
+        // Restore even when the assertion throws: a leaked console.error mock
+        // would silently swallow diagnostics in every later test in this file.
+        consoleErrorSpy.mockRestore()
+      }
     })
   })
 
