@@ -16,7 +16,6 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/dist/app',
 }))
 
 const { FileVersionStore } = await import('./version-store.js')

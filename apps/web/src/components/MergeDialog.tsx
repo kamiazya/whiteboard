@@ -433,7 +433,7 @@ export function MergeDialog({
               </div>
               <div className="text-xs text-muted-foreground">{previewCount ?? '—'} elements</div>
             </div>
-            <div className="relative h-[340px] overflow-hidden rounded border bg-white">
+            <div className="relative h-[340px] overflow-hidden rounded border bg-muted/30">
               {loading ? (
                 <div className="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
@@ -454,8 +454,8 @@ export function MergeDialog({
                   <div className="text-center text-xs">
                     <div>{previewElementCount > 0 ? 'No preview image yet' : 'No elements'}</div>
                     <div className="mt-1 text-[10px] opacity-80">
-                      Save «{source ? displayBranchName(source.name) : '?'}» with ⌘S to generate a
-                      preview image
+                      Open «{source ? displayBranchName(source.name) : '?'}» and save with ⌘S to
+                      generate its preview
                     </div>
                   </div>
                 </div>

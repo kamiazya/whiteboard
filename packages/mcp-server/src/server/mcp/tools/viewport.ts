@@ -8,6 +8,35 @@ import { parseCanvasId } from './canvas-id.js'
 
 export { viewportResponseSchema as viewportSetOutputSchema }
 
+export const viewportSetInputShape = {
+  canvasId: z
+    .string()
+    .describe('Canvas ID in "{workspaceId}/{slug}" form. Browser must be connected.'),
+  mode: z
+    .enum(['fit', 'move'])
+    .optional()
+    .describe(
+      '"fit" = scrollToContent + auto-zoom to frame the target elements. "move" = absolute scrollX/scrollY/zoom set. Default "fit".',
+    ),
+  elementIds: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Target element ids for mode="fit". When omitted, fit-to-all-elements. Ignored in "move" mode.',
+    ),
+  padding: z
+    .number()
+    .optional()
+    .describe('Padding (px) around target bounding box for mode="fit". Default 40.'),
+  animate: z
+    .boolean()
+    .optional()
+    .describe('Animate the viewport transition. Default true. Only applies to mode="fit".'),
+  scrollX: z.number().optional().describe('Absolute scrollX (world coords) for mode="move".'),
+  scrollY: z.number().optional().describe('Absolute scrollY (world coords) for mode="move".'),
+  zoom: z.number().optional().describe('Absolute zoom (1.0 = 100%) for mode="move".'),
+} satisfies z.ZodRawShape
+
 // Thin wrapper from MCP -> Hono route -> WS -> browser (excalidrawAPI).
 // useWhiteboardSync handles the actual scroll/zoom application.
 export function viewportSetTool() {
@@ -28,8 +57,7 @@ export function viewportSetTool() {
         elementIds: {
           type: 'array',
           items: { type: 'string' },
-          description:
-            '(mode="fit") Element IDs to frame. Omit to fit all elements in the scene.',
+          description: '(mode="fit") Element IDs to frame. Omit to fit all elements in the scene.',
         },
         padding: {
           type: 'number',
@@ -79,11 +107,14 @@ export function viewportSetTool() {
       if (args.scrollY !== undefined) body.scrollY = args.scrollY
       if (args.zoom !== undefined) body.zoom = args.zoom
 
-      const res = await client.request(`/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/viewport`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+      const res = await client.request(
+        `/api/canvas/${workspaceId}/${encodeURIComponent(slug)}/viewport`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      )
       if (!res.ok) {
         const raw = await res.json().catch(() => null)
         const errParse = raw === null ? null : viewportErrorBodySchema.safeParse(raw)

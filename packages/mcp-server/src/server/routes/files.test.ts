@@ -11,7 +11,6 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
 const { createFilesRouter } = await import('./files.js')
@@ -115,10 +114,7 @@ describe('GET /api/canvas/:workspaceId/:slug/file/:fileId', () => {
     // When both 'file-001' and 'file-001-extra' exist, requesting 'file-001'
     // must return only the exact match 'file-001.png'.
     const { writeFile } = await import('node:fs/promises')
-    await writeFile(
-      join(tempDir, 'session1', 'files', 'file-001.png'),
-      new Uint8Array([0x01]),
-    )
+    await writeFile(join(tempDir, 'session1', 'files', 'file-001.png'), new Uint8Array([0x01]))
     await writeFile(
       join(tempDir, 'session1', 'files', 'file-001-extra.png'),
       new Uint8Array([0x02]),

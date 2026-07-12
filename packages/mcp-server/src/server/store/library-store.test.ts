@@ -11,14 +11,11 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/dist/app',
 }))
 
-const {
-  loadInstalledLibraries,
-  addInstalledLibrary,
-  removeInstalledLibrary,
-} = await import('./library-store.js')
+const { loadInstalledLibraries, addInstalledLibrary, removeInstalledLibrary } = await import(
+  './library-store.js'
+)
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -40,7 +37,10 @@ describe('library-store', () => {
   })
 
   it('persists data across addInstalledLibrary -> loadInstalledLibraries', async () => {
-    await addInstalledLibrary('sid-1', 'https://libraries.excalidraw.com/libraries/foo.excalidrawlib')
+    await addInstalledLibrary(
+      'sid-1',
+      'https://libraries.excalidraw.com/libraries/foo.excalidrawlib',
+    )
     const libs = await loadInstalledLibraries('sid-1')
     expect(libs.urls).toEqual(['https://libraries.excalidraw.com/libraries/foo.excalidrawlib'])
   })
@@ -79,5 +79,4 @@ describe('library-store', () => {
     expect(a.urls).toEqual(['https://a.excalidrawlib'])
     expect(b.urls).toEqual(['https://b.excalidrawlib'])
   })
-
 })

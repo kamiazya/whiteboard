@@ -143,13 +143,11 @@ describe('publish contract', () => {
     expect(rootPackage.scripts['test:coverage']).toBe(
       'pnpm --filter @kamiazya/whiteboard-mcp test:coverage',
     )
-    expect(mcpPackage.scripts['test:coverage']).toBe(
-      'vitest run --coverage --project mcp-node --project mcp-jsdom',
-    )
+    expect(mcpPackage.scripts['test:coverage']).toBe('vitest run --coverage --project mcp-node')
   })
 
   it('declares sideEffects explicitly for bundlers', () => {
-    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/index.js', './dist/app/**/*.css'])
+    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/index.js'])
   })
 
   it('publishes to npm via OIDC trusted publisher (no NPM_TOKEN, with provenance)', () => {
@@ -321,11 +319,10 @@ describe('publish contract', () => {
     expect(vitestShared).toContain("provider: 'v8'")
     expect(vitestShared).toContain("reporter: ['text', 'html', 'lcov']")
     expect(vitestShared).toContain("reportsDirectory: './tmp/coverage'")
-    expect(vitestShared).toContain("include: ['src/**/*.{ts,tsx}']")
+    expect(vitestShared).toContain("include: ['src/**/*.ts']")
     expect(vitestShared).toContain("'**/*.test.*'")
     expect(vitestShared).toContain("'**/*.smoke-impl.ts'")
     expect(vitestShared).toContain("'**/*.distribution-impl.ts'")
-    expect(vitestShared).toContain("'src/app/components/ui/**'")
     expect(vitestShared).toContain("'dist/**'")
   })
 })
