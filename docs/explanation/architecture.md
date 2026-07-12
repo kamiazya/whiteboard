@@ -63,12 +63,11 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | `annotate` / `annotate_batch` | Add elements, single-shot or batched with grid layout. |
 | `update_element` / `delete_element` / `move_elements` / `canvas_clear` | Edit elements. |
 | `viewport_set` | Control browser pan and zoom (`mode: "fit"` / `"move"`). |
-| `export_png` | Export PNG. On success it also returns `imageBase64` as MCP `ImageContent` to the LLM. |
-| `canvas_export_json` | Export in standard `.excalidraw` JSON format for round-tripping with Excalidraw desktop or excalidraw.com. |
+| `export_canvas` | Export the canvas as `format: "png" \| "svg" \| "json"`. PNG on success also returns `imageBase64` as MCP `ImageContent` to the LLM; JSON is standard `.excalidraw` format for round-tripping with Excalidraw desktop or excalidraw.com. |
 | `version_save` / `version_restore` / `version_list` | Save and restore labeled canvas versions. `version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
 | `load_image` | Import an external image into the canvas. |
 
-`viewport_set` and `export_png` send instructions to the browser over WebSocket and settle on ACK, which is why they need a connected canvas tab. See [wire-protocol](../contributing/architecture/wire-protocol.md) for the full WebSocket message shapes.
+`viewport_set` and `export_canvas({ format: "png" })` send instructions to the browser over WebSocket and settle on ACK, which is why they need a connected canvas tab. `export_canvas({ format: "svg" | "json" })` always renders headless from the persisted document instead. See [wire-protocol](../contributing/architecture/wire-protocol.md) for the full WebSocket message shapes.
 
 ## Why Loro
 

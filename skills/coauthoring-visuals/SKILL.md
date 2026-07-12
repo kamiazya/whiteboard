@@ -124,7 +124,7 @@ Stage 2 rules:
   - overview belongs on the canvas
   - dense tables, long lists, and code-heavy detail belong in a companion artifact
 - When fixing an existing canvas, prefer local surgery
-- Assume tools like `create_frame`, `update_frame_members`, `update_element`, `move_elements`, `delete_elements`, `viewport_set`, and `export_png`
+- Assume tools like `create_frame`, `update_frame_members`, `update_element`, `move_elements`, `delete_elements`, `viewport_set`, and `export_canvas`
 - Build complex frames from the shell outward
   - layout / reading direction
   - large-scale shell such as layer, lane, zone, sidebar, frame

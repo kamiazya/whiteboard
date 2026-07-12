@@ -37,7 +37,7 @@ This page describes the **local daemon** in detail first, then server mode.
 Some operations require a connected browser client.
 
 - `viewport_set`
-- `export_png`
+- `export_canvas({ format: "png" })`
 
 These actions are routed through the daemon to the browser and fail fast when no browser client is connected.
 

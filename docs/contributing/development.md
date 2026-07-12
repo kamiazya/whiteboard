@@ -147,7 +147,7 @@ Default regression triple after a change:
 ```bash
 pnpm test        # unit tests (~3s, 460+ tests)
 pnpm typecheck   # tsc --noEmit (~10s)
-pnpm smoke:e2e   # stdio MCP subprocess: canvas_create -> version save/restore -> viewport / export no_client -> canvas_export_json round trip
+pnpm smoke:e2e   # stdio MCP subprocess: canvas_create -> version save/restore -> viewport no_client -> export_canvas (png/svg/json)
 ```
 
 If you also need a zero-context LLM-level check:

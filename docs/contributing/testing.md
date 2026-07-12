@@ -278,12 +278,12 @@ tsx scripts/smoke/mcp-template-smoke.mjs
 
 ### MCP Smoke Coverage Registry
 
-`src/server/mcp/mcp-smoke-coverage.ts` is the authoritative static registry that classifies all 43 registered MCP tools into four categories:
+`src/server/mcp/mcp-smoke-coverage.ts` is the authoritative static registry that classifies all 48 registered MCP tools into four categories:
 
 | Category | Description |
 |---|---|
 | `COVERED_TOOLS` | Called in `smoke:e2e` success path; MCP SDK validates `structuredContent` against `outputSchema` at runtime |
-| `ERROR_PATH_ONLY_TOOLS` | Route wiring verified via error path only (`viewport_set`, `export_png` — require browser client for success path) |
+| `ERROR_PATH_ONLY_TOOLS` | Route wiring verified via error path only (`viewport_set` — requires a browser client for the success path) |
 | `UNIT_ONLY_TOOLS` | Unit tests cover `outputSchema`; offline smoke call not needed |
 | `DEFERRED_TOOLS` | Cannot be called in offline smoke; each entry must carry `reason` + `unblock` fields |
 

@@ -367,7 +367,7 @@ export function updateFrameMembersTool() {
   return {
     name: 'update_frame_members',
     description:
-      'Add/remove elements from an existing frame without recreating it (frameId stays stable so export_png({frameId}) still targets the same group). All-or-nothing on missing ids. Recomputes frame x/y/width/height from the final member bbox plus padding.',
+      "Add/remove elements from an existing frame without recreating it (frameId stays stable so export_canvas({format:'png', frameId}) still targets the same group). All-or-nothing on missing ids. Recomputes frame x/y/width/height from the final member bbox plus padding.",
     // Derived from the Zod shape so the JSON-Schema view can never drift from
     // what registerToolWithAnnotations actually validates against.
     inputSchema: z.toJSONSchema(z.object(updateFrameMembersInputShape)) as {

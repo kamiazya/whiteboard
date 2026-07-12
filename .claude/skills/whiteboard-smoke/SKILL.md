@@ -16,7 +16,7 @@ Open [`references/smoke-matrix.md`](./references/smoke-matrix.md) first and sele
 - If a smoke test fails, fix that failure before moving to a larger one
 - `Claude` and `Codex` subprocess smoke tests consume API quota, so they are for manual verification rather than CI
 - `Codex` subprocess smoke may fail inside the sandbox because of `~/.codex/sessions` permissions. If so, rerun it outside the sandbox
-- For `viewport_set` and `export_png`, `no_client` while the browser is disconnected is an **expected success condition** in E2E smoke
+- For `viewport_set`, `no_client` while the browser is disconnected is an **expected success condition** in E2E smoke. `export_canvas` falls back to headless rendering instead, so its E2E coverage exercises the real render path with no browser connected
 
 ## Standard Flow
 
@@ -57,7 +57,7 @@ pnpm typecheck
 ## When Manual Checks Are Required
 
 - When you need to verify success paths that require a connected browser
-- When you need to inspect actual `export_png` rendering
+- When you need to inspect actual `export_canvas` PNG rendering in a connected browser
 - When you need to verify the appearance or readability on the Excalidraw canvas itself
 
 In those cases, do not treat smoke alone as sufficient. Open the browser and verify the real UI.

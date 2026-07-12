@@ -52,8 +52,16 @@ export interface HeadlessExportResult {
   height: number
 }
 
+export interface HeadlessSvgExportResult {
+  svg: string
+}
+
 interface HeadlessExporter {
   render(scene: ExcalidrawScene, options: HeadlessExportOptions): Promise<HeadlessExportResult>
+  renderSvg(
+    scene: ExcalidrawScene,
+    options: HeadlessExportOptions,
+  ): Promise<HeadlessSvgExportResult>
 }
 
 interface ExcalidrawScene {
@@ -186,30 +194,37 @@ async function buildExporter(): Promise<HeadlessExporter> {
     ? { fontBuffers: [excalifontTtf], loadSystemFonts: false, defaultFontFamily: 'Excalifont' }
     : { loadSystemFonts: true }
 
+  // Shared by render() and renderSvg(): filters elements to a frame and
+  // builds the SVGSVGElement Excalidraw's own export utility produces. The
+  // PNG path rasterises this via resvg; the SVG path serialises it directly.
+  async function buildSvgElement(scene: ExcalidrawScene, options: HeadlessExportOptions) {
+    const frameId = options.frameId
+    const elements = frameId
+      ? scene.elements.filter((e) => e.id === frameId || e.frameId === frameId)
+      : scene.elements
+    // Compose the appState passed to Excalidraw. When the caller forces a
+    // theme we override the scene's recorded theme/background so the same
+    // canvas can be exported under both light and dark for comparison.
+    const themedAppState =
+      options.theme !== undefined
+        ? {
+            ...(scene.appState ?? {}),
+            theme: options.theme,
+            viewBackgroundColor:
+              options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND,
+          }
+        : scene.appState
+    return exportToSvg({
+      elements: elements as unknown as ExportToSvgOpts['elements'],
+      appState: themedAppState as ExportToSvgOpts['appState'],
+      files: (scene.files ?? null) as ExportToSvgOpts['files'],
+      exportPadding: options.padding,
+    })
+  }
+
   return {
     async render(scene, options) {
-      const frameId = options.frameId
-      const elements = frameId
-        ? scene.elements.filter((e) => e.id === frameId || e.frameId === frameId)
-        : scene.elements
-      // Compose the appState passed to Excalidraw. When the caller forces a
-      // theme we override the scene's recorded theme/background so the same
-      // canvas can be exported under both light and dark for comparison.
-      const themedAppState =
-        options.theme !== undefined
-          ? {
-              ...(scene.appState ?? {}),
-              theme: options.theme,
-              viewBackgroundColor:
-                options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND,
-            }
-          : scene.appState
-      const svg = await exportToSvg({
-        elements: elements as unknown as ExportToSvgOpts['elements'],
-        appState: themedAppState as ExportToSvgOpts['appState'],
-        files: (scene.files ?? null) as ExportToSvgOpts['files'],
-        exportPadding: options.padding,
-      })
+      const svg = await buildSvgElement(scene, options)
       const themeBackground =
         options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND
       const resvg = new Resvg(svg.outerHTML, {
@@ -227,11 +242,17 @@ async function buildExporter(): Promise<HeadlessExporter> {
         height: png.height,
       }
     },
+    async renderSvg(scene, options) {
+      // Vector output is resolution-independent, so `scale`/`background`
+      // (raster-only concerns handled by resvg above) do not apply here.
+      const svg = await buildSvgElement(scene, options)
+      return { svg: svg.outerHTML }
+    },
   }
 }
 
 // Pre-warm the singleton during daemon startup so the first user-facing
-// `export_png` call does not pay the jsdom + canvas + resvg + woff2 cost.
+// `export_canvas` (format:png) call does not pay the jsdom + canvas + resvg + woff2 cost.
 // Errors are swallowed because pre-warming is best-effort: the actual export
 // path will still surface a descriptive failure.
 export async function prewarmHeadlessExporter(): Promise<void> {
@@ -266,4 +287,12 @@ export async function renderSceneToPng(
 ): Promise<HeadlessExportResult> {
   const exporter = await getHeadlessExporter()
   return exporter.render(scene, options)
+}
+
+export async function renderSceneToSvg(
+  scene: ExcalidrawScene,
+  options: HeadlessExportOptions = {},
+): Promise<HeadlessSvgExportResult> {
+  const exporter = await getHeadlessExporter()
+  return exporter.renderSvg(scene, options)
 }

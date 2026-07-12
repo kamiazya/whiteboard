@@ -38,7 +38,7 @@ export interface BuildAnnotationFieldsInput {
   fillStyle?: 'solid' | 'hachure' | 'cross-hatch'
   strokeWidth?: number
   // Shared ID used by template_insert so all elements from one insert can be
-  // targeted together later. canvas_export_json strips it by default.
+  // targeted together later. export_canvas({format:'json'}) strips it by default.
   templateInstanceId?: string
   // Marks text created as an arrow midpoint label so routing can ignore it as
   // an obstacle.
@@ -47,9 +47,7 @@ export interface BuildAnnotationFieldsInput {
 
 export type AnnotationFields = Record<string, unknown>
 
-export function buildAnnotationFields(
-  input: BuildAnnotationFieldsInput,
-): AnnotationFields {
+export function buildAnnotationFields(input: BuildAnnotationFieldsInput): AnnotationFields {
   const common: AnnotationFields = {
     id: input.elementId,
     x: input.x,
@@ -81,8 +79,9 @@ export function buildAnnotationFields(
   if (input.type === 'arrow') {
     // Prefer explicit route points, then derive a 2-point segment from endTarget,
     // then fall back to a 100px horizontal arrow.
-    const points: [number, number][] = input.points ?? (
-      input.endTarget
+    const points: [number, number][] =
+      input.points ??
+      (input.endTarget
         ? [
             [0, 0],
             [input.endTarget.x - input.x, input.endTarget.y - input.y],
@@ -90,8 +89,7 @@ export function buildAnnotationFields(
         : [
             [0, 0],
             [100, 0],
-          ]
-    )
+          ])
     // Compute the bbox from all points so intermediate elbows are covered.
     const xs = points.map((p) => p[0])
     const ys = points.map((p) => p[1])

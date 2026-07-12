@@ -53,7 +53,7 @@ library_insert_batch({
 })
 
 viewport_set({ canvasId: scratchId, mode: "fit", padding: 40 })
-export_png({ canvasId: scratchId, padding: 24 })
+export_canvas({ canvasId: scratchId, format: "png", padding: 24 })
 ```
 
 For GCP / AWS / network icon libraries in particular, this extra step materially improves diagram quality.

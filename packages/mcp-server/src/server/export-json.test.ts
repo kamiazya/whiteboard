@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -90,6 +90,35 @@ describe('exportCanvasJsonDoc with outputPath', () => {
         outputPath: join(tempDir, 'sid', '.checkpoints', 'v1.json'),
       }),
     ).rejects.toMatchObject({ name: 'OutputPathError', code: 'invalid_output_path' })
+  })
+
+  it('generates distinct default filePaths for two exports in the same millisecond', async () => {
+    // The default path used to be slug + millisecond timestamp only, so two
+    // exports issued fast enough to land in the same millisecond would
+    // collide and the second write would silently clobber the first.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
+    try {
+      const [first, second] = await Promise.all([
+        exportCanvasJsonDoc({
+          workspaceId: 'sid',
+          slug: 'canvas-a',
+          doc: buildDocWithRect(),
+          dataDir: tempDir,
+        }),
+        exportCanvasJsonDoc({
+          workspaceId: 'sid',
+          slug: 'canvas-a',
+          doc: buildDocWithRect(),
+          dataDir: tempDir,
+        }),
+      ])
+      expect(first.filePath).not.toBe(second.filePath)
+      await expect(readFile(first.filePath, 'utf-8')).resolves.toMatch(/"type": "excalidraw"/)
+      await expect(readFile(second.filePath, 'utf-8')).resolves.toMatch(/"type": "excalidraw"/)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('rejects a relative outputPath with a typed OutputPathError', async () => {
@@ -207,7 +236,9 @@ describe('exportCanvasJsonDoc with outputPath', () => {
     expect(Number.isNaN(el.y)).toBe(false)
 
     // Exactly one warning record for the dropped corrupt row.
-    const warnings = capture.records.filter((r) => r.level === 'warning' && r.scope === 'export-json')
+    const warnings = capture.records.filter(
+      (r) => r.level === 'warning' && r.scope === 'export-json',
+    )
     expect(warnings).toHaveLength(1)
   })
 })

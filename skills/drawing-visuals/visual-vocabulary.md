@@ -56,7 +56,7 @@ That does not mean every board belongs on one canvas.
 Use multiple frames on one canvas when:
 - you want to move between `current / problem / proposal` in one discussion
 - you want side-by-side or stacked comparison
-- you want section-level inspection through viewport or `export_png({ frameId })`
+- you want section-level inspection through viewport or `export_canvas({ format: "png", frameId })`
 - you may later add cross-frame arrows or supporting notes
 
 When using frames:

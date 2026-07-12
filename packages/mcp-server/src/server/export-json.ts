@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { LoroDoc } from 'loro-crdt'
+import { nanoid } from 'nanoid'
 import { DATA_DIR } from './config.js'
 import { getLogger } from './log.js'
 import { validateOutputPath } from './output-path.js'
@@ -56,7 +57,11 @@ async function resolveOutputPath(args: {
   }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const fileName = `${args.slug}-${timestamp}.excalidraw`
+  // The millisecond timestamp alone is not unique: two exports issued fast
+  // enough to land in the same millisecond would collide and the second
+  // write would silently clobber the first. The random suffix guarantees
+  // uniqueness regardless of call timing.
+  const fileName = `${args.slug}-${timestamp}-${nanoid(6)}.excalidraw`
   const exportsDir = join(args.dataDir ?? DATA_DIR, args.workspaceId, 'exports')
   return join(exportsDir, fileName)
 }

@@ -3,6 +3,7 @@ import { scheduleAutoCompact, setAutoCompactTrigger } from '../store/canvas-stor
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } from './canvas/auto-version.js'
 import { createCanvasJsonExportRouter } from './canvas/export-json.js'
+import { createCanvasSvgExportRouter } from './canvas/export-svg.js'
 import { createLiveDocRouter } from './canvas/live-doc.js'
 import { createMaintenanceRouter } from './canvas/maintenance.js'
 import { createCanvasMetadataRouter } from './canvas/metadata.js'
@@ -61,6 +62,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
   app.route('/', createVersionsRouter({ versionStore, getHeadBranch: options.getHeadBranch }))
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createCanvasJsonExportRouter())
+  app.route('/', createCanvasSvgExportRouter())
   app.route('/', createThumbnailsRouter({ versionStore }))
   app.route('/', createRestoreRouter({ versionStore }))
 

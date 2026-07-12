@@ -10,9 +10,17 @@
 
 import { applyMinFontPx } from '../../shared/min-font-px.js'
 import { embedExcalidrawScene } from '../../shared/png-embed-scene.js'
-import { type ParentedElement, resolveParentedElements } from '../../shared/resolve-parented-elements.js'
+import {
+  type ParentedElement,
+  resolveParentedElements,
+} from '../../shared/resolve-parented-elements.js'
 import { getDoc } from '../store/doc-cache.js'
-import { type HeadlessExportResult, renderSceneToPng } from './headless-renderer.js'
+import {
+  type HeadlessExportResult,
+  type HeadlessSvgExportResult,
+  renderSceneToPng,
+  renderSceneToSvg,
+} from './headless-renderer.js'
 import { loadCanvasFiles } from './load-canvas-files.js'
 
 export interface HeadlessCanvasExportOptions {
@@ -27,33 +35,30 @@ export interface HeadlessCanvasExportOptions {
   theme?: 'light' | 'dark'
 }
 
-export async function exportCanvasHeadless(args: {
-  workspaceId: string
-  slug: string
-  options?: HeadlessCanvasExportOptions
-}): Promise<HeadlessExportResult> {
-  const doc = await getDoc(args.workspaceId, args.slug)
+// Shared by both format entry points below: reads the persisted doc, resolves
+// parent-follow custom fields into absolute x/y, drops tombstones, and loads
+// only the file attachments the live elements actually reference.
+async function buildExportScene(
+  workspaceId: string,
+  slug: string,
+  options?: HeadlessCanvasExportOptions,
+) {
+  const doc = await getDoc(workspaceId, slug)
   const rawElements = doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
-  // Resolve parent-follow custom fields into absolute x/y so rendering matches
-  // the browser export, then keep all fields (Excalidraw ignores unknown ones).
   const elements = resolveParentedElements(
     rawElements as unknown as ParentedElement[],
   ) as unknown as Array<Record<string, unknown> & { id: string; type: string; isDeleted?: boolean }>
   const liveElements = elements.filter((e) => e.isDeleted !== true)
-  const sizedElements = applyMinFontPx(liveElements, args.options?.minFontPx)
-  // Pick the fileIds the canvas actually references so the file loader
-  // does NOT touch attachments owned by other canvases in the same
-  // workspace. Skipping deleted elements means a tombstoned image
-  // does not pin the underlying blob into the export payload.
+  const sizedElements = applyMinFontPx(liveElements, options?.minFontPx)
   const referencedFileIds = new Set<string>()
   for (const el of liveElements) {
     if (el.type !== 'image') continue
     const fileId = el.fileId
     if (typeof fileId === 'string' && fileId.length > 0) referencedFileIds.add(fileId)
   }
-  const files = await loadCanvasFiles(args.workspaceId, referencedFileIds)
+  const files = await loadCanvasFiles(workspaceId, referencedFileIds)
 
-  const scene = {
+  return {
     type: 'excalidraw' as const,
     version: 2,
     source: '@kamiazya/whiteboard',
@@ -61,6 +66,14 @@ export async function exportCanvasHeadless(args: {
     appState: { viewBackgroundColor: '#ffffff' },
     files,
   }
+}
+
+export async function exportCanvasHeadless(args: {
+  workspaceId: string
+  slug: string
+  options?: HeadlessCanvasExportOptions
+}): Promise<HeadlessExportResult> {
+  const scene = await buildExportScene(args.workspaceId, args.slug, args.options)
 
   const rendered = await renderSceneToPng(scene, {
     padding: args.options?.padding,
@@ -78,4 +91,20 @@ export async function exportCanvasHeadless(args: {
     ...rendered,
     png: embedExcalidrawScene(rendered.png, scene),
   }
+}
+
+// SVG output is vector markup, not a raster asset, so there is nothing to
+// re-embed a scene chunk into (unlike the PNG path above) — the `.svg` file
+// is a plain rendering artifact, not a round-trippable `.excalidraw` file.
+export async function exportCanvasHeadlessSvg(args: {
+  workspaceId: string
+  slug: string
+  options?: HeadlessCanvasExportOptions
+}): Promise<HeadlessSvgExportResult> {
+  const scene = await buildExportScene(args.workspaceId, args.slug, args.options)
+  return renderSceneToSvg(scene, {
+    padding: args.options?.padding,
+    frameId: args.options?.frameId,
+    theme: args.options?.theme,
+  })
 }
