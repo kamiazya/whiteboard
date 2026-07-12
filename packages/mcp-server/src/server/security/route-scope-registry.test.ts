@@ -92,4 +92,22 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     expect(resolveApiRouteScope('GET', '/mcp')).toBeNull()
     expect(resolveApiRouteScope('GET', '/')).toBeNull()
   })
+
+  // The file-route rule must key off the write/read split, not off the one
+  // write verb that happens to be mounted today — otherwise adding a DELETE
+  // (or POST) file route later silently authorizes a mutation with a
+  // read-only credential.
+  it('any write verb on a file route requires files:write, not just PUT', () => {
+    const filePath = '/api/canvas/ws1/main/file/abc'
+    expect(resolveApiRouteScope('GET', filePath)).toEqual({
+      kind: 'scoped',
+      scopes: ['files:read'],
+    })
+    for (const method of ['PUT', 'POST', 'PATCH', 'DELETE']) {
+      expect(resolveApiRouteScope(method, filePath), `${method} on a file route`).toEqual({
+        kind: 'scoped',
+        scopes: ['files:write'],
+      })
+    }
+  })
 })
