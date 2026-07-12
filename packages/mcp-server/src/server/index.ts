@@ -7,6 +7,7 @@ import {
   resolveMcpProtectedResourceMetadataFromEnv,
 } from './security/mcp-auth.js'
 import { isDirectEntryPoint } from './entrypoint.js'
+import { parseOAuthClientRegistryEnv } from './security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
@@ -112,6 +113,19 @@ export async function main() {
     process.exit(1)
   }
 
+  // Same fail-fast posture: a malformed registry must abort startup rather
+  // than leave the authorization-server surface silently unmounted, which
+  // would look identical to "the operator never configured it".
+  const oauthRegistry = parseOAuthClientRegistryEnv(process.env.WHITEBOARD_OAUTH_CLIENT_REGISTRY)
+  if (!oauthRegistry.ok) {
+    const log = getLogger('server-index')
+    log.error(
+      { reason: oauthRegistry.error },
+      'WHITEBOARD_OAUTH_CLIENT_REGISTRY could not be parsed; refusing to start',
+    )
+    process.exit(1)
+  }
+
   // A hosted origin in the allowlist widens which browser origins may reach
   // /api CORS, /mcp, and WS upgrade. Without a Bearer token, missing-token
   // auth strategies treat every request as authenticated (local-dev
@@ -162,6 +176,7 @@ export async function main() {
     mcpAuth,
     idleTimeoutMs,
     allowedWebOrigins,
+    oauthClientRegistry: oauthRegistry.registry,
     onClose: daemonMode
       ? async () => {
           await deleteDaemonRecord(DATA_DIR)

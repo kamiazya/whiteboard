@@ -9,6 +9,7 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { createApp } from './app.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
+import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { DATA_DIR, DIST_WEB_APP_DIR } from './config.js'
 import { handleWsUpgrade, getConnectionStats, setRuntimeTouchFn } from './routes/ws.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
@@ -29,6 +30,10 @@ export interface StartHttpServerOptions {
   /** Exact-match hosted origins admitted alongside loopback, on /api CORS,
    *  /mcp, and WS upgrade (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default. */
   allowedWebOrigins?: readonly string[]
+  /** Registered OAuth clients and their exact redirect_uris
+   *  (WHITEBOARD_OAUTH_CLIENT_REGISTRY). Empty by default, which leaves the
+   *  hosted-origin authorization-server surface entirely unmounted. */
+  oauthClientRegistry?: OAuthClientRegistry
 }
 
 export interface RunningServer {
@@ -136,6 +141,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     getStatus: getRuntimeStatus,
     shutdown: close,
     allowedWebOrigins: options.allowedWebOrigins,
+    oauthClientRegistry: options.oauthClientRegistry,
   })
 
   setRuntimeTouchFn(touch)

@@ -17,6 +17,7 @@ import {
 import { DATA_DIR } from '../shared/data-dir-secure.js'
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
+import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from '../server/security/web-origin-allowlist.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
@@ -33,7 +34,11 @@ export interface DaemonRunReadyResult {
 }
 
 export type DaemonRunOutcome =
-  | { kind: 'input-error'; message: string; code?: 'invalid_allowed_web_origins' }
+  | {
+      kind: 'input-error'
+      message: string
+      code?: 'invalid_allowed_web_origins' | 'invalid_oauth_client_registry'
+    }
   | { kind: 'refused'; message: string }
   | { kind: 'running'; result: DaemonRunReadyResult }
 
@@ -122,6 +127,19 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
     }
   }
 
+  // Same fail-fast posture as the allowlist above: a malformed registry must
+  // not start a daemon whose authorization-server surface is silently absent.
+  const oauthRegistry = parseOAuthClientRegistryEnv(
+    (options.env ?? process.env).WHITEBOARD_OAUTH_CLIENT_REGISTRY,
+  )
+  if (!oauthRegistry.ok) {
+    return {
+      kind: 'input-error',
+      message: `Invalid WHITEBOARD_OAUTH_CLIENT_REGISTRY (${oauthRegistry.error}).`,
+      code: 'invalid_oauth_client_registry',
+    }
+  }
+
   const existing = await loadDaemonRecord(dataDir)
   if (existing !== null && isPidAlive(existing.pid)) {
     return {
@@ -151,7 +169,13 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   return await withDaemonStartupLock(dataDir, async () => {
     const port = options.port ?? (await findAvailablePort())
 
-    const running = await startHttpServer({ port, host, token, allowedWebOrigins })
+    const running = await startHttpServer({
+      port,
+      host,
+      token,
+      allowedWebOrigins,
+      oauthClientRegistry: oauthRegistry.registry,
+    })
 
     const startedAt = new Date().toISOString()
 
