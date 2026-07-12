@@ -91,18 +91,20 @@ const boundElementRefSchema = z.object({
   type: z.string(),
 })
 
-const libraryElementSchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
-  boundElements: z.array(boundElementRefSchema).nullish(),
-  // .passthrough() retains arbitrary Excalidraw-proprietary fields (strokeStyle,
-  // roughness, strokeColor, etc.) that vary by element type; strict enumeration
-  // would reject valid real-world payloads fetched from external library URLs.
-}).passthrough()
+const libraryElementSchema = z
+  .object({
+    id: z.string(),
+    type: z.string(),
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+    boundElements: z.array(boundElementRefSchema).nullish(),
+    // .passthrough() retains arbitrary Excalidraw-proprietary fields (strokeStyle,
+    // roughness, strokeColor, etc.) that vary by element type; strict enumeration
+    // would reject valid real-world payloads fetched from external library URLs.
+  })
+  .passthrough()
 
 const libraryItemV2Schema = z.object({
   id: z.string().optional(),
@@ -190,9 +192,7 @@ async function loadLibrarySource(
     throw new Error('one of libraryUrl / libraryPath / userLibraryName is required')
   }
   if (specified.length > 1) {
-    throw new Error(
-      'Specify only one of libraryUrl / libraryPath / userLibraryName',
-    )
+    throw new Error('Specify only one of libraryUrl / libraryPath / userLibraryName')
   }
   if (src.libraryUrl) return fetchLibrary(src.libraryUrl)
   if (src.libraryPath) {
@@ -236,10 +236,7 @@ function appendElementsToDoc(
   }
 }
 
-function withAssignedGroups(
-  element: LibraryElement,
-  groupIds: string[],
-): LibraryElement {
+function withAssignedGroups(element: LibraryElement, groupIds: string[]): LibraryElement {
   if (groupIds.length === 0) return element
   const current = Array.isArray(element.groupIds)
     ? element.groupIds.filter((value): value is string => typeof value === 'string')
@@ -369,6 +366,12 @@ function itemBBox(elements: LibraryElement[]): {
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
+export const libraryListItemsInputShape = {
+  libraryUrl: z.string().optional(),
+  libraryPath: z.string().optional(),
+  userLibraryName: z.string().optional(),
+} satisfies z.ZodRawShape
+
 export function libraryListItemsTool() {
   return {
     name: 'library_list_items',
@@ -413,6 +416,37 @@ export function libraryListItemsTool() {
     },
   }
 }
+
+export const libraryInsertItemInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  libraryUrl: z
+    .string()
+    .optional()
+    .describe(
+      'HTTPS URL to a .excalidrawlib file (e.g. libraries.excalidraw.com items). Pick exactly one of libraryUrl / libraryPath / userLibraryName.',
+    ),
+  libraryPath: z.string().optional().describe('Absolute path to a local .excalidrawlib file.'),
+  userLibraryName: z
+    .string()
+    .optional()
+    .describe(
+      'Name of a user library saved via user_library_save (stored in ~/.whiteboard/.user-libraries/).',
+    ),
+  itemIndex: z
+    .number()
+    .describe(
+      'Item index within the library (0-based). Use library_list_items first to discover what is at each index.',
+    ),
+  target: z
+    .object({ x: z.number(), y: z.number() })
+    .describe(
+      'World coords for the top-left of the inserted item. Internal element ids are remapped to fresh ids.',
+    ),
+  scale: z
+    .number()
+    .optional()
+    .describe('Scale multiplier (1.0 = original). Overrides metadata.scales when both are set.'),
+} satisfies z.ZodRawShape
 
 export function libraryInsertItemTool() {
   return {
@@ -472,7 +506,11 @@ export function libraryInsertItemTool() {
         },
         client,
       )
-      const inserted = result.items[0] ?? { itemIndex: args.itemIndex, insertedCount: 0, elementIds: [] }
+      const inserted = result.items[0] ?? {
+        itemIndex: args.itemIndex,
+        insertedCount: 0,
+        elementIds: [],
+      }
       return {
         source: result.source,
         itemIndex: inserted.itemIndex,
@@ -482,6 +520,25 @@ export function libraryInsertItemTool() {
     },
   }
 }
+
+export const libraryInsertBatchInputShape = {
+  canvasId: z.string(),
+  libraryUrl: z.string().optional(),
+  libraryPath: z.string().optional(),
+  userLibraryName: z.string().optional(),
+  groupAs: z.string().optional(),
+  scale: z.number().optional(),
+  items: z
+    .array(
+      z.object({
+        itemIndex: z.number(),
+        target: z.object({ x: z.number(), y: z.number() }),
+        groupAs: z.string().optional(),
+        scale: z.number().optional(),
+      }),
+    )
+    .min(1),
+} satisfies z.ZodRawShape
 
 export function libraryInsertBatchTool() {
   return {
@@ -542,7 +599,10 @@ export function libraryInsertBatchTool() {
       },
       required: ['canvasId', 'items'],
     },
-    execute: async (args: LibraryInsertBatchArgs, client: DaemonClient): Promise<z.infer<typeof libraryInsertBatchOutputSchema>> => {
+    execute: async (
+      args: LibraryInsertBatchArgs,
+      client: DaemonClient,
+    ): Promise<z.infer<typeof libraryInsertBatchOutputSchema>> => {
       if (args.scale !== undefined) requirePositiveScale(args.scale)
       if (args.items.length === 0) {
         return {
@@ -560,6 +620,14 @@ export function libraryInsertBatchTool() {
 // Three tools for persisting library URLs at the session level so the browser can
 // restore the library panel after reloads.
 
+export const libraryInstallInputShape = {
+  libraryUrl: z
+    .string()
+    .describe(
+      'HTTPS URL to a .excalidrawlib file. Persisted to the session config so the browser auto-restores it on reload. Validated by fetching once at install time.',
+    ),
+} satisfies z.ZodRawShape
+
 export function libraryInstallTool(workspaceId: string) {
   return {
     name: 'library_install',
@@ -575,7 +643,10 @@ export function libraryInstallTool(workspaceId: string) {
       },
       required: ['libraryUrl'],
     },
-    execute: async (args: { libraryUrl: string }, client: DaemonClient): Promise<z.infer<typeof libraryInstallOutputSchema>> => {
+    execute: async (
+      args: { libraryUrl: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof libraryInstallOutputSchema>> => {
       // Verify the URL eagerly so broken sources fail here.
       const items = await fetchLibrary(args.libraryUrl)
       const res = await client.request(`/api/workspaces/${workspaceId}/libraries`, {
@@ -596,6 +667,8 @@ export function libraryInstallTool(workspaceId: string) {
   }
 }
 
+export const libraryUninstallInputShape = { libraryUrl: z.string() } satisfies z.ZodRawShape
+
 export function libraryUninstallTool(workspaceId: string) {
   return {
     name: 'library_uninstall',
@@ -607,7 +680,10 @@ export function libraryUninstallTool(workspaceId: string) {
       },
       required: ['libraryUrl'],
     },
-    execute: async (args: { libraryUrl: string }, client: DaemonClient): Promise<z.infer<typeof installedUrlsOutputSchema>> => {
+    execute: async (
+      args: { libraryUrl: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof installedUrlsOutputSchema>> => {
       const res = await client.request(`/api/workspaces/${workspaceId}/libraries`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -622,6 +698,8 @@ export function libraryUninstallTool(workspaceId: string) {
   }
 }
 
+export const libraryListInstalledInputShape = {} satisfies z.ZodRawShape
+
 export function libraryListInstalledTool(workspaceId: string) {
   return {
     name: 'library_list_installed',
@@ -631,7 +709,10 @@ export function libraryListInstalledTool(workspaceId: string) {
       type: 'object' as const,
       properties: {},
     },
-    execute: async (_args: object, client: DaemonClient): Promise<z.infer<typeof installedUrlsOutputSchema>> => {
+    execute: async (
+      _args: object,
+      client: DaemonClient,
+    ): Promise<z.infer<typeof installedUrlsOutputSchema>> => {
       const res = await client.request(`/api/workspaces/${workspaceId}/libraries`)
       if (!res.ok) {
         throw new Error(`Failed to list installed libraries: ${res.status}`)
@@ -645,6 +726,12 @@ export function libraryListInstalledTool(workspaceId: string) {
 // Three tools for managing user-scoped .excalidrawlib files across sessions. They
 // live under ~/.excalidraw/.user-libraries and cover personal icon sets, internal
 // templates, or curated local copies of external libraries.
+
+export const userLibrarySaveInputShape = {
+  name: z.string(),
+  fromUrl: z.string().optional(),
+  content: z.record(z.string(), z.unknown()).optional(),
+} satisfies z.ZodRawShape
 
 export function userLibrarySaveTool() {
   return {
@@ -707,6 +794,8 @@ export function userLibrarySaveTool() {
   }
 }
 
+export const userLibraryListInputShape = {} satisfies z.ZodRawShape
+
 export function userLibraryListTool() {
   return {
     name: 'user_library_list',
@@ -716,7 +805,10 @@ export function userLibraryListTool() {
       type: 'object' as const,
       properties: {},
     },
-    execute: async (_args: object, client: DaemonClient): Promise<z.infer<typeof userLibraryListOutputSchema>> => {
+    execute: async (
+      _args: object,
+      client: DaemonClient,
+    ): Promise<z.infer<typeof userLibraryListOutputSchema>> => {
       const res = await client.request('/api/user-libraries')
       if (!res.ok) {
         throw new Error(`Failed to list user libraries: ${res.status}`)
@@ -727,6 +819,8 @@ export function userLibraryListTool() {
     },
   }
 }
+
+export const userLibraryRemoveInputShape = { name: z.string() } satisfies z.ZodRawShape
 
 export function userLibraryRemoveTool() {
   return {
@@ -739,7 +833,10 @@ export function userLibraryRemoveTool() {
       },
       required: ['name'],
     },
-    execute: async (args: { name: string }, client: DaemonClient): Promise<z.infer<typeof userLibraryRemoveOutputSchema>> => {
+    execute: async (
+      args: { name: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof userLibraryRemoveOutputSchema>> => {
       const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}`, {
         method: 'DELETE',
       })
@@ -750,6 +847,8 @@ export function userLibraryRemoveTool() {
     },
   }
 }
+
+export const userLibraryMetadataGetInputShape = { name: z.string() } satisfies z.ZodRawShape
 
 export function userLibraryMetadataGetTool() {
   return {
@@ -763,8 +862,13 @@ export function userLibraryMetadataGetTool() {
       },
       required: ['name'],
     },
-    execute: async (args: { name: string }, client: DaemonClient): Promise<z.infer<typeof userLibraryMetadataManifestSchema>> => {
-      const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}/metadata`)
+    execute: async (
+      args: { name: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof userLibraryMetadataManifestSchema>> => {
+      const res = await client.request(
+        `/api/user-libraries/${encodeURIComponent(args.name)}/metadata`,
+      )
       return await readJsonOrThrow<UserLibraryMetadataManifest>(
         res,
         `Failed to load user library metadata: ${res.status}`,
@@ -772,6 +876,14 @@ export function userLibraryMetadataGetTool() {
     },
   }
 }
+
+export const userLibraryMetadataSetInputShape = {
+  name: z.string(),
+  revision: z.number(),
+  aliases: z.record(z.string(), z.number()).optional(),
+  notes: z.record(z.string(), z.string()).optional(),
+  scales: z.record(z.string(), z.number()).optional(),
+} satisfies z.ZodRawShape
 
 export function userLibraryMetadataSetTool() {
   return {
@@ -799,16 +911,19 @@ export function userLibraryMetadataSetTool() {
       },
       client: DaemonClient,
     ): Promise<z.infer<typeof userLibraryMetadataManifestSchema>> => {
-      const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}/metadata`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          revision: args.revision,
-          ...(args.aliases === undefined ? {} : { aliases: args.aliases }),
-          ...(args.notes === undefined ? {} : { notes: args.notes }),
-          ...(args.scales === undefined ? {} : { scales: args.scales }),
-        }),
-      })
+      const res = await client.request(
+        `/api/user-libraries/${encodeURIComponent(args.name)}/metadata`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            revision: args.revision,
+            ...(args.aliases === undefined ? {} : { aliases: args.aliases }),
+            ...(args.notes === undefined ? {} : { notes: args.notes }),
+            ...(args.scales === undefined ? {} : { scales: args.scales }),
+          }),
+        },
+      )
       return await readJsonOrThrow<UserLibraryMetadataManifest>(
         res,
         `Failed to set user library metadata: ${res.status}`,
@@ -816,6 +931,14 @@ export function userLibraryMetadataSetTool() {
     },
   }
 }
+
+export const userLibraryMetadataDeleteInputShape = {
+  name: z.string(),
+  revision: z.number(),
+  aliasKeys: z.array(z.string()).optional(),
+  noteKeys: z.array(z.string()).optional(),
+  scaleKeys: z.array(z.string()).optional(),
+} satisfies z.ZodRawShape
 
 export function userLibraryMetadataDeleteTool() {
   return {
@@ -843,16 +966,19 @@ export function userLibraryMetadataDeleteTool() {
       },
       client: DaemonClient,
     ): Promise<z.infer<typeof userLibraryMetadataManifestSchema>> => {
-      const res = await client.request(`/api/user-libraries/${encodeURIComponent(args.name)}/metadata`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          revision: args.revision,
-          ...(args.aliasKeys === undefined ? {} : { aliasKeys: args.aliasKeys }),
-          ...(args.noteKeys === undefined ? {} : { noteKeys: args.noteKeys }),
-          ...(args.scaleKeys === undefined ? {} : { scaleKeys: args.scaleKeys }),
-        }),
-      })
+      const res = await client.request(
+        `/api/user-libraries/${encodeURIComponent(args.name)}/metadata`,
+        {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            revision: args.revision,
+            ...(args.aliasKeys === undefined ? {} : { aliasKeys: args.aliasKeys }),
+            ...(args.noteKeys === undefined ? {} : { noteKeys: args.noteKeys }),
+            ...(args.scaleKeys === undefined ? {} : { scaleKeys: args.scaleKeys }),
+          }),
+        },
+      )
       return await readJsonOrThrow<UserLibraryMetadataManifest>(
         res,
         `Failed to delete user library metadata: ${res.status}`,
