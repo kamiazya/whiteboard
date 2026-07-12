@@ -911,16 +911,14 @@ export function createApp(options: AppOptions) {
     options.authMode === 'server-mode' || process.env.WHITEBOARD_LEGACY_UI === '1'
   const uiRootDir = useLegacyUiRoot ? DIST_APP_DIR : DIST_WEB_APP_DIR
 
-  if (useLegacyUiRoot) {
-    app.use('/fonts/*', serveStatic({ root: DIST_APP_DIR }))
-    app.use('/assets/*', serveStatic({ root: DIST_APP_DIR }))
-  } else {
-    // Layered lookup: prefer the apps/web build, fall back to the legacy
-    // dist/app assets so a partial/older build still serves something.
-    app.use('/fonts/*', serveStatic({ root: DIST_WEB_APP_DIR }))
-    app.use('/fonts/*', serveStatic({ root: DIST_APP_DIR }))
-    app.use('/assets/*', serveStatic({ root: DIST_WEB_APP_DIR }))
-    app.use('/assets/*', serveStatic({ root: DIST_APP_DIR }))
+  // Legacy-UI mode serves only dist/app. Otherwise assets resolve from the
+  // apps/web build first, falling back to dist/app so a partial/older build
+  // still serves something.
+  const staticRoots = useLegacyUiRoot ? [DIST_APP_DIR] : [DIST_WEB_APP_DIR, DIST_APP_DIR]
+  for (const pattern of ['/fonts/*', '/assets/*']) {
+    for (const root of staticRoots) {
+      app.use(pattern, serveStatic({ root }))
+    }
   }
 
   app.get('*', async (c) => {
