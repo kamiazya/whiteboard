@@ -9,6 +9,6 @@ export default defineConfig({
   test: {
     name: 'web-node',
     environment: 'node',
-    include: ['vite-pwa-options.test.ts', 'public-headers.test.ts'],
+    include: ['vite-pwa-options.test.ts', 'public-headers.test.ts', 'scripts/**/*.test.ts'],
   },
 })

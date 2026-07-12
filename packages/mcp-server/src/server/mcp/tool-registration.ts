@@ -1,7 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { createDaemonClient } from './daemon-client.js'
-import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
+import {
+  registerToolWithAnnotations,
+  structuredJsonResult,
+  type ToolHandlerReturn,
+} from './tool-support.js'
 import { annotateBatchOutputSchema, annotateBatchTool } from './tools/annotate-batch.js'
 import { annotateInputShape, annotateOutputSchema, annotateTool } from './tools/annotate.js'
 import { canvasAutoLayoutOutputSchema, canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
@@ -103,6 +107,49 @@ import {
 } from './tools/template.js'
 import { viewportSetOutputSchema, viewportSetTool } from './tools/viewport.js'
 
+// A registered-tool entry, already bound to McpServer at construction time.
+// The array below is necessarily heterogeneous (48 different I/O generic
+// pairs), so this is the erased/existential form of each entry — but the
+// erasure happens only AFTER defineTool() below has type-checked the
+// handler against ToolHandlerReturn<O> for that specific entry.
+type RegisteredTool = (server: McpServer) => unknown
+
+// Identity helper that captures a tool's I/O generics at its call site
+// before they are erased into RegisteredTool. Because defineTool itself
+// stays generic over <I, O>, passing an object literal here still lets
+// TypeScript check `handler`'s return type against
+// ToolHandlerReturn<O> — a handler returning the wrong structuredContent
+// shape fails to compile here exactly as it would with a direct
+// registerToolWithAnnotations call. Do not widen I/O to `unknown` or cast
+// around this signature; that would silently defeat the check.
+function defineTool<
+  // Default {} so an entry omitting inputSchema types its handler args as an
+  // empty object, not Record<string, any>.
+  I extends z.ZodRawShape = Record<string, never>,
+  O extends z.ZodTypeAny | undefined = undefined,
+>(entry: {
+  name: string
+  description?: string
+  inputSchema?: I
+  outputSchema?: O
+  handler: (
+    args: { [K in keyof I]: z.infer<I[K]> },
+    extra: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
+  ) => Promise<ToolHandlerReturn<O>> | ToolHandlerReturn<O>
+}): RegisteredTool {
+  return (server) =>
+    registerToolWithAnnotations(
+      server,
+      entry.name,
+      {
+        description: entry.description,
+        inputSchema: entry.inputSchema,
+        outputSchema: entry.outputSchema,
+      },
+      entry.handler,
+    )
+}
+
 // Registers all MCP tools on the given server instance. withDaemon is a
 // helper that opens a daemon client for the duration of a single tool call.
 export function registerAllTools(
@@ -159,10 +206,9 @@ export function registerAllTools(
   const versionList = versionListTool()
   const pairingLink = pairingLinkTool()
 
-  registerToolWithAnnotations(
-    server,
-    canvasTool.name,
-    {
+  const tools: RegisteredTool[] = [
+    defineTool({
+      name: canvasTool.name,
       description: canvasTool.description,
       inputSchema: {
         slug: z
@@ -184,19 +230,16 @@ export function registerAllTools(
           ),
       },
       outputSchema: canvasCreateOutputSchema,
-    },
-    async ({ slug, issueNumber, overwrite }) => {
-      const result = await withDaemon((client) =>
-        canvasTool.execute({ slug, issueNumber, overwrite }, workspaceId, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ slug, issueNumber, overwrite }) => {
+        const result = await withDaemon((client) =>
+          canvasTool.execute({ slug, issueNumber, overwrite }, workspaceId, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    listTool.name,
-    {
+    defineTool({
+      name: listTool.name,
       description: listTool.description,
       inputSchema: {
         slugContains: z
@@ -207,17 +250,14 @@ export function registerAllTools(
           ),
       },
       outputSchema: canvasListOutputSchema,
-    },
-    async ({ slugContains }) => {
-      const result = await withDaemon((client) => listTool.execute({ slugContains }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ slugContains }) => {
+        const result = await withDaemon((client) => listTool.execute({ slugContains }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    openTool.name,
-    {
+    defineTool({
+      name: openTool.name,
       description: openTool.description,
       inputSchema: {
         id: z
@@ -245,19 +285,16 @@ export function registerAllTools(
           ),
       },
       outputSchema: canvasOpenOutputSchema,
-    },
-    async ({ id, fullscreen, waitForClient, waitTimeoutMs }) => {
-      const result = await withDaemon((client) =>
-        openTool.execute({ id, fullscreen, waitForClient, waitTimeoutMs }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ id, fullscreen, waitForClient, waitTimeoutMs }) => {
+        const result = await withDaemon((client) =>
+          openTool.execute({ id, fullscreen, waitForClient, waitTimeoutMs }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    optimizeTool.name,
-    {
+    defineTool({
+      name: optimizeTool.name,
       description: optimizeTool.description,
       inputSchema: {
         slug: z
@@ -268,19 +305,16 @@ export function registerAllTools(
           ),
       },
       outputSchema: optimizeCanvasesOutputSchema,
-    },
-    async ({ slug }) => {
-      const result = await withDaemon((client) =>
-        optimizeTool.execute({ slug }, workspaceId, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ slug }) => {
+        const result = await withDaemon((client) =>
+          optimizeTool.execute({ slug }, workspaceId, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    loadTool.name,
-    {
+    defineTool({
+      name: loadTool.name,
       description: loadTool.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -297,37 +331,31 @@ export function registerAllTools(
           ),
       },
       outputSchema: loadImageOutputSchema,
-    },
-    async ({ canvasId, imagePath, position }) => {
-      const result = await withDaemon((client) =>
-        loadTool.execute({ canvasId, imagePath, position }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, imagePath, position }) => {
+        const result = await withDaemon((client) =>
+          loadTool.execute({ canvasId, imagePath, position }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  // The Zod raw shape lives in tools/annotate.js (annotateInputShape) so it is
-  // the single source of truth shared with the tool's own cross-field
-  // validation (annotateInputSchema) — see the comment there for why that
-  // extra check cannot live in this raw shape.
-  registerToolWithAnnotations(
-    server,
-    annotateToolDef.name,
-    {
+    defineTool({
+      name: annotateToolDef.name,
+      // The Zod raw shape lives in tools/annotate.js (annotateInputShape) so
+      // it is the single source of truth shared with the tool's own
+      // cross-field validation (annotateInputSchema) — see the comment
+      // there for why that extra check cannot live in this raw shape.
       description: annotateToolDef.description,
       inputSchema: annotateInputShape,
       outputSchema: annotateOutputSchema,
-    },
-    async (args) => {
-      const result = await withDaemon((client) => annotateToolDef.execute(args, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async (args) => {
+        const result = await withDaemon((client) => annotateToolDef.execute(args, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    annotateBatchToolDef.name,
-    {
+    defineTool({
+      name: annotateBatchToolDef.name,
       description: annotateBatchToolDef.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -464,36 +492,30 @@ export function registerAllTools(
           ),
       },
       outputSchema: annotateBatchOutputSchema,
-    },
-    async ({ canvasId, annotations, layout, dryRun, overlapThreshold, groupAs }) => {
-      const result = await withDaemon((client) =>
-        annotateBatchToolDef.execute(
-          { canvasId, annotations, layout, dryRun, overlapThreshold, groupAs },
-          client,
-        ),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, annotations, layout, dryRun, overlapThreshold, groupAs }) => {
+        const result = await withDaemon((client) =>
+          annotateBatchToolDef.execute(
+            { canvasId, annotations, layout, dryRun, overlapThreshold, groupAs },
+            client,
+          ),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    paletteGet.name,
-    {
+    defineTool({
+      name: paletteGet.name,
       description: paletteGet.description,
       inputSchema: { workspaceId: z.string() },
       outputSchema: paletteOutputSchema,
-    },
-    async ({ workspaceId }) => {
-      const result = await withDaemon((client) => paletteGet.execute({ workspaceId }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ workspaceId }) => {
+        const result = await withDaemon((client) => paletteGet.execute({ workspaceId }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    paletteSet.name,
-    {
+    defineTool({
+      name: paletteSet.name,
       description: paletteSet.description,
       inputSchema: {
         workspaceId: z
@@ -508,35 +530,29 @@ export function registerAllTools(
           ),
       },
       outputSchema: paletteOutputSchema,
-    },
-    async ({ workspaceId, entries }) => {
-      const result = await withDaemon((client) =>
-        paletteSet.execute({ workspaceId, entries }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ workspaceId, entries }) => {
+        const result = await withDaemon((client) =>
+          paletteSet.execute({ workspaceId, entries }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    paletteDelete.name,
-    {
+    defineTool({
+      name: paletteDelete.name,
       description: paletteDelete.description,
       inputSchema: { workspaceId: z.string(), keys: z.array(z.string()).min(1) },
       outputSchema: paletteOutputSchema,
-    },
-    async ({ workspaceId, keys }) => {
-      const result = await withDaemon((client) =>
-        paletteDelete.execute({ workspaceId, keys }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ workspaceId, keys }) => {
+        const result = await withDaemon((client) =>
+          paletteDelete.execute({ workspaceId, keys }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    exportTool.name,
-    {
+    defineTool({
+      name: exportTool.name,
       description: exportTool.description,
       inputSchema: {
         canvasId: z
@@ -588,31 +604,37 @@ export function registerAllTools(
           ),
       },
       outputSchema: exportPngOutputSchema,
-    },
-    async ({ canvasId, padding, scale, minFontPx, frameId, outputPath, overwrite, theme }) => {
-      const result = await withDaemon((client) =>
-        exportTool.execute(
-          { canvasId, padding, scale, minFontPx, frameId, outputPath, overwrite, theme },
-          client,
-        ),
-      )
-      // Return filePath in the text block and attach the image payload as a
-      // separate ImageContent block. If reading fails, omit the image block and
-      // fall back to returning only filePath.
-      const content: Array<
-        { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
-      > = [{ type: 'text', text: JSON.stringify({ filePath: result.filePath }) }]
-      if (result.imageBase64) {
-        content.push({ type: 'image', data: result.imageBase64, mimeType: 'image/png' })
-      }
-      return { structuredContent: result, content }
-    },
-  )
+      handler: async ({
+        canvasId,
+        padding,
+        scale,
+        minFontPx,
+        frameId,
+        outputPath,
+        overwrite,
+        theme,
+      }) => {
+        const result = await withDaemon((client) =>
+          exportTool.execute(
+            { canvasId, padding, scale, minFontPx, frameId, outputPath, overwrite, theme },
+            client,
+          ),
+        )
+        // Return filePath in the text block and attach the image payload as a
+        // separate ImageContent block. If reading fails, omit the image block and
+        // fall back to returning only filePath.
+        const content: Array<
+          { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+        > = [{ type: 'text', text: JSON.stringify({ filePath: result.filePath }) }]
+        if (result.imageBase64) {
+          content.push({ type: 'image', data: result.imageBase64, mimeType: 'image/png' })
+        }
+        return { structuredContent: result, content }
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    viewportTool.name,
-    {
+    defineTool({
+      name: viewportTool.name,
       description: viewportTool.description,
       inputSchema: {
         canvasId: z
@@ -643,17 +665,14 @@ export function registerAllTools(
         zoom: z.number().optional().describe('Absolute zoom (1.0 = 100%) for mode="move".'),
       },
       outputSchema: viewportSetOutputSchema,
-    },
-    async (args) => {
-      const result = await withDaemon((client) => viewportTool.execute(args, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async (args) => {
+        const result = await withDaemon((client) => viewportTool.execute(args, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    exportJsonTool.name,
-    {
+    defineTool({
+      name: exportJsonTool.name,
       description: exportJsonTool.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -665,19 +684,16 @@ export function registerAllTools(
           ),
       },
       outputSchema: canvasExportJsonOutputSchema,
-    },
-    async ({ canvasId, includeCustomFields }) => {
-      const result = await withDaemon((client) =>
-        exportJsonTool.execute({ canvasId, includeCustomFields }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, includeCustomFields }) => {
+        const result = await withDaemon((client) =>
+          exportJsonTool.execute({ canvasId, includeCustomFields }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    autoLayoutTool.name,
-    {
+    defineTool({
+      name: autoLayoutTool.name,
       description: autoLayoutTool.description,
       inputSchema: {
         canvasId: z.string(),
@@ -711,17 +727,14 @@ export function registerAllTools(
         groupGap: z.number().optional(),
       },
       outputSchema: canvasAutoLayoutOutputSchema,
-    },
-    async (args) => {
-      const result = await withDaemon((client) => autoLayoutTool.execute(args, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async (args) => {
+        const result = await withDaemon((client) => autoLayoutTool.execute(args, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    libListTool.name,
-    {
+    defineTool({
+      name: libListTool.name,
       description: libListTool.description,
       inputSchema: {
         libraryUrl: z.string().optional(),
@@ -729,19 +742,16 @@ export function registerAllTools(
         userLibraryName: z.string().optional(),
       },
       outputSchema: libraryListItemsOutputSchema,
-    },
-    async ({ libraryUrl, libraryPath, userLibraryName }) => {
-      const result = await withDaemon((client) =>
-        libListTool.execute({ libraryUrl, libraryPath, userLibraryName }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ libraryUrl, libraryPath, userLibraryName }) => {
+        const result = await withDaemon((client) =>
+          libListTool.execute({ libraryUrl, libraryPath, userLibraryName }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    libInsertTool.name,
-    {
+    defineTool({
+      name: libInsertTool.name,
       description: libInsertTool.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -779,22 +789,27 @@ export function registerAllTools(
           ),
       },
       outputSchema: libInsertItemOutputSchema,
-    },
-    async ({ canvasId, libraryUrl, libraryPath, userLibraryName, itemIndex, target, scale }) => {
-      const result = await withDaemon((client) =>
-        libInsertTool.execute(
-          { canvasId, libraryUrl, libraryPath, userLibraryName, itemIndex, target, scale },
-          client,
-        ),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({
+        canvasId,
+        libraryUrl,
+        libraryPath,
+        userLibraryName,
+        itemIndex,
+        target,
+        scale,
+      }) => {
+        const result = await withDaemon((client) =>
+          libInsertTool.execute(
+            { canvasId, libraryUrl, libraryPath, userLibraryName, itemIndex, target, scale },
+            client,
+          ),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    libInsertBatch.name,
-    {
+    defineTool({
+      name: libInsertBatch.name,
       description: libInsertBatch.description,
       inputSchema: {
         canvasId: z.string(),
@@ -815,22 +830,27 @@ export function registerAllTools(
           .min(1),
       },
       outputSchema: libraryInsertBatchOutputSchema,
-    },
-    async ({ canvasId, libraryUrl, libraryPath, userLibraryName, groupAs, scale, items }) => {
-      const result = await withDaemon((client) =>
-        libInsertBatch.execute(
-          { canvasId, libraryUrl, libraryPath, userLibraryName, groupAs, scale, items },
-          client,
-        ),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({
+        canvasId,
+        libraryUrl,
+        libraryPath,
+        userLibraryName,
+        groupAs,
+        scale,
+        items,
+      }) => {
+        const result = await withDaemon((client) =>
+          libInsertBatch.execute(
+            { canvasId, libraryUrl, libraryPath, userLibraryName, groupAs, scale, items },
+            client,
+          ),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    libInstall.name,
-    {
+    defineTool({
+      name: libInstall.name,
       description: libInstall.description,
       inputSchema: {
         libraryUrl: z
@@ -840,59 +860,47 @@ export function registerAllTools(
           ),
       },
       outputSchema: libraryInstallOutputSchema,
-    },
-    async ({ libraryUrl }) => {
-      const result = await withDaemon((client) => libInstall.execute({ libraryUrl }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ libraryUrl }) => {
+        const result = await withDaemon((client) => libInstall.execute({ libraryUrl }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    libUninstall.name,
-    {
+    defineTool({
+      name: libUninstall.name,
       description: libUninstall.description,
       inputSchema: { libraryUrl: z.string() },
       outputSchema: installedUrlsOutputSchema,
-    },
-    async ({ libraryUrl }) => {
-      const result = await withDaemon((client) => libUninstall.execute({ libraryUrl }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ libraryUrl }) => {
+        const result = await withDaemon((client) => libUninstall.execute({ libraryUrl }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    libListInstalled.name,
-    {
+    defineTool({
+      name: libListInstalled.name,
       description: libListInstalled.description,
       inputSchema: {},
       outputSchema: installedUrlsOutputSchema,
-    },
-    async () => {
-      const result = await withDaemon((client) => libListInstalled.execute({}, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async () => {
+        const result = await withDaemon((client) => libListInstalled.execute({}, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    libCatalog.name,
-    {
+    defineTool({
+      name: libCatalog.name,
       description: libCatalog.description,
       inputSchema: { query: z.string().optional(), limit: z.number().optional() },
       outputSchema: libraryCatalogListOutputSchema,
-    },
-    async ({ query, limit }) => {
-      const result = await libCatalog.execute({ query, limit })
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ query, limit }) => {
+        const result = await libCatalog.execute({ query, limit })
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    userLibSave.name,
-    {
+    defineTool({
+      name: userLibSave.name,
       description: userLibSave.description,
       inputSchema: {
         name: z.string(),
@@ -900,61 +908,49 @@ export function registerAllTools(
         content: z.record(z.string(), z.unknown()).optional(),
       },
       outputSchema: userLibrarySaveOutputSchema,
-    },
-    async ({ name, fromUrl, content }) => {
-      const result = await withDaemon((client) =>
-        userLibSave.execute({ name, fromUrl, content }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ name, fromUrl, content }) => {
+        const result = await withDaemon((client) =>
+          userLibSave.execute({ name, fromUrl, content }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    userLibList.name,
-    {
+    defineTool({
+      name: userLibList.name,
       description: userLibList.description,
       inputSchema: {},
       outputSchema: userLibraryListOutputSchema,
-    },
-    async () => {
-      const result = await withDaemon((client) => userLibList.execute({}, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async () => {
+        const result = await withDaemon((client) => userLibList.execute({}, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    userLibRemove.name,
-    {
+    defineTool({
+      name: userLibRemove.name,
       description: userLibRemove.description,
       inputSchema: { name: z.string() },
       outputSchema: userLibraryRemoveOutputSchema,
-    },
-    async ({ name }) => {
-      const result = await withDaemon((client) => userLibRemove.execute({ name }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ name }) => {
+        const result = await withDaemon((client) => userLibRemove.execute({ name }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    userLibMetadataGet.name,
-    {
+    defineTool({
+      name: userLibMetadataGet.name,
       description: userLibMetadataGet.description,
       inputSchema: { name: z.string() },
       outputSchema: userLibraryMetadataManifestSchema,
-    },
-    async ({ name }) => {
-      const result = await withDaemon((client) => userLibMetadataGet.execute({ name }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ name }) => {
+        const result = await withDaemon((client) => userLibMetadataGet.execute({ name }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    userLibMetadataSet.name,
-    {
+    defineTool({
+      name: userLibMetadataSet.name,
       description: userLibMetadataSet.description,
       inputSchema: {
         name: z.string(),
@@ -964,19 +960,16 @@ export function registerAllTools(
         scales: z.record(z.string(), z.number()).optional(),
       },
       outputSchema: userLibraryMetadataManifestSchema,
-    },
-    async ({ name, revision, aliases, notes, scales }) => {
-      const result = await withDaemon((client) =>
-        userLibMetadataSet.execute({ name, revision, aliases, notes, scales }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ name, revision, aliases, notes, scales }) => {
+        const result = await withDaemon((client) =>
+          userLibMetadataSet.execute({ name, revision, aliases, notes, scales }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    userLibMetadataDelete.name,
-    {
+    defineTool({
+      name: userLibMetadataDelete.name,
       description: userLibMetadataDelete.description,
       inputSchema: {
         name: z.string(),
@@ -986,19 +979,16 @@ export function registerAllTools(
         scaleKeys: z.array(z.string()).optional(),
       },
       outputSchema: userLibraryMetadataManifestSchema,
-    },
-    async ({ name, revision, aliasKeys, noteKeys, scaleKeys }) => {
-      const result = await withDaemon((client) =>
-        userLibMetadataDelete.execute({ name, revision, aliasKeys, noteKeys, scaleKeys }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ name, revision, aliasKeys, noteKeys, scaleKeys }) => {
+        const result = await withDaemon((client) =>
+          userLibMetadataDelete.execute({ name, revision, aliasKeys, noteKeys, scaleKeys }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    inspectTool.name,
-    {
+    defineTool({
+      name: inspectTool.name,
       description: inspectTool.description,
       inputSchema: {
         canvasId: z
@@ -1008,31 +998,25 @@ export function registerAllTools(
           ),
       },
       outputSchema: canvasInspectOutputSchema,
-    },
-    async ({ canvasId }) => {
-      const result = await withDaemon((client) => inspectTool.execute({ canvasId }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId }) => {
+        const result = await withDaemon((client) => inspectTool.execute({ canvasId }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    listTemplates.name,
-    {
+    defineTool({
+      name: listTemplates.name,
       description: listTemplates.description,
       inputSchema: {},
       outputSchema: templateListOutputSchema,
-    },
-    async () => {
-      const result = await listTemplates.execute()
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async () => {
+        const result = await listTemplates.execute()
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    insertTemplate.name,
-    {
+    defineTool({
+      name: insertTemplate.name,
       description: insertTemplate.description,
       inputSchema: {
         canvasId: z.string(),
@@ -1043,22 +1027,19 @@ export function registerAllTools(
         variables: z.record(z.string(), z.string()).optional(),
       },
       outputSchema: templateInsertOutputSchema,
-    },
-    async ({ canvasId, templateId, templatePath, target, scale, variables }) => {
-      const result = await withDaemon((client) =>
-        insertTemplate.execute(
-          { canvasId, templateId, templatePath, target, scale, variables },
-          client,
-        ),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, templateId, templatePath, target, scale, variables }) => {
+        const result = await withDaemon((client) =>
+          insertTemplate.execute(
+            { canvasId, templateId, templatePath, target, scale, variables },
+            client,
+          ),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    updateTool.name,
-    {
+    defineTool({
+      name: updateTool.name,
       description: updateTool.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1074,19 +1055,16 @@ export function registerAllTools(
           ),
       },
       outputSchema: elementIdOutputSchema,
-    },
-    async ({ canvasId, elementId, patch }) => {
-      const result = await withDaemon((client) =>
-        updateTool.execute({ canvasId, elementId, patch }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, elementId, patch }) => {
+        const result = await withDaemon((client) =>
+          updateTool.execute({ canvasId, elementId, patch }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    deleteTool.name,
-    {
+    defineTool({
+      name: deleteTool.name,
       description: deleteTool.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1097,19 +1075,16 @@ export function registerAllTools(
           ),
       },
       outputSchema: elementIdOutputSchema,
-    },
-    async ({ canvasId, elementId }) => {
-      const result = await withDaemon((client) =>
-        deleteTool.execute({ canvasId, elementId }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, elementId }) => {
+        const result = await withDaemon((client) =>
+          deleteTool.execute({ canvasId, elementId }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    deleteManyTool.name,
-    {
+    defineTool({
+      name: deleteManyTool.name,
       description: deleteManyTool.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1121,19 +1096,16 @@ export function registerAllTools(
           ),
       },
       outputSchema: deletedElementsOutputSchema,
-    },
-    async ({ canvasId, elementIds }) => {
-      const result = await withDaemon((client) =>
-        deleteManyTool.execute({ canvasId, elementIds }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, elementIds }) => {
+        const result = await withDaemon((client) =>
+          deleteManyTool.execute({ canvasId, elementIds }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    assignGroupTool.name,
-    {
+    defineTool({
+      name: assignGroupTool.name,
       description: assignGroupTool.description,
       inputSchema: {
         canvasId: z.string(),
@@ -1141,49 +1113,40 @@ export function registerAllTools(
         elementIds: z.array(z.string()).min(1),
       },
       outputSchema: assignGroupOutputSchema,
-    },
-    async ({ canvasId, groupId, elementIds }) => {
-      const result = await withDaemon((client) =>
-        assignGroupTool.execute({ canvasId, groupId, elementIds }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, groupId, elementIds }) => {
+        const result = await withDaemon((client) =>
+          assignGroupTool.execute({ canvasId, groupId, elementIds }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    deleteGroupT.name,
-    {
+    defineTool({
+      name: deleteGroupT.name,
       description: deleteGroupT.description,
       inputSchema: { canvasId: z.string(), groupId: z.string() },
       outputSchema: deletedElementsOutputSchema,
-    },
-    async ({ canvasId, groupId }) => {
-      const result = await withDaemon((client) =>
-        deleteGroupT.execute({ canvasId, groupId }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, groupId }) => {
+        const result = await withDaemon((client) =>
+          deleteGroupT.execute({ canvasId, groupId }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    listGroupsT.name,
-    {
+    defineTool({
+      name: listGroupsT.name,
       description: listGroupsT.description,
       inputSchema: { canvasId: z.string() },
       outputSchema: listGroupsOutputSchema,
-    },
-    async ({ canvasId }) => {
-      const result = await withDaemon((client) => listGroupsT.execute({ canvasId }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId }) => {
+        const result = await withDaemon((client) => listGroupsT.execute({ canvasId }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    moveTool.name,
-    {
+    defineTool({
+      name: moveTool.name,
       description: moveTool.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1199,54 +1162,45 @@ export function registerAllTools(
         dy: z.number().describe('Vertical translation in world coordinates (px). Negative = up.'),
       },
       outputSchema: elementIdsOutputSchema,
-    },
-    async ({ canvasId, elementIds, dx, dy }) => {
-      const result = await withDaemon((client) =>
-        moveTool.execute({ canvasId, elementIds, dx, dy }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, elementIds, dx, dy }) => {
+        const result = await withDaemon((client) =>
+          moveTool.execute({ canvasId, elementIds, dx, dy }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    alignTool.name,
-    {
+    defineTool({
+      name: alignTool.name,
       description: alignTool.description,
       // Input + output schemas come from element-ops-tools.ts as the single
       // source of truth — execute()'s arg type is z.infer<typeof
       // alignInputSchema> there, so registration and runtime stay in sync.
       inputSchema: alignInputSchema.shape,
       outputSchema: alignOutputSchema,
-    },
-    async ({ canvasId, elementIds, alignment }) => {
-      const result = await withDaemon((client) =>
-        alignTool.execute({ canvasId, elementIds, alignment }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, elementIds, alignment }) => {
+        const result = await withDaemon((client) =>
+          alignTool.execute({ canvasId, elementIds, alignment }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    distributeTool.name,
-    {
+    defineTool({
+      name: distributeTool.name,
       description: distributeTool.description,
       inputSchema: distributeInputSchema.shape,
       outputSchema: distributeOutputSchema,
-    },
-    async ({ canvasId, elementIds, direction }) => {
-      const result = await withDaemon((client) =>
-        distributeTool.execute({ canvasId, elementIds, direction }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, elementIds, direction }) => {
+        const result = await withDaemon((client) =>
+          distributeTool.execute({ canvasId, elementIds, direction }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    reorderTool.name,
-    {
+    defineTool({
+      name: reorderTool.name,
       description: reorderTool.description,
       inputSchema: {
         canvasId: z.string(),
@@ -1254,33 +1208,27 @@ export function registerAllTools(
         action: z.enum(['front', 'back']),
       },
       outputSchema: reorderOutputSchema,
-    },
-    async ({ canvasId, elementIds, action }) => {
-      const result = await withDaemon((client) =>
-        reorderTool.execute({ canvasId, elementIds, action }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, elementIds, action }) => {
+        const result = await withDaemon((client) =>
+          reorderTool.execute({ canvasId, elementIds, action }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    clearTool.name,
-    {
+    defineTool({
+      name: clearTool.name,
       description: clearTool.description,
       inputSchema: { canvasId: z.string() },
       outputSchema: clearedCountOutputSchema,
-    },
-    async ({ canvasId }) => {
-      const result = await withDaemon((client) => clearTool.execute({ canvasId }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId }) => {
+        const result = await withDaemon((client) => clearTool.execute({ canvasId }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    versionSave.name,
-    {
+    defineTool({
+      name: versionSave.name,
       description: versionSave.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1290,17 +1238,16 @@ export function registerAllTools(
           .describe('Optional human-readable label shown in the History panel.'),
       },
       outputSchema: versionSaveOutputSchema,
-    },
-    async ({ canvasId, label }) => {
-      const result = await withDaemon((client) => versionSave.execute({ canvasId, label }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, label }) => {
+        const result = await withDaemon((client) =>
+          versionSave.execute({ canvasId, label }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    versionRestore.name,
-    {
+    defineTool({
+      name: versionRestore.name,
       description: versionRestore.description,
       inputSchema: {
         canvasId: z.string().describe('Source canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1319,35 +1266,29 @@ export function registerAllTools(
           ),
       },
       outputSchema: versionRestoreOutputSchema,
-    },
-    async ({ canvasId, versionId, targetSlug, overwrite }) => {
-      const result = await withDaemon((client) =>
-        versionRestore.execute({ canvasId, versionId, targetSlug, overwrite }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, versionId, targetSlug, overwrite }) => {
+        const result = await withDaemon((client) =>
+          versionRestore.execute({ canvasId, versionId, targetSlug, overwrite }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    versionList.name,
-    {
+    defineTool({
+      name: versionList.name,
       description: versionList.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
       },
       outputSchema: versionListOutputSchema,
-    },
-    async ({ canvasId }) => {
-      const result = await withDaemon((client) => versionList.execute({ canvasId }, client))
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId }) => {
+        const result = await withDaemon((client) => versionList.execute({ canvasId }, client))
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    frameCreate.name,
-    {
+    defineTool({
+      name: frameCreate.name,
       description: frameCreate.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1384,19 +1325,16 @@ export function registerAllTools(
           .describe('Padding (px) around the member bbox when memberIds is set. Default 24.'),
       },
       outputSchema: createFrameOutputSchema,
-    },
-    async ({ canvasId, x, y, width, height, name, memberIds, padding }) => {
-      const result = await withDaemon((client) =>
-        frameCreate.execute({ canvasId, x, y, width, height, name, memberIds, padding }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, x, y, width, height, name, memberIds, padding }) => {
+        const result = await withDaemon((client) =>
+          frameCreate.execute({ canvasId, x, y, width, height, name, memberIds, padding }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    frameUpdateMembers.name,
-    {
+    defineTool({
+      name: frameUpdateMembers.name,
       description: frameUpdateMembers.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1421,19 +1359,16 @@ export function registerAllTools(
           .describe('Padding (px) around the resulting member bbox. Default 24.'),
       },
       outputSchema: updateFrameMembersOutputSchema,
-    },
-    async ({ canvasId, frameId, add, remove, padding }) => {
-      const result = await withDaemon((client) =>
-        frameUpdateMembers.execute({ canvasId, frameId, add, remove, padding }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, frameId, add, remove, padding }) => {
+        const result = await withDaemon((client) =>
+          frameUpdateMembers.execute({ canvasId, frameId, add, remove, padding }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    embedCreate.name,
-    {
+    defineTool({
+      name: embedCreate.name,
       description: embedCreate.description,
       inputSchema: {
         canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
@@ -1448,35 +1383,36 @@ export function registerAllTools(
         height: z.number().optional().describe('Embed height (px). Default 320.'),
       },
       outputSchema: createEmbedOutputSchema,
-    },
-    async ({ canvasId, url, x, y, width, height }) => {
-      const result = await withDaemon((client) =>
-        embedCreate.execute({ canvasId, url, x, y, width, height }, client),
-      )
-      return structuredJsonResult(result)
-    },
-  )
+      handler: async ({ canvasId, url, x, y, width, height }) => {
+        const result = await withDaemon((client) =>
+          embedCreate.execute({ canvasId, url, x, y, width, height }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
 
-  registerToolWithAnnotations(
-    server,
-    pairingLink.name,
-    {
+    defineTool({
+      name: pairingLink.name,
       description: pairingLink.description,
       inputSchema: createPairingLinkInputShape,
       outputSchema: createPairingLinkOutputSchema,
-    },
-    async (args) => {
-      const result = await withDaemon((client) => pairingLink.execute(args, client))
-      // content[0] stays JSON (the structuredJsonResult convention every other
-      // tool follows, and what callers/smoke parse as the primary payload); the
-      // credential note travels as a second text block instead of overwriting it.
-      return {
-        structuredContent: result,
-        content: [
-          { type: 'text' as const, text: JSON.stringify(result) },
-          { type: 'text' as const, text: buildPairingLinkText(result, result.webOrigin) },
-        ],
-      }
-    },
-  )
+      handler: async (args) => {
+        const result = await withDaemon((client) => pairingLink.execute(args, client))
+        // content[0] stays JSON (the structuredJsonResult convention every other
+        // tool follows, and what callers/smoke parse as the primary payload); the
+        // credential note travels as a second text block instead of overwriting it.
+        return {
+          structuredContent: result,
+          content: [
+            { type: 'text' as const, text: JSON.stringify(result) },
+            { type: 'text' as const, text: buildPairingLinkText(result, result.webOrigin) },
+          ],
+        }
+      },
+    }),
+  ]
+
+  for (const register of tools) {
+    register(server)
+  }
 }

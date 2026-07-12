@@ -1,9 +1,5 @@
 import { resolve } from 'node:path'
-import {
-  DATA_DIR,
-  resolveDataDir,
-  WHITEBOARD_ROOT,
-} from '../shared/data-dir-secure.js'
+import { DATA_DIR, resolveDataDir, WHITEBOARD_ROOT } from '../shared/data-dir-secure.js'
 
 // Re-export the create+secure data-dir resolution from the shared layer so
 // all existing server/store importers keep their '../server/config.js' import
@@ -15,3 +11,8 @@ export { DATA_DIR, resolveDataDir, WHITEBOARD_ROOT }
 // middleware). It must not live in the shared layer, which daemon and CLI
 // files also import.
 export const DIST_APP_DIR = resolve(WHITEBOARD_ROOT, 'dist/app')
+
+// The apps/web production build, copied here by its postbuild script.
+// Served as the canonical UI in local-daemon mode (R3 of the MCP-UI
+// retirement); dist/app above stays the server-mode root until R5.
+export const DIST_WEB_APP_DIR = resolve(WHITEBOARD_ROOT, 'dist/web-app')

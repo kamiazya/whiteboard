@@ -9,7 +9,7 @@ import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { detectMergeBadges } from '../shared/merge-engine.js'
 import { reconcileElementsOnDoc } from '../shared/reconcile-elements.js'
-import { DIST_APP_DIR } from './config.js'
+import { DIST_APP_DIR, DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createExcalidrawMcpServer } from './mcp/index.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
@@ -98,6 +98,33 @@ function setBaselineSecurityHeaders(headers: Headers): void {
 // https://html.spec.whatwg.org/multipage/scripting.html#restrictions-for-contents-of-script-elements
 function toInlineScriptJson(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c')
+}
+
+// Paths reserved for /api, /mcp, /ws, and .well-known routes must never
+// fall through to the SPA catch-all: an unmatched request under one of
+// these prefixes means "route not found", not "serve index.html".
+function isReservedUiPath(path: string): boolean {
+  return (
+    path === '/api' ||
+    path.startsWith('/api/') ||
+    path === '/mcp' ||
+    path.startsWith('/mcp/') ||
+    path === '/ws' ||
+    path.startsWith('/ws/') ||
+    path.startsWith('/.well-known/')
+  )
+}
+
+// Reads index.html from the primary UI root, falling back to the legacy
+// dist/app root when the primary root has not been built (e.g. mcp-server
+// built standalone without apps/web). Throws only when neither exists.
+async function readIndexHtmlLayered(primaryDir: string, fallbackDir: string): Promise<string> {
+  try {
+    return await readFile(join(primaryDir, 'index.html'), 'utf-8')
+  } catch (err) {
+    if (primaryDir === fallbackDir) throw err
+    return await readFile(join(fallbackDir, 'index.html'), 'utf-8')
+  }
 }
 
 function extractInitializeDebugPayload(parsedBody: unknown) {
@@ -873,12 +900,36 @@ export function createApp(options: AppOptions) {
     )
   }
 
-  app.use('/fonts/*', serveStatic({ root: DIST_APP_DIR }))
-  app.use('/assets/*', serveStatic({ root: DIST_APP_DIR }))
+  // Server-mode keeps serving the legacy dist/app UI unchanged until R5.
+  // Local-daemon mode serves the canonical apps/web build, unless the
+  // WHITEBOARD_LEGACY_UI escape hatch opts back into the legacy UI.
+  const useLegacyUiRoot =
+    options.authMode === 'server-mode' || process.env.WHITEBOARD_LEGACY_UI === '1'
+  const uiRootDir = useLegacyUiRoot ? DIST_APP_DIR : DIST_WEB_APP_DIR
+
+  // Legacy-UI mode serves only dist/app. Otherwise assets resolve from the
+  // apps/web build first, falling back to dist/app so a partial/older build
+  // still serves something.
+  const staticRoots = useLegacyUiRoot ? [DIST_APP_DIR] : [DIST_WEB_APP_DIR, DIST_APP_DIR]
+  for (const pattern of ['/fonts/*', '/assets/*']) {
+    for (const root of staticRoots) {
+      app.use(pattern, serveStatic({ root }))
+    }
+  }
+
+  // Captured once here, not read from getStatus() inside the request handler
+  // below: the port is fixed for the app instance's lifetime, but getStatus()
+  // also computes app.buildPresent via a synchronous existsSync() (see
+  // http-server.ts) that must run fresh per real status check, not on every
+  // SPA page load.
+  const daemonPort = options.getStatus().port
 
   app.get('*', async (c) => {
+    if (isReservedUiPath(c.req.path)) {
+      return c.notFound()
+    }
     try {
-      const html = await readFile(join(DIST_APP_DIR, 'index.html'), 'utf-8')
+      const html = await readIndexHtmlLayered(uiRootDir, DIST_APP_DIR)
       // The daemon token is deliberately NOT part of __WHITEBOARD_RUNTIME_CONFIG__
       // (see shared/token-store.ts) — it ships in its own global so it never
       // rides along inside an object that logging / error-reporting could
@@ -886,7 +937,7 @@ export function createApp(options: AppOptions) {
       const runtimeConfigJson = toInlineScriptJson({
         // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the
         // value is always a loopback origin, even when the daemon binds 0.0.0.0.
-        daemonBaseUrl: `http://127.0.0.1:${options.getStatus().port}`,
+        daemonBaseUrl: `http://127.0.0.1:${daemonPort}`,
       })
       const runtimeConfigScript = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
       const tokenScript = token

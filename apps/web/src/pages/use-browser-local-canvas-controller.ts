@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { mergeToSnapshot } from '../components/migration/import-browser-local.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
+import type { LoroLoadResult } from '../lib/loro-store.js'
+import { deriveCopyName } from '../lib/derive-copy-name.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 
-// Narrow surface used by the controller to seed a new canvas's Loro doc.
-// Injectable so node/jsdom tests can supply an in-memory fake instead of
-// touching real IndexedDB or the loro-crdt library directly.
+// Narrow surface used by the controller to seed a new canvas's Loro doc (and,
+// for duplicateCanvas, to read one back). Injectable so node/jsdom tests can
+// supply an in-memory fake instead of touching real IndexedDB or the
+// loro-crdt library directly.
 export interface LoroStoreLike {
   save(canvasId: string, snapshot: Uint8Array): Promise<void>
   createEmptySnapshot(): Uint8Array
+  load(canvasId: string): Promise<LoroLoadResult>
 }
 
 export type BrowserLocalPersistenceState =
@@ -31,6 +36,10 @@ export interface BrowserLocalCanvasController {
   listCanvases(): Promise<CanvasSnapshot[]>
   createCanvas(name?: string): Promise<CanvasSnapshot>
   switchCanvas(id: string): Promise<void>
+  // Duplicates the CURRENTLY open canvas (flushing any pending edit first so
+  // the copy reflects the latest state) under a derived "<name> (copy)" name,
+  // then switches to it — matching the create-then-open flow the UI expects.
+  duplicateCanvas(): Promise<CanvasSnapshot>
 }
 
 function createCanvasSnapshot(id: string, name?: string): CanvasSnapshot {
@@ -330,6 +339,45 @@ export function useBrowserLocalCanvasController(
     [flushSave],
   )
 
+  // Reads the source canvas's Loro record through mergeToSnapshot (the same
+  // snapshot+delta-log -> single-snapshot collapse the browser-local ->
+  // daemon copy-first import path already uses) so the duplicate is a true
+  // deep copy: a fresh Uint8Array with no shared reference to the source's
+  // bytes, deltas, or underlying LoroDoc.
+  const duplicateCanvas = useCallback(async (): Promise<CanvasSnapshot> => {
+    const flushed = await flushSave()
+    if (!flushed) throw new Error('Failed to save pending changes before duplicating.')
+    const source = snapshotRef.current
+    if (source === null) throw new Error('No canvas is open to duplicate.')
+
+    const loroResult = await loroRef.current.load(source.id)
+    if (loroResult.kind !== 'ok') {
+      throw new Error('The canvas data could not be read for duplication.')
+    }
+    const mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
+
+    const existingList = await storeRef.current.listCanvases()
+    const existingNames = new Set(existingList.map((c) => c.name))
+    const newName = deriveCopyName(source.name, existingNames)
+
+    const id = storeRef.current.generateId()
+    const fresh = createCanvasSnapshot(id, newName)
+    await storeRef.current.save(fresh)
+    try {
+      await loroRef.current.save(id, mergedSnapshot)
+    } catch (err) {
+      try {
+        await storeRef.current.removeCanvas?.(id)
+      } catch {
+        // Orphan cleanup is best-effort; leaving a stray metadata row is harmless.
+      }
+      throw err
+    }
+
+    await switchCanvas(id)
+    return fresh
+  }, [flushSave, switchCanvas])
+
   return {
     snapshot,
     persistence,
@@ -341,5 +389,6 @@ export function useBrowserLocalCanvasController(
     listCanvases,
     createCanvas,
     switchCanvas,
+    duplicateCanvas,
   }
 }
