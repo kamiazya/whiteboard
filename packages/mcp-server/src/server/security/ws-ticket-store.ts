@@ -16,22 +16,19 @@
 // ticket cannot both win.
 
 import { randomBytes } from 'node:crypto'
-import { z } from 'zod'
-import { AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
+import type { AuthScope } from './auth-strategy.js'
 
 // Long enough for the browser to mint a ticket and immediately open the WS
 // upgrade it names (sub-second in practice); short enough that a captured
 // ticket is a stale credential well before a human could act on it.
 const TICKET_TTL_MS = 30_000
 
-const wsTicketRecordSchema = z.object({
-  scopes: z.array(z.enum(AUTH_SCOPES)),
-  clientId: z.string().min(1),
-  expiresAt: z.number(),
-  redeemed: z.boolean(),
-})
-
-type WsTicketRecord = z.infer<typeof wsTicketRecordSchema>
+interface WsTicketRecord {
+  scopes: AuthScope[]
+  clientId: string
+  expiresAt: number
+  redeemed: boolean
+}
 
 export interface RedeemedWsTicket {
   scopes: readonly AuthScope[]
