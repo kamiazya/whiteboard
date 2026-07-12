@@ -20,6 +20,7 @@ import { createDebugRouter } from './routes/debug.js'
 import { createExportRouter, resolveExportRequest } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import { createLibrariesRouter } from './routes/libraries.js'
+import { createOAuthAuthzRouter } from './routes/oauth-authz.js'
 import { createPaletteRouter } from './routes/palette.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
@@ -39,6 +40,8 @@ import {
   type McpHttpAuthStrategy,
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
+import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
+import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
@@ -111,7 +114,8 @@ function isReservedUiPath(path: string): boolean {
     path.startsWith('/mcp/') ||
     path === '/ws' ||
     path.startsWith('/ws/') ||
-    path.startsWith('/.well-known/')
+    path.startsWith('/.well-known/') ||
+    path === '/token'
   )
 }
 
@@ -200,6 +204,13 @@ export interface LocalDaemonAppOptions {
    *  behavior is unchanged unless an operator opts in. Local-daemon only;
    *  server-mode governs its origins solely via allowedOrigins below. */
   allowedWebOrigins?: readonly string[]
+  /** Exact-URI redirect_uri registry for the hosted-origin OAuth 2.1
+   *  authorization-server surface (ADR-0005): /.well-known/oauth-protected-
+   *  resource/api, /.well-known/oauth-authorization-server, and /token.
+   *  Empty by default — the whole surface stays unmounted until an operator
+   *  configures at least one client. See oauth-authz-registry.ts for why
+   *  this is never derived from allowedWebOrigins. */
+  oauthClientRegistry?: OAuthClientRegistry
 }
 
 export interface ServerModeAppOptions {
@@ -456,6 +467,38 @@ export function createApp(options: AppOptions) {
     // the auth chain unchanged.
     app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
     app.use('/api/*', createDaemonAuthMiddleware(token))
+  }
+
+  // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
+  // daemon mode only — server-mode has its own external-IdP oauth-jwt
+  // resource-server strategy and is not itself an authorization server.
+  // Unmounted entirely unless an operator configures at least one
+  // redirect_uri registry entry (empty-by-default, like allowedWebOrigins).
+  if (
+    options.authMode === 'local-daemon' &&
+    options.oauthClientRegistry &&
+    options.oauthClientRegistry.length > 0
+  ) {
+    const oauthTransactionStore = createOAuthTransactionStore()
+    const oauthAuthzRoutes = createOAuthAuthzRouter({
+      store: oauthTransactionStore,
+      registry: options.oauthClientRegistry,
+    })
+    // A dedicated sub-app, not app.use('/token', ...) etc. directly on the
+    // top-level app: the host guard and CORS below must apply to exactly
+    // the metadata + /token routes this router defines, and nothing else —
+    // mounting them here rather than widening /api/*'s existing middleware
+    // keeps that scope explicit and auditable in one place.
+    const oauthAuthzGuarded = new Hono()
+    // Host guard first, ahead of CORS, for the same DNS-rebinding reason as
+    // /api/*: a spoofed non-loopback Host must be rejected before an
+    // OPTIONS preflight could short-circuit past it.
+    oauthAuthzGuarded.use('*', createApiHostGuardMiddleware(options.authMode))
+    // /token's own CORS handling — it inherits nothing from /api/*'s
+    // middleware chain merely by being mounted nearby.
+    oauthAuthzGuarded.use('*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
+    oauthAuthzGuarded.route('/', oauthAuthzRoutes)
+    app.route('/', oauthAuthzGuarded)
   }
 
   if (mcpAuth) {
