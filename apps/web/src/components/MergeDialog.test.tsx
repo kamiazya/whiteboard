@@ -465,6 +465,44 @@ describe('MergeDialog', () => {
     )
   })
 
+  it('gives the Combined preview panel a dark-mode-aware surface, not a hardcoded white background', async () => {
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    await screen.findByText(/5 elements/)
+    const previewCard = screen.getByTestId('merge-branch-card-preview')
+    const previewSurface = previewCard.querySelector('.relative.h-\\[340px\\]')
+    expect(previewSurface).not.toBeNull()
+    expect(previewSurface?.className).not.toMatch(/\bbg-white\b/)
+  })
+
+  it('tells the user which variation to open and save to generate the combined preview', async () => {
+    const runMerge = vi
+      .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
+      .mockResolvedValue({ badges: [], preview: { elementCount: 5 } })
+    render(
+      <MergeDialog
+        open
+        source={feature}
+        target={main}
+        onClose={() => undefined}
+        runMerge={runMerge}
+      />,
+    )
+    // Unambiguous: names the comparison-side variation and says to OPEN it,
+    // not just "save" (which reads as if the currently-open canvas suffices).
+    expect(await screen.findByText(/Open «feature» and save with ⌘S/)).toBeTruthy()
+  })
+
   it('fetches versions and renders thumbnails through the authorized daemon fetch in cross-origin daemon mode', async () => {
     // Thumbnails are fetchable in daemon mode via VersionThumbnail's
     // authorized fetch + objectURL — the dialog's own versions fetch (used to
