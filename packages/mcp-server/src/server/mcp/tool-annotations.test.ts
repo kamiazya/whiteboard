@@ -37,7 +37,7 @@ function extractProfileKeys(src: string): string[] {
 }
 
 function countRegisterCalls(src: string): number {
-  return (src.match(/^\s*defineTool\(\{/gm) ?? []).length
+  return (src.match(/^\s*defineTool\(\s*\{/gm) ?? []).length
 }
 
 describe('MCP tool annotations coverage', () => {

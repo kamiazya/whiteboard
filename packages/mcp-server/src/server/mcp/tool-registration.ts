@@ -123,7 +123,9 @@ type RegisteredTool = (server: McpServer) => unknown
 // registerToolWithAnnotations call. Do not widen I/O to `unknown` or cast
 // around this signature; that would silently defeat the check.
 function defineTool<
-  I extends z.ZodRawShape,
+  // Default {} so an entry omitting inputSchema types its handler args as an
+  // empty object, not Record<string, any>.
+  I extends z.ZodRawShape = Record<string, never>,
   O extends z.ZodTypeAny | undefined = undefined,
 >(entry: {
   name: string
