@@ -30,6 +30,9 @@ const ALLOWLISTED_FILES = new Set([
   // Asserts the packed tarball contains ZERO dist/app/ entries — the
   // literal string is the regression guard itself, not a live reference.
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts',
+  // Unit-tests the dist/app/ rejection branch of assertTarballFileList with
+  // a synthetic entry list — same rationale as the impl file above.
+  'packages/mcp-server/src/server/mcp/tarball.distribution.test.ts',
 ])
 
 function listAppNames(): string[] {

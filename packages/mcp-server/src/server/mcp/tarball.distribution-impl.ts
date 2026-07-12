@@ -38,12 +38,10 @@ function spawnChecked(
 // Checked directly against the packed tarball's file list rather than the
 // source tree, since `files`/`sideEffects` config drift or a stray build
 // artifact would otherwise only surface as a runtime 404 after publish.
-function assertTarballFileList(tarballPath: string): void {
-  const result = spawnSync('tar', ['-tzf', tarballPath], { encoding: 'utf-8' })
-  if (result.status !== 0) {
-    throw new Error(`[tarball-smoke] tar -tzf failed: ${(result.stderr as string)?.trim()}`)
-  }
-  const entries = (result.stdout as string).split('\n').filter(Boolean)
+// Exported (and split from the `tar -tzf` invocation) so the two failure
+// branches can be exercised with a synthetic entry list, not just via the
+// end-to-end happy-path smoke.
+export function assertTarballFileList(entries: readonly string[]): void {
   const distAppEntries = entries.filter((e) => e.startsWith('package/dist/app/'))
   if (distAppEntries.length > 0) {
     throw new Error(
@@ -53,6 +51,14 @@ function assertTarballFileList(tarballPath: string): void {
   if (!entries.includes('package/dist/web-app/index.html')) {
     throw new Error('[tarball-smoke] packed tarball is missing dist/web-app/index.html')
   }
+}
+
+function listTarballEntries(tarballPath: string): string[] {
+  const result = spawnSync('tar', ['-tzf', tarballPath], { encoding: 'utf-8' })
+  if (result.status !== 0) {
+    throw new Error(`[tarball-smoke] tar -tzf failed: ${(result.stderr as string)?.trim()}`)
+  }
+  return (result.stdout as string).split('\n').filter(Boolean)
 }
 
 export async function runPackedTarballSmoke({
@@ -111,7 +117,7 @@ export async function runPackedTarballSmoke({
       throw new Error(`[tarball-smoke] packed tarball was not created: ${packedTarballPath}`)
     }
 
-    assertTarballFileList(packedTarballPath)
+    assertTarballFileList(listTarballEntries(packedTarballPath))
 
     writeFileSync(
       resolve(installDir, 'package.json'),
