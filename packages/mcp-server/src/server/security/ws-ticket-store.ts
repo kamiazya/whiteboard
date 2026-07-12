@@ -27,7 +27,6 @@ interface WsTicketRecord {
   scopes: AuthScope[]
   clientId: string
   expiresAt: number
-  redeemed: boolean
 }
 
 export interface RedeemedWsTicket {
@@ -79,7 +78,6 @@ export function createWsTicketStore(options?: { now?: () => number }): WsTicketS
       scopes: [...scopes],
       clientId,
       expiresAt,
-      redeemed: false,
     })
     return { ticket, expiresIn: TICKET_TTL_MS / 1000 }
   }
@@ -88,15 +86,10 @@ export function createWsTicketStore(options?: { now?: () => number }): WsTicketS
     const record = tickets.get(ticket)
     if (!record) return null
 
-    // Compare-and-swap: the redeemed check and the transition to redeemed
-    // happen in the same synchronous step, before the expiry check below.
-    // Node's run-to-completion semantics make this atomic across concurrent
-    // callers racing the same ticket value — whichever loses the race reads
-    // `redeemed: true` and fails, even if it would otherwise have arrived in
-    // time. Once a ticket is spent, it is spent, exactly like an
-    // authorization code.
-    if (record.redeemed) return null
-    tickets.set(ticket, { ...record, redeemed: true })
+    // Delete-on-redeem: Node's run-to-completion semantics make this
+    // atomic — two concurrent upgrades racing the same ticket cannot both
+    // win because whichever runs second finds the key already gone.
+    tickets.delete(ticket)
 
     if (record.expiresAt < now()) return null
     return { scopes: [...record.scopes], clientId: record.clientId }
