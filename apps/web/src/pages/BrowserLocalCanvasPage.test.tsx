@@ -1,5 +1,14 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { Loro } from 'loro-crdt'
+import type { ReactElement } from 'react'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
@@ -8,6 +17,14 @@ import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
+
+// The page now reads useLocation/useNavigate for URL<->canvas-id sync, so
+// every render needs a Router ancestor — wrapping once here keeps the
+// existing single-arg `render(<BrowserLocalCanvasPage .../>)` call sites
+// throughout this file unchanged.
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+}
 
 // createCanvas seeds an empty Loro doc; the real LoroStore touches IndexedDB,
 // which jsdom does not implement. A fake keeps these page-level tests scoped
@@ -474,6 +491,45 @@ describe('BrowserLocalCanvasPage', () => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Other canvas')
     })
     expect(await store.getDefaultCanvasId()).toBe('c2')
+  })
+
+  it('cold-loads a /local/:canvasId deep link straight into that canvas', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await act(async () => {
+      rtlRender(
+        <MemoryRouter initialEntries={['/local/c2']}>
+          <BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} initialCanvasId="c2" />
+        </MemoryRouter>,
+      )
+    })
+    const heading = await screen.findByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Other canvas')
+  })
+
+  it('updates the URL to /local/:canvasId when the switcher opens a different canvas', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    const router = createMemoryRouter(
+      [{ path: '*', element: <BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} /> }],
+      { initialEntries: ['/'] },
+    )
+    await act(async () => {
+      rtlRender(<RouterProvider router={router} />)
+    })
+    const switcher = await screen.findByRole('button', { name: 'untitled' })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    const otherItem = await screen.findByText('Other canvas')
+    fireEvent.pointerUp(otherItem)
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/local/c2')
+    })
   })
 
   it('creating a canvas through the top bar switches to a fresh untitled canvas', async () => {

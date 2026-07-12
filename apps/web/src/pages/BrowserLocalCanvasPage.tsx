@@ -1,6 +1,7 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +15,7 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
+import { browserLocalCanvasPath } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -58,6 +60,10 @@ interface BrowserLocalCanvasPageProps {
   // Defaults to browser-local so existing callers/tests keep working
   // unedited; App.tsx passes the resolved ProviderState's capabilities.
   capabilities?: WhiteboardCapabilities
+  // A canvas id requested by the URL at mount (e.g. a bookmarked
+  // /local/:canvasId deep link), read once — see
+  // useBrowserLocalCanvasController's own contract for the same parameter.
+  initialCanvasId?: string
 }
 
 // Map the persistence state machine to user-facing copy. `degraded` carries its
@@ -79,6 +85,7 @@ export function BrowserLocalCanvasPage({
   store,
   loro,
   capabilities = BROWSER_LOCAL_CAPABILITIES,
+  initialCanvasId,
 }: BrowserLocalCanvasPageProps) {
   const {
     snapshot,
@@ -92,7 +99,9 @@ export function BrowserLocalCanvasPage({
     createCanvas,
     switchCanvas,
     duplicateCanvas,
-  } = useBrowserLocalCanvasController(store, loro)
+  } = useBrowserLocalCanvasController(store, loro, initialCanvasId)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
   // re-read from localStorage on every render.
@@ -137,6 +146,31 @@ export function BrowserLocalCanvasPage({
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
+
+  // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
+  // (bookmarkable/shareable, matching the daemon side's
+  // /canvas/:workspaceId/:slug contract). The first sync replaces so a
+  // plain '/' load doesn't leave an extra history entry behind it; every
+  // subsequent switch (via the switcher, or create-then-switch) pushes.
+  //
+  // Deliberately one-directional (no URL->switchCanvas effect): wiring
+  // browser back/forward to re-trigger switchCanvas raced with Excalidraw's
+  // own render cycle in practice (an update-during-a-different-component's-
+  // render warning, with the location change never reaching this
+  // component's next render in time) without a robust fix found in this
+  // pass. Landing the one-directional half now still makes every
+  // browser-local canvas addressable; the round-trip is a known follow-up.
+  const isFirstCanvasUrlSyncRef = useRef(true)
+  useEffect(() => {
+    if (canvasId === null) return
+    const path = browserLocalCanvasPath(canvasId)
+    const isFirstSync = isFirstCanvasUrlSyncRef.current
+    isFirstCanvasUrlSyncRef.current = false
+    if (location.pathname === path) return
+    navigate(path, { replace: isFirstSync })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasId, navigate])
+
   useEffect(() => {
     if (canvasId === null) return
     const generation = ++listGenerationRef.current

@@ -49,6 +49,13 @@ function createCanvasSnapshot(id: string, name?: string): CanvasSnapshot {
 export function useBrowserLocalCanvasController(
   store: BrowserLocalStore,
   loro: LoroStoreLike = new LoroStore(),
+  // A canvas id requested by the URL (e.g. a bookmarked /local/:canvasId
+  // deep link), read once at mount. Takes priority over the store's own
+  // "default canvas" pointer, which it also repoints on success so a later
+  // plain (no deep link) load resumes here — the same contract switchCanvas
+  // already has. A stale/deleted id falls back to the normal flow rather
+  // than showing an error: a dead bookmark must not dead-end the user.
+  initialCanvasId?: string,
 ): BrowserLocalCanvasController {
   const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
@@ -128,6 +135,19 @@ export function useBrowserLocalCanvasController(
     let cancelled = false
 
     async function load() {
+      if (initialCanvasId !== undefined) {
+        const requested = await storeRef.current.load(initialCanvasId)
+        if (cancelled) return
+        if (requested.kind === 'ok') {
+          await storeRef.current.setDefaultCanvasId(initialCanvasId)
+          if (!cancelled) setSnapshot(requested.snapshot)
+          return
+        }
+        // Not found / corrupted: silently fall through to the normal
+        // default-canvas flow below rather than showing a degraded banner —
+        // a stale bookmark must not dead-end the user.
+      }
+
       let id = await storeRef.current.getDefaultCanvasId()
       if (cancelled) return
 

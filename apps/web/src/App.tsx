@@ -4,7 +4,12 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { BetaBanner } from './components/BetaBanner.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
-import { type DaemonRoute, daemonRoutePath, parseDaemonRoute } from './lib/app-routes.js'
+import {
+  type DaemonRoute,
+  daemonRoutePath,
+  parseBrowserLocalRoute,
+  parseDaemonRoute,
+} from './lib/app-routes.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
 import {
   BROWSER_LOCAL_CAPABILITIES,
@@ -141,6 +146,14 @@ export function App({ providerState }: AppProps) {
     }
     return parseDaemonRoute(location.pathname) ?? { kind: 'index' }
   })
+
+  // Read once at mount: a bookmarked/shared `/local/:canvasId` deep link
+  // seeds which browser-local canvas to open. BrowserLocalCanvasPage owns
+  // all subsequent URL<->canvas-id sync itself (switching canvases, back/
+  // forward) once mounted — this is only the cold-load entry point.
+  const [initialBrowserLocalCanvasId] = useState(
+    () => parseBrowserLocalRoute(location.pathname)?.canvasId,
+  )
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -358,6 +371,7 @@ export function App({ providerState }: AppProps) {
             <BrowserLocalCanvasPage
               store={browserLocalStore}
               capabilities={effectiveState.capabilities}
+              initialCanvasId={initialBrowserLocalCanvasId}
             />
           </Suspense>
         </div>
