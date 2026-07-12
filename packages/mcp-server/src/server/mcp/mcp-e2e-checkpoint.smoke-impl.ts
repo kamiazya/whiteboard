@@ -423,6 +423,37 @@ export async function runE2eCheckpointSmoke({
       `[e2e] canvas_export_json → ${body.elements.length} elems in standard JSON (type=${body.type}, v${body.version})`,
     )
 
+    // export_canvas unifies png/svg/json behind one tool — exercise all three
+    // formats so structuredContent validation against each format's branch of
+    // exportCanvasOutputSchema runs at least once.
+    const canvasPng = await callTool('export_canvas', { canvasId: created.id, format: 'png' })
+    if (canvasPng.format !== 'png' || !canvasPng.filePath) {
+      throw new Error(
+        `export_canvas(format:png) returned unexpected shape: ${JSON.stringify(canvasPng)}`,
+      )
+    }
+    console.log('[e2e] export_canvas(format:png) OK')
+
+    const canvasSvg = await callTool('export_canvas', { canvasId: created.id, format: 'svg' })
+    if (canvasSvg.format !== 'svg' || !(canvasSvg.filePath as string).endsWith('.svg')) {
+      throw new Error(
+        `export_canvas(format:svg) returned unexpected shape: ${JSON.stringify(canvasSvg)}`,
+      )
+    }
+    const svgMarkup = await readFile(canvasSvg.filePath as string, 'utf-8')
+    if (!svgMarkup.trim().startsWith('<svg')) {
+      throw new Error('export_canvas(format:svg) did not produce real SVG markup')
+    }
+    console.log('[e2e] export_canvas(format:svg) OK (real <svg> markup on disk)')
+
+    const canvasJson = await callTool('export_canvas', { canvasId: created.id, format: 'json' })
+    if (canvasJson.format !== 'json' || !(canvasJson.filePath as string).endsWith('.excalidraw')) {
+      throw new Error(
+        `export_canvas(format:json) returned unexpected shape: ${JSON.stringify(canvasJson)}`,
+      )
+    }
+    console.log('[e2e] export_canvas(format:json) OK')
+
     console.log('\n[e2e] ALL OK')
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
