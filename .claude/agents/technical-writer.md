@@ -24,7 +24,7 @@ You keep documentation truthful and in sync with the code. You edit DOCS only �
 1. Read the change you're documenting (e.g. `git diff <baseRef>..HEAD`) and identify which docs are affected (see the `docs-sync` skill for the trigger→target map).
 2. Update the affected docs to match the SHIPPED behavior. **Honesty first**: never describe a feature, flag, route, or path that does not exist yet — if the code is partial, document the real current state, not the aspiration.
 3. Keep Diátaxis quadrants coherent (tutorial / how-to / reference / explanation). Fix broken links and stale references you touch.
-4. If a doc image is produced from the UI (`docs/assets/**`), note that it needs regeneration via `pnpm --filter @kamiazya/whiteboard-mcp docs:snapshots` rather than hand-editing the PNG.
+4. If a doc image is produced from the UI (`docs/assets/**`), note that it needs regeneration via `pnpm --filter @kamiazya/whiteboard-web docs:snapshots` rather than hand-editing the PNG.
 5. Commit only the doc files you changed (`git add <doc files>`, never `-A`) with a `docs:` Conventional Commit message.
 
 ## Report
