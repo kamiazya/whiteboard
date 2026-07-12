@@ -20,7 +20,7 @@ import { createDebugRouter } from './routes/debug.js'
 import { createExportRouter, resolveExportRequest } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import { createLibrariesRouter } from './routes/libraries.js'
-import { createOAuthAuthzRouter } from './routes/oauth-authz.js'
+import { createOAuthAuthzRouter, OAUTH_AUTHZ_PATHS } from './routes/oauth-authz.js'
 import { createPaletteRouter } from './routes/palette.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
@@ -484,21 +484,21 @@ export function createApp(options: AppOptions) {
       store: oauthTransactionStore,
       registry: options.oauthClientRegistry,
     })
-    // A dedicated sub-app, not app.use('/token', ...) etc. directly on the
-    // top-level app: the host guard and CORS below must apply to exactly
-    // the metadata + /token routes this router defines, and nothing else —
-    // mounting them here rather than widening /api/*'s existing middleware
-    // keeps that scope explicit and auditable in one place.
-    const oauthAuthzGuarded = new Hono()
-    // Host guard first, ahead of CORS, for the same DNS-rebinding reason as
-    // /api/*: a spoofed non-loopback Host must be rejected before an
-    // OPTIONS preflight could short-circuit past it.
-    oauthAuthzGuarded.use('*', createApiHostGuardMiddleware(options.authMode))
-    // /token's own CORS handling — it inherits nothing from /api/*'s
-    // middleware chain merely by being mounted nearby.
-    oauthAuthzGuarded.use('*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
-    oauthAuthzGuarded.route('/', oauthAuthzRoutes)
-    app.route('/', oauthAuthzGuarded)
+    // Attached per explicit path, NOT via a sub-app: Hono merges a sub-app's
+    // `use('*')` into the parent as `/*`, so a sub-app mounted at '/' would
+    // run this host guard and CORS ahead of every other route's own policy —
+    // an OPTIONS preflight for /mcp would be answered here before
+    // createMcpHttpOriginMiddleware ever ran.
+    for (const path of OAUTH_AUTHZ_PATHS) {
+      // Host guard first, ahead of CORS, for the same DNS-rebinding reason as
+      // /api/*: a spoofed non-loopback Host must be rejected before an
+      // OPTIONS preflight could short-circuit past it.
+      app.use(path, createApiHostGuardMiddleware(options.authMode))
+      // This surface's own CORS handling — it inherits nothing from /api/*'s
+      // middleware chain merely by being mounted nearby.
+      app.use(path, createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
+    }
+    app.route('/', oauthAuthzRoutes)
   }
 
   if (mcpAuth) {

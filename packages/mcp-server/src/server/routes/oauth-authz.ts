@@ -29,6 +29,16 @@ const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource/
 const AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-authorization-server'
 export const OAUTH_TOKEN_PATH = '/token'
 
+// Exported so the caller can attach this router's middleware to exactly these
+// paths. Hono's `app.route('/', subApp)` merges a sub-app's `use('*')` into the
+// parent as `/*` — it does NOT confine it to the sub-app's own routes — so a
+// sub-app is the wrong tool for scoping middleware.
+export const OAUTH_AUTHZ_PATHS = [
+  PROTECTED_RESOURCE_METADATA_PATH,
+  AUTHORIZATION_SERVER_METADATA_PATH,
+  OAUTH_TOKEN_PATH,
+] as const
+
 export const tokenRequestSchema = z.object({
   grant_type: z.literal('authorization_code'),
   code: z.string().min(1),
