@@ -5,7 +5,9 @@
 // the registrations independently, then cross-check their counts.
 //
 // TOOL_PROFILES lives in tool-profiles.ts.
-// registerToolWithAnnotations calls live in tool-registration.ts.
+// Tool registrations live in tool-registration.ts as `defineTool({...})`
+// entries in a data-driven array (each one calls registerToolWithAnnotations
+// through the defineTool identity helper).
 
 import { readFileSync, existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -35,11 +37,11 @@ function extractProfileKeys(src: string): string[] {
 }
 
 function countRegisterCalls(src: string): number {
-  return (src.match(/registerToolWithAnnotations\(\s*server\s*,/g) ?? []).length
+  return (src.match(/^\s*defineTool\(\{/gm) ?? []).length
 }
 
 describe('MCP tool annotations coverage', () => {
-  it('matches TOOL_PROFILES entry count to registerToolWithAnnotations call count', () => {
+  it('matches TOOL_PROFILES entry count to defineTool registration entry count', () => {
     const profileKeys = extractProfileKeys(profilesSrc)
     const callCount = countRegisterCalls(registrationSrc)
     expect(profileKeys.length).toBe(callCount)
