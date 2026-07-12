@@ -77,6 +77,16 @@ describe('applyUpdate', () => {
     expect(() => applyUpdate(doc, 'r1', {})).not.toThrow()
     expect(readElement(doc, 'r1')).toMatchObject({ x: 10, y: 20 })
   })
+
+  it('writes a key that is not a real Excalidraw element field instead of filtering it out', () => {
+    // applyUpdate has no per-type field allowlist (building one would need the
+    // full Excalidraw element schema across every element variant), so a
+    // misspelled or made-up key is stored as-is rather than silently dropped.
+    // The tool description must say this plainly rather than claim filtering
+    // that does not happen.
+    applyUpdate(doc, 'r1', { notARealExcalidrawField: 'value' })
+    expect(readElement(doc, 'r1')).toMatchObject({ notARealExcalidrawField: 'value' })
+  })
 })
 
 describe('applyUpdate on arrow elements', () => {
