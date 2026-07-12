@@ -37,14 +37,10 @@ export const alignInputSchema = z.object({
   elementIds: z
     .array(z.string())
     .min(2)
-    .describe(
-      'Element ids to align. Needs at least 2; the orthogonal axis is left untouched.',
-    ),
+    .describe('Element ids to align. Needs at least 2; the orthogonal axis is left untouched.'),
   alignment: z
     .enum(['left', 'center', 'right', 'top', 'middle', 'bottom'])
-    .describe(
-      "Target axis. 'left'/'right'/'center' move x; 'top'/'bottom'/'middle' move y.",
-    ),
+    .describe("Target axis. 'left'/'right'/'center' move x; 'top'/'bottom'/'middle' move y."),
 })
 
 export const alignOutputSchema = z.object({
@@ -84,6 +80,18 @@ export const listGroupsOutputSchema = z.object({
   ),
 })
 
+export const updateElementInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  elementId: z
+    .string()
+    .describe('Target element id (from canvas_inspect or annotate result). Throws if not found.'),
+  patch: z
+    .record(z.string(), z.unknown())
+    .describe(
+      'Partial element fields to merge (e.g. { text: "...", strokeColor: "#1971c2", x: 100, width: 200 }). Only valid Excalidraw element fields are applied; unknown keys are ignored.',
+    ),
+} satisfies z.ZodRawShape
+
 // Partially update fields on an existing element. Useful for relabeling or small
 // geometry/style tweaks. The caller is responsible for patch value validity.
 export function updateElementTool() {
@@ -95,7 +103,10 @@ export function updateElementTool() {
       type: 'object' as const,
       properties: {
         canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementId: { type: 'string', description: 'Excalidraw element id returned from annotate/load_image.' },
+        elementId: {
+          type: 'string',
+          description: 'Excalidraw element id returned from annotate/load_image.',
+        },
         patch: {
           type: 'object',
           description: 'Field → value map. Values are applied verbatim with LoroMap.set.',
@@ -113,11 +124,25 @@ export function updateElementTool() {
       const prevVV = doc.version()
       applyUpdate(doc, args.elementId, args.patch)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       return { elementId: args.elementId }
     },
   }
 }
+
+export const deleteElementInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  elementId: z
+    .string()
+    .describe(
+      'Target element id. Soft-delete (tombstone) — element is removed from visible scene but kept in CRDT history. No-op if already deleted.',
+    ),
+} satisfies z.ZodRawShape
 
 // Soft-delete an element by setting isDeleted=true so the CRDT delete still propagates.
 export function deleteElementTool() {
@@ -133,17 +158,35 @@ export function deleteElementTool() {
       },
       required: ['canvasId', 'elementId'],
     },
-    execute: async (args: { canvasId: string; elementId: string }, client: DaemonClient): Promise<z.infer<typeof elementIdOutputSchema>> => {
+    execute: async (
+      args: { canvasId: string; elementId: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof elementIdOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       applyDelete(doc, args.elementId)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       return { elementId: args.elementId }
     },
   }
 }
+
+export const deleteElementsInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  elementIds: z
+    .array(z.string())
+    .min(1)
+    .describe(
+      'Element ids to soft-delete (tombstone) in 1 snapshot/commit/broadcast. Always prefer this over multiple delete_element calls — it is faster and atomic.',
+    ),
+} satisfies z.ZodRawShape
 
 // Tombstone multiple elements in one snapshot/commit/broadcast. This is cheaper
 // than calling delete_element repeatedly and remains all-or-nothing.
@@ -185,6 +228,8 @@ export function deleteElementsTool() {
   }
 }
 
+export const canvasClearInputShape = { canvasId: z.string() } satisfies z.ZodRawShape
+
 // Tombstone every non-deleted element so the canvas can be reset efficiently in
 // one snapshot/commit/update cycle.
 export function canvasClearTool() {
@@ -199,17 +244,37 @@ export function canvasClearTool() {
       },
       required: ['canvasId'],
     },
-    execute: async (args: { canvasId: string }, client: DaemonClient): Promise<z.infer<typeof clearedCountOutputSchema>> => {
+    execute: async (
+      args: { canvasId: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof clearedCountOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
       const clearedCount = applyClear(doc)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       return { clearedCount }
     },
   }
 }
+
+export const moveElementsInputShape = {
+  canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
+  elementIds: z
+    .array(z.string())
+    .min(1)
+    .describe(
+      'Element ids to move together. All ids in the same group are translated by the same (dx, dy) in one batched commit.',
+    ),
+  dx: z.number().describe('Horizontal translation in world coordinates (px). Negative = left.'),
+  dy: z.number().describe('Vertical translation in world coordinates (px). Negative = up.'),
+} satisfies z.ZodRawShape
 
 // Move multiple elements by the same dx/dy. Missing ids abort the whole operation.
 export function moveElementsTool() {
@@ -240,7 +305,12 @@ export function moveElementsTool() {
       const prevVV = doc.version()
       applyMove(doc, args.elementIds, args.dx, args.dy)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       return { elementIds: args.elementIds }
     },
   }
@@ -266,7 +336,12 @@ export function alignElementsTool() {
       const prevVV = doc.version()
       applyAlign(doc, args.elementIds, args.alignment)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       return { elementIds: args.elementIds, alignment: args.alignment }
     },
   }
@@ -289,11 +364,22 @@ export function distributeElementsTool() {
       const prevVV = doc.version()
       applyDistribute(doc, args.elementIds, args.direction)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       return { elementIds: args.elementIds, direction: args.direction }
     },
   }
 }
+
+export const assignToGroupInputShape = {
+  canvasId: z.string(),
+  groupId: z.string(),
+  elementIds: z.array(z.string()).min(1),
+} satisfies z.ZodRawShape
 
 // Tool for adding members to a logical group via Excalidraw's native groupIds.
 // Pick a readable free-form groupId so the set can be found and deleted later.
@@ -339,6 +425,11 @@ export function assignToGroupTool() {
   }
 }
 
+export const deleteGroupInputShape = {
+  canvasId: z.string(),
+  groupId: z.string(),
+} satisfies z.ZodRawShape
+
 // Tombstone every element in the given groupId in one shot.
 export function deleteGroupTool() {
   return {
@@ -373,6 +464,8 @@ export function deleteGroupTool() {
   }
 }
 
+export const listGroupsInputShape = { canvasId: z.string() } satisfies z.ZodRawShape
+
 // List every group on the canvas. memberIds include only non-deleted elements. Read-only.
 export function listGroupsTool() {
   return {
@@ -386,13 +479,22 @@ export function listGroupsTool() {
       },
       required: ['canvasId'],
     },
-    execute: async (args: { canvasId: string }, client: DaemonClient): Promise<z.infer<typeof listGroupsOutputSchema>> => {
+    execute: async (
+      args: { canvasId: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof listGroupsOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       return { groups: listGroups(doc) }
     },
   }
 }
+
+export const reorderElementsInputShape = {
+  canvasId: z.string(),
+  elementIds: z.array(z.string()).min(1),
+  action: z.enum(['front', 'back']),
+} satisfies z.ZodRawShape
 
 // Change z-order by moving the selected elementIds together to the list front or
 // back. Excalidraw draws later elements in front, and native Loro moves avoid tombstones.
@@ -428,7 +530,12 @@ export function reorderElementsTool() {
       const prevVV = doc.version()
       applyReorder(doc, args.elementIds, args.action)
       doc.commit()
-      await apiPostLoroUpdate(client, workspaceId, slug, doc.export({ mode: 'update', from: prevVV }))
+      await apiPostLoroUpdate(
+        client,
+        workspaceId,
+        slug,
+        doc.export({ mode: 'update', from: prevVV }),
+      )
       return { elementIds: args.elementIds, action: args.action }
     },
   }
