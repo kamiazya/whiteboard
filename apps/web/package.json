@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run && vitest run --config vitest.node.config.ts",
     "test:browser": "vitest run --config vitest.browser.config.ts",
+    "docs:snapshots": "vitest run --config vitest.docs-snapshots.config.ts",
+    "docs:snapshots:check": "pnpm docs:snapshots && pnpm docs:snapshots && git diff --exit-code -- ../../docs/assets/",
     "typecheck": "tsc --noEmit",
     "smoke:artifact": "node scripts/smoke-artifact.mjs",
     "smoke:bundle-size": "node scripts/smoke-bundle-size.mjs",
