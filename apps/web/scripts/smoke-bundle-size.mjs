@@ -108,12 +108,15 @@ if (!existsSync(indexHtmlPath)) {
     return m ? (m[2] ?? m[3] ?? m[4]) : undefined
   }
   const entryScripts = []
-  for (const [tag] of html.matchAll(/<script\b[^>]*>/g)) {
+  // Case-insensitive: HTML tag names are case-insensitive per the spec, and a
+  // hand-rolled tag matcher that only matches lower case silently stops
+  // finding entries if any producer ever emits upper/mixed case tags.
+  for (const [tag] of html.matchAll(/<script\b[^>]*>/gi)) {
     const src = attr(tag, 'src')
     if (src?.startsWith('/assets/') && src.endsWith('.js')) entryScripts.push(src)
   }
   const modulepreloads = []
-  for (const [tag] of html.matchAll(/<link\b[^>]*>/g)) {
+  for (const [tag] of html.matchAll(/<link\b[^>]*>/gi)) {
     const href = attr(tag, 'href')
     if (
       attr(tag, 'rel') === 'modulepreload' &&
