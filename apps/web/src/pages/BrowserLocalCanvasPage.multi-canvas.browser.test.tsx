@@ -6,11 +6,26 @@
  * useCanvasSync reconnect-on-backend-identity-change path.
  */
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { Loro } from 'loro-crdt'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 import '../index.css'
+
+// The page reads/writes the canvas id through the router, so it needs a router
+// in scope exactly as it has one in main.tsx.
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+}
 
 type ExcalidrawOnChange = (elements: unknown[], appState: unknown, files: unknown) => void
 

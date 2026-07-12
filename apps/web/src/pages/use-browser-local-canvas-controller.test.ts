@@ -503,6 +503,57 @@ describe('useBrowserLocalCanvasController', () => {
     expect(result.current.persistence.kind).toBe('saved')
   })
 
+  describe('initialCanvasId (deep-linked canvas)', () => {
+    const other: CanvasSnapshot = {
+      id: 'c2',
+      name: 'other canvas',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+    }
+
+    it('loads the requested canvas instead of the store default when given', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await store.save(other)
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, undefined, 'c2'))
+      await act(async () => {})
+      expect(result.current.snapshot).toEqual(other)
+    })
+
+    it('repoints the store default to the requested canvas so a later plain load resumes there', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await store.save(other)
+      renderHook(() => useBrowserLocalCanvasController(store, undefined, 'c2'))
+      await act(async () => {})
+      expect(await store.getDefaultCanvasId()).toBe('c2')
+    })
+
+    it('falls back to the normal default-canvas flow when the requested id is not found (stale/bookmarked link)', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const { result } = renderHook(() =>
+        useBrowserLocalCanvasController(store, undefined, 'does-not-exist'),
+      )
+      await act(async () => {})
+      // No error wall — silently lands on whatever the store's own default
+      // resolves to, exactly like a plain (no initialCanvasId) mount would.
+      expect(result.current.snapshot).toEqual(snap)
+      expect(result.current.persistence.kind).toBe('saved')
+    })
+
+    it('behaves exactly like today when initialCanvasId is omitted', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store))
+      await act(async () => {})
+      expect(result.current.snapshot).toEqual(snap)
+    })
+  })
+
   describe('multi-canvas: listCanvases / createCanvas / switchCanvas', () => {
     it('listCanvases reflects the auto-created canvas on first mount', async () => {
       const store = new MemoryStore()

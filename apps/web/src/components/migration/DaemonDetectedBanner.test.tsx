@@ -89,7 +89,7 @@ describe('DaemonDetectedBanner', () => {
     expect(probeFn.mock.calls[1]?.[1]).toMatchObject({ forceRecheck: true })
   })
 
-  it('renders the detected banner with copy and a link to the how-to doc', async () => {
+  it('renders the detected banner with an "Open the local app" primary CTA linking to the daemon origin', async () => {
     const probeFn = vi.fn().mockResolvedValue(DETECTED)
     render(
       <DaemonDetectedBanner
@@ -100,10 +100,75 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    await screen.findByText(
-      'A local whiteboard daemon is running. Ask your AI agent for a pairing link (create_pairing_link) to unlock versions, variations, and combining changes.',
+    await screen.findByText(/A local whiteboard daemon is running at/)
+    const openLink = screen.getByRole('link', { name: /open the local app/i })
+    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099')
+    // The pairing-link ask is gone: since R3, navigating to the daemon
+    // origin needs no pairing at all.
+    expect(screen.queryByText(/ask your ai agent/i)).toBeNull()
+  })
+
+  it('deep-links "Open the local app" to the last-connected workspace/slug when known', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        lastConnectedWorkspaceId: 'w1',
+        lastConnectedSlug: 'main',
+      },
+    }))
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
     )
-    const link = screen.getByRole('link', { name: /connect/i })
+
+    const openLink = await screen.findByRole('link', { name: /open the local app/i })
+    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
+  })
+
+  it('does not emit a double slash when the stored base URL has a trailing slash', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: 'http://127.0.0.1:3099/',
+        lastConnectedWorkspaceId: 'w1',
+        lastConnectedSlug: 'main',
+      },
+    }))
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    const openLink = await screen.findByRole('link', { name: /open the local app/i })
+    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
+  })
+
+  it('still links to the how-to doc alongside the primary CTA', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    const link = await screen.findByRole('link', { name: /learn more/i })
     expect(link.getAttribute('href')).toBe(HOW_TO_CONNECT_URL)
   })
 
@@ -121,15 +186,56 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /dismiss/i }))
 
-    expect(
-      screen.queryByText(
-        'A local whiteboard daemon is running. Ask your AI agent for a pairing link (create_pairing_link) to unlock versions, variations, and combining changes.',
-      ),
-    ).toBeNull()
+    expect(screen.queryByText(/A local whiteboard daemon is running at/)).toBeNull()
 
     const saved = store.load()
     expect(saved.storage.dismissedDaemonCtaInstanceId).toBe('inst-1')
     expect(saved.storage.dismissedDaemonCtaAt).toEqual(expect.any(String))
+  })
+
+  it('"Forget this daemon" clears the persisted reconnect target and hides the banner', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: 'http://127.0.0.1:3099',
+        lastConnectedWorkspaceId: 'w1',
+        lastConnectedSlug: 'main',
+      },
+    }))
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /forget this daemon/i }))
+
+    expect(screen.queryByText(/A local whiteboard daemon is running at/)).toBeNull()
+    const saved = store.load()
+    expect(saved.storage.localDaemonBaseUrl).toBeUndefined()
+    expect(saved.storage.lastConnectedWorkspaceId).toBeUndefined()
+    expect(saved.storage.lastConnectedSlug).toBeUndefined()
+  })
+
+  it('does not render "Forget this daemon" when no target has ever been persisted', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    await screen.findByText(/A local whiteboard daemon is running at/)
+    expect(screen.queryByRole('button', { name: /forget this daemon/i })).toBeNull()
   })
 
   it('shows the honest unsupported notice instead of the CTA when the probe proves the browser blocked it', async () => {
