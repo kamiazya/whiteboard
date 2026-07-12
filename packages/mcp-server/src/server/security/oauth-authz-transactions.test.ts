@@ -14,8 +14,9 @@ describe('expired-entry pruning', () => {
       state: 's',
       codeChallenge: 'challenge',
       codeChallengeMethod: 'S256',
+      csrfToken: 'csrf-token',
     })
-    expect(store.size()).toEqual({ transactions: 1, codes: 0 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0 })
 
     clock += TRANSACTION_TTL_MS + 1
     store.createTransaction({
@@ -25,11 +26,12 @@ describe('expired-entry pruning', () => {
       state: 's2',
       codeChallenge: 'challenge',
       codeChallengeMethod: 'S256',
+      csrfToken: 'csrf-token',
     })
 
     // The first transaction is gone, not merely unusable: a long-lived daemon
     // must not accumulate one record per abandoned/attacker-driven attempt.
-    expect(store.size()).toEqual({ transactions: 1, codes: 0 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0 })
   })
 
   it('reclaims the code-hash index entry of an expired code-issued transaction', () => {
@@ -42,10 +44,11 @@ describe('expired-entry pruning', () => {
       state: 's',
       codeChallenge: 'challenge',
       codeChallengeMethod: 'S256',
+      csrfToken: 'csrf-token',
     })
     store.approveTransaction(transactionId)
     expect(store.issueAuthorizationCode(transactionId)).not.toBeNull()
-    expect(store.size()).toEqual({ transactions: 1, codes: 1 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 1, attempts: 0 })
 
     clock += TRANSACTION_TTL_MS + 1
     store.createTransaction({
@@ -55,9 +58,10 @@ describe('expired-entry pruning', () => {
       state: 's2',
       codeChallenge: 'challenge',
       codeChallengeMethod: 'S256',
+      csrfToken: 'csrf-token',
     })
 
-    expect(store.size()).toEqual({ transactions: 1, codes: 0 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0 })
   })
 
   it('reclaims a redeemed transaction once its window has passed', () => {
@@ -70,6 +74,7 @@ describe('expired-entry pruning', () => {
       state: 's',
       codeChallenge: 'challenge',
       codeChallengeMethod: 'S256',
+      csrfToken: 'csrf-token',
     })
     store.approveTransaction(transactionId)
     const issued = store.issueAuthorizationCode(transactionId)
@@ -90,6 +95,7 @@ describe('expired-entry pruning', () => {
       state: 's2',
       codeChallenge: 'challenge',
       codeChallengeMethod: 'S256',
+      csrfToken: 'csrf-token',
     })
     expect(store.size().transactions).toBe(1)
   })
@@ -102,6 +108,7 @@ const baseInput = {
   state: 'client-supplied-state-value',
   codeChallenge: 'test-challenge-does-not-need-to-be-real-for-creation',
   codeChallengeMethod: 'S256' as const,
+  csrfToken: 'csrf-token-for-approval-binding',
 }
 
 // A real S256 PKCE pair: challenge = base64url(sha256(verifier)).
@@ -327,5 +334,135 @@ describe('createOAuthTransactionStore', () => {
     expect(minted.accessToken).toEqual(expect.any(String))
     expect(minted.accessToken.length).toBeGreaterThan(20)
     expect(minted.expiresIn).toBeGreaterThan(0)
+  })
+
+  it('rejects creation with a missing or empty csrfToken at the Zod boundary', () => {
+    const store = createOAuthTransactionStore()
+    expect(() => store.createTransaction({ ...baseInput, csrfToken: '' })).toThrow()
+    const { csrfToken, ...withoutCsrfToken } = baseInput
+    expect(() =>
+      store.createTransaction(
+        withoutCsrfToken as unknown as Parameters<typeof store.createTransaction>[0],
+      ),
+    ).toThrow()
+  })
+})
+
+describe('verifyApprovalBinding', () => {
+  it('returns true only for the exact csrfToken bound to the transaction', () => {
+    const store = createOAuthTransactionStore()
+    const { transactionId } = store.createTransaction(baseInput)
+    expect(store.verifyApprovalBinding(transactionId, baseInput.csrfToken)).toBe(true)
+    expect(store.verifyApprovalBinding(transactionId, 'wrong-token')).toBe(false)
+  })
+
+  it('returns false for an unknown transaction id', () => {
+    const store = createOAuthTransactionStore()
+    expect(store.verifyApprovalBinding('never-created', 'anything')).toBe(false)
+  })
+})
+
+describe('denyTransaction', () => {
+  it('moves a pending transaction to denied, closing off approval and code issuance', () => {
+    const store = createOAuthTransactionStore()
+    const { transactionId } = store.createTransaction(baseInput)
+    expect(store.denyTransaction(transactionId)).toBe(true)
+    expect(store.approveTransaction(transactionId)).toBe(false)
+    expect(store.issueAuthorizationCode(transactionId)).toBeNull()
+  })
+
+  it('returns false for an unknown transaction id', () => {
+    const store = createOAuthTransactionStore()
+    expect(store.denyTransaction('never-created')).toBe(false)
+  })
+})
+
+describe('issueAuthorizationCode single-issuance', () => {
+  it('returns null for a second issuance attempt on an already code-issued transaction', () => {
+    const store = createOAuthTransactionStore()
+    const { transactionId } = store.createTransaction(baseInput)
+    store.approveTransaction(transactionId)
+    expect(store.issueAuthorizationCode(transactionId)).not.toBeNull()
+    expect(store.issueAuthorizationCode(transactionId)).toBeNull()
+  })
+})
+
+describe('getTransactionForApproval', () => {
+  it('returns an approval view for a pending, unexpired transaction', () => {
+    const store = createOAuthTransactionStore()
+    const { transactionId, expiresAt } = store.createTransaction(baseInput)
+    expect(store.getTransactionForApproval(transactionId)).toEqual({
+      clientId: baseInput.clientId,
+      redirectUri: baseInput.redirectUri,
+      scopes: baseInput.scopes,
+      status: 'pending',
+      expiresAt,
+    })
+  })
+
+  it('returns null once the transaction has been denied', () => {
+    const store = createOAuthTransactionStore()
+    const { transactionId } = store.createTransaction(baseInput)
+    store.denyTransaction(transactionId)
+    expect(store.getTransactionForApproval(transactionId)).toBeNull()
+  })
+
+  it('returns null once a code has been issued for the transaction', () => {
+    const store = createOAuthTransactionStore()
+    const { transactionId } = createApprovedCodeIssuedTransaction(store)
+    expect(store.getTransactionForApproval(transactionId)).toBeNull()
+  })
+
+  it('returns null once the transaction has expired', () => {
+    let clock = 1_000_000
+    const store = createOAuthTransactionStore({ now: () => clock })
+    const { transactionId } = store.createTransaction(baseInput)
+    clock += 5 * 60_000 + 1
+    expect(store.getTransactionForApproval(transactionId)).toBeNull()
+  })
+
+  it('returns null for an unknown transaction id', () => {
+    const store = createOAuthTransactionStore()
+    expect(store.getTransactionForApproval('never-created')).toBeNull()
+  })
+})
+
+describe('authorize attempt rate limiting', () => {
+  const RATE_LIMIT_MAX_ATTEMPTS = 10
+  const RATE_LIMIT_WINDOW_MS = 60_000
+
+  it('blocks the Nth+1 attempt in-window for the same client and recovers after the window passes', () => {
+    let clock = 1_000_000
+    const store = createOAuthTransactionStore({ now: () => clock })
+    for (let i = 0; i < RATE_LIMIT_MAX_ATTEMPTS; i++) {
+      expect(store.recordAuthorizeAttempt('client-a')).toBe(true)
+    }
+    expect(store.recordAuthorizeAttempt('client-a')).toBe(false)
+
+    clock += RATE_LIMIT_WINDOW_MS + 1
+    expect(store.recordAuthorizeAttempt('client-a')).toBe(true)
+  })
+
+  it('tracks each client independently', () => {
+    const store = createOAuthTransactionStore()
+    for (let i = 0; i < RATE_LIMIT_MAX_ATTEMPTS; i++) {
+      expect(store.recordAuthorizeAttempt('client-a')).toBe(true)
+    }
+    expect(store.recordAuthorizeAttempt('client-a')).toBe(false)
+    expect(store.recordAuthorizeAttempt('client-b')).toBe(true)
+  })
+
+  it('keeps the attempt-tracking map bounded once a client-window has fully elapsed', () => {
+    let clock = 1_000_000
+    const store = createOAuthTransactionStore({ now: () => clock })
+    store.recordAuthorizeAttempt('client-a')
+    expect(store.size().attempts).toBe(1)
+
+    clock += RATE_LIMIT_WINDOW_MS + 1
+    // A prune only ever runs on a write for this client (or another one) — a
+    // fresh attempt from a different client must not resurrect client-a's
+    // stale entry.
+    store.recordAuthorizeAttempt('client-b')
+    expect(store.size().attempts).toBe(1)
   })
 })

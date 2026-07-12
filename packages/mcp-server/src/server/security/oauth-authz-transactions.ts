@@ -31,6 +31,13 @@ const CODE_TTL_MS = 60_000
 // designed in ADR-0005 but is explicitly out of scope for this slice.
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 
+// Bounds for the per-client /authorize attempt counter (slice B's rate
+// limit on the GET before a transaction even exists). Values are
+// deliberately generous for a human clicking through a consent screen,
+// not tuned against a specific attacker model.
+const RATE_LIMIT_MAX_ATTEMPTS = 10
+const RATE_LIMIT_WINDOW_MS = 60_000
+
 const createTransactionInputSchema = z.object({
   clientId: z.string().min(1),
   redirectUri: z.string().min(1),
@@ -42,6 +49,11 @@ const createTransactionInputSchema = z.object({
   state: z.string().min(1),
   codeChallenge: z.string().min(1),
   codeChallengeMethod: z.literal('S256'),
+  // Double-submit CSRF binding for the approval POST (ADR-0005: "possession
+  // of a transaction id must not authorize a cross-site POST"). The route
+  // generates this value and never places it in a URL; the approval form
+  // must echo it back alongside a matching cookie.
+  csrfToken: z.string().min(1),
 })
 
 export type CreateTransactionInput = z.infer<typeof createTransactionInputSchema>
@@ -62,12 +74,31 @@ interface TransactionRecord {
   state: string
   codeChallenge: string
   codeChallengeMethod: 'S256'
+  csrfToken: string
   status: TransactionStatus
   createdAt: number
   expiresAt: number
   codeHash?: string
   codeExpiresAt?: number
 }
+
+const approvalViewSchema = z.object({
+  clientId: z.string().min(1),
+  redirectUri: z.string().min(1),
+  scopes: z.array(z.enum(AUTH_SCOPES)),
+  status: z.literal('pending'),
+  expiresAt: z.number(),
+})
+
+export type ApprovalView = z.infer<typeof approvalViewSchema>
+
+const redirectTargetSchema = z.object({
+  clientId: z.string().min(1),
+  redirectUri: z.string().min(1),
+  state: z.string().min(1),
+})
+
+export type RedirectTarget = z.infer<typeof redirectTargetSchema>
 
 export type RedeemAuthorizationCodeInput = {
   code: string
@@ -91,29 +122,55 @@ function hashCode(rawCode: string): string {
   return createHash('sha256').update(rawCode).digest('hex')
 }
 
+// Compare two secrets without leaking, through timing, how much of the
+// value matched. timingSafeEqual throws on a length mismatch, so unequal
+// lengths are rejected up front — a length difference is not itself secret.
+function secretsMatch(actual: string, expected: string): boolean {
+  const actualBytes = Buffer.from(actual)
+  const expectedBytes = Buffer.from(expected)
+  if (actualBytes.length !== expectedBytes.length) return false
+  return timingSafeEqual(actualBytes, expectedBytes)
+}
+
 // S256 per RFC 7636 §4.2: challenge = BASE64URL-ENCODE(SHA256(verifier)).
-// A verifier-mismatch must not leak timing information about how much of
-// the challenge matched, hence timingSafeEqual over the raw hash bytes.
 function verifyPkce(codeChallenge: string, codeVerifier: string): boolean {
   const computedChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
-  const computed = Buffer.from(computedChallenge)
-  const expected = Buffer.from(codeChallenge)
-  if (computed.length !== expected.length) return false
-  return timingSafeEqual(computed, expected)
+  return secretsMatch(computedChallenge, codeChallenge)
 }
 
 export interface OAuthTransactionStore {
   createTransaction(input: CreateTransactionInput): { transactionId: string; expiresAt: number }
   approveTransaction(transactionId: string): boolean
+  denyTransaction(transactionId: string): boolean
   issueAuthorizationCode(transactionId: string): { code: string } | null
   redeemAuthorizationCode(input: RedeemAuthorizationCodeInput): RedeemAuthorizationCodeResult
   mintAccessToken(
     scopes: readonly AuthScope[],
     clientId: string,
   ): { accessToken: string; expiresIn: number }
+  // Constant-time check that a submitted csrfToken is the one bound to the
+  // transaction at creation.
+  verifyApprovalBinding(transactionId: string, csrfToken: string): boolean
+  // Read accessor for the approval screen. Deliberately narrower than
+  // TransactionRecord: no state/codeChallenge/csrfToken/codeHash leak into
+  // rendered HTML, and only a 'pending', unexpired transaction is
+  // renderable at all — a screen cannot outlive its transaction.
+  getTransactionForApproval(transactionId: string): ApprovalView | null
+  // Where an authorization response for this transaction may be delivered,
+  // and the `state` RFC 6749 §4.1.2 requires it to echo. Separate from
+  // ApprovalView because that view feeds the rendered HTML and must not
+  // carry `state`; this one feeds only a Location header. Pending-only, so
+  // the decision route must read it *before* it approves or denies — a
+  // transaction that has already been decided has no further response to
+  // deliver.
+  getTransactionRedirect(transactionId: string): RedirectTarget | null
+  // Per-client sliding-window limiter for GET /authorize, gating attempts
+  // before a transaction exists at all. Returns true when the attempt is
+  // allowed (and is recorded), false when the client is over the limit.
+  recordAuthorizeAttempt(clientId: string): boolean
   // Live entry counts. The store's only unbounded-growth risk is retained
   // dead records, so its occupancy has to be observable to be assertable.
-  size(): { transactions: number; codes: number }
+  size(): { transactions: number; codes: number; attempts: number }
 }
 
 export function createOAuthTransactionStore(options?: {
@@ -125,6 +182,10 @@ export function createOAuthTransactionStore(options?: {
   // every pending transaction to find a match — and so the raw code is
   // never the map key either; only its hash ever lives in memory.
   const codeHashIndex = new Map<string, string>()
+  // Per-client sliding window of attempt timestamps for the /authorize
+  // rate limit. Pruned lazily on every write, same posture as
+  // pruneExpired, so it never needs a timer handle.
+  const authorizeAttempts = new Map<string, number[]>()
 
   // Lazy sweep, not a timer. A `setInterval` would keep the Node event loop
   // alive for the daemon's whole lifetime and would have to be torn down by
@@ -158,6 +219,7 @@ export function createOAuthTransactionStore(options?: {
       state: parsed.state,
       codeChallenge: parsed.codeChallenge,
       codeChallengeMethod: parsed.codeChallengeMethod,
+      csrfToken: parsed.csrfToken,
       status: 'pending',
       createdAt,
       expiresAt,
@@ -165,10 +227,72 @@ export function createOAuthTransactionStore(options?: {
     return { transactionId: id, expiresAt }
   }
 
-  function approveTransaction(transactionId: string): boolean {
+  // The only state a transaction can still be approved, denied, or rendered
+  // from. Every caller below re-checks expiry here rather than trusting
+  // pruneExpired to have run.
+  function getPendingTransaction(transactionId: string): TransactionRecord | null {
     const record = transactions.get(transactionId)
-    if (!record || record.status !== 'pending' || record.expiresAt < now()) return false
-    transactions.set(transactionId, { ...record, status: 'approved' })
+    if (!record || record.status !== 'pending' || record.expiresAt < now()) return null
+    return record
+  }
+
+  function decidePendingTransaction(transactionId: string, status: 'approved' | 'denied'): boolean {
+    const record = getPendingTransaction(transactionId)
+    if (!record) return false
+    transactions.set(transactionId, { ...record, status })
+    return true
+  }
+
+  function approveTransaction(transactionId: string): boolean {
+    return decidePendingTransaction(transactionId, 'approved')
+  }
+
+  function denyTransaction(transactionId: string): boolean {
+    return decidePendingTransaction(transactionId, 'denied')
+  }
+
+  function verifyApprovalBinding(transactionId: string, csrfToken: string): boolean {
+    const record = transactions.get(transactionId)
+    if (!record) return false
+    return secretsMatch(csrfToken, record.csrfToken)
+  }
+
+  function getTransactionForApproval(transactionId: string): ApprovalView | null {
+    const record = getPendingTransaction(transactionId)
+    if (!record) return null
+    return {
+      clientId: record.clientId,
+      redirectUri: record.redirectUri,
+      scopes: [...record.scopes],
+      status: 'pending',
+      expiresAt: record.expiresAt,
+    }
+  }
+
+  function getTransactionRedirect(transactionId: string): RedirectTarget | null {
+    const record = getPendingTransaction(transactionId)
+    if (!record) return null
+    return { clientId: record.clientId, redirectUri: record.redirectUri, state: record.state }
+  }
+
+  function recordAuthorizeAttempt(clientId: string): boolean {
+    const attemptedAt = now()
+    const cutoff = attemptedAt - RATE_LIMIT_WINDOW_MS
+    // Prune every client's window on each call, not just the current
+    // client's, so an abandoned client's entry does not linger forever
+    // just because nobody ever calls this again with its id.
+    for (const [id, timestamps] of authorizeAttempts) {
+      const live = timestamps.filter((t) => t > cutoff)
+      if (live.length === 0) {
+        authorizeAttempts.delete(id)
+      } else if (live.length !== timestamps.length) {
+        authorizeAttempts.set(id, live)
+      }
+    }
+
+    const existing = authorizeAttempts.get(clientId) ?? []
+    if (existing.length >= RATE_LIMIT_MAX_ATTEMPTS) return false
+    authorizeAttempts.set(clientId, [...existing, attemptedAt])
     return true
   }
 
@@ -245,16 +369,25 @@ export function createOAuthTransactionStore(options?: {
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS }
   }
 
-  function size(): { transactions: number; codes: number } {
-    return { transactions: transactions.size, codes: codeHashIndex.size }
+  function size(): { transactions: number; codes: number; attempts: number } {
+    return {
+      transactions: transactions.size,
+      codes: codeHashIndex.size,
+      attempts: authorizeAttempts.size,
+    }
   }
 
   return {
     createTransaction,
     approveTransaction,
+    denyTransaction,
     issueAuthorizationCode,
     redeemAuthorizationCode,
     mintAccessToken,
+    verifyApprovalBinding,
+    getTransactionForApproval,
+    getTransactionRedirect,
+    recordAuthorizeAttempt,
     size,
   }
 }

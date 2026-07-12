@@ -25,6 +25,7 @@ function issueCode(store: ReturnType<typeof createOAuthTransactionStore>) {
     state: 'abc123',
     codeChallenge: PKCE_CHALLENGE,
     codeChallengeMethod: 'S256',
+    csrfToken: 'test-csrf-token',
   })
   store.approveTransaction(transactionId)
   const issued = store.issueAuthorizationCode(transactionId)
