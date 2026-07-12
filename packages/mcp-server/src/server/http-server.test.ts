@@ -139,3 +139,57 @@ describe('startHttpServer WS upgrade with allowedWebOrigins', () => {
     await expect(attemptWsUpgrade(port, 'https://not-allowed.example')).resolves.toBe(403)
   })
 })
+
+describe('startHttpServer oauth client registry', () => {
+  let running: RunningServer | undefined
+
+  afterEach(async () => {
+    await running?.close()
+    running = undefined
+  })
+
+  // The router, its Zod schemas, and its unit tests can all be correct while
+  // the surface stays unreachable, because createApp only mounts it when it
+  // is handed a registry. This asserts the option actually reaches the real
+  // Node HTTP server — the difference between a shipped endpoint and dead code.
+  it('mounts /token on the real HTTP server when a registry is configured', async () => {
+    const port = await findAvailablePort(4200)
+    running = await startHttpServer({
+      port,
+      host: '127.0.0.1',
+      oauthClientRegistry: [
+        {
+          clientId: 'whiteboard-hosted-web',
+          redirectUris: ['https://whiteboard.pages.dev/oauth/callback'],
+        },
+      ],
+    })
+
+    // RFC 6749 §4.1.3's wire format, over a real socket. An unmounted route
+    // would 404; reaching the handler with an unknown code is a 400
+    // invalid_grant, which is what proves the body was parsed at all.
+    const res = await fetch(`http://127.0.0.1:${port}/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: 'not-a-real-code',
+        redirect_uri: 'https://whiteboard.pages.dev/oauth/callback',
+        client_id: 'whiteboard-hosted-web',
+        code_verifier: 'x'.repeat(43),
+      }),
+    })
+
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_grant' })
+    expect(res.headers.get('Cache-Control')).toBe('no-store')
+  })
+
+  it('leaves /token unmounted when no registry is configured', async () => {
+    const port = await findAvailablePort(4300)
+    running = await startHttpServer({ port, host: '127.0.0.1' })
+
+    const res = await fetch(`http://127.0.0.1:${port}/token`, { method: 'POST' })
+    expect(res.status).toBe(404)
+  })
+})

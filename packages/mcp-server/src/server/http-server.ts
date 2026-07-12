@@ -15,6 +15,7 @@ import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
+import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { validationErrorBody } from './validators.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
@@ -29,6 +30,10 @@ export interface StartHttpServerOptions {
   /** Exact-match hosted origins admitted alongside loopback, on /api CORS,
    *  /mcp, and WS upgrade (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default. */
   allowedWebOrigins?: readonly string[]
+  /** Registered OAuth clients and their exact redirect_uris
+   *  (WHITEBOARD_OAUTH_CLIENT_REGISTRY). Empty by default, which leaves the
+   *  hosted-origin authorization-server surface entirely unmounted. */
+  oauthClientRegistry?: OAuthClientRegistry
 }
 
 export interface RunningServer {
@@ -136,6 +141,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     getStatus: getRuntimeStatus,
     shutdown: close,
     allowedWebOrigins: options.allowedWebOrigins,
+    oauthClientRegistry: options.oauthClientRegistry,
   })
 
   setRuntimeTouchFn(touch)

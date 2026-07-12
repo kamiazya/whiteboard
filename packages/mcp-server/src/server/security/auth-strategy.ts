@@ -29,18 +29,26 @@
 import type { MiddlewareHandler } from 'hono'
 import { isAuthorized } from '../routes/auth.js'
 
-export type AuthScope =
-  | 'canvas:read'
-  | 'canvas:write'
-  | 'workspace:read'
-  | 'workspace:write'
-  | 'versions:read'
-  | 'versions:write'
-  | 'files:read'
-  | 'files:write'
-  | 'runtime:read'
-  | 'runtime:admin'
-  | 'mcp:call'
+// The scope vocabulary as a runtime array, not just a type: anything that
+// needs to validate an externally-supplied scope string against this
+// vocabulary (Zod schemas, OAuth scope-request parsing) needs a value to
+// check membership against, not only a compile-time union. `AuthScope`
+// is derived from this array so the two can never drift apart.
+export const AUTH_SCOPES = [
+  'canvas:read',
+  'canvas:write',
+  'workspace:read',
+  'workspace:write',
+  'versions:read',
+  'versions:write',
+  'files:read',
+  'files:write',
+  'runtime:read',
+  'runtime:admin',
+  'mcp:call',
+] as const
+
+export type AuthScope = (typeof AUTH_SCOPES)[number]
 
 // The full grant set a single-tenant local-token session holds today (see
 // `createLocalTokenAuthStrategy` below: the success path ignores
