@@ -46,10 +46,13 @@ export function requiredScopesForClientTextMessage(
   return WS_CLIENT_TEXT_MESSAGE_REQUIRED_SCOPES[type]
 }
 
+// Called on every WS message (control frame or binary CRDT update), so this
+// stays allocation-free: both arrays are tiny (at most the 11-entry
+// AuthScope vocabulary), and `Array.includes` over that size beats building
+// a `Set` per call under the message rates a live canvas produces.
 export function hasRequiredScopes(
   granted: readonly AuthScope[],
   required: readonly AuthScope[],
 ): boolean {
-  const grantedSet = new Set(granted)
-  return required.every((scope) => grantedSet.has(scope))
+  return required.every((scope) => granted.includes(scope))
 }
