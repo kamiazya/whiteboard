@@ -37,7 +37,14 @@ describe('applyUpdate', () => {
   let doc: LoroDoc
   beforeEach(() => {
     doc = new LoroDoc()
-    seedElement(doc, 'r1', { type: 'rectangle', x: 10, y: 20, width: 100, height: 50, strokeColor: '#000' })
+    seedElement(doc, 'r1', {
+      type: 'rectangle',
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      strokeColor: '#000',
+    })
   })
 
   it('case 162', () => {
@@ -54,7 +61,11 @@ describe('applyUpdate', () => {
   it('case 164', () => {
     applyUpdate(doc, 'r1', { strokeColor: '#0000ff' })
     expect(readElement(doc, 'r1')).toMatchObject({
-      x: 10, y: 20, width: 100, height: 50, strokeColor: '#0000ff',
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+      strokeColor: '#0000ff',
     })
   })
 
@@ -65,6 +76,38 @@ describe('applyUpdate', () => {
   it('case 166', () => {
     expect(() => applyUpdate(doc, 'r1', {})).not.toThrow()
     expect(readElement(doc, 'r1')).toMatchObject({ x: 10, y: 20 })
+  })
+})
+
+describe('applyUpdate on arrow elements', () => {
+  let doc: LoroDoc
+  beforeEach(() => {
+    doc = new LoroDoc()
+    seedElement(doc, 'a1', {
+      type: 'arrow',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 0,
+      points: [
+        [0, 0],
+        [100, 0],
+      ],
+    })
+  })
+
+  it('rejects a text patch on an arrow instead of silently no-op-ing', () => {
+    // Arrows render a label as a separate bound text element (see annotate's
+    // arrow label mechanism), not via a `text` field on the arrow itself.
+    // Silently accepting `text` here would report ok:true while adding no
+    // visible label, so this must fail loudly instead.
+    expect(() => applyUpdate(doc, 'a1', { text: 'shipped' })).toThrow(/label/i)
+    expect(readElement(doc, 'a1')).not.toHaveProperty('text')
+  })
+
+  it('still allows non-text geometry/style patches on arrows', () => {
+    expect(() => applyUpdate(doc, 'a1', { strokeColor: '#ff0000' })).not.toThrow()
+    expect(readElement(doc, 'a1')).toMatchObject({ strokeColor: '#ff0000' })
   })
 })
 
@@ -487,7 +530,10 @@ describe('applyAlign', () => {
       y: 35,
       width: 100,
       height: 0,
-      points: [[0, 0], [100, 0]],
+      points: [
+        [0, 0],
+        [100, 0],
+      ],
       startBoxId: 'a',
       endBoxId: 'b',
     })

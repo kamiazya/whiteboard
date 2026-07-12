@@ -62,15 +62,25 @@ function readBoundArrowIds(map: LoroMap): string[] {
     .map((value) => value.id)
 }
 
+// Excalidraw arrows never render a `text` field directly — a label is a
+// separate bound text element positioned near the arrow's midpoint (the same
+// mechanism `annotate` type="arrow" + label uses). Silently writing `text`
+// onto an arrow's own map would report success while adding no visible
+// label, so that patch key is rejected instead of accepted as a no-op.
+function assertNoArrowTextPatch(map: LoroMap, patch: Record<string, unknown>): void {
+  if (map.get('type') !== 'arrow') return
+  if (!('text' in patch)) return
+  throw new Error(
+    'update_element cannot set `text` on an arrow element: arrows render a label via a separate bound text element, not a `text` field on the arrow itself. Use annotate (type="arrow", label=...) to add a label, or update_element on that label\'s own elementId to edit an existing one.',
+  )
+}
+
 // Apply an arbitrary field patch to a single element.
 // This assumes known Excalidraw element fields (x/y/width/height/strokeColor/...),
 // while value validation is delegated to the caller (the MCP tool schema).
-export function applyUpdate(
-  doc: LoroDoc,
-  elementId: string,
-  patch: Record<string, unknown>,
-): void {
+export function applyUpdate(doc: LoroDoc, elementId: string, patch: Record<string, unknown>): void {
   const map = requireElementMap(doc, elementId)
+  assertNoArrowTextPatch(map, patch)
   for (const [k, v] of Object.entries(patch)) {
     map.set(k, v as never)
   }
@@ -134,11 +144,7 @@ function readGroupIds(map: LoroMap): string[] {
 }
 
 // Append groupId to every member's groupIds array. Existing membership is a no-op.
-export function applyAssignToGroup(
-  doc: LoroDoc,
-  groupId: string,
-  memberIds: string[],
-): void {
+export function applyAssignToGroup(doc: LoroDoc, groupId: string, memberIds: string[]): void {
   if (memberIds.length === 0) return
   const maps = memberIds.map((id) => requireElementMap(doc, id))
   for (const map of maps) {
@@ -192,12 +198,7 @@ export function applyDeleteGroup(doc: LoroDoc, groupId: string): string[] {
 }
 
 // Move multiple elements by the same dx/dy in one all-or-nothing operation.
-export function applyMove(
-  doc: LoroDoc,
-  elementIds: string[],
-  dx: number,
-  dy: number,
-): void {
+export function applyMove(doc: LoroDoc, elementIds: string[], dx: number, dy: number): void {
   // Pre-check that every id exists before mutating the doc.
   const maps: LoroMap[] = elementIds.map((id) => requireElementMap(doc, id))
   if (dx === 0 && dy === 0) return
@@ -243,13 +244,10 @@ export function applyMove(
     })
     arrowMap.set('x', snapped.start.x)
     arrowMap.set('y', snapped.start.y)
-    arrowMap.set(
-      'points',
-      [
-        [0, 0],
-        [snapped.end.x - snapped.start.x, snapped.end.y - snapped.start.y],
-      ] as Parameters<LoroMap['set']>[1],
-    )
+    arrowMap.set('points', [
+      [0, 0],
+      [snapped.end.x - snapped.start.x, snapped.end.y - snapped.start.y],
+    ] as Parameters<LoroMap['set']>[1])
     arrowMap.set('width', Math.abs(snapped.end.x - snapped.start.x))
     arrowMap.set('height', Math.abs(snapped.end.y - snapped.start.y))
   }
@@ -257,11 +255,7 @@ export function applyMove(
 
 // Reorder z-index while preserving the selected ids' current relative order,
 // moving them together to the back or front without creating extra tombstones.
-export function applyReorder(
-  doc: LoroDoc,
-  elementIds: string[],
-  action: 'front' | 'back',
-): void {
+export function applyReorder(doc: LoroDoc, elementIds: string[], action: 'front' | 'back'): void {
   if (elementIds.length === 0) return
   // Pre-check.
   for (const id of elementIds) requireElementMap(doc, id)
@@ -307,11 +301,7 @@ export type AlignAxis = 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom
 // Snap a set of elements to a shared axis. Each element is shifted into place
 // by reusing applyMove with a single-id call so that bound arrows re-snap to
 // the new box centres exactly the way move_elements does.
-export function applyAlign(
-  doc: LoroDoc,
-  elementIds: string[],
-  alignment: AlignAxis,
-): void {
+export function applyAlign(doc: LoroDoc, elementIds: string[], alignment: AlignAxis): void {
   // Drop duplicate ids before any geometry is computed; otherwise an id
   // listed twice would participate in min/max/centroid math twice and
   // applyMove() would shift it twice. Preserve first-occurrence order so
@@ -391,9 +381,7 @@ export function applyDistribute(
   // Sort by leading edge along the chosen axis. Build (originalId, rect) pairs
   // so we can apply moves back to the right element after sorting.
   const indexed = elementIds.map((id, i) => ({ id, rect: rects[i] }))
-  indexed.sort((a, b) =>
-    direction === 'horizontal' ? a.rect.x - b.rect.x : a.rect.y - b.rect.y,
-  )
+  indexed.sort((a, b) => (direction === 'horizontal' ? a.rect.x - b.rect.x : a.rect.y - b.rect.y))
 
   if (direction === 'horizontal') {
     const first = indexed[0].rect
