@@ -170,12 +170,17 @@ function parseScopes(rawScope: string): readonly AuthScope[] | null {
 // - `default-src 'none'` matches a page that loads nothing at all and has no
 //   inline script; `form-action` is deliberately omitted, since the approval
 //   POST's response is a cross-origin redirect to the client's callback.
-const AUTHORIZE_SECURITY_HEADERS = {
-  'Cache-Control': 'no-store',
-  'Referrer-Policy': 'no-referrer',
-  'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
-} as const
+// The single inline <style> is admitted by a per-response nonce rather than
+// `style-src 'unsafe-inline'`: the grant then covers exactly the stylesheet
+// this response carries, and nothing an injection could add to it.
+function authorizeSecurityHeaders(styleNonce: string) {
+  return {
+    'Cache-Control': 'no-store',
+    'Referrer-Policy': 'no-referrer',
+    'X-Frame-Options': 'DENY',
+    'Content-Security-Policy': `default-src 'none'; style-src 'nonce-${styleNonce}'; frame-ancestors 'none'; base-uri 'none'`,
+  }
+}
 
 // Scoped to /authorize so it is never attached to any other request. The
 // value is the transaction's csrfToken; the approval form echoes the same
@@ -190,12 +195,21 @@ function isSecureRequest(c: Context): boolean {
   return new URL(c.req.url).protocol === 'https:'
 }
 
-function htmlResponse(c: Context, body: string, status: 200 | 400 | 403 | 429) {
-  return c.html(body, status, AUTHORIZE_SECURITY_HEADERS)
+function newStyleNonce(): string {
+  return randomBytes(16).toString('base64')
+}
+
+function htmlResponse(
+  c: Context,
+  render: (styleNonce: string) => string,
+  status: 200 | 400 | 403 | 429,
+) {
+  const styleNonce = newStyleNonce()
+  return c.html(render(styleNonce), status, authorizeSecurityHeaders(styleNonce))
 }
 
 function errorPage(c: Context, reason: AuthorizeErrorReason, status: 400 | 403 | 429) {
-  return htmlResponse(c, renderAuthorizeErrorPage(reason), status)
+  return htmlResponse(c, (styleNonce) => renderAuthorizeErrorPage(reason, styleNonce), status)
 }
 
 // RFC 6749 §4.1.2 / §4.1.2.1: the authorization response — success or error —
@@ -322,7 +336,11 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
       // never be sent back, breaking the flow the operator is running.
       secure: isSecureRequest(c),
     })
-    return htmlResponse(c, renderApprovalPage({ transactionId, csrfToken, view }), 200)
+    return htmlResponse(
+      c,
+      (styleNonce) => renderApprovalPage({ transactionId, csrfToken, view, styleNonce }),
+      200,
+    )
   })
 
   app.post(OAUTH_AUTHORIZE_DECISION_PATH, async (c) => {
@@ -386,10 +404,12 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
       { code: issued.code, state: target.state },
       303,
     )
-    // The Location header of this response carries the authorization code.
-    for (const [header, value] of Object.entries(AUTHORIZE_SECURITY_HEADERS)) {
-      response.headers.set(header, value)
-    }
+    // The Location header of this response carries the authorization code, so
+    // it must not be cached, and no-referrer keeps the /authorize URL (with
+    // its state and code_challenge) out of the callback's Referer. A CSP is
+    // meaningless on a redirect with no body, so none is set here.
+    response.headers.set('Cache-Control', 'no-store')
+    response.headers.set('Referrer-Policy', 'no-referrer')
     return response
   })
 

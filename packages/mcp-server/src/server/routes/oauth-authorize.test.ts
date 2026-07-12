@@ -156,6 +156,31 @@ describe('GET /authorize — approval screen', () => {
     expect(res.headers.get('content-security-policy')).toContain("frame-ancestors 'none'")
   })
 
+  // The page's one stylesheet is admitted by a nonce, not by
+  // `style-src 'unsafe-inline'`. If the header's nonce and the <style> tag's
+  // ever drift apart the consent screen silently renders unstyled — legible,
+  // but not the deliberate surface a trust decision deserves — and nothing
+  // else would catch it.
+  it('admits its stylesheet by a per-response nonce that matches the CSP header', async () => {
+    const { app } = buildApp()
+    const { res, html } = await startApproval(app)
+
+    const csp = res.headers.get('content-security-policy') ?? ''
+    const headerNonce = /style-src 'nonce-([^']+)'/.exec(csp)?.[1]
+    const tagNonce = /<style nonce="([^"]+)">/.exec(html)?.[1]
+
+    expect(headerNonce).toBeDefined()
+    expect(tagNonce).toBe(headerNonce)
+    expect(csp).not.toContain('unsafe-inline')
+
+    // And it is per-response, not a constant baked into the module.
+    const second = await startApproval(app)
+    const secondNonce = /style-src 'nonce-([^']+)'/.exec(
+      second.res.headers.get('content-security-policy') ?? '',
+    )?.[1]
+    expect(secondNonce).not.toBe(headerNonce)
+  })
+
   it('rate-limits a client hammering the endpoint', async () => {
     const { app } = buildApp()
     let lastStatus = 0
