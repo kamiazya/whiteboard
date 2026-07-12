@@ -131,7 +131,7 @@ export function DaemonCanvasPage({
     if (backend) setAuthError(false)
   }, [backend])
 
-  const { setExcalidrawAPI, onChange, clearLocalUndo } = useCanvasSync(backend, {
+  const { setExcalidrawAPI, onChange, clearLocalUndo, exportScene } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
@@ -292,6 +292,7 @@ export function DaemonCanvasPage({
             onRestored={clearLocalUndo}
             versionPanelExtra={versionPanelExtra}
             onNavigateBack={onNavigateBack}
+            onExport={exportScene}
           />
         )}
         {capabilities.branches && canvas && (

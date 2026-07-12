@@ -225,7 +225,7 @@ export function BrowserLocalCanvasPage({
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
-  const { setExcalidrawAPI, onChange } = useCanvasSync(backend)
+  const { setExcalidrawAPI, onChange, exportScene } = useCanvasSync(backend)
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
@@ -323,6 +323,7 @@ export function BrowserLocalCanvasPage({
             branches: capabilities.branches,
             merge: capabilities.merge,
           }}
+          onExport={exportScene}
         />
       </Suspense>
       {/* Page-specific bits that WorkspaceTopBar has no slot for. A plain
