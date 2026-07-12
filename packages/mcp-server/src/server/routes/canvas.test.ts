@@ -834,6 +834,62 @@ describe('versions API', () => {
     expect(ids).toEqual(['added-after-v1', 'keep-me'])
   })
 
+  it('evicts the cached doc when reconcile/commit itself fails during in-place restore, not only when saveCanvas fails', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+    const initial = new LoroDoc()
+    const vv0 = initial.version()
+    const list = initial.getMovableList('elements')
+    const m0 = list.insertContainer(0, new LoroMap())
+    m0.set('id', 'keep-me')
+    initial.commit()
+    await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: initial.export({ mode: 'update', from: vv0 }),
+    })
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+    const vv1 = initial.version()
+    const m1 = list.insertContainer(list.length, new LoroMap())
+    m1.set('id', 'added-after-v1')
+    initial.commit()
+    await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: initial.export({ mode: 'update', from: vv1 }),
+    })
+
+    expect(peekDoc('session1', 'canvas-a')).toBeDefined()
+
+    // reconcileElementsOnDoc already mutated the live cached doc by the time
+    // doc.commit() runs, so a throw here must still evict the cache -- not
+    // only the saveCanvas failure path further down.
+    const commitSpy = vi.spyOn(LoroDoc.prototype, 'commit').mockImplementationOnce(() => {
+      throw new Error('simulated commit failure')
+    })
+
+    const restoreRes = await app.request(
+      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+      { method: 'POST' },
+    )
+    commitSpy.mockRestore()
+
+    expect(restoreRes.status).toBe(500)
+    expect(peekDoc('session1', 'canvas-a')).toBeUndefined()
+
+    const reloaded = await getDoc('session1', 'canvas-a')
+    const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>)
+      .map((el) => el.id)
+      .sort()
+    expect(ids).toEqual(['added-after-v1', 'keep-me'])
+  })
+
   it('returns 404 when restoring a missing version id', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(
@@ -926,6 +982,40 @@ describe('versions API', () => {
       }>
       const alive = elements.filter((e) => !e.isDeleted).map((e) => e.id)
       expect(alive).toEqual(['keep-me'])
+    })
+
+    it('targetSlug === slug WITHOUT overwrite still restores in place (same-slug is never treated as a distinct target)', async () => {
+      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+      const initial = new LoroDoc()
+      const vv0 = initial.version()
+      const list = initial.getMovableList('elements')
+      const m0 = list.insertContainer(0, new LoroMap())
+      m0.set('id', 'keep-me')
+      initial.commit()
+      await app.request('/api/canvas/session1/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: initial.export({ mode: 'update', from: vv0 }),
+      })
+      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      })
+      const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+      const restoreRes = await app.request(
+        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetSlug: 'canvas-a' }),
+        },
+      )
+      expect(restoreRes.status).toBe(200)
+      const body = (await restoreRes.json()) as { ok: boolean }
+      expect(body.ok).toBe(true)
     })
 
     it('restoring into a different existing canvas reconciles that canvas and broadcasts to it, not the source', async () => {

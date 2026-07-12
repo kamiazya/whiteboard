@@ -43,15 +43,15 @@ async function reconcileCommitSaveBroadcast(
   sendRestoreEvent(workspaceId, targetSlug, 'started', label)
   try {
     const prevVV = doc.version()
-    reconcileElementsOnDoc(doc, past)
-    doc.commit()
     try {
+      reconcileElementsOnDoc(doc, past)
+      doc.commit()
       await saveCanvas(workspaceId, targetSlug, doc, { overwrite: true })
     } catch (err) {
-      // reconcileElementsOnDoc + commit above already mutated the cached
-      // doc, so a failed save would otherwise leave the cache ahead of
-      // durable state. Evict it so the next read reloads the last
-      // successfully persisted snapshot.
+      // reconcileElementsOnDoc mutates the cached doc in place before
+      // commit/save run, so any failure in this block (reconcile, commit,
+      // or save) leaves the cache ahead of durable state. Evict it so the
+      // next read reloads the last successfully persisted snapshot.
       evictDoc(workspaceId, targetSlug)
       throw err
     }
@@ -126,7 +126,10 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
       }
 
       // Restore-as-new-canvas / overwrite-existing-canvas branch.
-      if (targetSlug !== undefined) {
+      // targetSlug === slug is the same document as the in-place restore
+      // below, so route it there directly instead of forcing callers to
+      // pass overwrite:true against their own canvas.
+      if (targetSlug !== undefined && targetSlug !== slug) {
         try {
           validateSlug(targetSlug)
         } catch (err) {
