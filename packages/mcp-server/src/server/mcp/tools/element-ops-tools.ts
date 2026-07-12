@@ -88,7 +88,7 @@ export const updateElementInputShape = {
   patch: z
     .record(z.string(), z.unknown())
     .describe(
-      'Partial element fields to merge (e.g. { text: "...", strokeColor: "#1971c2", x: 100, width: 200 }). Only valid Excalidraw element fields are applied; unknown keys are ignored.',
+      'Partial element fields to merge (e.g. { strokeColor: "#1971c2", x: 100, width: 200 }). Keys are written to the element as-is; there is no allowlist, so a misspelled or made-up key is stored without producing any visible effect — only real Excalidraw element fields change rendering. `box_with_label` is a composite of a rectangle plus separate text/title elements (from annotate); there is no single `box_with_label` element to patch, so target the specific sub-element\'s own id (e.g. its text or title id, not the rectangle\'s id) to change its `text`. For arrow elements, `text` is REJECTED (throws) rather than silently ignored: an arrow\'s label is a separate bound text element, not a `text` field on the arrow — use annotate (type="arrow", label=...) to add one, or target that label element\'s own id here to edit it.',
     ),
 } satisfies z.ZodRawShape
 
@@ -98,7 +98,7 @@ export function updateElementTool() {
   return {
     name: 'update_element',
     description:
-      'Patch fields of an existing element in-place (e.g., change text, strokeColor, x/y/width/height). Any Excalidraw element field can be set via patch.',
+      'Patch fields of an existing element in-place (e.g., change text, strokeColor, x/y/width/height). Any Excalidraw element field can be set via patch, except `text` on arrow elements — arrows label via a separate bound text element (see annotate), so that combination throws instead of silently doing nothing.',
     // Derived from the Zod shape so the JSON-Schema view can never drift from
     // what registerToolWithAnnotations actually validates against.
     inputSchema: z.toJSONSchema(z.object(updateElementInputShape)) as {
