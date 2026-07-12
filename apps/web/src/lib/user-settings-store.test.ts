@@ -53,6 +53,24 @@ describe('createUserSettingsStore', () => {
     expect(reloaded.storage.dismissedDaemonCtaInstanceId).toBe('instance-1')
   })
 
+  it('persists localDaemonBaseUrl, lastConnectedWorkspaceId and lastConnectedSlug (reconnect target)', () => {
+    const store = createUserSettingsStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: 'http://127.0.0.1:3099',
+        lastConnectedWorkspaceId: 'w1',
+        lastConnectedSlug: 'main',
+      },
+    }))
+
+    const reloaded = createUserSettingsStore().load()
+    expect(reloaded.storage.localDaemonBaseUrl).toBe('http://127.0.0.1:3099')
+    expect(reloaded.storage.lastConnectedWorkspaceId).toBe('w1')
+    expect(reloaded.storage.lastConnectedSlug).toBe('main')
+  })
+
   it('reset() clears stored settings back to defaults', () => {
     const store = createUserSettingsStore()
     store.save({

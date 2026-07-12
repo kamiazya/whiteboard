@@ -50,7 +50,11 @@ const BUDGETS = [
 // WASM bindings, forcing the entry to eagerly load ~23 KB it never uses on
 // the critical path. ~10% headroom over the measured number, not the
 // aspirational floor.
-const CRITICAL_PATH_BUDGET_KB = 108
+//
+// Raised from 108 KB when history routing landed: react-router has to be in
+// the entry (it decides which page to lazy-load), so its ~16 KB is a real,
+// unavoidable critical-path cost of addressable URLs. Measured 114.0 KB.
+const CRITICAL_PATH_BUDGET_KB = 126
 
 let failures = 0
 

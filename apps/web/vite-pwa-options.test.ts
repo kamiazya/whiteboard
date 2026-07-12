@@ -21,6 +21,14 @@ describe('pwaOptions', () => {
     }
   })
 
+  it('does not deny the client-side routes added by app-routes.ts — an offline deep link gets the app shell, not a network error', () => {
+    const denylist = pwaOptions.workbox?.navigateFallbackDenylist ?? []
+    const clientRoutes = ['/canvas/w1/main', '/w/w1', '/local/abc-123']
+    for (const path of clientRoutes) {
+      expect(denylist.some((re) => re.test(path))).toBe(false)
+    }
+  })
+
   it('denylists exact daemon prefixes only, not future routes that merely start with the same characters', () => {
     const denylist = pwaOptions.workbox?.navigateFallbackDenylist ?? []
 

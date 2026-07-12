@@ -49,6 +49,13 @@ function createCanvasSnapshot(id: string, name?: string): CanvasSnapshot {
 export function useBrowserLocalCanvasController(
   store: BrowserLocalStore,
   loro: LoroStoreLike = new LoroStore(),
+  // A canvas id requested by the URL (e.g. a bookmarked /local/:canvasId
+  // deep link), read once at mount. Takes priority over the store's own
+  // "default canvas" pointer, which it also repoints on success so a later
+  // plain (no deep link) load resumes here — the same contract switchCanvas
+  // already has. A stale/deleted id falls back to the normal flow rather
+  // than showing an error: a dead bookmark must not dead-end the user.
+  initialCanvasId?: string,
 ): BrowserLocalCanvasController {
   const [snapshot, setSnapshot] = useState<CanvasSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
@@ -70,6 +77,11 @@ export function useBrowserLocalCanvasController(
   const snapshotRef = useRef(snapshot)
   snapshotRef.current = snapshot
   const pendingSnapshotRef = useRef<CanvasSnapshot | null>(null)
+  // Guards overlapping switchCanvas calls (a fast switcher double-click, or a
+  // burst of browser Back/Forward): only the call that is still the latest
+  // requested one when its async load settles is allowed to commit state, so
+  // an earlier call resolving after a later one can never clobber it.
+  const switchGenerationRef = useRef(0)
   // Tracks the currently in-flight flush so overlapping callers (renameCanvas's
   // fire-and-forget flush racing with switchCanvas's own awaited flush) serialize
   // on the real outcome instead of the second caller observing an already-cleared
@@ -128,6 +140,19 @@ export function useBrowserLocalCanvasController(
     let cancelled = false
 
     async function load() {
+      if (initialCanvasId !== undefined) {
+        const requested = await storeRef.current.load(initialCanvasId)
+        if (cancelled) return
+        if (requested.kind === 'ok') {
+          await storeRef.current.setDefaultCanvasId(initialCanvasId)
+          if (!cancelled) setSnapshot(requested.snapshot)
+          return
+        }
+        // Not found / corrupted: silently fall through to the normal
+        // default-canvas flow below rather than showing a degraded banner —
+        // a stale bookmark must not dead-end the user.
+      }
+
       let id = await storeRef.current.getDefaultCanvasId()
       if (cancelled) return
 
@@ -298,12 +323,15 @@ export function useBrowserLocalCanvasController(
 
   const switchCanvas = useCallback(
     async (id: string): Promise<void> => {
+      const generation = ++switchGenerationRef.current
       // Flush any pending edit on the current canvas before switching away
       // from it, so a fast switch never drops an in-flight rename.
       const flushed = await flushSave()
+      if (generation !== switchGenerationRef.current) return // superseded while flushing
       if (!flushed) return
       try {
         const result = await storeRef.current.load(id)
+        if (generation !== switchGenerationRef.current) return // superseded while loading
         if (result.kind !== 'ok') {
           // Target record is missing or unreadable: surface it the same way the
           // initial-mount load does, instead of leaving the user with no feedback
@@ -318,6 +346,7 @@ export function useBrowserLocalCanvasController(
           return
         }
         await storeRef.current.setDefaultCanvasId(id)
+        if (generation !== switchGenerationRef.current) return // superseded while persisting the pointer
         snapshotRef.current = result.snapshot
         setSnapshot(result.snapshot)
         // Clear any stale degraded banner left over from the previous canvas —
@@ -325,6 +354,7 @@ export function useBrowserLocalCanvasController(
         // showing an error from before the switch.
         setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
       } catch {
+        if (generation !== switchGenerationRef.current) return
         // Generic safe copy — do not expose raw IndexedDB error. Current
         // snapshot and default pointer are left untouched: a failed switch
         // must not corrupt the still-current canvas view.

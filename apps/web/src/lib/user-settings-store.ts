@@ -43,6 +43,14 @@ const storageSettingsSchema = z
     preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
     lastBrowserLocalCanvasId: z.string().optional(),
     localDaemonBaseUrl: z.string().optional(),
+    // The (workspaceId, slug) last reached via a #wb= pairing, alongside
+    // localDaemonBaseUrl above — together they let a later hosted-app load
+    // offer a one-click reconnect to the same daemon and canvas instead of
+    // just the daemon's root. slug is meaningless without workspaceId, but
+    // this is UI-hint state (not an access boundary), so it is not enforced
+    // by a cross-field refine the way daemonConnectionPayloadSchema does.
+    lastConnectedWorkspaceId: z.string().optional(),
+    lastConnectedSlug: z.string().optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
     dismissedBetaBannerAt: z.string().optional(),
     dismissedDaemonCtaAt: z.string().optional(),

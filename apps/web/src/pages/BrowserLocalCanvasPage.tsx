@@ -1,6 +1,7 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,6 +15,7 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
+import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -58,6 +60,10 @@ interface BrowserLocalCanvasPageProps {
   // Defaults to browser-local so existing callers/tests keep working
   // unedited; App.tsx passes the resolved ProviderState's capabilities.
   capabilities?: WhiteboardCapabilities
+  // A canvas id requested by the URL at mount (e.g. a bookmarked
+  // /local/:canvasId deep link), read once — see
+  // useBrowserLocalCanvasController's own contract for the same parameter.
+  initialCanvasId?: string
 }
 
 // Map the persistence state machine to user-facing copy. `degraded` carries its
@@ -79,6 +85,7 @@ export function BrowserLocalCanvasPage({
   store,
   loro,
   capabilities = BROWSER_LOCAL_CAPABILITIES,
+  initialCanvasId,
 }: BrowserLocalCanvasPageProps) {
   const {
     snapshot,
@@ -92,7 +99,9 @@ export function BrowserLocalCanvasPage({
     createCanvas,
     switchCanvas,
     duplicateCanvas,
-  } = useBrowserLocalCanvasController(store, loro)
+  } = useBrowserLocalCanvasController(store, loro, initialCanvasId)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
   // re-read from localStorage on every render.
@@ -137,6 +146,55 @@ export function BrowserLocalCanvasPage({
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
+
+  // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
+  // (bookmarkable/shareable, matching the daemon side's
+  // /canvas/:workspaceId/:slug contract). The first sync replaces so a
+  // plain '/' load doesn't leave an extra history entry behind it; every
+  // subsequent switch (via the switcher, or create-then-switch) pushes.
+  //
+  // This never fights the URL->canvas effect below: that effect only calls
+  // switchCanvas when the URL disagrees with the already-loaded canvasId, and
+  // by the time navigate() below lands, location.pathname already equals
+  // path — so the other effect sees no drift left to act on.
+  const isFirstCanvasUrlSyncRef = useRef(true)
+  useEffect(() => {
+    if (canvasId === null) return
+    const path = browserLocalCanvasPath(canvasId)
+    const isFirstSync = isFirstCanvasUrlSyncRef.current
+    isFirstCanvasUrlSyncRef.current = false
+    if (location.pathname === path) return
+    navigate(path, { replace: isFirstSync })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canvasId, navigate])
+
+  // URL -> canvas id: browser Back/Forward (and any other history navigation)
+  // moves location.pathname without any switcher click firing, so this is the
+  // only thing that keeps the loaded canvas in sync with the address bar for
+  // that direction. Runs in an effect (never during render) so it can't race
+  // Excalidraw's own render cycle; switchCanvas's generation guard (see the
+  // controller hook) protects against a rapid back-back-back burst landing a
+  // stale canvas.
+  //
+  // lastKnownCanvasIdRef distinguishes the two ways this effect's own
+  // dependencies can change: a switcher-driven switchCanvas() updates canvasId
+  // before the sibling canvas-id -> URL effect's navigate() call has actually
+  // updated `location`, so this effect would otherwise see a stale pathname
+  // that still names the PREVIOUS canvas and switch straight back to it. When
+  // the URL still names the previously-known canvas id, that's this
+  // component's own pending push catching up, not an external navigation —
+  // skip it and let the other effect finish the sync.
+  const lastKnownCanvasIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (canvasId === null) return
+    const requestedId = parseBrowserLocalRoute(location.pathname)?.canvasId
+    const lastKnownCanvasId = lastKnownCanvasIdRef.current
+    lastKnownCanvasIdRef.current = canvasId
+    if (requestedId === undefined || requestedId === canvasId) return
+    if (requestedId === lastKnownCanvasId) return
+    void switchCanvas(requestedId)
+  }, [location.pathname, canvasId, switchCanvas])
+
   useEffect(() => {
     if (canvasId === null) return
     const generation = ++listGenerationRef.current
