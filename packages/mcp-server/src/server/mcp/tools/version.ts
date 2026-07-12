@@ -106,13 +106,13 @@ export const versionRestoreInputShape = {
     .string()
     .optional()
     .describe(
-      'When set, restore as a new canvas under this slug in the same workspace. Original canvas is left untouched.',
+      'When set, restore into this slug in the same workspace instead of the source canvas. Creates it if new; source canvas is left untouched either way.',
     ),
   overwrite: z
     .boolean()
     .optional()
     .describe(
-      'Only used with targetSlug. When true, replace an existing canvas at targetSlug. Default false.',
+      'Only used with targetSlug. When true and targetSlug already exists, reconciles the past version onto that canvas (same merge semantics as in-place restore, applied to the target). Default false — an existing target slug otherwise fails with output_exists.',
     ),
 } satisfies z.ZodRawShape
 
@@ -120,7 +120,7 @@ export function versionRestoreTool() {
   return {
     name: 'version_restore',
     description:
-      'Restore a saved version. Default = in-place reconcile against the source canvas. Pass targetSlug to instead write the past doc as a brand-new canvas in the same workspace (replaces the deleted checkpoint_restore flow).',
+      'Restore a saved version. Default = in-place reconcile against the source canvas. Pass targetSlug to restore into a different canvas in the same workspace instead (new if it does not exist, reconciled onto it if it does and overwrite is set; replaces the deleted checkpoint_restore flow).',
     // Derived from the Zod shape so the JSON-Schema view can never drift from
     // what registerToolWithAnnotations actually validates against.
     inputSchema: z.toJSONSchema(z.object(versionRestoreInputShape)) as {
