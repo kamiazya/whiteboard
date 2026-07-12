@@ -71,6 +71,50 @@ describe('createUserSettingsStore', () => {
     expect(reloaded.storage.lastConnectedSlug).toBe('main')
   })
 
+  // The stored base URL is rendered into an `href`. Anything that can write
+  // localStorage could otherwise plant a `javascript:` URL and turn a link
+  // click into script execution, so the schema rejects it and the caller falls
+  // back to defaults rather than trusting what it read.
+  it.each([
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'not a url',
+  ])('rejects a stored localDaemonBaseUrl that is not http(s): %s', (hostile) => {
+    // Everything else in this payload is valid, so only the URL constraint
+    // can be what rejects it — otherwise the test would pass whether or not
+    // the constraint exists.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { localDaemonBaseUrl: hostile, lastConnectedWorkspaceId: 'w1' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+
+    const loaded = createUserSettingsStore().load()
+    expect(loaded.storage.localDaemonBaseUrl).toBeUndefined()
+    // The whole payload is discarded, not just the offending field.
+    expect(loaded.storage.lastConnectedWorkspaceId).toBeUndefined()
+  })
+
+  it('accepts an http(s) base URL in an otherwise identical payload', () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099', lastConnectedWorkspaceId: 'w1' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+
+    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(
+      'http://127.0.0.1:3099',
+    )
+  })
+
   it('reset() clears stored settings back to defaults', () => {
     const store = createUserSettingsStore()
     store.save({
