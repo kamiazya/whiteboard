@@ -46,7 +46,11 @@ function tokenize(text: string): string[] {
   return tokens
 }
 
-// Force-split tokens that are wider than maxWidth.
+// Last-resort break for a token (or hyphen segment) that is still wider than
+// maxWidth on its own: break at character boundaries without inserting a
+// hyphen. Fabricating a hyphen here would misrepresent the identifier as
+// containing a character it doesn't have, which is worse than an unmarked
+// break.
 function splitTokenByWidth(token: string, maxWidth: number, fontSize: number): string[] {
   const out: string[] = []
   let cur = ''
@@ -63,6 +67,49 @@ function splitTokenByWidth(token: string, maxWidth: number, fontSize: number): s
   return out
 }
 
+// Split a token at its existing hyphens, keeping each hyphen attached to the
+// segment it follows (e.g. 'payment-service' -> ['payment-', 'service']).
+// Returns a single-element array when there is no internal hyphen to break
+// at, or when the token is hyphens only.
+function splitAtHyphens(token: string): string[] {
+  const parts = token.split('-')
+  if (parts.length <= 1) return [token]
+  return parts
+    .map((part, i) => (i < parts.length - 1 ? `${part}-` : part))
+    .filter((part) => part !== '')
+}
+
+// A wrapped fragment of a single over-wide token. `attached` marks fragments
+// that continue the same original word (via an existing hyphen or a forced
+// character break) and must never gain a space separator from the caller.
+interface TokenFragment {
+  text: string
+  attached: boolean
+}
+
+// Force-split a token that doesn't fit maxWidth. Prefers breaking at an
+// existing hyphen boundary over an arbitrary character boundary, so a break
+// lands where the identifier itself already has one instead of fabricating
+// a new break point mid-word.
+function splitOversizedToken(token: string, maxWidth: number, fontSize: number): TokenFragment[] {
+  const hyphenParts = splitAtHyphens(token)
+  if (hyphenParts.length <= 1) {
+    return splitTokenByWidth(token, maxWidth, fontSize).map((text, i) => ({
+      text,
+      attached: i > 0,
+    }))
+  }
+  return hyphenParts.flatMap((part, i) => {
+    if (estimateTextWidth(part, fontSize) <= maxWidth) {
+      return [{ text: part, attached: i > 0 }]
+    }
+    return splitTokenByWidth(part, maxWidth, fontSize).map((text, j) => ({
+      text,
+      attached: i > 0 || j > 0,
+    }))
+  })
+}
+
 // Pack tokens greedily into wrapped lines. Narrow-token joins use a single space;
 // wide-character joins use no separator.
 function isNarrowToken(tok: string): boolean {
@@ -74,24 +121,23 @@ function joiner(prev: string, next: string): string {
   return isNarrowToken(prev) && isNarrowToken(next) ? ' ' : ''
 }
 
-function packLine(
-  tokens: string[],
-  maxWidth: number,
-  fontSize: number,
-): string[] {
+function packLine(tokens: string[], maxWidth: number, fontSize: number): string[] {
   const lines: string[] = []
   let cur = ''
   for (const rawTok of tokens) {
-    // Split over-wide tokens at character boundaries.
-    const pieces = estimateTextWidth(rawTok, fontSize) <= maxWidth
-      ? [rawTok]
-      : splitTokenByWidth(rawTok, maxWidth, fontSize)
-    for (const tok of pieces) {
+    // Split over-wide tokens, preferring an existing hyphen boundary over an
+    // arbitrary character break.
+    const pieces: TokenFragment[] =
+      estimateTextWidth(rawTok, fontSize) <= maxWidth
+        ? [{ text: rawTok, attached: false }]
+        : splitOversizedToken(rawTok, maxWidth, fontSize)
+    for (const { text: tok, attached } of pieces) {
       if (!cur) {
         cur = tok
         continue
       }
-      const candidate = cur + joiner(cur.slice(-1), tok) + tok
+      const separator = attached ? '' : joiner(cur.slice(-1), tok)
+      const candidate = cur + separator + tok
       if (estimateTextWidth(candidate, fontSize) <= maxWidth) {
         cur = candidate
       } else {
@@ -104,11 +150,7 @@ function packLine(
   return lines
 }
 
-export function wrapTextToWidth(
-  text: string,
-  maxWidth: number,
-  fontSize: number = 20,
-): string[] {
+export function wrapTextToWidth(text: string, maxWidth: number, fontSize: number = 20): string[] {
   if (text === '') return ['']
   if (maxWidth <= 0) return splitPerChar(text)
 
