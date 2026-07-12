@@ -1,8 +1,10 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { BetaBanner } from './components/BetaBanner.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
+import { type DaemonRoute, daemonRoutePath, parseDaemonRoute } from './lib/app-routes.js'
 import { IndexedDBStore } from './lib/browser-local-store.js'
 import {
   BROWSER_LOCAL_CAPABILITIES,
@@ -42,10 +44,10 @@ const DaemonIndexPage = lazy(() =>
 // canvas. A #wb= fragment with a slug skips straight to 'canvas'; local-daemon
 // and slug-less pairing start on 'index'. `key` on the DaemonCanvasPage mount
 // forces a clean remount (fresh controller/backend) on every index -> canvas
-// transition instead of reusing a previous canvas's identity.
-type DaemonView =
-  | { kind: 'index'; workspaceId?: string }
-  | { kind: 'canvas'; workspaceId: string; slug: string }
+// transition instead of reusing a previous canvas's identity. Reuses
+// DaemonRoute's shape (rather than a parallel type) since this state IS the
+// route — app-routes.ts's parse/build functions keep the two in sync.
+type DaemonView = DaemonRoute
 
 const browserLocalStore = new IndexedDBStore()
 const userSettingsStore = createUserSettingsStore()
@@ -118,22 +120,69 @@ export function App({ providerState }: AppProps) {
   // global, so it must run exactly once per mount — calling it in the render
   // body would let StrictMode's double-render read-then-lose the token.
   const [daemonToken] = useState(() => readDaemonTokenOnce() ?? undefined)
+  const location = useLocation()
+  const navigate = useNavigate()
 
   // A #wb= fragment carrying both workspaceId+slug skips straight to the
   // canvas (the existing deep-link contract); a workspace-only fragment is
   // still a valid target (see daemon-connection-payload.ts's refine) and
   // starts on the gallery pre-scoped to that workspace rather than
-  // whichever workspace the daemon happens to list first. A slug-less AND
-  // workspace-less fragment (or local-daemon's runtime-config path, which
-  // never has a fragment at all) starts on the gallery unscoped. Lazy
-  // initializer: daemonConnection's payload is fixed for the life of the
-  // mount, so this never needs to react to it changing after the fact.
+  // whichever workspace the daemon happens to list first. Absent a fragment
+  // (local-daemon's runtime-config path, or a same-origin cold load of a
+  // `/canvas/:workspaceId/:slug` or `/w/:workspaceId` URL — e.g. a bookmark,
+  // a shared link, or R3's "Open the local app" deep link), the URL itself
+  // seeds the view. Lazy initializer: both the payload and the pathname at
+  // mount time are fixed for the life of the mount.
   const [daemonView, setDaemonView] = useState<DaemonView>(() => {
-    if (daemonConnection.status !== 'paired') return { kind: 'index' }
-    const { workspaceId, slug } = daemonConnection.payload
-    if (workspaceId && slug) return { kind: 'canvas', workspaceId, slug }
-    return { kind: 'index', workspaceId }
+    if (daemonConnection.status === 'paired') {
+      const { workspaceId, slug } = daemonConnection.payload
+      if (workspaceId && slug) return { kind: 'canvas', workspaceId, slug }
+      return { kind: 'index', workspaceId }
+    }
+    return parseDaemonRoute(location.pathname) ?? { kind: 'index' }
   })
+
+  // Keeps the address bar in sync with `daemonView` in both directions.
+  //
+  // State -> URL: fires whenever daemonView changes, whether from in-app
+  // navigation (onOpenCanvas/onNavigateBack below) or from the #wb=
+  // consume-once fragment establishing the initial view above. The very
+  // first sync uses `replace` so the raw pairing URL never lingers as a
+  // separate history entry the user could "back" into (it's already been
+  // consumed and re-visiting it would silently do nothing); every
+  // subsequent sync pushes, so browser back/forward has real steps to walk.
+  const isFirstUrlSyncRef = useRef(true)
+  useEffect(() => {
+    const path = daemonRoutePath(daemonView)
+    // Read-then-clear on the FIRST EFFECT RUN regardless of whether it ends
+    // up navigating: a no-op first run (URL already matches the initial
+    // view) must not leave the very next real navigation still thinking
+    // it's the first one and wrongly replacing instead of pushing.
+    const isFirstSync = isFirstUrlSyncRef.current
+    isFirstUrlSyncRef.current = false
+    if (location.pathname === path) return
+    navigate(path, { replace: isFirstSync })
+    // location.pathname is read, not depended on: including it would refire
+    // this effect on every navigation (including the one it just performed),
+    // which is harmless but noisy. daemonView is the actual trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daemonView, navigate])
+
+  // URL -> state: handles the browser back/forward buttons (and, in
+  // principle, any other code path that changes the route without going
+  // through setDaemonView). Skips its own first run so it never overrides
+  // the payload-preferring lazy initializer above with a stale pathname
+  // that hasn't caught up to the #wb= sync effect yet.
+  const isFirstRouteSyncRef = useRef(true)
+  useEffect(() => {
+    if (isFirstRouteSyncRef.current) {
+      isFirstRouteSyncRef.current = false
+      return
+    }
+    const parsed = parseDaemonRoute(location.pathname)
+    if (parsed !== null) setDaemonView(parsed)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
 
   // Persists ONLY the reconnect target (baseUrl/workspaceId/slug), never the
   // bootstrapToken — the token stays in-memory via readDaemonTokenOnce's
