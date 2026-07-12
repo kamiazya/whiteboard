@@ -1,12 +1,24 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import {
+  ALL_AUTH_SCOPES,
+  AUTH_SCOPES,
   type AuthAuthorizeInput,
   type AuthDecision,
   type AuthStrategy,
   createAuthStrategyMiddleware,
   createLocalTokenAuthStrategy,
 } from './auth-strategy.js'
+
+describe('ALL_AUTH_SCOPES', () => {
+  // ALL_AUTH_SCOPES is handed out wholesale on every accepted WS upgrade.
+  // It must always cover exactly the AUTH_SCOPES vocabulary — not a
+  // hand-copied literal that can silently drift (under- or over-grant)
+  // when a scope is added to one list and forgotten in the other.
+  it('contains exactly the same scopes as AUTH_SCOPES, no more and no less', () => {
+    expect(new Set(ALL_AUTH_SCOPES)).toEqual(new Set(AUTH_SCOPES))
+  })
+})
 
 describe('createLocalTokenAuthStrategy', () => {
   // Behavior parity with the legacy `isAuthorized()` rule in
