@@ -485,17 +485,24 @@ describe('generate-npm-sbom.mjs pnpm-run environment', () => {
 })
 
 describe('cyclonedx-npm version policy', () => {
-  it('stays on v4 until the v5 --ignore-npm-errors regression is fixed', () => {
-    // @cyclonedx/cyclonedx-npm@5.0.0 treats npm ls ELSPROBLEMS as fatal even with
-    // --ignore-npm-errors, so SBOM generation fails on the pnpm-deployed prod tree
-    // (devDependencies are intentionally absent there). v4 honours the flag.
-    // v6.0.0 reworked npm-cli detection but its release notes do not claim an
-    // --ignore-npm-errors fix, so the pin stands until one is verified.
-    // Accepted trade-off: GHSA-v75r-vx73-82pj (fixed only in >=5.0.0) is a
-    // shell-injection via the --workspace argument; this repo never passes
-    // --workspace and spawns cyclonedx-npm with a sanitized env on Linux CI,
-    // so the advisory is not exploitable here.
-    // Remove this pin guard once an upstream release honours --ignore-npm-errors again.
+  it('requires >= 5.x now that CI proves --ignore-npm-errors works on the deployed prod tree', () => {
+    // Historically pinned to v4: @cyclonedx/cyclonedx-npm@5.0.0 was suspected of
+    // treating npm ls ELSPROBLEMS as fatal even with --ignore-npm-errors, which
+    // would break SBOM generation on the pnpm-deployed prod tree (devDependencies
+    // are intentionally absent there).
+    //
+    // Verified fixed: the ci.yml `sbom-npm` job runs generate:sbom:npm against
+    // this exact deployed-prod-tree path on every PR/push (Linux), and the
+    // "generated SBOM content regression" tests above assert the output is
+    // non-empty and contains real production components. That job is the
+    // living proof this invariant holds — if a future cyclonedx-npm release
+    // regresses --ignore-npm-errors, that CI job fails before this version
+    // bound would need to move.
+    //
+    // Moving to >=5 also closes GHSA-v75r-vx73-82pj (shell injection via
+    // --workspace, fixed in >=5.0.0); this repo never passes --workspace so the
+    // advisory was not exploitable even on v4, but the newer line carries the
+    // fix regardless.
     const rootPkg = JSON.parse(readFile('package.json')) as {
       devDependencies?: Record<string, string>
     }
@@ -503,7 +510,7 @@ describe('cyclonedx-npm version policy', () => {
     expect(version, '@cyclonedx/cyclonedx-npm must be a root devDependency').toBeTruthy()
     expect(
       version,
-      'must stay on ^4.x — v5.0.0 --ignore-npm-errors regression breaks generate:sbom:npm',
-    ).toMatch(/^\^?4\./)
+      'must be >= 5.x — the ci.yml sbom-npm job is required to prove --ignore-npm-errors still works before bumping further',
+    ).toMatch(/^\^?([5-9]|\d{2,})\./)
   })
 })
