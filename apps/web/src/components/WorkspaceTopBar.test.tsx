@@ -894,6 +894,95 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
   })
 })
 
+describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
+  function openCanvasActionsMenu() {
+    const canvasActions = screen.getByLabelText('Canvas actions')
+    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    return screen.findByText('Copy canvas URL')
+  }
+
+  afterEach(() => {
+    // @ts-expect-error -- test-only cleanup of a property defined per-test below
+    delete navigator.clipboard
+  })
+
+  it('shows a "Copied!" confirmation after a successful copy, then reverts', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
+    try {
+      renderBar()
+      const copyItem = await openCanvasActionsMenu()
+      fireEvent.pointerUp(copyItem)
+
+      await vi.waitFor(() => expect(screen.getByText('Copied!')).toBeTruthy())
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/canvas/ws_1/canvas-a'))
+      // Screen-reader-visible announcement, independent of the visible label.
+      expect(screen.getByRole('status').textContent).toContain('Canvas URL copied to clipboard.')
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000)
+      })
+      await vi.waitFor(() => expect(screen.queryByText('Copied!')).toBeNull())
+      expect(screen.getByText('Copy canvas URL')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('surfaces a rejected clipboard write as a visible error instead of a false success', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
+    renderBar()
+    const copyItem = await openCanvasActionsMenu()
+    fireEvent.pointerUp(copyItem)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain("Couldn't copy automatically")
+    expect(screen.queryByText('Copied!')).toBeNull()
+    expect(screen.getByRole('status').textContent).toContain(
+      "Couldn't copy the canvas URL automatically.",
+    )
+
+    // Fallback: the URL is still available as selectable text.
+    const fallbackInput = screen.getByLabelText('Canvas URL') as HTMLInputElement
+    expect(fallbackInput.value).toContain('/canvas/ws_1/canvas-a')
+    expect(fallbackInput.readOnly).toBe(true)
+  })
+
+  it('does not nest the live-region announcement or the error fallback inside the role="menu" container', async () => {
+    // WAI-ARIA menu pattern: an element with role="menu" may only own
+    // menuitem/menuitemcheckbox/menuitemradio/group descendants. A
+    // role="status"/role="alert" live region nested directly inside it
+    // violates that contract (axe/AccessLint: aria-required-children) even
+    // though the text itself is never focusable or selectable via arrow keys.
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
+    renderBar()
+    const copyItem = await openCanvasActionsMenu()
+    fireEvent.pointerUp(copyItem)
+
+    const alert = await screen.findByRole('alert')
+    const status = screen.getByRole('status')
+    const menu = screen.getByRole('menu')
+
+    expect(menu.contains(alert)).toBe(false)
+    expect(menu.contains(status)).toBe(false)
+  })
+})
+
 describe('WorkspaceTopBar — dataMode="local"', () => {
   it('never calls the daemon fetch: mount, open the canvas switcher, and open the actions area', async () => {
     render(

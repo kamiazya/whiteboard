@@ -5,6 +5,7 @@ import {
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
+  Check,
   ChevronDown,
   ChevronLeft,
   Copy,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -251,6 +253,16 @@ export default function WorkspaceTopBar({
   const [versionOpen, setVersionOpen] = useState(false)
   const [canvasSearch, setCanvasSearch] = useState('')
   const versionPanelRef = useRef<HTMLDivElement | null>(null)
+  // Copy-URL confirmation: the button itself reports success/failure instead
+  // of a separate toast, since the affordance already has a fixed home (the
+  // canvas actions menu) and a transient label swap is enough signal.
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
+  const copyStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Anchor for the portaled copy-error fallback box below — it can no longer
+  // rely on CSS `position: absolute` relative to this wrapper once it's
+  // portaled to document.body, so its on-screen position is computed from
+  // this element's own rect instead.
+  const canvasActionsRef = useRef<HTMLDivElement | null>(null)
 
   // Save state: dirty dot + Cmd/Ctrl+S only.
   // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
@@ -394,6 +406,7 @@ export default function WorkspaceTopBar({
   useEffect(
     () => () => {
       mountedRef.current = false
+      if (copyStatusTimeoutRef.current) clearTimeout(copyStatusTimeoutRef.current)
     },
     [],
   )
@@ -596,12 +609,33 @@ export default function WorkspaceTopBar({
     }
   }
 
+  // Kept outside copyCanvasUrl so the failure-path fallback can render the
+  // same URL as selectable text without recomputing it.
+  const canvasUrl = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
+
+  const scheduleCopyStatusReset = (delayMs: number) => {
+    if (copyStatusTimeoutRef.current) clearTimeout(copyStatusTimeoutRef.current)
+    copyStatusTimeoutRef.current = setTimeout(() => {
+      if (mountedRef.current) setCopyStatus('idle')
+    }, delayMs)
+  }
+
   const copyCanvasUrl = async () => {
     try {
-      const url = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
-      await navigator.clipboard.writeText(url)
-    } catch {
-      /* ignore */
+      await navigator.clipboard.writeText(canvasUrl)
+      if (!mountedRef.current) return
+      setCopyStatus('copied')
+      scheduleCopyStatusReset(2000)
+    } catch (err) {
+      // A silent catch here is exactly the bug this fixes — clipboard access
+      // can be denied (permissions, insecure context, browser refusal) and
+      // must surface as a visible failure, not a false "copied" success.
+      log.error('failed to copy canvas URL to clipboard:', err)
+      if (!mountedRef.current) return
+      setCopyStatus('error')
+      // Longer than the success state: the user needs time to read the
+      // fallback instructions and select the URL manually.
+      scheduleCopyStatusReset(8000)
     }
   }
 
@@ -781,45 +815,127 @@ export default function WorkspaceTopBar({
         </DropdownMenu>
 
         {/* Canvas-specific actions such as rename and copy URL. */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              aria-label="Canvas actions"
-            >
-              <Pencil className="size-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem
-              onSelect={() => {
-                setDraft(effectiveNames.canvases[slug] ?? '')
-                setRenamingCanvas(true)
-              }}
-              className="gap-2"
-            >
-              <Pencil className="size-3.5" />
-              Rename canvas
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={copyCanvasUrl} className="gap-2">
-              <Copy className="size-3.5" />
-              Copy canvas URL
-            </DropdownMenuItem>
-            {onExport && (
-              <>
-                <DropdownMenuItem onSelect={() => void handleExport('png')} className="gap-2">
-                  <Download className="size-3.5" />
-                  Export as PNG
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void handleExport('svg')} className="gap-2">
-                  <Download className="size-3.5" />
-                  Export as SVG
-                </DropdownMenuItem>
-              </>
+        <div ref={canvasActionsRef} className="relative">
+          <DropdownMenu
+            onOpenChange={(open) => {
+              // Every fresh open starts from a clean confirmation state rather
+              // than showing a stale "Copied!"/error from a previous visit.
+              if (open) setCopyStatus('idle')
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Canvas actions"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onSelect={() => {
+                  setDraft(effectiveNames.canvases[slug] ?? '')
+                  setRenamingCanvas(true)
+                }}
+                className="gap-2"
+              >
+                <Pencil className="size-3.5" />
+                Rename canvas
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  // Keep the menu open so the "Copied!"/error confirmation is
+                  // actually visible — Radix closes the menu on select by
+                  // default, which is exactly the silent-feedback bug.
+                  e.preventDefault()
+                  void copyCanvasUrl()
+                }}
+                className="gap-2"
+              >
+                {copyStatus === 'copied' ? (
+                  <Check className="size-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+                {copyStatus === 'copied' ? 'Copied!' : 'Copy canvas URL'}
+              </DropdownMenuItem>
+              {onExport && (
+                <>
+                  <DropdownMenuItem onSelect={() => void handleExport('png')} className="gap-2">
+                    <Download className="size-3.5" />
+                    Export as PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void handleExport('svg')} className="gap-2">
+                    <Download className="size-3.5" />
+                    Export as SVG
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* Both the live-region announcement and the error fallback below
+              are portaled straight to document.body rather than rendered as
+              siblings in this subtree, for two independent reasons:
+              1. WAI-ARIA menu pattern: an element with role="menu" may only
+                 own menuitem/menuitemcheckbox/menuitemradio/group
+                 descendants, so neither can live inside the Radix menu
+                 content (axe/AccessLint: aria-required-children).
+              2. copyCanvasUrl's onSelect handler below deliberately keeps
+                 this menu open on both success and failure so the
+                 confirmation is visible, and Radix's DismissableLayer inerts
+                 (aria-hides) the rest of the page for as long as the menu
+                 stays open. Rendering these two as ordinary siblings here —
+                 i.e. nested under this page's own <header>/<main> — meant
+                 their on-again-off-again presence changed *which* ancestor
+                 chain that inerting walk kept visible on every open/close of
+                 this menu, which went on to corrupt the hide/unhide
+                 bookkeeping for unrelated siblings elsewhere on the page
+                 (observed as BrowserLocalCanvasPage's destructive-action
+                 toolbar staying permanently aria-hidden after this menu had
+                 already closed). Portaling both directly to body gives each
+                 an ancestor chain of just `document.body`, so they can never
+                 again be nested inside — or, by omission, un-inert — any of
+                 this page's own DOM. */}
+          {typeof document !== 'undefined' &&
+            createPortal(
+              <div aria-live="polite" role="status" className="sr-only">
+                {copyStatus === 'copied' && 'Canvas URL copied to clipboard.'}
+                {copyStatus === 'error' && "Couldn't copy the canvas URL automatically."}
+              </div>,
+              document.body,
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          {typeof document !== 'undefined' &&
+            copyStatus === 'error' &&
+            createPortal(
+              <div
+                role="alert"
+                style={(() => {
+                  const rect = canvasActionsRef.current?.getBoundingClientRect()
+                  return {
+                    position: 'fixed',
+                    top: (rect?.bottom ?? 0) + 4,
+                    left: rect?.left ?? 0,
+                  }
+                })()}
+                className="z-50 w-72 rounded-md border bg-popover px-2 py-1.5 text-xs text-destructive shadow-md"
+              >
+                <p>Couldn't copy automatically. Select and copy the link below:</p>
+                <Input
+                  readOnly
+                  value={canvasUrl}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    e.currentTarget.select()
+                  }}
+                  onFocus={(e) => e.currentTarget.select()}
+                  aria-label="Canvas URL"
+                  className="mt-1 h-7 font-mono text-[11px]"
+                />
+              </div>,
+              document.body,
+            )}
+        </div>
 
         {/* Inline canvas rename input. */}
         {renamingCanvas && (
