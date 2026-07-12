@@ -139,9 +139,56 @@ The remaining blocker for hosted pairing is therefore **this repo's own
 daemon policy**, not the browser: with a `pages.dev` Origin the daemon
 returns no `Access-Control-Allow-Origin` on `/api/*`, 403 on `/mcp`, and
 rejects the WS upgrade (loopback-hostname Origin gate) — all verified
-against a running daemon. Chromium's LNA gating for WebSocket is not yet
-shipped (tracked upstream), so WS behavior must be re-verified when it
-lands.
+against a running daemon.
+
+### Re-measured (2026-07-12): WebSocket is still not LNA-gated
+
+The remaining unknown from the addendum above — whether Chromium's LNA
+gating had been extended to the WebSocket upgrade — has been re-measured
+with a committed, reusable harness
+(`packages/mcp-server/scripts/smoke/mcp-lna-transport-smoke.mjs`, run via
+`pnpm smoke:lna-transport`). It drives all three engines against the same
+real `https://kamiazya-whiteboard.pages.dev` origin, this time probing both
+a `fetch` (baseline re-confirmation) and a `new WebSocket(...)` upgrade to a
+throwaway, fully CORS-permissive loopback probe server — not this repo's own
+daemon, so the daemon's own origin gate (F4 above) cannot mask browser-level
+behavior.
+
+| Engine (tested build) | `fetch` (no LNA grant) | `fetch` (LNA granted) | WS upgrade (no LNA grant) | WS upgrade (LNA granted) |
+|---|---|---|---|---|
+| Chromium 147.0.7727.15 (Playwright bundled) | Fails fast (`TypeError: Failed to fetch`, ~25ms; `permissions.query` reports `prompt`) | Succeeds | **Succeeds** | Succeeds |
+| Firefox 148.0.2 (Playwright build v1511) | Succeeds (no permission concept applies) | n/a | Succeeds | n/a |
+| WebKit (Playwright build 2272, macOS 26.4) | Blocked (`TypeError: Load failed`) | n/a | Blocked | n/a |
+
+Two findings, both load-bearing for ADR-0005's connection-ticket design:
+
+1. **The WebSocket upgrade is *not* gated behind Local Network Access on
+   this Chromium build, even with no permission granted at all.** A page
+   with an undecided (`prompt`) LNA permission state can still open a raw
+   loopback WebSocket while its `fetch` to the same loopback origin is
+   blocked outright. This means the earlier open question — "does a grant
+   covering the ticket `fetch` also cover the socket open, or is a separate
+   grant required?" — does not yet arise in practice: **no grant is
+   required for the socket at all**, only for the `fetch` that mints the
+   ticket. This is a **currently-observed gap** (Chromium's LNA WebSocket
+   gating is still tracked upstream, not yet shipped), not a guaranteed
+   permanent exemption — the connection-ticket flow must not depend on it
+   staying this way, and should still surface a denied/blocked LNA grant on
+   the ticket `fetch` as an explicit error per ADR-0005, rather than assume
+   the socket will silently succeed forever.
+2. **The undecided-permission `fetch` failure is fast, not a hang, in this
+   automated build** (~25ms, not the addendum's previously observed 5-second
+   silent timeout). Automation does not surface the real permission-prompt
+   UI, so this is consistent with — not a contradiction of — the addendum's
+   standing caveat that "the real user-facing prompt UX" remains unverified
+   by this harness; a fast rejection here plausibly corresponds to an
+   automated context resolving the prompt as denied rather than leaving it
+   pending, which a real interactive user would instead see as a visible
+   permission prompt. This nuance should be re-checked with manual/real
+   browser verification before the connection-ticket UX is finalized.
+
+Re-run `pnpm --filter @kamiazya/whiteboard-mcp smoke:lna-transport` whenever
+a browser build moves, to catch the day Chromium's WS gating ships.
 
 ### Decision (supersedes the Approach A/B framing above)
 
@@ -193,6 +240,7 @@ lands.
   loopback — usable as a regression check for the transport assumptions in
   this ADR.
 - Unverified remainder, to re-check before shipping hosted pairing: the real
-  user-facing prompt UX (automation bypasses the prompt), WS behavior once
-  Chromium gates it behind LNA, and LNA rollout changes (origin trial /
-  enterprise policy knobs).
+  user-facing prompt UX (automation bypasses the prompt), and LNA rollout
+  changes (origin trial / enterprise policy knobs). WS behavior has been
+  re-measured (2026-07-12, above): still not LNA-gated on the tested
+  Chromium build, but re-run the harness when Chromium ships WS gating.
