@@ -1,21 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
-import { join } from 'node:path'
 import type { Socket } from 'node:net'
+import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
 import { IdleTimer } from '../daemon/idle-timer.js'
-import { PACKAGE_VERSION } from '../shared/package-version.js'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
-import { createApp } from './app.js'
-import { normalizeBindHost } from './daemon-auth-binding.js'
-import { DATA_DIR, DIST_WEB_APP_DIR } from './config.js'
-import { handleWsUpgrade, getConnectionStats, setRuntimeTouchFn } from './routes/ws.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
+import { createApp } from './app.js'
+import { DATA_DIR, DIST_WEB_APP_DIR } from './config.js'
+import { normalizeBindHost } from './daemon-auth-binding.js'
+import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
-import { validationErrorBody } from './validators.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
+import { validationErrorBody } from './validators.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
 
@@ -185,7 +185,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     }
     touch()
     wss.handleUpgrade(req, socket, head, (ws) => {
-      void handleWsUpgrade(req, ws)
+      void handleWsUpgrade(req, ws, decision.scopes)
     })
   })
 

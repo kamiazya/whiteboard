@@ -41,6 +41,7 @@ import {
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
+import { resolveApiRouteScope } from './security/route-scope-registry.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   BranchNotFoundError,
@@ -217,67 +218,6 @@ export interface ServerModeAppOptions {
 
 export type AppOptions = LocalDaemonAppOptions | ServerModeAppOptions
 
-function resolveServerModeApiScopes(method: string, path: string): readonly AuthScope[] {
-  const isWrite = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
-
-  // File routes
-  if (/^\/api\/canvas\/[^/]+\/[^/]+\/file\//.test(path)) {
-    return method === 'PUT' ? ['files:write'] : ['files:read']
-  }
-
-  // Canvas write operations (update, export, export-json are POST but mutate state)
-  if (
-    /^\/api\/canvas\/[^/]+\/[^/]+\/(update|export|export-json)$/.test(path) &&
-    method === 'POST'
-  ) {
-    return ['canvas:write']
-  }
-  if (path === '/api/import-migration-bundle') return ['canvas:write']
-  // Catch-all for remaining /api/canvas/ routes. Honor the write/read split so a mutating
-  // POST (e.g. /viewport) is not authorized with only canvas:read; the specific write routes
-  // above (update/export/export-json) still take precedence.
-  if (path.startsWith('/api/canvas/')) return isWrite ? ['canvas:write'] : ['canvas:read']
-
-  // User library routes — writes mutate workspace-level shared library state
-  if (path.startsWith('/api/user-libraries')) {
-    return isWrite ? ['workspace:write'] : ['canvas:read']
-  }
-
-  // Version history, thumbnails, restore, compact (version-control operations on a canvas)
-  if (
-    /^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/(versions|latest-thumbnail|compact)/.test(path)
-  ) {
-    return isWrite ? ['versions:write'] : ['versions:read']
-  }
-
-  // Branch and checkpoint routes (version-control operations within a workspace)
-  if (/^\/api\/workspaces\/[^/]+\/canvases\/[^/]+\/branches/.test(path)) {
-    return isWrite ? ['versions:write'] : ['versions:read']
-  }
-  if (/^\/api\/workspaces\/[^/]+\/checkpoints$/.test(path)) {
-    return ['versions:write']
-  }
-
-  // Workspace routes — default write → workspace:write, read → workspace:read
-  if (path.startsWith('/api/workspaces')) {
-    return isWrite ? ['workspace:write'] : ['workspace:read']
-  }
-
-  // touch/shutdown/logs-prune all mutate daemon-managed state (liveness timer,
-  // process lifecycle, on-disk log files) and require the admin tier even
-  // though the HTTP verb for prune is POST like any other write route.
-  if (
-    path === '/api/runtime/touch' ||
-    path === '/api/runtime/shutdown' ||
-    path === '/api/runtime/logs/prune'
-  ) {
-    return ['runtime:admin']
-  }
-  if (path.startsWith('/api/runtime/')) return ['runtime:read']
-
-  return isWrite ? ['canvas:write'] : ['canvas:read']
-}
-
 function buildServerModeAuthFailResponse(decision: {
   status: 401 | 403
   code: string
@@ -295,14 +235,25 @@ function buildServerModeAuthFailResponse(decision: {
 
 function createServerModeApiAuthMiddleware(authStrategy: AsyncAuthStrategy): MiddlewareHandler {
   return async (c, next) => {
-    // Ping is a liveness probe available without credentials
-    if (c.req.path === '/api/runtime/ping') return next()
     const method = c.req.method.toUpperCase()
+    const routeScope = resolveApiRouteScope(method, c.req.path)
+    // No declared decision at all: fail closed rather than silently applying
+    // a guessed scope. Reaching this branch means a route was mounted under
+    // /api/* without an entry in route-scope-registry.ts — the registry-wide
+    // test (route-scope-registry.test.ts) is meant to catch this before it
+    // ships, so a live 500 here means that guard was bypassed or the route
+    // was added after the registry without updating both.
+    if (routeScope === null) {
+      return c.json({ error: 'auth.route-undeclared' }, 500)
+    }
+    // The `public` decision is a deliberate, documented carve-out (currently
+    // only GET /api/runtime/ping — a liveness probe) — never an omission.
+    if (routeScope.kind === 'public') return next()
     const decision = await authStrategy.authorize({
       method,
       path: c.req.path,
       authorizationHeader: c.req.header('authorization'),
-      requiredScopes: resolveServerModeApiScopes(method, c.req.path),
+      requiredScopes: routeScope.scopes,
     })
     if (decision.ok) return next()
     return buildServerModeAuthFailResponse(decision)
