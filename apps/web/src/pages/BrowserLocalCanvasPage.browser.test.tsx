@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
+
+// The page reads/writes the canvas id through the router, so it needs a router
+// in scope exactly as it has one in main.tsx.
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+}
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {

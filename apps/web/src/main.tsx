@@ -2,6 +2,7 @@
 import './excalidraw-asset-path.js'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.js'
 import './index.css'
 import './pwa/bootstrap.js'
@@ -11,6 +12,8 @@ if (!rootEl) throw new Error('Root element #root not found')
 
 createRoot(rootEl).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
   </StrictMode>,
 )

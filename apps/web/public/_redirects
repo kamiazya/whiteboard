@@ -1,0 +1,9 @@
+# SPA fallback: apps/web now has client-side routes (/canvas/:workspaceId/:slug,
+# /w/:workspaceId, /local/:canvasId) that have no matching file in dist/. Without
+# this rule, Cloudflare Pages 404s any direct load or reload of those URLs —
+# only requests that land on '/' first and navigate client-side ever worked.
+# A 200 rewrite (not a 3xx redirect) keeps the deep-linked URL in the address
+# bar; index.html's own client-side router then resolves it. Static assets
+# (js/css/fonts/etc.) are matched against real files first, so this catch-all
+# only applies to paths with no corresponding dist/ file.
+/*    /index.html   200

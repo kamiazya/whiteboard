@@ -25,14 +25,19 @@ function readDist(rel) {
   return readFileSync(p, 'utf-8')
 }
 
-// Collect all text artifact files: html, js, css, plain-text, and _headers.
+// Collect all text artifact files: html, js, css, plain-text, and the
+// Cloudflare Pages config files (_headers, _redirects).
 function collectArtifactFiles(dir) {
   const results = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
       results.push(...collectArtifactFiles(full))
-    } else if (/\.(html|js|css|txt)$/.test(entry.name) || entry.name === '_headers') {
+    } else if (
+      /\.(html|js|css|txt)$/.test(entry.name) ||
+      entry.name === '_headers' ||
+      entry.name === '_redirects'
+    ) {
       results.push(full)
     }
   }
@@ -69,6 +74,20 @@ if (headers !== null) {
   )
   assert(headers.includes('Referrer-Policy'), '_headers: Referrer-Policy present')
   assert(headers.includes('Permissions-Policy'), '_headers: Permissions-Policy present')
+}
+
+// ── _redirects copied (SPA fallback) ──────────────────────────────────────────
+// apps/web has client-side routes with no matching dist/ file
+// (/canvas/:workspaceId/:slug, /w/:workspaceId, /local/:canvasId); without this
+// rule Cloudflare Pages 404s a direct load or reload of any of them.
+console.log('\n[smoke-artifact] _redirects (SPA fallback)')
+const redirects = readDist('_redirects')
+assert(redirects !== null, 'dist/_redirects exists (Cloudflare Pages SPA fallback)')
+if (redirects !== null) {
+  assert(
+    /^\/\*\s+\/index\.html\s+200\s*$/m.test(redirects),
+    '_redirects: catch-all rewrite to /index.html with a 200 (not a 3xx redirect)',
+  )
 }
 
 // ── CSP integrity ─────────────────────────────────────────────────────────────
