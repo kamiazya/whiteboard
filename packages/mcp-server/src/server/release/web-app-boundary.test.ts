@@ -32,7 +32,7 @@ const FIXTURE_BROWSER_APP_DIR = resolve(PACKAGE_SRC_DIR, '__fixture-browser-app_
 /**
  * Check whether a GitHub Actions job body declares `environment: production-web`,
  * either as the short string form or the `name:`/`url:` mapping form (in any key
- * order, quotes optional).
+ * order, quotes optional, with or without a trailing YAML comment).
  *
  * This walks lines instead of using a single combined regex. A prior version
  * used one alternation with a lazy-repeated inner group
@@ -40,26 +40,66 @@ const FIXTURE_BROWSER_APP_DIR = resolve(PACKAGE_SRC_DIR, '__fixture-browser-app_
  * following `\r?\n`, giving the engine exponentially many ways to partition a
  * non-matching input and triggering catastrophic backtracking (CodeQL
  * js/redos). Scanning line-by-line makes each step O(1) with no backtracking.
+ *
+ * Comments are stripped before matching so a trailing `# ...` on either the
+ * `environment:` line or a `name:` line inside the mapping form doesn't leak
+ * into the compared value. The scalar form also returns immediately once a
+ * non-empty inline value is present: a value that isn't `production-web`
+ * (e.g. `environment: development`) must not fall through to scan the
+ * mapping-form block below it, or a `name: production-web` line belonging to
+ * an unrelated nested key could produce a false positive.
  */
 function matchesEnvironmentProductionWeb(jobSection: string): boolean {
   const stripQuotes = (s: string) => s.trim().replace(/^['"]|['"]$/g, '')
-  const lines = jobSection.split(/\r?\n/)
-  const envIndex = lines.findIndex((line) => /^\s*environment:\s*(.*)$/.test(line))
+  const lines = jobSection.split(/\r?\n/).map((line) => line.replace(/#.*$/, ''))
+  const envIndex = lines.findIndex((line) => /^\s*environment:\s*/.test(line))
   if (envIndex === -1) return false
 
-  const inlineValue = lines[envIndex].match(/^\s*environment:\s*(.*)$/)?.[1] ?? ''
-  if (inlineValue !== '' && stripQuotes(inlineValue) === 'production-web') return true
+  const envLine = lines[envIndex]
+  const inlineValue = envLine.match(/^\s*environment:\s*(.*)$/)?.[1]?.trim() ?? ''
+  if (inlineValue !== '') return stripQuotes(inlineValue) === 'production-web'
 
   // Mapping form: `environment:` on its own line, followed by an indented
-  // block of `key: value` entries (any order) until the block ends.
+  // block of `key: value` entries (any order) until the block ends (a line
+  // at or below the `environment:` line's own indentation, or a non-key line).
+  const envIndent = envLine.match(/^(\s*)/)?.[1]?.length ?? 0
   for (let i = envIndex + 1; i < lines.length; i++) {
     const line = lines[i]
+    if (line.trim() === '') continue
+    const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0
+    if (indent <= envIndent) break
     if (!/^\s+[\w-]+:/.test(line)) break
     const nameMatch = line.match(/^\s+name:\s*(.*)$/)
     if (nameMatch && stripQuotes(nameMatch[1]) === 'production-web') return true
   }
   return false
 }
+
+describe('matchesEnvironmentProductionWeb edge cases', () => {
+  it('matches the inline scalar form with a trailing YAML comment', () => {
+    expect(
+      matchesEnvironmentProductionWeb(
+        'deploy-web:\n    environment: production-web  # deploy target\n',
+      ),
+    ).toBe(true)
+  })
+
+  it('matches the mapping form with a trailing YAML comment on the name: line', () => {
+    expect(
+      matchesEnvironmentProductionWeb(
+        'deploy-web:\n    environment:\n      name: production-web  # deploy target\n      url: https://example.com\n',
+      ),
+    ).toBe(true)
+  })
+
+  it('does not fall through to a later name: line when the inline scalar does not match', () => {
+    expect(
+      matchesEnvironmentProductionWeb(
+        'deploy-web:\n    environment: development\n  name: production-web\n',
+      ),
+    ).toBe(false)
+  })
+})
 
 function collectTsFiles(dir: string): string[] {
   const results: string[] = []
