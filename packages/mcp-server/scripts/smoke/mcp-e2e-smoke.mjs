@@ -265,6 +265,34 @@ async function main() {
     `[e2e] annotate_batch → arrow with text-as-label alias (labelId=${batchArrow.annotations[0].labelId})`,
   )
 
+  // update_element must reject `text` patches targeting an arrow's own
+  // element (arrows label via a separate bound text element, not a `text`
+  // field on the arrow) instead of returning ok:true for a no-op.
+  await expectRejected(
+    callTool('update_element', {
+      canvasId: created.id,
+      elementId: batchArrow.annotations[0].arrowId,
+      patch: { text: 'should not silently no-op' },
+    }),
+    /label/i,
+    'update_element text patch on an arrow element',
+  )
+  console.log('[e2e] update_element → rejects text patch on arrow OK')
+
+  // update_element on the arrow's own separately-tracked label element must
+  // still work — this is the actual supported way to edit an existing label.
+  const updatedLabel = await callTool('update_element', {
+    canvasId: created.id,
+    elementId: batchArrow.annotations[0].labelId,
+    patch: { text: 'smoke-label-updated' },
+  })
+  if (updatedLabel.elementId !== batchArrow.annotations[0].labelId) {
+    throw new Error(
+      `update_element on label returned unexpected shape: ${JSON.stringify(updatedLabel)}`,
+    )
+  }
+  console.log('[e2e] update_element → updates arrow label element text OK')
+
   // Exercise create_frame so any drift between its zod outputSchema
   // (assignedMembers etc.) and the runtime payload trips the SDK's structured-
   // content validator at this layer instead of leaking out to MCP clients.
