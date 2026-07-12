@@ -205,6 +205,16 @@ export function App({ providerState }: AppProps) {
   useEffect(() => {
     if (daemonConnection.status !== 'paired') return
     const { baseUrl, workspaceId, slug } = daemonConnection.payload
+    // update() serializes and writes to localStorage synchronously; skip it
+    // when the stored target already matches what we would write.
+    const stored = userSettingsStore.load().storage
+    if (
+      stored.localDaemonBaseUrl === baseUrl &&
+      stored.lastConnectedWorkspaceId === workspaceId &&
+      stored.lastConnectedSlug === slug
+    ) {
+      return
+    }
     userSettingsStore.update((current) => ({
       ...current,
       storage: {
