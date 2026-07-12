@@ -10,12 +10,33 @@ const COMMIT_SHA_RE = /^[0-9a-f]{40}$/
 
 describe('release.yml — action pinning policy', () => {
   it('every uses: entry is pinned to a 40-char commit SHA (no mutable tags)', async () => {
-    const text = await readFile(
-      join(REPO_ROOT, '.github/workflows/release.yml'),
-      'utf-8',
-    )
+    const text = await readFile(join(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')
 
-    // Extract all `uses: owner/repo@ref` values.
+    // Extract all `uses: owner/repo@ref` values. Local composite actions
+    // (relative paths starting with "./") are excluded: they are not external
+    // supply-chain dependencies — the checked-out commit itself already pins
+    // their contents, so there is no separate ref to SHA-pin.
+    const usesRefs = [...text.matchAll(/uses:\s+(\S+)/g)]
+      .map((m) => m[1])
+      .filter((ref) => !ref.startsWith('./'))
+    expect(usesRefs.length).toBeGreaterThan(0)
+
+    for (const ref of usesRefs) {
+      const at = ref.lastIndexOf('@')
+      expect(at, `${ref}: missing @ separator`).toBeGreaterThan(0)
+      const sha = ref.slice(at + 1)
+      expect(
+        COMMIT_SHA_RE.test(sha),
+        `Action ${ref} uses mutable ref "${sha}" — pin to a 40-char commit SHA`,
+      ).toBe(true)
+    }
+  })
+})
+
+describe('setup-pnpm composite action — pinning policy', () => {
+  it('every uses: entry is pinned to a 40-char commit SHA (no mutable tags)', async () => {
+    const text = await readFile(join(REPO_ROOT, '.github/actions/setup-pnpm/action.yml'), 'utf-8')
+
     const usesRefs = [...text.matchAll(/uses:\s+(\S+)/g)].map((m) => m[1])
     expect(usesRefs.length).toBeGreaterThan(0)
 
@@ -33,10 +54,7 @@ describe('release.yml — action pinning policy', () => {
 
 describe('release.yml — root permissions policy', () => {
   it('packages: write is absent from the workflow root permissions block', async () => {
-    const text = await readFile(
-      join(REPO_ROOT, '.github/workflows/release.yml'),
-      'utf-8',
-    )
+    const text = await readFile(join(REPO_ROOT, '.github/workflows/release.yml'), 'utf-8')
 
     // Everything before `jobs:` is the workflow preamble (root-level keys).
     // `packages: write` with 2-space indent is a root-level permissions entry.

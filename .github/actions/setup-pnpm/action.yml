@@ -1,0 +1,63 @@
+name: Setup Node and pnpm
+description: >-
+  Install Node per .node-version and activate the packageManager-pinned pnpm
+  via corepack, with pnpm store caching. Centralizes pnpm setup so a pnpm
+  version bump or tooling fix only needs to land here once.
+
+inputs:
+  node-version:
+    description: >-
+      Node version to install. Overrides node-version-file when set — used by
+      the publish-mcp release job, which checks out an old tag whose tree may
+      predate .node-version and must pin Node inline instead.
+    required: false
+    default: ''
+  registry-url:
+    description: npm registry URL to configure (passed through to actions/setup-node).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
+        registry-url: ${{ inputs.registry-url }}
+
+    # corepack prepare (no argument) reads packageManager from package.json
+    # and downloads that exact pnpm build directly from the npm registry.
+    # This avoids pnpm/action-setup's self-install path, which bundles an
+    # older pnpm and asks IT to `pnpm add -g` the pinned version — that
+    # self-update codepath breaks on pnpm 11.12.0 regardless of the action's
+    # `standalone` input (both variants still shell out to the same broken
+    # `pnpm self-update <version>`; see
+    # https://github.com/pnpm/action-setup/issues/276: "Cannot use 'in'
+    # operator to search for 'integrity' in undefined"). corepack never
+    # invokes pnpm's self-update — it fetches and shims the target version
+    # directly — so it sidesteps the bug entirely.
+    #
+    # Corepack is being unbundled from Node (nodejs/node#57825): Node 25+
+    # ships without it. This action must keep working once the runner's
+    # Node no longer includes it, so install corepack from npm first when
+    # the runner doesn't already have it on PATH.
+    - name: Activate pnpm via corepack
+      shell: bash
+      run: |
+        command -v corepack >/dev/null 2>&1 || npm install -g corepack
+        corepack enable
+        corepack prepare --activate
+
+    - name: Resolve pnpm store directory
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache pnpm store
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-

@@ -33,12 +33,75 @@ minimumReleaseAge: 10080
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 
-# pnpm v11 blocks all build scripts by default (security-by-default).
-# esbuild's postinstall (install.js) must run: it writes the absolute path of the
-# @esbuild/linux-x64 native binary into lib/main.js. Without this, the JS API
-# cannot locate the binary and Vite's dep optimizer hangs indefinitely when the
-# pnpm store cache is cold (lockfile change → cache miss → fresh install).
-# With a warm pnpm store cache the previously-written path survives in cached
-# files, which is why warm cache runs succeed even with the postinstall blocked.
-onlyBuiltDependencies:
-  - esbuild
+# Patched versions for known-vulnerable transitive deps. Moved here from the
+# package.json "pnpm.overrides" key: pnpm v11 no longer reads settings from
+# package.json's "pnpm" field (see https://pnpm.io/settings).
+overrides:
+  lodash-es@<4.18.0: ^4.18.0
+  nanoid@<3.3.8: ^3.3.8
+  nanoid@>=4.0.0 <5.0.9: ^5.0.9
+  protobufjs@<8.6.0: ^8.6.0
+  fast-uri@<3.1.2: ^3.1.2
+  kysely@<0.28.17: ^0.28.17
+  "@grpc/grpc-js@<1.14.4": ^1.14.4
+  shell-quote@<1.8.4: ^1.8.4
+  uuid@<11.1.1: ^11.1.1
+  qs@>=6.11.1 <6.15.2: ^6.15.2
+  ip-address@<=10.1.0: ^10.1.1
+  mermaid@<11.15.0: ^11.16.0
+  dompurify@<3.4.11: ^3.4.11
+
+# Multiple concurrent agent-driven git worktrees are routine in this repo;
+# without this, pnpm materializes a full node_modules/.pnpm copy per
+# worktree (~1GB each), which has caused real disk exhaustion. A shared
+# global virtual store lets every worktree's node_modules symlink into one
+# on-disk store instead of duplicating it. Requires pnpm >= 11.
+#
+# Currently left OFF: enabling it makes apps/web/node_modules/@excalidraw/excalidraw
+# resolve through a much deeper external symlink chain (into
+# ~/Library/pnpm/store/v11/links/...), and TypeScript's "bundler"
+# moduleResolution then reports a spurious structural mismatch for
+# useCanvasSync.ts's Excalidraw AppState mapped type (TS2740), even though
+# the underlying package files are byte-identical and not duplicated.
+#
+# Re-verified 2026-07-12 on pnpm 11.12.0 (this repo's pinned version, which
+# already ships the pnpm/pnpm#9739 fix for stale hoisted-symlink residue
+# from a prior non-GVS install): a fully clean install — every node_modules
+# in the worktree removed, then `pnpm install --force` from scratch with
+# this flag on from the start — still reproduces TS2740. So the failure is
+# not #9739 residue; it is a distinct symlink-depth interaction between
+# TypeScript's mapped-type structural check and pnpm's GVS link chain.
+#
+# `publicHoistPattern` does not help: @excalidraw/excalidraw is a *direct*
+# dependency of apps/web, already at the top of its node_modules, so the
+# hoisting setting (which only relocates transitive deps) has no effect on
+# it — confirmed by identical `readlink` output and identical TS2740 before
+# and after adding the pattern.
+#
+# The same tsc run passes cleanly with this flag off, and also passes with
+# moduleResolution switched to node16 (an unrelated wider change, not
+# adopted here). Re-enable once this TypeScript/pnpm interaction is
+# understood or fixed upstream.
+enableGlobalVirtualStore: false
+
+# pnpm v11 blocks all build scripts by default (security-by-default);
+# allowBuilds is the v11 replacement for the removed onlyBuiltDependencies /
+# neverBuiltDependencies / ignoredBuiltDependencies keys (see
+# https://pnpm.io/settings#allowbuilds). Esbuild's postinstall (install.js)
+# is load-bearing: on a cold store it resolves the platform-specific
+# @esbuild/<platform> optionalDependency and hardlinks its native binary into
+# bin/esbuild — without that, esbuild falls back to spawning the binary via a
+# slower JS wrapper. pnpm already ignored build scripts for the deps below
+# under pnpm 10 (verified: same "Ignored build scripts" warning appears on a
+# clean pnpm 10 install), so only esbuild is allowed here — this preserves
+# existing behavior rather than newly enabling native builds pnpm was already
+# skipping.
+allowBuilds:
+  '@swc/core': false
+  canvas: false
+  esbuild: true
+  lefthook: false
+  libxmljs2: false
+  msw: false
+  sharp: false
+  workerd: false
