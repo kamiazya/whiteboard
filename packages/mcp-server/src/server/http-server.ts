@@ -16,6 +16,7 @@ import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
+import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { validationErrorBody } from './validators.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
@@ -132,6 +133,13 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     await options.onClose?.()
   }
 
+  // Shared with the raw `upgrade` handler below (ADR-0005): a ticket minted
+  // by the POST /api/ws-ticket route mounted inside `app` must be redeemable
+  // by the WS upgrade that follows it, which happens outside Hono entirely.
+  // Two separate store instances would mean every minted ticket 401s at
+  // upgrade — the route and the upgrade path have to agree on which store.
+  const wsTicketStore = createWsTicketStore()
+
   const app = createApp({
     authMode: 'local-daemon',
     token: options.token,
@@ -142,6 +150,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     shutdown: close,
     allowedWebOrigins: options.allowedWebOrigins,
     oauthClientRegistry: options.oauthClientRegistry,
+    wsTicketStore,
   })
 
   setRuntimeTouchFn(touch)
@@ -170,7 +179,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       socket.destroy()
       return
     }
-    const decision = authorizeWsUpgrade(req.headers, options.token, options.allowedWebOrigins)
+    const decision = authorizeWsUpgrade(
+      req.headers,
+      options.token,
+      options.allowedWebOrigins,
+      wsTicketStore.redeemTicket,
+    )
     if (!decision.accept) {
       const statusCode = decision.statusCode ?? 401
       const statusText = statusCode === 403 ? 'Forbidden' : 'Unauthorized'

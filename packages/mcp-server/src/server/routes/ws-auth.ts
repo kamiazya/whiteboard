@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from 'node:http'
 import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
+  TICKET_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '../../shared/ws-protocol.js'
 import { ALL_AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'
@@ -68,10 +69,21 @@ export interface WsUpgradeDecision {
   scopes?: readonly AuthScope[]
 }
 
+// Redeems a connection ticket minted by POST /api/ws-ticket (ADR-0005),
+// returning the grant's own scopes on success. Injected rather than imported
+// directly so this module stays agnostic of the concrete ws-ticket-store
+// instance — the caller (http-server.ts) owns the one store shared with the
+// route handler that mints tickets.
+export type RedeemTicketFn = (ticket: string) => {
+  scopes: readonly AuthScope[]
+  clientId: string
+} | null
+
 export function authorizeWsUpgrade(
   headers: IncomingHttpHeaders,
   token?: string,
   allowedOrigins: readonly string[] = [],
+  redeemTicket?: RedeemTicketFn,
 ): WsUpgradeDecision {
   if (!isAllowedBrowserOrigin(headers.origin, headers.host, allowedOrigins)) {
     return { accept: false, statusCode: 403 }
@@ -79,6 +91,26 @@ export function authorizeWsUpgrade(
 
   const protocols = parseProtocolHeader(headers['sec-websocket-protocol'])
   const offeredBaseProtocol = protocols.includes(WHITEBOARD_WS_PROTOCOL)
+
+  // Checked ahead of the daemon-token branch: a ticket is a narrower,
+  // single-use credential distinct from the shared daemon token, and an
+  // offered ticket protocol entry must be redeemed (or rejected) on its own
+  // terms even when a daemon token is also configured for this daemon.
+  const offeredTicketProtocol = protocols.find((protocol) =>
+    protocol.startsWith(TICKET_WS_PROTOCOL_PREFIX),
+  )
+  if (offeredTicketProtocol !== undefined) {
+    const rawTicket = offeredTicketProtocol.slice(TICKET_WS_PROTOCOL_PREFIX.length)
+    const redeemed = redeemTicket?.(rawTicket) ?? null
+    if (!offeredBaseProtocol || redeemed === null) {
+      return { accept: false, statusCode: 401 }
+    }
+    // Never ALL_AUTH_SCOPES here: a ticket carries exactly the scopes its
+    // originating OAuth grant held, which is the whole point of bridging
+    // through a ticket rather than reusing the daemon-token's full-authority
+    // path.
+    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: redeemed.scopes }
+  }
 
   if (!token) {
     return {
