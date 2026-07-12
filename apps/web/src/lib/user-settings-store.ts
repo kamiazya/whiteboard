@@ -42,7 +42,23 @@ const storageSettingsSchema = z
   .object({
     preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
     lastBrowserLocalCanvasId: z.string().optional(),
-    localDaemonBaseUrl: z.string().optional(),
+    // Constrained to http/https because this value is rendered into an `href`
+    // (the "Open the local app" escape hatch). Anything that can write
+    // localStorage — a same-origin script, a browser extension — could
+    // otherwise store `javascript:…` here and turn a link click into script
+    // execution. Rejecting it at the schema protects every consumer, not just
+    // the one that renders it today.
+    localDaemonBaseUrl: z
+      .string()
+      .refine((value) => {
+        try {
+          const { protocol } = new URL(value)
+          return protocol === 'http:' || protocol === 'https:'
+        } catch {
+          return false
+        }
+      }, 'must be an http(s) URL')
+      .optional(),
     // The (workspaceId, slug) last reached via a #wb= pairing, alongside
     // localDaemonBaseUrl above — together they let a later hosted-app load
     // offer a one-click reconnect to the same daemon and canvas instead of

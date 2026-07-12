@@ -12,8 +12,14 @@ import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 // Shown only once a probe PROVES the browser blocked the request (tier
 // 'tier2-blocked') — never on a merely inconclusive failure. Honesty
 // discipline: an unproven guess is worse than no notice at all.
+//
+// This is deliberately not a dead end: the daemon serves the same app at
+// its own origin, and a top-level navigation there is a normal link click,
+// not a fetch — it is not subject to the mixed-content/private-network
+// gate that produced this notice in the first place. The "Open the local
+// app" link below is the escape hatch.
 export const UNSUPPORTED_BROWSER_NOTICE =
-  'Your browser cannot connect to a local daemon; canvases stay in this browser.'
+  'This browser blocks the hosted app from reaching a local daemon over the network, so canvases stay saved in this browser only.'
 
 // Docs are not served from apps/web (no /docs route), so the banner links to
 // the source-of-truth GitHub blob rather than fabricating a local route.
@@ -167,7 +173,15 @@ export function DaemonDetectedBanner({
   return (
     <>
       {showUnsupportedNotice && (
-        <span className="text-xs text-muted-foreground">{UNSUPPORTED_BROWSER_NOTICE}</span>
+        // One flex item, not two: the parent lays its children out with a gap,
+        // so a sibling anchor would read as a detached chip and could wrap onto
+        // its own line, away from the sentence that explains it.
+        <span className="text-xs text-muted-foreground">
+          {UNSUPPORTED_BROWSER_NOTICE}{' '}
+          <a href={openLocalAppUrl} className="font-medium underline">
+            Open the local app
+          </a>
+        </span>
       )}
       {showManualAffordance && (
         <button
