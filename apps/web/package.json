@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/copy-into-mcp-dist.mjs",
     "preview": "vite preview",
     "test": "vitest run && vitest run --config vitest.node.config.ts",
     "test:browser": "vitest run --config vitest.browser.config.ts",
