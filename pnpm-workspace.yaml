@@ -67,14 +67,28 @@ overrides:
 # global virtual store lets every worktree's node_modules symlink into one
 # on-disk store instead of duplicating it. Requires pnpm >= 11.
 #
-# Currently left OFF: enabling it makes `apps/web` node_modules resolve
-# through a much deeper external symlink chain (into
+# Currently left OFF: enabling it makes apps/web/node_modules/@excalidraw/excalidraw
+# resolve through a much deeper external symlink chain (into
 # ~/Library/pnpm/store/v11/links/...), and TypeScript's "bundler"
 # moduleResolution then reports a spurious structural mismatch for
 # useCanvasSync.ts's Excalidraw AppState mapped type (TS2740), even though
-# the underlying package files are byte-identical and not duplicated
-# (verified: single physical instance of every package involved). The same
-# tsc run passes cleanly with this flag off, and also passes with
+# the underlying package files are byte-identical and not duplicated.
+#
+# Re-verified 2026-07-12 on pnpm 11.12.0 (this repo's pinned version, which
+# already ships the pnpm/pnpm#9739 fix for stale hoisted-symlink residue
+# from a prior non-GVS install): a fully clean install — every node_modules
+# in the worktree removed, then `pnpm install --force` from scratch with
+# this flag on from the start — still reproduces TS2740. So the failure is
+# not #9739 residue; it is a distinct symlink-depth interaction between
+# TypeScript's mapped-type structural check and pnpm's GVS link chain.
+#
+# `publicHoistPattern` does not help: @excalidraw/excalidraw is a *direct*
+# dependency of apps/web, already at the top of its node_modules, so the
+# hoisting setting (which only relocates transitive deps) has no effect on
+# it — confirmed by identical `readlink` output and identical TS2740 before
+# and after adding the pattern.
+#
+# The same tsc run passes cleanly with this flag off, and also passes with
 # moduleResolution switched to node16 (an unrelated wider change, not
 # adopted here). Re-enable once this TypeScript/pnpm interaction is
 # understood or fixed upstream.
