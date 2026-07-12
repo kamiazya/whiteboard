@@ -3,6 +3,7 @@ import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '../../shared/ws-protocol.js'
+import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import { authorizeWsUpgrade } from './ws-auth.js'
 
 // authorizeWsUpgrade is the gate between an inbound WS upgrade and the
@@ -30,12 +31,35 @@ describe('authorizeWsUpgrade', () => {
     expect(decision.accept).toBe(true)
   })
 
+  it('an accepted upgrade always carries a `scopes` grant for downstream per-message enforcement', () => {
+    // Today's only WS credential is the single shared daemon token, which —
+    // matching createLocalTokenAuthStrategy's documented single-tenant
+    // concession — grants every scope. This pins that the grant is present
+    // and explicit, not an implicit "everything is allowed" left for
+    // routes/ws.ts to assume.
+    const decision = authorizeWsUpgrade({ host: 'localhost:3099' }, 'secret-token', [])
+    expect(decision.accept).toBe(false) // no protocol/token offered
+    const acceptedDecision = authorizeWsUpgrade(
+      {
+        host: 'localhost:3099',
+        'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret-token`,
+      },
+      'secret-token',
+    )
+    expect(acceptedDecision.accept).toBe(true)
+    expect(acceptedDecision.scopes).toEqual(ALL_AUTH_SCOPES)
+  })
+
   it('reports the negotiated subprotocol when the client offers it', () => {
     const decision = authorizeWsUpgrade({
       host: 'localhost:3099',
       'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
     })
-    expect(decision).toEqual({ accept: true, protocol: WHITEBOARD_WS_PROTOCOL })
+    expect(decision).toEqual({
+      accept: true,
+      protocol: WHITEBOARD_WS_PROTOCOL,
+      scopes: ALL_AUTH_SCOPES,
+    })
   })
 
   it('rejects with 401 when token auth is enabled and the protocol header is missing the matching token', () => {
@@ -57,7 +81,11 @@ describe('authorizeWsUpgrade', () => {
       },
       'secret',
     )
-    expect(decision).toEqual({ accept: true, protocol: WHITEBOARD_WS_PROTOCOL })
+    expect(decision).toEqual({
+      accept: true,
+      protocol: WHITEBOARD_WS_PROTOCOL,
+      scopes: ALL_AUTH_SCOPES,
+    })
   })
 
   it('rejects with 403 for a non-loopback Origin even with a valid token (Origin check precedes token check)', () => {

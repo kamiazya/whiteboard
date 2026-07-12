@@ -1,18 +1,21 @@
-import type { WebSocket, RawData } from 'ws'
 import type { IncomingMessage } from 'node:http'
 import { SpanKind } from '@opentelemetry/api'
 import type { LoroDoc } from 'loro-crdt'
+import type { RawData, WebSocket } from 'ws'
 import type { ServerTextMessage } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
 import { extractContextFromHeaders, getTracer } from '../observability/tracing.js'
-import { getDoc } from '../store/doc-cache.js'
+import { ALL_AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'
+import {
+  hasRequiredScopes,
+  requiredScopesForClientTextMessage,
+  WS_BINARY_UPDATE_REQUIRED_SCOPES,
+} from '../security/ws-scope-registry.js'
 import { saveCanvas } from '../store/canvas-store.js'
+import { getDoc } from '../store/doc-cache.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { setBroadcastFn } from './canvas.js'
-import {
-  parseWsClientTextMessage,
-  parseWsTargetFromRequestUrl,
-} from './ws-validation.js'
+import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
 
 // Connection registry: key = "workspaceId/slug", value = Set<WebSocket>
 const connections = new Map<string, Set<WebSocket>>()
@@ -39,11 +42,7 @@ function omitUndefined<T extends object>(o: T): Partial<T> {
   return out
 }
 
-function forEachClient(
-  workspaceId: string,
-  slug: string,
-  fn: (ws: WebSocket) => void,
-): void {
+function forEachClient(workspaceId: string, slug: string, fn: (ws: WebSocket) => void): void {
   const clients = connections.get(`${workspaceId}/${slug}`)
   if (!clients) return
   for (const ws of clients) fn(ws)
@@ -54,21 +53,13 @@ function forEachClient(
 // the request is already replayed when the client emits `client_ready`,
 // so broadcasting to non-ready sockets would just deliver the message
 // twice.
-function forEachReadyClient(
-  workspaceId: string,
-  slug: string,
-  fn: (ws: WebSocket) => void,
-): void {
+function forEachReadyClient(workspaceId: string, slug: string, fn: (ws: WebSocket) => void): void {
   const ready = readyConnections.get(`${workspaceId}/${slug}`)
   if (!ready) return
   for (const ws of ready) fn(ws)
 }
 
-function broadcastTextMessage(
-  workspaceId: string,
-  slug: string,
-  message: ServerTextMessage,
-): void {
+function broadcastTextMessage(workspaceId: string, slug: string, message: ServerTextMessage): void {
   const raw = JSON.stringify(message)
   forEachClient(workspaceId, slug, (ws) => ws.send(raw))
 }
@@ -106,11 +97,7 @@ export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
   autoVersionTrigger = fn
 }
 
-export function sendVersionCreated(
-  workspaceId: string,
-  slug: string,
-  version: VersionEntry,
-): void {
+export function sendVersionCreated(workspaceId: string, slug: string, version: VersionEntry): void {
   broadcastTextMessage(workspaceId, slug, { type: 'version_created', version })
 }
 
@@ -198,8 +185,14 @@ export function getReadyClientCount(workspaceId: string, slug: string): number {
 }
 
 export function getConnectionStats(): { connectedClients: number; readyClients: number } {
-  const connectedClients = Array.from(connections.values()).reduce((sum, clients) => sum + clients.size, 0)
-  const readyClients = Array.from(readyConnections.values()).reduce((sum, clients) => sum + clients.size, 0)
+  const connectedClients = Array.from(connections.values()).reduce(
+    (sum, clients) => sum + clients.size,
+    0,
+  )
+  const readyClients = Array.from(readyConnections.values()).reduce(
+    (sum, clients) => sum + clients.size,
+    0,
+  )
   return { connectedClients, readyClients }
 }
 
@@ -207,7 +200,17 @@ export function getConnectionStats(): { connectedClients: number; readyClients: 
 // URL pattern: /ws/:workspaceId/:slug
 // slug arrives URL-encoded because hierarchical paths may include "/".
 // Example: /ws/abc/621%2Fheader -> workspaceId="abc", slug="621/header"
-export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Promise<void> {
+//
+// `scopes` is the grant the upgrade authorized (see `authorizeWsUpgrade`).
+// Defaults to the full grant set so every existing call site — which
+// predates per-message scope enforcement — keeps its current behavior
+// unchanged; callers that hold a narrower credential pass their real grant
+// explicitly.
+export async function handleWsUpgrade(
+  req: IncomingMessage,
+  ws: WebSocket,
+  scopes: readonly AuthScope[] = ALL_AUTH_SCOPES,
+): Promise<void> {
   let workspaceId = ''
   let slug = ''
   try {
@@ -245,6 +248,13 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
       const text = Buffer.isBuffer(data) ? data.toString() : String(data)
       const msg = parseWsClientTextMessage(text)
       if (msg === null) return
+      if (!hasRequiredScopes(scopes, requiredScopesForClientTextMessage(msg.type))) {
+        getLogger('ws').warning(
+          { workspaceId, slug, messageType: msg.type },
+          'ws message rejected: insufficient scope',
+        )
+        return
+      }
       if (msg.type === 'client_ready') {
         if (!readyConnections.has(key)) {
           readyConnections.set(key, new Set())
@@ -277,7 +287,18 @@ export async function handleWsUpgrade(req: IncomingMessage, ws: WebSocket): Prom
       return
     }
 
-    // binary frame = Loro update
+    // binary frame = Loro update = a canvas mutation. Enforced here, not just
+    // at upgrade: a socket authorized with only canvas:read must not be able
+    // to import, persist, or broadcast a CRDT update just because it already
+    // completed the handshake.
+    if (!hasRequiredScopes(scopes, WS_BINARY_UPDATE_REQUIRED_SCOPES)) {
+      getLogger('ws').warning(
+        { workspaceId, slug },
+        'ws binary update rejected: insufficient scope',
+      )
+      return
+    }
+
     const bytes = Buffer.isBuffer(data)
       ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
       : data instanceof ArrayBuffer
