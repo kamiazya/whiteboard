@@ -109,12 +109,12 @@ describe('ErrorBoundary', () => {
     seamSpy.mockRestore()
   })
 
-  // The seam is routed through app-logger (see ErrorBoundary.tsx), so a caught
-  // render crash is only visible in dev builds. These two tests lock in that
-  // deliberate choice: dev builds must still surface the crash, and prod
-  // builds must not leak console noise, rather than either regressing
-  // silently the next time app-logger's dev/prod gate changes.
-  describe('app-logger dev/prod gate', () => {
+  // The seam is routed through app-logger's `reportCrash` channel (see
+  // ErrorBoundary.tsx), which is deliberately NOT gated by the dev/prod
+  // no-op that every other app-logger level uses. These tests lock in that
+  // a caught render crash is surfaced in BOTH dev and prod builds, rather
+  // than regressing silently the next time app-logger's channels change.
+  describe('app-logger crash-report gate', () => {
     afterEach(() => {
       vi.unstubAllGlobals()
     })
@@ -133,7 +133,7 @@ describe('ErrorBoundary', () => {
       expect(call?.[0]).toContain('[error-boundary]')
     })
 
-    it('stays silent in a prod build (app-logger no-ops there)', () => {
+    it('still reports the caught error in a prod build (reportCrash survives production on purpose)', () => {
       vi.stubGlobal('import.meta', { env: { DEV: false } })
       const spy = vi.fn()
       console.error = spy
@@ -142,11 +142,13 @@ describe('ErrorBoundary', () => {
           <Bomb trigger />
         </ErrorBoundary>,
       )
-      // React's own error-boundary dev warning also calls console.error and
-      // is outside this seam's control — only assert that OUR seam (tagged
-      // '[error-boundary]') stayed silent.
-      const ownCall = spy.mock.calls.find((c) => String(c[0]).includes('[error-boundary]'))
-      expect(ownCall).toBeUndefined()
+      const call = spy.mock.calls.find((c) => String(c[0]).includes('ErrorBoundary caught:'))
+      expect(call).toBeTruthy()
+      expect(call?.[0]).toContain('[error-boundary]')
+      const context = call?.[1] as { error: Error; componentStack?: string | null }
+      expect(context.error).toBeInstanceOf(Error)
+      expect(context.error.message).toBe('boom')
+      expect(context.componentStack).toBeTruthy()
     })
   })
 })

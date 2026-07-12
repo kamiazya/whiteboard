@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { getAppLogger } from './app-logger.js'
+import { getAppLogger, reportCrash } from './app-logger.js'
 
 describe('getAppLogger', () => {
   afterEach(() => {
@@ -119,6 +119,41 @@ describe('getAppLogger', () => {
       const loggerA = getAppLogger('a')
       const loggerB = getAppLogger('b')
       expect(loggerA).not.toBe(loggerB)
+    })
+  })
+
+  // reportCrash is the one app-logger channel that is NOT gated by
+  // dev/prod: it exists so ErrorBoundary can still surface a crash report
+  // after a real production build. These tests pin the contrast against the
+  // ordinary levels, which stay silent in prod by design (see the PROD path
+  // suite above).
+  describe('reportCrash (production-visible crash channel)', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+      vi.restoreAllMocks()
+    })
+
+    it('emits in a dev build', () => {
+      vi.stubGlobal('import.meta', { env: { DEV: true } })
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      reportCrash('crash-name', 'boom happened', { detail: 'x' })
+      expect(spy).toHaveBeenCalledTimes(1)
+      expect(spy.mock.calls[0][0]).toContain('[crash-name]')
+      expect(spy.mock.calls[0][0]).toContain('boom happened')
+      expect(spy.mock.calls[0][1]).toEqual({ detail: 'x' })
+    })
+
+    it('still emits in a prod build, unlike every other AppLogger level', () => {
+      vi.stubGlobal('import.meta', { env: { DEV: false } })
+      const crashSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      reportCrash('crash-name', 'boom happened', { detail: 'x' })
+      expect(crashSpy).toHaveBeenCalledTimes(1)
+      expect(crashSpy.mock.calls[0][0]).toContain('[crash-name]')
+
+      crashSpy.mockClear()
+      const logger = getAppLogger('ordinary-diagnostic')
+      logger.error('routine diagnostic, e.g. a debounced scene-sync retry')
+      expect(crashSpy).toHaveBeenCalledTimes(0)
     })
   })
 })
