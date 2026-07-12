@@ -56,33 +56,51 @@ overrides:
 # worktree (~1GB each), which has caused real disk exhaustion. A shared
 # global virtual store lets every worktree's node_modules symlink into one
 # on-disk store instead of duplicating it. Requires pnpm >= 11.
+enableGlobalVirtualStore: true
+
+# GVS gives every global-store package its own node_modules/ containing only
+# that package's *declared* dependencies (lockfileToDepGraph.ts). In standard
+# mode, .pnpm/<depPath>/node_modules/ is instead a merged view that also
+# includes the consumer's devDependencies as siblings — so a package that
+# references a type or a runtime module without declaring it as a real
+# dependency still resolves one under standard mode, but not under GVS.
+# These two entries patch packages in the @excalidraw/excalidraw dependency
+# chain that hit exactly that gap:
 #
-# Currently left OFF: enabling it makes apps/web/node_modules/@excalidraw/excalidraw
-# resolve through a much deeper external symlink chain (into
-# ~/Library/pnpm/store/v11/links/...), and TypeScript's "bundler"
-# moduleResolution then reports a spurious structural mismatch for
-# useCanvasSync.ts's Excalidraw AppState mapped type (TS2740), even though
-# the underlying package files are byte-identical and not duplicated.
+# - @excalidraw/excalidraw's own AppState/MutableAppState mapped types
+#   reference React's types without declaring @types/react. Under GVS,
+#   TypeScript resolves a *different* React type identity through
+#   @excalidraw/excalidraw than the one apps/web uses directly, and the two
+#   AppState shapes stop being structurally assignable (TS2740).
+# - tunnel-rat (a transitive dep of @excalidraw/excalidraw) only lists
+#   react/react-dom under devDependencies, not dependencies or
+#   peerDependencies, even though its runtime code imports "react". Under
+#   GVS the bundler (Vite/Rolldown) can no longer find react as a sibling
+#   and fails to resolve the import at build time.
 #
-# Re-verified 2026-07-12 on pnpm 11.12.0 (this repo's pinned version, which
-# already ships the pnpm/pnpm#9739 fix for stale hoisted-symlink residue
-# from a prior non-GVS install): a fully clean install — every node_modules
-# in the worktree removed, then `pnpm install --force` from scratch with
-# this flag on from the start — still reproduces TS2740. So the failure is
-# not #9739 residue; it is a distinct symlink-depth interaction between
-# TypeScript's mapped-type structural check and pnpm's GVS link chain.
+# Both entries inject the missing dependency edge so pnpm links the
+# workspace's own react / @types/react into the offending package's
+# node_modules, restoring a single shared module/type identity.
 #
-# `publicHoistPattern` does not help: @excalidraw/excalidraw is a *direct*
-# dependency of apps/web, already at the top of its node_modules, so the
-# hoisting setting (which only relocates transitive deps) has no effect on
-# it — confirmed by identical `readlink` output and identical TS2740 before
-# and after adding the pattern.
-#
-# The same tsc run passes cleanly with this flag off, and also passes with
-# moduleResolution switched to node16 (an unrelated wider change, not
-# adopted here). Re-enable once this TypeScript/pnpm interaction is
-# understood or fixed upstream.
-enableGlobalVirtualStore: false
+# @secretlint/resolver hits the same class of gap for a different reason:
+# its tryResolve() falls back to `createRequire(import.meta.url).resolve(...)`
+# scoped to @secretlint/resolver's own module location (no resolve hook is
+# registered anywhere in this call chain), so every rule package configured
+# in .secretlintrc.json (e.g. "@secretlint/secretlint-rule-pattern") must be
+# a real sibling of @secretlint/resolver itself, not merely available
+# somewhere in the workspace's devDependencies.
+packageExtensions:
+  "@excalidraw/excalidraw":
+    dependencies:
+      "@types/react": "*"
+  "tunnel-rat":
+    dependencies:
+      react: "*"
+      react-dom: "*"
+  "@secretlint/resolver":
+    dependencies:
+      "@secretlint/secretlint-rule-pattern": "*"
+      "@secretlint/secretlint-rule-preset-recommend": "*"
 
 # pnpm v11 blocks all build scripts by default (security-by-default);
 # allowBuilds is the v11 replacement for the removed onlyBuiltDependencies /
