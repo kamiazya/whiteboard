@@ -372,6 +372,17 @@ async function main() {
   if (insBefore.elementCount < 1)
     throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
 
+  // canvas_inspect must surface the frame's name, otherwise a caller can see a
+  // frame exists but not what it is called. Cross-checks the elementSummarySchema
+  // `name` field against the real create_frame({ name: 'e2e-frame' }) payload above.
+  const inspectedFrame = insBefore.elements.find((e) => e.id === frame.elementId)
+  if (!inspectedFrame || inspectedFrame.name !== 'e2e-frame') {
+    throw new Error(
+      `canvas_inspect missing/incorrect frame name: ${JSON.stringify(inspectedFrame)}`,
+    )
+  }
+  console.log(`[e2e] canvas_inspect → frame name "${inspectedFrame.name}" OK`)
+
   // version_save labels the current state and returns a versionId. The
   // restore-as-new-canvas flow (formerly the checkpoint pair) is now
   // version_restore with targetSlug.

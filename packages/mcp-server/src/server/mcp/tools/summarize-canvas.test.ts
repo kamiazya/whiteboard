@@ -124,6 +124,30 @@ describe('suite 15', () => {
   })
 })
 
+describe('suite 17', () => {
+  it('includes the frame name so a caller can identify a frame without re-deriving it from geometry', () => {
+    const doc = new LoroDoc()
+    appendElement(doc, {
+      id: 'frame-1',
+      type: 'frame',
+      x: 0,
+      y: 0,
+      width: 400,
+      height: 300,
+      name: 'WAVE 0 Onboarding',
+    })
+    const summary = summarizeCanvas(doc)
+    expect(summary.elements[0]!.name).toBe('WAVE 0 Onboarding')
+  })
+
+  it('omits name for element types that never set it', () => {
+    const doc = new LoroDoc()
+    appendElement(doc, { id: 'rect-1', type: 'rectangle', x: 0, y: 0, width: 10, height: 10 })
+    const summary = summarizeCanvas(doc)
+    expect(summary.elements[0]!.name).toBeUndefined()
+  })
+})
+
 describe('suite 16', () => {
   const LIMIT = 80
 
