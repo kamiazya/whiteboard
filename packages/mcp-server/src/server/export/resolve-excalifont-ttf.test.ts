@@ -4,7 +4,7 @@
 // as a test failure in the PNG-only headless-renderer.test.ts above it. This
 // test asserts the real dist/web-app layout resolves to a non-null buffer.
 
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -16,21 +16,15 @@ const PACKAGE_ROOT = resolve(__dirname, '../../..')
 const DIST_WEB_APP_DIR = join(PACKAGE_ROOT, 'dist', 'web-app')
 const DIST_WEB_APP_FONTS_DIR = join(DIST_WEB_APP_DIR, 'fonts', 'Excalifont')
 
+// Resolve through Node's own module resolution rather than reading pnpm's
+// .pnpm layout: that layout is an implementation detail that changes across
+// pnpm versions and does not exist at all under a hoisted linker or another
+// package manager.
 function findUpstreamExcalifontDir(): string {
-  const pnpmDir = resolve(PACKAGE_ROOT, '../../node_modules/.pnpm')
-  const excalidrawDirName = readdirSync(pnpmDir).find((name) =>
-    name.startsWith('@excalidraw+excalidraw@'),
-  )
-  if (!excalidrawDirName) {
-    throw new Error(
-      'could not locate an installed @excalidraw/excalidraw package under node_modules/.pnpm',
-    )
-  }
-  return resolve(
-    pnpmDir,
-    excalidrawDirName,
-    'node_modules/@excalidraw/excalidraw/dist/prod/fonts/Excalifont',
-  )
+  // The package's own entry (dist/prod/index.js) ships its fonts alongside it;
+  // ./package.json is not in the package's `exports`, so resolve the entry.
+  const entryPath = fileURLToPath(import.meta.resolve('@excalidraw/excalidraw'))
+  return resolve(dirname(entryPath), 'fonts/Excalifont')
 }
 
 describe('resolveExcalifontTtf against the real dist/web-app layout', () => {
