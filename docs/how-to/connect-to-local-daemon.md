@@ -11,6 +11,34 @@ underlying MCP tools your AI agent calls (`create_branch`, `merge`, and so
 on) intentionally keep their git-derived names — the UI vocabulary is a
 presentation-layer choice and does not change the tool contract.
 
+## Opening the daemon's own UI directly
+
+The local daemon serves the canonical `apps/web` build at its own origin —
+open `http://127.0.0.1:<port>/` (default port `3099`) in a browser and it
+renders the same canvas gallery and editor as a standalone `apps/web` deploy,
+already same-origin with the daemon's `/api/*`, `/mcp`, and WebSocket routes.
+No pairing link or Local Network Access prompt is needed for this path.
+
+- **No service worker on this origin.** The daemon injects a per-request
+  `__WHITEBOARD_RUNTIME_CONFIG__` and `__WHITEBOARD_DAEMON_TOKEN__` into every
+  response; a Workbox-precached shell would pin a stale token across daemon
+  restarts, so the daemon-served build ships without the offline service
+  worker that a standalone `apps/web` deploy installs.
+- **Loopback-only live sync.** The injected daemon base URL for the
+  WebSocket connection is always `http://127.0.0.1:<port>` — a fixed loopback
+  address, not whatever host or IP the browser used to reach the page. If you
+  bind the daemon beyond loopback (for example `--host 0.0.0.0`) and open its
+  UI from another device on the LAN, the page loads but its live-sync
+  WebSocket still tries to reach `127.0.0.1` on *that device*, which is not
+  the daemon — sync silently fails. This same-origin UI is intended for
+  local, same-machine use; reach a daemon from another device through the
+  pairing flow below instead.
+- **`WHITEBOARD_LEGACY_UI=1`** opts the daemon back into the retired
+  `packages/mcp-server/src/app` UI instead, for the remaining window before
+  that UI is removed (see [ADR-0001](../contributing/adr/0001-apps-web-canonical-frontend.md)
+  and [Configuration](../reference/configuration.md)). It stays available
+  only until that migration completes.
+
 ## How detection works
 
 The web app probes `GET /api/runtime/ping` on the daemon's default loopback
