@@ -71,7 +71,7 @@ function makeInternalStatus(): RuntimeStatusResponse {
     idleForMs: 0,
     auth: { mode: 'local-token', hasToken: true },
     storage: { dataDir: '/Users/internal/data-dir', dataDirWritable: true },
-    app: { served: true, buildPresent: false },
+    app: { served: true, buildPresent: false, ui: 'legacy' },
     mcp: { httpEnabled: true, endpoint: 'http://0.0.0.0:3099/mcp' },
     clients: { connected: 0, ready: 0 },
   }

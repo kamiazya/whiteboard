@@ -62,7 +62,7 @@ function createRuntimeOptions(
       idleForMs: 10,
       auth: { mode: 'local-token', hasToken: Boolean(token) },
       storage: { dataDir: '/tmp', dataDirWritable: true },
-      app: { served: true, buildPresent: false },
+      app: { served: true, buildPresent: false, ui: 'web-app' },
       mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
       clients: { connected: 0, ready: 0 },
     }),

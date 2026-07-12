@@ -87,6 +87,9 @@ export async function startServerModeHttp(
       app: {
         served: false,
         buildPresent: existsSync(join(DIST_APP_DIR, 'index.html')),
+        // Server-mode's UI root is pinned to the legacy dist/app build until
+        // R5 of the MCP-UI retirement (ADR 0001); it never serves dist/web-app.
+        ui: 'legacy',
       },
       mcp: { httpEnabled: true, endpoint: `${baseUrl}/mcp` },
       clients: { connected: 0, ready: 0 },
