@@ -1,7 +1,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
+import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
@@ -11,9 +13,18 @@ import type { LoroStoreLike } from './use-browser-local-canvas-controller.js'
 // which jsdom does not implement. A fake keeps these page-level tests scoped
 // to the switcher/create UI wiring, matching the controller test's own fake.
 class FakeLoroStore implements LoroStoreLike {
-  async save(): Promise<void> {}
+  private byId = new Map<string, Uint8Array>()
+
+  async save(id: string, bytes: Uint8Array): Promise<void> {
+    this.byId.set(id, bytes)
+  }
   createEmptySnapshot(): Uint8Array {
     return new Uint8Array([1, 2, 3])
+  }
+  async load(id: string): Promise<LoroLoadResult> {
+    const bytes = this.byId.get(id)
+    if (bytes === undefined) return { kind: 'not-found' }
+    return { kind: 'ok', snapshot: bytes }
   }
 }
 
@@ -213,6 +224,27 @@ describe('BrowserLocalCanvasPage', () => {
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.queryByRole('alertdialog')).toBeNull()
     expect(screen.getByRole('main')).toBeTruthy()
+  })
+
+  it('duplicates the canvas and switches to the copy when Duplicate is clicked', async () => {
+    vi.useRealTimers()
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+    const loro = new FakeLoroStore()
+    const seed = new Loro()
+    seed.getList('elements').push({ id: 'rect-1' })
+    await loro.save('c1', seed.export({ mode: 'snapshot' }))
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} loro={loro} />)
+    })
+    const duplicateBtn = screen.getByRole('button', { name: /duplicate/i })
+    await act(async () => {
+      duplicateBtn.click()
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled (copy)')
+    })
   })
 
   it('renders a human-readable save status instead of the raw state enum', async () => {

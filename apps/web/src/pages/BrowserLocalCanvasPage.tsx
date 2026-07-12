@@ -91,6 +91,7 @@ export function BrowserLocalCanvasPage({
     listCanvases,
     createCanvas,
     switchCanvas,
+    duplicateCanvas,
   } = useBrowserLocalCanvasController(store, loro)
 
   // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
@@ -262,6 +263,14 @@ export function BrowserLocalCanvasPage({
           Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
           combining changes
         </span>
+        <button
+          type="button"
+          aria-label="Duplicate canvas"
+          onClick={() => void duplicateCanvas()}
+          className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent"
+        >
+          Duplicate
+        </button>
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <button
