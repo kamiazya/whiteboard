@@ -18,7 +18,6 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/dist/app',
 }))
 
 const {
@@ -64,7 +63,6 @@ test.aroundEach(async (runTest, { store }) => {
 })
 
 describe('user-library-metadata-store', () => {
-
   test('keeps the .meta.json suffix constant for back-compat', () => {
     expect(USER_LIBRARY_METADATA_FILENAME_SUFFIX).toBe('.meta.json')
   })
@@ -139,7 +137,9 @@ describe('user-library-metadata-store', () => {
     })
   })
 
-  test('treats a manifestJson row that fails schema validation as corruption', async ({ store }) => {
+  test('treats a manifestJson row that fails schema validation as corruption', async ({
+    store,
+  }) => {
     const { getDb } = await import('./db/index.js')
     const { prepareDataDir } = await import('./db/prepare.js')
     await prepareDataDir(store.tempDir)

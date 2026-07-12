@@ -118,10 +118,10 @@ If behavior diverges, fall back to renaming `.mcp.json` to `.mcp.json.published`
 
 ## When MCP server restart is required
 
-`WHITEBOARD_ROOT` and `DIST_APP_DIR` in `packages/mcp-server/src/server/config.ts` resolve once at startup, relative to `import.meta.url`. After any of the following, restart the Claude Code session or run `/mcp reconnect`:
+`WHITEBOARD_ROOT` and `DIST_WEB_APP_DIR` in `packages/mcp-server/src/server/config.ts` resolve once at startup, relative to `import.meta.url`. After any of the following, restart the Claude Code session or run `/mcp reconnect`:
 
 - Moving the source tree to a different path (e.g. into a different monorepo)
-- Changing the `dist/app` build location
+- Changing the `dist/web-app` build location
 - Editing `config.ts` itself
 
 This does not affect normal published usage through `npx -y @kamiazya/whiteboard-mcp@latest`, because each launch is a fresh spawn.
@@ -131,7 +131,7 @@ This does not affect normal published usage through `npx -y @kamiazya/whiteboard
 ```bash
 pnpm dev             # Vite + MCP server together
 pnpm mcp             # MCP server only (tsx)
-pnpm build           # dist/server + dist/app
+pnpm build           # dist/server (apps/web build copies dist/web-app in via its postbuild step)
 pnpm test            # Vitest (all projects)
 pnpm typecheck       # tsc --noEmit
 pnpm smoke           # MCP smoke

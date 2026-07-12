@@ -10,9 +10,9 @@ export { DATA_DIR, resolveDataDir, WHITEBOARD_ROOT }
 // The compiled web-asset directory is a server-only concept (static-file
 // middleware). It must not live in the shared layer, which daemon and CLI
 // files also import.
-export const DIST_APP_DIR = resolve(WHITEBOARD_ROOT, 'dist/app')
-
+//
 // The apps/web production build, copied here by its postbuild script.
-// Served as the canonical UI in local-daemon mode (R3 of the MCP-UI
-// retirement); dist/app above stays the server-mode root until R5.
+// Served as the canonical UI in local-daemon mode (ADR 0001, R3). Server-mode
+// serves a minimal inline placeholder instead (see app.ts) — it has no
+// token/session-acquisition flow apps/web's provider model can use.
 export const DIST_WEB_APP_DIR = resolve(WHITEBOARD_ROOT, 'dist/web-app')

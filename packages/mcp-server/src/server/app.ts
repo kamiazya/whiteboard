@@ -9,7 +9,7 @@ import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { detectMergeBadges } from '../shared/merge-engine.js'
 import { reconcileElementsOnDoc } from '../shared/reconcile-elements.js'
-import { DIST_APP_DIR, DIST_WEB_APP_DIR } from './config.js'
+import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createExcalidrawMcpServer } from './mcp/index.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
@@ -115,17 +115,26 @@ function isReservedUiPath(path: string): boolean {
   )
 }
 
-// Reads index.html from the primary UI root, falling back to the legacy
-// dist/app root when the primary root has not been built (e.g. mcp-server
-// built standalone without apps/web). Throws only when neither exists.
-async function readIndexHtmlLayered(primaryDir: string, fallbackDir: string): Promise<string> {
-  try {
-    return await readFile(join(primaryDir, 'index.html'), 'utf-8')
-  } catch (err) {
-    if (primaryDir === fallbackDir) throw err
-    return await readFile(join(fallbackDir, 'index.html'), 'utf-8')
-  }
-}
+// Minimal, honest placeholder served at server-mode's root. Server-mode has
+// its own OAuth/JWT auth (see AsyncAuthStrategy) and no local-daemon bearer
+// token; apps/web's provider model only knows browser-local and
+// local-daemon-token auth, so injecting it here without a real token would
+// serve a UI whose every request 401s. Point operators at the API/MCP
+// surface instead until apps/web grows a server-mode-aware auth flow.
+const SERVER_MODE_PLACEHOLDER_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Whiteboard (server mode)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+<h1>Whiteboard server</h1>
+<p>This daemon is running in server mode, which does not serve the browser UI.</p>
+<p>Use the HTTP API under <code>/api</code> or connect an MCP client to <code>/mcp</code>.</p>
+</body>
+</html>
+`
 
 function extractInitializeDebugPayload(parsedBody: unknown) {
   if (!isJsonObject(parsedBody) || parsedBody.method !== 'initialize') {
@@ -900,21 +909,20 @@ export function createApp(options: AppOptions) {
     )
   }
 
-  // Server-mode keeps serving the legacy dist/app UI unchanged until R5.
-  // Local-daemon mode serves the canonical apps/web build, unless the
-  // WHITEBOARD_LEGACY_UI escape hatch opts back into the legacy UI.
-  const useLegacyUiRoot =
-    options.authMode === 'server-mode' || process.env.WHITEBOARD_LEGACY_UI === '1'
-  const uiRootDir = useLegacyUiRoot ? DIST_APP_DIR : DIST_WEB_APP_DIR
+  if (options.authMode === 'server-mode') {
+    // Server-mode serves only the static placeholder above — no build
+    // artifact, no runtime-config / token injection, no static asset roots.
+    app.get('*', (c) => {
+      if (isReservedUiPath(c.req.path)) {
+        return c.notFound()
+      }
+      return c.html(SERVER_MODE_PLACEHOLDER_HTML)
+    })
+    return app
+  }
 
-  // Legacy-UI mode serves only dist/app. Otherwise assets resolve from the
-  // apps/web build first, falling back to dist/app so a partial/older build
-  // still serves something.
-  const staticRoots = useLegacyUiRoot ? [DIST_APP_DIR] : [DIST_WEB_APP_DIR, DIST_APP_DIR]
   for (const pattern of ['/fonts/*', '/assets/*']) {
-    for (const root of staticRoots) {
-      app.use(pattern, serveStatic({ root }))
-    }
+    app.use(pattern, serveStatic({ root: DIST_WEB_APP_DIR }))
   }
 
   // Captured once here, not read from getStatus() inside the request handler
@@ -929,7 +937,7 @@ export function createApp(options: AppOptions) {
       return c.notFound()
     }
     try {
-      const html = await readIndexHtmlLayered(uiRootDir, DIST_APP_DIR)
+      const html = await readFile(join(DIST_WEB_APP_DIR, 'index.html'), 'utf-8')
       // The daemon token is deliberately NOT part of __WHITEBOARD_RUNTIME_CONFIG__
       // (see shared/token-store.ts) — it ships in its own global so it never
       // rides along inside an object that logging / error-reporting could

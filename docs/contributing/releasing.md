@@ -68,7 +68,7 @@ unpacked (`smoke:tarball`, `smoke:packaged`, the packaged-daemon/server-mode nod
 (`pnpm typecheck` + `pnpm test:mcp-node`) so an obviously broken tag never publishes.
 
 It deliberately does **not** re-run the full browser/jsdom test matrix
-(`pnpm test` = mcp-node + mcp-jsdom + mcp-browser + web-browser). That correctness is
+(`pnpm test` = mcp-node + apps/web jsdom + web-browser). That correctness is
 already proven by **verify CI (`ci.yml`) at the identical tag SHA**: a release tag always
 points at a commit that was pushed to `main`, and `ci.yml`'s `verify` job (gated on
 `test-unit`, `test-jsdom`, `test-browser`) already ran against that exact commit before a

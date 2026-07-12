@@ -101,9 +101,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test mcp-jsdom
-        run: pnpm exec vitest run --project=mcp-jsdom
-
       - name: Test web (jsdom + node)
         run: pnpm --filter @kamiazya/whiteboard-web test
 
@@ -125,13 +122,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # Run from packages/mcp-server so vitest finds only the 4 mcp
-      # projects, avoiding initialization of unrelated workspaces.
-      - name: Test mcp-browser
-        timeout-minutes: 5
-        run: pnpm exec vitest run --project=mcp-browser
-        working-directory: packages/mcp-server
 
       - name: Test web-browser
         timeout-minutes: 5

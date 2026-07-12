@@ -11,12 +11,16 @@ vi.mock('../config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
 const { loadCanvasFiles } = await import('./load-canvas-files.js')
 
-async function seedFile(workspaceId: string, fileId: string, ext: string, bytes: number): Promise<void> {
+async function seedFile(
+  workspaceId: string,
+  fileId: string,
+  ext: string,
+  bytes: number,
+): Promise<void> {
   const dir = join(tempDir, workspaceId, 'files')
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, `${fileId}${ext}`), Buffer.alloc(bytes, 0xab))
@@ -99,10 +103,7 @@ describe('loadCanvasFiles selective loading', () => {
     // short-circuit on the stat() probe before reaching the per-id loop.
     await mkdir(join(tempDir, 'ws_evil', 'files'), { recursive: true })
 
-    const out = await loadCanvasFiles(
-      'ws_evil',
-      new Set(['../../secrets/hostkey']),
-    )
+    const out = await loadCanvasFiles('ws_evil', new Set(['../../secrets/hostkey']))
     // The traversal id must be silently dropped — never returned, never
     // base64 in the response, never read from disk.
     expect(out).toEqual({})
@@ -113,10 +114,7 @@ describe('loadCanvasFiles selective loading', () => {
     await writeFile(join(tempDir, 'absolute-leak.png'), Buffer.from('SECRET'))
     await mkdir(join(tempDir, 'ws_evil', 'files'), { recursive: true })
 
-    const out = await loadCanvasFiles(
-      'ws_evil',
-      new Set([join(tempDir, 'absolute-leak')]),
-    )
+    const out = await loadCanvasFiles('ws_evil', new Set([join(tempDir, 'absolute-leak')]))
     expect(out).toEqual({})
   })
 
@@ -128,10 +126,7 @@ describe('loadCanvasFiles selective loading', () => {
     await seedFile('ws_mime', 'e', '.webp', 1)
     await seedFile('ws_mime', 'f', '.svg', 1)
 
-    const out = await loadCanvasFiles(
-      'ws_mime',
-      new Set(['a', 'b', 'c', 'd', 'e', 'f']),
-    )
+    const out = await loadCanvasFiles('ws_mime', new Set(['a', 'b', 'c', 'd', 'e', 'f']))
     expect(out['a'].mimeType).toBe('image/png')
     expect(out['b'].mimeType).toBe('image/jpeg')
     expect(out['c'].mimeType).toBe('image/jpeg')

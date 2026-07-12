@@ -99,7 +99,11 @@ function makeScopeStrategy(grantedScopes) {
       }
       return {
         ok: true,
-        context: { kind: 'oauth-resource-server', subject: 'smoke-sub', scopes: [...grantedScopes] },
+        context: {
+          kind: 'oauth-resource-server',
+          subject: 'smoke-sub',
+          scopes: [...grantedScopes],
+        },
       }
     },
   }
@@ -165,7 +169,9 @@ try {
     }
     if (!threw) fail('1a: non-HTTPS publicBaseUrl must throw')
     if (!threw.message.includes('invalid server-mode config')) {
-      fail('1a: throw message must contain "invalid server-mode config"', { message: threw.message })
+      fail('1a: throw message must contain "invalid server-mode config"', {
+        message: threw.message,
+      })
     }
     assertNoLeak('1a error message', threw.message)
   }
@@ -186,7 +192,9 @@ try {
     }
     if (!threw) fail('1b: wildcard allowedOrigins must throw')
     if (!threw.message.includes('invalid server-mode config')) {
-      fail('1b: throw message must contain "invalid server-mode config"', { message: threw.message })
+      fail('1b: throw message must contain "invalid server-mode config"', {
+        message: threw.message,
+      })
     }
   }
   console.log('[server-mode-smoke] scenario 1 (invalid config fail-closed): PASS')
@@ -201,7 +209,9 @@ try {
     })
     if (!plan.ok) fail('2: expected valid plan for :443 URL', { plan: JSON.stringify(plan) })
     if (plan.publicBaseUrl !== 'https://example.com') {
-      fail('2: publicBaseUrl not normalized (expected https://example.com)', { got: plan.publicBaseUrl })
+      fail('2: publicBaseUrl not normalized (expected https://example.com)', {
+        got: plan.publicBaseUrl,
+      })
     }
     if (!plan.allowedOrigins.includes('https://example.com')) {
       fail('2: allowedOrigins not normalized', { got: JSON.stringify(plan.allowedOrigins) })
@@ -244,7 +254,8 @@ try {
     const plan = planServerModeAuth({
       mode: 'server-mode',
       bindHost: '0.0.0.0',
-      externalUrl: 'https://canary-user:canary-pass@canary-internal.example.com/path?tok=canary-xyz',
+      externalUrl:
+        'https://canary-user:canary-pass@canary-internal.example.com/path?tok=canary-xyz',
     })
     if (plan.ok) fail('3: expected plan to reject credential URL')
     const asText = JSON.stringify(plan)
@@ -264,7 +275,8 @@ try {
     if (body.includes(dataDir)) fail('4: dataDir path leaked in status response', { body })
     // Internal port is sanitized to the public URL port (443 for https://smoke.example.com),
     // so we check the internal bind address form, not the bare port number.
-    if (body.includes('http://0.0.0.0')) fail('4: internal bind URL leaked in status response', { body })
+    if (body.includes('http://0.0.0.0'))
+      fail('4: internal bind URL leaked in status response', { body })
   }
   console.log('[server-mode-smoke] scenario 4 (runtime status sanitization): PASS')
 
@@ -277,7 +289,8 @@ try {
     const wwwa401 = res401.headers.get('WWW-Authenticate')
     const body401 = await res401.text()
     if (status401 !== 401) fail('5a: expected 401 without auth', { status: status401 })
-    if (wwwa401 !== 'Bearer') fail('5a: 401 must have WWW-Authenticate: Bearer', { header: wwwa401 })
+    if (wwwa401 !== 'Bearer')
+      fail('5a: 401 must have WWW-Authenticate: Bearer', { header: wwwa401 })
     assertNoLeak('5a 401', body401)
 
     const res403 = await req(appEmpty, 'GET', '/api/workspaces', { bearer: SMOKE_TOKEN })
@@ -382,6 +395,26 @@ try {
     }
   }
   console.log('[server-mode-smoke] scenario 6 (local-daemon unchanged): PASS')
+
+  // --- Scenario 7: server-mode root serves the static placeholder, not apps/web ---
+  // R5 of the MCP-UI retirement (ADR 0001): server-mode has no apps/web-compatible
+  // auth flow, so its root must never inject a token or runtime-config.
+  {
+    const app = makeApp([])
+    const res = await app.request('/')
+    if (res.status !== 200) fail('7: expected 200 on server-mode root', { status: res.status })
+    const body = await res.text()
+    if (body.includes('__WHITEBOARD_DAEMON_TOKEN__')) {
+      fail('7: server-mode root must not inject a daemon token')
+    }
+    if (body.includes('__WHITEBOARD_RUNTIME_CONFIG__')) {
+      fail('7: server-mode root must not inject apps/web runtime-config')
+    }
+    if (!body.includes('/mcp')) {
+      fail('7: server-mode placeholder must point operators at /mcp')
+    }
+  }
+  console.log('[server-mode-smoke] scenario 7 (root serves static placeholder): PASS')
 
   console.log('[server-mode-smoke] all scenarios passed')
 } finally {
