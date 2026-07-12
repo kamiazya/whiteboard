@@ -84,6 +84,11 @@ function matchesQuery(entry: CatalogEntry, q: string): boolean {
   return keywords.every((kw) => haystack.includes(kw))
 }
 
+export const libraryCatalogListInputShape = {
+  query: z.string().optional(),
+  limit: z.number().optional(),
+} satisfies z.ZodRawShape
+
 export function libraryCatalogListTool() {
   return {
     name: 'library_catalog_list',
@@ -103,11 +108,12 @@ export function libraryCatalogListTool() {
         },
       },
     },
-    execute: async (args: { query?: string; limit?: number }): Promise<z.infer<typeof libraryCatalogListOutputSchema>> => {
+    execute: async (args: {
+      query?: string
+      limit?: number
+    }): Promise<z.infer<typeof libraryCatalogListOutputSchema>> => {
       const entries = await loadCatalog()
-      const filtered = args.query
-        ? entries.filter((e) => matchesQuery(e, args.query!))
-        : entries
+      const filtered = args.query ? entries.filter((e) => matchesQuery(e, args.query!)) : entries
       const limit = args.limit ?? 20
       const sliced = filtered.slice(0, Math.max(0, limit))
       return {

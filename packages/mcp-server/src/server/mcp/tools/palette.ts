@@ -52,10 +52,13 @@ export async function apiDeletePalette(
   )
 }
 
+export const paletteGetInputShape = { workspaceId: z.string() } satisfies z.ZodRawShape
+
 export function paletteGetTool() {
   return {
     name: 'palette_get',
-    description: 'Get the workspace color palette used by annotate / annotate_batch semantic tokens.',
+    description:
+      'Get the workspace color palette used by annotate / annotate_batch semantic tokens.',
     inputSchema: {
       type: 'object' as const,
       properties: {
@@ -63,11 +66,27 @@ export function paletteGetTool() {
       },
       required: ['workspaceId'],
     },
-    execute: async (args: { workspaceId: string }, client: DaemonClient): Promise<z.infer<typeof paletteResponseSchema>> => {
+    execute: async (
+      args: { workspaceId: string },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof paletteResponseSchema>> => {
       return { palette: await apiGetPalette(client, args.workspaceId) }
     },
   }
 }
+
+export const paletteSetInputShape = {
+  workspaceId: z
+    .string()
+    .describe(
+      'Workspace ID (the part before "/" in canvasId). Palette is shared across all canvases in the workspace.',
+    ),
+  entries: z
+    .record(z.string(), z.string())
+    .describe(
+      'Color key → hex map. Keys are dotted semantic identifiers (e.g. "plan.a.bg", "accent.target"). Values are hex (#RRGGBB). Existing keys are merged (not replaced wholesale). Use these keys instead of hex in annotate/annotate_batch color/backgroundColor for re-themability.',
+    ),
+} satisfies z.ZodRawShape
 
 export function paletteSetTool() {
   return {
@@ -90,6 +109,11 @@ export function paletteSetTool() {
   }
 }
 
+export const paletteDeleteInputShape = {
+  workspaceId: z.string(),
+  keys: z.array(z.string()).min(1),
+} satisfies z.ZodRawShape
+
 export function paletteDeleteTool() {
   return {
     name: 'palette_delete',
@@ -102,7 +126,10 @@ export function paletteDeleteTool() {
       },
       required: ['workspaceId', 'keys'],
     },
-    execute: async (args: { workspaceId: string; keys: string[] }, client: DaemonClient): Promise<z.infer<typeof paletteResponseSchema>> => {
+    execute: async (
+      args: { workspaceId: string; keys: string[] },
+      client: DaemonClient,
+    ): Promise<z.infer<typeof paletteResponseSchema>> => {
       return { palette: await apiDeletePalette(client, args.workspaceId, args.keys) }
     },
   }
