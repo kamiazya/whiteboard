@@ -20,11 +20,7 @@
 //     to `server.sendLoggingMessage`. Tests use `captureLogsForTests` for
 //     a typed records buffer.
 
-import pino, {
-  type DestinationStream,
-  type Logger as PinoLogger,
-  stdSerializers,
-} from 'pino'
+import pino, { type DestinationStream, type Logger as PinoLogger, stdSerializers } from 'pino'
 import { Writable } from 'node:stream'
 
 // RFC 5424 severities exposed through MCP `notifications/message`. Order
@@ -76,9 +72,7 @@ export function parseLogLevel(input: string | undefined | null): LogLevel | null
   // itself does not accept "warn" once useOnlyCustomLevels is on, so we
   // collapse it here.
   if (normalised === 'warn') return 'warning'
-  return (LOG_LEVELS as readonly string[]).includes(normalised)
-    ? (normalised as LogLevel)
-    : null
+  return (LOG_LEVELS as readonly string[]).includes(normalised) ? (normalised as LogLevel) : null
 }
 
 function resolveInitialLevel(): LogLevel {
@@ -135,6 +129,56 @@ destinations.add(stderrDestination)
 
 // ── Root pino instance ────────────────────────────────────────────────
 
+// Every path below is a real secret/PII carrier found in this codebase, or
+// a common credential name a careless call site could introduce later:
+//   - token / daemonToken / bootstrapToken: the local-daemon bearer token
+//     (see shared/token-store.ts, mcp/tools/pairing-link.ts) — a `#wb=`
+//     pairing URL or an Authorization header round-trips this value, and it
+//     grants full daemon access to whoever holds it.
+//   - accessToken: OAuth access tokens (security/oauth-resource-strategy.ts).
+//   - authorization / cookie: raw auth headers a route handler might log
+//     wholesale while debugging (`c.req.header('authorization')`).
+//   - password / secret / apiKey: not currently produced by this codebase,
+//     kept as a generic net for future call sites.
+// `*.<name>` covers one level of nesting (e.g. `{ client: { token } }`,
+// `{ err: { token } }` after the error serializer runs) — fast-redact does
+// not support an arbitrary-depth wildcard, so a secret nested two or more
+// levels deep under a non-listed key would NOT be caught. Adding a new
+// secret-bearing field anywhere in the server means adding both its
+// top-level and its `*.<name>` path here.
+//
+// Capped at one level deliberately, not by oversight: every `log.*` call
+// site in this server (grep `src/server/**/*.ts` for `log\.(debug|info|
+// notice|warning|error|critical|alert|emergency)\(`) passes either a flat
+// field bag or an `{ err }`/`{ error }`/`{ cause }` object, and the error
+// serializer's own output is flat too — so today's deepest real secret
+// position is exactly one level (`err.token`, `client.token`). A third
+// tier (`*.*.<name>`) would double this list for a shape (`req.headers.
+// authorization`, `config.auth.token`) nothing here currently produces.
+// If a call site starts logging a wholesale two-level-nested object with a
+// credential in it, add the `*.*.<name>` tier for that field then — don't
+// pre-pay the per-path fast-redact cost for a shape that doesn't exist yet.
+const REDACTED_PATHS = [
+  'token',
+  'daemonToken',
+  'bootstrapToken',
+  'accessToken',
+  'authorization',
+  'cookie',
+  'password',
+  'secret',
+  'apiKey',
+  '*.token',
+  '*.daemonToken',
+  '*.bootstrapToken',
+  '*.accessToken',
+  '*.authorization',
+  '*.cookie',
+  '*.password',
+  '*.secret',
+  '*.apiKey',
+]
+
 const root: Logger = pino(
   {
     level: resolveInitialLevel(),
@@ -151,11 +195,22 @@ const root: Logger = pino(
     // weight to every record and is irrelevant to MCP consumers.
     base: null,
     // Serialise common error keys so callers can pass `{err}` / `{error}`
-    // / `{cause}` and get `{name, message, stack}` automatically.
+    // / `{cause}` and get `{name, message, stack}` automatically. Redaction
+    // (below) runs on the fully serialised object, so a secret attached as
+    // a custom property on an Error (`err.token = ...`) is still caught by
+    // the `*.token` path even though it only exists after this serializer runs.
     serializers: {
       err: stdSerializers.err,
       error: stdSerializers.err,
       cause: stdSerializers.err,
+    },
+    // Censor rather than remove: these fields are diagnostically useful as
+    // "a token/cookie was present" without exposing the value itself, and
+    // `remove: true` would make an otherwise-valid record silently lose a
+    // key, which is harder to notice than a censored placeholder.
+    redact: {
+      paths: REDACTED_PATHS,
+      censor: '[redacted]',
     },
   },
   fanout,
