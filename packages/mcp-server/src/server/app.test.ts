@@ -1359,5 +1359,41 @@ describe('createApp daemon mutation auth', () => {
       expect(res.status).toBe(200)
       expect(await res.text()).toContain('apps-web-marker')
     })
+
+    it('returns 404 (not the SPA HTML) for the bare /api path with no trailing segment', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/api')
+      expect(res.status).toBe(404)
+      expect(await res.text()).not.toContain('apps-web-marker')
+    })
+
+    it('does not re-invoke getStatus (and its buildPresent existsSync check) on every SPA page request', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(
+        join(tmp.dir, 'web-app', 'index.html'),
+        '<!DOCTYPE html><html><head></head><body><div id="root">apps-web-marker</div></body></html>',
+      )
+
+      const baseOptions = createRuntimeOptions('secret')
+      const getStatus = vi.fn(baseOptions.getStatus)
+      const app = createApp({ ...baseOptions, getStatus })
+
+      // The catch-all HTML route only needs the daemon's port (fixed for the
+      // app instance's lifetime) to build daemonBaseUrl — it must not pull
+      // this from a fresh getStatus() call on every page load, since
+      // getStatus() also computes app.buildPresent via a synchronous
+      // existsSync() the real http-server.ts implementation performs.
+      const callsBeforeRequests = getStatus.mock.calls.length
+      await app.request('/canvas/session1/demo')
+      await app.request('/canvas/session2/other')
+      await app.request('/')
+      expect(getStatus.mock.calls.length).toBe(callsBeforeRequests)
+    })
   })
 })

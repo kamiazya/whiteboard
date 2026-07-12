@@ -105,6 +105,7 @@ function toInlineScriptJson(value: unknown): string {
 // these prefixes means "route not found", not "serve index.html".
 function isReservedUiPath(path: string): boolean {
   return (
+    path === '/api' ||
     path.startsWith('/api/') ||
     path === '/mcp' ||
     path.startsWith('/mcp/') ||
@@ -916,6 +917,13 @@ export function createApp(options: AppOptions) {
     }
   }
 
+  // Captured once here, not read from getStatus() inside the request handler
+  // below: the port is fixed for the app instance's lifetime, but getStatus()
+  // also computes app.buildPresent via a synchronous existsSync() (see
+  // http-server.ts) that must run fresh per real status check, not on every
+  // SPA page load.
+  const daemonPort = options.getStatus().port
+
   app.get('*', async (c) => {
     if (isReservedUiPath(c.req.path)) {
       return c.notFound()
@@ -929,7 +937,7 @@ export function createApp(options: AppOptions) {
       const runtimeConfigJson = toInlineScriptJson({
         // Composed from 127.0.0.1 + port (not getStatus().baseUrl) so the
         // value is always a loopback origin, even when the daemon binds 0.0.0.0.
-        daemonBaseUrl: `http://127.0.0.1:${options.getStatus().port}`,
+        daemonBaseUrl: `http://127.0.0.1:${daemonPort}`,
       })
       const runtimeConfigScript = `<script>window.__WHITEBOARD_RUNTIME_CONFIG__ = ${runtimeConfigJson}</script>`
       const tokenScript = token
