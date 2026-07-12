@@ -145,7 +145,7 @@ export function exportPngTool() {
         outputPath: {
           type: 'string',
           description:
-            'Absolute path to write the PNG to. Useful for placing the export next to a source asset. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+            "Absolute path to write the PNG to. Must be inside this workspace's exports directory (~/.whiteboard/<workspaceId>/exports, or $WHITEBOARD_DATA_DIR/<workspaceId>/exports if that env var is set) — paths outside it are rejected with invalid_output_path. Parent directories inside that root are created as needed. Omit outputPath to write to the default location there automatically.",
         },
         overwrite: {
           type: 'boolean',

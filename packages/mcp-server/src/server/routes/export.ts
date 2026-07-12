@@ -92,7 +92,7 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
         )
       } catch (err) {
         if (err instanceof OutputPathError) {
-          const { status, body: errBody } = toCanvasOutputPathErrorBody(err)
+          const { status, body: errBody } = toCanvasOutputPathErrorBody(err, workspaceId)
           return c.json(errBody as ExportErrorBody, status)
         }
         throw err

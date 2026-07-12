@@ -120,6 +120,32 @@ export default defineConfig({
           chunkInfo.name === 'DaemonCanvasPage'
             ? 'assets/daemon-canvas-[hash].js'
             : 'assets/[name]-[hash].js',
+        // Isolate loro-crdt and React into their own named vendor chunks
+        // instead of letting Rollup's automatic chunking scatter them across
+        // shared chunks. This does not shrink total transfer on its own — it
+        // separates what changes (app code) from what doesn't (vendor code),
+        // so a deploy that only touches app code doesn't invalidate the
+        // (much larger) vendor caches.
+        //
+        // Deliberately NOT grouping @excalidraw/* the same way: Excalidraw's
+        // own dist already dynamically imports its heavy optional features
+        // (mermaid-to-excalidraw's parser, cytoscape, katex — the various
+        // *Diagram-*.js / cytoscape.esm-*.js / katex-*.js chunks visible in
+        // the build output). A blanket `id.includes('@excalidraw')` rule
+        // merges those into one eager multi-MB chunk regardless of import
+        // kind, which both defeats Excalidraw's own lazy split and blows
+        // past vite-plugin-pwa's 2 MiB precache-per-file limit. Leave
+        // Excalidraw's core module to whichever automatic chunk it lands in;
+        // Stage 2 (deferring the whole editor page behind React.lazy) is
+        // what actually keeps it out of the initial paint.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('loro-crdt')) return 'vendor-loro-crdt'
+          if (id.includes('/react-dom/') || id.includes('/react/') || id.includes('scheduler')) {
+            return 'vendor-react'
+          }
+          return undefined
+        },
       },
     },
   },
