@@ -173,12 +173,15 @@ export function DaemonDetectedBanner({
   return (
     <>
       {showUnsupportedNotice && (
-        <>
-          <span className="text-xs text-muted-foreground">{UNSUPPORTED_BROWSER_NOTICE}</span>
-          <a href={openLocalAppUrl} className="text-xs font-medium underline">
+        // One flex item, not two: the parent lays its children out with a gap,
+        // so a sibling anchor would read as a detached chip and could wrap onto
+        // its own line, away from the sentence that explains it.
+        <span className="text-xs text-muted-foreground">
+          {UNSUPPORTED_BROWSER_NOTICE}{' '}
+          <a href={openLocalAppUrl} className="font-medium underline">
             Open the local app
           </a>
-        </>
+        </span>
       )}
       {showManualAffordance && (
         <button
