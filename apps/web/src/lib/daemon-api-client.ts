@@ -6,6 +6,10 @@ import {
   type ListWorkspacesResponse,
   listWorkspacesResponseSchema,
   problemDetailsErrorSchema,
+  type UpdateCanvasResponse,
+  updateCanvasResponseSchema,
+  type WorkspaceNames,
+  workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 
 /**
@@ -136,6 +140,57 @@ export function createCanvas(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ slug }),
+    },
+  )
+}
+
+// GET /api/canvas/:workspaceId/:slug/snapshot returns raw Loro bytes
+// (application/octet-stream), not JSON — kept separate from fetchAndParse,
+// which always calls res.json().
+export async function getCanvasSnapshot(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  slug: string,
+): Promise<Uint8Array> {
+  const url = `${daemonBaseUrl}/api/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(slug)}/snapshot`
+  const res = await fetchFn(url)
+  if (!res.ok) {
+    throw new Error(await parseProblemDetails(res))
+  }
+  return new Uint8Array(await res.arrayBuffer())
+}
+
+export function updateCanvas(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  slug: string,
+  snapshot: Uint8Array,
+): Promise<UpdateCanvasResponse> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(slug)}/update`,
+    updateCanvasResponseSchema,
+    { method: 'POST', body: snapshot },
+  )
+}
+
+export function setCanvasName(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  slug: string,
+  name: string,
+): Promise<WorkspaceNames> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(slug)}/name`,
+    workspaceNamesSchema,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
     },
   )
 }
