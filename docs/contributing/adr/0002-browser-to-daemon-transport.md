@@ -209,6 +209,32 @@ allowlist — read every canvas with no credential at all, making
 `canvas:read` theatre on the read path. ADR-0005 marked this "a prerequisite
 slice" rather than deciding it; this addendum is that decision.
 
+### Why the original reasoning no longer holds
+
+The carve-out rested on two premises, and both are gone:
+
+1. **"Tokenizing reads breaks `<img src>` thumbnails."** This was the stated
+   cost that justified leaving `GET` open. The consumer audit below found
+   the cost never actually existed in the shipped app: every real
+   thumbnail/file consumer already fetches the bytes through the
+   bearer-carrying transport and renders an `object URL`, so there was
+   nothing left to trade away. A carve-out justified by a cost that isn't
+   there is not a considered trade anymore — it is just an open door.
+2. **"Loopback bind + Host-loopback check contain the blast radius."** That
+   containment assumption is exactly what a hosted origin as a first-class
+   client (ADR-0005) removes: the daemon is now meant to accept requests
+   from an origin that is not loopback at all, admitted deliberately
+   through the CORS allowlist. Once that is the design, "only a page
+   running on localhost can reach this" stops being true by construction,
+   and the carve-out's whole safety argument goes with it.
+
+Cookie-based auth was also considered and rejected as an alternative to a
+bearer header: cookies are sent automatically by the browser on every
+matching-origin request, which is exactly the CSRF surface a bearer token
+in an explicit `Authorization` header does not have. ADR-0002's original
+decision already restricts token carriers to the `Authorization` header and
+the WS subprotocol; nothing here reopens that restriction.
+
 ### The consumer audit
 
 Every place `apps/web` reads daemon-served canvas/asset bytes was audited
@@ -267,9 +293,14 @@ the first addendum above: canvas/asset `GET` is no longer tokenless.
   argue past the query-parameter ban above: the fetch+blob path was already
   shipped and free, so there was no cost left to justify reopening that
   ADR-0002 prohibition for.
+- **Cookie-based auth instead of a bearer header** — rejected: a cookie is
+  attached by the browser automatically on any matching-origin request,
+  which is a CSRF surface a bearer token carried in an explicit
+  `Authorization` header structurally does not have. This does not change
+  the original decision to restrict token carriers to the `Authorization`
+  header and the WS subprotocol; it only reconfirms it for the read path.
 - **Narrow the carve-out to cross-origin callers only, keep same-origin GET
-  open** — rejected: this is exactly the half-measure the task guarding
-  this change warned against. It would leave the matrix claiming protection
-  the code does not uniformly provide, and the same-origin case has no
-  weaker threat model once a hosted origin can be same-origin-equivalent
-  via LNA (ADR-0002's second addendum).
+  open** — rejected as a half-measure: it would leave the matrix claiming
+  protection the code does not uniformly provide, and the same-origin case
+  has no weaker threat model once a hosted origin can be same-origin-
+  equivalent via LNA (ADR-0002's second addendum).
