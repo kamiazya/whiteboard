@@ -493,7 +493,12 @@ describe('BrowserLocalCanvasPage', () => {
     expect(await store.getDefaultCanvasId()).toBe('c2')
   })
 
-  it('cold-loads a /local/:canvasId deep link straight into that canvas', async () => {
+  it('honors an explicit initialCanvasId prop over the store default canvas', async () => {
+    // This only proves the page itself respects initialCanvasId — it does NOT
+    // cover the URL->initialCanvasId wiring (App.tsx's parseBrowserLocalRoute),
+    // since the pathname and the prop are set independently here. See
+    // App.test.tsx's "derives initialCanvasId from the /local/:canvasId URL"
+    // test for that boundary.
     vi.useRealTimers()
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
@@ -501,7 +506,7 @@ describe('BrowserLocalCanvasPage', () => {
     await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
     await act(async () => {
       rtlRender(
-        <MemoryRouter initialEntries={['/local/c2']}>
+        <MemoryRouter initialEntries={['/']}>
           <BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} initialCanvasId="c2" />
         </MemoryRouter>,
       )

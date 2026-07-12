@@ -19,12 +19,23 @@ afterEach(cleanup)
 // page mounts. BrowserLocalCanvasPage pulls in Excalidraw/loro-crdt which
 // need a real browser (roughjs native bindings, WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
+// Captures the initialCanvasId prop so a test can assert App derives it from
+// the /local/:canvasId URL (parseBrowserLocalRoute) rather than merely
+// mounting the page.
+let receivedInitialCanvasId: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
 // during render, so App's ErrorBoundary wiring has something real to catch.
 let throwInBrowserLocalCanvasPage = false
 vi.mock('./pages/BrowserLocalCanvasPage.js', () => ({
-  BrowserLocalCanvasPage: ({ capabilities }: { capabilities?: WhiteboardCapabilities }) => {
+  BrowserLocalCanvasPage: ({
+    capabilities,
+    initialCanvasId,
+  }: {
+    capabilities?: WhiteboardCapabilities
+    initialCanvasId?: string
+  }) => {
     receivedCapabilities = capabilities
+    receivedInitialCanvasId = initialCanvasId
     if (throwInBrowserLocalCanvasPage) {
       throw new Error('boom')
     }
@@ -156,6 +167,26 @@ describe('App capability wiring', () => {
       </MemoryRouter>,
     )
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
+  })
+
+  it('derives initialCanvasId from a /local/:canvasId cold-load URL', () => {
+    receivedInitialCanvasId = undefined
+    render(
+      <MemoryRouter initialEntries={['/local/c2']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    expect(receivedInitialCanvasId).toBe('c2')
+  })
+
+  it('leaves initialCanvasId undefined for a plain "/" cold load', () => {
+    receivedInitialCanvasId = undefined
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    expect(receivedInitialCanvasId).toBeUndefined()
   })
 })
 
