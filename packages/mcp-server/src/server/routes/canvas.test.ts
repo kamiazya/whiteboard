@@ -761,6 +761,78 @@ describe('versions API', () => {
     expect(keepMe?.frameId).toBeUndefined()
   })
 
+  it('evicts the cached doc when saveCanvas fails during in-place restore, so a subsequent read does not serve the un-persisted reconcile', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+
+    // Step 1: seed with keep-me.
+    const initial = new LoroDoc()
+    const vv0 = initial.version()
+    const list = initial.getMovableList('elements')
+    const m0 = list.insertContainer(0, new LoroMap())
+    m0.set('id', 'keep-me')
+    initial.commit()
+    await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: initial.export({ mode: 'update', from: vv0 }),
+    })
+
+    // Step 2: save v1.
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const saveBody = (await saveRes.json()) as { version: { id: string } }
+
+    // Step 3: add a second element after v1, so restoring v1 would tombstone it.
+    const vv1 = initial.version()
+    const m1 = list.insertContainer(list.length, new LoroMap())
+    m1.set('id', 'added-after-v1')
+    initial.commit()
+    await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: initial.export({ mode: 'update', from: vv1 }),
+    })
+
+    expect(peekDoc('session1', 'canvas-a')).toBeDefined()
+
+    // Restore calls doc.export() twice before the failure point we care about:
+    // once inside versionStore.load() to clone the live doc, then again inside
+    // saveCanvas() once reconcile+commit have already mutated the cached doc.
+    // Let the first pass through and fail only the second.
+    let exportCallCount = 0
+    const originalExport = LoroDoc.prototype.export
+    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementation(function (
+      this: LoroDoc,
+      ...args: Parameters<typeof originalExport>
+    ) {
+      exportCallCount++
+      if (exportCallCount === 2) {
+        throw new Error('simulated snapshot failure')
+      }
+      return originalExport.apply(this, args)
+    })
+
+    const restoreRes = await app.request(
+      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
+      { method: 'POST' },
+    )
+    exportSpy.mockRestore()
+
+    expect(restoreRes.status).toBe(500)
+    // The cache must be evicted: without eviction, the reconciled-but-never-
+    // saved tombstone state would keep serving from memory.
+    expect(peekDoc('session1', 'canvas-a')).toBeUndefined()
+
+    const reloaded = await getDoc('session1', 'canvas-a')
+    const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>)
+      .map((el) => el.id)
+      .sort()
+    expect(ids).toEqual(['added-after-v1', 'keep-me'])
+  })
+
   it('returns 404 when restoring a missing version id', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const res = await app.request(

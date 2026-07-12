@@ -120,7 +120,16 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         const prevVV = doc.version()
         reconcileElementsOnDoc(doc, past)
         doc.commit()
-        await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+        try {
+          await saveCanvas(workspaceId, slug, doc, { overwrite: true })
+        } catch (err) {
+          // reconcileElementsOnDoc + commit above already mutated the cached
+          // doc, so a failed save would otherwise leave the cache ahead of
+          // durable state. Evict it so the next read reloads the last
+          // successfully persisted snapshot.
+          evictDoc(workspaceId, slug)
+          throw err
+        }
         const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
         if (update.byteLength > 0) {
           getBroadcastFn()(workspaceId, slug, update)
