@@ -1,8 +1,8 @@
 name: Setup Node and pnpm
 description: >-
-  Install the packageManager-pinned pnpm via pnpm/action-setup, then Node with
-  pnpm store caching. Centralizes pnpm setup so a pnpm/tooling version bump
-  only needs to land here once instead of at every workflow call site.
+  Install Node per .node-version and activate the packageManager-pinned pnpm
+  via corepack, with pnpm store caching. Centralizes pnpm setup so a pnpm
+  version bump or tooling fix only needs to land here once.
 
 inputs:
   node-version:
@@ -20,11 +20,38 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-
     - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
       with:
         node-version: ${{ inputs.node-version }}
         node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
         registry-url: ${{ inputs.registry-url }}
-        cache: pnpm
+
+    # corepack prepare (no argument) reads packageManager from package.json
+    # and downloads that exact pnpm build directly from the npm registry.
+    # This avoids pnpm/action-setup's self-install path, which bundles an
+    # older pnpm and asks IT to `pnpm add -g` the pinned version — that
+    # self-update codepath breaks on pnpm 11.12.0 regardless of the action's
+    # `standalone` input (both variants still shell out to the same broken
+    # `pnpm self-update <version>`; see
+    # https://github.com/pnpm/action-setup/issues/276: "Cannot use 'in'
+    # operator to search for 'integrity' in undefined"). corepack never
+    # invokes pnpm's self-update — it fetches and shims the target version
+    # directly — so it sidesteps the bug entirely.
+    - name: Activate pnpm via corepack
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare --activate
+
+    - name: Resolve pnpm store directory
+      id: pnpm-store
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Cache pnpm store
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.pnpm-store.outputs.path }}
+        key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-store-

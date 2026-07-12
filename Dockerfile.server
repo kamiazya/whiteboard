@@ -26,7 +26,7 @@
 # ── Stage 1: build ─────────────────────────────────────────────────────────
 FROM node:22-alpine AS build
 
-RUN corepack enable && corepack prepare pnpm@11.11.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.12.0 --activate
 
 WORKDIR /workspace
 

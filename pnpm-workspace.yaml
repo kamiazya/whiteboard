@@ -64,8 +64,8 @@ overrides:
 # useCanvasSync.ts's Excalidraw AppState mapped type (TS2740), even though
 # the underlying package files are byte-identical and not duplicated.
 #
-# Re-verified 2026-07-12 on pnpm 11.12.0 (a pnpm 11.x release that already
-# ships the pnpm/pnpm#9739 fix for stale hoisted-symlink residue
+# Re-verified 2026-07-12 on pnpm 11.12.0 (this repo's pinned version, which
+# already ships the pnpm/pnpm#9739 fix for stale hoisted-symlink residue
 # from a prior non-GVS install): a fully clean install — every node_modules
 # in the worktree removed, then `pnpm install --force` from scratch with
 # this flag on from the start — still reproduces TS2740. So the failure is
