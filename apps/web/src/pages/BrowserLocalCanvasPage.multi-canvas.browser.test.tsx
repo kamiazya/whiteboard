@@ -51,6 +51,7 @@ vi.mock('@excalidraw/excalidraw', () => ({
   restoreElements: (els: unknown[]) => els,
   CaptureUpdateAction: { NEVER: 'never' },
   exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
+  exportToSvg: vi.fn(async () => document.createElementNS('http://www.w3.org/2000/svg', 'svg')),
 }))
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
