@@ -1,4 +1,9 @@
-import { CaptureUpdateAction, exportToBlob, restoreElements } from '@excalidraw/excalidraw'
+import {
+  CaptureUpdateAction,
+  exportToBlob,
+  exportToSvg,
+  restoreElements,
+} from '@excalidraw/excalidraw'
 import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types'
 import type {
   AppState,
@@ -33,6 +38,10 @@ const log = getAppLogger('canvas-sync')
 
 export type SyncStatus = 'idle' | 'connected' | 'error'
 
+// Raster/vector are the only formats the underlying @excalidraw/excalidraw
+// export utilities support; there is no PDF export anywhere in the library.
+export type SceneExportFormat = 'png' | 'svg'
+
 // Daemon-only callback seam. Every member is stored in a ref (see optionsRef
 // below) so passing a fresh inline object on every render never forces a
 // backend reconnect. A browser-local backend never fires any of these
@@ -65,6 +74,10 @@ export interface UseCanvasSyncResult {
   restoreInProgress: boolean
   restoreLabel: string | null
   clearLocalUndo: () => void
+  // null when no ExcalidrawImperativeAPI is registered yet (mount race) —
+  // callers treat that the same as "export unavailable right now" rather
+  // than throwing.
+  exportScene: (format: SceneExportFormat) => Promise<Blob | null>
 }
 
 // Upper bound on waiting for a file upload before committing anyway. A hung
@@ -686,6 +699,24 @@ export function useCanvasSync(
     return true
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Renders the live scene through the same exportToBlob/exportToSvg utilities
+  // Excalidraw's own (harder-to-discover) hamburger-menu export dialog uses,
+  // so a header-driven "Export" affordance produces byte-identical output
+  // without duplicating export logic.
+  const exportScene = useCallback(async (format: SceneExportFormat): Promise<Blob | null> => {
+    const api = excalidrawAPIRef.current
+    if (!api) return null
+    const elements = api.getSceneElements()
+    const appState = api.getAppState()
+    const files = api.getFiles()
+    if (format === 'png') {
+      return exportToBlob({ elements, appState, files, exportPadding: 10 })
+    }
+    const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
+    const serialized = new XMLSerializer().serializeToString(svg)
+    return new Blob([serialized], { type: 'image/svg+xml' })
+  }, [])
+
   const loroRedo = useCallback(() => {
     const um = undoManagerRef.current
     const doc = docRef.current
@@ -780,5 +811,6 @@ export function useCanvasSync(
     restoreInProgress,
     restoreLabel,
     clearLocalUndo,
+    exportScene,
   }
 }

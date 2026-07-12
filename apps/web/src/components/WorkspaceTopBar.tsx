@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronLeft,
   Copy,
+  Download,
   EllipsisVertical,
   FilePlus2,
   FileText,
@@ -197,6 +198,13 @@ interface Props {
   // a host page can keep its own "Save version" button + status message
   // without this component needing to know about it.
   versionPanelExtra?: ReactNode
+  // Renders the scene through the same export utility Excalidraw's own
+  // (harder-to-discover) hamburger-menu export dialog uses. Omitted (the
+  // default) hides the "Export as PNG/SVG" menu items entirely rather than
+  // wiring a control to a capability the host page hasn't set up — there is
+  // deliberately no PDF option here because no export path (this app's or
+  // Excalidraw's own) produces one.
+  onExport?: (format: 'png' | 'svg') => Promise<Blob | null>
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -225,6 +233,7 @@ export default function WorkspaceTopBar({
   branchRefreshSignal,
   versionRefreshSignal,
   versionPanelExtra,
+  onExport,
 }: Props) {
   const isLocalMode = dataMode === 'local'
   const versionsEnabled = capabilities?.versions ?? true
@@ -592,6 +601,26 @@ export default function WorkspaceTopBar({
     }
   }
 
+  // A trailing slash-segment (the canvas leaf) makes the safest download
+  // filename; falling back to the raw slug covers the ungrouped case.
+  const exportFilenameBase = (canvasFlat ?? canvasLeaf ?? slug).replace(/[\\/:*?"<>|]/g, '-')
+
+  const handleExport = async (format: 'png' | 'svg') => {
+    if (!onExport) return
+    try {
+      const blob = await onExport(format)
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${exportFilenameBase}.${format}`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      log.error('canvas export failed:', err)
+    }
+  }
+
   return (
     <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-3">
       {/* Left side: back button, workspace name, and canvas switcher. */}
@@ -760,6 +789,18 @@ export default function WorkspaceTopBar({
               <Copy className="size-3.5" />
               Copy canvas URL
             </DropdownMenuItem>
+            {onExport && (
+              <>
+                <DropdownMenuItem onSelect={() => void handleExport('png')} className="gap-2">
+                  <Download className="size-3.5" />
+                  Export as PNG
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void handleExport('svg')} className="gap-2">
+                  <Download className="size-3.5" />
+                  Export as SVG
+                </DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
 

@@ -537,6 +537,107 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
   })
 })
 
+describe('WorkspaceTopBar — export affordance (RED-first)', () => {
+  async function openCanvasActions() {
+    const canvasActions = screen.getByLabelText('Canvas actions')
+    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+    await screen.findByText('Rename canvas')
+  }
+
+  it('does not render export menu items when onExport is not provided', async () => {
+    renderBar()
+    await openCanvasActions()
+
+    expect(screen.queryByText('Export as PNG')).toBeNull()
+    expect(screen.queryByText('Export as SVG')).toBeNull()
+  })
+
+  it('invokes onExport with "png" from the Canvas actions menu and triggers a download', async () => {
+    const blob = new Blob(['fake-png'], { type: 'image/png' })
+    const onExport = vi.fn().mockResolvedValue(blob)
+    const createObjectURL = vi.fn(() => 'blob:mock-url')
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
+
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+        onExport={onExport}
+      />,
+      { container: document.body },
+    )
+
+    await openCanvasActions()
+    const pngItem = await screen.findByText('Export as PNG')
+    fireEvent.pointerUp(pngItem)
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
+    await waitFor(() => expect(createObjectURL).toHaveBeenCalledWith(blob))
+    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
+
+    vi.unstubAllGlobals()
+  })
+
+  it('invokes onExport with "svg" from the Canvas actions menu', async () => {
+    const blob = new Blob(['<svg></svg>'], { type: 'image/svg+xml' })
+    const onExport = vi.fn().mockResolvedValue(blob)
+    vi.stubGlobal('URL', {
+      ...URL,
+      createObjectURL: vi.fn(() => 'blob:mock-url'),
+      revokeObjectURL: vi.fn(),
+    })
+
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+        onExport={onExport}
+      />,
+      { container: document.body },
+    )
+
+    await openCanvasActions()
+    const svgItem = await screen.findByText('Export as SVG')
+    fireEvent.pointerUp(svgItem)
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('svg'))
+
+    vi.unstubAllGlobals()
+  })
+
+  it('does not throw when onExport resolves null (export unavailable)', async () => {
+    const onExport = vi.fn().mockResolvedValue(null)
+
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        slug="canvas-a"
+        canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onEnterFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToCanvas={() => {}}
+        onExport={onExport}
+      />,
+      { container: document.body },
+    )
+
+    await openCanvasActions()
+    const pngItem = await screen.findByText('Export as PNG')
+    fireEvent.pointerUp(pngItem)
+
+    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
+  })
+})
+
 describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
   it('marks the exposed right-side action group and the More-actions kebab trigger with responsive collapse classes', () => {
     renderBar()
