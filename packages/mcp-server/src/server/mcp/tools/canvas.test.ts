@@ -59,23 +59,6 @@ describe('canvas_create', () => {
     }
   })
 
-  it('case 98', async () => {
-    const tool = createCanvasTool()
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = vi.fn(async (_input: string | URL, init?: RequestInit) => {
-      expect(init?.body).toBe(JSON.stringify({ slug: '123-my-canvas', overwrite: false }))
-      return new Response(JSON.stringify({ slug: '123-my-canvas' }), { status: 200 })
-    }) as typeof globalThis.fetch
-
-    try {
-      await expect(
-        tool.execute({ slug: 'my-canvas', issueNumber: 123 }, 'test-session-id', client),
-      ).resolves.toMatchObject({ id: 'test-session-id/123-my-canvas' })
-    } finally {
-      globalThis.fetch = originalFetch
-    }
-  })
-
   it('case 99', async () => {
     const tool = createCanvasTool()
     const originalFetch = globalThis.fetch

@@ -114,6 +114,56 @@ function throwExportError(res: Response, body: ExportErrorBody | null): never {
   throw new Error(`Export failed: ${res.status} ${body?.message ?? 'unknown error'}`)
 }
 
+export const exportPngInputShape = {
+  canvasId: z
+    .string()
+    .describe(
+      'Canvas ID in "{workspaceId}/{slug}" form. Browser must be connected (call canvas_open first).',
+    ),
+  padding: z
+    .number()
+    .optional()
+    .describe(
+      'Padding (px) around all elements in the exported PNG. Default 10. Use 24-48 to avoid cropping annotation strokes / text.',
+    ),
+  scale: z
+    .number()
+    .optional()
+    .describe(
+      'Export scale factor (appState.exportScale). Default 1. Use 2-3 for high-DPI exports of large canvases.',
+    ),
+  minFontPx: z
+    .number()
+    .optional()
+    .describe(
+      'Minimum font size (px) enforced on text elements before export. Clones with Math.max(fontSize, minFontPx) so small annotation text stays legible. Original scene unchanged.',
+    ),
+  frameId: z
+    .string()
+    .optional()
+    .describe(
+      'When set, export only the frame and its children. Useful for section-scoped exports on large canvases.',
+    ),
+  outputPath: z
+    .string()
+    .optional()
+    .describe(
+      'Absolute path to write the PNG to. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+    ),
+  overwrite: z
+    .boolean()
+    .optional()
+    .describe(
+      'Replace an existing file at outputPath. Default false; without it an existing outputPath is rejected with output_exists.',
+    ),
+  theme: z
+    .enum(['light', 'dark'])
+    .optional()
+    .describe(
+      'Force the rendered scene into "light" or "dark" without mutating the persisted appState. Use it to export the same canvas under both themes for dark-mode QA or contrast review.',
+    ),
+} satisfies z.ZodRawShape
+
 export function exportPngTool() {
   return {
     name: 'export_png',

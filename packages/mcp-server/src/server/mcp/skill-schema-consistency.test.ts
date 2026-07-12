@@ -48,11 +48,18 @@ const SKILL_REFERENCE_PATHS = [
 const skillText = [SKILL_PATH, ...SKILL_REFERENCE_PATHS]
   .map((p) => readFileSync(p, 'utf-8'))
   .join('\n')
-// Statically load tool-registration.ts so the zod schema can be compared with
-// the JSON inputSchema. JSON schema fields could exist while zod silently
-// strips them, so this test compares source-level key sets directly.
-const MCP_INDEX_PATH = resolve(__dirname, 'tool-registration.ts')
-const mcpIndexText = readFileSync(MCP_INDEX_PATH, 'utf-8')
+// Statically load the source files that declare tool input shapes so the zod
+// schema can be compared with the JSON inputSchema. JSON schema fields could
+// exist while zod silently strips them, so this test compares source-level
+// key sets directly. Input shapes live next to their tool in tools/*.ts
+// (annotateBatchInputShape, libraryInsertBatchInputShape, etc.), not inlined
+// in tool-registration.ts, so all three are read and concatenated.
+const ZOD_SOURCE_PATHS = [
+  resolve(__dirname, 'tool-registration.ts'),
+  resolve(__dirname, 'tools/annotate-batch.ts'),
+  resolve(__dirname, 'tools/library.ts'),
+]
+const mcpIndexText = ZOD_SOURCE_PATHS.map((p) => readFileSync(p, 'utf-8')).join('\n')
 
 // Materialize every tool factory and build a tool.name -> inputSchema lookup.
 // Each tool has a different inputSchema shape, so the map uses a widened schema
@@ -265,16 +272,16 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
   })
 
   // 9. zod ↔ JSON inputSchema parity for annotate_batch.
-  // Every key in annotate-batch.ts JSON schema must also exist in the inline
-  // zod shape in tool-registration.ts. Missing zod fields get stripped silently.
+  // Every key in annotate-batch.ts JSON schema must also exist in
+  // annotateBatchInputShape (tools/annotate-batch.ts). Missing zod fields get
+  // stripped silently.
   describe('zod ↔ JSON inputSchema parity for annotate_batch', () => {
     const annotationsSchema = toolByName.get('annotate_batch')!.inputSchema.properties
       .annotations as { items: { properties: Record<string, unknown> } }
     const jsonKeys = Object.keys(annotationsSchema.items.properties)
 
-    // annotate_batch zod is declared inline in tool-registration.ts. Match
-    // `<key>: z.` in the source text (the formatter may wrap `z` onto its own
-    // line). False positives are acceptable; missed keys are not.
+    // Match `<key>: z.` in the source text (the formatter may wrap `z` onto
+    // its own line). False positives are acceptable; missed keys are not.
     for (const key of jsonKeys) {
       it(`defines annotate_batch.annotations[].${key} in the zod schema`, () => {
         const pattern = new RegExp(`\\b${key}\\s*:\\s*z\\s*\\.`)
