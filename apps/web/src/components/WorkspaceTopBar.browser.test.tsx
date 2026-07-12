@@ -564,4 +564,34 @@ describe('WorkspaceTopBar browser mode', () => {
     const headerAfter = screen.getByRole('banner')
     expect(headerAfter.getBoundingClientRect().height).toBeCloseTo(48, 0)
   })
+
+  it('announces a failed copy without nesting the alert inside the real role="menu" element', async () => {
+    // Real Chromium rendering (not jsdom) of the Radix menu — the layer where
+    // the ARIA tree axe/AccessLint inspects actually exists.
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
+    renderTopBar()
+
+    await page.getByRole('button', { name: 'Canvas actions' }).click()
+    await page.getByText('Copy canvas URL').click()
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain("Couldn't copy automatically")
+
+    const menu = screen.getByRole('menu')
+    expect(menu.contains(alert)).toBe(false)
+
+    // The announcement is still reachable in the accessibility tree even
+    // though it is no longer a DOM child of the menu.
+    const status = screen.getByRole('status')
+    expect(status.textContent).toContain("Couldn't copy the canvas URL automatically.")
+    expect(menu.contains(status)).toBe(false)
+
+    // @ts-expect-error -- test-only cleanup of a property defined above
+    delete navigator.clipboard
+  })
 })

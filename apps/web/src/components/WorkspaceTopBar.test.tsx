@@ -957,6 +957,30 @@ describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
     expect(fallbackInput.value).toContain('/canvas/ws_1/canvas-a')
     expect(fallbackInput.readOnly).toBe(true)
   })
+
+  it('does not nest the live-region announcement or the error fallback inside the role="menu" container', async () => {
+    // WAI-ARIA menu pattern: an element with role="menu" may only own
+    // menuitem/menuitemcheckbox/menuitemradio/group descendants. A
+    // role="status"/role="alert" live region nested directly inside it
+    // violates that contract (axe/AccessLint: aria-required-children) even
+    // though the text itself is never focusable or selectable via arrow keys.
+    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+
+    renderBar()
+    const copyItem = await openCanvasActionsMenu()
+    fireEvent.pointerUp(copyItem)
+
+    const alert = await screen.findByRole('alert')
+    const status = screen.getByRole('status')
+    const menu = screen.getByRole('menu')
+
+    expect(menu.contains(alert)).toBe(false)
+    expect(menu.contains(status)).toBe(false)
+  })
 })
 
 describe('WorkspaceTopBar — dataMode="local"', () => {

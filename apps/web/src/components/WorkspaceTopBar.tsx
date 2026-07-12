@@ -809,86 +809,96 @@ export default function WorkspaceTopBar({
         </DropdownMenu>
 
         {/* Canvas-specific actions such as rename and copy URL. */}
-        <DropdownMenu
-          onOpenChange={(open) => {
-            // Every fresh open starts from a clean confirmation state rather
-            // than showing a stale "Copied!"/error from a previous visit.
-            if (open) setCopyStatus('idle')
-          }}
-        >
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-              aria-label="Canvas actions"
-            >
-              <Pencil className="size-3.5" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem
-              onSelect={() => {
-                setDraft(effectiveNames.canvases[slug] ?? '')
-                setRenamingCanvas(true)
-              }}
-              className="gap-2"
-            >
-              <Pencil className="size-3.5" />
-              Rename canvas
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(e) => {
-                // Keep the menu open so the "Copied!"/error confirmation is
-                // actually visible — Radix closes the menu on select by
-                // default, which is exactly the silent-feedback bug.
-                e.preventDefault()
-                void copyCanvasUrl()
-              }}
-              className="gap-2"
-            >
-              {copyStatus === 'copied' ? (
-                <Check className="size-3.5 text-emerald-600" />
-              ) : (
-                <Copy className="size-3.5" />
+        <div className="relative">
+          <DropdownMenu
+            onOpenChange={(open) => {
+              // Every fresh open starts from a clean confirmation state rather
+              // than showing a stale "Copied!"/error from a previous visit.
+              if (open) setCopyStatus('idle')
+            }}
+          >
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                aria-label="Canvas actions"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem
+                onSelect={() => {
+                  setDraft(effectiveNames.canvases[slug] ?? '')
+                  setRenamingCanvas(true)
+                }}
+                className="gap-2"
+              >
+                <Pencil className="size-3.5" />
+                Rename canvas
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  // Keep the menu open so the "Copied!"/error confirmation is
+                  // actually visible — Radix closes the menu on select by
+                  // default, which is exactly the silent-feedback bug.
+                  e.preventDefault()
+                  void copyCanvasUrl()
+                }}
+                className="gap-2"
+              >
+                {copyStatus === 'copied' ? (
+                  <Check className="size-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+                {copyStatus === 'copied' ? 'Copied!' : 'Copy canvas URL'}
+              </DropdownMenuItem>
+              {onExport && (
+                <>
+                  <DropdownMenuItem onSelect={() => void handleExport('png')} className="gap-2">
+                    <Download className="size-3.5" />
+                    Export as PNG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void handleExport('svg')} className="gap-2">
+                    <Download className="size-3.5" />
+                    Export as SVG
+                  </DropdownMenuItem>
+                </>
               )}
-              {copyStatus === 'copied' ? 'Copied!' : 'Copy canvas URL'}
-            </DropdownMenuItem>
-            {onExport && (
-              <>
-                <DropdownMenuItem onSelect={() => void handleExport('png')} className="gap-2">
-                  <Download className="size-3.5" />
-                  Export as PNG
-                </DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => void handleExport('svg')} className="gap-2">
-                  <Download className="size-3.5" />
-                  Export as SVG
-                </DropdownMenuItem>
-              </>
-            )}
-            {/* Visually hidden so screen readers announce the outcome even
-                though focus stays on the menu item above. */}
-            <div aria-live="polite" role="status" className="sr-only">
-              {copyStatus === 'copied' && 'Canvas URL copied to clipboard.'}
-              {copyStatus === 'error' && "Couldn't copy the canvas URL automatically."}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          {/* Rendered as a sibling of the Radix menu (role="menu"), not a
+              descendant of it: the WAI-ARIA menu pattern only allows
+              menuitem/menuitemcheckbox/menuitemradio/group as owned elements,
+              and a live region nested directly inside role="menu" fails that
+              contract (axe/AccessLint: aria-required-children). aria-live and
+              role="alert" are announced wherever they sit in the document, so
+              moving them outside the menu subtree does not silence them. */}
+          <div aria-live="polite" role="status" className="sr-only">
+            {copyStatus === 'copied' && 'Canvas URL copied to clipboard.'}
+            {copyStatus === 'error' && "Couldn't copy the canvas URL automatically."}
+          </div>
+          {copyStatus === 'error' && (
+            <div
+              role="alert"
+              className="absolute left-0 top-full z-50 mt-1 w-72 rounded-md border bg-popover px-2 py-1.5 text-xs text-destructive shadow-md"
+            >
+              <p>Couldn't copy automatically. Select and copy the link below:</p>
+              <Input
+                readOnly
+                value={canvasUrl}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  e.currentTarget.select()
+                }}
+                onFocus={(e) => e.currentTarget.select()}
+                aria-label="Canvas URL"
+                className="mt-1 h-7 font-mono text-[11px]"
+              />
             </div>
-            {copyStatus === 'error' && (
-              <div className="px-2 py-1.5 text-xs text-destructive" role="alert">
-                <p>Couldn't copy automatically. Select and copy the link below:</p>
-                <Input
-                  readOnly
-                  value={canvasUrl}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    e.currentTarget.select()
-                  }}
-                  onFocus={(e) => e.currentTarget.select()}
-                  aria-label="Canvas URL"
-                  className="mt-1 h-7 font-mono text-[11px]"
-                />
-              </div>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          )}
+        </div>
 
         {/* Inline canvas rename input. */}
         {renamingCanvas && (
