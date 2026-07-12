@@ -66,8 +66,10 @@ describe('isRegisteredRedirectUri', () => {
     const result = oauthClientRegistrySchema.safeParse([
       { clientId: 'x', redirectUris: ['https://*.pages.dev/callback'] },
     ])
-    // '*.pages.dev' is not a valid URL host, so schema parsing (z.string().url())
-    // already rejects it before it could ever be used as a wildcard.
+    // WHATWG URL parsing treats '*' as an ordinary hostname character, so
+    // `new URL('https://*.pages.dev/callback')` succeeds and `z.string().url()`
+    // admits it. The explicit wildcard refinement is the only thing rejecting
+    // this — it is load-bearing, not redundant.
     expect(result.success).toBe(false)
   })
 })
