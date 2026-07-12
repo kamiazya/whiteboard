@@ -230,9 +230,12 @@ export function listTemplatesTool() {
     name: 'template_list',
     description:
       'List built-in whiteboard templates/components that can be inserted with template_insert. Templates are lightweight annotate_batch recipes intended for reusable architecture parts.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(listTemplatesInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (): Promise<z.infer<typeof templateListOutputSchema>> => ({
       templates: BUILTIN_TEMPLATES.map((template) => ({
@@ -251,12 +254,25 @@ export function listTemplatesTool() {
 }
 
 export const insertTemplateInputShape = {
-  canvasId: z.string(),
-  templateId: z.string().optional(),
-  templatePath: z.string().optional(),
-  target: z.object({ x: z.number(), y: z.number() }),
-  scale: z.number().optional(),
-  variables: z.record(z.string(), z.string()).optional(),
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+  templateId: z.string().optional().describe('Built-in template id returned by template_list.'),
+  templatePath: z
+    .string()
+    .optional()
+    .describe('Absolute path to a custom template JSON file. Use instead of templateId.'),
+  target: z
+    .object({ x: z.number(), y: z.number() })
+    .describe(
+      'Insertion origin in canvas coordinates. Template coordinates are offset from this point.',
+    ),
+  scale: z
+    .number()
+    .optional()
+    .describe('Optional scale multiplier applied to template geometry. Default 1.'),
+  variables: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe('Optional placeholder values keyed by variable name. Overrides template defaults.'),
 } satisfies z.ZodRawShape
 
 export function insertTemplateTool() {
@@ -264,37 +280,12 @@ export function insertTemplateTool() {
     name: 'template_insert',
     description:
       'Insert a built-in or file-based template onto a canvas. Templates are resolved into annotate_batch annotations, so they remain editable after insertion. Use templateId for built-ins or templatePath for a custom JSON template.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        templateId: {
-          type: 'string',
-          description: 'Built-in template id returned by template_list.',
-        },
-        templatePath: {
-          type: 'string',
-          description: 'Absolute path to a custom template JSON file. Use instead of templateId.',
-        },
-        target: {
-          type: 'object',
-          description:
-            'Insertion origin in canvas coordinates. Template coordinates are offset from this point.',
-          properties: { x: { type: 'number' }, y: { type: 'number' } },
-          required: ['x', 'y'],
-        },
-        scale: {
-          type: 'number',
-          description: 'Optional scale multiplier applied to template geometry. Default 1.',
-        },
-        variables: {
-          type: 'object',
-          additionalProperties: { type: 'string' },
-          description:
-            'Optional placeholder values keyed by variable name. Overrides template defaults.',
-        },
-      },
-      required: ['canvasId', 'target'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(insertTemplateInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {

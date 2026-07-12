@@ -148,7 +148,7 @@ export const exportPngInputShape = {
     .string()
     .optional()
     .describe(
-      'Absolute path to write the PNG to. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+      "Absolute path to write the PNG to. Must be inside this workspace's exports directory (~/.whiteboard/<workspaceId>/exports, or $WHITEBOARD_DATA_DIR/<workspaceId>/exports if that env var is set) — paths outside it are rejected with invalid_output_path. Parent directories inside that root are created as needed. Omit outputPath to write to the default location there automatically.",
     ),
   overwrite: z
     .boolean()
@@ -168,48 +168,12 @@ export function exportPngTool() {
   return {
     name: 'export_png',
     description: 'Export the whiteboard canvas as a PNG file',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        padding: {
-          type: 'number',
-          description:
-            'Padding in pixels around all elements in the exported PNG. Default: 10. Use larger values (e.g., 24-48) to avoid cropping annotation strokes/text.',
-        },
-        scale: {
-          type: 'number',
-          description:
-            'Export scale factor (appState.exportScale). Default: 1. Use 2-3 for high-DPI exports.',
-        },
-        minFontPx: {
-          type: 'number',
-          description:
-            'Minimum font size (px) enforced on text-bearing elements before export. Clones elements with Math.max(fontSize, minFontPx) so small annotation text remains legible at small scales.',
-        },
-        frameId: {
-          type: 'string',
-          description:
-            'When set, export only the elements inside the given frame (plus the frame itself). Useful for section-scoped exports on large canvases to keep the resulting PNG small.',
-        },
-        outputPath: {
-          type: 'string',
-          description:
-            "Absolute path to write the PNG to. Must be inside this workspace's exports directory (~/.whiteboard/<workspaceId>/exports, or $WHITEBOARD_DATA_DIR/<workspaceId>/exports if that env var is set) — paths outside it are rejected with invalid_output_path. Parent directories inside that root are created as needed. Omit outputPath to write to the default location there automatically.",
-        },
-        overwrite: {
-          type: 'boolean',
-          description:
-            'Replace an existing file at outputPath. Default: false. Without this, an existing outputPath is rejected with output_exists.',
-        },
-        theme: {
-          type: 'string',
-          enum: ['light', 'dark'],
-          description:
-            'Force the rendered scene into "light" or "dark" without mutating the persisted appState. Use it to export the same canvas under both themes for dark-mode QA, contrast review, or before/after comparison.',
-        },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(exportPngInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: ExportPngArgs,

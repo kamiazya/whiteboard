@@ -99,21 +99,12 @@ export function updateElementTool() {
     name: 'update_element',
     description:
       'Patch fields of an existing element in-place (e.g., change text, strokeColor, x/y/width/height). Any Excalidraw element field can be set via patch.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementId: {
-          type: 'string',
-          description: 'Excalidraw element id returned from annotate/load_image.',
-        },
-        patch: {
-          type: 'object',
-          description: 'Field → value map. Values are applied verbatim with LoroMap.set.',
-          additionalProperties: true,
-        },
-      },
-      required: ['canvasId', 'elementId', 'patch'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(updateElementInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; elementId: string; patch: Record<string, unknown> },
@@ -150,13 +141,12 @@ export function deleteElementTool() {
     name: 'delete_element',
     description:
       'Soft-delete an element by setting isDeleted=true (tombstone). The element stays in the LoroList so the delete op propagates across clients; Excalidraw hides it automatically.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementId: { type: 'string' },
-      },
-      required: ['canvasId', 'elementId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(deleteElementInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; elementId: string },
@@ -195,18 +185,12 @@ export function deleteElementsTool() {
     name: 'delete_elements',
     description:
       'Soft-delete multiple elements in one snapshot/commit/broadcast. All-or-nothing: if any id is missing, nothing is deleted. Duplicates are deduped. Already-deleted ids are idempotent (no error). Use this instead of calling delete_element N times.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementIds: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-          description: 'Excalidraw element ids to tombstone.',
-        },
-      },
-      required: ['canvasId', 'elementIds'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(deleteElementsInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; elementIds: string[] },
@@ -228,7 +212,9 @@ export function deleteElementsTool() {
   }
 }
 
-export const canvasClearInputShape = { canvasId: z.string() } satisfies z.ZodRawShape
+export const canvasClearInputShape = {
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+} satisfies z.ZodRawShape
 
 // Tombstone every non-deleted element so the canvas can be reset efficiently in
 // one snapshot/commit/update cycle.
@@ -237,12 +223,12 @@ export function canvasClearTool() {
     name: 'canvas_clear',
     description:
       'Soft-delete all non-deleted elements on the canvas in one snapshot/commit/broadcast. Tombstone semantics identical to delete_element. Returns { clearedCount }. Idempotent: a second call on an empty canvas returns 0.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(canvasClearInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string },
@@ -282,19 +268,12 @@ export function moveElementsTool() {
     name: 'move_elements',
     description:
       'Translate multiple elements by the same (dx, dy). All-or-nothing: if any id is missing, nothing is moved.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementIds: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-        },
-        dx: { type: 'number' },
-        dy: { type: 'number' },
-      },
-      required: ['canvasId', 'elementIds', 'dx', 'dy'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(moveElementsInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; elementIds: string[]; dx: number; dy: number },
@@ -376,9 +355,13 @@ export function distributeElementsTool() {
 }
 
 export const assignToGroupInputShape = {
-  canvasId: z.string(),
-  groupId: z.string(),
-  elementIds: z.array(z.string()).min(1),
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+  groupId: z
+    .string()
+    .describe(
+      'Free-form group identifier. Pick a readable string (kebab-case recommended). Can be reused to grow an existing group.',
+    ),
+  elementIds: z.array(z.string()).min(1).describe('Excalidraw element ids to add to the group.'),
 } satisfies z.ZodRawShape
 
 // Tool for adding members to a logical group via Excalidraw's native groupIds.
@@ -388,22 +371,12 @@ export function assignToGroupTool() {
     name: 'assign_to_group',
     description:
       "Add elements to a logical group by appending a groupId to their `groupIds: string[]`. Use a meaningful user-chosen groupId (e.g. 'section-11-before') so delete_group / list_groups can target the set later. Idempotent: already-assigned members are skipped. All-or-nothing on missing ids.",
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        groupId: {
-          type: 'string',
-          description:
-            'Free-form group identifier. Pick a readable string (kebab-case recommended). Can be reused to grow an existing group.',
-        },
-        elementIds: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-        },
-      },
-      required: ['canvasId', 'groupId', 'elementIds'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(assignToGroupInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; groupId: string; elementIds: string[] },
@@ -426,8 +399,8 @@ export function assignToGroupTool() {
 }
 
 export const deleteGroupInputShape = {
-  canvasId: z.string(),
-  groupId: z.string(),
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+  groupId: z.string().describe('Group identifier assigned via assign_to_group.'),
 } satisfies z.ZodRawShape
 
 // Tombstone every element in the given groupId in one shot.
@@ -436,13 +409,12 @@ export function deleteGroupTool() {
     name: 'delete_group',
     description:
       'Soft-delete all non-deleted elements belonging to a groupId in one snapshot/commit/broadcast. Returns { deletedElementIds }. Returns empty array if the group has no live members.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        groupId: { type: 'string' },
-      },
-      required: ['canvasId', 'groupId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(deleteGroupInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; groupId: string },
@@ -464,7 +436,9 @@ export function deleteGroupTool() {
   }
 }
 
-export const listGroupsInputShape = { canvasId: z.string() } satisfies z.ZodRawShape
+export const listGroupsInputShape = {
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+} satisfies z.ZodRawShape
 
 // List every group on the canvas. memberIds include only non-deleted elements. Read-only.
 export function listGroupsTool() {
@@ -472,12 +446,12 @@ export function listGroupsTool() {
     name: 'list_groups',
     description:
       'List all logical groups on the canvas and their member element ids (tombstoned members excluded). Read-only.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(listGroupsInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string },
@@ -491,9 +465,13 @@ export function listGroupsTool() {
 }
 
 export const reorderElementsInputShape = {
-  canvasId: z.string(),
-  elementIds: z.array(z.string()).min(1),
-  action: z.enum(['front', 'back']),
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+  elementIds: z.array(z.string()).min(1).describe('Element ids to reorder together.'),
+  action: z
+    .enum(['front', 'back'])
+    .describe(
+      '"front" = to top of stacking order (rendered above others); "back" = to bottom (rendered behind others).',
+    ),
 } satisfies z.ZodRawShape
 
 // Change z-order by moving the selected elementIds together to the list front or
@@ -503,23 +481,12 @@ export function reorderElementsTool() {
     name: 'reorder_elements',
     description:
       'Change z-order (layer) of elements. "front" brings elements to the top (rendered above others); "back" sends them to the bottom. Relative order among the selected ids is preserved. All-or-nothing: if any id is missing, nothing changes.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        elementIds: {
-          type: 'array',
-          items: { type: 'string' },
-          minItems: 1,
-        },
-        action: {
-          type: 'string',
-          enum: ['front', 'back'],
-          description:
-            '"front" = to top of stacking order (rendered above others); "back" = to bottom (rendered behind others).',
-        },
-      },
-      required: ['canvasId', 'elementIds', 'action'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(reorderElementsInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; elementIds: string[]; action: 'front' | 'back' },

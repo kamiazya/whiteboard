@@ -73,18 +73,12 @@ export function loadImageTool() {
   return {
     name: 'load_image',
     description: 'Load an image file onto the whiteboard canvas',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        imagePath: { type: 'string', description: 'Absolute path to the image file' },
-        position: {
-          type: 'string',
-          enum: ['center', 'left', 'right'],
-          description: 'Position of the image on the canvas',
-        },
-      },
-      required: ['canvasId', 'imagePath'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(loadImageInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string; imagePath: string; position?: string },
