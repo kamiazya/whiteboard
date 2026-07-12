@@ -40,7 +40,7 @@ export function canvasExportJsonTool() {
   return {
     name: 'canvas_export_json',
     description:
-      'Export the canvas as a standard Excalidraw JSON (.excalidraw) file that can be opened in the Excalidraw desktop app, excalidraw.com, or any tool reading the official schema. Our internal custom fields (parentId / relX / relY) are resolved into absolute x/y and stripped by default.',
+      'Export the canvas as a standard Excalidraw JSON (.excalidraw) file that can be opened in the Excalidraw desktop app, excalidraw.com, or any tool reading the official schema. Our internal custom fields (parentId / relX / relY) are resolved into absolute x/y and stripped by default. Deprecated: prefer export_canvas({ format: "json" }), which also offers png and svg in one tool. Kept for backward compatibility.',
     // Derived from the Zod shape so the JSON-Schema view can never drift from
     // what registerToolWithAnnotations actually validates against.
     inputSchema: z.toJSONSchema(z.object(canvasExportJsonInputShape)) as {

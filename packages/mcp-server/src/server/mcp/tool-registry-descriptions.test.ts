@@ -35,6 +35,8 @@ import {
   reorderElementsInputShape,
   updateElementInputShape,
 } from './tools/element-ops-tools.js'
+import { exportCanvasInputShape } from './tools/export-canvas.js'
+import { exportSvgInputShape } from './tools/export-svg.js'
 import { exportPngInputShape } from './tools/export.js'
 import {
   createEmbedInputShape,
@@ -86,6 +88,8 @@ const REGISTERED_INPUT_SHAPES: Record<string, z.ZodRawShape> = {
   palette_set: paletteSetInputShape,
   palette_delete: paletteDeleteInputShape,
   export_png: exportPngInputShape,
+  export_svg: exportSvgInputShape,
+  export_canvas: exportCanvasInputShape,
   viewport_set: viewportSetInputShape,
   canvas_export_json: canvasExportJsonInputShape,
   canvas_auto_layout: canvasAutoLayoutInputShape,
@@ -176,6 +180,6 @@ describe('registered tool inputSchema descriptions', () => {
   it('covers every tool registered in tool-registration.ts (guards against a silently-skipped new tool)', () => {
     // Kept in sync manually with the `inputSchema:` count in tool-registration.ts.
     // A mismatch here means a new tool was registered without adding it above.
-    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(48)
+    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(50)
   })
 })

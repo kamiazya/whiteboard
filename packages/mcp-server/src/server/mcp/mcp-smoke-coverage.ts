@@ -44,7 +44,9 @@ export const ALL_REGISTERED_TOOLS = [
   'delete_elements',
   'delete_group',
   'distribute_elements',
+  'export_canvas',
   'export_png',
+  'export_svg',
   'library_catalog_list',
   'library_insert_batch',
   'library_insert_item',
@@ -91,6 +93,8 @@ export const COVERED_TOOLS = [
   'library_list_installed',
   'library_list_items',
   'export_png',
+  'export_svg',
+  'export_canvas',
   'library_uninstall',
 ] as const
 

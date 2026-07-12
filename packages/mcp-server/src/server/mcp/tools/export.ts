@@ -167,7 +167,8 @@ export const exportPngInputShape = {
 export function exportPngTool() {
   return {
     name: 'export_png',
-    description: 'Export the whiteboard canvas as a PNG file',
+    description:
+      'Export the whiteboard canvas as a PNG file. Deprecated: prefer export_canvas({ format: "png" }), which also offers svg and json in one tool. Kept for backward compatibility.',
     // Derived from the Zod shape so the JSON-Schema view can never drift from
     // what registerToolWithAnnotations actually validates against.
     inputSchema: z.toJSONSchema(z.object(exportPngInputShape)) as {

@@ -74,6 +74,12 @@ import {
   updateElementInputShape,
   updateElementTool,
 } from './tools/element-ops-tools.js'
+import {
+  exportCanvasInputShape,
+  exportCanvasOutputSchema,
+  exportCanvasTool,
+} from './tools/export-canvas.js'
+import { exportSvgInputShape, exportSvgOutputSchema, exportSvgTool } from './tools/export-svg.js'
 import { exportPngInputShape, exportPngOutputSchema, exportPngTool } from './tools/export.js'
 import {
   versionListInputShape,
@@ -225,6 +231,8 @@ export function registerAllTools(
   const annotateToolDef = annotateTool()
   const annotateBatchToolDef = annotateBatchTool()
   const exportTool = exportPngTool()
+  const exportSvg = exportSvgTool()
+  const exportCanvas = exportCanvasTool()
   const viewportTool = viewportSetTool()
   const exportJsonTool = canvasExportJsonTool()
   const autoLayoutTool = canvasAutoLayoutTool()
@@ -453,6 +461,38 @@ export function registerAllTools(
           exportJsonTool.execute({ canvasId, includeCustomFields, outputPath, overwrite }, client),
         )
         return structuredJsonResult(result)
+      },
+    }),
+
+    defineTool({
+      name: exportSvg.name,
+      description: exportSvg.description,
+      inputSchema: exportSvgInputShape,
+      outputSchema: exportSvgOutputSchema,
+      handler: async ({ canvasId, padding, frameId, outputPath, overwrite, theme }) => {
+        const result = await withDaemon((client) =>
+          exportSvg.execute({ canvasId, padding, frameId, outputPath, overwrite, theme }, client),
+        )
+        return structuredJsonResult(result)
+      },
+    }),
+
+    defineTool({
+      name: exportCanvas.name,
+      description: exportCanvas.description,
+      inputSchema: exportCanvasInputShape,
+      outputSchema: exportCanvasOutputSchema,
+      handler: async (args) => {
+        const result = await withDaemon((client) => exportCanvas.execute(args, client))
+        // PNG results carry an image payload just like export_png's own
+        // registration does; svg/json results are text-only structured content.
+        const content: Array<
+          { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
+        > = [{ type: 'text', text: JSON.stringify(result) }]
+        if (result.format === 'png' && result.imageBase64) {
+          content.push({ type: 'image', data: result.imageBase64, mimeType: 'image/png' })
+        }
+        return { structuredContent: result, content }
       },
     }),
 

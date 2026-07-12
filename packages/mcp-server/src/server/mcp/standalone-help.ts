@@ -13,7 +13,7 @@ const HELP_LINES = [
   '2. `annotate_batch` for boxes/arrows/text in one pass',
   '3. `canvas_inspect` to verify structure',
   '4. `viewport_set` or `canvas_open` when a human needs to review the board',
-  '5. `export_png` or `canvas_export_json` when you need an artifact',
+  '5. `export_canvas({ format: "png" | "svg" | "json" })` when you need an artifact',
   '',
   'Color guidance:',
   '- Use semantic color families instead of ad-hoc hex values when the board has stable categories.',
@@ -53,11 +53,7 @@ export function formatInstalledLibrariesResource(installedUrls: string[]): strin
     ].join('\n')
   }
 
-  return [
-    '# Installed libraries',
-    '',
-    ...installedUrls.map((url) => `- ${url}`),
-  ].join('\n')
+  return ['# Installed libraries', '', ...installedUrls.map((url) => `- ${url}`)].join('\n')
 }
 
 export function formatRecentCanvasesResource(
