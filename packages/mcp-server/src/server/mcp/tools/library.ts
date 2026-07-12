@@ -367,9 +367,12 @@ function itemBBox(elements: LibraryElement[]): {
 }
 
 export const libraryListItemsInputShape = {
-  libraryUrl: z.string().optional(),
-  libraryPath: z.string().optional(),
-  userLibraryName: z.string().optional(),
+  libraryUrl: z.string().optional().describe('HTTPS URL to a .excalidrawlib file.'),
+  libraryPath: z.string().optional().describe('Absolute path to a local .excalidrawlib file.'),
+  userLibraryName: z
+    .string()
+    .optional()
+    .describe('Name of a user library saved via user_library_save.'),
 } satisfies z.ZodRawShape
 
 export function libraryListItemsTool() {
@@ -377,22 +380,12 @@ export function libraryListItemsTool() {
     name: 'library_list_items',
     description:
       'List items in an Excalidraw library. Source is one of: libraryUrl (HTTPS, e.g. libraries.excalidraw.com), libraryPath (absolute local file), or userLibraryName (saved via user_library_save). Returns per-item metadata (index, name, element count, bbox).',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        libraryUrl: {
-          type: 'string',
-          description: 'HTTPS URL to a .excalidrawlib file.',
-        },
-        libraryPath: {
-          type: 'string',
-          description: 'Absolute path to a local .excalidrawlib file.',
-        },
-        userLibraryName: {
-          type: 'string',
-          description: 'Name of a user library saved via user_library_save.',
-        },
-      },
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(libraryListItemsInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {
@@ -453,36 +446,12 @@ export function libraryInsertItemTool() {
     name: 'library_insert_item',
     description:
       'Insert a specific item from an Excalidraw library onto the canvas. Source is one of: libraryUrl / libraryPath / userLibraryName. The item is cloned with fresh element ids and shifted so its bbox top-left aligns with target. Internal references (containerId / boundElements / arrow bindings) are remapped. External references are dropped.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        libraryUrl: { type: 'string', description: 'HTTPS URL to a .excalidrawlib file' },
-        libraryPath: { type: 'string', description: 'Absolute path to a local .excalidrawlib' },
-        userLibraryName: {
-          type: 'string',
-          description: 'Name of a user library saved via user_library_save.',
-        },
-        itemIndex: {
-          type: 'number',
-          description: 'Zero-based index of the item within the library.',
-        },
-        target: {
-          type: 'object',
-          description: 'Absolute canvas coordinate for the item bbox top-left.',
-          properties: {
-            x: { type: 'number' },
-            y: { type: 'number' },
-          },
-          required: ['x', 'y'],
-        },
-        scale: {
-          type: 'number',
-          description:
-            'Optional scale multiplier applied to the inserted item geometry. When omitted for userLibraryName, metadata.scales[itemIndex] is used if present.',
-        },
-      },
-      required: ['canvasId', 'itemIndex', 'target'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(libraryInsertItemInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {
@@ -522,22 +491,44 @@ export function libraryInsertItemTool() {
 }
 
 export const libraryInsertBatchInputShape = {
-  canvasId: z.string(),
-  libraryUrl: z.string().optional(),
-  libraryPath: z.string().optional(),
-  userLibraryName: z.string().optional(),
-  groupAs: z.string().optional(),
-  scale: z.number().optional(),
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+  libraryUrl: z.string().optional().describe('HTTPS URL to a .excalidrawlib file'),
+  libraryPath: z.string().optional().describe('Absolute path to a local .excalidrawlib'),
+  userLibraryName: z
+    .string()
+    .optional()
+    .describe('Name of a user library saved via user_library_save.'),
+  groupAs: z
+    .string()
+    .optional()
+    .describe('Optional logical group id applied to every inserted element in the batch.'),
+  scale: z
+    .number()
+    .optional()
+    .describe(
+      'Optional default scale multiplier applied to every inserted item. Item-level scale overrides this. When omitted for userLibraryName, metadata.scales[itemIndex] is used if present.',
+    ),
   items: z
     .array(
       z.object({
-        itemIndex: z.number(),
-        target: z.object({ x: z.number(), y: z.number() }),
-        groupAs: z.string().optional(),
-        scale: z.number().optional(),
+        itemIndex: z.number().describe('Zero-based index of the item within the library.'),
+        target: z
+          .object({ x: z.number(), y: z.number() })
+          .describe('Absolute canvas coordinate for the item bbox top-left.'),
+        groupAs: z
+          .string()
+          .optional()
+          .describe('Optional logical group id applied only to this item insertion.'),
+        scale: z
+          .number()
+          .optional()
+          .describe(
+            'Optional scale multiplier for this item insertion. Overrides batch scale and metadata.scales[itemIndex].',
+          ),
       }),
     )
-    .min(1),
+    .min(1)
+    .describe('Items to insert from the shared source.'),
 } satisfies z.ZodRawShape
 
 export function libraryInsertBatchTool() {
@@ -545,59 +536,12 @@ export function libraryInsertBatchTool() {
     name: 'library_insert_batch',
     description:
       'Insert multiple items from the same Excalidraw library onto a canvas in one snapshot/update cycle. Source is one of: libraryUrl / libraryPath / userLibraryName. Each item is cloned with fresh ids, shifted to its target, and may optionally receive batch-level or per-item groupAs labels.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        libraryUrl: { type: 'string', description: 'HTTPS URL to a .excalidrawlib file' },
-        libraryPath: { type: 'string', description: 'Absolute path to a local .excalidrawlib' },
-        userLibraryName: {
-          type: 'string',
-          description: 'Name of a user library saved via user_library_save.',
-        },
-        groupAs: {
-          type: 'string',
-          description: 'Optional logical group id applied to every inserted element in the batch.',
-        },
-        scale: {
-          type: 'number',
-          description:
-            'Optional default scale multiplier applied to every inserted item. Item-level scale overrides this. When omitted for userLibraryName, metadata.scales[itemIndex] is used if present.',
-        },
-        items: {
-          type: 'array',
-          description: 'Items to insert from the shared source.',
-          items: {
-            type: 'object',
-            properties: {
-              itemIndex: {
-                type: 'number',
-                description: 'Zero-based index of the item within the library.',
-              },
-              target: {
-                type: 'object',
-                description: 'Absolute canvas coordinate for the item bbox top-left.',
-                properties: {
-                  x: { type: 'number' },
-                  y: { type: 'number' },
-                },
-                required: ['x', 'y'],
-              },
-              groupAs: {
-                type: 'string',
-                description: 'Optional logical group id applied only to this item insertion.',
-              },
-              scale: {
-                type: 'number',
-                description:
-                  'Optional scale multiplier for this item insertion. Overrides batch scale and metadata.scales[itemIndex].',
-              },
-            },
-            required: ['itemIndex', 'target'],
-          },
-        },
-      },
-      required: ['canvasId', 'items'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(libraryInsertBatchInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: LibraryInsertBatchArgs,
@@ -633,15 +577,12 @@ export function libraryInstallTool(workspaceId: string) {
     name: 'library_install',
     description:
       'Register a library URL at the session level. The URL is persisted to disk so the browser auto-restores it on reload. Also validates by fetching the library once (count of items returned for confirmation).',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        libraryUrl: {
-          type: 'string',
-          description: 'HTTPS URL to a .excalidrawlib file.',
-        },
-      },
-      required: ['libraryUrl'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(libraryInstallInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { libraryUrl: string },
@@ -667,18 +608,20 @@ export function libraryInstallTool(workspaceId: string) {
   }
 }
 
-export const libraryUninstallInputShape = { libraryUrl: z.string() } satisfies z.ZodRawShape
+export const libraryUninstallInputShape = {
+  libraryUrl: z.string().describe('Library URL previously registered via library_install.'),
+} satisfies z.ZodRawShape
 
 export function libraryUninstallTool(workspaceId: string) {
   return {
     name: 'library_uninstall',
     description: 'Remove a previously installed library URL from the session registry.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        libraryUrl: { type: 'string' },
-      },
-      required: ['libraryUrl'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(libraryUninstallInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { libraryUrl: string },
@@ -705,9 +648,12 @@ export function libraryListInstalledTool(workspaceId: string) {
     name: 'library_list_installed',
     description:
       'List library URLs that have been installed to this session (via library_install or the browser library dialog).',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(libraryListInstalledInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       _args: object,
@@ -728,9 +674,19 @@ export function libraryListInstalledTool(workspaceId: string) {
 // templates, or curated local copies of external libraries.
 
 export const userLibrarySaveInputShape = {
-  name: z.string(),
-  fromUrl: z.string().optional(),
-  content: z.record(z.string(), z.unknown()).optional(),
+  name: z.string().describe('Library name (letters / digits / hyphens / underscores / dots).'),
+  fromUrl: z
+    .string()
+    .optional()
+    .describe(
+      'HTTPS URL of a .excalidrawlib to fetch and save locally (e.g. curate a catalog item).',
+    ),
+  content: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      'Raw .excalidrawlib JSON ({type, version, library or libraryItems}). Use instead of fromUrl.',
+    ),
 } satisfies z.ZodRawShape
 
 export function userLibrarySaveTool() {
@@ -738,25 +694,12 @@ export function userLibrarySaveTool() {
     name: 'user_library_save',
     description:
       'Save a user-level library to ~/.excalidraw/.user-libraries/{name}.excalidrawlib. Provide EITHER fromUrl (fetched and stored) OR content (raw .excalidrawlib JSON object). Same name overwrites. The saved library is usable via userLibraryName in library_list_items / library_insert_item across sessions.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: {
-          type: 'string',
-          description: 'Library name (letters / digits / hyphens / underscores / dots).',
-        },
-        fromUrl: {
-          type: 'string',
-          description:
-            'HTTPS URL of a .excalidrawlib to fetch and save locally (e.g. curate a catalog item).',
-        },
-        content: {
-          type: 'object',
-          description:
-            'Raw .excalidrawlib JSON ({type, version, library or libraryItems}). Use instead of fromUrl.',
-        },
-      },
-      required: ['name'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(userLibrarySaveInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { name: string; fromUrl?: string; content?: unknown },
@@ -801,9 +744,12 @@ export function userLibraryListTool() {
     name: 'user_library_list',
     description:
       'List user-level libraries saved in ~/.excalidraw/.user-libraries/. Returns { name, path, itemCount } for each.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {},
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(userLibraryListInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       _args: object,
@@ -820,18 +766,20 @@ export function userLibraryListTool() {
   }
 }
 
-export const userLibraryRemoveInputShape = { name: z.string() } satisfies z.ZodRawShape
+export const userLibraryRemoveInputShape = {
+  name: z.string().describe('Library name previously saved via user_library_save.'),
+} satisfies z.ZodRawShape
 
 export function userLibraryRemoveTool() {
   return {
     name: 'user_library_remove',
     description: 'Delete a user-level library by name. No-op if not found.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string' },
-      },
-      required: ['name'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(userLibraryRemoveInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { name: string },
@@ -848,19 +796,21 @@ export function userLibraryRemoveTool() {
   }
 }
 
-export const userLibraryMetadataGetInputShape = { name: z.string() } satisfies z.ZodRawShape
+export const userLibraryMetadataGetInputShape = {
+  name: z.string().describe('Library name previously saved via user_library_save.'),
+} satisfies z.ZodRawShape
 
 export function userLibraryMetadataGetTool() {
   return {
     name: 'user_library_metadata_get',
     description:
       'Load user-level library metadata from ~/.excalidraw/.user-libraries/{name}.meta.json. Returns an empty manifest with revision 0 when metadata has not been created yet.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string' },
-      },
-      required: ['name'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(userLibraryMetadataGetInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { name: string },
@@ -878,11 +828,22 @@ export function userLibraryMetadataGetTool() {
 }
 
 export const userLibraryMetadataSetInputShape = {
-  name: z.string(),
-  revision: z.number(),
-  aliases: z.record(z.string(), z.number()).optional(),
-  notes: z.record(z.string(), z.string()).optional(),
-  scales: z.record(z.string(), z.number()).optional(),
+  name: z.string().describe('Library name previously saved via user_library_save.'),
+  revision: z
+    .number()
+    .describe('Current manifest revision (from user_library_metadata_get). Prevents lost updates.'),
+  aliases: z
+    .record(z.string(), z.number())
+    .optional()
+    .describe('itemIndex-keyed alias map to merge into the manifest.'),
+  notes: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe('itemIndex-keyed note map to merge into the manifest.'),
+  scales: z
+    .record(z.string(), z.number())
+    .optional()
+    .describe('itemIndex-keyed default-scale map to merge into the manifest.'),
 } satisfies z.ZodRawShape
 
 export function userLibraryMetadataSetTool() {
@@ -890,16 +851,12 @@ export function userLibraryMetadataSetTool() {
     name: 'user_library_metadata_set',
     description:
       'Merge aliases / notes / scales into a user-level library metadata manifest. Requires the current revision and returns the updated manifest with revision + 1.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string' },
-        revision: { type: 'number' },
-        aliases: { type: 'object', additionalProperties: { type: 'number' } },
-        notes: { type: 'object', additionalProperties: { type: 'string' } },
-        scales: { type: 'object', additionalProperties: { type: 'number' } },
-      },
-      required: ['name', 'revision'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(userLibraryMetadataSetInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {
@@ -933,11 +890,19 @@ export function userLibraryMetadataSetTool() {
 }
 
 export const userLibraryMetadataDeleteInputShape = {
-  name: z.string(),
-  revision: z.number(),
-  aliasKeys: z.array(z.string()).optional(),
-  noteKeys: z.array(z.string()).optional(),
-  scaleKeys: z.array(z.string()).optional(),
+  name: z.string().describe('Library name previously saved via user_library_save.'),
+  revision: z
+    .number()
+    .describe('Current manifest revision (from user_library_metadata_get). Prevents lost updates.'),
+  aliasKeys: z
+    .array(z.string())
+    .optional()
+    .describe('itemIndex keys to remove from the alias map.'),
+  noteKeys: z.array(z.string()).optional().describe('itemIndex keys to remove from the note map.'),
+  scaleKeys: z
+    .array(z.string())
+    .optional()
+    .describe('itemIndex keys to remove from the scale map.'),
 } satisfies z.ZodRawShape
 
 export function userLibraryMetadataDeleteTool() {
@@ -945,16 +910,12 @@ export function userLibraryMetadataDeleteTool() {
     name: 'user_library_metadata_delete',
     description:
       'Delete alias / note / scale keys from a user-level library metadata manifest. Requires the current revision and returns the updated manifest with revision + 1.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string' },
-        revision: { type: 'number' },
-        aliasKeys: { type: 'array', items: { type: 'string' } },
-        noteKeys: { type: 'array', items: { type: 'string' } },
-        scaleKeys: { type: 'array', items: { type: 'string' } },
-      },
-      required: ['name', 'revision'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(userLibraryMetadataDeleteInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {

@@ -52,19 +52,25 @@ export async function apiDeletePalette(
   )
 }
 
-export const paletteGetInputShape = { workspaceId: z.string() } satisfies z.ZodRawShape
+export const paletteGetInputShape = {
+  workspaceId: z
+    .string()
+    .describe(
+      'Workspace ID (the part before "/" in canvasId). Palette is shared across all canvases in the workspace.',
+    ),
+} satisfies z.ZodRawShape
 
 export function paletteGetTool() {
   return {
     name: 'palette_get',
     description:
       'Get the workspace color palette used by annotate / annotate_batch semantic tokens.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        workspaceId: { type: 'string' },
-      },
-      required: ['workspaceId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(paletteGetInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { workspaceId: string },
@@ -92,13 +98,12 @@ export function paletteSetTool() {
   return {
     name: 'palette_set',
     description: 'Merge entries into the workspace color palette and return the resulting palette.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        workspaceId: { type: 'string' },
-        entries: { type: 'object', additionalProperties: { type: 'string' } },
-      },
-      required: ['workspaceId', 'entries'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(paletteSetInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { workspaceId: string; entries: PaletteEntries },
@@ -110,21 +115,24 @@ export function paletteSetTool() {
 }
 
 export const paletteDeleteInputShape = {
-  workspaceId: z.string(),
-  keys: z.array(z.string()).min(1),
+  workspaceId: z
+    .string()
+    .describe(
+      'Workspace ID (the part before "/" in canvasId). Palette is shared across all canvases in the workspace.',
+    ),
+  keys: z.array(z.string()).min(1).describe('Palette keys to remove.'),
 } satisfies z.ZodRawShape
 
 export function paletteDeleteTool() {
   return {
     name: 'palette_delete',
     description: 'Delete keys from the workspace color palette and return the resulting palette.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        workspaceId: { type: 'string' },
-        keys: { type: 'array', items: { type: 'string' }, minItems: 1 },
-      },
-      required: ['workspaceId', 'keys'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(paletteDeleteInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { workspaceId: string; keys: string[] },

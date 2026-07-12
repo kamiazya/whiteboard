@@ -20,7 +20,19 @@ export const canvasExportJsonInputShape = {
     .boolean()
     .optional()
     .describe(
-      'When true, include custom Loro CRDT fields (parent/relX/relY etc.) in the output. Default false — exports a clean .excalidraw JSON compatible with Excalidraw desktop / excalidraw.com.',
+      'Keep internal custom fields (parentId / relX / relY) in the exported JSON. Default: false. Set true for debugging or round-tripping through this tool.',
+    ),
+  outputPath: z
+    .string()
+    .optional()
+    .describe(
+      "Absolute path to write the .excalidraw file to. Must be inside this workspace's exports directory (~/.whiteboard/<workspaceId>/exports, or $WHITEBOARD_DATA_DIR/<workspaceId>/exports if that env var is set) — paths outside it are rejected with invalid_output_path. Parent directories inside that root are created as needed. Omit outputPath to write to the default location there automatically.",
+    ),
+  overwrite: z
+    .boolean()
+    .optional()
+    .describe(
+      'Replace an existing file at outputPath. Default: false. Without this, an existing outputPath is rejected with output_exists.',
     ),
 } satisfies z.ZodRawShape
 
@@ -29,27 +41,12 @@ export function canvasExportJsonTool() {
     name: 'canvas_export_json',
     description:
       'Export the canvas as a standard Excalidraw JSON (.excalidraw) file that can be opened in the Excalidraw desktop app, excalidraw.com, or any tool reading the official schema. Our internal custom fields (parentId / relX / relY) are resolved into absolute x/y and stripped by default.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        includeCustomFields: {
-          type: 'boolean',
-          description:
-            'Keep internal custom fields (parentId / relX / relY) in the exported JSON. Default: false. Set true for debugging or round-tripping through this tool.',
-        },
-        outputPath: {
-          type: 'string',
-          description:
-            "Absolute path to write the .excalidraw file to. Must be inside this workspace's exports directory (~/.whiteboard/<workspaceId>/exports, or $WHITEBOARD_DATA_DIR/<workspaceId>/exports if that env var is set) — paths outside it are rejected with invalid_output_path. Parent directories inside that root are created as needed. Omit outputPath to write to the default location there automatically.",
-        },
-        overwrite: {
-          type: 'boolean',
-          description:
-            'Replace an existing file at outputPath. Default: false. Without this, an existing outputPath is rejected with output_exists.',
-        },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(canvasExportJsonInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: CanvasExportJsonArgs,

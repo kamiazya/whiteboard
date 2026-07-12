@@ -85,8 +85,13 @@ function matchesQuery(entry: CatalogEntry, q: string): boolean {
 }
 
 export const libraryCatalogListInputShape = {
-  query: z.string().optional(),
-  limit: z.number().optional(),
+  query: z
+    .string()
+    .optional()
+    .describe(
+      'Case-insensitive substring matched against name / description / author name. Omit to list all libraries.',
+    ),
+  limit: z.number().optional().describe('Cap the number of returned items. Default 20.'),
 } satisfies z.ZodRawShape
 
 export function libraryCatalogListTool() {
@@ -94,19 +99,12 @@ export function libraryCatalogListTool() {
     name: 'library_catalog_list',
     description:
       'Search the official Excalidraw library catalog (libraries.excalidraw.com/libraries.json). Use this to discover .excalidrawlib bundles by keyword before calling library_install. Returns metadata (name, description, authors, absolute download URL, preview URL) for matching libraries.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        query: {
-          type: 'string',
-          description:
-            'Case-insensitive substring matched against name / description / author name. Omit to list all libraries.',
-        },
-        limit: {
-          type: 'number',
-          description: 'Cap the number of returned items. Default 20.',
-        },
-      },
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(libraryCatalogListInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (args: {
       query?: string

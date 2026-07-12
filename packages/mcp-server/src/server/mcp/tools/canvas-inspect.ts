@@ -19,12 +19,12 @@ export function canvasInspectTool() {
     name: 'canvas_inspect',
     description:
       'Inspect the current state of a whiteboard canvas. Returns elementCount (raw Excalidraw node count — composite annotations like box_with_label expand to multiple nodes, so this is higher than the number of annotate() calls) and per-element summaries (id, type, position, size, key attributes) so Claude can decide where to place annotations or verify prior operations.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(canvasInspectInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: { canvasId: string },
