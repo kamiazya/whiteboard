@@ -114,15 +114,20 @@ function hashCode(rawCode: string): string {
   return createHash('sha256').update(rawCode).digest('hex')
 }
 
+// Compare two secrets without leaking, through timing, how much of the
+// value matched. timingSafeEqual throws on a length mismatch, so unequal
+// lengths are rejected up front — a length difference is not itself secret.
+function secretsMatch(actual: string, expected: string): boolean {
+  const actualBytes = Buffer.from(actual)
+  const expectedBytes = Buffer.from(expected)
+  if (actualBytes.length !== expectedBytes.length) return false
+  return timingSafeEqual(actualBytes, expectedBytes)
+}
+
 // S256 per RFC 7636 §4.2: challenge = BASE64URL-ENCODE(SHA256(verifier)).
-// A verifier-mismatch must not leak timing information about how much of
-// the challenge matched, hence timingSafeEqual over the raw hash bytes.
 function verifyPkce(codeChallenge: string, codeVerifier: string): boolean {
   const computedChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
-  const computed = Buffer.from(computedChallenge)
-  const expected = Buffer.from(codeChallenge)
-  if (computed.length !== expected.length) return false
-  return timingSafeEqual(computed, expected)
+  return secretsMatch(computedChallenge, codeChallenge)
 }
 
 export interface OAuthTransactionStore {
@@ -136,7 +141,7 @@ export interface OAuthTransactionStore {
     clientId: string,
   ): { accessToken: string; expiresIn: number }
   // Constant-time check that a submitted csrfToken is the one bound to the
-  // transaction at creation. Mirrors verifyPkce's approach below.
+  // transaction at creation.
   verifyApprovalBinding(transactionId: string, csrfToken: string): boolean
   // Read accessor for the approval screen. Deliberately narrower than
   // TransactionRecord: no state/codeChallenge/csrfToken/codeHash leak into
@@ -206,32 +211,39 @@ export function createOAuthTransactionStore(options?: {
     return { transactionId: id, expiresAt }
   }
 
-  function approveTransaction(transactionId: string): boolean {
+  // The only state a transaction can still be approved, denied, or rendered
+  // from. Every caller below re-checks expiry here rather than trusting
+  // pruneExpired to have run.
+  function getPendingTransaction(transactionId: string): TransactionRecord | null {
     const record = transactions.get(transactionId)
-    if (!record || record.status !== 'pending' || record.expiresAt < now()) return false
-    transactions.set(transactionId, { ...record, status: 'approved' })
+    if (!record || record.status !== 'pending' || record.expiresAt < now()) return null
+    return record
+  }
+
+  function decidePendingTransaction(transactionId: string, status: 'approved' | 'denied'): boolean {
+    const record = getPendingTransaction(transactionId)
+    if (!record) return false
+    transactions.set(transactionId, { ...record, status })
     return true
   }
 
+  function approveTransaction(transactionId: string): boolean {
+    return decidePendingTransaction(transactionId, 'approved')
+  }
+
   function denyTransaction(transactionId: string): boolean {
-    const record = transactions.get(transactionId)
-    if (!record || record.status !== 'pending' || record.expiresAt < now()) return false
-    transactions.set(transactionId, { ...record, status: 'denied' })
-    return true
+    return decidePendingTransaction(transactionId, 'denied')
   }
 
   function verifyApprovalBinding(transactionId: string, csrfToken: string): boolean {
     const record = transactions.get(transactionId)
     if (!record) return false
-    const computed = Buffer.from(csrfToken)
-    const expected = Buffer.from(record.csrfToken)
-    if (computed.length !== expected.length) return false
-    return timingSafeEqual(computed, expected)
+    return secretsMatch(csrfToken, record.csrfToken)
   }
 
   function getTransactionForApproval(transactionId: string): ApprovalView | null {
-    const record = transactions.get(transactionId)
-    if (!record || record.status !== 'pending' || record.expiresAt < now()) return null
+    const record = getPendingTransaction(transactionId)
+    if (!record) return null
     return {
       clientId: record.clientId,
       redirectUri: record.redirectUri,
@@ -242,7 +254,8 @@ export function createOAuthTransactionStore(options?: {
   }
 
   function recordAuthorizeAttempt(clientId: string): boolean {
-    const cutoff = now() - RATE_LIMIT_WINDOW_MS
+    const attemptedAt = now()
+    const cutoff = attemptedAt - RATE_LIMIT_WINDOW_MS
     // Prune every client's window on each call, not just the current
     // client's, so an abandoned client's entry does not linger forever
     // just because nobody ever calls this again with its id.
@@ -257,7 +270,7 @@ export function createOAuthTransactionStore(options?: {
 
     const existing = authorizeAttempts.get(clientId) ?? []
     if (existing.length >= RATE_LIMIT_MAX_ATTEMPTS) return false
-    authorizeAttempts.set(clientId, [...existing, now()])
+    authorizeAttempts.set(clientId, [...existing, attemptedAt])
     return true
   }
 
