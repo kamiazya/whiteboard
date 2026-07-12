@@ -156,6 +156,16 @@ export function validateBranchName(name: string): string {
       `Invalid branch name "${name}": kebab-case ASCII only`,
     )
   }
+  // The UI renders exactly 'main' as 'Main' for display. Allowing a
+  // case-variant like 'Main' or 'MAIN' as a real branch name would make it
+  // render identically to (and thus indistinguishable from) the default
+  // branch across switch/rename/delete/combine surfaces.
+  if (name !== 'main' && name.toLowerCase() === 'main') {
+    throw new ValidationError(
+      'invalid_branch_name',
+      `Invalid branch name "${name}": reserved (conflicts with "main")`,
+    )
+  }
   return name
 }
 

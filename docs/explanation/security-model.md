@@ -22,7 +22,7 @@ This page describes the **local daemon** in detail first, then server mode.
 
 - **Bearer token**: local HTTP clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the stdio MCP server can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
 - **Origin checks**: `/mcp` only allows loopback browser origins (`127.0.0.1`, `::1`, or `localhost`) for local HTTP use. All three resolve to the same loopback interface; allowing `localhost` is consistent with browser behavior across platforms.
-- **Hosted web-app pairing**: a browser app served from a non-loopback (hosted `https:`) origin can still pair with the local daemon, but only once that origin is listed in `WHITEBOARD_ALLOWED_WEB_ORIGINS` — a comma-separated, exact-match, HTTPS-only allowlist (no wildcards). Loopback origins need no allowlist entry. This env var governs the local daemon only; it is unrelated to server mode's origin allowlist below.
+- **Hosted web-app pairing**: a browser app served from a non-loopback (hosted `https:`) origin can still pair with the local daemon, but only once that origin is listed in `WHITEBOARD_ALLOWED_WEB_ORIGINS` — a comma-separated, HTTPS-only allowlist whose entries are exact origins or `https://*.example.com` leftmost-label wildcard subdomain patterns (bare `*` is never permitted; see [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)). Loopback origins need no allowlist entry. This env var governs the local daemon only; it is unrelated to server mode's origin allowlist below.
 - **Security headers**: the app serves `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `no-referrer`, and same-origin cross-origin headers.
 - **Debug route gate**: `/api/debug` is hidden unless `WHITEBOARD_DEBUG=1` is set, and still requires Bearer auth when a token exists.
 
@@ -54,8 +54,13 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   not issue or manage user credentials.
 - Cross-origin access is restricted by `WHITEBOARD_SERVER_ALLOWED_ORIGINS`,
   an explicit `https://` allowlist (defaulting to
-  `WHITEBOARD_SERVER_EXTERNAL_URL` when unset) — wildcards are rejected.
-  This is a distinct setting from the local daemon's
+  `WHITEBOARD_SERVER_EXTERNAL_URL` when unset). Entries may be exact origins
+  or a `https://*.example.com` leftmost-label wildcard subdomain pattern for
+  deployment-preview shapes (e.g. Cloudflare Pages branch previews); bare `*`
+  is always rejected. See
+  [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)
+  for the exact matching rules and the residual `*.pages.dev`-style breadth
+  risk. This is a distinct setting from the local daemon's
   `WHITEBOARD_ALLOWED_WEB_ORIGINS` above; the two are read by different
   code paths and never consult each other.
 - The container binds plain HTTP to **all interfaces (`0.0.0.0`) by

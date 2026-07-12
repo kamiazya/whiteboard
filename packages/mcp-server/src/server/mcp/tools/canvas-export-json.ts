@@ -31,7 +31,7 @@ export function canvasExportJsonTool() {
         outputPath: {
           type: 'string',
           description:
-            'Absolute path to write the .excalidraw file to. Must be inside the workspace exports directory. Parent directories are created as needed. When omitted, write to the workspace exports directory.',
+            "Absolute path to write the .excalidraw file to. Must be inside this workspace's exports directory (~/.whiteboard/<workspaceId>/exports, or $WHITEBOARD_DATA_DIR/<workspaceId>/exports if that env var is set) — paths outside it are rejected with invalid_output_path. Parent directories inside that root are created as needed. Omit outputPath to write to the default location there automatically.",
         },
         overwrite: {
           type: 'boolean',
@@ -41,7 +41,10 @@ export function canvasExportJsonTool() {
       },
       required: ['canvasId'],
     },
-    execute: async (args: CanvasExportJsonArgs, client: DaemonClient): Promise<z.infer<typeof canvasExportJsonOutputSchema>> => {
+    execute: async (
+      args: CanvasExportJsonArgs,
+      client: DaemonClient,
+    ): Promise<z.infer<typeof canvasExportJsonOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       const body: {
         includeCustomFields: boolean
@@ -62,9 +65,10 @@ export function canvasExportJsonTool() {
         },
       )
       if (!res.ok) {
-        const errBody = (await res.json().catch(() => null)) as
-          | { error?: string; message?: string }
-          | null
+        const errBody = (await res.json().catch(() => null)) as {
+          error?: string
+          message?: string
+        } | null
         // Prefer the human-readable message so the LLM sees enough context to
         // adjust outputPath instead of a bare error code.
         throw new Error(

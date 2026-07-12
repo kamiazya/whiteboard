@@ -7,7 +7,7 @@ import {
   type ToolHandlerReturn,
 } from './tool-support.js'
 import { annotateBatchOutputSchema, annotateBatchTool } from './tools/annotate-batch.js'
-import { annotateOutputSchema, annotateTool } from './tools/annotate.js'
+import { annotateInputShape, annotateOutputSchema, annotateTool } from './tools/annotate.js'
 import { canvasAutoLayoutOutputSchema, canvasAutoLayoutTool } from './tools/canvas-auto-layout.js'
 import { canvasExportJsonOutputSchema, canvasExportJsonTool } from './tools/canvas-export-json.js'
 import { canvasInspectOutputSchema, canvasInspectTool } from './tools/canvas-inspect.js'
@@ -341,206 +341,15 @@ export function registerAllTools(
 
     defineTool({
       name: annotateToolDef.name,
+      // The Zod raw shape lives in tools/annotate.js (annotateInputShape) so
+      // it is the single source of truth shared with the tool's own
+      // cross-field validation (annotateInputSchema) — see the comment
+      // there for why that extra check cannot live in this raw shape.
       description: annotateToolDef.description,
-      inputSchema: {
-        canvasId: z.string().describe('Canvas ID in "{workspaceId}/{slug}" form.'),
-        type: z
-          .enum(['arrow', 'text', 'rectangle', 'highlight', 'box_with_label', 'group'])
-          .describe(
-            'Annotation kind. arrow = directed arrow, text = standalone label, rectangle = empty box, highlight = filled background, box_with_label = box + auto-wrapped title/subText, group = bbox+title around existing memberIds.',
-          ),
-        imageId: z
-          .string()
-          .optional()
-          .describe(
-            'When set, target/endTarget are interpreted relative to the named image (use load_image first). Use with coords="relative".',
-          ),
-        coords: z
-          .enum(['absolute', 'relative', 'parent'])
-          .optional()
-          .describe(
-            'Coordinate space. "absolute" (default) = world coords. "relative" = offset from imageId. "parent" = offset from a parent element (defer-resolved at apply-time, used for sticky annotations on moving parents).',
-          ),
-        target: z
-          .object({ x: z.number(), y: z.number() })
-          .describe(
-            'Top-left corner of the element in chosen coord space. For arrows this is the start point.',
-          ),
-        text: z
-          .union([z.string(), z.array(z.string())])
-          .optional()
-          .describe(
-            'Body text. string[] for explicit line breaks; long lines auto-wrap to box width when autoFit=true.',
-          ),
-        title: z
-          .union([z.string(), z.array(z.string())])
-          .optional()
-          .describe(
-            'Header text rendered larger than text. Used by box_with_label to separate title from body.',
-          ),
-        subText: z
-          .union([z.string(), z.array(z.string())])
-          .optional()
-          .describe(
-            'Smaller secondary text. Default position is below the box (inside-bottom). Use subTextPosition="top" for above-box captions.',
-          ),
-        subTextPosition: z
-          .enum(['top', 'inside-bottom'])
-          .optional()
-          .describe('Where subText is placed relative to box_with_label. Default "inside-bottom".'),
-        autoFit: z
-          .boolean()
-          .optional()
-          .describe(
-            'Auto-wrap long lines and auto-grow box height. Default true. Set false to honor explicit string[] line breaks strictly.',
-          ),
-        color: z
-          .string()
-          .optional()
-          .describe(
-            'Stroke / text color. Accepts semantic keys ("primary","success","danger","warning","neutral","info") or palette key (declared via palette_set) or hex (#RRGGBB).',
-          ),
-        backgroundColor: z
-          .string()
-          .optional()
-          .describe(
-            'Fill color (rectangle / highlight / box_with_label background). Same key vocabulary as `color`.',
-          ),
-        fillStyle: z
-          .enum(['solid', 'hachure', 'cross-hatch'])
-          .optional()
-          .describe('Fill pattern for box / highlight. Default Excalidraw default ("hachure").'),
-        strokeWidth: z.number().optional().describe('Line thickness in px. Default 2.'),
-        fontFamily: z
-          .union([
-            z.literal(1),
-            z.literal(2),
-            z.literal(3),
-            z.literal(5),
-            z.literal(6),
-            z.literal(7),
-            z.literal(8),
-            z.literal(9),
-          ])
-          .optional()
-          .describe(
-            'Excalidraw font family enum (1=Virgil/hand-drawn, 2=Helvetica, 3=Cascadia/mono, 5-9 = additional families). Default 1.',
-          ),
-        fontSize: z.number().optional().describe('Text size in px. Default 20.'),
-        width: z
-          .number()
-          .optional()
-          .describe(
-            'Box width in px (rectangle / highlight / box_with_label). Required for accurate text wrap.',
-          ),
-        height: z
-          .number()
-          .optional()
-          .describe(
-            'Box height in px. With autoFit=true, used as a minimum (grows if text overflows).',
-          ),
-        align: z
-          .enum(['left', 'center', 'right'])
-          .optional()
-          .describe('Horizontal text alignment inside box_with_label / text. Default "left".'),
-        endTarget: z
-          .object({ x: z.number(), y: z.number() })
-          .optional()
-          .describe('Arrow end point. Required when type="arrow" and endBoxId is not set.'),
-        startBoxId: z
-          .string()
-          .optional()
-          .describe(
-            'Arrow start: snap to the named box edge instead of using `target`. Convenient for connecting existing elements.',
-          ),
-        endBoxId: z
-          .string()
-          .optional()
-          .describe('Arrow end: snap to the named box edge instead of using `endTarget`.'),
-        label: z.string().optional().describe('Inline label rendered along the arrow midpoint.'),
-        labelOffset: z
-          .number()
-          .optional()
-          .describe('Perpendicular offset (px) from arrow path for the label. Default 8.'),
-        labelSide: z
-          .enum(['auto', 'above', 'below', 'left', 'right'])
-          .optional()
-          .describe(
-            'Side of arrow path where label sits. "auto" picks the less-crowded side. Default "auto".',
-          ),
-        memberIds: z
-          .array(z.string())
-          .optional()
-          .describe('For type="group": ids of existing elements to wrap with a labeled bbox.'),
-        padding: z
-          .number()
-          .optional()
-          .describe('For type="group": extra padding (px) around the member bbox. Default 16.'),
-      },
+      inputSchema: annotateInputShape,
       outputSchema: annotateOutputSchema,
-      handler: async ({
-        canvasId,
-        type,
-        imageId,
-        coords,
-        target,
-        text,
-        title,
-        subText,
-        subTextPosition,
-        autoFit,
-        color,
-        backgroundColor,
-        fillStyle,
-        strokeWidth,
-        fontFamily,
-        fontSize,
-        width,
-        height,
-        align,
-        endTarget,
-        startBoxId,
-        endBoxId,
-        label,
-        labelOffset,
-        labelSide,
-        memberIds,
-        padding,
-      }) => {
-        const result = await withDaemon((client) =>
-          annotateToolDef.execute(
-            {
-              canvasId,
-              type,
-              imageId,
-              coords,
-              target,
-              text,
-              title,
-              subText,
-              subTextPosition,
-              autoFit,
-              color,
-              backgroundColor,
-              fillStyle,
-              strokeWidth,
-              fontFamily,
-              fontSize,
-              width,
-              height,
-              align,
-              endTarget,
-              startBoxId,
-              endBoxId,
-              label,
-              labelOffset,
-              labelSide,
-              memberIds,
-              padding,
-            },
-            client,
-          ),
-        )
+      handler: async (args) => {
+        const result = await withDaemon((client) => annotateToolDef.execute(args, client))
         return structuredJsonResult(result)
       },
     }),

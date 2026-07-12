@@ -53,6 +53,14 @@ vi.mock('./pages/DaemonCanvasPage.js', () => ({
   },
 }))
 
+let receivedDaemonIndexPageProps: Record<string, unknown> | undefined
+vi.mock('./pages/DaemonIndexPage.js', () => ({
+  DaemonIndexPage: (props: Record<string, unknown>) => {
+    receivedDaemonIndexPageProps = props
+    return <div data-testid="daemon-index-page" />
+  },
+}))
+
 const BROWSER_LOCAL_STATE: ProviderState = {
   kind: 'browser-local',
   capabilities: {
@@ -204,6 +212,7 @@ describe('App daemon-pairing routing', () => {
 describe('App local-daemon provider state', () => {
   beforeEach(() => {
     receivedDaemonPageProps = undefined
+    receivedDaemonIndexPageProps = undefined
     resetTokenStoreForTests()
     delete (window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__
   })
@@ -212,34 +221,122 @@ describe('App local-daemon provider state', () => {
     delete (window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__
   })
 
-  it('mounts DaemonCanvasPage instead of the placeholder, with no workspaceId/slug', async () => {
+  it('mounts DaemonIndexPage (the gallery) instead of auto-opening a canvas', async () => {
     render(<App providerState={LOCAL_DAEMON_STATE} />)
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
     expect(screen.queryByTestId('browser-local-canvas-page')).toBeNull()
     expect(screen.queryByText('Whiteboard')).toBeNull()
-    expect(receivedDaemonPageProps?.daemonBaseUrl).toBe(LOCAL_DAEMON_STATE.daemonBaseUrl)
-    expect(receivedDaemonPageProps?.workspaceId).toBeUndefined()
-    expect(receivedDaemonPageProps?.slug).toBeUndefined()
+    expect(receivedDaemonIndexPageProps?.daemonBaseUrl).toBe(LOCAL_DAEMON_STATE.daemonBaseUrl)
+    expect(receivedDaemonIndexPageProps?.onOpenCanvas).toBeInstanceOf(Function)
+  })
+
+  it('mounts DaemonCanvasPage with the opened canvas identity after a gallery selection', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-index-page')
+    const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+      workspaceId: string,
+      slug: string,
+    ) => void
+    act(() => {
+      onOpenCanvas('w1', 'main')
+    })
+    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
+    expect(screen.queryByTestId('daemon-index-page')).toBeNull()
+    expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
+    expect(receivedDaemonPageProps?.slug).toBe('main')
     expect(receivedDaemonPageProps?.capabilities).toEqual(LOCAL_DAEMON_STATE.capabilities)
     expect(receivedDaemonPageProps?.browserLocalStore).toBeDefined()
     expect(receivedDaemonPageProps?.onContinueBrowserLocal).toBeInstanceOf(Function)
+    expect(receivedDaemonPageProps?.onNavigateBack).toBeInstanceOf(Function)
   })
 
   it('passes the daemon-injected token when present', async () => {
     ;(window as { __WHITEBOARD_DAEMON_TOKEN__?: unknown }).__WHITEBOARD_DAEMON_TOKEN__ = 'tok-x'
     render(<App providerState={LOCAL_DAEMON_STATE} />)
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
-    expect(receivedDaemonPageProps?.token).toBe('tok-x')
+    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(receivedDaemonIndexPageProps?.token).toBe('tok-x')
   })
 
   it('mounts gracefully with token undefined when the daemon has not injected one', async () => {
     render(<App providerState={LOCAL_DAEMON_STATE} />)
-    expect(await screen.findByTestId('daemon-canvas-page')).toBeTruthy()
-    expect(receivedDaemonPageProps?.token).toBeUndefined()
+    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(receivedDaemonIndexPageProps?.token).toBeUndefined()
+  })
+
+  it('returns to the index when DaemonCanvasPage invokes onNavigateBack', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-index-page')
+    act(() => {
+      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
+        'w1',
+        'main',
+      )
+    })
+    await screen.findByTestId('daemon-canvas-page')
+    const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
+    act(() => {
+      onNavigateBack()
+    })
+    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+  })
+
+  it('preserves the opened canvas workspaceId as initialWorkspaceId when navigating back to the index', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-index-page')
+    act(() => {
+      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
+        'workspace-b',
+        'main',
+      )
+    })
+    await screen.findByTestId('daemon-canvas-page')
+    const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
+    act(() => {
+      onNavigateBack()
+    })
+    await screen.findByTestId('daemon-index-page')
+    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+  })
+
+  it('remounts DaemonCanvasPage cleanly when opening a different canvas after returning to the index', async () => {
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-index-page')
+    act(() => {
+      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
+        'w1',
+        'canvas-a',
+      )
+    })
+    await screen.findByTestId('daemon-canvas-page')
+    expect(receivedDaemonPageProps?.slug).toBe('canvas-a')
+
+    const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
+    act(() => {
+      onNavigateBack()
+    })
+    await screen.findByTestId('daemon-index-page')
+
+    act(() => {
+      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
+        'w1',
+        'canvas-b',
+      )
+    })
+    await screen.findByTestId('daemon-canvas-page')
+    expect(receivedDaemonPageProps?.slug).toBe('canvas-b')
   })
 
   it('escapes to browser-local with BROWSER_LOCAL_CAPABILITIES and neutral chip/banner copy', async () => {
     render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-index-page')
+    act(() => {
+      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
+        'w1',
+        'main',
+      )
+    })
     await screen.findByTestId('daemon-canvas-page')
     const onContinueBrowserLocal = receivedDaemonPageProps?.onContinueBrowserLocal as () => void
     act(() => {
@@ -258,15 +355,64 @@ describe('App local-daemon provider state', () => {
 
   it('catches an error surfacing through the local-daemon lazy path (boundary outside Suspense)', async () => {
     throwInDaemonCanvasPage = true
+    render(<App providerState={LOCAL_DAEMON_STATE} />)
+    await screen.findByTestId('daemon-index-page')
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     try {
-      render(<App providerState={LOCAL_DAEMON_STATE} />)
+      act(() => {
+        ;(
+          receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void
+        )('w1', 'main')
+      })
       expect(await screen.findByText('Something went wrong')).toBeTruthy()
       expect(reportSpy).toHaveBeenCalled()
     } finally {
       throwInDaemonCanvasPage = false
       reportSpy.mockRestore()
     }
+  })
+})
+
+describe('App daemon-pairing routing (index vs canvas)', () => {
+  beforeEach(() => {
+    receivedDaemonPageProps = undefined
+    receivedDaemonIndexPageProps = undefined
+    mockDaemonConnectionResult = { status: 'none' }
+  })
+  afterEach(() => {
+    mockDaemonConnectionResult = { status: 'none' }
+  })
+
+  it('lands on the index when the #wb= payload has no slug', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: undefined,
+        slug: undefined,
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(screen.queryByTestId('daemon-canvas-page')).toBeNull()
+  })
+
+  it('forwards the payload workspaceId as initialWorkspaceId when the #wb= payload has a workspace but no slug', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'workspace-b',
+        slug: undefined,
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    render(<App providerState={BROWSER_LOCAL_STATE} />)
+    expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
+    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
   })
 })
 

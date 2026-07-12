@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { LoroDoc, LoroMap } from 'loro-crdt'
-import { appendAnnotationToDoc } from './annotate.js'
+import { annotateInputSchema, appendAnnotationToDoc } from './annotate.js'
 
 const client = {
   port: 3099,
@@ -9,6 +9,145 @@ const client = {
     globalThis.fetch(new URL(path, 'http://localhost:3099'), init),
   touch: async () => undefined,
 }
+
+describe('annotateInputSchema — target conditionally required', () => {
+  it('parses an arrow with startBoxId/endBoxId and no target', () => {
+    const result = annotateInputSchema.safeParse({
+      canvasId: 'sid/slug',
+      type: 'arrow',
+      startBoxId: 'rectA',
+      endBoxId: 'rectB',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects an arrow with neither target nor startBoxId, with an actionable message', () => {
+    const result = annotateInputSchema.safeParse({
+      canvasId: 'sid/slug',
+      type: 'arrow',
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/target.*startBoxId|startBoxId.*target/)
+      expect(result.error.issues[0]?.path).toEqual(['target'])
+    }
+  })
+
+  it('still requires target for non-arrow, non-group types', () => {
+    const result = annotateInputSchema.safeParse({
+      canvasId: 'sid/slug',
+      type: 'rectangle',
+    })
+    expect(result.success).toBe(false)
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/target/)
+    }
+  })
+
+  it('does not require target for type="group" (ignored, defaults internally)', () => {
+    const result = annotateInputSchema.safeParse({
+      canvasId: 'sid/slug',
+      type: 'group',
+      memberIds: ['a', 'b'],
+    })
+    expect(result.success).toBe(true)
+  })
+})
+
+describe('annotate (single) execute — targetless box-snapped arrow parity', () => {
+  function seedTwoRectsSnapshot(): Uint8Array {
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    const a = list.insertContainer(0, new LoroMap())
+    a.set('id', 'rectA')
+    a.set('type', 'rectangle')
+    a.set('x', 0)
+    a.set('y', 0)
+    a.set('width', 100)
+    a.set('height', 100)
+    const b = list.insertContainer(1, new LoroMap())
+    b.set('id', 'rectB')
+    b.set('type', 'rectangle')
+    b.set('x', 200)
+    b.set('y', 0)
+    b.set('width', 100)
+    b.set('height', 100)
+    doc.commit()
+    return doc.export({ mode: 'snapshot' })
+  }
+
+  // Dedicated per-call fake client (no globalThis.fetch mutation) so two
+  // sequential annotate() calls in the same test never share state.
+  function makeFakeClient(snapshotBytes: Uint8Array) {
+    let capturedUpdate: Uint8Array | undefined
+    const fakeClient = {
+      port: 3099,
+      baseUrl: 'http://localhost:3099',
+      request: async (path: string, init?: RequestInit) => {
+        if (path.endsWith('/palette')) {
+          return new Response(JSON.stringify({ palette: {} }), { status: 200 })
+        }
+        if (path.endsWith('/snapshot')) {
+          return new Response(snapshotBytes, { status: 200 })
+        }
+        if (path.endsWith('/update')) {
+          capturedUpdate = init?.body as Uint8Array
+          return new Response(null, { status: 204 })
+        }
+        throw new Error(`Unexpected request: ${path}`)
+      },
+      touch: async () => undefined,
+    }
+    return { client: fakeClient, getUpdate: () => capturedUpdate }
+  }
+
+  async function annotateArrow(target: { x: number; y: number } | undefined) {
+    const snapshotBytes = seedTwoRectsSnapshot()
+    const { client: fakeClient, getUpdate } = makeFakeClient(snapshotBytes)
+    const { annotateTool } = await import('./annotate.js')
+    const tool = annotateTool()
+    await tool.execute(
+      {
+        canvasId: 'sid/slug',
+        type: 'arrow',
+        coords: 'absolute',
+        ...(target !== undefined ? { target } : {}),
+        startBoxId: 'rectA',
+        endBoxId: 'rectB',
+      },
+      fakeClient,
+    )
+    const finalDoc = LoroDoc.fromSnapshot(snapshotBytes)
+    const update = getUpdate()
+    if (update) finalDoc.import(update)
+    return (finalDoc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>).find(
+      (e) => e.type === 'arrow',
+    ) as { x: number; y: number; width: number; height: number; points: unknown }
+  }
+
+  it('creating a box-snapped arrow with no target produces the same geometry as the dummy target:{0,0} workaround', async () => {
+    const withDummyTarget = await annotateArrow({ x: 0, y: 0 })
+    const withoutTarget = await annotateArrow(undefined)
+    // Compare geometry only: id/seed/versionNonce/updated are randomized or
+    // time-based per call and are not part of the "same geometry" claim.
+    const geometry = (arrow: {
+      x: number
+      y: number
+      width: number
+      height: number
+      points: unknown
+    }) => ({
+      x: arrow.x,
+      y: arrow.y,
+      width: arrow.width,
+      height: arrow.height,
+      points: arrow.points,
+    })
+    expect(geometry(withoutTarget)).toEqual(geometry(withDummyTarget))
+    expect(withDummyTarget.width).toBe(100)
+    expect(withDummyTarget.height).toBe(0)
+  })
+})
 
 describe('annotate (single) warnings', () => {
   let originalFetch: typeof globalThis.fetch

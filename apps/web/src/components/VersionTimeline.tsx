@@ -21,6 +21,7 @@ import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
+import { displayBranchName } from '@/lib/utils'
 import { VersionThumbnail } from './VersionThumbnail.js'
 
 const log = getAppLogger('VersionTimeline')
@@ -312,7 +313,9 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
                           {row?.branchOut ? (
                             <>
                               {' · '}
-                              <span className="text-primary">branched → {row.branchOut}</span>
+                              <span className="text-primary">
+                                variation → {displayBranchName(row.branchOut)}
+                              </span>
                             </>
                           ) : null}
                         </span>

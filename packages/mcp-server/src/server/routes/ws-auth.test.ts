@@ -178,4 +178,39 @@ describe('authorizeWsUpgrade', () => {
       expect(decision).toEqual({ accept: false, statusCode: 401 })
     })
   })
+
+  describe('wildcard subdomain allowlist admission', () => {
+    const wildcardAllowedOrigins = ['https://*.kamiazya-whiteboard.pages.dev']
+
+    it('admits an Origin matched by a wildcard pattern with a valid token', () => {
+      const decision = authorizeWsUpgrade(
+        {
+          host: '127.0.0.1:3099',
+          origin: 'https://preview-42.kamiazya-whiteboard.pages.dev',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
+        },
+        'secret',
+        wildcardAllowedOrigins,
+      )
+      expect(decision.accept).toBe(true)
+    })
+
+    it('still 403s a non-matching origin', () => {
+      const decision = authorizeWsUpgrade(
+        { host: '127.0.0.1:3099', origin: 'https://evil.com' },
+        undefined,
+        wildcardAllowedOrigins,
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 403 })
+    })
+
+    it('403s a two-label subdomain — only one label is matched', () => {
+      const decision = authorizeWsUpgrade(
+        { host: '127.0.0.1:3099', origin: 'https://a.b.kamiazya-whiteboard.pages.dev' },
+        undefined,
+        wildcardAllowedOrigins,
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 403 })
+    })
+  })
 })

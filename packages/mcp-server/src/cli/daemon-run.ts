@@ -141,7 +141,11 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
       return { kind: 'input-error', message: 'Token read from stdin was empty.' }
     }
   } else {
-    token = process.env.WHITEBOARD_DAEMON_TOKEN ?? nanoid(32)
+    // Read through options.env (defaulting to process.env) rather than
+    // process.env directly so config-file-layered values (applied by the
+    // dispatcher before this is called) and test overrides share one seam
+    // with the allowedWebOrigins read above.
+    token = (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN ?? nanoid(32)
   }
 
   return await withDaemonStartupLock(dataDir, async () => {

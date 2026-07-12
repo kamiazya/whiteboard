@@ -9,10 +9,7 @@ import { validationErrorBody, validateWorkspaceId, validateSlug } from '../valid
 
 // requestId -> { resolve, reject }
 // viewport does not return payload data, only an ACK, so it reuses the export-style pending map.
-const pendingViewport = new Map<
-  string,
-  { resolve: () => void; reject: (err: Error) => void }
->()
+const pendingViewport = new Map<string, { resolve: () => void; reject: (err: Error) => void }>()
 
 // Receives WS viewport_response messages from ws.ts.
 export function resolveViewportRequest(requestId: string): void {
@@ -59,12 +56,13 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
 
     const requestId = nanoid()
 
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
       await new Promise<void>((resolve, reject) => {
         pendingViewport.set(requestId, { resolve, reject })
         sendViewportRequest(workspaceId, slug, requestId, body)
 
-        setTimeout(() => {
+        timer = setTimeout(() => {
           if (pendingViewport.has(requestId)) {
             pendingViewport.delete(requestId)
             reject(new Error('timeout'))
@@ -72,6 +70,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
         }, timeoutMs)
       }).finally(() => {
         pendingViewport.delete(requestId)
+        clearTimeout(timer)
       })
 
       const ok: ViewportResponse = { ok: true }
