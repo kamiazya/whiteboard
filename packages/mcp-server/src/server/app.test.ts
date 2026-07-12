@@ -99,10 +99,21 @@ describe('createApp daemon mutation auth', () => {
     clearWorkspaceIdCache()
   })
 
-  it('read-only routes stay public while mutation routes require bearer auth', async () => {
+  it('read routes require bearer auth just like mutation routes', async () => {
     const app = createApp(createRuntimeOptions('secret'))
 
-    const listRes = await app.request('/api/workspaces')
+    // ADR-0002's original carve-out left canvas/asset GET tokenless, relying
+    // on loopback-only reachability. ADR-0005 retires that assumption for a
+    // hosted-origin caller, and the client already authenticates every read
+    // (apiFetch attaches the bearer to every same-origin /api/* request), so
+    // the server now requires it here too instead of silently accepting an
+    // unauthenticated read.
+    const unauthedListRes = await app.request('/api/workspaces')
+    expect(unauthedListRes.status).toBe(401)
+
+    const listRes = await app.request('/api/workspaces', {
+      headers: { Authorization: 'Bearer secret' },
+    })
     expect(listRes.status).toBe(200)
 
     const debugRes = await app.request('/api/debug')
@@ -169,7 +180,9 @@ describe('createApp daemon mutation auth', () => {
   it('adds the same baseline security headers to API responses', async () => {
     const app = createApp(createRuntimeOptions('secret'))
 
-    const res = await app.request('/api/workspaces')
+    const res = await app.request('/api/workspaces', {
+      headers: { Authorization: 'Bearer secret' },
+    })
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Security-Policy')).toBe("frame-ancestors 'none'")
@@ -758,7 +771,7 @@ describe('createApp daemon mutation auth', () => {
     expect(runtimeRow?.value).toMatch(/^[A-Za-z0-9_-]{21}$/)
   })
 
-  it('protects newly added mutating /api routes by default', async () => {
+  it('protects newly added /api routes by default, GET included', async () => {
     const app = createApp(createRuntimeOptions('secret'))
     app.route(
       '/',
@@ -767,14 +780,12 @@ describe('createApp daemon mutation auth', () => {
         .post('/api/test-probe', (c) => c.json({ ok: true })),
     )
 
-    // The GET route registered here after createApp() is shadowed by the
-    // reserved-prefix catch-all (registration order: the wildcard was added
-    // first, and Hono runs matched GET handlers in registration order), so
-    // it now correctly 404s as an unrecognized /api/* route rather than
-    // silently falling back to the SPA HTML — the assertion this test cares
-    // about is that the POST route below stays auth-gated.
+    // The bearer-auth middleware in app.ts runs ahead of routing for all of
+    // /api/*, so an unauthenticated GET here 401s before Hono ever resolves
+    // which handler (this test's late-registered probe, or the
+    // reserved-prefix catch-all) would have matched.
     const getRes = await app.request('/api/test-probe')
-    expect(getRes.status).toBe(404)
+    expect(getRes.status).toBe(401)
 
     const unauthedPostRes = await app.request('/api/test-probe', {
       method: 'POST',
@@ -1308,7 +1319,15 @@ describe('createApp daemon mutation auth', () => {
 
       const app = createApp(createRuntimeOptions('secret'))
 
-      const apiRes = await app.request('/api/not-real')
+      // Auth runs ahead of routing for all of /api/*, so an unauthenticated
+      // request 401s regardless of whether the path is real; only an
+      // authenticated request reaches the "does this route exist" question.
+      const unauthedApiRes = await app.request('/api/not-real')
+      expect(unauthedApiRes.status).toBe(401)
+
+      const apiRes = await app.request('/api/not-real', {
+        headers: { Authorization: 'Bearer secret' },
+      })
       expect(apiRes.status).toBe(404)
       expect(await apiRes.text()).not.toContain('apps-web-marker')
 

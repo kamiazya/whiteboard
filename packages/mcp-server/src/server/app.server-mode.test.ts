@@ -108,7 +108,10 @@ describe('app — server-mode composition', () => {
     ).not.toThrow()
   })
 
-  it('local-daemon: GET /api/workspaces is open without auth header', async () => {
+  it('local-daemon: GET /api/workspaces requires the same bearer as a mutation route', async () => {
+    // ADR-0002's original GET carve-out is retired (see auth.ts): a hosted
+    // origin admitted by CORS would otherwise read every canvas with no
+    // credential at all. The client already sends the bearer on every read.
     const app = createApp({
       authMode: 'local-daemon',
       token: 'local-token',
@@ -116,7 +119,12 @@ describe('app — server-mode composition', () => {
       getStatus: () => makeInternalStatus(),
       shutdown: () => Promise.resolve(),
     })
-    const res = await app.request('/api/workspaces')
+    const unauthedRes = await app.request('/api/workspaces')
+    expect(unauthedRes.status).toBe(401)
+
+    const res = await app.request('/api/workspaces', {
+      headers: { Authorization: 'Bearer local-token' },
+    })
     expect(res.status).toBe(200)
   })
 
@@ -862,15 +870,17 @@ describe('app — server-mode composition', () => {
     ).toThrow('local-daemon mode must not receive authStrategy')
   })
 
-  it('mode confusion: server-mode routes are auth-gated (not open like local-daemon)', async () => {
-    // server-mode: GET /api/workspaces requires workspace:read
+  it('mode confusion: server-mode enforces per-scope auth, local-daemon only the shared bearer', async () => {
+    // server-mode: GET /api/workspaces requires workspace:read — a bearer
+    // with the wrong scope still 403s.
     const serverApp = createApp(makeServerModeOptions([]))
     const serverRes = await serverApp.request('/api/workspaces', {
       headers: { authorization: BEARER },
     })
     expect(serverRes.status).toBe(403)
 
-    // local-daemon: same route is open (no scope enforcement)
+    // local-daemon: same route requires only the single shared bearer, no
+    // per-scope enforcement — presenting the daemon token is sufficient.
     const localApp = createApp({
       authMode: 'local-daemon',
       token: 'local-token',
@@ -878,7 +888,9 @@ describe('app — server-mode composition', () => {
       getStatus: () => makeInternalStatus(),
       shutdown: () => Promise.resolve(),
     })
-    const localRes = await localApp.request('/api/workspaces')
+    const localRes = await localApp.request('/api/workspaces', {
+      headers: { Authorization: 'Bearer local-token' },
+    })
     expect(localRes.status).toBe(200)
   })
 

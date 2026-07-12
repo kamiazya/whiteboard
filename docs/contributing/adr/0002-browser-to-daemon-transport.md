@@ -242,5 +242,113 @@ a browser build moves, to catch the day Chromium's WS gating ships.
 - Unverified remainder, to re-check before shipping hosted pairing: the real
   user-facing prompt UX (automation bypasses the prompt), and LNA rollout
   changes (origin trial / enterprise policy knobs). WS behavior has been
-  re-measured (2026-07-12, above): still not LNA-gated on the tested
+  re-measured (2026-07-12, below): still not LNA-gated on the tested
   Chromium build, but re-run the harness when Chromium ships WS gating.
+
+## Addendum (accepted): the canvas/asset GET carve-out is retired
+
+The first addendum above left canvas/asset `GET` tokenless in local-daemon
+mode, accepting the residual risk that "a malicious page on another
+localhost port can still read canvas `GET` responses via reflected CORS."
+ADR-0005 names a Stage 4 origin allowlist as the mitigation for that risk,
+then goes further: once a *hosted* origin is an admitted CORS caller, the
+same tokenless surface lets that origin — or anyone who gets past the
+allowlist — read every canvas with no credential at all, making
+`canvas:read` theatre on the read path. ADR-0005 marked this "a prerequisite
+slice" rather than deciding it; this addendum is that decision.
+
+### Why the original reasoning no longer holds
+
+The carve-out rested on two premises, and both are gone:
+
+1. **"Tokenizing reads breaks `<img src>` thumbnails."** This was the stated
+   cost that justified leaving `GET` open. The consumer audit below found
+   the cost never actually existed in the shipped app: every real
+   thumbnail/file consumer already fetches the bytes through the
+   bearer-carrying transport and renders an `object URL`, so there was
+   nothing left to trade away. A carve-out justified by a cost that isn't
+   there is not a considered trade anymore — it is just an open door.
+2. **"Loopback bind + Host-loopback check contain the blast radius."** That
+   containment assumption is exactly what a hosted origin as a first-class
+   client (ADR-0005) removes: the daemon is now meant to accept requests
+   from an origin that is not loopback at all, admitted deliberately
+   through the CORS allowlist. Once that is the design, "only a page
+   running on localhost can reach this" stops being true by construction,
+   and the carve-out's whole safety argument goes with it.
+
+Cookie-based auth was also considered and rejected as an alternative to a
+bearer header: cookies are sent automatically by the browser on every
+matching-origin request, which is exactly the CSRF surface a bearer token
+in an explicit `Authorization` header does not have. ADR-0002's original
+decision already restricts token carriers to the `Authorization` header and
+the WS subprotocol; nothing here reopens that restriction.
+
+### The consumer audit
+
+Every place `apps/web` reads daemon-served canvas/asset bytes was audited
+for whether it goes through the bearer-carrying client or bypasses it with
+a bare `<img src>` / URL construction:
+
+- `shared/api-client.ts`'s `apiFetch` already attaches `Authorization:
+  Bearer <token>` to every same-origin `/api/*` request, GET included.
+- `VersionThumbnail.tsx` and `CanvasThumb.tsx` (the only two thumbnail
+  surfaces; every other consumer — `VersionTimeline`, `MergeDialog`,
+  `WorkspaceTopBar`, `DaemonIndexPage` — renders through one of these two)
+  already fetch the thumbnail bytes through the daemon-aware fetch and
+  render an object URL, falling back to a bare `<img src>` only when no
+  `DaemonApiContext.Provider` is mounted.
+- `shared/daemon-backend.ts`'s `getFile` (pasted/embedded canvas assets)
+  already fetches through the same transport, never `<img src>`.
+- Auditing where `DaemonApiContext.Provider` is mounted found it wraps
+  *every* real daemon-connected page (`DaemonCanvasPage`, `DaemonIndexPage`)
+  unconditionally — the "no provider" fallback branch in
+  `VersionThumbnail`/`CanvasThumb` has no reachable production caller today.
+  It is dormant defensive code, not a live tokenless path; it would need
+  reintroducing a same-origin, provider-less render path (e.g. a future
+  daemon-self-served UI distinct from apps/web) before it mattered again.
+
+### Decision
+
+The measured client-side cost of tokenizing every canvas/asset read is
+**zero** — it already shipped. So the carve-out is retired outright, not
+narrowed to "cross-origin callers only": local-daemon mode now requires the
+shared bearer token on every `/api/*` request, read or write, with the sole
+exception of `/api/runtime/ping` (the pre-authentication availability
+probe). See `requiresDaemonAuth` in `packages/mcp-server/src/server/routes/auth.ts`.
+
+This retires the second bullet under "Local-daemon read-path carve-out" in
+the first addendum above: canvas/asset `GET` is no longer tokenless.
+`/api/runtime/*` behavior (all but `ping` requires Bearer) is unchanged.
+
+### Consequences
+
+- `canvas:read` now means something on every code path, not just the
+  server-mode OAuth path.
+- An unauthenticated `GET` to any `/api/*` route other than
+  `/api/runtime/ping` now 401s instead of 404ing on an unmatched path —
+  auth runs ahead of routing, so route existence is not distinguishable
+  without a bearer either way.
+- If a future same-origin, provider-less render path is reintroduced (the
+  dormant `<img src>` fallback in `VersionThumbnail`/`CanvasThumb` becoming
+  reachable), it will 401 rather than silently degrade, because the server
+  no longer has a tokenless GET surface to fall back on. That is the
+  intended failure mode — a broken image is loud; a silent unauthenticated
+  read is not.
+
+### Alternatives considered (this addendum)
+
+- **Signed/query-token URLs for thumbnails** — rejected without needing to
+  argue past the query-parameter ban above: the fetch+blob path was already
+  shipped and free, so there was no cost left to justify reopening that
+  ADR-0002 prohibition for.
+- **Cookie-based auth instead of a bearer header** — rejected: a cookie is
+  attached by the browser automatically on any matching-origin request,
+  which is a CSRF surface a bearer token carried in an explicit
+  `Authorization` header structurally does not have. This does not change
+  the original decision to restrict token carriers to the `Authorization`
+  header and the WS subprotocol; it only reconfirms it for the read path.
+- **Narrow the carve-out to cross-origin callers only, keep same-origin GET
+  open** — rejected as a half-measure: it would leave the matrix claiming
+  protection the code does not uniformly provide, and the same-origin case
+  has no weaker threat model once a hosted origin can be same-origin-
+  equivalent via LNA (ADR-0002's second addendum).
