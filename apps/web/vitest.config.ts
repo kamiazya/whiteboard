@@ -38,6 +38,13 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    exclude: ['src/**/*.browser.test.ts', 'src/**/*.browser.test.tsx'],
+    // *.docs-snapshot.test.tsx files run only via `pnpm docs:snapshots`
+    // (vitest.docs-snapshots.config.ts) — they write PNGs into the repo
+    // and need real browser mode, not jsdom.
+    exclude: [
+      'src/**/*.browser.test.ts',
+      'src/**/*.browser.test.tsx',
+      'src/**/*.docs-snapshot.test.tsx',
+    ],
   },
 })
