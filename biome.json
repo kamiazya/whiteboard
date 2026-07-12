@@ -76,6 +76,21 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "apps/web/src/**/*.ts",
+        "apps/web/src/**/*.tsx",
+        "!apps/web/src/**/*.test.ts",
+        "!apps/web/src/**/*.test.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "error"
+          }
+        }
+      }
     }
   ]
 }
