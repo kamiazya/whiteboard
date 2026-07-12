@@ -1014,7 +1014,12 @@ describe('useCanvasSync', () => {
         }),
       ).resolves.not.toThrow()
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('onExportRequest failed', expect.any(Error))
+      // Routed through app-logger, which prefixes the message with its
+      // '[canvas-sync]' name tag.
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[canvas-sync] onExportRequest failed',
+        expect.any(Error),
+      )
       consoleErrorSpy.mockRestore()
     })
   })

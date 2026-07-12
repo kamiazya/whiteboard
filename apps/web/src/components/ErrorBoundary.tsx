@@ -1,19 +1,23 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { getAppLogger } from '../lib/app-logger.js'
 
 // React error boundary for the whiteboard surface.
 // Keep the app recoverable instead of letting an Excalidraw, Loro, or routing error blank the whole root.
 // This is intentionally minimal; richer recovery actions can be added later if needed.
 
+const log = getAppLogger('error-boundary')
+
 // Module-local logging seam: kept separate from the boundary's render logic so
-// componentDidCatch has a single, mockable call site. The body is a stand-in
-// until apps/web gains a shared app-logger (tracked in tmp/issues); the
-// signature (message + structured context) is chosen so swapping the body for
-// a real logger later is a body-only change, not an interface change. Exposed
-// as an object (not a bare function) so tests can `vi.spyOn` the property —
-// spying a same-module function binding does not intercept direct calls.
+// componentDidCatch has a single, mockable call site. Routed through the
+// shared app-logger, which means a caught render crash is only reported in
+// dev builds — app-logger no-ops in production, so this is deliberately NOT
+// a substitute for a production error-reporting integration (Sentry or
+// similar), should one be added later. Exposed as an object (not a bare
+// function) so tests can `vi.spyOn` the property — spying a same-module
+// function binding does not intercept direct calls.
 export const errorBoundaryLog = {
   report(message: string, context: Record<string, unknown>): void {
-    console.error(message, context)
+    log.error(message, context)
   },
 }
 

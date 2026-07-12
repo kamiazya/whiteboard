@@ -35,7 +35,7 @@ export function getAppLogger(name: string): AppLogger {
       | undefined
     const isDev = importMeta?.['env']?.['DEV'] === true
     if (isDev) {
-      // eslint-disable-next-line no-console
+      // biome-ignore lint/suspicious/noConsole: this is the one intended sink apps/web routes diagnostics through
       console[level](`${tag} ${message}`, ...context)
     }
   }

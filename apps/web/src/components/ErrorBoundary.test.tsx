@@ -108,4 +108,45 @@ describe('ErrorBoundary', () => {
     expect((context as { error: Error }).error.message).toBe('boom')
     seamSpy.mockRestore()
   })
+
+  // The seam is routed through app-logger (see ErrorBoundary.tsx), so a caught
+  // render crash is only visible in dev builds. These two tests lock in that
+  // deliberate choice: dev builds must still surface the crash, and prod
+  // builds must not leak console noise, rather than either regressing
+  // silently the next time app-logger's dev/prod gate changes.
+  describe('app-logger dev/prod gate', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('forwards the caught error to console in a dev build (real seam, not mocked)', () => {
+      vi.stubGlobal('import.meta', { env: { DEV: true } })
+      const spy = vi.fn()
+      console.error = spy
+      render(
+        <ErrorBoundary>
+          <Bomb trigger />
+        </ErrorBoundary>,
+      )
+      const call = spy.mock.calls.find((c) => String(c[0]).includes('ErrorBoundary caught:'))
+      expect(call).toBeTruthy()
+      expect(call?.[0]).toContain('[error-boundary]')
+    })
+
+    it('stays silent in a prod build (app-logger no-ops there)', () => {
+      vi.stubGlobal('import.meta', { env: { DEV: false } })
+      const spy = vi.fn()
+      console.error = spy
+      render(
+        <ErrorBoundary>
+          <Bomb trigger />
+        </ErrorBoundary>,
+      )
+      // React's own error-boundary dev warning also calls console.error and
+      // is outside this seam's control — only assert that OUR seam (tagged
+      // '[error-boundary]') stayed silent.
+      const ownCall = spy.mock.calls.find((c) => String(c[0]).includes('[error-boundary]'))
+      expect(ownCall).toBeUndefined()
+    })
+  })
 })

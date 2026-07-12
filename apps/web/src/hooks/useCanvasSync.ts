@@ -21,12 +21,15 @@ import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
+import { getAppLogger } from '../lib/app-logger.js'
 import {
   type ExportRequestHandlerDeps,
   flushPendingExportRequests,
   handleIncomingExportRequest,
 } from './canvas-sync-export.js'
 import type { DirtyEventDetail } from './useDirtyState.js'
+
+const log = getAppLogger('canvas-sync')
 
 export type SyncStatus = 'idle' | 'connected' | 'error'
 
@@ -379,7 +382,7 @@ export function useCanvasSync(
           try {
             commitElements()
           } catch (err) {
-            console.error('scene commit failed; skipping this firing', err)
+            log.error('scene commit failed; skipping this firing', err)
           }
         }
         const runThisFiring = async (): Promise<void> => {
@@ -406,16 +409,16 @@ export function useCanvasSync(
               try {
                 optionsRef.current.onFileUploadSucceeded?.()
               } catch (err) {
-                console.error('onFileUploadSucceeded callback threw', err)
+                log.error('onFileUploadSucceeded callback threw', err)
               }
             }
           } catch (err) {
-            console.error('putFile failed', err)
+            log.error('putFile failed', err)
             if (connectionGenerationRef.current === connGen) {
               try {
                 optionsRef.current.onFileUploadFailed?.()
               } catch (callbackErr) {
-                console.error('onFileUploadFailed callback threw', callbackErr)
+                log.error('onFileUploadFailed callback threw', callbackErr)
               }
             }
           } finally {
@@ -536,7 +539,7 @@ export function useCanvasSync(
         try {
           optionsRef.current.onVersionCreated?.(payload)
         } catch (err) {
-          console.error('onVersionCreated callback threw', err)
+          log.error('onVersionCreated callback threw', err)
         }
       },
 
@@ -558,7 +561,7 @@ export function useCanvasSync(
         try {
           optionsRef.current.onHeadChanged?.(payload)
         } catch (err) {
-          console.error('onHeadChanged callback threw', err)
+          log.error('onHeadChanged callback threw', err)
         }
       },
 
@@ -612,7 +615,7 @@ export function useCanvasSync(
         try {
           await handleIncomingExportRequest(payload, buildExportDeps(bk))
         } catch (err) {
-          console.error('onExportRequest failed', err)
+          log.error('onExportRequest failed', err)
         }
       },
 
@@ -622,7 +625,7 @@ export function useCanvasSync(
         try {
           optionsRef.current.onAuthError?.()
         } catch (err) {
-          console.error('onAuthError callback threw', err)
+          log.error('onAuthError callback threw', err)
         }
       },
 
@@ -663,7 +666,7 @@ export function useCanvasSync(
     bk?.sendClientReady()
     if (!bk) return
     void flushPendingExportRequests(buildExportDeps(bk)).catch((err: unknown) => {
-      console.error('flushPendingExportRequests failed', err)
+      log.error('flushPendingExportRequests failed', err)
     })
   }, [apiReady, buildExportDeps])
 

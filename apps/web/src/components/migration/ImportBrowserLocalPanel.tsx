@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
-import { DEFAULT_DAEMON_BASE_URL } from '../../lib/daemon-probe.js'
+import { getAppLogger } from '../../lib/app-logger.js'
 import type { BrowserLocalStore } from '../../lib/browser-local-store.js'
+import { DEFAULT_DAEMON_BASE_URL } from '../../lib/daemon-probe.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import type { CanvasSnapshot } from '../../lib/whiteboard-client.js'
 import { importOneCanvas } from './import-browser-local.js'
+
+const log = getAppLogger('import-browser-local-panel')
 
 // Minimal surface this panel needs from LoroStore — narrower than the full
 // class so tests can inject a plain object instead of touching IndexedDB.
@@ -54,7 +57,7 @@ export function ImportBrowserLocalPanel({
       .catch((err: unknown) => {
         // A blocked/corrupt IndexedDB must not leave the panel in the
         // loading state forever — degrade to the empty state.
-        console.error('listCanvases failed', err)
+        log.error('listCanvases failed', err)
         if (!cancelled) setCanvases([])
       })
     return () => {
