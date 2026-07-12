@@ -4,8 +4,8 @@
 // one-time manual grep: any future reintroduction of these strings outside
 // the allowlisted historical references fails the build.
 
-import { readFileSync, readdirSync, statSync } from 'node:fs'
-import { dirname, join, relative, resolve } from 'node:path'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { dirname, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -32,22 +32,32 @@ const ALLOWLISTED_FILES = new Set([
   'packages/mcp-server/src/server/mcp/tarball.distribution-impl.ts',
 ])
 
-const SCAN_ROOTS = ['packages', 'apps/*/src', 'scripts', '.github/workflows', 'docs'].flatMap(
-  (pattern) => {
-    if (!pattern.includes('*')) return [pattern]
-    const [prefix, suffix] = pattern.split('/*')
-    const base = resolve(REPO_ROOT, prefix)
-    let entries: string[]
-    try {
-      entries = readdirSync(base, { withFileTypes: true })
-        .filter((e) => e.isDirectory())
-        .map((e) => e.name)
-    } catch {
-      return []
-    }
-    return entries.map((name) => `${prefix}/${name}${suffix}`)
-  },
-)
+function listAppNames(): string[] {
+  try {
+    return readdirSync(resolve(REPO_ROOT, 'apps'), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+  } catch {
+    return []
+  }
+}
+
+const APP_NAMES = listAppNames()
+
+// Directory trees swept recursively. apps/* is narrowed to src/ so local
+// build/scratch output under an app root cannot make this sweep flaky.
+const SCAN_ROOTS = [
+  'packages',
+  ...APP_NAMES.map((name) => `apps/${name}/src`),
+  'scripts',
+  '.github/workflows',
+  'docs',
+]
+
+// Individual files outside the swept trees. Workspace-root manifests only —
+// never the dependency tree. packages/**/package.json is already covered by
+// the `packages` sweep.
+const SCAN_FILES = ['package.json', ...APP_NAMES.map((name) => `apps/${name}/package.json`)]
 
 const SCANNABLE_EXTENSIONS = new Set([
   '.ts',
@@ -76,33 +86,18 @@ function collectFiles(dir: string): string[] {
     const fullPath = join(dir, entry.name)
     if (entry.isDirectory()) {
       results.push(...collectFiles(fullPath))
-    } else if (entry.isFile()) {
-      const ext = entry.name.slice(entry.name.lastIndexOf('.'))
-      if (SCANNABLE_EXTENSIONS.has(ext)) results.push(fullPath)
+    } else if (entry.isFile() && SCANNABLE_EXTENSIONS.has(extname(entry.name))) {
+      results.push(fullPath)
     }
   }
   return results
-}
-
-function collectPackageJsonFiles(): string[] {
-  // package.json files at each workspace root, not the entire dependency tree.
-  const candidates = ['package.json', 'packages/mcp-server/package.json', 'apps/web/package.json']
-  return candidates
-    .map((rel) => resolve(REPO_ROOT, rel))
-    .filter((abs) => {
-      try {
-        return statSync(abs).isFile()
-      } catch {
-        return false
-      }
-    })
 }
 
 describe('legacy UI (src/app, dist/app, WHITEBOARD_LEGACY_UI) stays retired', () => {
   it('no non-allowlisted file mentions the retired legacy-UI strings', () => {
     const filesToScan = new Set<string>([
       ...SCAN_ROOTS.flatMap((rel) => collectFiles(resolve(REPO_ROOT, rel))),
-      ...collectPackageJsonFiles(),
+      ...SCAN_FILES.map((rel) => resolve(REPO_ROOT, rel)).filter((abs) => existsSync(abs)),
     ])
 
     const violations: string[] = []
