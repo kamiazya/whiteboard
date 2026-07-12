@@ -16,7 +16,7 @@ describe('expired-entry pruning', () => {
       codeChallengeMethod: 'S256',
       csrfToken: 'csrf-token',
     })
-    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0, grants: 0 })
 
     clock += TRANSACTION_TTL_MS + 1
     store.createTransaction({
@@ -31,7 +31,7 @@ describe('expired-entry pruning', () => {
 
     // The first transaction is gone, not merely unusable: a long-lived daemon
     // must not accumulate one record per abandoned/attacker-driven attempt.
-    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0, grants: 0 })
   })
 
   it('reclaims the code-hash index entry of an expired code-issued transaction', () => {
@@ -48,7 +48,7 @@ describe('expired-entry pruning', () => {
     })
     store.approveTransaction(transactionId)
     expect(store.issueAuthorizationCode(transactionId)).not.toBeNull()
-    expect(store.size()).toEqual({ transactions: 1, codes: 1, attempts: 0 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 1, attempts: 0, grants: 0 })
 
     clock += TRANSACTION_TTL_MS + 1
     store.createTransaction({
@@ -61,7 +61,7 @@ describe('expired-entry pruning', () => {
       csrfToken: 'csrf-token',
     })
 
-    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0 })
+    expect(store.size()).toEqual({ transactions: 1, codes: 0, attempts: 0, grants: 0 })
   })
 
   it('reclaims a redeemed transaction once its window has passed', () => {

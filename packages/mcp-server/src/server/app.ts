@@ -413,6 +413,22 @@ export function createApp(options: AppOptions) {
     setBaselineSecurityHeaders(c.res.headers)
   })
 
+  // The hosted-origin OAuth surface is mounted below, but its store has to
+  // exist before the /api/* auth middleware is built: the same store both
+  // mints an access grant (at /token) and is the only thing that can later
+  // recognize the token that grant issued. Two instances would mean tokens
+  // minted by one and unknown to the other.
+  const oauthAuthz =
+    options.authMode === 'local-daemon' &&
+    options.oauthClientRegistry &&
+    options.oauthClientRegistry.length > 0
+      ? {
+          store: createOAuthTransactionStore(),
+          registry: options.oauthClientRegistry,
+          allowedWebOrigins: options.allowedWebOrigins ?? [],
+        }
+      : undefined
+
   if (options.authMode === 'server-mode') {
     app.use('/api/*', createApiHostGuardMiddleware(options.authMode))
     app.use('/api/*', createServerModeApiAuthMiddleware(options.authStrategy))
@@ -428,7 +444,10 @@ export function createApp(options: AppOptions) {
     // while every other method (GET included — see auth.js) falls through to
     // the auth chain unchanged.
     app.use('/api/*', createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
-    app.use('/api/*', createDaemonAuthMiddleware(token))
+    // Either credential: the daemon token (full authority, unchanged) or an
+    // OAuth access token, which is additionally checked against the route's
+    // declared scope. Both fail identically.
+    app.use('/api/*', createDaemonAuthMiddleware(token, oauthAuthz?.store))
   }
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
@@ -436,15 +455,10 @@ export function createApp(options: AppOptions) {
   // resource-server strategy and is not itself an authorization server.
   // Unmounted entirely unless an operator configures at least one
   // redirect_uri registry entry (empty-by-default, like allowedWebOrigins).
-  if (
-    options.authMode === 'local-daemon' &&
-    options.oauthClientRegistry &&
-    options.oauthClientRegistry.length > 0
-  ) {
-    const oauthTransactionStore = createOAuthTransactionStore()
+  if (oauthAuthz) {
     const oauthAuthzRoutes = createOAuthAuthzRouter({
-      store: oauthTransactionStore,
-      registry: options.oauthClientRegistry,
+      store: oauthAuthz.store,
+      registry: oauthAuthz.registry,
     })
     // Attached per explicit path, NOT via a sub-app: Hono merges a sub-app's
     // `use('*')` into the parent as `/*`, so a sub-app mounted at '/' would
@@ -464,7 +478,7 @@ export function createApp(options: AppOptions) {
     // screen and script its POST cross-site, which is the whole thing the
     // approval step exists to prevent. See oauth-authz.ts.
     for (const path of OAUTH_AUTHZ_CORS_PATHS) {
-      app.use(path, createApiLoopbackCorsMiddleware(options.allowedWebOrigins ?? []))
+      app.use(path, createApiLoopbackCorsMiddleware(oauthAuthz.allowedWebOrigins))
     }
     app.route('/', oauthAuthzRoutes)
   }

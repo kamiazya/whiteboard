@@ -67,9 +67,11 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
   }
 
-  // User library routes: writes mutate workspace-level shared library state.
+  // User library routes are workspace-level shared state: a read is a
+  // workspace read (not a canvas read — collapsing it onto canvas:read would
+  // let a canvas-only grant enumerate the shared library), a write mutates it.
   if (path.startsWith('/api/user-libraries')) {
-    return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'canvas:read'] }
+    return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
   }
 
   // Version history, thumbnails, restore, compact — version-control

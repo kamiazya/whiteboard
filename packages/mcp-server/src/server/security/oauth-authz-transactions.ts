@@ -107,6 +107,42 @@ export type RedeemAuthorizationCodeInput = {
   codeVerifier: string | undefined
 }
 
+// What an access grant looks like to anything that is not the token holder:
+// enough to render or revoke it, never enough to replay it. The raw token is
+// absent by construction — only its SHA-256 hash is ever retained (RFC 6819
+// §5.1.4.1.3: an authorization server should store credentials hashed so a
+// dump of its state cannot be replayed against it), exactly as the
+// authorization code already is.
+const grantSummarySchema = z.object({
+  grantId: z.string().min(1),
+  clientId: z.string().min(1),
+  scopes: z.array(z.enum(AUTH_SCOPES)),
+  issuedAt: z.number(),
+  expiresAt: z.number(),
+})
+
+export type GrantSummary = z.infer<typeof grantSummarySchema>
+
+// The authorization context a verified access token yields to the resource
+// server. `scopes` is the set the *user approved for this grant* — never the
+// full vocabulary — which is the whole point of the token being scoped at all.
+const accessGrantContextSchema = z.object({
+  grantId: z.string().min(1),
+  clientId: z.string().min(1),
+  scopes: z.array(z.enum(AUTH_SCOPES)),
+})
+
+export type AccessGrantContext = z.infer<typeof accessGrantContextSchema>
+
+interface GrantRecord {
+  id: string
+  clientId: string
+  tokenHash: string
+  scopes: readonly AuthScope[]
+  issuedAt: number
+  expiresAt: number
+}
+
 export type RedeemAuthorizationCodeResult =
   | { ok: true; transactionId: string; scopes: readonly AuthScope[]; clientId: string }
   | {
@@ -144,10 +180,27 @@ export interface OAuthTransactionStore {
   denyTransaction(transactionId: string): boolean
   issueAuthorizationCode(transactionId: string): { code: string } | null
   redeemAuthorizationCode(input: RedeemAuthorizationCodeInput): RedeemAuthorizationCodeResult
+  // Mints the bearer token for an approved grant AND persists the grant it
+  // authorizes. A token that is minted but not stored authorizes nothing — it
+  // is a string the client believes in and the resource server has never
+  // heard of.
   mintAccessToken(
     scopes: readonly AuthScope[],
     clientId: string,
   ): { accessToken: string; expiresIn: number }
+  // Resource-server side of RFC 6749 §7: resolve a presented bearer to the
+  // grant it belongs to, or null for anything unknown, expired, or revoked.
+  // The caller learns nothing about *why* — see the middleware, which must
+  // not let a caller distinguish credential kinds by their rejections.
+  verifyAccessToken(accessToken: string): AccessGrantContext | null
+  // RFC 7009's intent, without (yet) the /revoke endpoint: a grant a user
+  // approved must be withdrawable. Returns false when the grant is already
+  // gone, so a double-revoke is not reported as a fresh success.
+  revokeGrant(grantId: string): boolean
+  // Live, unexpired grants held by one client — the read side any future
+  // grant-management surface needs, and the reason revocation is keyed by an
+  // id rather than by a token nobody but the holder has.
+  listGrants(clientId: string): readonly GrantSummary[]
   // Constant-time check that a submitted csrfToken is the one bound to the
   // transaction at creation.
   verifyApprovalBinding(transactionId: string, csrfToken: string): boolean
@@ -170,7 +223,7 @@ export interface OAuthTransactionStore {
   recordAuthorizeAttempt(clientId: string): boolean
   // Live entry counts. The store's only unbounded-growth risk is retained
   // dead records, so its occupancy has to be observable to be assertable.
-  size(): { transactions: number; codes: number; attempts: number }
+  size(): { transactions: number; codes: number; attempts: number; grants: number }
 }
 
 export function createOAuthTransactionStore(options?: {
@@ -186,6 +239,13 @@ export function createOAuthTransactionStore(options?: {
   // rate limit. Pruned lazily on every write, same posture as
   // pruneExpired, so it never needs a timer handle.
   const authorizeAttempts = new Map<string, number[]>()
+  // Approved access grants, keyed by an opaque grant id so revocation has
+  // something to name that is not the token itself. The token appears only as
+  // the SHA-256 hash in `grantTokenIndex` / `GrantRecord.tokenHash`; the raw
+  // value leaves this function once, in the /token response, and is never
+  // retained.
+  const grants = new Map<string, GrantRecord>()
+  const grantTokenIndex = new Map<string, string>()
 
   // Lazy sweep, not a timer. A `setInterval` would keep the Node event loop
   // alive for the daemon's whole lifetime and would have to be torn down by
@@ -355,25 +415,96 @@ export function createOAuthTransactionStore(options?: {
     return { ok: true, transactionId, scopes: record.scopes, clientId: record.clientId }
   }
 
+  // Same lazy-sweep posture as pruneExpired, and for the same reason: a timer
+  // would hold the event loop open for the daemon's whole life. An expired
+  // grant is already unusable (verifyAccessToken re-checks expiry), so
+  // reclaiming it is a memory concern, not a security one.
+  function pruneExpiredGrants(): void {
+    const cutoff = now()
+    for (const [id, record] of grants) {
+      if (record.expiresAt >= cutoff) continue
+      grants.delete(id)
+      grantTokenIndex.delete(record.tokenHash)
+    }
+  }
+
   function mintAccessToken(
     scopes: readonly AuthScope[],
-    _clientId: string,
+    clientId: string,
   ): { accessToken: string; expiresIn: number } {
-    // Opaque bearer token, not a JWT: validating it on protected routes is
-    // a resource-server concern (oauth-resource-strategy.ts's seam) that
-    // this slice does not wire up — see ADR-0005's "the resource-server
-    // half does not already exist" constraint. This skeleton only mints
-    // the token the /token response carries.
+    pruneExpiredGrants()
+    // Opaque bearer token, not a JWT: this daemon is both the authorization
+    // server and the only resource server for its own API, so there is no
+    // second party that would need to validate the token without asking us.
+    // A local lookup against a hashed record is strictly less to get wrong
+    // than signing keys, `alg` handling, and rotation.
     const accessToken = randomBytes(32).toString('base64url')
-    void scopes
+    const tokenHash = hashCode(accessToken)
+    const issuedAt = now()
+    const grantId = randomBytes(16).toString('base64url')
+    grants.set(grantId, {
+      id: grantId,
+      clientId,
+      tokenHash,
+      scopes: [...scopes],
+      issuedAt,
+      expiresAt: issuedAt + ACCESS_TOKEN_TTL_SECONDS * 1000,
+    })
+    grantTokenIndex.set(tokenHash, grantId)
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS }
   }
 
-  function size(): { transactions: number; codes: number; attempts: number } {
+  // A minted access token is a fixed-length base64url string (32 random
+  // bytes). An input far longer than that is never a real token — bounding it
+  // before hashing keeps a request from forcing the daemon to SHA-256 an
+  // arbitrarily large body. The bound sits well above the real length so it
+  // never rejects a legitimate token.
+  const MAX_ACCESS_TOKEN_LENGTH = 256
+
+  function verifyAccessToken(accessToken: string): AccessGrantContext | null {
+    if (accessToken.length === 0 || accessToken.length > MAX_ACCESS_TOKEN_LENGTH) return null
+    // Lookup is by hash of the presented token. The index maps a token hash to
+    // its grant id, so a hit already means the stored hash equals this one —
+    // there is no separate secret to compare, and a JS Map.get is not
+    // constant-time anyway, so no digest comparison is done here. Expiry is
+    // re-checked at use, not merely at issue.
+    const presentedHash = hashCode(accessToken)
+    const grantId = grantTokenIndex.get(presentedHash)
+    if (grantId === undefined) return null
+    const record = grants.get(grantId)
+    if (!record) return null
+    if (record.expiresAt < now()) return null
+    return { grantId: record.id, clientId: record.clientId, scopes: [...record.scopes] }
+  }
+
+  function revokeGrant(grantId: string): boolean {
+    pruneExpiredGrants()
+    const record = grants.get(grantId)
+    if (!record) return false
+    grants.delete(grantId)
+    grantTokenIndex.delete(record.tokenHash)
+    return true
+  }
+
+  function listGrants(clientId: string): readonly GrantSummary[] {
+    const cutoff = now()
+    return [...grants.values()]
+      .filter((record) => record.clientId === clientId && record.expiresAt >= cutoff)
+      .map((record) => ({
+        grantId: record.id,
+        clientId: record.clientId,
+        scopes: [...record.scopes],
+        issuedAt: record.issuedAt,
+        expiresAt: record.expiresAt,
+      }))
+  }
+
+  function size(): { transactions: number; codes: number; attempts: number; grants: number } {
     return {
       transactions: transactions.size,
       codes: codeHashIndex.size,
       attempts: authorizeAttempts.size,
+      grants: grants.size,
     }
   }
 
@@ -384,6 +515,9 @@ export function createOAuthTransactionStore(options?: {
     issueAuthorizationCode,
     redeemAuthorizationCode,
     mintAccessToken,
+    verifyAccessToken,
+    revokeGrant,
+    listGrants,
     verifyApprovalBinding,
     getTransactionForApproval,
     getTransactionRedirect,
