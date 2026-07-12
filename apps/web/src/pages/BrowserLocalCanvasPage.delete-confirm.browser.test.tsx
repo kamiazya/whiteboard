@@ -1,9 +1,24 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import {
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
+
+// The page reads/writes the canvas id through the router, so it needs a router
+// in scope exactly as it has one in main.tsx.
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+}
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
