@@ -25,6 +25,7 @@ vi.mock('@hono/node-server', () => ({ serve: mockServe }))
 vi.mock('./app.js', () => ({ createApp: vi.fn(() => ({ fetch: vi.fn() })) }))
 
 import { startServerModeHttp } from './server-mode-http.js'
+import { createApp } from './app.js'
 
 function makeOptions() {
   return {
@@ -80,6 +81,27 @@ describe('startServerModeHttp', () => {
     await close()
 
     expect(server.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('wires getStatus() to report the always-available server-placeholder UI', async () => {
+    const options = makeOptions()
+    const startPromise = startServerModeHttp(options)
+    const server = getLastServer()!
+    setImmediate(() => server.emit('listening'))
+    await startPromise
+
+    const createAppMock = vi.mocked(createApp)
+    const passedOptions = createAppMock.mock.calls.at(-1)?.[0]
+    const status = passedOptions?.getStatus()
+
+    // Server-mode ships the placeholder page inline in app.ts (not a build
+    // artifact), so these fields are fixed rather than derived from a
+    // filesystem check.
+    expect(status?.app).toEqual({
+      served: true,
+      buildPresent: true,
+      ui: 'server-placeholder',
+    })
   })
 
   it('rejects when the server emits an error before listening', async () => {
