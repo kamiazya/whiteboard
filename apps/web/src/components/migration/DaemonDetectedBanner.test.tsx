@@ -101,7 +101,7 @@ describe('DaemonDetectedBanner', () => {
     )
 
     await screen.findByText(
-      'A local whiteboard daemon is running. Ask your AI agent for a pairing link (create_pairing_link) to unlock versions, branches, and merge.',
+      'A local whiteboard daemon is running. Ask your AI agent for a pairing link (create_pairing_link) to unlock versions, variations, and combining changes.',
     )
     const link = screen.getByRole('link', { name: /connect/i })
     expect(link.getAttribute('href')).toBe(HOW_TO_CONNECT_URL)
@@ -123,7 +123,7 @@ describe('DaemonDetectedBanner', () => {
 
     expect(
       screen.queryByText(
-        'A local whiteboard daemon is running. Ask your AI agent for a pairing link (create_pairing_link) to unlock versions, branches, and merge.',
+        'A local whiteboard daemon is running. Ask your AI agent for a pairing link (create_pairing_link) to unlock versions, variations, and combining changes.',
       ),
     ).toBeNull()
 

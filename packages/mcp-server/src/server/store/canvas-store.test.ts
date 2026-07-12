@@ -27,6 +27,7 @@ const {
   setAutoCompactTrigger,
   disposeAutoCompact,
   _inFlightAutoCompactCountForTests,
+  _isDisposingAutoCompactForTests,
 } = await import('./canvas-store.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
@@ -877,14 +878,21 @@ describe('auto-compact disposal', () => {
     expect(await readLastCompactedAt()).not.toBeNull()
   })
 
-  it('disposeAutoCompact cancels a timer rescheduled by an in-flight compaction instead of leaving it dangling', async () => {
+  it('disposeAutoCompact refuses a reschedule attempted while disposal is in progress, instead of racing a timer against the next clear pass', async () => {
     const store = await buildCompactableCanvas('reentrant')
 
     // Simulates loadCanvas()'s legacy-migration path resuming mid-compaction
     // and calling saveCanvas(), which re-invokes the auto-compact trigger and
-    // schedules a fresh timer *while disposeAutoCompact is already awaiting
-    // this in-flight compaction*. A single clear-then-await pass would clear
-    // the timer map before this reschedule happens and miss it.
+    // attempts to schedule a fresh timer. The reschedule is gated on an
+    // explicit signal (not a wall-clock delay) so it fires deterministically
+    // once _isDisposingAutoCompactForTests() is confirmed true, rather than
+    // hoping a fixed sleep lands inside disposeAutoCompact's await window —
+    // that race is what made the previous version of this test flaky under
+    // load (CI run 29162596104).
+    let releaseReschedule: () => void = () => undefined
+    const rescheduleGate = new Promise<void>((resolve) => {
+      releaseReschedule = resolve
+    })
     const rescheduleCallCount = { count: 0 }
     const countingStore = new Proxy(store, {
       get(target, prop, receiver) {
@@ -901,8 +909,8 @@ describe('auto-compact disposal', () => {
       get(target, prop, receiver) {
         if (prop === 'earliestFrontiers') {
           return async (workspaceId: string, slug: string) => {
-            await new Promise((r) => setTimeout(r, 50))
-            scheduleAutoCompact('session1', 'reentrant', countingStore, { debounceMs: 20 })
+            await rescheduleGate
+            scheduleAutoCompact('session1', 'reentrant', countingStore, { debounceMs: 0 })
             return target.earliestFrontiers(workspaceId, slug)
           }
         }
@@ -918,12 +926,24 @@ describe('auto-compact disposal', () => {
       { timeout: 2000 },
     )
 
-    await disposeAutoCompact()
+    const disposePromise = disposeAutoCompact()
+    // Confirm disposal has actually begun (and is blocked awaiting the
+    // in-flight compaction above) before letting the reschedule proceed —
+    // this is the exact interleaving the original bug report depended on
+    // luck to hit.
+    await vi.waitFor(
+      () => {
+        expect(_isDisposingAutoCompactForTests()).toBe(true)
+      },
+      { timeout: 2000 },
+    )
+    releaseReschedule()
+    await disposePromise
 
     expect(_inFlightAutoCompactCountForTests()).toBe(0)
-    // Wait past the rescheduled timer's debounce window and confirm it was
-    // cancelled rather than merely not-yet-fired.
-    await new Promise((r) => setTimeout(r, 100))
+    // debounceMs: 0 still yields a macrotask tick before firing; give it a
+    // chance to fire if it were ever going to, then confirm it didn't.
+    await new Promise((r) => setTimeout(r, 20))
     expect(rescheduleCallCount.count).toBe(0)
   })
 

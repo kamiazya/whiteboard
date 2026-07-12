@@ -638,7 +638,7 @@ export function createCanvasRouter(options: CanvasRouterOptions = {}) {
       )
     } catch (err) {
       if (err instanceof OutputPathError) {
-        const { status, body } = toCanvasOutputPathErrorBody(err)
+        const { status, body } = toCanvasOutputPathErrorBody(err, workspaceId)
         return c.json(body, status)
       }
       throw err

@@ -65,7 +65,10 @@ describe('exportPngTool execute', () => {
   it('case 368', async () => {
     fetchMock.mockImplementation(async (input: string | URL) => {
       const url = input.toString()
-      if (url === 'http://localhost:3099/api/canvas/sid/slug/export' && fetchMock.mock.calls.length === 1) {
+      if (
+        url === 'http://localhost:3099/api/canvas/sid/slug/export' &&
+        fetchMock.mock.calls.length === 1
+      ) {
         return new Response(
           JSON.stringify({
             error: 'no_client',
@@ -132,10 +135,10 @@ describe('exportPngTool execute', () => {
 
   it('case 370', async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({ error: 'timeout', message: 'Export timed out after 10s.' }),
-        { status: 504, headers: { 'Content-Type': 'application/json' } },
-      ),
+      new Response(JSON.stringify({ error: 'timeout', message: 'Export timed out after 10s.' }), {
+        status: 504,
+        headers: { 'Content-Type': 'application/json' },
+      }),
     )
 
     const { exportPngTool } = await import('./export.js')
@@ -161,9 +164,7 @@ describe('exportPngTool execute', () => {
   })
 
   it('case 372', async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response('not json', { status: 500 }),
-    )
+    fetchMock.mockResolvedValueOnce(new Response('not json', { status: 500 }))
 
     const { exportPngTool } = await import('./export.js')
     const tool = exportPngTool()
@@ -213,10 +214,7 @@ describe('exportPngTool execute', () => {
 
     const { exportPngTool } = await import('./export.js')
     const tool = exportPngTool()
-    await tool.execute(
-      { canvasId: 'sid/slug', padding: 32, scale: 2, minFontPx: 14 },
-      client,
-    )
+    await tool.execute({ canvasId: 'sid/slug', padding: 32, scale: 2, minFontPx: 14 }, client)
 
     const [, init] = fetchMock.mock.calls[0]
     expect(JSON.parse(init?.body as string)).toEqual({
@@ -376,12 +374,13 @@ describe('exportPngTool execute', () => {
     })
   })
 
-  it('surfaces invalid_output_path errors from the export route', async () => {
+  it('surfaces an invalid_output_path rejection that names the allowed exports root', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           error: 'invalid_output_path',
-          message: 'outputPath must be an absolute path (received: relative.png)',
+          message:
+            "Invalid output path. outputPath must be inside this workspace's exports directory (~/.whiteboard/sid/exports, or $WHITEBOARD_DATA_DIR/sid/exports if that env var is set). Omit outputPath to write there automatically.",
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       ),
@@ -390,11 +389,16 @@ describe('exportPngTool execute', () => {
     const { exportPngTool } = await import('./export.js')
     const tool = exportPngTool()
     await expect(
-      tool.execute(
-        { canvasId: 'sid/slug', outputPath: 'relative.png' },
-        client,
-      ),
-    ).rejects.toThrow(/absolute path/)
+      tool.execute({ canvasId: 'sid/slug', outputPath: '/elsewhere/canvas.png' }, client),
+    ).rejects.toThrow(/exports directory/)
+  })
+
+  it("documents the outputPath sandbox constraint in the tool's inputSchema description", async () => {
+    const { exportPngTool } = await import('./export.js')
+    const tool = exportPngTool()
+    const description = tool.inputSchema.properties.outputPath.description
+    expect(description).toMatch(/exports directory/)
+    expect(description).toMatch(/WHITEBOARD_DATA_DIR/)
   })
 
   it('surfaces output_exists when the target file already exists', async () => {
@@ -402,8 +406,7 @@ describe('exportPngTool execute', () => {
       new Response(
         JSON.stringify({
           error: 'output_exists',
-          message:
-            'outputPath already exists. Pass overwrite=true to replace it: /abs/canvas.png',
+          message: 'outputPath already exists. Pass overwrite=true to replace it: /abs/canvas.png',
         }),
         { status: 409, headers: { 'Content-Type': 'application/json' } },
       ),
@@ -412,10 +415,7 @@ describe('exportPngTool execute', () => {
     const { exportPngTool } = await import('./export.js')
     const tool = exportPngTool()
     await expect(
-      tool.execute(
-        { canvasId: 'sid/slug', outputPath: '/abs/canvas.png' },
-        client,
-      ),
+      tool.execute({ canvasId: 'sid/slug', outputPath: '/abs/canvas.png' }, client),
     ).rejects.toThrow(/already exists/)
   })
 })

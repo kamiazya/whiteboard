@@ -1,27 +1,40 @@
 // Single source of truth for the local-daemon's hosted-origin admission
 // contract: parses WHITEBOARD_ALLOWED_WEB_ORIGINS and exposes the one
 // predicate every surface (/api CORS, /mcp origin gate, WS upgrade) must use
-// so origin matching cannot drift between them. Exact-match only — wildcard
-// and suffix matching are never introduced here (ADR-0002 addendum).
+// so origin matching cannot drift between them. Entries are exact https
+// origins OR leftmost-label wildcard subdomain patterns (see
+// origin-pattern.ts for the full matching contract); bare '*' stays
+// rejected (ADR-0002 addendum, amended to admit the narrower wildcard shape).
 //
 // This env var governs local-daemon mode only. Server-mode reads
 // WHITEBOARD_SERVER_ALLOWED_ORIGINS via server-mode-exposure.ts and never
 // consults this module.
 
 import { getLogger } from '../log.js'
-import { validateOriginEntry, type OriginValidationFailureReason } from './origin-validation.js'
+import {
+  canonicalizeOriginPatternEntry,
+  matchOrigin,
+  parseOriginPatternEntry,
+  parseOriginPatterns,
+  type OriginPatternFailureReason,
+} from './origin-pattern.js'
 
 export type WebOriginsFailureCode =
   | 'web_origins.entry_must_be_https'
   | 'web_origins.entry_must_be_origin'
   | 'web_origins.wildcard_forbidden'
   | 'web_origins.entry_unparseable'
+  | 'web_origins.invalid_wildcard_pattern'
 
-const REASON_TO_CODE: Record<OriginValidationFailureReason, WebOriginsFailureCode> = {
+const REASON_TO_CODE: Record<OriginPatternFailureReason, WebOriginsFailureCode> = {
   unparseable: 'web_origins.entry_unparseable',
   wildcard: 'web_origins.wildcard_forbidden',
   not_https: 'web_origins.entry_must_be_https',
   not_origin: 'web_origins.entry_must_be_origin',
+  wildcard_not_leftmost: 'web_origins.invalid_wildcard_pattern',
+  wildcard_multi_label: 'web_origins.invalid_wildcard_pattern',
+  wildcard_suffix_too_short: 'web_origins.invalid_wildcard_pattern',
+  wildcard_ip_suffix: 'web_origins.invalid_wildcard_pattern',
 }
 
 export type ParseAllowedWebOriginsResult =
@@ -43,29 +56,40 @@ export function parseAllowedWebOriginsEnv(value: string | undefined): ParseAllow
   for (let entryIndex = 0; entryIndex < entries.length; entryIndex += 1) {
     const entry = entries[entryIndex].trim()
     if (entry.length === 0) continue
-    const result = validateOriginEntry(entry)
+    const result = parseOriginPatternEntry(entry)
     if (!result.ok) {
       return { ok: false, code: REASON_TO_CODE[result.reason], entryIndex }
     }
-    origins.push(result.origin)
+    origins.push(canonicalizeOriginPatternEntry(entry))
   }
   return { ok: true, origins }
 }
 
-// Per-request exact-match predicate shared by /api CORS, /mcp origin gate,
-// and WS upgrade. Normalises the request Origin header through URL.origin so
-// host case and default-port variants compare canonically against the
-// already-normalised allowlist produced by parseAllowedWebOriginsEnv.
+// Per-request admission predicate shared by /api CORS, /mcp origin gate, and
+// WS upgrade. Each allowlist entry (already validated by
+// parseAllowedWebOriginsEnv) is parsed into an OriginPattern and matched
+// via the shared matcher, which normalizes the request Origin header's case,
+// IDN form, and default port identically to the pattern side.
+//
+// The allowlist array is parsed once at startup and reused by reference for
+// every request, so the compiled patterns are cached per array identity —
+// re-parsing on every CORS/mcp/WS request would be pure waste on a hot path.
+const compiledAllowlists = new WeakMap<readonly string[], ReturnType<typeof parseOriginPatterns>>()
+
+function compiledPatternsFor(allowlist: readonly string[]): ReturnType<typeof parseOriginPatterns> {
+  const cached = compiledAllowlists.get(allowlist)
+  if (cached) return cached
+  const patterns = parseOriginPatterns(allowlist)
+  compiledAllowlists.set(allowlist, patterns)
+  return patterns
+}
+
 export function isAllowedWebOrigin(
   originHeader: string | undefined,
   allowlist: readonly string[],
 ): boolean {
   if (!originHeader || allowlist.length === 0) return false
-  try {
-    return allowlist.includes(new URL(originHeader).origin)
-  } catch {
-    return false
-  }
+  return matchOrigin(compiledPatternsFor(allowlist), originHeader)
 }
 
 // Startup-time wiring helper shared by both entrypoints (cli/daemon-run.ts,

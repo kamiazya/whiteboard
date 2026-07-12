@@ -74,7 +74,7 @@ describe('HeaderBranchBanner', () => {
     await waitFor(() => {
       expect(screen.getByTestId('header-branch-banner')).toBeTruthy()
     })
-    expect(screen.getByText(/changes not yet merged into/)).toBeTruthy()
+    expect(screen.getByText(/changes not yet combined into/)).toBeTruthy()
     expect(screen.getByText(/3/)).toBeTruthy()
     expect(screen.getByTestId('header-branch-banner-merge')).toBeTruthy()
   })

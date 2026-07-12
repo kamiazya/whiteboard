@@ -40,6 +40,7 @@ import {
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
+import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   BranchNotFoundError,
@@ -314,27 +315,21 @@ function createServerModeAsyncAuthMiddleware(
   }
 }
 
+// Pattern-aware: allowedOrigins may contain exact origins or leftmost-label
+// wildcard subdomain patterns (see origin-pattern.ts). Deliberately does NOT
+// build a Set of `new URL(o).origin` strings for exact-match lookup — that
+// call does not throw on a wildcard entry (it parses '*' as a literal
+// hostname character), so an exact-Set lookup would silently never admit a
+// real subdomain rather than fail loudly.
 function createServerModeOriginMiddleware(allowedOrigins: readonly string[]): MiddlewareHandler {
-  const allowed = new Set(
-    allowedOrigins.map((o) => {
-      try {
-        return new URL(o).origin
-      } catch {
-        return o
-      }
-    }),
-  )
+  const patterns = parseOriginPatterns(allowedOrigins)
   return async (c, next) => {
     const origin = c.req.header('origin')
     if (!origin) {
       if (c.req.method.toUpperCase() === 'OPTIONS') return new Response(null, { status: 204 })
       return next()
     }
-    let normalized: string | null = null
-    try {
-      normalized = new URL(origin).origin
-    } catch {}
-    if (!normalized || !allowed.has(normalized)) {
+    if (!matchOrigin(patterns, origin)) {
       return Response.json(
         { jsonrpc: '2.0', error: { code: -32000, message: 'forbidden origin' }, id: null },
         { status: 403 },
