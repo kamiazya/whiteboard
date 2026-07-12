@@ -16,6 +16,9 @@ vi.mock('./config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
   DIST_APP_DIR: '/tmp/whiteboard/dist/app',
+  // Server-mode never reads DIST_WEB_APP_DIR (its root serving is pinned to
+  // the legacy dist/app UI until R5), but the binding must still exist.
+  DIST_WEB_APP_DIR: '/tmp/whiteboard/dist/web-app',
 }))
 
 const { createApp } = await import('./app.js')
