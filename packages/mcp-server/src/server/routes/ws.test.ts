@@ -526,4 +526,33 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
     expect(ws.closes).toEqual([{ code: 1008, reason: 'Insufficient scope' }])
     ws.emitClose()
   })
+
+  it('a frame already in flight when the socket was closed for scope takes no effect', async () => {
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-inflight', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read'],
+    )
+
+    const clientDoc = new LoroDoc()
+    const prevVV = clientDoc.version()
+    clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
+    clientDoc.commit()
+
+    // The mutation trips the scope gate and starts the closing handshake...
+    await ws.emitMessage(
+      Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array),
+      true,
+    )
+    // ...but `close()` only *starts* it, so a frame the client had already put
+    // on the wire still arrives. Even though canvas:read alone would normally
+    // authorize client_ready, it must not register a socket that is closing.
+    const { getReadyClientCount } = await import('./ws.js')
+    await ws.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(getReadyClientCount('session1', 'canvas-inflight')).toBe(0)
+    ws.emitClose()
+  })
 })

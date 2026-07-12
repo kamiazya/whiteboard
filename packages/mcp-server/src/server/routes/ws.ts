@@ -246,11 +246,19 @@ export async function handleWsUpgrade(
   // by retrying. Dropping the frame while leaving the socket open would let it
   // keep pushing rejected traffic; RFC 6455 1008 (Policy Violation) is the
   // close code for a message the peer is not permitted to send.
+  // `ws.close()` only starts the closing handshake: frames the client already
+  // put on the wire still reach this handler before the socket is torn down.
+  // Without this flag a connection that just lost the socket for one message
+  // could still have an in-scope follow-up frame (e.g. `client_ready`) take
+  // effect on a socket that is on its way out.
+  let isClosing = false
   function closeForInsufficientScope(): void {
+    isClosing = true
     ws.close(1008, 'Insufficient scope')
   }
 
   ws.on('message', async (data: RawData, isBinary: boolean) => {
+    if (isClosing) return
     runtimeTouch()
     if (!isBinary) {
       // text frame = JSON（export_response / viewport_response / ws_trace）
