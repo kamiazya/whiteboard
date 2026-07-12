@@ -101,6 +101,13 @@ export function createDaemonAuthMiddleware(
   grantStore?: OAuthTransactionStore,
 ): MiddlewareHandler {
   return async (c, next) => {
+    // The route-scope registry is the single source of truth for which routes
+    // are public; consult it first so a route declared public there can never
+    // be locked behind auth by a stale second list. `requiresDaemonAuth` still
+    // gates everything outside `/api/*` (static app, etc.).
+    if (resolveApiRouteScope(c.req.method, c.req.path)?.kind === 'public') {
+      return next()
+    }
     if (!requiresDaemonAuth(c.req.path)) {
       return next()
     }

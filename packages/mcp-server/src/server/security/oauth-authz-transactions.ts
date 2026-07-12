@@ -454,18 +454,25 @@ export function createOAuthTransactionStore(options?: {
     return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS }
   }
 
+  // A minted access token is a fixed-length base64url string (32 random
+  // bytes). An input far longer than that is never a real token — bounding it
+  // before hashing keeps a request from forcing the daemon to SHA-256 an
+  // arbitrarily large body. The bound sits well above the real length so it
+  // never rejects a legitimate token.
+  const MAX_ACCESS_TOKEN_LENGTH = 256
+
   function verifyAccessToken(accessToken: string): AccessGrantContext | null {
-    if (accessToken.length === 0) return null
-    // Lookup is by hash, so the raw token never has to be compared against a
-    // stored secret at all — the only comparison is between two SHA-256
-    // digests of the same fixed length, and it is done in constant time so a
-    // near-miss cannot be walked byte by byte via response timing.
+    if (accessToken.length === 0 || accessToken.length > MAX_ACCESS_TOKEN_LENGTH) return null
+    // Lookup is by hash of the presented token. The index maps a token hash to
+    // its grant id, so a hit already means the stored hash equals this one —
+    // there is no separate secret to compare, and a JS Map.get is not
+    // constant-time anyway, so no digest comparison is done here. Expiry is
+    // re-checked at use, not merely at issue.
     const presentedHash = hashCode(accessToken)
     const grantId = grantTokenIndex.get(presentedHash)
     if (grantId === undefined) return null
     const record = grants.get(grantId)
     if (!record) return null
-    if (!secretsMatch(presentedHash, record.tokenHash)) return null
     if (record.expiresAt < now()) return null
     return { grantId: record.id, clientId: record.clientId, scopes: [...record.scopes] }
   }

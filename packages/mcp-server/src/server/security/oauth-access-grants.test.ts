@@ -21,6 +21,16 @@ describe('access-grant store', () => {
     expect(store.verifyAccessToken('')).toBeNull()
   })
 
+  // A minted token is a fixed-length base64url string, so an over-long input
+  // is never a real token — rejecting it early keeps a request from making the
+  // daemon hash a megabyte of attacker input. (The return value is null either
+  // way; the point of the guard is to skip the hash, which output alone can't
+  // observe — hence the plain null assertion here.)
+  it('rejects an over-long bearer', () => {
+    const store = createOAuthTransactionStore()
+    expect(store.verifyAccessToken('a'.repeat(4096))).toBeNull()
+  })
+
   it('rejects an expired grant', () => {
     let clock = 1_000
     const store = createOAuthTransactionStore({ now: () => clock })
