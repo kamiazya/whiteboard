@@ -56,103 +56,126 @@ const BUDGETS = [
 // unavoidable critical-path cost of addressable URLs. Measured 114.0 KB.
 const CRITICAL_PATH_BUDGET_KB = 126
 
-let failures = 0
-
-function gzipSize(path) {
-  return gzipSync(readFileSync(path)).length
+// Attribute-order-, quote-style-, and case-insensitive: extract each tag
+// first, then match attributes independently, so a Vite/minifier formatting
+// change (or a producer that emits upper/mixed-case tags or attributes —
+// both HTML tag names and attribute names are case-insensitive per spec)
+// cannot silently zero out the file list and let the budget pass vacuously.
+export function attr(tag, name) {
+  const m = tag.match(new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'))
+  return m ? (m[2] ?? m[3] ?? m[4]) : undefined
 }
 
-if (!existsSync(ASSETS)) {
-  console.error(`  FAIL  dist/assets not found at ${ASSETS} — run \`pnpm build\` first`)
-  process.exit(1)
-}
-
-const files = readdirSync(ASSETS)
-for (const { label, pattern, limit, required } of BUDGETS) {
-  const matches = files.filter((f) => pattern.test(f))
-  if (matches.length === 0) {
-    if (required) {
-      console.error(`  FAIL  ${label}: no file matching ${pattern} in dist/assets`)
-      failures++
-    } else {
-      console.log(`  skip  ${label}: no matching chunk yet`)
-    }
-    continue
-  }
-  for (const f of matches) {
-    const size = gzipSize(join(ASSETS, f))
-    const sizeKb = (size / KB).toFixed(1)
-    const limitKb = (limit / KB).toFixed(0)
-    if (size > limit) {
-      console.error(`  FAIL  ${label}: ${f} is ${sizeKb} KB gzip (budget ${limitKb} KB)`)
-      failures++
-    } else {
-      console.log(`  pass  ${label}: ${f} is ${sizeKb} KB gzip (budget ${limitKb} KB)`)
-    }
-  }
-}
-
-// Critical-path total: entry script + every modulepreloaded JS chunk, as
-// listed in dist/index.html. This is what actually determines first-paint
-// transfer size — see the module comment above for why the per-file
-// entry-JS budget above cannot catch a regression here (e.g. a statically
-// imported Excalidraw/loro-crdt page would inflate this total without ever
-// growing index-*.js itself).
-const indexHtmlPath = join(DIST, 'index.html')
-if (!existsSync(indexHtmlPath)) {
-  console.error(`  FAIL  dist/index.html not found at ${indexHtmlPath} — run \`pnpm build\` first`)
-  failures++
-} else {
-  const html = readFileSync(indexHtmlPath, 'utf8')
-  // Attribute-order- and quote-style-insensitive: extract each tag first,
-  // then match attributes independently, so a Vite/minifier formatting change
-  // cannot silently zero out the file list and let the budget pass vacuously.
-  const attr = (tag, name) => {
-    const m = tag.match(new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`))
-    return m ? (m[2] ?? m[3] ?? m[4]) : undefined
-  }
+// Extracts every entry <script src> and modulepreload <link href> JS file
+// referenced from a built index.html — the critical-path payload a fresh
+// visitor downloads before first paint. Tag names, attribute names, and the
+// `rel` attribute value are all matched case-insensitively per the HTML spec.
+export function extractCriticalPathFiles(html) {
   const entryScripts = []
-  for (const [tag] of html.matchAll(/<script\b[^>]*>/g)) {
+  for (const [tag] of html.matchAll(/<script\b[^>]*>/gi)) {
     const src = attr(tag, 'src')
     if (src?.startsWith('/assets/') && src.endsWith('.js')) entryScripts.push(src)
   }
   const modulepreloads = []
-  for (const [tag] of html.matchAll(/<link\b[^>]*>/g)) {
+  for (const [tag] of html.matchAll(/<link\b[^>]*>/gi)) {
     const href = attr(tag, 'href')
+    const rel = attr(tag, 'rel')
     if (
-      attr(tag, 'rel') === 'modulepreload' &&
+      rel?.toLowerCase() === 'modulepreload' &&
       href?.startsWith('/assets/') &&
       href.endsWith('.js')
     ) {
       modulepreloads.push(href)
     }
   }
-  const criticalPathFiles = [...new Set([...entryScripts, ...modulepreloads])]
-  if (criticalPathFiles.length === 0) {
-    console.error(
-      '  FAIL  no entry <script src> or <link rel="modulepreload"> JS found in dist/index.html — the parser is broken or the build output changed shape; refusing to pass a vacuous budget',
-    )
-    failures++
+  return [...new Set([...entryScripts, ...modulepreloads])]
+}
+
+function gzipSize(path) {
+  return gzipSync(readFileSync(path)).length
+}
+
+// Guarded behind the import.meta.url check below so importing this module
+// (e.g. from smoke-bundle-size.test.ts to exercise extractCriticalPathFiles)
+// never runs the gate or calls process.exit as an import side effect.
+function main() {
+  let failures = 0
+
+  if (!existsSync(ASSETS)) {
+    console.error(`  FAIL  dist/assets not found at ${ASSETS} — run \`pnpm build\` first`)
+    process.exit(1)
   }
-  let criticalPathBytes = 0
-  for (const href of criticalPathFiles) {
-    criticalPathBytes += gzipSize(join(DIST, href.replace(/^\//, '')))
+
+  const files = readdirSync(ASSETS)
+  for (const { label, pattern, limit, required } of BUDGETS) {
+    const matches = files.filter((f) => pattern.test(f))
+    if (matches.length === 0) {
+      if (required) {
+        console.error(`  FAIL  ${label}: no file matching ${pattern} in dist/assets`)
+        failures++
+      } else {
+        console.log(`  skip  ${label}: no matching chunk yet`)
+      }
+      continue
+    }
+    for (const f of matches) {
+      const size = gzipSize(join(ASSETS, f))
+      const sizeKb = (size / KB).toFixed(1)
+      const limitKb = (limit / KB).toFixed(0)
+      if (size > limit) {
+        console.error(`  FAIL  ${label}: ${f} is ${sizeKb} KB gzip (budget ${limitKb} KB)`)
+        failures++
+      } else {
+        console.log(`  pass  ${label}: ${f} is ${sizeKb} KB gzip (budget ${limitKb} KB)`)
+      }
+    }
   }
-  const criticalPathKb = (criticalPathBytes / KB).toFixed(1)
-  if (criticalPathBytes > CRITICAL_PATH_BUDGET_KB * KB) {
+
+  // Critical-path total: entry script + every modulepreloaded JS chunk, as
+  // listed in dist/index.html. This is what actually determines first-paint
+  // transfer size — see the module comment above for why the per-file
+  // entry-JS budget above cannot catch a regression here (e.g. a statically
+  // imported Excalidraw/loro-crdt page would inflate this total without ever
+  // growing index-*.js itself).
+  const indexHtmlPath = join(DIST, 'index.html')
+  if (!existsSync(indexHtmlPath)) {
     console.error(
-      `  FAIL  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
+      `  FAIL  dist/index.html not found at ${indexHtmlPath} — run \`pnpm build\` first`,
     )
     failures++
   } else {
-    console.log(
-      `  pass  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
-    )
+    const html = readFileSync(indexHtmlPath, 'utf8')
+    const criticalPathFiles = extractCriticalPathFiles(html)
+    if (criticalPathFiles.length === 0) {
+      console.error(
+        '  FAIL  no entry <script src> or <link rel="modulepreload"> JS found in dist/index.html — the parser is broken or the build output changed shape; refusing to pass a vacuous budget',
+      )
+      failures++
+    }
+    let criticalPathBytes = 0
+    for (const href of criticalPathFiles) {
+      criticalPathBytes += gzipSize(join(DIST, href.replace(/^\//, '')))
+    }
+    const criticalPathKb = (criticalPathBytes / KB).toFixed(1)
+    if (criticalPathBytes > CRITICAL_PATH_BUDGET_KB * KB) {
+      console.error(
+        `  FAIL  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
+      )
+      failures++
+    } else {
+      console.log(
+        `  pass  critical-path JS (entry + modulepreload, ${criticalPathFiles.length} files): ${criticalPathKb} KB gzip (budget ${CRITICAL_PATH_BUDGET_KB} KB)`,
+      )
+    }
   }
+
+  if (failures > 0) {
+    console.error(`\nbundle-size gate: ${failures} failure(s)`)
+    process.exit(1)
+  }
+  console.log('\nbundle-size gate: OK')
 }
 
-if (failures > 0) {
-  console.error(`\nbundle-size gate: ${failures} failure(s)`)
-  process.exit(1)
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main()
 }
-console.log('\nbundle-size gate: OK')
