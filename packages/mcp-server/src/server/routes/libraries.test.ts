@@ -10,7 +10,6 @@ vi.mock('../config.js', () => ({
     return tempDir
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
 const { createLibrariesRouter } = await import('./libraries.js')

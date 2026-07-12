@@ -8,10 +8,8 @@ import { getAppLogger } from './app-logger.js'
 // app — see AGENTS.md's Zod Schema Discipline section.
 export const MERGE_COMMITTED_EVENT = 'excalidraw:merge_committed'
 
-// Non-strict: packages/mcp-server/src/app's MergeDialog is a frozen dispatcher
-// that may carry extra fields during the shared-window transition period.
-// Unknown fields are stripped rather than rejected so both dispatchers stay
-// compatible with this parser.
+// Non-strict: unknown fields are stripped rather than rejected so the
+// dispatcher can grow the detail shape without a lockstep parser change.
 export const mergeCommittedDetailSchema = z.object({
   workspaceId: z.string().min(1),
   slug: z.string().min(1),

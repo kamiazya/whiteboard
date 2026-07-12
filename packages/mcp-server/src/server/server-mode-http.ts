@@ -6,12 +6,11 @@
 // cleanly so the dispatcher's SIGTERM handler can await it.
 
 import { randomUUID } from 'node:crypto'
-import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
-import { join } from 'node:path'
+import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
-import { DATA_DIR, DIST_APP_DIR } from './config.js'
+import { DATA_DIR } from './config.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 
 export interface StartServerModeHttpOptions {
@@ -85,11 +84,11 @@ export async function startServerModeHttp(
         dataDirWritable: isDataDirWritable(DATA_DIR),
       },
       app: {
-        served: false,
-        buildPresent: existsSync(join(DIST_APP_DIR, 'index.html')),
-        // Server-mode's UI root is pinned to the legacy dist/app build until
-        // R5 of the MCP-UI retirement (ADR 0001); it never serves dist/web-app.
-        ui: 'legacy',
+        // The static placeholder page is always available — it ships inline
+        // in app.ts, not as a build artifact — so both fields are fixed.
+        served: true,
+        buildPresent: true,
+        ui: 'server-placeholder',
       },
       mcp: { httpEnabled: true, endpoint: `${baseUrl}/mcp` },
       clients: { connected: 0, ready: 0 },

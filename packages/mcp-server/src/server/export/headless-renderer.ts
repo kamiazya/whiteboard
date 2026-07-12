@@ -82,14 +82,15 @@ interface ExcalidrawFile {
 
 // Resolve the bundled Excalifont woff2. Looked up at module init so the
 // daemon does not pay the disk hit per export call.
-async function resolveExcalifontTtf(): Promise<Buffer | null> {
+export async function resolveExcalifontTtf(): Promise<Buffer | null> {
   const here = dirname(fileURLToPath(import.meta.url))
   // dist layout: dist/server/export/headless-renderer.js — fonts under
-  // dist/app/fonts/node_modules/@excalidraw/excalidraw/dist/prod/fonts/Excalifont/
+  // dist/web-app/fonts/Excalifont/ (apps/web's vite config self-hosts the
+  // Excalidraw fonts flat, not under the upstream node_modules path).
   const candidates = [
-    join(here, '..', '..', 'app', 'fonts', 'node_modules', '@excalidraw', 'excalidraw', 'dist', 'prod', 'fonts', 'Excalifont'),
+    join(here, '..', '..', 'web-app', 'fonts', 'Excalifont'),
     // src layout (tsx watch mode): packages/mcp-server/src/server/export/...
-    join(here, '..', '..', '..', 'dist', 'app', 'fonts', 'node_modules', '@excalidraw', 'excalidraw', 'dist', 'prod', 'fonts', 'Excalifont'),
+    join(here, '..', '..', '..', 'dist', 'web-app', 'fonts', 'Excalifont'),
   ]
   for (const dir of candidates) {
     try {
@@ -136,9 +137,14 @@ async function buildExporter(): Promise<HeadlessExporter> {
   define('devicePixelRatio', 1)
   define('location', win.location)
   define('crypto', win.crypto ?? globalThis.crypto)
-  define('FontFace', class {
-    load() { return Promise.resolve(this) }
-  })
+  define(
+    'FontFace',
+    class {
+      load() {
+        return Promise.resolve(this)
+      }
+    },
+  )
 
   // Node-canvas-shaped polyfill: enough for ctx.measureText() which is what
   // Excalidraw's truncateText() and getCanvasSize() need. happy-dom's
@@ -209,9 +215,10 @@ async function buildExporter(): Promise<HeadlessExporter> {
       const resvg = new Resvg(svg.outerHTML, {
         background: options.background ?? themeBackground,
         font: fontOption,
-        fitTo: options.scale && options.scale !== 1
-          ? { mode: 'zoom', value: options.scale }
-          : { mode: 'original' },
+        fitTo:
+          options.scale && options.scale !== 1
+            ? { mode: 'zoom', value: options.scale }
+            : { mode: 'original' },
       })
       const png = resvg.render()
       return {
@@ -231,10 +238,7 @@ export async function prewarmHeadlessExporter(): Promise<void> {
   try {
     await getHeadlessExporter()
   } catch (err) {
-    log.warning(
-      { err: err instanceof Error ? err : new Error(String(err)) },
-      'pre-warm failed',
-    )
+    log.warning({ err: err instanceof Error ? err : new Error(String(err)) }, 'pre-warm failed')
   }
 }
 

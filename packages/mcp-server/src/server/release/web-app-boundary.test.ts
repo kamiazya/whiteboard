@@ -1,11 +1,15 @@
 // Property catalog: hosted web app / npm package boundary invariants.
 // Drift guards:
-//   - packages/mcp-server/src/app must not import src/server, src/cli, src/daemon,
-//     or Node-only builtins; src/shared imports are restricted to an explicit allowlist
+//   - apps/web must not import src/server, src/cli, src/daemon, or Node-only
+//     builtins; src/shared imports are restricted to an explicit allowlist
 //   - @kamiazya/whiteboard-mcp package.json files must not include apps/ or src/
 //   - pnpm-workspace.yaml must declare apps/* so apps/web participates in workspace builds
 //   - apps/web skeleton must exist at the intended deploy-target location
 // No PBT: static file-list / import-list guards are clearer as example tests.
+//
+// The original daemon-served browser UI this test catalog once also scanned
+// was deleted in Stage 5 of the MCP-UI retirement (ADR 0001); apps/web is
+// the sole browser app now.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { builtinModules } from 'node:module'
@@ -18,9 +22,12 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../../../..')
 const PACKAGE_ROOT = resolve(__dirname, '../../..')
 const PACKAGE_SRC_DIR = resolve(PACKAGE_ROOT, 'src')
-const APP_SRC_DIR = resolve(PACKAGE_SRC_DIR, 'app')
 const APPS_WEB_DIR = resolve(REPO_ROOT, 'apps/web')
 const APPS_WEB_SRC_DIR = resolve(REPO_ROOT, 'apps/web/src')
+// Synthetic fixture dir for the forbiddenResolvedPath unit tests below — kept
+// outside any real browser app dir so those tests must pass browserAppDir
+// explicitly rather than relying on collectBrowserAppFiles's real scan roots.
+const FIXTURE_BROWSER_APP_DIR = resolve(PACKAGE_SRC_DIR, '__fixture-browser-app__')
 
 function collectTsFiles(dir: string): string[] {
   const results: string[] = []
@@ -37,18 +44,9 @@ function collectTsFiles(dir: string): string[] {
 
 // Returns all browser app TypeScript files paired with their containing app root.
 // The app root is used by forbiddenResolvedPath to distinguish internal from cross-boundary imports.
-// apps/web/src is included when it exists so boundary violations there are caught automatically.
 function collectBrowserAppFiles(): { file: string; browserAppDir: string }[] {
-  const results: { file: string; browserAppDir: string }[] = []
-  for (const file of collectTsFiles(APP_SRC_DIR)) {
-    results.push({ file, browserAppDir: APP_SRC_DIR })
-  }
-  if (existsSync(APPS_WEB_SRC_DIR)) {
-    for (const file of collectTsFiles(APPS_WEB_SRC_DIR)) {
-      results.push({ file, browserAppDir: APPS_WEB_SRC_DIR })
-    }
-  }
-  return results
+  if (!existsSync(APPS_WEB_SRC_DIR)) return []
+  return collectTsFiles(APPS_WEB_SRC_DIR).map((file) => ({ file, browserAppDir: APPS_WEB_SRC_DIR }))
 }
 
 // Extracts all import/require specifiers, including side-effect imports and re-exports.
@@ -84,7 +82,7 @@ function isForbiddenNodeBuiltin(specifier: string): boolean {
 
 // ── src/shared allowlist ──────────────────────────────────────────────────────
 
-// Explicit allowlist of browser-safe surfaces within src/shared/ that src/app may import.
+// Explicit allowlist of browser-safe surfaces within src/shared/ that the browser app may import.
 // Any src/shared/* import NOT matching this list is a boundary violation.
 // Add new entries here only after confirming the module contains no Node-only APIs.
 const ALLOWED_SHARED_EXACT = new Set([
@@ -126,11 +124,10 @@ function isAllowedSharedImport(relToShared: string, fromFile: string): boolean {
 
 // Returns the path relative to src/ if the specifier resolves from fromFile into
 // a forbidden zone; null if the import is within the browser app dir or explicitly allowed.
-// browserAppDir defaults to APP_SRC_DIR for backward-compat with unit fixture tests.
 function forbiddenResolvedPath(
   fromFile: string,
   specifier: string,
-  browserAppDir = APP_SRC_DIR,
+  browserAppDir = APPS_WEB_SRC_DIR,
 ): string | null {
   if (!specifier.startsWith('.')) return null
   const resolved = resolve(dirname(fromFile), specifier)
@@ -194,10 +191,10 @@ describe('extractImportSpecifiers parser coverage', () => {
   })
 
   it('server re-export is caught by the cross-boundary check', () => {
-    const fakeFile = resolve(APP_SRC_DIR, 'lib/dummy.ts')
+    const fakeFile = resolve(FIXTURE_BROWSER_APP_DIR, 'lib/dummy.ts')
     const specifiers = extractImportSpecifiers("export * from '../../server/routes/canvas.js'")
     const violations = specifiers
-      .map((s) => forbiddenResolvedPath(fakeFile, s))
+      .map((s) => forbiddenResolvedPath(fakeFile, s, FIXTURE_BROWSER_APP_DIR))
       .filter((v) => v !== null)
     expect(violations).not.toHaveLength(0)
   })
@@ -206,65 +203,67 @@ describe('extractImportSpecifiers parser coverage', () => {
 // ── src/shared allowlist unit tests ──────────────────────────────────────────
 
 describe('src/shared allowlist', () => {
-  // A representative file at src/app/lib/ depth, two levels up to reach src/shared/
-  const fakeAppFile = resolve(APP_SRC_DIR, 'lib/dummy.ts')
+  // A representative fixture file two levels below packages/mcp-server/src
+  // (matching the depth forbiddenResolvedPath's relative specifiers assume),
+  // deliberately outside any real browser app dir so browserAppDir must be
+  // passed explicitly.
+  const fakeAppFile = resolve(FIXTURE_BROWSER_APP_DIR, 'lib/dummy.ts')
+  const check = (specifier: string) =>
+    forbiddenResolvedPath(fakeAppFile, specifier, FIXTURE_BROWSER_APP_DIR)
 
   it('api-contracts/* imports are allowed', () => {
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/api-contracts/canvas.js')).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/api-contracts/branches.js')).toBeNull()
+    expect(check('../../shared/api-contracts/canvas.js')).toBeNull()
+    expect(check('../../shared/api-contracts/branches.js')).toBeNull()
   })
 
   it('explicitly listed browser-safe helpers are allowed', () => {
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/canvas-backend-contract.js')).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/external-url-policy.js')).toBeNull()
-    expect(
-      forbiddenResolvedPath(fakeAppFile, '../../shared/resolve-parented-elements.js'),
-    ).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/ws-messages.js')).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/ws-protocol.js')).toBeNull()
+    expect(check('../../shared/canvas-backend-contract.js')).toBeNull()
+    expect(check('../../shared/external-url-policy.js')).toBeNull()
+    expect(check('../../shared/resolve-parented-elements.js')).toBeNull()
+    expect(check('../../shared/ws-messages.js')).toBeNull()
+    expect(check('../../shared/ws-protocol.js')).toBeNull()
   })
 
   it('relocated daemon-backend transport modules are allowed', () => {
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/daemon-backend.js')).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/api-client.js')).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/upload-files.js')).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/ws-text-message.js')).toBeNull()
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/browser-tracing.js')).toBeNull()
+    expect(check('../../shared/daemon-backend.js')).toBeNull()
+    expect(check('../../shared/api-client.js')).toBeNull()
+    expect(check('../../shared/upload-files.js')).toBeNull()
+    expect(check('../../shared/ws-text-message.js')).toBeNull()
+    expect(check('../../shared/browser-tracing.js')).toBeNull()
   })
 
   it('test-utils/* imports are allowed from test files', () => {
-    const fakeTestFile = resolve(APP_SRC_DIR, 'lib/dummy.test.ts')
-    expect(forbiddenResolvedPath(fakeTestFile, '../../shared/test-utils/fast-check.js')).toBeNull()
+    const fakeTestFile = resolve(FIXTURE_BROWSER_APP_DIR, 'lib/dummy.test.ts')
+    expect(
+      forbiddenResolvedPath(
+        fakeTestFile,
+        '../../shared/test-utils/fast-check.js',
+        FIXTURE_BROWSER_APP_DIR,
+      ),
+    ).toBeNull()
   })
 
   it('test-utils/* imports are denied from production source files', () => {
-    expect(
-      forbiddenResolvedPath(fakeAppFile, '../../shared/test-utils/fast-check.js'),
-    ).not.toBeNull()
+    expect(check('../../shared/test-utils/fast-check.js')).not.toBeNull()
   })
 
   it('diagnostics/* imports are denied (Node-backed writers not browser-safe)', () => {
-    expect(forbiddenResolvedPath(fakeAppFile, '../../shared/diagnostics/logger.js')).not.toBeNull()
+    expect(check('../../shared/diagnostics/logger.js')).not.toBeNull()
   })
 
   it('arbitrary unlisted shared helpers are denied', () => {
-    expect(
-      forbiddenResolvedPath(fakeAppFile, '../../shared/some-new-node-helper.js'),
-    ).not.toBeNull()
+    expect(check('../../shared/some-new-node-helper.js')).not.toBeNull()
   })
 })
 
 // ── Full codebase scans ───────────────────────────────────────────────────────
-// Covers packages/mcp-server/src/app and apps/web/src (when it exists).
+// Covers apps/web/src.
 
 describe('browser app import boundary: Node-only builtins', () => {
   const browserAppFiles = collectBrowserAppFiles()
 
-  it('src/app contains TypeScript source files to scan', () => {
-    const appCount = browserAppFiles.filter(
-      ({ browserAppDir }) => browserAppDir === APP_SRC_DIR,
-    ).length
-    expect(appCount, 'src/app must contain TypeScript files').toBeGreaterThan(0)
+  it('apps/web/src contains TypeScript source files to scan', () => {
+    expect(browserAppFiles.length, 'apps/web/src must contain TypeScript files').toBeGreaterThan(0)
   })
 
   it('no file in browser app source imports a Node-only builtin', () => {

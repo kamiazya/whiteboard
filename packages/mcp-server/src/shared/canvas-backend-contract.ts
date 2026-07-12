@@ -3,8 +3,8 @@
  *
  * This module lives in src/shared so it is included in the tsconfig.server.json
  * declaration emit (dist/shared/canvas-backend-contract.d.ts) and can be
- * exported from the package via a subpath without pulling JSX-heavy src/app
- * into the Node build.
+ * exported from the package via a subpath without pulling JSX-heavy browser
+ * UI code into the Node build.
  *
  * CanvasBackend and CanvasBackendHandlers are intentionally hand-written
  * `interface` declarations — they are a pure in-process callback/transport

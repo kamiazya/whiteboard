@@ -14,7 +14,6 @@ vi.mock('./config.js', () => ({
   },
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
-  DIST_APP_DIR: '/tmp/whiteboard/dist/app',
 }))
 
 const { backupDataDir, restoreDataDir, BackupError } = await import('./backup-restore.js')

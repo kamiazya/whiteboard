@@ -1,6 +1,6 @@
 // Machine-checked coverage map: proves that every correctness project removed
-// from the publish gate (mcp-node, mcp-jsdom, mcp-browser, web-browser) is
-// still exercised by verify CI on the same commit. This is what makes it safe
+// from the publish gate (mcp-node, apps/web jsdom, web-browser) is still
+// exercised by verify CI on the same commit. This is what makes it safe
 // for publish-mcp to stop re-running `pnpm test` — a future edit that drops a
 // project from ci.yml's verify path fails this test red.
 
@@ -23,12 +23,8 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
     expect(text).toMatch(/--project[=\s]mcp-node/)
   })
 
-  it('runs the mcp-jsdom project (test-jsdom job)', () => {
-    expect(text).toMatch(/--project[=\s]mcp-jsdom/)
-  })
-
-  it('runs the mcp-browser project (test-browser job)', () => {
-    expect(text).toMatch(/--project[=\s]mcp-browser/)
+  it('runs the apps/web jsdom suite (test-jsdom job)', () => {
+    expect(text).toContain('whiteboard-web test')
   })
 
   it('runs the web-browser suite (test-browser job, apps/web vitest.browser.config.ts)', () => {

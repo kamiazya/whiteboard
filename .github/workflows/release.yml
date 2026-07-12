@@ -140,7 +140,7 @@ jobs:
         # Runs the "publish" tier of tests/e2e/distribution/release-gate-matrix.json:
         # typecheck, mcp-node floor, build, artifact checks, SBOM generation, and
         # tarball/packaged/distribution smokes. It deliberately does NOT re-run the
-        # full mcp-jsdom/mcp-browser/web-browser matrix — that already ran on this
+        # full web (jsdom)/web-browser matrix — that already ran on this
         # exact commit in ci.yml's verify job before the release PR was merged. See
         # docs/contributing/releasing.md "Publish gate scope".
         working-directory: .

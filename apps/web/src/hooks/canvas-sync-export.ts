@@ -2,9 +2,10 @@ import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { BinaryFiles } from '@excalidraw/excalidraw/types'
 import type { ExportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-contract'
 
-// Ported verbatim from the frozen packages/mcp-server/src/app/hooks/useWhiteboardSync.helpers.ts
-// (buildWhiteboardWsProtocols/buildWhiteboardWsUrl and applyRestoreComplete/RestoreCompleteDeps
-// are intentionally excluded — daemon-only / trivially inlined at the call site instead).
+// Ported verbatim from the original daemon-served UI's useWhiteboardSync
+// helpers (since retired; buildWhiteboardWsProtocols/buildWhiteboardWsUrl and
+// applyRestoreComplete/RestoreCompleteDeps were intentionally excluded —
+// daemon-only / trivially inlined at the call site instead).
 
 type ExportApi = {
   getSceneElements: () => readonly ExcalidrawElement[]
