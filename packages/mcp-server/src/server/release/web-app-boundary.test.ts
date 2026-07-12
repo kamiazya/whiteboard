@@ -29,6 +29,38 @@ const APPS_WEB_SRC_DIR = resolve(REPO_ROOT, 'apps/web/src')
 // explicitly rather than relying on collectBrowserAppFiles's real scan roots.
 const FIXTURE_BROWSER_APP_DIR = resolve(PACKAGE_SRC_DIR, '__fixture-browser-app__')
 
+/**
+ * Check whether a GitHub Actions job body declares `environment: production-web`,
+ * either as the short string form or the `name:`/`url:` mapping form (in any key
+ * order, quotes optional).
+ *
+ * This walks lines instead of using a single combined regex. A prior version
+ * used one alternation with a lazy-repeated inner group
+ * (`(?:\s+[\w-]+:[^\n]*\r?\n)*?`) whose `\s+` could itself consume the
+ * following `\r?\n`, giving the engine exponentially many ways to partition a
+ * non-matching input and triggering catastrophic backtracking (CodeQL
+ * js/redos). Scanning line-by-line makes each step O(1) with no backtracking.
+ */
+function matchesEnvironmentProductionWeb(jobSection: string): boolean {
+  const stripQuotes = (s: string) => s.trim().replace(/^['"]|['"]$/g, '')
+  const lines = jobSection.split(/\r?\n/)
+  const envIndex = lines.findIndex((line) => /^\s*environment:\s*(.*)$/.test(line))
+  if (envIndex === -1) return false
+
+  const inlineValue = lines[envIndex].match(/^\s*environment:\s*(.*)$/)?.[1] ?? ''
+  if (inlineValue !== '' && stripQuotes(inlineValue) === 'production-web') return true
+
+  // Mapping form: `environment:` on its own line, followed by an indented
+  // block of `key: value` entries (any order) until the block ends.
+  for (let i = envIndex + 1; i < lines.length; i++) {
+    const line = lines[i]
+    if (!/^\s+[\w-]+:/.test(line)) break
+    const nameMatch = line.match(/^\s+name:\s*(.*)$/)
+    if (nameMatch && stripQuotes(nameMatch[1]) === 'production-web') return true
+  }
+  return false
+}
+
 function collectTsFiles(dir: string): string[] {
   const results: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -665,11 +697,9 @@ describe('apps/web Cloudflare deploy secrets guard', () => {
       'CLOUDFLARE_ACCOUNT_ID',
     )
     expect(
-      deployWebSection,
+      matchesEnvironmentProductionWeb(deployWebSection),
       'deploy-web job must declare the production-web environment (secrets scoped to tag-protected env); the string form and the name/url mapping form are both valid, with optional quotes and any key order',
-    ).toMatch(
-      /environment:\s*(?:['"]?production-web['"]?\s*(?:\r?\n|$)|\r?\n(?:\s+[\w-]+:[^\n]*\r?\n)*?\s+name:\s*['"]?production-web['"]?)/,
-    )
+    ).toBe(true)
   })
 
   it('deploy-web avoids the wrangler-action npm-install fallback (catalog: is pnpm-only)', () => {
