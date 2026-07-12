@@ -35,7 +35,7 @@ export function getAppLogger(name: string): AppLogger {
       | undefined
     const isDev = importMeta?.['env']?.['DEV'] === true
     if (isDev) {
-      // eslint-disable-next-line no-console
+      // biome-ignore lint/suspicious/noConsole: this is the one intended sink apps/web routes diagnostics through
       console[level](`${tag} ${message}`, ...context)
     }
   }
@@ -54,4 +54,22 @@ export function getAppLogger(name: string): AppLogger {
       log('debug', message, context)
     },
   }
+}
+
+/**
+ * Reports an unrecoverable failure through a channel that survives the
+ * production build — the deliberate exception to every level on
+ * `AppLogger`, which is dev-only diagnostic noise by design (it no-ops in
+ * prod so routine failures like a debounced scene-sync retry never reach a
+ * user's console).
+ *
+ * `reportCrash` exists for `ErrorBoundary.componentDidCatch` only: once
+ * React has torn down the tree and shown the fallback UI, a silent prod
+ * build leaves the user with nothing to paste into a bug report. If a
+ * second call site wants this channel, treat that as a deliberate review
+ * conversation, not a default to reach for.
+ */
+export function reportCrash(name: string, message: string, context: Record<string, unknown>): void {
+  // biome-ignore lint/suspicious/noConsole: intentional production-visible sink for unrecoverable crash reports — see the doc comment above
+  console.error(`[${name}] ${message}`, context)
 }

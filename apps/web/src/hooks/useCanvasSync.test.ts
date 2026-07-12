@@ -20,10 +20,15 @@ vi.mock('@excalidraw/excalidraw', () => ({
   restoreElements: (els: unknown[]) => els,
   CaptureUpdateAction: { NEVER: 'NEVER' },
   exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
+  exportToSvg: vi.fn(async () => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('data-testid', 'exported-svg')
+    return svg
+  }),
 }))
 
 // eslint-disable-next-line import/first
-import { exportToBlob } from '@excalidraw/excalidraw'
+import { exportToBlob, exportToSvg } from '@excalidraw/excalidraw'
 // eslint-disable-next-line import/first
 import { useCanvasSync } from './useCanvasSync.js'
 
@@ -34,6 +39,7 @@ function makeApiStub() {
     addFiles: vi.fn(),
     getSceneElements: vi.fn(() => []),
     getAppState: vi.fn(() => ({ scrollX: 0, scrollY: 0, zoom: { value: 1 } })),
+    getFiles: vi.fn(() => ({})),
   }
 }
 
@@ -1014,8 +1020,18 @@ describe('useCanvasSync', () => {
         }),
       ).resolves.not.toThrow()
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('onExportRequest failed', expect.any(Error))
-      consoleErrorSpy.mockRestore()
+      try {
+        // Routed through app-logger, which prefixes the message with its
+        // '[canvas-sync]' name tag.
+        expect(consoleErrorSpy).toHaveBeenCalledWith(
+          '[canvas-sync] onExportRequest failed',
+          expect.any(Error),
+        )
+      } finally {
+        // Restore even when the assertion throws: a leaked console.error mock
+        // would silently swallow diagnostics in every later test in this file.
+        consoleErrorSpy.mockRestore()
+      }
     })
   })
 
@@ -1773,6 +1789,62 @@ describe('useCanvasSync', () => {
       rerender({ id: { workspaceId: 'ws-2', slug: 'canvas-c' } })
 
       expect(connectSpy).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  describe('exportScene', () => {
+    beforeEach(() => {
+      vi.mocked(exportToBlob).mockClear()
+      vi.mocked(exportToSvg).mockClear()
+    })
+
+    it('returns null when no excalidraw API is registered yet', async () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      const blob = await result.current.exportScene('png')
+
+      expect(blob).toBeNull()
+      expect(exportToBlob).not.toHaveBeenCalled()
+    })
+
+    it('exports a PNG blob via exportToBlob using the live scene', async () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const blob = await result.current.exportScene('png')
+
+      expect(exportToBlob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          elements: api.getSceneElements(),
+          files: api.getFiles(),
+        }),
+      )
+      expect(blob).not.toBeNull()
+      expect(blob!.type).toBe('image/png')
+    })
+
+    it("exports an SVG blob by serializing exportToSvg's SVGSVGElement", async () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      const blob = await result.current.exportScene('svg')
+
+      expect(exportToSvg).toHaveBeenCalled()
+      expect(blob).not.toBeNull()
+      expect(blob!.type).toBe('image/svg+xml')
+      const text = await blob!.text()
+      expect(text).toContain('data-testid="exported-svg"')
     })
   })
 })

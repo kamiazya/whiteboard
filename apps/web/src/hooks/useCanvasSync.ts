@@ -1,4 +1,9 @@
-import { CaptureUpdateAction, exportToBlob, restoreElements } from '@excalidraw/excalidraw'
+import {
+  CaptureUpdateAction,
+  exportToBlob,
+  exportToSvg,
+  restoreElements,
+} from '@excalidraw/excalidraw'
 import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types'
 import type {
   AppState,
@@ -21,6 +26,7 @@ import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
+import { getAppLogger } from '../lib/app-logger.js'
 import {
   type ExportRequestHandlerDeps,
   flushPendingExportRequests,
@@ -28,7 +34,13 @@ import {
 } from './canvas-sync-export.js'
 import type { DirtyEventDetail } from './useDirtyState.js'
 
+const log = getAppLogger('canvas-sync')
+
 export type SyncStatus = 'idle' | 'connected' | 'error'
+
+// Raster/vector are the only formats the underlying @excalidraw/excalidraw
+// export utilities support; there is no PDF export anywhere in the library.
+export type SceneExportFormat = 'png' | 'svg'
 
 // Daemon-only callback seam. Every member is stored in a ref (see optionsRef
 // below) so passing a fresh inline object on every render never forces a
@@ -62,6 +74,10 @@ export interface UseCanvasSyncResult {
   restoreInProgress: boolean
   restoreLabel: string | null
   clearLocalUndo: () => void
+  // null when no ExcalidrawImperativeAPI is registered yet (mount race) —
+  // callers treat that the same as "export unavailable right now" rather
+  // than throwing.
+  exportScene: (format: SceneExportFormat) => Promise<Blob | null>
 }
 
 // Upper bound on waiting for a file upload before committing anyway. A hung
@@ -379,7 +395,7 @@ export function useCanvasSync(
           try {
             commitElements()
           } catch (err) {
-            console.error('scene commit failed; skipping this firing', err)
+            log.error('scene commit failed; skipping this firing', err)
           }
         }
         const runThisFiring = async (): Promise<void> => {
@@ -406,16 +422,16 @@ export function useCanvasSync(
               try {
                 optionsRef.current.onFileUploadSucceeded?.()
               } catch (err) {
-                console.error('onFileUploadSucceeded callback threw', err)
+                log.error('onFileUploadSucceeded callback threw', err)
               }
             }
           } catch (err) {
-            console.error('putFile failed', err)
+            log.error('putFile failed', err)
             if (connectionGenerationRef.current === connGen) {
               try {
                 optionsRef.current.onFileUploadFailed?.()
               } catch (callbackErr) {
-                console.error('onFileUploadFailed callback threw', callbackErr)
+                log.error('onFileUploadFailed callback threw', callbackErr)
               }
             }
           } finally {
@@ -536,7 +552,7 @@ export function useCanvasSync(
         try {
           optionsRef.current.onVersionCreated?.(payload)
         } catch (err) {
-          console.error('onVersionCreated callback threw', err)
+          log.error('onVersionCreated callback threw', err)
         }
       },
 
@@ -558,7 +574,7 @@ export function useCanvasSync(
         try {
           optionsRef.current.onHeadChanged?.(payload)
         } catch (err) {
-          console.error('onHeadChanged callback threw', err)
+          log.error('onHeadChanged callback threw', err)
         }
       },
 
@@ -612,7 +628,7 @@ export function useCanvasSync(
         try {
           await handleIncomingExportRequest(payload, buildExportDeps(bk))
         } catch (err) {
-          console.error('onExportRequest failed', err)
+          log.error('onExportRequest failed', err)
         }
       },
 
@@ -622,7 +638,7 @@ export function useCanvasSync(
         try {
           optionsRef.current.onAuthError?.()
         } catch (err) {
-          console.error('onAuthError callback threw', err)
+          log.error('onAuthError callback threw', err)
         }
       },
 
@@ -663,7 +679,7 @@ export function useCanvasSync(
     bk?.sendClientReady()
     if (!bk) return
     void flushPendingExportRequests(buildExportDeps(bk)).catch((err: unknown) => {
-      console.error('flushPendingExportRequests failed', err)
+      log.error('flushPendingExportRequests failed', err)
     })
   }, [apiReady, buildExportDeps])
 
@@ -682,6 +698,24 @@ export function useCanvasSync(
     void applyLoroToExcalidraw(doc, bk)
     return true
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Renders the live scene through the same exportToBlob/exportToSvg utilities
+  // Excalidraw's own (harder-to-discover) hamburger-menu export dialog uses,
+  // so a header-driven "Export" affordance produces byte-identical output
+  // without duplicating export logic.
+  const exportScene = useCallback(async (format: SceneExportFormat): Promise<Blob | null> => {
+    const api = excalidrawAPIRef.current
+    if (!api) return null
+    const elements = api.getSceneElements()
+    const appState = api.getAppState()
+    const files = api.getFiles()
+    if (format === 'png') {
+      return exportToBlob({ elements, appState, files, exportPadding: 10 })
+    }
+    const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
+    const serialized = new XMLSerializer().serializeToString(svg)
+    return new Blob([serialized], { type: 'image/svg+xml' })
+  }, [])
 
   const loroRedo = useCallback(() => {
     const um = undoManagerRef.current
@@ -777,5 +811,6 @@ export function useCanvasSync(
     restoreInProgress,
     restoreLabel,
     clearLocalUndo,
+    exportScene,
   }
 }

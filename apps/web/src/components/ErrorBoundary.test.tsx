@@ -108,4 +108,47 @@ describe('ErrorBoundary', () => {
     expect((context as { error: Error }).error.message).toBe('boom')
     seamSpy.mockRestore()
   })
+
+  // The seam is routed through app-logger's `reportCrash` channel (see
+  // ErrorBoundary.tsx), which is deliberately NOT gated by the dev/prod
+  // no-op that every other app-logger level uses. These tests lock in that
+  // a caught render crash is surfaced in BOTH dev and prod builds, rather
+  // than regressing silently the next time app-logger's channels change.
+  describe('app-logger crash-report gate', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('forwards the caught error to console in a dev build (real seam, not mocked)', () => {
+      vi.stubGlobal('import.meta', { env: { DEV: true } })
+      const spy = vi.fn()
+      console.error = spy
+      render(
+        <ErrorBoundary>
+          <Bomb trigger />
+        </ErrorBoundary>,
+      )
+      const call = spy.mock.calls.find((c) => String(c[0]).includes('ErrorBoundary caught:'))
+      expect(call).toBeTruthy()
+      expect(call?.[0]).toContain('[error-boundary]')
+    })
+
+    it('still reports the caught error in a prod build (reportCrash survives production on purpose)', () => {
+      vi.stubGlobal('import.meta', { env: { DEV: false } })
+      const spy = vi.fn()
+      console.error = spy
+      render(
+        <ErrorBoundary>
+          <Bomb trigger />
+        </ErrorBoundary>,
+      )
+      const call = spy.mock.calls.find((c) => String(c[0]).includes('ErrorBoundary caught:'))
+      expect(call).toBeTruthy()
+      expect(call?.[0]).toContain('[error-boundary]')
+      const context = call?.[1] as { error: Error; componentStack?: string | null }
+      expect(context.error).toBeInstanceOf(Error)
+      expect(context.error.message).toBe('boom')
+      expect(context.componentStack).toBeTruthy()
+    })
+  })
 })

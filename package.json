@@ -57,7 +57,7 @@
     "intent:list": "npx @tanstack/intent@latest list",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
-    "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server",
+    "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server apps/web/src",
     "secretlint": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "test:scripts": "node --test .claude/scripts/*.test.mjs",
     "prepare": "lefthook install || true"
