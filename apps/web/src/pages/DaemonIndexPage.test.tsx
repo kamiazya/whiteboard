@@ -378,6 +378,154 @@ describe('DaemonIndexPage', () => {
     expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 
+  it('disables the card Duplicate button while in flight, and double-clicking produces exactly one copy', async () => {
+    let resolveSnapshot: ((res: Response) => void) | undefined
+    let snapshotCalls = 0
+    const created: Array<[string, string]> = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && (!init || init.method === undefined)) {
+        return Promise.resolve(
+          jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { slug: string }
+        created.push(['ws-a', body.slug])
+        return Promise.resolve(jsonResponse({ slug: body.slug }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/names')) {
+        return Promise.resolve(jsonResponse({ canvases: { alpha: 'Alpha' }, pinned: [] }))
+      }
+      if (url.endsWith('/api/canvas/ws-a/alpha/snapshot')) {
+        snapshotCalls++
+        return new Promise<Response>((resolve) => {
+          resolveSnapshot = resolve
+        })
+      }
+      if (/\/api\/canvas\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ ok: true }))
+      }
+      if (/\/api\/workspaces\/ws-a\/canvases\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
+        return Promise.resolve(jsonResponse({ canvases: { alpha: 'Alpha' }, pinned: [] }))
+      }
+      return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    const duplicateBtn = (await screen.findByRole('button', {
+      name: /duplicate/i,
+    })) as HTMLButtonElement
+    fireEvent.click(duplicateBtn)
+    await waitFor(() => expect(duplicateBtn.disabled).toBe(true))
+
+    // A second click while disabled must not start a second duplicate read.
+    fireEvent.click(duplicateBtn)
+    expect(snapshotCalls).toBe(1)
+
+    resolveSnapshot?.(
+      new Response(new Uint8Array([1, 2, 3]) as BodyInit, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      }),
+    )
+    await waitFor(() => expect(created).toEqual([['ws-a', 'alpha-copy']]))
+    await waitFor(() => expect(duplicateBtn.disabled).toBe(false))
+    vi.unstubAllGlobals()
+  })
+
+  it('shows an alert and re-enables the Duplicate button when duplicating fails', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+      namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha' }, pinned: [] } },
+      // No snapshotByCanvas entry for 'alpha' -> the mock 404s the snapshot read.
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    const duplicateBtn = (await screen.findByRole('button', {
+      name: /duplicate/i,
+    })) as HTMLButtonElement
+    fireEvent.click(duplicateBtn)
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/not found/i)
+    expect(duplicateBtn.disabled).toBe(false)
+  })
+
+  it('does not apply a stale duplicate completion to a workspace the user has since switched away from', async () => {
+    let resolveSnapshot: ((res: Response) => void) | undefined
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
+        return Promise.resolve(
+          jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] }),
+        )
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && (!init || init.method === undefined)) {
+        return Promise.resolve(
+          jsonResponse({ canvases: [{ slug: 'alpha', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      if (url.endsWith('/api/workspaces/ws-b/canvases') && (!init || init.method === undefined)) {
+        return Promise.resolve(
+          jsonResponse({ canvases: [{ slug: 'beta', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      if (url.endsWith('/api/workspaces/ws-a/canvases') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { slug: string }
+        return Promise.resolve(jsonResponse({ slug: body.slug }))
+      }
+      if (
+        url.endsWith('/api/workspaces/ws-a/names') ||
+        url.endsWith('/api/workspaces/ws-b/names')
+      ) {
+        return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+      }
+      if (url.endsWith('/api/canvas/ws-a/alpha/snapshot')) {
+        return new Promise<Response>((resolve) => {
+          resolveSnapshot = resolve
+        })
+      }
+      if (/\/api\/canvas\/ws-a\/[^/]+\/update$/.test(url) && init?.method === 'POST') {
+        return Promise.resolve(jsonResponse({ ok: true }))
+      }
+      if (/\/api\/workspaces\/ws-a\/canvases\/[^/]+\/name$/.test(url) && init?.method === 'PUT') {
+        return Promise.resolve(jsonResponse({ canvases: {}, pinned: [] }))
+      }
+      return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    const duplicateBtn = await screen.findByRole('button', { name: /duplicate/i })
+    fireEvent.click(duplicateBtn)
+
+    // Switch workspaces while the duplicate (still reading alpha's snapshot) is in flight.
+    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
+    expect(await screen.findByText('beta')).toBeTruthy()
+
+    resolveSnapshot?.(
+      new Response(new Uint8Array([1, 2, 3]) as BodyInit, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    // The completed duplicate belongs to ws-a; the visible grid must still be
+    // ws-b's, untouched by ws-a's post-duplicate refresh.
+    expect(screen.getByText('beta')).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
+    expect(screen.queryByText('alpha-copy')).toBeNull()
+    vi.unstubAllGlobals()
+  })
+
   it('creates a canvas via New canvas and opens it', async () => {
     const created: Array<[string, string]> = []
     installFetchMock({

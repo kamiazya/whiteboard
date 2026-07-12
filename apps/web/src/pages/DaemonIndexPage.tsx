@@ -1,6 +1,6 @@
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { z } from 'zod'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
@@ -113,6 +113,18 @@ export function DaemonIndexPage({
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  // Which card's Duplicate action is currently in flight — disables just that
+  // card's button (a second click during the async read-then-write must not
+  // start a second copy) rather than a page-wide boolean.
+  const [duplicatingSlug, setDuplicatingSlug] = useState<string | null>(null)
+
+  // Always-current mirror of selectedWorkspace for handleDuplicate's async
+  // completion check below: a plain ref write during render (not inside an
+  // effect) is safe here because it never triggers a re-render itself, and
+  // it must reflect the LATEST selection synchronously, including the very
+  // render that changes it — an effect-synced ref would lag by one render.
+  const selectedWorkspaceRef = useRef(selectedWorkspace)
+  selectedWorkspaceRef.current = selectedWorkspace
 
   useEffect(() => {
     let cancelled = false
@@ -208,29 +220,43 @@ export function DaemonIndexPage({
   // requiring a dedicated server-side "duplicate" endpoint.
   const handleDuplicate = useCallback(
     async (sourceSlug: string) => {
-      if (!selectedWorkspace) return
+      if (duplicatingSlug !== null) return
+      const workspaceAtStart = selectedWorkspace
+      if (!workspaceAtStart) return
+      setDuplicatingSlug(sourceSlug)
       setDuplicateError(null)
       const sourceRow = rows.find((r) => r.slug === sourceSlug)
+      // The whole operation targets workspaceAtStart, not whatever the user
+      // has switched the selector to by the time each await resolves — a
+      // duplicate started in one workspace must finish in that SAME
+      // workspace even if the user has since switched away from it. Applying
+      // its completion (the rows refresh) to the page is gated separately,
+      // below, on whether that workspace is still the one being viewed.
       try {
         const snapshot = await getCanvasSnapshot(
           daemonFetch,
           daemonBaseUrl,
-          selectedWorkspace,
+          workspaceAtStart,
           sourceSlug,
         )
         const existingSlugs = new Set(rows.map((r) => r.slug))
         const newSlug = deriveCopySlug(sourceSlug, existingSlugs)
-        const created = await createCanvas(daemonFetch, daemonBaseUrl, selectedWorkspace, newSlug)
-        await updateCanvas(daemonFetch, daemonBaseUrl, selectedWorkspace, created.slug, snapshot)
+        const created = await createCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, newSlug)
+        await updateCanvas(daemonFetch, daemonBaseUrl, workspaceAtStart, created.slug, snapshot)
         const existingNames = new Set(rows.map((r) => r.displayName))
         const newName = deriveCopyName(sourceRow?.displayName ?? sourceSlug, existingNames)
-        await setCanvasName(daemonFetch, daemonBaseUrl, selectedWorkspace, created.slug, newName)
-        await loadWorkspace(selectedWorkspace, () => false)
+        await setCanvasName(daemonFetch, daemonBaseUrl, workspaceAtStart, created.slug, newName)
+        const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
+        if (isStale()) return
+        await loadWorkspace(workspaceAtStart, isStale)
       } catch (err) {
+        if (selectedWorkspaceRef.current !== workspaceAtStart) return
         setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
+      } finally {
+        setDuplicatingSlug((current) => (current === sourceSlug ? null : current))
       }
     },
-    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace],
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace, duplicatingSlug],
   )
 
   return (
@@ -373,12 +399,13 @@ export function DaemonIndexPage({
                   <button
                     type="button"
                     aria-label={`Duplicate ${hasDisplayName ? row.displayName : row.slug}`}
+                    disabled={duplicatingSlug === row.slug}
                     onClick={(event) => {
                       // Prevents the click from bubbling to the wrapping open-button.
                       event.stopPropagation()
                       void handleDuplicate(row.slug)
                     }}
-                    className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
+                    className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-100 disabled:cursor-not-allowed"
                   >
                     Duplicate
                   </button>
