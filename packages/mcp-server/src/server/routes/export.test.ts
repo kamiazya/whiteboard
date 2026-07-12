@@ -110,6 +110,32 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     expect(written.equals(fakePng)).toBe(true)
   })
 
+  it('generates distinct default filePaths for two headless exports in the same millisecond', async () => {
+    // The default path used to be slug + millisecond timestamp only, so two
+    // exports issued fast enough to land in the same millisecond would
+    // collide and the second write would silently clobber the first.
+    mockGetClientCount.mockReturnValue(0)
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from('fake-png-bytes'),
+      width: 100,
+      height: 50,
+    })
+    const app = makeApp()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
+    try {
+      const [resA, resB] = await Promise.all([
+        app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' }),
+        app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' }),
+      ])
+      const bodyA = (await resA.json()) as { filePath: string }
+      const bodyB = (await resB.json()) as { filePath: string }
+      expect(bodyA.filePath).not.toBe(bodyB.filePath)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('returns 404 with canvas_not_found when no browser is connected and the canvas does not exist', async () => {
     // Headless fallback used to silently succeed for unknown canvasIds:
     // getDoc + loadCanvas hand back an empty LoroDoc on cache miss, so a

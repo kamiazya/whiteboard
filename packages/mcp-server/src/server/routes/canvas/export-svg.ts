@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { nanoid } from 'nanoid'
 import { exportSvgRequestSchema } from '../../../shared/api-contracts/export-svg.js'
 import type { ExportErrorBody } from '../../../shared/api-contracts/export.js'
 import { DATA_DIR } from '../../config.js'
@@ -96,6 +97,11 @@ export function createCanvasSvgExportRouter() {
 
 function defaultSvgExportPath(workspaceId: string, slug: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const fileName = `${slug}-${timestamp}.svg`
+  // The millisecond timestamp alone is not unique: two exports issued fast
+  // enough to land in the same millisecond would collide and the second
+  // write would silently clobber the first. The random suffix guarantees
+  // uniqueness regardless of call timing, matching the PNG and JSON export
+  // routes' default-path convention.
+  const fileName = `${slug}-${timestamp}-${nanoid(6)}.svg`
   return join(DATA_DIR, workspaceId, 'exports', fileName)
 }

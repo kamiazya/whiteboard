@@ -78,4 +78,20 @@ describe('exportCanvasTool execute', () => {
     expect(url.toString()).toBe('http://localhost:3099/api/canvas/sid/slug/export-json')
     expect(JSON.parse(init?.body as string)).toEqual({ includeCustomFields: true })
   })
+
+  it('rejects an unsupported format instead of silently rendering PNG', async () => {
+    // The registered MCP tool's inputSchema (a Zod enum) rejects an
+    // out-of-enum format before this ever runs. This guards the function
+    // itself: a caller that bypasses that boundary (direct unit-test call,
+    // a future refactor of the format switch) must not have "unknown format"
+    // silently resolve into the PNG branch — the whole point of `format` is
+    // that it is the contract, not a suggestion.
+    const { exportCanvasTool } = await import('./export-canvas.js')
+    const tool = exportCanvasTool()
+
+    await expect(
+      tool.execute({ canvasId: 'sid/slug', format: 'pdf' as unknown as 'png' }, client),
+    ).rejects.toThrow(/unsupported format/i)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

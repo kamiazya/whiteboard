@@ -64,6 +64,26 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
     expect(written.trim().startsWith('<svg')).toBe(true)
   })
 
+  it('generates distinct default filePaths for two exports in the same millisecond', async () => {
+    // The default path used to be slug + millisecond timestamp only, so two
+    // exports issued fast enough to land in the same millisecond would
+    // collide and the second write would silently clobber the first.
+    const app = makeApp()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
+    try {
+      const [resA, resB] = await Promise.all([
+        app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' }),
+        app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' }),
+      ])
+      const bodyA = (await resA.json()) as { filePath: string }
+      const bodyB = (await resB.json()) as { filePath: string }
+      expect(bodyA.filePath).not.toBe(bodyB.filePath)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('forwards padding, frameId, and theme to exportCanvasHeadlessSvg', async () => {
     const app = makeApp()
 
@@ -87,6 +107,18 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
     const app = makeApp()
     const res = await app.request('/api/canvas/bad.sid/canvas-a/export-svg', { method: 'POST' })
     expect(res.status).toBe(400)
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
+  })
+
+  it('rejects a whitespace-only body with 400 invalid_request instead of throwing', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '   ',
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_request' })
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 

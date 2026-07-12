@@ -218,7 +218,11 @@ function defaultExportPath(workspaceId: string, slug: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
   // .excalidraw.png is a PNG with embedded scene JSON. Normal image viewers
   // treat it as a PNG, and dropping it into Excalidraw restores the scene.
-  const fileName = `${slug}-${timestamp}.excalidraw.png`
+  // The millisecond timestamp alone is not unique: two exports issued fast
+  // enough to land in the same millisecond would collide and the second
+  // write would silently clobber the first. The random suffix guarantees
+  // uniqueness regardless of call timing.
+  const fileName = `${slug}-${timestamp}-${nanoid(6)}.excalidraw.png`
   return join(DATA_DIR, workspaceId, 'exports', fileName)
 }
 

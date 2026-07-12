@@ -4,15 +4,14 @@ import { canvasExportJsonTool } from './canvas-export-json.js'
 import { exportPngTool } from './export.js'
 import { exportSvgTool } from './export-svg.js'
 
-// Unifies the three per-format export tools (export_png / export_svg /
-// canvas_export_json) behind one `format` switch. This is the single source
-// of the export contract going forward; export_png and canvas_export_json
-// stay registered (unchanged, non-breaking) for existing callers of the
-// published npm package, but their descriptions point here. Rather than
-// re-implement each format's HTTP/output-path/error-handling logic a third
-// time, this tool delegates straight to the existing per-format tool
-// builders — one implementation per format, shared by both the legacy tool
-// name and this one.
+// Unifies the three per-format export tools (png / svg / json) behind one
+// `format` switch. This is the only registered MCP export tool — the
+// project is pre-1.0 with no external users to keep a deprecated dual
+// surface for (ADR-0001), so the former standalone export_png and
+// canvas_export_json tools were removed rather than kept as wrappers.
+// Their format-specific HTTP/output-path/error-handling implementations
+// still live in export.ts / canvas-export-json.ts and are delegated to here
+// rather than re-implemented a third time.
 export const exportCanvasOutputSchema = z.object({
   format: z.enum(['png', 'svg', 'json']),
   filePath: z.string(),
@@ -98,8 +97,7 @@ export const exportCanvasInputShape = {
 export function exportCanvasTool() {
   return {
     name: 'export_canvas',
-    description:
-      'Unified canvas export: choose format "png" | "svg" | "json" in one tool. Prefer this over the deprecated export_png / canvas_export_json tools.',
+    description: 'Unified canvas export: choose format "png" | "svg" | "json" in one tool.',
     inputSchema: z.toJSONSchema(z.object(exportCanvasInputShape)) as {
       type: 'object'
       properties: Record<string, unknown>
@@ -135,20 +133,28 @@ export function exportCanvasTool() {
         )
         return { format: 'svg', filePath: result.filePath, svgMarkup: result.svgMarkup }
       }
-      const result = await exportPngTool().execute(
-        {
-          canvasId: args.canvasId,
-          padding: args.padding,
-          scale: args.scale,
-          minFontPx: args.minFontPx,
-          frameId: args.frameId,
-          outputPath: args.outputPath,
-          overwrite: args.overwrite,
-          theme: args.theme,
-        },
-        client,
-      )
-      return { format: 'png', filePath: result.filePath, imageBase64: result.imageBase64 }
+      if (args.format === 'png') {
+        const result = await exportPngTool().execute(
+          {
+            canvasId: args.canvasId,
+            padding: args.padding,
+            scale: args.scale,
+            minFontPx: args.minFontPx,
+            frameId: args.frameId,
+            outputPath: args.outputPath,
+            overwrite: args.overwrite,
+            theme: args.theme,
+          },
+          client,
+        )
+        return { format: 'png', filePath: result.filePath, imageBase64: result.imageBase64 }
+      }
+      // The registered MCP tool's inputSchema (a Zod enum) rejects an
+      // out-of-enum format before this ever runs, but `format` is the whole
+      // contract of this tool — a caller that reaches here with anything
+      // else must get a loud failure, never a silent fallback to a format
+      // that was not requested.
+      throw new Error(`Unsupported format: ${String(args.format)}`)
     },
   }
 }
