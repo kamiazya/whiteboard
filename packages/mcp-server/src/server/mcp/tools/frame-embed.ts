@@ -144,23 +144,30 @@ export const createFrameInputShape = {
   x: z
     .number()
     .optional()
-    .describe(
-      'Frame top-left x (world coords). Ignored when memberIds is provided (auto-fits to bbox).',
-    ),
-  y: z.number().optional().describe('Frame top-left y. Ignored when memberIds is provided.'),
-  width: z.number().optional().describe('Frame width (px). Ignored when memberIds is provided.'),
-  height: z.number().optional().describe('Frame height (px). Ignored when memberIds is provided.'),
+    .describe('Frame top-left x (world coords). Default 100. Ignored when memberIds auto-fits.'),
+  y: z
+    .number()
+    .optional()
+    .describe('Frame top-left y. Default 100. Ignored when memberIds auto-fits.'),
+  width: z
+    .number()
+    .optional()
+    .describe('Frame width (px). Default 600. Ignored when memberIds auto-fits.'),
+  height: z
+    .number()
+    .optional()
+    .describe('Frame height (px). Default 400. Ignored when memberIds auto-fits.'),
   name: z
     .string()
     .optional()
     .describe(
-      'Frame label rendered at the top edge. Treat this as a section heading; avoid duplicating it inside the frame.',
+      'Frame label rendered at the top edge. Treat this as a section heading; avoid duplicating it inside the frame. Truncated to 30 characters to avoid overflowing the frame width.',
     ),
   memberIds: z
     .array(z.string())
     .optional()
     .describe(
-      'Existing element ids to enclose. Frame auto-fits to their bounding box at creation time. Children get their frameId set.',
+      'Existing element ids to enclose. Frame auto-fits to their bounding box at creation time. Children get their frameId set. Max 500.',
     ),
   padding: z
     .number()
@@ -173,31 +180,12 @@ export function createFrameTool() {
     name: 'create_frame',
     description:
       'Create an Excalidraw frame element. A frame groups child elements visually and moves them together. Pass `memberIds` to auto-fit the frame to the bounding box of those elements (their `frameId` is set to the new frame). Without `memberIds`, an empty frame is placed at (x, y) with given width/height.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string' },
-        x: { type: 'number', description: 'Left. Ignored when memberIds auto-fits.' },
-        y: { type: 'number', description: 'Top. Ignored when memberIds auto-fits.' },
-        width: { type: 'number', description: 'Default 600. Ignored when memberIds auto-fits.' },
-        height: { type: 'number', description: 'Default 400. Ignored when memberIds auto-fits.' },
-        name: {
-          type: 'string',
-          description:
-            'Optional frame label shown above the frame. Truncated to 30 characters to avoid overflowing the frame width.',
-        },
-        memberIds: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'Optional existing element ids to wrap. Frame auto-fits their bounding box and assigns frameId to each. Max 500.',
-        },
-        padding: {
-          type: 'number',
-          description: 'Padding around memberIds bounding box. Default 24.',
-        },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(createFrameInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (args: CreateFrameArgs, client: DaemonClient): Promise<CreateFrameResult> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
@@ -282,12 +270,12 @@ export const createEmbedInputShape = {
   url: z
     .string()
     .describe(
-      'External URL to embed (YouTube / Figma / CodeSandbox / etc.). Excalidraw allowlist-checks at render time; non-allowlisted URLs require user approval in the browser. The element is created either way, so you can stack annotations on it before validation.',
+      'http(s) URL to embed. Excalidraw renders allowlist domains (YouTube, Figma, CodeSandbox, CodePen, etc.) as iframes; others show a validation prompt until user confirms. The element is created either way, so you can stack annotations on it before validation.',
     ),
-  x: z.number().optional().describe('Embed top-left x. Default centered on viewport.'),
-  y: z.number().optional().describe('Embed top-left y. Default centered on viewport.'),
-  width: z.number().optional().describe('Embed width (px). Default 480.'),
-  height: z.number().optional().describe('Embed height (px). Default 320.'),
+  x: z.number().optional().describe('Embed top-left x. Default 100.'),
+  y: z.number().optional().describe('Embed top-left y. Default 100.'),
+  width: z.number().optional().describe('Embed width (px). Default 640.'),
+  height: z.number().optional().describe('Embed height (px). Default 400.'),
 } satisfies z.ZodRawShape
 
 // Excalidraw only renders allowlisted URLs as iframes. This tool just stores the
@@ -297,21 +285,12 @@ export function createEmbedTool() {
     name: 'create_embed',
     description:
       'Embed a web page or media URL into the canvas as an Excalidraw embeddable element. Use for annotating live websites with arrows/text for design feedback, or referencing external resources. URL must be http(s). Size defaults to 640x400 (16:10).',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string' },
-        url: {
-          type: 'string',
-          description:
-            'http(s) URL to embed. Excalidraw renders allowlist domains (YouTube, Figma, CodeSandbox, CodePen, etc.) as iframes; others show a validation prompt until user confirms.',
-        },
-        x: { type: 'number', description: 'Left. Default 100.' },
-        y: { type: 'number', description: 'Top. Default 100.' },
-        width: { type: 'number', description: 'Default 640.' },
-        height: { type: 'number', description: 'Default 400.' },
-      },
-      required: ['canvasId', 'url'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(createEmbedInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (args: CreateEmbedArgs, client: DaemonClient): Promise<CreateEmbedResult> => {
       if (!/^https?:\/\//.test(args.url)) {
@@ -389,28 +368,12 @@ export function updateFrameMembersTool() {
     name: 'update_frame_members',
     description:
       'Add/remove elements from an existing frame without recreating it (frameId stays stable so export_png({frameId}) still targets the same group). All-or-nothing on missing ids. Recomputes frame x/y/width/height from the final member bbox plus padding.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string' },
-        frameId: { type: 'string', description: 'Existing frame element id.' },
-        add: {
-          type: 'array',
-          items: { type: 'string' },
-          description:
-            'Element ids to include in the frame (their frameId will point to this frame).',
-        },
-        remove: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Element ids to eject from the frame (their frameId is set to null).',
-        },
-        padding: {
-          type: 'number',
-          description: 'Padding around the recomputed bbox. Default 24.',
-        },
-      },
-      required: ['canvasId', 'frameId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(updateFrameMembersInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: UpdateFrameMembersArgs,
