@@ -48,21 +48,23 @@ export function DaemonDetectedBanner({
   )
   const abortRef = useRef<AbortController | null>(null)
 
-  // load() round-trips localStorage synchronously; the probe target is fixed
-  // for the store's lifetime, so read it once instead of on every render.
-  const baseUrl = useMemo(
-    () => settingsStore.load().storage.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL,
-    [settingsStore],
-  )
+  // The store object identity never changes, so anything derived from it has
+  // to be recomputed explicitly when we write to it — a useMemo keyed on the
+  // store would keep serving pre-Forget values until a reload.
+  const [storedTarget, setStoredTarget] = useState(() => {
+    const { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedSlug } =
+      settingsStore.load().storage
+    return { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedSlug }
+  })
+
+  // Trailing slashes would otherwise produce `http://host:3099//canvas/...`.
+  const baseUrl = (storedTarget.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL).replace(/\/+$/, '')
 
   // Whether a reconnect target was ever actually persisted (as opposed to
   // baseUrl above, which always resolves to DEFAULT_DAEMON_BASE_URL even with
   // nothing stored) — this gates whether "Forget this daemon" has anything
   // to forget.
-  const hasStoredTarget = useMemo(
-    () => settingsStore.load().storage.localDaemonBaseUrl !== undefined,
-    [settingsStore],
-  )
+  const hasStoredTarget = storedTarget.localDaemonBaseUrl !== undefined
 
   // Since R3 the daemon serves the canonical apps/web build at its own
   // origin with no pairing needed at all, so the primary CTA is a plain
@@ -70,12 +72,12 @@ export function DaemonDetectedBanner({
   // last-connected canvas when known so the link lands the user back where
   // they were instead of just the daemon's root.
   const openLocalAppUrl = useMemo(() => {
-    const { lastConnectedWorkspaceId, lastConnectedSlug } = settingsStore.load().storage
+    const { lastConnectedWorkspaceId, lastConnectedSlug } = storedTarget
     if (lastConnectedWorkspaceId && lastConnectedSlug) {
       return `${baseUrl}/canvas/${encodeURIComponent(lastConnectedWorkspaceId)}/${encodeURIComponent(lastConnectedSlug)}`
     }
     return baseUrl
-  }, [settingsStore, baseUrl])
+  }, [storedTarget, baseUrl])
 
   // 'http:'/'https:' -> 'http'/'https'; any other scheme (e.g. jsdom's
   // default 'about:' outside these injected-prop tests) falls back to
@@ -134,6 +136,11 @@ export function DaemonDetectedBanner({
         lastConnectedSlug: undefined,
       },
     }))
+    setStoredTarget({
+      localDaemonBaseUrl: undefined,
+      lastConnectedWorkspaceId: undefined,
+      lastConnectedSlug: undefined,
+    })
     handleDismiss()
   }
 

@@ -132,6 +132,31 @@ describe('DaemonDetectedBanner', () => {
     expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
   })
 
+  it('does not emit a double slash when the stored base URL has a trailing slash', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: 'http://127.0.0.1:3099/',
+        lastConnectedWorkspaceId: 'w1',
+        lastConnectedSlug: 'main',
+      },
+    }))
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    const openLink = await screen.findByRole('link', { name: /open the local app/i })
+    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
+  })
+
   it('still links to the how-to doc alongside the primary CTA', async () => {
     const probeFn = vi.fn().mockResolvedValue(DETECTED)
     render(
