@@ -84,6 +84,18 @@ interface PendingMerge {
   target: BranchMeta | null
 }
 
+// Same ellipsis + title-attribute truncation the switch-variation dropdown
+// uses for branch names (below): a menu action whose label embeds a
+// user-chosen variation name must not push the menu wider than its fixed
+// width or wrap the destructive Delete label across several lines.
+function TruncatedMenuLabel({ text }: { text: string }): JSX.Element {
+  return (
+    <span className="min-w-0 flex-1 truncate" title={text}>
+      {text}
+    </span>
+  )
+}
+
 export function HeaderBranchChip({
   workspaceId,
   slug,
@@ -418,8 +430,8 @@ export function HeaderBranchChip({
             }}
             className="gap-2"
           >
-            <Pencil className="size-3.5" />
-            Rename «{displayBranchName(head)}»…
+            <Pencil className="size-3.5 shrink-0" />
+            <TruncatedMenuLabel text={`Rename «${displayBranchName(head)}»…`} />
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={head === 'main'}
@@ -433,8 +445,8 @@ export function HeaderBranchChip({
               }
             }}
           >
-            <Trash2 className="size-3.5" />
-            Delete «{displayBranchName(head)}»…
+            <Trash2 className="size-3.5 shrink-0" />
+            <TruncatedMenuLabel text={`Delete «${displayBranchName(head)}»…`} />
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

@@ -301,4 +301,26 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
       dryRun: true,
     })
   })
+
+  it('truncates a long HEAD name in kebab Rename/Delete with a title, like the switch dropdown', async () => {
+    const longName = 'comprehensive-marketing-site-redesign-proposal-v2'
+    const longBranches: BranchMeta[] = [
+      branches[0],
+      { name: longName, tipFrontiers: '', color: '#f97316', createdAt: '2026-04-23T01:00:00Z' },
+    ]
+    stateHolder.current.state = { head: longName, branches: longBranches }
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const renameItem = await screen.findByText(new RegExp(`Rename.*${longName}`))
+    const renameLabel = renameItem.closest('.truncate') ?? renameItem
+    expect(renameLabel.className).toMatch(/\btruncate\b/)
+    expect(renameLabel.getAttribute('title')).toContain(longName)
+
+    const deleteItem = await screen.findByText(new RegExp(`Delete.*${longName}`))
+    const deleteLabel = deleteItem.closest('.truncate') ?? deleteItem
+    expect(deleteLabel.className).toMatch(/\btruncate\b/)
+    expect(deleteLabel.getAttribute('title')).toContain(longName)
+  })
 })
