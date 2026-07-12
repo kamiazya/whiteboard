@@ -7,6 +7,7 @@
 
 import { randomBytes } from 'node:crypto'
 import { type Context, Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie'
 import { z } from 'zod'
 import { AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'
@@ -102,6 +103,17 @@ function tokenError(error: TokenErrorResponse['error']) {
 // HTTP/1.0 request-header artifact that RFC 7234 §5.4 gives no defined
 // meaning as a response header, and no HTTP/1.1 cache consults it.
 const TOKEN_CACHE_CONTROL = { 'Cache-Control': 'no-store' } as const
+
+// Both OAuth POST bodies are read in full before anything can reject them, and
+// both are reachable with no credential at all — so an unbounded body is a
+// straight OOM lever on a daemon holding the user's data. Every legitimate
+// request here is a handful of short fields (a code, a verifier, a URI), so
+// the cap can sit far below any real payload.
+const OAUTH_BODY_LIMIT_BYTES = 8 * 1024
+const oauthBodyLimit = bodyLimit({
+  maxSize: OAUTH_BODY_LIMIT_BYTES,
+  onError: (c) => c.text('Payload too large', 413),
+})
 
 // RFC 6749 §4.1.3 / OAuth 2.1 §4.1.3: the token request body is
 // `application/x-www-form-urlencoded`; a spec-compliant client (including the
@@ -343,7 +355,7 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
     )
   })
 
-  app.post(OAUTH_AUTHORIZE_DECISION_PATH, async (c) => {
+  app.post(OAUTH_AUTHORIZE_DECISION_PATH, oauthBodyLimit, async (c) => {
     if (isCrossSiteRequest(c)) return errorPage(c, 'csrf_check_failed', 403)
 
     const form = decisionFormSchema.safeParse(
@@ -413,7 +425,7 @@ export function createOAuthAuthzRouter(options: OAuthAuthzRouterOptions) {
     return response
   })
 
-  app.post(OAUTH_TOKEN_PATH, async (c) => {
+  app.post(OAUTH_TOKEN_PATH, oauthBodyLimit, async (c) => {
     let rawBody: unknown
     try {
       rawBody = await readTokenRequestBody(c)

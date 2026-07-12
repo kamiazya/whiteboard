@@ -192,6 +192,24 @@ describe('GET /authorize — approval screen', () => {
   })
 })
 
+// Both POST surfaces read the whole body before any validation can reject it,
+// so an unbounded body is an OOM lever on a daemon holding the user's data —
+// and these are the only two routes reachable before any credential exists.
+describe('OAuth POST bodies are bounded', () => {
+  it.each([
+    ['/token', 'application/x-www-form-urlencoded'],
+    ['/authorize/decision', 'application/x-www-form-urlencoded'],
+  ])('rejects an oversized body on %s with 413', async (path, contentType) => {
+    const { app } = buildApp()
+    const res = await app.request(path, {
+      method: 'POST',
+      headers: { 'Content-Type': contentType, Origin: ORIGIN },
+      body: `x=${'a'.repeat(64 * 1024)}`,
+    })
+    expect(res.status).toBe(413)
+  })
+})
+
 describe('POST /authorize/decision', () => {
   it('approves: issues a code bound to the state and the registered redirect_uri', async () => {
     const { app } = buildApp()
