@@ -15,7 +15,7 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
-import { browserLocalCanvasPath } from '../lib/app-routes.js'
+import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -153,13 +153,10 @@ export function BrowserLocalCanvasPage({
   // plain '/' load doesn't leave an extra history entry behind it; every
   // subsequent switch (via the switcher, or create-then-switch) pushes.
   //
-  // Deliberately one-directional (no URL->switchCanvas effect): wiring
-  // browser back/forward to re-trigger switchCanvas raced with Excalidraw's
-  // own render cycle in practice (an update-during-a-different-component's-
-  // render warning, with the location change never reaching this
-  // component's next render in time) without a robust fix found in this
-  // pass. Landing the one-directional half now still makes every
-  // browser-local canvas addressable; the round-trip is a known follow-up.
+  // This never fights the URL->canvas effect below: that effect only calls
+  // switchCanvas when the URL disagrees with the already-loaded canvasId, and
+  // by the time navigate() below lands, location.pathname already equals
+  // path — so the other effect sees no drift left to act on.
   const isFirstCanvasUrlSyncRef = useRef(true)
   useEffect(() => {
     if (canvasId === null) return
@@ -170,6 +167,33 @@ export function BrowserLocalCanvasPage({
     navigate(path, { replace: isFirstSync })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvasId, navigate])
+
+  // URL -> canvas id: browser Back/Forward (and any other history navigation)
+  // moves location.pathname without any switcher click firing, so this is the
+  // only thing that keeps the loaded canvas in sync with the address bar for
+  // that direction. Runs in an effect (never during render) so it can't race
+  // Excalidraw's own render cycle; switchCanvas's generation guard (see the
+  // controller hook) protects against a rapid back-back-back burst landing a
+  // stale canvas.
+  //
+  // lastKnownCanvasIdRef distinguishes the two ways this effect's own
+  // dependencies can change: a switcher-driven switchCanvas() updates canvasId
+  // before the sibling canvas-id -> URL effect's navigate() call has actually
+  // updated `location`, so this effect would otherwise see a stale pathname
+  // that still names the PREVIOUS canvas and switch straight back to it. When
+  // the URL still names the previously-known canvas id, that's this
+  // component's own pending push catching up, not an external navigation —
+  // skip it and let the other effect finish the sync.
+  const lastKnownCanvasIdRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (canvasId === null) return
+    const requestedId = parseBrowserLocalRoute(location.pathname)?.canvasId
+    const lastKnownCanvasId = lastKnownCanvasIdRef.current
+    lastKnownCanvasIdRef.current = canvasId
+    if (requestedId === undefined || requestedId === canvasId) return
+    if (requestedId === lastKnownCanvasId) return
+    void switchCanvas(requestedId)
+  }, [location.pathname, canvasId, switchCanvas])
 
   useEffect(() => {
     if (canvasId === null) return
