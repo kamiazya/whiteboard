@@ -9,13 +9,17 @@ import {
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
 
-export const exportPngOutputSchema = z.object({
+// Internal to exportPngTool()'s inputSchema/outputSchema construction and its
+// z.infer-typed execute() return below — export_canvas is the only tool this
+// is reachable through now, so this schema is intentionally not registered
+// on its own.
+const exportPngOutputSchema = z.object({
   filePath: z.string(),
   imageBase64: z.string().optional(),
 })
 
 // Browser cold starts can take 1-3s locally and 4-5s in CI or remote setups,
-// so export_png waits 5s instead of 3s to reduce flaky no_client failures.
+// so this waits 5s instead of 3s to reduce flaky no_client failures.
 const EXPORT_PNG_WAIT_TIMEOUT_MS = 5_000
 const EXPORT_PNG_WAIT_INTERVAL_MS = 100
 
@@ -114,7 +118,7 @@ function throwExportError(res: Response, body: ExportErrorBody | null): never {
   throw new Error(`Export failed: ${res.status} ${body?.message ?? 'unknown error'}`)
 }
 
-export const exportPngInputShape = {
+const exportPngInputShape = {
   canvasId: z
     .string()
     .describe(
@@ -164,11 +168,15 @@ export const exportPngInputShape = {
     ),
 } satisfies z.ZodRawShape
 
+// PNG-specific export implementation, delegated to by export_canvas({format:
+// 'png'}) in export-canvas.ts. Not registered as its own MCP tool — name/
+// description/inputSchema here exist only so export-canvas.ts has a
+// self-describing unit to call and unit tests can exercise this path in
+// isolation from the format switch.
 export function exportPngTool() {
   return {
     name: 'export_png',
-    description:
-      'Export the whiteboard canvas as a PNG file. Deprecated: prefer export_canvas({ format: "png" }), which also offers svg and json in one tool. Kept for backward compatibility.',
+    description: 'Export the whiteboard canvas as a PNG file.',
     // Derived from the Zod shape so the JSON-Schema view can never drift from
     // what registerToolWithAnnotations actually validates against.
     inputSchema: z.toJSONSchema(z.object(exportPngInputShape)) as {

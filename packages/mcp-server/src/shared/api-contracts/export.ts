@@ -2,7 +2,7 @@ import { z } from 'zod'
 
 // Request / response schemas for POST /api/canvas/:workspaceId/:slug/export.
 // Imported by the route handler (validates incoming body + types its
-// `c.json(...)` responses) and the MCP export_png tool (parses fetch
+// `c.json(...)` responses) and the MCP export_canvas tool (parses fetch
 // responses) so a wire-format change has exactly one place to update.
 
 export const exportRequestSchema = z.object({

@@ -22,8 +22,8 @@ export interface StorageReport {
     files: { bytes: number; files: number }
     libraries: { bytes: number; files: number }
     db: { bytes: number; files: number }
-    // PNG / JSON exports the user produced via export_png /
-    // canvas_export_json. Kept separate from "other" because they are
+    // PNG / JSON exports the user produced via export_canvas.
+    // Kept separate from "other" because they are
     // legitimate user data the UI should not invite to delete.
     exports: { bytes: number; files: number }
     // Daemon log files. Operational data — typically safe to clean up
@@ -78,11 +78,7 @@ function categorize(relPath: string): keyof StorageReport['byCategory'] {
   return 'other'
 }
 
-async function walk(
-  root: string,
-  current: string,
-  report: StorageReport,
-): Promise<void> {
+async function walk(root: string, current: string, report: StorageReport): Promise<void> {
   let entries
   try {
     entries = await readdir(current, { withFileTypes: true })

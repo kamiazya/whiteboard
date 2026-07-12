@@ -9,7 +9,7 @@ Like a whiteboard on the wall of a meeting room, this is a tool for AI and human
 Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the canvas and can be revisited and refined later.
 
-Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `palette_get` / `palette_set` / `palette_delete` / `load_image` / `export_png` / `canvas_export_json` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it as PNG or standard `.excalidraw` JSON.
+Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `palette_get` / `palette_set` / `palette_delete` / `load_image` / `export_canvas` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it with `export_canvas({ format })` as PNG, SVG, or standard `.excalidraw` JSON.
 Open exported PNGs with the Read tool and inspect them visually.
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
@@ -181,9 +181,9 @@ update_element({
 
   - use `delta = -boxH` for upper-band arrows and `delta = +boxH` for lower-band arrows
   - keep label width within roughly 110px including margin; if it overflows, shorten or split it to two lines
-  - for large DAG-heavy sections, wrap them in `create_frame` and iterate with `export_png({ frameId })`
+  - for large DAG-heavy sections, wrap them in `create_frame` and iterate with `export_canvas({ format: "png", frameId })`
 - **Template variables**: use `template_insert({ variables: { service: "Billing API" } })` to substitute placeholders such as `{{service}}`
-- **Use frames for large diagrams**: if the canvas grows past a few screens, group related content with `create_frame`. This also enables section-level `export_png({ frameId })`
+- **Use frames for large diagrams**: if the canvas grows past a few screens, group related content with `create_frame`. This also enables section-level `export_canvas({ format: "png", frameId })`
 - **For related questions such as `current / problem / proposal`, think in frames first**: on an infinite Excalidraw canvas, related frames are easier to compare than separate canvases
 - **Treat frame names as section headings**: if the frame is named `Current` / `Problem` / `Proposal`, do not repeat the same heading inside it. Use the large text inside the frame for the conclusion or claim
 - **For review directions on an existing web UI, use `create_embed`**: embed the URL, then layer arrows / highlights with `annotate`
@@ -192,24 +192,25 @@ update_element({
 ### Step 3: Export To PNG And Inspect Visually
 
 ```js
-export_png({ canvasId })
+export_canvas({ canvasId, format: "png" })
 // For large diagrams where small text gets crushed:
-export_png({ canvasId, scale: 2, minFontPx: 16, padding: 32 })
+export_canvas({ canvasId, format: "png", scale: 2, minFontPx: 16, padding: 32 })
 // For inspecting only one section on a large canvas:
-export_png({ canvasId, frameId: "<frame-id>", padding: 24 })
+export_canvas({ canvasId, format: "png", frameId: "<frame-id>", padding: 24 })
 ```
 
-`export_png` waits briefly for the browser to settle after opening, but it does **not** automatically open the canvas.
-If you need reliable export for a disconnected canvas, call `canvas_open({ waitForClient: true })` first.
+`export_canvas` is the single tool for every export format — pass `format: "png"`, `"svg"`, or `"json"`. PNG waits briefly for the browser to settle after opening, but it does **not** automatically open the canvas; SVG and JSON always render headless from the persisted document.
+If you need reliable PNG export for a disconnected canvas, call `canvas_open({ waitForClient: true })` first.
 
-Options:
+Options (PNG/SVG unless noted):
 - `padding`: whitespace around elements in px, default 10
-- `scale`: export DPI multiplier, default 1
-- `minFontPx`: boosts font size only in the export clone
+- `scale`: PNG only. Export DPI multiplier, default 1
+- `minFontPx`: PNG only. Boosts font size only in the export clone
 - `frameId`: exports only the frame plus its child elements
-- `outputPath`: absolute path to write the PNG to. When omitted, write to the workspace exports dir
+- `outputPath`: absolute path to write the file to. When omitted, write to the workspace exports dir
 - `overwrite`: replace an existing file at `outputPath`. Default false; without it an existing file rejects with `output_exists`
 - `theme`: `"light"` or `"dark"`. Forces the rendered scene into the chosen theme without mutating persisted state. Pair both runs (`outputPath: ".../foo-light.png"` + `theme: "light"` and `.../foo-dark.png` + `theme: "dark"`) when reviewing dark-mode contrast or shipping diagrams that may live in mixed themes
+- `includeCustomFields`: JSON only. Keep internal custom fields (`parentId` / `relX` / `relY`) in the exported JSON. Default false, which resolves them into absolute x/y — use this to round-trip through excalidraw.com or the desktop app
 
 Inspect the exported PNG visually:
 
@@ -285,7 +286,7 @@ assign_to_group({ canvasId, groupId: "sec-11-after", elementIds })
 - inspect existing groups with `list_groups({ canvasId })`
 - give `groupId` a meaningful kebab-case name such as `sec-11-before`, `sec-11-after`, or `merge-dialog-wireframe`
 - one element can belong to multiple groups
-- for frames: `create_frame({ memberIds })` auto-fits only at creation time. If you add new elements later, pull them in with `update_frame_members({ frameId, add: [...] })` so the `frameId` stays stable for future `export_png({ frameId })`
+- for frames: `create_frame({ memberIds })` auto-fits only at creation time. If you add new elements later, pull them in with `update_frame_members({ frameId, add: [...] })` so the `frameId` stays stable for future `export_canvas({ format: "png", frameId })`
 
 After each fix, go back to Step 3 and export again.
 Redrawing is normal whiteboard behavior, not failure.
@@ -304,7 +305,7 @@ Redrawing is normal whiteboard behavior, not failure.
 - [ ] did you use semantic color keys?
 - [ ] can the main path / supporting info / problem / proposal / uncertainty be distinguished visually?
 - [ ] are arrow labels duplicating what box titles or callouts already say?
-- [ ] did you visually inspect with `export_png` and inspect structure with `canvas_inspect`?
+- [ ] did you visually inspect with `export_canvas` and inspect structure with `canvas_inspect`?
 - [ ] did you use `update_element` / `move_elements` / `delete_element` for local fixes?
 - [ ] if structure or intent needed rethinking, did you redraw on a new canvas instead of forcing the old one to fit?
 

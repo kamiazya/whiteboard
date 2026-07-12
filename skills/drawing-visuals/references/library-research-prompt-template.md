@@ -59,7 +59,7 @@ The General Subagent should evaluate at least:
 1. Inspect the candidate library
 2. Create a scratch canvas
 3. Arrange candidate indices with `library_insert_batch`
-4. Use `viewport_set` and `export_png` to make comparison easy
+4. Use `viewport_set` and `export_canvas({ format: "png" })` to make comparison easy
 5. Narrow candidates by identity and visual scale
 6. If needed, run another trial insert with explicit `scale`
 7. Save the adopted result into `aliases` / `notes` / `scales` via `user_library_metadata_set`

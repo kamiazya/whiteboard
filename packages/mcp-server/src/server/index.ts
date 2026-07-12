@@ -148,7 +148,7 @@ export async function main() {
   await prepareDataDir(DATA_DIR)
 
   // Best-effort: warm the headless renderer in the background so the first
-  // export_png call (when no browser is connected) does not pay the
+  // export_canvas call (when no browser is connected) does not pay the
   // jsdom + canvas + resvg + woff2 startup cost. Errors are logged inside.
   if (daemonMode) {
     const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')

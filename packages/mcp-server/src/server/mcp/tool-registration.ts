@@ -18,11 +18,6 @@ import {
   canvasAutoLayoutTool,
 } from './tools/canvas-auto-layout.js'
 import {
-  canvasExportJsonInputShape,
-  canvasExportJsonOutputSchema,
-  canvasExportJsonTool,
-} from './tools/canvas-export-json.js'
-import {
   canvasInspectInputShape,
   canvasInspectOutputSchema,
   canvasInspectTool,
@@ -80,7 +75,6 @@ import {
   exportCanvasTool,
 } from './tools/export-canvas.js'
 import { exportSvgInputShape, exportSvgOutputSchema, exportSvgTool } from './tools/export-svg.js'
-import { exportPngInputShape, exportPngOutputSchema, exportPngTool } from './tools/export.js'
 import {
   versionListInputShape,
   versionListOutputSchema,
@@ -230,11 +224,9 @@ export function registerAllTools(
   const loadTool = loadImageTool()
   const annotateToolDef = annotateTool()
   const annotateBatchToolDef = annotateBatchTool()
-  const exportTool = exportPngTool()
   const exportSvg = exportSvgTool()
   const exportCanvas = exportCanvasTool()
   const viewportTool = viewportSetTool()
-  const exportJsonTool = canvasExportJsonTool()
   const autoLayoutTool = canvasAutoLayoutTool()
   const paletteGet = paletteGetTool()
   const paletteSet = paletteSetTool()
@@ -407,59 +399,12 @@ export function registerAllTools(
     }),
 
     defineTool({
-      name: exportTool.name,
-      description: exportTool.description,
-      inputSchema: exportPngInputShape,
-      outputSchema: exportPngOutputSchema,
-      handler: async ({
-        canvasId,
-        padding,
-        scale,
-        minFontPx,
-        frameId,
-        outputPath,
-        overwrite,
-        theme,
-      }) => {
-        const result = await withDaemon((client) =>
-          exportTool.execute(
-            { canvasId, padding, scale, minFontPx, frameId, outputPath, overwrite, theme },
-            client,
-          ),
-        )
-        // Return filePath in the text block and attach the image payload as a
-        // separate ImageContent block. If reading fails, omit the image block and
-        // fall back to returning only filePath.
-        const content: Array<
-          { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
-        > = [{ type: 'text', text: JSON.stringify({ filePath: result.filePath }) }]
-        if (result.imageBase64) {
-          content.push({ type: 'image', data: result.imageBase64, mimeType: 'image/png' })
-        }
-        return { structuredContent: result, content }
-      },
-    }),
-
-    defineTool({
       name: viewportTool.name,
       description: viewportTool.description,
       inputSchema: viewportSetInputShape,
       outputSchema: viewportSetOutputSchema,
       handler: async (args) => {
         const result = await withDaemon((client) => viewportTool.execute(args, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: exportJsonTool.name,
-      description: exportJsonTool.description,
-      inputSchema: canvasExportJsonInputShape,
-      outputSchema: canvasExportJsonOutputSchema,
-      handler: async ({ canvasId, includeCustomFields, outputPath, overwrite }) => {
-        const result = await withDaemon((client) =>
-          exportJsonTool.execute({ canvasId, includeCustomFields, outputPath, overwrite }, client),
-        )
         return structuredJsonResult(result)
       },
     }),
@@ -484,8 +429,8 @@ export function registerAllTools(
       outputSchema: exportCanvasOutputSchema,
       handler: async (args) => {
         const result = await withDaemon((client) => exportCanvas.execute(args, client))
-        // PNG results carry an image payload just like export_png's own
-        // registration does; svg/json results are text-only structured content.
+        // PNG results carry an image payload as a separate ImageContent block;
+        // svg/json results are text-only structured content.
         const content: Array<
           { type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }
         > = [{ type: 'text', text: JSON.stringify(result) }]

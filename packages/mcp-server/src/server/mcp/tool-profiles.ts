@@ -25,8 +25,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   canvas_list: { profile: READ_ONLY, title: 'List canvases' },
   canvas_open: { profile: READ_ONLY, title: 'Open canvas in browser' },
   canvas_inspect: { profile: READ_ONLY, title: 'Inspect canvas elements' },
-  canvas_export_json: { profile: READ_ONLY, title: 'Export canvas as JSON (deprecated)' },
-  export_png: { profile: READ_ONLY, title: 'Export canvas as PNG (deprecated)' },
   export_svg: { profile: READ_ONLY, title: 'Export canvas as SVG' },
   export_canvas: { profile: READ_ONLY, title: 'Export canvas (png/svg/json)' },
   list_groups: { profile: READ_ONLY, title: 'List element groups' },

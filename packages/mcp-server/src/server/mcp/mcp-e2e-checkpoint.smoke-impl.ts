@@ -391,48 +391,18 @@ export async function runE2eCheckpointSmoke({
     )
     console.log('[e2e] viewport_set → no_client OK (route wiring verified)')
 
-    // export_png now falls back to headless rendering when no browser is connected.
-    // Verify it succeeds (headless path is active after the #45 merge).
-    const pngResult = await callTool('export_png', { canvasId: created.id })
-    console.log(
-      `[e2e] export_png → headless render OK (pngDataUrl=${typeof (pngResult as Record<string, unknown>).pngDataUrl !== 'undefined' ? 'present' : 'not present'})`,
-    )
-
-    const exported = await callTool('canvas_export_json', { canvasId: created.id })
-    if (!exported.filePath || !(exported.filePath as string).endsWith('.excalidraw')) {
-      throw new Error(`canvas_export_json returned unexpected shape: ${JSON.stringify(exported)}`)
-    }
-    const body = JSON.parse(await readFile(exported.filePath as string, 'utf-8')) as {
-      type: string
-      version: number
-      elements: Array<{ type: string }>
-    }
-    if (body.type !== 'excalidraw' || body.version !== 2) {
-      throw new Error(
-        `exported JSON has wrong wrapper: ${JSON.stringify({ type: body.type, version: body.version })}`,
-      )
-    }
-    if (!Array.isArray(body.elements) || body.elements.length !== exported.elementCount) {
-      throw new Error(
-        `element count mismatch: body.elements=${body.elements?.length} elementCount=${exported.elementCount}`,
-      )
-    }
-    const rectInExport = body.elements.find((el) => el.type === 'rectangle')
-    if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
-    console.log(
-      `[e2e] canvas_export_json → ${body.elements.length} elems in standard JSON (type=${body.type}, v${body.version})`,
-    )
-
     // export_canvas unifies png/svg/json behind one tool — exercise all three
     // formats so structuredContent validation against each format's branch of
-    // exportCanvasOutputSchema runs at least once.
+    // exportCanvasOutputSchema runs at least once. PNG also falls back to
+    // headless rendering when no browser is connected, so this doubles as the
+    // no-client-headless-render regression check.
     const canvasPng = await callTool('export_canvas', { canvasId: created.id, format: 'png' })
     if (canvasPng.format !== 'png' || !canvasPng.filePath) {
       throw new Error(
         `export_canvas(format:png) returned unexpected shape: ${JSON.stringify(canvasPng)}`,
       )
     }
-    console.log('[e2e] export_canvas(format:png) OK')
+    console.log('[e2e] export_canvas(format:png) OK (headless render, no browser client)')
 
     const canvasSvg = await callTool('export_canvas', { canvasId: created.id, format: 'svg' })
     if (canvasSvg.format !== 'svg' || !(canvasSvg.filePath as string).endsWith('.svg')) {
@@ -452,7 +422,29 @@ export async function runE2eCheckpointSmoke({
         `export_canvas(format:json) returned unexpected shape: ${JSON.stringify(canvasJson)}`,
       )
     }
-    console.log('[e2e] export_canvas(format:json) OK')
+    const exportedJsonBody = JSON.parse(await readFile(canvasJson.filePath as string, 'utf-8')) as {
+      type: string
+      version: number
+      elements: Array<{ type: string }>
+    }
+    if (exportedJsonBody.type !== 'excalidraw' || exportedJsonBody.version !== 2) {
+      throw new Error(
+        `exported JSON has wrong wrapper: ${JSON.stringify({ type: exportedJsonBody.type, version: exportedJsonBody.version })}`,
+      )
+    }
+    if (
+      !Array.isArray(exportedJsonBody.elements) ||
+      exportedJsonBody.elements.length !== canvasJson.elementCount
+    ) {
+      throw new Error(
+        `element count mismatch: body.elements=${exportedJsonBody.elements?.length} elementCount=${canvasJson.elementCount}`,
+      )
+    }
+    const rectInExport = exportedJsonBody.elements.find((el) => el.type === 'rectangle')
+    if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
+    console.log(
+      `[e2e] export_canvas(format:json) OK → ${exportedJsonBody.elements.length} elems (type=${exportedJsonBody.type}, v${exportedJsonBody.version})`,
+    )
 
     console.log('\n[e2e] ALL OK')
   } catch (err) {

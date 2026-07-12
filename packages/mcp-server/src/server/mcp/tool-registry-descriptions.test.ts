@@ -14,7 +14,6 @@ import { z } from 'zod'
 import { annotateBatchInputShape } from './tools/annotate-batch.js'
 import { annotateInputShape } from './tools/annotate.js'
 import { canvasAutoLayoutInputShape } from './tools/canvas-auto-layout.js'
-import { canvasExportJsonInputShape } from './tools/canvas-export-json.js'
 import { canvasInspectInputShape } from './tools/canvas-inspect.js'
 import {
   canvasCreateInputShape,
@@ -37,7 +36,6 @@ import {
 } from './tools/element-ops-tools.js'
 import { exportCanvasInputShape } from './tools/export-canvas.js'
 import { exportSvgInputShape } from './tools/export-svg.js'
-import { exportPngInputShape } from './tools/export.js'
 import {
   createEmbedInputShape,
   createFrameInputShape,
@@ -87,11 +85,9 @@ const REGISTERED_INPUT_SHAPES: Record<string, z.ZodRawShape> = {
   palette_get: paletteGetInputShape,
   palette_set: paletteSetInputShape,
   palette_delete: paletteDeleteInputShape,
-  export_png: exportPngInputShape,
   export_svg: exportSvgInputShape,
   export_canvas: exportCanvasInputShape,
   viewport_set: viewportSetInputShape,
-  canvas_export_json: canvasExportJsonInputShape,
   canvas_auto_layout: canvasAutoLayoutInputShape,
   library_list_items: libraryListItemsInputShape,
   library_insert_item: libraryInsertItemInputShape,
@@ -180,6 +176,6 @@ describe('registered tool inputSchema descriptions', () => {
   it('covers every tool registered in tool-registration.ts (guards against a silently-skipped new tool)', () => {
     // Kept in sync manually with the `inputSchema:` count in tool-registration.ts.
     // A mismatch here means a new tool was registered without adding it above.
-    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(50)
+    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(48)
   })
 })

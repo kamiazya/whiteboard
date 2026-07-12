@@ -10,9 +10,10 @@
 // Coverage:
 //   1. canvas_create -> annotate -> canvas_inspect
 //   2. viewport_set rejects immediately with no_client when no browser is connected
-//   3. export_png falls back to headless rendering when no browser is connected
-//   4. canvas_export_json round-trips a known element shape
-//   5. export_png honours theme=light / theme=dark
+//   3. export_canvas(format:png) falls back to headless rendering when no browser is connected
+//   4. export_canvas(format:json) round-trips a known element shape
+//   5. export_canvas(format:png) honours theme=light / theme=dark
+//   6. export_canvas(format:svg) renders real SVG markup headless
 //
 // For 2 and 3 there is no browser WS client, so success behavior is not
 // observed. Instead, the smoke proves that both route wiring and MCP wrapping
@@ -468,25 +469,35 @@ async function main() {
   )
   console.log('[e2e] viewport_set → no_client OK (route wiring verified)')
 
-  // export_png against a non-existent canvas must fail loudly. The previous
-  // headless path silently returned an empty PNG for any typoed slug because
-  // getDoc / loadCanvas resolve to an empty LoroDoc on cache miss; we now
-  // 404 up front so the caller sees the typo.
+  // export_canvas(format:png) against a non-existent canvas must fail loudly.
+  // The previous headless path silently returned an empty PNG for any typoed
+  // slug because getDoc / loadCanvas resolve to an empty LoroDoc on cache
+  // miss; we now 404 up front so the caller sees the typo.
   await expectRejected(
-    callTool('export_png', { canvasId: `${created.id.split('/')[0]}/no-such-canvas` }),
+    callTool('export_canvas', {
+      canvasId: `${created.id.split('/')[0]}/no-such-canvas`,
+      format: 'png',
+    }),
     /canvas_not_found|404/i,
-    'export_png against missing canvas',
+    'export_canvas(format:png) against missing canvas',
   )
-  console.log('[e2e] export_png → canvas_not_found OK for missing canvas')
+  console.log('[e2e] export_canvas(format:png) → canvas_not_found OK for missing canvas')
 
-  // export_png: with no browser connected, the route falls back to the
-  // headless renderer (jsdom + @napi-rs/canvas + resvg-js). Confirm we get a
-  // .excalidraw.png file path back instead of a no_client rejection.
-  const exportedPng = await callTool('export_png', { canvasId: created.id })
-  if (!exportedPng.filePath || !exportedPng.filePath.endsWith('.excalidraw.png')) {
-    throw new Error(`export_png returned unexpected shape: ${JSON.stringify(exportedPng)}`)
+  // export_canvas(format:png): with no browser connected, the route falls
+  // back to the headless renderer (jsdom + @napi-rs/canvas + resvg-js).
+  // Confirm we get a .excalidraw.png file path back instead of a no_client
+  // rejection.
+  const exportedPng = await callTool('export_canvas', { canvasId: created.id, format: 'png' })
+  if (
+    exportedPng.format !== 'png' ||
+    !exportedPng.filePath ||
+    !exportedPng.filePath.endsWith('.excalidraw.png')
+  ) {
+    throw new Error(
+      `export_canvas(format:png) returned unexpected shape: ${JSON.stringify(exportedPng)}`,
+    )
   }
-  console.log(`[e2e] export_png (headless) → ${exportedPng.filePath}`)
+  console.log(`[e2e] export_canvas(format:png) (headless) → ${exportedPng.filePath}`)
 
   // The .excalidraw.png contract requires the scene JSON to be embedded as a
   // tEXt chunk so dropping the file back onto the canvas restores the scene.
@@ -512,16 +523,16 @@ async function main() {
     }
     if (foundKeyword !== 'application/vnd.excalidraw+json') {
       throw new Error(
-        `export_png (headless) PNG is missing the embedded Excalidraw scene chunk (got keyword=${foundKeyword}).`,
+        `export_canvas(format:png) (headless) PNG is missing the embedded Excalidraw scene chunk (got keyword=${foundKeyword}).`,
       )
     }
-    console.log('[e2e] export_png (headless) embeds Excalidraw scene tEXt chunk')
+    console.log('[e2e] export_canvas(format:png) (headless) embeds Excalidraw scene tEXt chunk')
   }
 
-  // load_image + export_png: confirm that BinaryFiles flow end-to-end so that
-  // a regression in loadCanvasFiles (e.g. wrong path layout) shows up here.
-  // We use a tiny solid-color PNG so the assertion is robust against the
-  // exact pixel size of the embedded image.
+  // load_image + export_canvas(format:png): confirm that BinaryFiles flow
+  // end-to-end so that a regression in loadCanvasFiles (e.g. wrong path
+  // layout) shows up here. We use a tiny solid-color PNG so the assertion is
+  // robust against the exact pixel size of the embedded image.
   const tinyPng = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAGUlEQVR4nGP8z8DAwIQDMOEUobiUgQEkAQATDQMR/HpTEgAAAABJRU5ErkJggg==',
     'base64',
@@ -532,30 +543,38 @@ async function main() {
   if (!loaded.elementId) {
     throw new Error(`load_image returned unexpected shape: ${JSON.stringify(loaded)}`)
   }
-  const exportedWithImage = await callTool('export_png', { canvasId: created.id })
+  const exportedWithImage = await callTool('export_canvas', {
+    canvasId: created.id,
+    format: 'png',
+  })
   if (!exportedWithImage.filePath || !exportedWithImage.filePath.endsWith('.excalidraw.png')) {
     throw new Error(
-      `export_png after load_image returned unexpected shape: ${JSON.stringify(exportedWithImage)}`,
+      `export_canvas(format:png) after load_image returned unexpected shape: ${JSON.stringify(exportedWithImage)}`,
     )
   }
-  console.log(`[e2e] load_image + export_png (headless) → ${exportedWithImage.filePath}`)
+  console.log(
+    `[e2e] load_image + export_canvas(format:png) (headless) → ${exportedWithImage.filePath}`,
+  )
 
-  // export_png theme=light/dark: export the same canvas twice with explicit
-  // themes to defend the headless renderer's theme handling. If the renderer
-  // ignores `theme`, both files would be byte-identical and the contrast QA
-  // workflow recommended in skills/drawing-visuals/dark-mode-techniques.md
-  // would silently produce identical exports.
+  // export_canvas(format:png) theme=light/dark: export the same canvas twice
+  // with explicit themes to defend the headless renderer's theme handling.
+  // If the renderer ignores `theme`, both files would be byte-identical and
+  // the contrast QA workflow recommended in
+  // skills/drawing-visuals/dark-mode-techniques.md would silently produce
+  // identical exports.
   const themeExportsDir = join(tmpDataDir, created.id.split('/')[0], 'exports')
   const lightOut = join(themeExportsDir, 'theme-light.png')
   const darkOut = join(themeExportsDir, 'theme-dark.png')
-  const themeLight = await callTool('export_png', {
+  const themeLight = await callTool('export_canvas', {
     canvasId: created.id,
+    format: 'png',
     theme: 'light',
     outputPath: lightOut,
     overwrite: true,
   })
-  const themeDark = await callTool('export_png', {
+  const themeDark = await callTool('export_canvas', {
     canvasId: created.id,
+    format: 'png',
     theme: 'dark',
     outputPath: darkOut,
     overwrite: true,
@@ -577,68 +596,53 @@ async function main() {
   }
   if (lightBytes.equals(darkBytes)) {
     throw new Error(
-      'export_png produced byte-identical PNGs for theme=light and theme=dark — the renderer is ignoring theme.',
+      'export_canvas(format:png) produced byte-identical PNGs for theme=light and theme=dark — the renderer is ignoring theme.',
     )
   }
   console.log(
-    `[e2e] export_png theme=light/dark differ (${lightStat.size}B vs ${darkStat.size}B) — theme honored`,
+    `[e2e] export_canvas(format:png) theme=light/dark differ (${lightStat.size}B vs ${darkStat.size}B) — theme honored`,
   )
 
-  // canvas_export_json: pure LoroDoc readback with no browser required, then
-  // export to standard .excalidraw format.
-  // Read the JSON back and verify wrapper shape and element count directly.
-  const { readFile } = await import('node:fs/promises')
-  const exported = await callTool('canvas_export_json', { canvasId: created.id })
-  if (!exported.filePath || !exported.filePath.endsWith('.excalidraw')) {
-    throw new Error(`canvas_export_json returned unexpected shape: ${JSON.stringify(exported)}`)
-  }
-  const body = JSON.parse(await readFile(exported.filePath, 'utf-8'))
-  if (body.type !== 'excalidraw' || body.version !== 2) {
-    throw new Error(
-      `exported JSON has wrong wrapper: ${JSON.stringify({ type: body.type, version: body.version })}`,
-    )
-  }
-  if (!Array.isArray(body.elements) || body.elements.length !== exported.elementCount) {
-    throw new Error(
-      `element count mismatch: body.elements=${body.elements?.length} elementCount=${exported.elementCount}`,
-    )
-  }
-  const rectInExport = body.elements.find((el) => el.type === 'rectangle')
-  if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
-  console.log(
-    `[e2e] canvas_export_json → ${body.elements.length} elems in standard JSON (type=${body.type}, v${body.version})`,
-  )
-
-  // export_canvas unifies png/svg/json behind one tool with a `format` switch.
-  // Exercise all three so structuredContent validation against each format's
-  // branch of exportCanvasOutputSchema runs at least once.
-  const canvasPng = await callTool('export_canvas', { canvasId: created.id, format: 'png' })
-  if (canvasPng.format !== 'png' || !canvasPng.filePath) {
-    throw new Error(
-      `export_canvas(format:png) returned unexpected shape: ${JSON.stringify(canvasPng)}`,
-    )
-  }
-  console.log('[e2e] export_canvas(format:png) OK')
-
+  // export_canvas(format:svg): always rendered headless from the persisted
+  // document, so no browser client is required.
   const canvasSvg = await callTool('export_canvas', { canvasId: created.id, format: 'svg' })
   if (canvasSvg.format !== 'svg' || !canvasSvg.filePath.endsWith('.svg')) {
     throw new Error(
       `export_canvas(format:svg) returned unexpected shape: ${JSON.stringify(canvasSvg)}`,
     )
   }
+  const { readFile } = await import('node:fs/promises')
   const svgMarkup = await readFile(canvasSvg.filePath, 'utf-8')
   if (!svgMarkup.trim().startsWith('<svg')) {
     throw new Error('export_canvas(format:svg) did not produce real SVG markup')
   }
   console.log('[e2e] export_canvas(format:svg) OK (real <svg> markup on disk)')
 
+  // export_canvas(format:json): pure LoroDoc readback with no browser
+  // required, exported to standard .excalidraw format. Read the JSON back and
+  // verify wrapper shape and element count directly.
   const canvasJson = await callTool('export_canvas', { canvasId: created.id, format: 'json' })
   if (canvasJson.format !== 'json' || !canvasJson.filePath.endsWith('.excalidraw')) {
     throw new Error(
       `export_canvas(format:json) returned unexpected shape: ${JSON.stringify(canvasJson)}`,
     )
   }
-  console.log('[e2e] export_canvas(format:json) OK')
+  const body = JSON.parse(await readFile(canvasJson.filePath, 'utf-8'))
+  if (body.type !== 'excalidraw' || body.version !== 2) {
+    throw new Error(
+      `exported JSON has wrong wrapper: ${JSON.stringify({ type: body.type, version: body.version })}`,
+    )
+  }
+  if (!Array.isArray(body.elements) || body.elements.length !== canvasJson.elementCount) {
+    throw new Error(
+      `element count mismatch: body.elements=${body.elements?.length} elementCount=${canvasJson.elementCount}`,
+    )
+  }
+  const rectInExport = body.elements.find((el) => el.type === 'rectangle')
+  if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
+  console.log(
+    `[e2e] export_canvas(format:json) OK → ${body.elements.length} elems (type=${body.type}, v${body.version})`,
+  )
 
   // library_list_items via a local .excalidrawlib file: validates that the
   // schema-based normalizeLibraryPayload accepts a standard v2 payload and that

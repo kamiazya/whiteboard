@@ -252,7 +252,7 @@ async function buildExporter(): Promise<HeadlessExporter> {
 }
 
 // Pre-warm the singleton during daemon startup so the first user-facing
-// `export_png` call does not pay the jsdom + canvas + resvg + woff2 cost.
+// `export_canvas` (format:png) call does not pay the jsdom + canvas + resvg + woff2 cost.
 // Errors are swallowed because pre-warming is best-effort: the actual export
 // path will still surface a descriptive failure.
 export async function prewarmHeadlessExporter(): Promise<void> {
