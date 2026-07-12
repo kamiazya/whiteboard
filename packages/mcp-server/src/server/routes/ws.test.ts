@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtemp, mkdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -22,6 +22,7 @@ const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest } = await im
 
 class FakeWebSocket {
   sent: Array<string | Uint8Array> = []
+  closes: Array<{ code?: number; reason?: string }> = []
   private listeners = new Map<string, Array<(...args: unknown[]) => void>>()
 
   send(data: string | Uint8Array | ArrayBuffer): void {
@@ -42,7 +43,9 @@ class FakeWebSocket {
     this.listeners.set(event, handlers)
   }
 
-  close(): void {}
+  close(code?: number, reason?: string): void {
+    this.closes.push({ code, reason })
+  }
 
   async emitMessage(data: Buffer, isBinary: boolean): Promise<void> {
     for (const handler of this.listeners.get('message') ?? []) {
@@ -410,5 +413,146 @@ describe('handleWsUpgrade ws_trace propagation', () => {
       await provider.shutdown()
       trace.disable()
     }
+  })
+})
+
+describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-scope-test-'))
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    clearCache()
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+    setAutoVersionTrigger(() => Promise.resolve(null))
+  })
+
+  it('a canvas:read-only connection cannot emit a CRDT mutation over the socket', async () => {
+    const { peekDoc } = await import('../store/doc-cache.js')
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const ws = new FakeWebSocket()
+    // Grant only canvas:read — the shape a workspace:read-scoped credential
+    // would hold once scoped WS credentials exist (ADR-0005).
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-readonly', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read'],
+    )
+
+    const clientDoc = new LoroDoc()
+    const prevVV = clientDoc.version()
+    const list = clientDoc.getMovableList('elements')
+    const map = list.insertContainer(0, new LoroMap())
+    map.set('id', 'should-never-persist')
+    map.set('type', 'rectangle')
+    clientDoc.commit()
+
+    await ws.emitMessage(
+      Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array),
+      true,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    // The update was never imported into the server's live doc.
+    const liveDoc = peekDoc('session1', 'canvas-readonly')
+    const elements = liveDoc?.getMovableList('elements').toJSON() as
+      | Array<{ id: string }>
+      | undefined
+    expect(elements ?? []).toEqual([])
+
+    // Nor was it persisted to disk: reading it back yields an empty canvas,
+    // not one containing the rejected element.
+    clearCache()
+    const saved = await loadCanvas('session1', 'canvas-readonly')
+    const savedElements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
+    expect(savedElements).toEqual([])
+
+    // And the socket is closed rather than silently swallowing further frames.
+    expect(ws.closes).toEqual([{ code: 1008, reason: 'Insufficient scope' }])
+
+    ws.emitClose()
+  })
+
+  it('a canvas:write-granted connection can still emit a CRDT mutation (no regression)', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-writable', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read', 'canvas:write'],
+    )
+
+    const clientDoc = new LoroDoc()
+    const prevVV = clientDoc.version()
+    const list = clientDoc.getMovableList('elements')
+    const map = list.insertContainer(0, new LoroMap())
+    map.set('id', 'persists-fine')
+    map.set('type', 'rectangle')
+    clientDoc.commit()
+
+    await ws.emitMessage(
+      Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array),
+      true,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 30))
+
+    clearCache()
+    const saved = await loadCanvas('session1', 'canvas-writable')
+    const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
+    expect(elements.map((entry) => entry.id)).toEqual(['persists-fine'])
+
+    ws.emitClose()
+  })
+
+  it('a connection with no canvas:read cannot even signal client_ready (control messages gated too)', async () => {
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-noscope', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      [],
+    )
+
+    const { getReadyClientCount } = await import('./ws.js')
+    await ws.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(getReadyClientCount('session1', 'canvas-noscope')).toBe(0)
+
+    // Scopes are fixed at upgrade, so a client that lacks the scope for a
+    // message can never succeed by retrying. Leaving the socket open would
+    // let it keep pushing rejected frames indefinitely; close it out.
+    expect(ws.closes).toEqual([{ code: 1008, reason: 'Insufficient scope' }])
+    ws.emitClose()
+  })
+
+  it('a frame already in flight when the socket was closed for scope takes no effect', async () => {
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-inflight', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read'],
+    )
+
+    const clientDoc = new LoroDoc()
+    const prevVV = clientDoc.version()
+    clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
+    clientDoc.commit()
+
+    // The mutation trips the scope gate and starts the closing handshake...
+    await ws.emitMessage(
+      Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array),
+      true,
+    )
+    // ...but `close()` only *starts* it, so a frame the client had already put
+    // on the wire still arrives. Even though canvas:read alone would normally
+    // authorize client_ready, it must not register a socket that is closing.
+    const { getReadyClientCount } = await import('./ws.js')
+    await ws.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+
+    expect(getReadyClientCount('session1', 'canvas-inflight')).toBe(0)
+    ws.emitClose()
   })
 })

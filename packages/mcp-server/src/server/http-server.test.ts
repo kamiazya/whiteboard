@@ -2,8 +2,9 @@ import { request } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
+import { type RunningServer, startHttpServer } from './http-server.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
-import { startHttpServer, type RunningServer } from './http-server.js'
+import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
 
 describe('authorizeWsUpgrade', () => {
   it('rejects websocket upgrade without the daemon subprotocol token when token auth is enabled', () => {
@@ -39,7 +40,7 @@ describe('authorizeWsUpgrade', () => {
         },
         'secret',
       ),
-    ).toEqual({ accept: true, protocol: 'excalidraw-v1' })
+    ).toEqual({ accept: true, protocol: 'excalidraw-v1', scopes: ALL_AUTH_SCOPES })
   })
 
   it('keeps websocket auth disabled when daemon token is unset', () => {
@@ -47,7 +48,7 @@ describe('authorizeWsUpgrade', () => {
       authorizeWsUpgrade({
         host: '127.0.0.1:3099',
       }),
-    ).toEqual({ accept: true, protocol: undefined })
+    ).toEqual({ accept: true, protocol: undefined, scopes: ALL_AUTH_SCOPES })
   })
 
   it('admits cross-name loopback origins but rejects non-loopback ones', () => {
@@ -63,7 +64,7 @@ describe('authorizeWsUpgrade', () => {
         },
         'secret',
       ),
-    ).toEqual({ accept: true, protocol: 'excalidraw-v1' })
+    ).toEqual({ accept: true, protocol: 'excalidraw-v1', scopes: ALL_AUTH_SCOPES })
 
     expect(
       authorizeWsUpgrade(
