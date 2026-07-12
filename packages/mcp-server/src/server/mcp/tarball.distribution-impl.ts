@@ -127,9 +127,22 @@ export async function runPackedTarballSmoke({
     console.log(`[tarball-smoke] pack → ${packedTarballPath}`)
     console.log(`[tarball-smoke] install dir → ${installDir}`)
 
+    // --ignore-scripts: this installs into a disposable scratch directory to
+    // check that the packed tarball's entrypoint runs, not to exercise any
+    // dependency's native build step. Without it, pnpm 11's default-deny
+    // build-script policy makes `pnpm add` exit non-zero (ERR_PNPM_IGNORED_BUILDS)
+    // whenever a transitive dependency ships an ignored postinstall script
+    // (e.g. protobufjs) — a real behavior change from pnpm 10, where the same
+    // situation was only a warning.
     spawnChecked(
       'pnpm',
-      ['add', '--prefer-offline', '--package-import-method=copy', packedTarballPath],
+      [
+        'add',
+        '--prefer-offline',
+        '--package-import-method=copy',
+        '--ignore-scripts',
+        packedTarballPath,
+      ],
       { cwd: installDir, env },
     )
 

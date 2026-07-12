@@ -206,17 +206,15 @@ describe('implementedNow is false — locally-runnable gate not yet wired', () =
 
 describe('ci.yml dry-run jobs exist (consolidated from publish-dry-run.yml)', () => {
   it('dry-run-npm job exists in ci.yml', () => {
-    expect(
-      readWorkflow(CI_WORKFLOW),
-      'dry-run-npm job must exist in ci.yml',
-    ).toContain('  dry-run-npm:')
+    expect(readWorkflow(CI_WORKFLOW), 'dry-run-npm job must exist in ci.yml').toContain(
+      '  dry-run-npm:',
+    )
   })
 
   it('dry-run-docker job exists in ci.yml', () => {
-    expect(
-      readWorkflow(CI_WORKFLOW),
-      'dry-run-docker job must exist in ci.yml',
-    ).toContain('  dry-run-docker:')
+    expect(readWorkflow(CI_WORKFLOW), 'dry-run-docker job must exist in ci.yml').toContain(
+      '  dry-run-docker:',
+    )
   })
 
   it('dry-run-npm job references publish:dry-run:npm', () => {
@@ -265,7 +263,9 @@ describe('ci.yml dry-run jobs upload artifacts', () => {
 
   it('dry-run-docker artifact path is the docker metadata JSON', () => {
     const section = jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-docker')
-    expect(section).toContain('path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json')
+    expect(section).toContain(
+      'path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json',
+    )
   })
 
   it('dry-run-docker artifact upload warns if no files are found (metadata may be absent for unchanged images)', () => {
@@ -313,7 +313,10 @@ describe('ci.yml cleanliness (no publish/sign/OIDC capabilities)', () => {
 describe('publish:dry-run aggregate contract', () => {
   function dryRunSegments(): string[] {
     const script = packageScripts['publish:dry-run'] ?? ''
-    return script.split('&&').map((s) => s.trim()).filter(Boolean)
+    return script
+      .split('&&')
+      .map((s) => s.trim())
+      .filter(Boolean)
   }
 
   it('publish:dry-run contains pnpm publish:dry-run:npm', () => {
@@ -339,12 +342,8 @@ describe('publish:dry-run aggregate contract', () => {
 describe('dry-run-docker job setup drift (ci.yml)', () => {
   const dockerSection = () => jobSection(readWorkflow(CI_WORKFLOW), 'dry-run-docker')
 
-  it('docker dry-run job uses pnpm/action-setup', () => {
-    expect(dockerSection()).toContain('pnpm/action-setup')
-  })
-
-  it('docker dry-run job uses actions/setup-node', () => {
-    expect(dockerSection()).toContain('actions/setup-node')
+  it('docker dry-run job uses the shared setup-pnpm composite action', () => {
+    expect(dockerSection()).toContain('./.github/actions/setup-pnpm')
   })
 
   it('docker dry-run job runs pnpm install --frozen-lockfile', () => {
@@ -352,19 +351,14 @@ describe('dry-run-docker job setup drift (ci.yml)', () => {
   })
 
   it('docker dry-run job does not push to registry', () => {
-    expect(
-      dockerSection(),
-      'docker dry-run must not push to registry',
-    ).not.toContain('push: true')
+    expect(dockerSection(), 'docker dry-run must not push to registry').not.toContain('push: true')
   })
 })
 
 // ── validateFutureGateCoverage PBT ───────────────────────────────────────────
 
 describe('validateFutureGateCoverage PBT', () => {
-  const nonEmptyStr = fc
-    .string({ minLength: 1, maxLength: 32 })
-    .filter((s) => s.trim().length > 0)
+  const nonEmptyStr = fc.string({ minLength: 1, maxLength: 32 }).filter((s) => s.trim().length > 0)
 
   fcTest.prop(
     [
@@ -413,9 +407,7 @@ describe('validateFutureGateCoverage PBT', () => {
       const sanitisedScripts = Object.fromEntries(
         Object.entries(scripts).filter(([k]) => k !== artifact.futureGateId),
       )
-      expect(
-        validateFutureGateCoverage(artifact, sanitisedScripts, gateIds).ok,
-      ).toBe(false)
+      expect(validateFutureGateCoverage(artifact, sanitisedScripts, gateIds).ok).toBe(false)
     },
   )
 
@@ -427,14 +419,11 @@ describe('validateFutureGateCoverage PBT', () => {
       }),
     ],
     withDefaults(),
-  )(
-    'deferred artifact whose futureGateId is already in matrix fails',
-    (artifact) => {
-      const scripts = { [artifact.futureGateId]: 'some-command' }
-      const matrixIds = [artifact.futureGateId]
-      expect(validateFutureGateCoverage(artifact, scripts, matrixIds).ok).toBe(false)
-    },
-  )
+  )('deferred artifact whose futureGateId is already in matrix fails', (artifact) => {
+    const scripts = { [artifact.futureGateId]: 'some-command' }
+    const matrixIds = [artifact.futureGateId]
+    expect(validateFutureGateCoverage(artifact, scripts, matrixIds).ok).toBe(false)
+  })
 })
 
 // ── validateCiWorkflowPolicy PBT ──────────────────────────────────────────────
