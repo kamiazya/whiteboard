@@ -10,36 +10,60 @@ import { z } from 'zod'
 // canvas field wastes tokens and includes noisy data like image dataURLs, so the
 // summary keeps only this minimal identification and geometry set.
 const elementSummarySchema = z.object({
-  id: z.string(),
-  type: z.string(),
-  x: z.number().optional(),
-  y: z.number().optional(),
-  width: z.number().optional(),
-  height: z.number().optional(),
-  angle: z.number().optional(),
-  fileId: z.string().optional(),
-  text: z.string().optional(),
-  strokeColor: z.string().optional(),
-  backgroundColor: z.string().optional(),
-  isDeleted: z.boolean().optional(),
+  id: z.string().describe('Element id.'),
+  type: z.string().describe('Excalidraw element type (e.g. rectangle, text, frame, image).'),
+  x: z.number().optional().describe('Left position.'),
+  y: z.number().optional().describe('Top position.'),
+  width: z.number().optional().describe('Element width.'),
+  height: z.number().optional().describe('Element height.'),
+  angle: z.number().optional().describe('Rotation angle in radians.'),
+  fileId: z.string().optional().describe('Referenced binary file id, for image elements.'),
+  text: z
+    .string()
+    .optional()
+    .describe(
+      'Text preview (collapsed to one line, truncated to 80 characters), for text elements.',
+    ),
+  strokeColor: z.string().optional().describe('Stroke/border color.'),
+  backgroundColor: z.string().optional().describe('Fill color.'),
+  isDeleted: z
+    .boolean()
+    .optional()
+    .describe('True when this slot is a tombstone from a deleted element.'),
+  name: z
+    .string()
+    .optional()
+    .describe(
+      'Frame name as set via create_frame, present only for frame elements. Lets a caller identify a frame without re-deriving it from geometry.',
+    ),
 })
 
 export const canvasInspectOutputSchema = z.object({
   // Total slots in the LoroList, including deleted tombstones. Useful for
   // understanding the full history footprint of the canvas.
-  nodeCount: z.number(),
+  nodeCount: z
+    .number()
+    .describe('Total slots in the underlying element list, including deleted tombstones.'),
   // Number of live raw Excalidraw nodes (isDeleted !== true). Composite
   // annotations like box_with_label expand into multiple nodes (e.g. rect + text),
   // so this count is higher than the number of logical annotate() calls when
   // composites are used. Equals logicalCount only when no composites are present.
-  elementCount: z.number(),
+  elementCount: z
+    .number()
+    .describe(
+      'Number of live (non-deleted) raw Excalidraw nodes. Composite annotations like box_with_label expand into multiple nodes, so this exceeds the number of annotate() calls when composites are used.',
+    ),
   // Stable alias for elementCount. Use this field when sanity-checking how many
   // visible elements the canvas holds; the name makes the intent explicit.
   // Note: composite annotations (box_with_label) still expand to multiple raw nodes
   // each, so this will exceed the number of annotate() calls when composites are used.
-  logicalCount: z.number(),
+  logicalCount: z
+    .number()
+    .describe('Stable alias for elementCount, provided so callers can be explicit about intent.'),
   // Elements in LoroList insertion order, including tombstones for history context.
-  elements: z.array(elementSummarySchema),
+  elements: z
+    .array(elementSummarySchema)
+    .describe('Per-element summaries in insertion order, including tombstones.'),
 })
 
 export type ElementSummary = z.infer<typeof elementSummarySchema>
