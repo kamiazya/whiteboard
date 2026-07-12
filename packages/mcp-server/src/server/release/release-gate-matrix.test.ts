@@ -98,25 +98,25 @@ const KNOWN_CATEGORIES = new Set([
   'pages',
 ])
 const KNOWN_BUCKETS = new Set(['fast', 'medium', 'slow'])
-const KNOWN_TIERS = new Set([
-  'ci',
-  'local-release',
-  'docker-release',
-  'publish',
-  'pages-release',
-])
+const KNOWN_TIERS = new Set(['ci', 'local-release', 'docker-release', 'publish', 'pages-release'])
 
 // Count distribution test steps from the test:e2e:distribution script.
 // The script is: `pnpm build && <step1> && <step2> && ...`
 // Subtract 1 to exclude the leading build prerequisite.
 function countDistributionSteps(script: string): number {
-  const parts = script.split('&&').map((s) => s.trim()).filter(Boolean)
+  const parts = script
+    .split('&&')
+    .map((s) => s.trim())
+    .filter(Boolean)
   return parts.length - 1
 }
 
 // Split a shell script by && into trimmed, non-empty segments.
 function scriptSegments(script: string): string[] {
-  return script.split('&&').map((s) => s.trim()).filter(Boolean)
+  return script
+    .split('&&')
+    .map((s) => s.trim())
+    .filter(Boolean)
 }
 
 // Returns true iff gate.command appears as an exact &&-segment in the script.
@@ -133,7 +133,7 @@ const readmeText = readText('tests/e2e/distribution/README.md')
 
 // Authoritative step count for the distribution chain. Update this constant
 // when a new node smoke is added to test:e2e:distribution.
-const EXPECTED_DISTRIBUTION_STEPS = 15
+const EXPECTED_DISTRIBUTION_STEPS = 16
 
 describe('release-gate-matrix.json structure', () => {
   it('has schemaVersion 1', () => {
@@ -174,10 +174,7 @@ describe('release-gate-matrix.json structure', () => {
   it('all requiredFor tiers are from the known set', () => {
     for (const gate of matrix.gates) {
       for (const tier of gate.requiredFor) {
-        expect(
-          KNOWN_TIERS.has(tier),
-          `unknown tier "${tier}" on gate "${gate.id}"`,
-        ).toBe(true)
+        expect(KNOWN_TIERS.has(tier), `unknown tier "${tier}" on gate "${gate.id}"`).toBe(true)
       }
     }
   })
@@ -269,9 +266,17 @@ describe('tier aggregate completeness drift', () => {
     const parts = script.split('&&').map((s) => s.trim())
     const buildIdx = parts.findIndex((p) => /^pnpm build(\s|$)/.test(p))
     const artifactsIdx = parts.findIndex((p) => p.includes('check:release-artifacts'))
-    expect(buildIdx, 'pnpm build must be present in check:release-candidate').toBeGreaterThanOrEqual(0)
-    expect(artifactsIdx, 'check:release-artifacts must be present in check:release-candidate').toBeGreaterThanOrEqual(0)
-    expect(buildIdx, 'pnpm build must run before check:release-artifacts').toBeLessThan(artifactsIdx)
+    expect(
+      buildIdx,
+      'pnpm build must be present in check:release-candidate',
+    ).toBeGreaterThanOrEqual(0)
+    expect(
+      artifactsIdx,
+      'check:release-artifacts must be present in check:release-candidate',
+    ).toBeGreaterThanOrEqual(0)
+    expect(buildIdx, 'pnpm build must run before check:release-artifacts').toBeLessThan(
+      artifactsIdx,
+    )
   })
 
   it('check:release-candidate:docker covers all docker-release-required gates', () => {
@@ -315,8 +320,8 @@ describe('test:e2e:distribution step-count drift', () => {
     expect(countDistributionSteps(script)).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
-  it('README says "fifteen steps" matching the current chain', () => {
-    expect(readmeText).toMatch(/The chain has fifteen steps/)
+  it('README says "sixteen steps" matching the current chain', () => {
+    expect(readmeText).toMatch(/The chain has sixteen steps/)
   })
 })
 
@@ -405,21 +410,16 @@ describe('pages-release tier wiring drift', () => {
   // command with shell metacharacters or env assignment is rejected, not executed.
   describe('splitCommand gate-command parser', () => {
     const importSplitCommand = async () => {
-      const mod = await import(
-        pathToFileURL(join(ROOT, 'tools/checks/src/split-command.mjs')).href
-      )
+      const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/split-command.mjs')).href)
       return mod.splitCommand as (command: string) => string[]
     }
 
     it('splits plain commands and collapses surrounding/repeated whitespace', async () => {
       const splitCommand = await importSplitCommand()
       expect(splitCommand('pnpm build')).toEqual(['pnpm', 'build'])
-      expect(splitCommand('  pnpm   --filter  @kamiazya/whiteboard-web   smoke:artifact ')).toEqual([
-        'pnpm',
-        '--filter',
-        '@kamiazya/whiteboard-web',
-        'smoke:artifact',
-      ])
+      expect(splitCommand('  pnpm   --filter  @kamiazya/whiteboard-web   smoke:artifact ')).toEqual(
+        ['pnpm', '--filter', '@kamiazya/whiteboard-web', 'smoke:artifact'],
+      )
     })
 
     it('rejects empty, shell-metachar, and env-assignment commands', async () => {
@@ -435,7 +435,10 @@ describe('pages-release tier wiring drift', () => {
     it('accepts every pages-release gate command in the matrix', async () => {
       const splitCommand = await importSplitCommand()
       for (const gate of pagesGates) {
-        expect(() => splitCommand(gate.command), `gate "${gate.id}" must be shell-safe`).not.toThrow()
+        expect(
+          () => splitCommand(gate.command),
+          `gate "${gate.id}" must be shell-safe`,
+        ).not.toThrow()
       }
     })
   })
@@ -494,10 +497,7 @@ describe('pages-release tier wiring drift', () => {
       )
       expect(r.ok).toBe(true)
       expect(r.exitCode).toBe(0)
-      expect(calls).toEqual([
-        'pnpm build',
-        'pnpm --filter @kamiazya/whiteboard-web smoke:artifact',
-      ])
+      expect(calls).toEqual(['pnpm build', 'pnpm --filter @kamiazya/whiteboard-web smoke:artifact'])
     })
 
     it('runSteps stops at the first non-zero exit (fail-fast) and returns that code', async () => {
@@ -571,9 +571,7 @@ describe('pages-release tier wiring drift', () => {
 })
 
 describe('validateGate PBT', () => {
-  const nonEmptyStr = fc
-    .string({ minLength: 1, maxLength: 64 })
-    .filter((s) => s.trim().length > 0)
+  const nonEmptyStr = fc.string({ minLength: 1, maxLength: 64 }).filter((s) => s.trim().length > 0)
   const tier = fc.constantFrom<'ci' | 'local-release' | 'docker-release' | 'publish'>(
     'ci',
     'local-release',
@@ -605,9 +603,7 @@ describe('validateGate PBT', () => {
         id: nonEmptyStr,
         command: nonEmptyStr,
         category: nonEmptyStr,
-        requiredFor: fc
-          .uniqueArray(tier, { minLength: 1 })
-          .filter((arr) => arr.includes('ci')),
+        requiredFor: fc.uniqueArray(tier, { minLength: 1 }).filter((arr) => arr.includes('ci')),
         requiresDocker: fc.constant(true),
         requiresNetwork: fc.boolean(),
         expectedRuntimeBucket: bucket,
@@ -637,10 +633,10 @@ describe('validateGate PBT', () => {
     expect(validateGate(gate).ok).toBe(false)
   })
 
-  fcTest.prop(
-    [fc.record({ id: fc.constant('') })],
-    withDefaults(),
-  )('gate with empty id always fails validation', (gate) => {
-    expect(validateGate(gate).ok).toBe(false)
-  })
+  fcTest.prop([fc.record({ id: fc.constant('') })], withDefaults())(
+    'gate with empty id always fails validation',
+    (gate) => {
+      expect(validateGate(gate).ok).toBe(false)
+    },
+  )
 })
