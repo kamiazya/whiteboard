@@ -19,6 +19,9 @@ interface MockRoutes {
     { workspace?: string; canvases: Record<string, string>; pinned: string[] } | 'fail'
   >
   onCreateCanvas?: (workspaceId: string, slug: string) => void
+  snapshotByCanvas?: Record<string, Uint8Array>
+  onUpdateCanvas?: (workspaceId: string, slug: string, bytes: Uint8Array) => void
+  onSetCanvasName?: (workspaceId: string, slug: string, name: string) => void
 }
 
 function installFetchMock(routes: MockRoutes) {
@@ -48,6 +51,37 @@ function installFetchMock(routes: MockRoutes) {
         return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
       }
       return Promise.resolve(jsonResponse(names))
+    }
+    const snapshotMatch = url.match(/\/api\/canvas\/([^/]+)\/([^/]+)\/snapshot$/)
+    if (snapshotMatch) {
+      const slug = decodeURIComponent(snapshotMatch[2])
+      const bytes = routes.snapshotByCanvas?.[slug]
+      if (!bytes) return Promise.resolve(jsonResponse({ title: 'Not found' }, 404))
+      return Promise.resolve(
+        new Response(bytes as BodyInit, {
+          status: 200,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        }),
+      )
+    }
+    const updateMatch = url.match(/\/api\/canvas\/([^/]+)\/([^/]+)\/update$/)
+    if (updateMatch && init?.method === 'POST') {
+      const workspaceId = decodeURIComponent(updateMatch[1])
+      const slug = decodeURIComponent(updateMatch[2])
+      routes.onUpdateCanvas?.(workspaceId, slug, new Uint8Array(init.body as ArrayBuffer))
+      return Promise.resolve(jsonResponse({ ok: true }))
+    }
+    const canvasNameMatch = url.match(/\/api\/workspaces\/([^/]+)\/canvases\/([^/]+)\/name$/)
+    if (canvasNameMatch && init?.method === 'PUT') {
+      const workspaceId = decodeURIComponent(canvasNameMatch[1])
+      const slug = decodeURIComponent(canvasNameMatch[2])
+      const body = JSON.parse(String(init.body)) as { name: string }
+      routes.onSetCanvasName?.(workspaceId, slug, body.name)
+      const names = routes.namesByWorkspace?.[workspaceId]
+      const canvases = names && names !== 'fail' ? names.canvases : {}
+      return Promise.resolve(
+        jsonResponse({ canvases: { ...canvases, [slug]: body.name }, pinned: [] }),
+      )
     }
     return Promise.resolve(jsonResponse({}, 404))
   })
@@ -312,6 +346,36 @@ describe('DaemonIndexPage', () => {
     fireEvent.click(card)
 
     expect(onOpenCanvas).toHaveBeenCalledExactlyOnceWith('ws-a', 'alpha')
+  })
+
+  it('duplicates a canvas via its card Duplicate action without opening it', async () => {
+    const updates: Array<[string, string, Uint8Array]> = []
+    const created: Array<[string, string]> = []
+    const names: Array<[string, string, string]> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: {
+        'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+      namesByWorkspace: { 'ws-a': { canvases: { alpha: 'Alpha' }, pinned: [] } },
+      snapshotByCanvas: { alpha: new Uint8Array([1, 2, 3]) },
+      onCreateCanvas: (workspaceId, slug) => created.push([workspaceId, slug]),
+      onUpdateCanvas: (workspaceId, slug, bytes) => updates.push([workspaceId, slug, bytes]),
+      onSetCanvasName: (workspaceId, slug, name) => names.push([workspaceId, slug, name]),
+    })
+    const onOpenCanvas = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={onOpenCanvas} />)
+    const duplicateBtn = await screen.findByRole('button', { name: /duplicate/i })
+    fireEvent.click(duplicateBtn)
+
+    await waitFor(() => {
+      expect(created).toEqual([['ws-a', 'alpha-copy']])
+    })
+    expect(updates).toEqual([['ws-a', 'alpha-copy', new Uint8Array([1, 2, 3])]])
+    expect(names).toEqual([['ws-a', 'alpha-copy', 'Alpha (copy)']])
+    // Clicking the Duplicate action must not also open the source canvas.
+    expect(onOpenCanvas).not.toHaveBeenCalled()
   })
 
   it('creates a canvas via New canvas and opens it', async () => {

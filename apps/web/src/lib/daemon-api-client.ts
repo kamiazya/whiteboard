@@ -172,7 +172,7 @@ export function updateCanvas(
     fetchFn,
     `${daemonBaseUrl}/api/canvas/${encodeURIComponent(workspaceId)}/${encodeURIComponent(slug)}/update`,
     updateCanvasResponseSchema,
-    { method: 'POST', body: snapshot },
+    { method: 'POST', body: snapshot as BodyInit },
   )
 }
 

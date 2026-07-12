@@ -7,9 +7,14 @@ import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import {
   createCanvas,
   createDaemonFetch,
+  getCanvasSnapshot,
   listCanvases,
   listWorkspaces,
+  setCanvasName,
+  updateCanvas,
 } from '../lib/daemon-api-client.js'
+import { deriveCopyName } from '../lib/derive-copy-name.js'
+import { deriveCopySlug } from '../lib/derive-copy-slug.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
 
 // A gallery for a connected daemon, scoped to ONE workspace at a time — the
@@ -107,6 +112,7 @@ export function DaemonIndexPage({
   const [newCanvasSlug, setNewCanvasSlug] = useState('')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -196,6 +202,37 @@ export function DaemonIndexPage({
     }
   }, [daemonFetch, daemonBaseUrl, selectedWorkspace, newCanvasSlug, onOpenCanvas])
 
+  // Client-side copy through EXISTING daemon HTTP endpoints only (read
+  // snapshot -> create canvas -> write snapshot -> rename), matching the
+  // browser-local controller's read-then-write duplicate flow rather than
+  // requiring a dedicated server-side "duplicate" endpoint.
+  const handleDuplicate = useCallback(
+    async (sourceSlug: string) => {
+      if (!selectedWorkspace) return
+      setDuplicateError(null)
+      const sourceRow = rows.find((r) => r.slug === sourceSlug)
+      try {
+        const snapshot = await getCanvasSnapshot(
+          daemonFetch,
+          daemonBaseUrl,
+          selectedWorkspace,
+          sourceSlug,
+        )
+        const existingSlugs = new Set(rows.map((r) => r.slug))
+        const newSlug = deriveCopySlug(sourceSlug, existingSlugs)
+        const created = await createCanvas(daemonFetch, daemonBaseUrl, selectedWorkspace, newSlug)
+        await updateCanvas(daemonFetch, daemonBaseUrl, selectedWorkspace, created.slug, snapshot)
+        const existingNames = new Set(rows.map((r) => r.displayName))
+        const newName = deriveCopyName(sourceRow?.displayName ?? sourceSlug, existingNames)
+        await setCanvasName(daemonFetch, daemonBaseUrl, selectedWorkspace, created.slug, newName)
+        await loadWorkspace(selectedWorkspace, () => false)
+      } catch (err) {
+        setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
+      }
+    },
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, rows, loadWorkspace],
+  )
+
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <div className="flex h-dvh flex-col overflow-y-auto p-4">
@@ -279,6 +316,11 @@ export function DaemonIndexPage({
             {createError}
           </div>
         )}
+        {duplicateError && (
+          <div role="alert" className="mb-2 text-sm text-destructive">
+            {duplicateError}
+          </div>
+        )}
 
         {tab === 'storage' ? (
           <StorageReportCard />
@@ -293,33 +335,54 @@ export function DaemonIndexPage({
             {visible.map((row) => {
               const hasDisplayName = row.displayName !== row.slug
               return (
-                <button
+                <div
                   key={row.slug}
-                  type="button"
                   data-testid="daemon-index-canvas-card"
                   onClick={() => selectedWorkspace && onOpenCanvas(selectedWorkspace, row.slug)}
-                  className="flex flex-col gap-2 rounded-lg border p-2 text-left hover:bg-accent"
+                  className="group relative rounded-lg border hover:bg-accent"
                 >
-                  <CanvasThumb workspaceId={selectedWorkspace ?? ''} slug={row.slug} size="card" />
-                  <div className="min-w-0">
-                    {hasDisplayName && (
-                      <div className="truncate text-sm font-medium">{row.displayName}</div>
-                    )}
-                    <div
-                      data-testid="canvas-slug"
-                      className={
-                        hasDisplayName
-                          ? 'truncate text-xs text-muted-foreground'
-                          : 'truncate text-sm font-medium'
-                      }
-                    >
-                      {row.slug}
+                  <button
+                    type="button"
+                    onClick={() => selectedWorkspace && onOpenCanvas(selectedWorkspace, row.slug)}
+                    className="flex w-full flex-col gap-2 p-2 text-left"
+                  >
+                    <CanvasThumb
+                      workspaceId={selectedWorkspace ?? ''}
+                      slug={row.slug}
+                      size="card"
+                    />
+                    <div className="min-w-0">
+                      {hasDisplayName && (
+                        <div className="truncate text-sm font-medium">{row.displayName}</div>
+                      )}
+                      <div
+                        data-testid="canvas-slug"
+                        className={
+                          hasDisplayName
+                            ? 'truncate text-xs text-muted-foreground'
+                            : 'truncate text-sm font-medium'
+                        }
+                      >
+                        {row.slug}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatRelative(row.updatedAt)}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground">
-                      {formatRelative(row.updatedAt)}
-                    </div>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Duplicate ${hasDisplayName ? row.displayName : row.slug}`}
+                    onClick={(event) => {
+                      // Prevents the click from bubbling to the wrapping open-button.
+                      event.stopPropagation()
+                      void handleDuplicate(row.slug)
+                    }}
+                    className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
+                  >
+                    Duplicate
+                  </button>
+                </div>
               )
             })}
           </div>
