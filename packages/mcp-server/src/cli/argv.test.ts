@@ -142,6 +142,7 @@ describe('parseDaemonRunArgs', () => {
       port: undefined,
       dataDir: undefined,
       tokenStdin: false,
+      noOpen: false,
     })
   })
 
@@ -152,6 +153,7 @@ describe('parseDaemonRunArgs', () => {
       '--port=4000',
       '--data-dir=/tmp/data',
       '--token-stdin',
+      '--no-open',
     ])
     expect(result).toEqual({
       kind: 'ok',
@@ -160,7 +162,14 @@ describe('parseDaemonRunArgs', () => {
       port: 4000,
       dataDir: '/tmp/data',
       tokenStdin: true,
+      noOpen: true,
     })
+  })
+
+  it('returns usage-error when --no-open is duplicated', () => {
+    const result = parseDaemonRunArgs(['--json', '--no-open', '--no-open'])
+    expect(result).toMatchObject({ kind: 'usage-error' })
+    expect((result as { kind: string; message: string }).message).toContain('--no-open')
   })
 
   it('returns usage-error when --json is missing', () => {

@@ -119,6 +119,17 @@ describe('loadConfigFile', () => {
     expect(() => loadConfigFile(dir)).toThrow(/port/)
   })
 
+  it('parses the openBrowser key', () => {
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ openBrowser: false }))
+    const loaded = loadConfigFile(dir)
+    expect(loaded?.config).toEqual({ openBrowser: false })
+  })
+
+  it('fails fast when openBrowser is not a boolean', () => {
+    writeFileSync(join(dir, '.whiteboardrc.json'), JSON.stringify({ openBrowser: 'nope' }))
+    expect(() => loadConfigFile(dir)).toThrow(/openBrowser/)
+  })
+
   it('never includes the token value in a thrown validation message for another key', () => {
     writeFileSync(
       join(dir, '.whiteboardrc.json'),

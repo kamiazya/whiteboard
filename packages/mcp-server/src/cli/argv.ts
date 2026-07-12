@@ -70,7 +70,15 @@ export function parseDaemonSubcommandArgs(
 }
 
 export type DaemonRunArgs =
-  | { kind: 'ok'; json: true; host?: string; port?: number; dataDir?: string; tokenStdin: boolean }
+  | {
+      kind: 'ok'
+      json: true
+      host?: string
+      port?: number
+      dataDir?: string
+      tokenStdin: boolean
+      noOpen: boolean
+    }
   | { kind: 'usage-error'; message: string }
 
 export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
@@ -79,6 +87,7 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
   let port: number | undefined
   let dataDir: string | undefined
   let tokenStdin = false
+  let noOpen = false
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]
@@ -92,6 +101,12 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
     if (arg === '--token-stdin') {
       if (tokenStdin) return { kind: 'usage-error', message: '--token-stdin specified more than once' }
       tokenStdin = true
+      continue
+    }
+
+    if (arg === '--no-open') {
+      if (noOpen) return { kind: 'usage-error', message: '--no-open specified more than once' }
+      noOpen = true
       continue
     }
 
@@ -158,7 +173,7 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
     }
   }
 
-  return { kind: 'ok', json: true, host, port, dataDir, tokenStdin }
+  return { kind: 'ok', json: true, host, port, dataDir, tokenStdin, noOpen }
 }
 
 export type DaemonSupportBundleArgs =

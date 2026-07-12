@@ -15,6 +15,31 @@ Runtime environment variables and sandbox quirks.
 | `MCP_HTTP_DEBUG` | When set to `1`, the HTTP MCP server logs `[mcp-http:init]` / `[mcp-http]` events to help diagnose request flow. | unset |
 | `WHITEBOARD_ALLOWED_WEB_ORIGINS` | Comma-separated list of extra hosted origins admitted alongside the fixed loopback set (`localhost`, `127.0.0.1`, `::1`) on `/api/*` CORS, `/mcp`, and WS upgrade — **local-daemon mode only**. Each entry must be an exact `https://` origin (no path/query/fragment/credentials) **or** a `https://*.example.com` wildcard subdomain pattern (see below); bare `*` is rejected. Matching is case-insensitive on the host and normalizes the default `:443` port, but any other port is significant. An invalid entry aborts daemon startup with a logged error naming the offending entry's index (the raw value is never echoed). Can also be set via a [config file](#config-file-local-daemon)'s `allowedWebOrigins` key; this env var always wins. | unset (loopback-only, unchanged) |
 
+## Auto-opening the browser (`whiteboard daemon run`)
+
+`whiteboard daemon run` opens your default browser at the daemon's own
+origin (`http://127.0.0.1:<port>`) once it is listening — no pairing link
+needed, since the daemon injects the token server-side into the HTML it
+serves (see [Connect to a local daemon](../how-to/connect-to-local-daemon.md)).
+
+This only happens when ALL of the following hold; any one failing suppresses
+it silently (logged at `debug`, never printed to stdout/stderr):
+
+- you did not pass `--no-open` or set `openBrowser: false` in a
+  [config file](#config-file-local-daemon),
+- stdout is an interactive TTY (so scripts, CI runners, and piped output never
+  trigger it),
+- `CI` is not set in the environment,
+- the process is not running inside a container (Docker, Podman, …),
+- the daemon is bound to a loopback host (`127.0.0.1` / `localhost` / `::1` —
+  the only hosts `whiteboard daemon run` accepts in the first place).
+
+Honored on the `whiteboard daemon run` CLI path only — `server/index.ts` (the
+dev-watch entrypoint behind `pnpm mcp:http:dev`) and `whiteboard server run`
+(server-mode) never call this, so repeated `tsx watch` restarts during local
+development do not spawn a new tab per restart, and a server-mode deployment
+never pops a browser on its host.
+
 Setting `WHITEBOARD_ALLOWED_WEB_ORIGINS` only widens which browser *origins*
 the daemon will talk to over CORS/WS — it does not change authentication.
 Mutating `/api/*` routes still require the daemon Bearer token, and `/mcp`
@@ -82,10 +107,11 @@ logLevel: info
 
 Supported keys: `allowedWebOrigins` (string array), `port` (1-65535),
 `token`, `logLevel` (`debug` / `info` / `notice` / `warning` / `error` /
-`critical` / `alert` / `emergency`), and `dataDir`. Unknown keys are logged
-as a warning and dropped rather than silently ignored; an invalid value
-(wrong type, out-of-range port, etc.) aborts startup with an error naming
-the file path and the offending key.
+`critical` / `alert` / `emergency`), `dataDir`, and `openBrowser` (boolean;
+see [Auto-opening the browser](#auto-opening-the-browser-whiteboard-daemon-run)).
+Unknown keys are logged as a warning and dropped rather than silently
+ignored; an invalid value (wrong type, out-of-range port, etc.) aborts
+startup with an error naming the file path and the offending key.
 
 **Precedence: environment variable > config file > built-in default.** Any
 `WHITEBOARD_*` env var that is already set always wins over the same value
@@ -103,6 +129,10 @@ Two scoped exceptions worth knowing:
   import time, before a config file can be loaded, so a `dataDir` key there
   produces a startup warning instead of silently doing nothing — use
   `WHITEBOARD_DATA_DIR` on that entrypoint instead.
+- **`openBrowser`**: also honored on the `whiteboard daemon run` CLI path
+  only, for the same reason `dataDir` is scoped there — see
+  [Auto-opening the browser](#auto-opening-the-browser-whiteboard-daemon-run).
+  An explicit `--no-open` flag always wins over this key.
 
 **Security note:** a `token` value in a config file is a dev-only
 convenience — treat it like a `.env` file with a secret in it (do not commit

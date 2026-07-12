@@ -72,7 +72,14 @@ const SAFE_LOADERS: LoadersSync = {
   '.ts': refuseCodeLoader,
 }
 
-const KNOWN_KEYS = ['allowedWebOrigins', 'port', 'token', 'logLevel', 'dataDir'] as const
+const KNOWN_KEYS = [
+  'allowedWebOrigins',
+  'port',
+  'token',
+  'logLevel',
+  'dataDir',
+  'openBrowser',
+] as const
 type KnownKey = (typeof KNOWN_KEYS)[number]
 
 // token is intentionally a plain string: file-stored tokens are a dev-only
@@ -85,6 +92,9 @@ export const whiteboardConfigFileSchema = z
     token: z.string().optional(),
     logLevel: z.enum(LOG_LEVELS).optional(),
     dataDir: z.string().optional(),
+    // Honored on the `whiteboard daemon run` CLI path only — see
+    // dataDir's comment above for why this entrypoint distinction exists.
+    openBrowser: z.boolean().optional(),
   })
   .strict()
 
