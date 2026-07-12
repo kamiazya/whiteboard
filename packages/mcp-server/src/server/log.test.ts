@@ -147,7 +147,13 @@ describe('redaction', () => {
 
     // stderr destination — assert on the raw NDJSON line, not the parsed
     // record, so redaction is proven before any consumer-side reshaping.
-    const line = String(writeSpy!.mock.calls.at(-1)?.[0])
+    // Assert the spy actually captured this log call first: an unasserted
+    // `undefined` last call would make `String(undefined)` (i.e. the string
+    // "undefined") vacuously pass every `not.toContain(secret)` check below.
+    const lastCall = writeSpy!.mock.calls.at(-1)
+    expect(lastCall).toBeDefined()
+    const line = String(lastCall?.[0])
+    expect(line).toContain('wholesale object logged carelessly')
     for (const value of Object.values(secretFields)) {
       expect(line).not.toContain(value)
     }
@@ -165,7 +171,12 @@ describe('redaction', () => {
     // Non-sensitive sibling field must survive untouched.
     expect((record.data?.client as Record<string, unknown>)?.baseUrl).toBe('http://127.0.0.1:3099')
 
-    const line = String(writeSpy!.mock.calls.at(-1)?.[0])
+    // See the vacuous-pass note above: assert the call happened and carries
+    // the expected message before asserting on its content.
+    const lastCall = writeSpy!.mock.calls.at(-1)
+    expect(lastCall).toBeDefined()
+    const line = String(lastCall?.[0])
+    expect(line).toContain('logged the whole daemon client by mistake')
     expect(line).not.toContain('daemon-secret-token')
   })
 
@@ -180,7 +191,10 @@ describe('redaction', () => {
     expect(serialisedErr.message).toBe('daemon request failed')
     expect(serialisedErr.token).toBe('[redacted]')
 
-    const line = String(writeSpy!.mock.calls.at(-1)?.[0])
+    const lastCall = writeSpy!.mock.calls.at(-1)
+    expect(lastCall).toBeDefined()
+    const line = String(lastCall?.[0])
+    expect(line).toContain('daemon request failed')
     expect(line).not.toContain('daemon-secret-token')
   })
 
