@@ -42,8 +42,12 @@ const renderSpy = vi.fn(async () => ({
   width: 10,
   height: 10,
 }))
+const renderSvgSpy = vi.fn(async () => ({
+  svg: '<svg><rect/></svg>',
+}))
 vi.mock('./headless-renderer.js', () => ({
   renderSceneToPng: renderSpy,
+  renderSceneToSvg: renderSvgSpy,
 }))
 
 // Walk PNG chunks for the integration test below. Mirrors the parser used
@@ -67,7 +71,7 @@ function findTextChunk(png: Buffer): { keyword: string; text: string } | null {
   return null
 }
 
-const { exportCanvasHeadless } = await import('./headless-export.js')
+const { exportCanvasHeadless, exportCanvasHeadlessSvg } = await import('./headless-export.js')
 const { saveCanvas } = await import('../store/canvas-store.js')
 const { clearCache } = await import('../store/doc-cache.js')
 
@@ -75,6 +79,7 @@ beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-headless-export-test-'))
   clearCache()
   renderSpy.mockClear()
+  renderSvgSpy.mockClear()
 })
 
 afterEach(async () => {
@@ -170,5 +175,27 @@ describe('exportCanvasHeadless minFontPx', () => {
       elements: Array<{ id: string; fontSize?: number }>
     }
     expect(scene.elements.find((e) => e.id === 'tiny')?.fontSize).toBe(8)
+  })
+})
+
+describe('exportCanvasHeadlessSvg', () => {
+  it('renders the scene through renderSceneToSvg and returns its markup', async () => {
+    const doc = new LoroDoc()
+    const list = doc.getMovableList('elements')
+    const rect = list.insertContainer(0, new LoroMap())
+    rect.set('id', 'r1')
+    rect.set('type', 'rectangle')
+    rect.set('isDeleted', false)
+    doc.commit()
+    await saveCanvas('ws_svg', 'design', doc)
+
+    const result = await exportCanvasHeadlessSvg({ workspaceId: 'ws_svg', slug: 'design' })
+
+    expect(renderSvgSpy).toHaveBeenCalledTimes(1)
+    expect(result.svg).toBe('<svg><rect/></svg>')
+    const scene = renderSvgSpy.mock.calls[0][0] as {
+      elements: Array<{ id: string }>
+    }
+    expect(scene.elements.map((e) => e.id)).toEqual(['r1'])
   })
 })
