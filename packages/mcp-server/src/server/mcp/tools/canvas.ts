@@ -57,6 +57,26 @@ interface CanvasSummary {
   updatedAt: string
 }
 
+export const canvasCreateInputShape = {
+  slug: z
+    .string()
+    .describe(
+      'URL-safe canvas slug (a-z, 0-9, hyphen). Used as the canvas identifier within the current workspace. Returned canvasId is "{workspaceId}/{slug}".',
+    ),
+  issueNumber: z
+    .number()
+    .optional()
+    .describe(
+      'Optional GitHub issue number prefix. When set, the final slug becomes "{issueNumber}-{slug}" (e.g. issueNumber=42 + slug=login → "42-login").',
+    ),
+  overwrite: z
+    .boolean()
+    .optional()
+    .describe(
+      'When true, replace an existing canvas with the same slug. Default false — existing slug throws ConflictError.',
+    ),
+} satisfies z.ZodRawShape
+
 export function createCanvasTool() {
   return {
     name: 'canvas_create',
@@ -95,6 +115,15 @@ export function createCanvasTool() {
   }
 }
 
+export const canvasListInputShape = {
+  slugContains: z
+    .string()
+    .optional()
+    .describe(
+      'Case-insensitive substring filter on canvas slug. Workspaces with 0 matching canvases are omitted from the output to reduce noise.',
+    ),
+} satisfies z.ZodRawShape
+
 export function listCanvasTool() {
   return {
     name: 'canvas_list',
@@ -125,7 +154,9 @@ export function listCanvasTool() {
           const workspaceId = workspace.workspaceId
           const canvasesRes = await client.request(`/api/workspaces/${workspaceId}/canvases`)
           if (!canvasesRes.ok) {
-            throw new Error(`Failed to list canvases for workspace ${workspaceId}: ${canvasesRes.status}`)
+            throw new Error(
+              `Failed to list canvases for workspace ${workspaceId}: ${canvasesRes.status}`,
+            )
           }
           let canvases = ((await canvasesRes.json()) as { canvases: CanvasSummary[] }).canvases
           if (needle) canvases = canvases.filter((c) => c.slug.toLowerCase().includes(needle))
@@ -148,6 +179,32 @@ export function listCanvasTool() {
     },
   }
 }
+
+export const canvasOpenInputShape = {
+  id: z
+    .string()
+    .describe(
+      'Canvas ID in "{workspaceId}/{slug}" form (returned by canvas_create / canvas_list).',
+    ),
+  fullscreen: z
+    .boolean()
+    .optional()
+    .describe(
+      'Open in fullscreen editing mode (sidebar hidden, Excalidraw fills viewport). User can toggle with sidebar button or "f" / Escape. Default false.',
+    ),
+  waitForClient: z
+    .boolean()
+    .optional()
+    .describe(
+      'Block until the browser establishes a WebSocket connection. Prevents no_client errors when chaining canvas_open → export_png / viewport_set. Default false.',
+    ),
+  waitTimeoutMs: z
+    .number()
+    .optional()
+    .describe(
+      'Polling timeout (ms) for waitForClient. Default 5000. Ignored when waitForClient is false.',
+    ),
+} satisfies z.ZodRawShape
 
 export function openCanvasTool() {
   return {
@@ -235,6 +292,15 @@ export function openCanvasTool() {
 //                      array + aggregated totals
 // Both call into the same server-side compactCanvas() so cut-point semantics
 // (oldest retained version frontiers) and idempotency stay identical.
+export const optimizeCanvasesInputShape = {
+  slug: z
+    .string()
+    .optional()
+    .describe(
+      'Canvas slug to optimize. When omitted, every canvas in the current workspace is compacted in sequence.',
+    ),
+} satisfies z.ZodRawShape
+
 export function optimizeCanvasesTool() {
   return {
     name: 'optimize_canvases',
@@ -277,10 +343,9 @@ export function optimizeCanvasesTool() {
           totalAfterBytes: single.afterBytes,
         }
       }
-      const res = await client.request(
-        `/api/workspaces/${workspaceId}/canvases/optimize-all`,
-        { method: 'POST' },
-      )
+      const res = await client.request(`/api/workspaces/${workspaceId}/canvases/optimize-all`, {
+        method: 'POST',
+      })
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { message?: string } | null
         throw new Error(body?.message ?? `optimize-all failed: ${res.status}`)
