@@ -201,21 +201,21 @@ that render real components against deterministic mocked data and write
 PNGs straight to their final paths.
 
 ```bash
-pnpm --filter @kamiazya/whiteboard-mcp docs:snapshots
+pnpm --filter @kamiazya/whiteboard-web docs:snapshots
 ```
 
-Each `*.docs-snapshot.test.tsx` under
-`packages/mcp-server/src/app/docs-snapshots/` mounts a component, waits
-for the post-fetch render to settle, then calls `page.screenshot({ path:
-… })`. To add a new doc image:
+Each `*.docs-snapshot.test.tsx` under `apps/web/src/docs-snapshots/`
+mounts a canonical apps/web component, waits for the post-fetch render
+to settle, then calls `page.screenshot({ path: … })`. To add a new doc
+image:
 
 1. Drop a new `<name>.docs-snapshot.test.tsx` file under that directory.
 2. Pin the system clock with `vi.setSystemTime(...)` so any "Xd ago"
    labels stay stable across regenerations.
 3. Save to the canonical asset path with
    `resolveDocAssetPath('foo.png')` from `_helpers.ts`.
-4. Run `pnpm docs:snapshots` and commit the resulting PNG alongside the
-   markdown change that references it.
+4. Run `pnpm --filter @kamiazya/whiteboard-web docs:snapshots` and commit
+   the resulting PNG alongside the markdown change that references it.
 
 The project is excluded from the regular `pnpm test` run because it
 writes into the repo. Cross-platform font rendering means snapshots
@@ -223,7 +223,7 @@ generated on Linux CI will not be byte-identical to macOS / Windows
 captures, so for now treat this as a developer-driven workflow:
 regenerate locally, commit.
 
-`pnpm docs:snapshots:check` invokes the generator twice before running
+`pnpm --filter @kamiazya/whiteboard-web docs:snapshots:check` invokes the generator twice before running
 `git diff --exit-code` because Vite's first run after a config change
 can re-optimise dependencies and produce a one-off pixel drift; the
 second run is the stable artifact. If a regeneration leaves
