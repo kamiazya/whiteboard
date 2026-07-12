@@ -1,0 +1,172 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { Hono } from 'hono'
+
+let tempDir: string
+
+vi.mock('../../config.js', () => ({
+  get DATA_DIR() {
+    return tempDir
+  },
+  WHITEBOARD_ROOT: '/tmp/whiteboard',
+  REPO_ROOT: '/tmp',
+}))
+
+const mockExportCanvasHeadlessSvg =
+  vi.fn<
+    (args: {
+      workspaceId: string
+      slug: string
+      options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
+    }) => Promise<{ svg: string }>
+  >()
+vi.mock('../../export/headless-export.js', () => ({
+  exportCanvasHeadlessSvg: (args: {
+    workspaceId: string
+    slug: string
+    options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
+  }) => mockExportCanvasHeadlessSvg(args),
+}))
+
+const { createCanvasSvgExportRouter } = await import('./export-svg.js')
+
+function makeApp() {
+  const app = new Hono()
+  app.route('/', createCanvasSvgExportRouter())
+  return app
+}
+
+describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-svg-test-'))
+    mockExportCanvasHeadlessSvg.mockReset()
+    mockExportCanvasHeadlessSvg.mockResolvedValue({ svg: '<svg><rect/></svg>' })
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('renders headlessly and writes a real .svg file to the default exports dir', async () => {
+    const app = makeApp()
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { filePath: string }
+    expect(body.filePath).toMatch(/canvas-a-.*\.svg$/)
+    expect(mockExportCanvasHeadlessSvg).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 's1', slug: 'canvas-a' }),
+    )
+    const written = await readFile(body.filePath, 'utf-8')
+    expect(written.trim().startsWith('<svg')).toBe(true)
+  })
+
+  it('forwards padding, frameId, and theme to exportCanvasHeadlessSvg', async () => {
+    const app = makeApp()
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(mockExportCanvasHeadlessSvg).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: 's1',
+        slug: 'canvas-a',
+        options: expect.objectContaining({ padding: 24, frameId: 'frame-1', theme: 'dark' }),
+      }),
+    )
+  })
+
+  it('rejects invalid workspaceId or slug with 400', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/canvas/bad.sid/canvas-a/export-svg', { method: 'POST' })
+    expect(res.status).toBe(400)
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
+  })
+
+  it('rejects an invalid theme with 400 invalid_request', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: 'sepia' }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_request' })
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
+  })
+
+  it('writes to an explicit outputPath inside the workspace exports dir', async () => {
+    const app = makeApp()
+    const outputPath = join(tempDir, 's1', 'exports', 'custom.svg')
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath }),
+    })
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { filePath: string }
+    expect(body.filePath).toBe(outputPath)
+  })
+
+  it('rejects an outputPath outside the workspace exports dir with 400 invalid_output_path', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }),
+    })
+    expect(res.status).toBe(400)
+    await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
+  })
+
+  it('refuses to overwrite an existing file by default and returns 409', async () => {
+    const app = makeApp()
+    const outputPath = join(tempDir, 's1', 'exports', 'pre-existing.svg')
+    await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
+    await writeFile(outputPath, '<svg>OLD</svg>')
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath }),
+    })
+    expect(res.status).toBe(409)
+    await expect(res.json()).resolves.toMatchObject({ error: 'output_exists' })
+    await expect(readFile(outputPath, 'utf-8')).resolves.toBe('<svg>OLD</svg>')
+  })
+
+  it('overwrites an existing file when overwrite=true', async () => {
+    const app = makeApp()
+    const outputPath = join(tempDir, 's1', 'exports', 'replace.svg')
+    await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
+    await writeFile(outputPath, '<svg>OLD</svg>')
+
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ outputPath, overwrite: true }),
+    })
+    expect(res.status).toBe(200)
+    await expect(readFile(outputPath, 'utf-8')).resolves.toBe('<svg><rect/></svg>')
+  })
+
+  it('returns 500 headless_export_failed when rendering throws', async () => {
+    mockExportCanvasHeadlessSvg.mockRejectedValue(new Error('boom'))
+    const app = makeApp()
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', { method: 'POST' })
+    expect(res.status).toBe(500)
+    const body = (await res.json()) as { error: string; message: string }
+    expect(body.error).toBe('headless_export_failed')
+    expect(body.message).toBe('boom')
+  })
+})
