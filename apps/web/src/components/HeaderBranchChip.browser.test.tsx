@@ -1,5 +1,5 @@
 import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { UseBranchesResult } from '@/hooks/useBranches'
@@ -300,5 +300,100 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
       into: 'main',
       dryRun: true,
     })
+  })
+
+  it('truncates a long HEAD name in kebab Rename/Delete with a title, like the switch dropdown', async () => {
+    const longName = 'comprehensive-marketing-site-redesign-proposal-v2'
+    const longBranches: BranchMeta[] = [
+      branches[0],
+      { name: longName, tipFrontiers: '', color: '#f97316', createdAt: '2026-04-23T01:00:00Z' },
+    ]
+    stateHolder.current.state = { head: longName, branches: longBranches }
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const kebab = screen.getByTestId('header-branch-kebab')
+    await userEvent.click(kebab)
+
+    const renameItem = await screen.findByText(new RegExp(`Rename.*${longName}`))
+    const renameLabel = renameItem.closest('.truncate') ?? renameItem
+    expect(renameLabel.className).toMatch(/\btruncate\b/)
+    expect(renameLabel.getAttribute('title')).toContain(longName)
+
+    const deleteItem = await screen.findByText(new RegExp(`Delete.*${longName}`))
+    const deleteLabel = deleteItem.closest('.truncate') ?? deleteItem
+    expect(deleteLabel.className).toMatch(/\btruncate\b/)
+    expect(deleteLabel.getAttribute('title')).toContain(longName)
+  })
+
+  it('dismisses the "Variation" hover tooltip the moment the switch-variation dropdown opens', async () => {
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const chip = screen.getByTestId('header-branch-chip')
+
+    // Hover first so the tooltip actually opens (delayDuration is 0). Radix
+    // renders both a visible copy and a visually-hidden accessible copy of
+    // the tooltip text, so assert via role (unique) rather than text.
+    await userEvent.hover(chip)
+    await screen.findByRole('tooltip')
+
+    await userEvent.click(chip)
+
+    // The dropdown opening is itself a press/click interaction on the same
+    // trigger — the tooltip must not still be showing (overlapping the
+    // dropdown) just because the pointer never physically left the chip.
+    await screen.findByText('Switch variation')
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
+  it('does not reopen the tooltip when the dropdown returns focus to the chip on close', async () => {
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const chip = screen.getByTestId('header-branch-chip')
+
+    await userEvent.hover(chip)
+    await screen.findByRole('tooltip')
+    await userEvent.click(chip)
+    const option = await screen.findByText('feature-x')
+    await userEvent.click(option)
+
+    // Radix's dropdown returns focus to its trigger on close for
+    // accessibility; since the same button is also the Tooltip's trigger,
+    // that focus return must not itself reopen the hover tooltip.
+    await waitFor(() => expect(stateHolder.current.setHead).toHaveBeenCalledWith('feature-x'))
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
+  })
+
+  it('does not poison the next genuine hover when the dropdown closes without returning focus to the chip', async () => {
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const chip = screen.getByTestId('header-branch-chip')
+    const kebab = screen.getByTestId('header-branch-kebab')
+
+    // Open the switch-variation dropdown, then click the (separate) kebab
+    // trigger. To the switch-variation dropdown this is an outside
+    // interaction (closing it, since Radix's dismissable layer detects
+    // outside interactions via pointerdown); the kebab's own click handler
+    // then opens ITS OWN dropdown and takes focus — so the chip's dropdown
+    // closes WITHOUT focus ever returning to the chip itself. Dispatch the
+    // full pointerdown -> click sequence directly (bypassing the
+    // actionability retry loop userEvent.click gets stuck in while the
+    // first dropdown's overlay still intercepts pointer events).
+    const clickThrough = (el: Element) => {
+      fireEvent.pointerDown(el)
+      fireEvent.mouseDown(el)
+      fireEvent.pointerUp(el)
+      fireEvent.mouseUp(el)
+      fireEvent.click(el)
+    }
+    await userEvent.click(chip)
+    await screen.findByText('Switch variation')
+    clickThrough(kebab)
+    await waitFor(() => expect(screen.queryByText('Switch variation')).toBeNull())
+    await screen.findByText(/Combine into/)
+    clickThrough(kebab) // close the kebab menu too, leaving focus off the chip
+
+    // A later, entirely genuine hover on the chip must still show the
+    // tooltip — the earlier close must not have permanently suppressed it.
+    // (A brief pause first — a real user's next hover is never literally
+    // the very next microtask after clicking elsewhere.)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    await userEvent.hover(chip)
+    await screen.findByRole('tooltip')
   })
 })
