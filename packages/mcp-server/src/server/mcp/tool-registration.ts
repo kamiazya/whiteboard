@@ -448,9 +448,9 @@ export function registerAllTools(
       description: exportJsonTool.description,
       inputSchema: canvasExportJsonInputShape,
       outputSchema: canvasExportJsonOutputSchema,
-      handler: async ({ canvasId, includeCustomFields }) => {
+      handler: async ({ canvasId, includeCustomFields, outputPath, overwrite }) => {
         const result = await withDaemon((client) =>
-          exportJsonTool.execute({ canvasId, includeCustomFields }, client),
+          exportJsonTool.execute({ canvasId, includeCustomFields, outputPath, overwrite }, client),
         )
         return structuredJsonResult(result)
       },

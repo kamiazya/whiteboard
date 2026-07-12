@@ -173,35 +173,58 @@ function buildArrowObstacles(
 }
 
 export const canvasAutoLayoutInputShape = {
-  canvasId: z.string(),
-  direction: z.enum(['TB', 'LR']).optional(),
-  layerGap: z.number().optional(),
-  nodeGap: z.number().optional(),
+  canvasId: z.string().describe('Canvas ID (workspaceId/slug)'),
+  direction: z
+    .enum(['TB', 'LR'])
+    .optional()
+    .describe('Layout direction. Default: TB (top-to-bottom).'),
+  layerGap: z.number().optional().describe('Gap between layers / ranks in pixels. Default: 80.'),
+  nodeGap: z.number().optional().describe('Gap between nodes within the same layer. Default: 40.'),
   origin: z
     .object({
       x: z.number(),
       y: z.number(),
     })
-    .optional(),
+    .optional()
+    .describe('Top-left of the laid-out diagram. Default: {x:40, y:40}.'),
   pins: z
     .array(
       z.object({
-        id: z.string(),
-        rank: z.number().optional(),
-        anchor: z.enum(['left', 'right', 'top', 'bottom', 'center']).optional(),
-        column: z.number().optional(),
+        id: z.string().describe('Element id (rectangle) to pin'),
+        rank: z.number().optional().describe('Explicit rank (0 = first layer)'),
+        anchor: z
+          .enum(['left', 'right', 'top', 'bottom', 'center'])
+          .optional()
+          .describe(
+            'Rank shortcut instead of an explicit rank number. "left"/"top" = rank 0, "right"/"bottom" = max rank, "center" = middle rank.',
+          ),
+        column: z
+          .number()
+          .optional()
+          .describe(
+            'Order within the same rank (0 = leftmost / topmost cross-axis slot). Nodes without column land after pinned nodes in original order.',
+          ),
       }),
     )
-    .optional(),
+    .optional()
+    .describe(
+      'Pin specific element ids to fixed ranks/columns. rank/anchor control the layer axis (y for TB, x for LR); column controls the cross axis (horizontal slot within a rank). Use column for 2D layouts like "orders column vs payments column stacked under a common client". anchor "left"/"top" = rank 0, "right"/"bottom" = max rank, "center" = middle rank.',
+    ),
   groups: z
     .array(
       z.object({
-        id: z.string(),
-        elementIds: z.array(z.string()),
+        id: z.string().describe('Group id (used for ordering and debug)'),
+        elementIds: z.array(z.string()).describe('Rect element ids that belong to this group.'),
       }),
     )
-    .optional(),
-  groupGap: z.number().optional(),
+    .optional()
+    .describe(
+      'Partition elements into subgraphs that lay out independently. Each group computes its own rank / column, and groups are placed side-by-side on the cross axis (x for TB, y for LR). Use for "two parallel service columns under a shared client" diagrams where a global BFS would collapse them into one column.',
+    ),
+  groupGap: z
+    .number()
+    .optional()
+    .describe('Gap between groups on the cross axis (default 80). Only used when groups is set.'),
 } satisfies z.ZodRawShape
 
 export function canvasAutoLayoutTool() {
@@ -209,78 +232,12 @@ export function canvasAutoLayoutTool() {
     name: 'canvas_auto_layout',
     description:
       'Re-layout the canvas as a hierarchical directed graph. Rectangles become nodes, arrows become edges, and positions are recomputed so the diagram reads in the chosen direction (TB = top-to-bottom, default; LR = left-to-right). Bound labels (containerId) move with their rectangles. Elements that are not rectangles or that are disconnected land in layer 0.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        direction: {
-          type: 'string',
-          enum: ['TB', 'LR'],
-          description: 'Layout direction. Default: TB (top-to-bottom).',
-        },
-        layerGap: {
-          type: 'number',
-          description: 'Gap between layers / ranks in pixels. Default: 80.',
-        },
-        nodeGap: {
-          type: 'number',
-          description: 'Gap between nodes within the same layer. Default: 40.',
-        },
-        origin: {
-          type: 'object',
-          description: 'Top-left of the laid-out diagram. Default: {x:40, y:40}.',
-          properties: {
-            x: { type: 'number' },
-            y: { type: 'number' },
-          },
-          required: ['x', 'y'],
-        },
-        pins: {
-          type: 'array',
-          description:
-            'Pin specific element ids to fixed ranks/columns. rank/anchor control the layer axis (y for TB, x for LR); column controls the cross axis (horizontal slot within a rank). Use column for 2D layouts like "orders column vs payments column stacked under a common client". anchor "left"/"top" = rank 0, "right"/"bottom" = max rank, "center" = middle rank.',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', description: 'Element id (rectangle) to pin' },
-              rank: { type: 'number', description: 'Explicit rank (0 = first layer)' },
-              anchor: {
-                type: 'string',
-                enum: ['left', 'right', 'top', 'bottom', 'center'],
-              },
-              column: {
-                type: 'number',
-                description:
-                  'Order within the same rank (0 = leftmost / topmost cross-axis slot). Nodes without column land after pinned nodes in original order.',
-              },
-            },
-            required: ['id'],
-          },
-        },
-        groups: {
-          type: 'array',
-          description:
-            'Partition elements into subgraphs that lay out independently. Each group computes its own rank / column, and groups are placed side-by-side on the cross axis (x for TB, y for LR). Use for "two parallel service columns under a shared client" diagrams where a global BFS would collapse them into one column.',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', description: 'Group id (used for ordering and debug)' },
-              elementIds: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Rect element ids that belong to this group.',
-              },
-            },
-            required: ['id', 'elementIds'],
-          },
-        },
-        groupGap: {
-          type: 'number',
-          description:
-            'Gap between groups on the cross axis (default 80). Only used when groups is set.',
-        },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(canvasAutoLayoutInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {

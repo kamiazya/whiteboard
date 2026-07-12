@@ -44,44 +44,12 @@ export function viewportSetTool() {
     name: 'viewport_set',
     description:
       'Pan/zoom the browser canvas to focus attention. Use mode="fit" to frame specific elements (or all elements when elementIds is omitted), or mode="move" to set scrollX/scrollY/zoom directly. Requires an open browser client — call canvas_open first.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID (workspaceId/slug)' },
-        mode: {
-          type: 'string',
-          enum: ['fit', 'move'],
-          description:
-            'Viewport update mode. Default: "fit". "fit" frames elementIds (or all elements). "move" sets scrollX/scrollY/zoom directly.',
-        },
-        elementIds: {
-          type: 'array',
-          items: { type: 'string' },
-          description: '(mode="fit") Element IDs to frame. Omit to fit all elements in the scene.',
-        },
-        padding: {
-          type: 'number',
-          description: '(mode="fit") Extra padding in viewport pixels around the framed bounds.',
-        },
-        animate: {
-          type: 'boolean',
-          description:
-            'Whether to animate the viewport transition. Default: true. Set false for instant snaps.',
-        },
-        scrollX: {
-          type: 'number',
-          description: '(mode="move") Target scrollX in scene coordinates.',
-        },
-        scrollY: {
-          type: 'number',
-          description: '(mode="move") Target scrollY in scene coordinates.',
-        },
-        zoom: {
-          type: 'number',
-          description: '(mode="move") Target zoom level (e.g. 1 = 100%, 2 = 200%).',
-        },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(viewportSetInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: {

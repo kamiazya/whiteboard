@@ -868,5 +868,35 @@ describe('annotate_batch', () => {
         },
       ])
     })
+
+    it('applies per-item groupAs in addition to the batch-level groupAs', async () => {
+      const { annotateBatchTool } = await import('./annotate-batch.js')
+      const tool = annotateBatchTool()
+      const res = await tool.execute(
+        {
+          canvasId: 'sid/slug',
+          groupAs: 'plan-a-row',
+          annotations: [
+            {
+              type: 'rectangle',
+              target: { x: 0, y: 0 },
+              coords: 'absolute',
+              groupAs: 'selected-option',
+            },
+            { type: 'text', target: { x: 0, y: 100 }, coords: 'absolute', text: 'Option A' },
+          ],
+        } as never,
+        client,
+      )
+      const updateDoc = new LoroDoc()
+      updateDoc.import(postedUpdate!)
+      const groups = listGroups(updateDoc)
+      // Every element belongs to the shared batch group ...
+      expect(groups.find((g) => g.groupId === 'plan-a-row')?.memberIds).toEqual(res.elementIds)
+      // ... and only the first item's element additionally belongs to its own sub-group.
+      expect(groups.find((g) => g.groupId === 'selected-option')?.memberIds).toEqual([
+        res.elementIds[0],
+      ])
+    })
   })
 })

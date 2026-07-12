@@ -63,17 +63,12 @@ export function versionSaveTool() {
     name: 'version_save',
     description:
       'Save a labeled version of the canvas state. Returns versionId for later restore. Versions are slug-scoped (canvas-local) and auto-pruned per-canvas, replacing the prior checkpoint flow.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID in "{workspaceId}/{slug}" form.' },
-        label: {
-          type: 'string',
-          description:
-            'Optional human-readable label (shown in the History panel). When omitted, the version is saved without a label and counts toward the auto-version pool.',
-        },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(versionSaveInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: VersionSaveArgs,
@@ -126,29 +121,12 @@ export function versionRestoreTool() {
     name: 'version_restore',
     description:
       'Restore a saved version. Default = in-place reconcile against the source canvas. Pass targetSlug to instead write the past doc as a brand-new canvas in the same workspace (replaces the deleted checkpoint_restore flow).',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: {
-          type: 'string',
-          description: 'Source canvas ID in "{workspaceId}/{slug}" form.',
-        },
-        versionId: {
-          type: 'string',
-          description: 'Version id returned from version_save or listed via the History panel.',
-        },
-        targetSlug: {
-          type: 'string',
-          description:
-            'When set, restore as a new canvas under this slug in the same workspace instead of reconciling in place. The original canvas is left untouched.',
-        },
-        overwrite: {
-          type: 'boolean',
-          description:
-            'Only used with targetSlug. When true, replace an existing canvas at targetSlug. Default false — an existing target slug fails with output_exists.',
-        },
-      },
-      required: ['canvasId', 'versionId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(versionRestoreInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: VersionRestoreArgs,
@@ -194,12 +172,12 @@ export function versionListTool() {
     name: 'version_list',
     description:
       'List saved versions for a canvas (most recent first). Combine with version_restore to replay a specific labeled snapshot.',
-    inputSchema: {
-      type: 'object' as const,
-      properties: {
-        canvasId: { type: 'string', description: 'Canvas ID in "{workspaceId}/{slug}" form.' },
-      },
-      required: ['canvasId'],
+    // Derived from the Zod shape so the JSON-Schema view can never drift from
+    // what registerToolWithAnnotations actually validates against.
+    inputSchema: z.toJSONSchema(z.object(versionListInputShape)) as {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
     },
     execute: async (
       args: VersionListArgs,
