@@ -4,7 +4,7 @@
   "description": "Claude Code and Codex plugin wrapper surfaces for the whiteboard MCP server and shared skills.",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.12.0",
+  "packageManager": "pnpm@11.11.0",
   "repository": {
     "type": "git",
     "url": "https://github.com/kamiazya/whiteboard.git"

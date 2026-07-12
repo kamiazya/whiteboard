@@ -1,0 +1,30 @@
+name: Setup Node and pnpm
+description: >-
+  Install the packageManager-pinned pnpm via pnpm/action-setup, then Node with
+  pnpm store caching. Centralizes pnpm setup so a pnpm/tooling version bump
+  only needs to land here once instead of at every workflow call site.
+
+inputs:
+  node-version:
+    description: >-
+      Node version to install. Overrides node-version-file when set — used by
+      the publish-mcp release job, which checks out an old tag whose tree may
+      predate .node-version and must pin Node inline instead.
+    required: false
+    default: ''
+  registry-url:
+    description: npm registry URL to configure (passed through to actions/setup-node).
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+    - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        node-version-file: ${{ inputs.node-version == '' && '.node-version' || '' }}
+        registry-url: ${{ inputs.registry-url }}
+        cache: pnpm
