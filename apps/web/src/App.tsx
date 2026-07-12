@@ -193,7 +193,14 @@ export function App({ providerState }: AppProps) {
       return
     }
     const parsed = parseDaemonRoute(location.pathname)
-    if (parsed !== null) setDaemonView(parsed)
+    if (parsed === null) return
+    // parseDaemonRoute returns a fresh object every time, and React compares
+    // state by reference — so re-set only when the route actually differs,
+    // otherwise a back/forward landing on the current view re-renders for
+    // nothing.
+    setDaemonView((current) =>
+      daemonRoutePath(current) === daemonRoutePath(parsed) ? current : parsed,
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname])
 

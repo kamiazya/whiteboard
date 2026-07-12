@@ -36,20 +36,32 @@ export type DaemonRoute =
 export function parseDaemonRoute(pathname: string): DaemonRoute | null {
   const canvasMatch = pathname.match(/^\/canvas\/([^/]+)\/([^/]+)\/?$/)
   if (canvasMatch) {
-    return {
-      kind: 'canvas',
-      workspaceId: decodeURIComponent(canvasMatch[1]),
-      slug: decodeURIComponent(canvasMatch[2]),
-    }
+    const workspaceId = decodeSegment(canvasMatch[1])
+    const slug = decodeSegment(canvasMatch[2])
+    if (workspaceId === null || slug === null) return null
+    return { kind: 'canvas', workspaceId, slug }
   }
   const workspaceMatch = pathname.match(/^\/w\/([^/]+)\/?$/)
   if (workspaceMatch) {
-    return { kind: 'index', workspaceId: decodeURIComponent(workspaceMatch[1]) }
+    const workspaceId = decodeSegment(workspaceMatch[1])
+    return workspaceId === null ? null : { kind: 'index', workspaceId }
   }
   if (pathname === '/' || pathname === '') {
     return { kind: 'index' }
   }
   return null
+}
+
+// decodeURIComponent throws URIError on a malformed percent sequence
+// (`/canvas/w%1/main`). These parsers run inside render-phase lazy
+// initializers, so a throw here takes down the whole app; an unparseable URL
+// is a not-a-route, not a crash.
+function decodeSegment(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return null
+  }
 }
 
 // Inverse of parseDaemonRoute — the single place that turns a DaemonView
@@ -62,5 +74,7 @@ export function daemonRoutePath(route: DaemonRoute): string {
 
 export function parseBrowserLocalRoute(pathname: string): { canvasId: string } | null {
   const match = pathname.match(/^\/local\/([^/]+)\/?$/)
-  return match ? { canvasId: decodeURIComponent(match[1]) } : null
+  if (!match) return null
+  const canvasId = decodeSegment(match[1])
+  return canvasId === null ? null : { canvasId }
 }

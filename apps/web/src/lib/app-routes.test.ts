@@ -97,3 +97,15 @@ describe('parseBrowserLocalRoute', () => {
     expect(parseBrowserLocalRoute('/canvas/w1/main')).toBeNull()
   })
 })
+
+// Both parsers run inside render-phase lazy initializers, so a URIError from a
+// malformed percent sequence would crash the app rather than fall back to the
+// index.
+describe('malformed percent-encoding', () => {
+  it('treats an undecodable segment as not-a-route instead of throwing', () => {
+    expect(parseDaemonRoute('/canvas/w%1/main')).toBeNull()
+    expect(parseDaemonRoute('/canvas/w1/ma%in')).toBeNull()
+    expect(parseDaemonRoute('/w/%E0%A4%A')).toBeNull()
+    expect(parseBrowserLocalRoute('/local/%zz')).toBeNull()
+  })
+})
