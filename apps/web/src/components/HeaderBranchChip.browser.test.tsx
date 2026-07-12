@@ -1,5 +1,5 @@
 import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { UseBranchesResult } from '@/hooks/useBranches'
@@ -322,5 +322,41 @@ describe('HeaderBranchChip (browser — real Radix dropdown/dialog interaction)'
     const deleteLabel = deleteItem.closest('.truncate') ?? deleteItem
     expect(deleteLabel.className).toMatch(/\btruncate\b/)
     expect(deleteLabel.getAttribute('title')).toContain(longName)
+  })
+
+  it('dismisses the "Variation" hover tooltip the moment the switch-variation dropdown opens', async () => {
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const chip = screen.getByTestId('header-branch-chip')
+
+    // Hover first so the tooltip actually opens (delayDuration is 0). Radix
+    // renders both a visible copy and a visually-hidden accessible copy of
+    // the tooltip text, so assert via role (unique) rather than text.
+    await userEvent.hover(chip)
+    await screen.findByRole('tooltip')
+
+    await userEvent.click(chip)
+
+    // The dropdown opening is itself a press/click interaction on the same
+    // trigger — the tooltip must not still be showing (overlapping the
+    // dropdown) just because the pointer never physically left the chip.
+    await screen.findByText('Switch variation')
+    expect(screen.queryByRole('tooltip')).toBeNull()
+  })
+
+  it('does not reopen the tooltip when the dropdown returns focus to the chip on close', async () => {
+    render(<HeaderBranchChip workspaceId="s1" slug="c1" />)
+    const chip = screen.getByTestId('header-branch-chip')
+
+    await userEvent.hover(chip)
+    await screen.findByRole('tooltip')
+    await userEvent.click(chip)
+    const option = await screen.findByText('feature-x')
+    await userEvent.click(option)
+
+    // Radix's dropdown returns focus to its trigger on close for
+    // accessibility; since the same button is also the Tooltip's trigger,
+    // that focus return must not itself reopen the hover tooltip.
+    await waitFor(() => expect(stateHolder.current.setHead).toHaveBeenCalledWith('feature-x'))
+    await waitFor(() => expect(screen.queryByRole('tooltip')).toBeNull())
   })
 })

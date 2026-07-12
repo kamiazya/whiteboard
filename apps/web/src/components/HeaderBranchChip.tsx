@@ -210,6 +210,21 @@ export function HeaderBranchChip({
 
   const chipColor = activeBranch?.color ?? '#64748b'
 
+  // The chip is both a TooltipTrigger and (nested) a DropdownMenuTrigger, so
+  // a hover-opened "Variation" tooltip has no reason on its own to close
+  // when the dropdown opens — the pointer never actually leaves the chip.
+  // Controlling Tooltip's open state (a standard Radix prop) lets the
+  // dropdown's own onOpenChange force it closed instead of leaving it to
+  // linger until a later hover-out.
+  const [chipTooltipOpen, setChipTooltipOpen] = useState(false)
+  // Radix also returns focus to a DropdownMenuTrigger when its menu closes
+  // (an accessibility default), and that focus event, on the same element
+  // also acting as the Tooltip's trigger, reopens the tooltip on its own —
+  // undoing the close above a moment later. Swallow exactly the next
+  // focus-driven open request after a close so it doesn't fight Radix's own
+  // return-focus behavior; real hover-driven opens are unaffected.
+  const suppressNextTooltipOpenRef = useRef(false)
+
   // Radix marks background content inert/aria-hidden while a dropdown or
   // dialog is open, so an error raised inside one of those flows must render
   // *inside* the still-open surface to stay visible and announced — a copy
@@ -239,6 +254,11 @@ export function HeaderBranchChip({
       {/* Main chip: branch switching and creation live in this dropdown. */}
       <DropdownMenu
         onOpenChange={(open) => {
+          // Opening OR closing the dropdown both mean the hover tooltip is
+          // stale: either the chip just got clicked (open), or a selection
+          // just closed the menu with the pointer still resting near the
+          // chip (close).
+          setChipTooltipOpen(false)
           if (open) {
             // A stale error from the previous interaction shouldn't greet
             // the user when they re-open the menu.
@@ -246,10 +266,20 @@ export function HeaderBranchChip({
           } else {
             setCreateOpen(false)
             setNewName('')
+            suppressNextTooltipOpenRef.current = true
           }
         }}
       >
-        <Tooltip>
+        <Tooltip
+          open={chipTooltipOpen}
+          onOpenChange={(next) => {
+            if (next && suppressNextTooltipOpenRef.current) {
+              suppressNextTooltipOpenRef.current = false
+              return
+            }
+            setChipTooltipOpen(next)
+          }}
+        >
           <TooltipTrigger asChild>
             <DropdownMenuTrigger asChild>
               <button
