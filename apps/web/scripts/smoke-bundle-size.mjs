@@ -41,17 +41,16 @@ const BUDGETS = [
   },
 ]
 
-// Regression stop at today's measured critical-path size (~119 KB) after
-// Stage 2 of tmp/issues/apps-web-entry-bundle-over-budget.md's plan:
-// React.lazy on both canvas pages (BrowserLocalCanvasPage and the earlier
-// DaemonCanvasPage) keeps Excalidraw's ~400 KB out of the initial paint
-// entirely. vendor-loro-crdt (~23 KB) still ships eagerly — some module in
-// App.tsx's static import graph reaches it, and vite-plugin-top-level-await
-// propagates a synchronous import for any TLA-using chunk up to whichever
-// entry point reaches it, even through code that itself only calls into
-// loro-crdt from a lazy branch. ~10% headroom over the measured number, not
-// the aspirational floor.
-const CRITICAL_PATH_BUDGET_KB = 135
+// Regression stop at today's measured critical-path size (~97.7 KB) after
+// Stage 2 of tmp/issues/apps-web-entry-bundle-over-budget.md's plan
+// (React.lazy on both canvas pages keeps Excalidraw's ~400 KB out of the
+// initial paint) plus dropping vendor-loro-crdt's own manualChunks bucket
+// (tmp/issues/vendor-loro-eager-modulepreload.md): that bucket had been
+// accidentally co-locating vite's shared dynamic-import helper with loro's
+// WASM bindings, forcing the entry to eagerly load ~23 KB it never uses on
+// the critical path. ~10% headroom over the measured number, not the
+// aspirational floor.
+const CRITICAL_PATH_BUDGET_KB = 108
 
 let failures = 0
 

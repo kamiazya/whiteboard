@@ -119,4 +119,36 @@ describe('multi-canvas foundation (browser — real IndexedDB)', () => {
     expect(result.current.snapshot?.id).toBe(idA)
     expect(await store.getDefaultCanvasId()).toBe(idA)
   })
+
+  it('duplicateCanvas deep-copies the real IndexedDB-backed Loro doc: later edits to the source never appear in the copy', async () => {
+    const store = new IndexedDBStore()
+    const loro = new LoroStore()
+    const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+    await waitFor(() => expect(result.current.snapshot).not.toBeNull())
+    const sourceId = result.current.snapshot!.id
+    await loro.save(sourceId, snapshotWithElements([{ id: 'original-element' }]))
+
+    let duplicated: Awaited<ReturnType<typeof result.current.duplicateCanvas>> | undefined
+    await act(async () => {
+      duplicated = await result.current.duplicateCanvas()
+    })
+    expect(duplicated?.id).not.toBe(sourceId)
+    expect(result.current.snapshot?.id).toBe(duplicated?.id)
+
+    // Edit the SOURCE canvas's real IndexedDB record after duplicating.
+    const loadedSource = await loro.load(sourceId)
+    expect(loadedSource.kind).toBe('ok')
+    if (loadedSource.kind !== 'ok') return
+    const sourceDoc = new Loro()
+    sourceDoc.import(loadedSource.snapshot)
+    sourceDoc.getList('elements').push({ id: 'added-after-duplicate' })
+    await loro.save(sourceId, sourceDoc.export({ mode: 'snapshot' }))
+
+    const loadedCopy = await loro.load(duplicated!.id)
+    expect(loadedCopy.kind).toBe('ok')
+    if (loadedCopy.kind !== 'ok') return
+    const copyDoc = new Loro()
+    copyDoc.import(loadedCopy.snapshot)
+    expect(copyDoc.getList('elements').toJSON()).toEqual([{ id: 'original-element' }])
+  })
 })

@@ -1,7 +1,9 @@
 import { act, renderHook } from '@testing-library/react'
+import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
+import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import {
   type LoroStoreLike,
@@ -11,10 +13,12 @@ import {
 class FakeLoroStore implements LoroStoreLike {
   saved: Array<{ id: string; bytes: Uint8Array }> = []
   shouldThrow = false
+  private byId = new Map<string, Uint8Array>()
 
   async save(id: string, bytes: Uint8Array): Promise<void> {
     if (this.shouldThrow) throw new Error('loro save failed')
     this.saved.push({ id, bytes })
+    this.byId.set(id, bytes)
   }
 
   createEmptySnapshot(): Uint8Array {
@@ -22,6 +26,22 @@ class FakeLoroStore implements LoroStoreLike {
     // the isolation LoroStoreLike is meant to provide to this test file.
     return new Uint8Array([1, 2, 3])
   }
+
+  async load(id: string): Promise<LoroLoadResult> {
+    const bytes = this.byId.get(id)
+    if (bytes === undefined) return { kind: 'not-found' }
+    return { kind: 'ok', snapshot: bytes }
+  }
+}
+
+// duplicateCanvas runs the real loro-crdt merge/export (mergeToSnapshot),
+// so its tests need real Loro bytes rather than the fake's placeholder
+// `[1, 2, 3]` — that would throw when mergeToSnapshot tries to import it.
+function realSnapshotWithElements(elements: unknown[]): Uint8Array {
+  const doc = new Loro()
+  const list = doc.getList('elements')
+  for (const el of elements) list.push(el)
+  return doc.export({ mode: 'snapshot' })
 }
 
 const snap: CanvasSnapshot = {
@@ -860,6 +880,136 @@ describe('useBrowserLocalCanvasController', () => {
         kind: 'ok',
         snapshot: { ...snap, name: 'Second rename', updatedAt: expect.any(String) },
       })
+    })
+  })
+
+  describe('duplicateCanvas', () => {
+    it('creates a new canvas named "<name> (copy)", copies the Loro bytes, and switches to it', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      await loro.save('c1', realSnapshotWithElements([{ id: 'rect-1' }]))
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let duplicated: CanvasSnapshot | undefined
+      await act(async () => {
+        duplicated = await result.current.duplicateCanvas()
+      })
+
+      expect(duplicated?.name).toBe('untitled (copy)')
+      expect(duplicated?.id).not.toBe('c1')
+      // switched to the duplicate
+      expect(result.current.snapshot?.id).toBe(duplicated?.id)
+      expect(await store.getDefaultCanvasId()).toBe(duplicated?.id)
+
+      const copiedLoro = await loro.load(duplicated!.id)
+      expect(copiedLoro.kind).toBe('ok')
+      if (copiedLoro.kind === 'ok') {
+        const doc = new Loro()
+        doc.import(copiedLoro.snapshot)
+        expect(doc.getList('elements').toJSON()).toEqual([{ id: 'rect-1' }])
+      }
+    })
+
+    it('increments the numeric suffix when "(copy)" is already taken', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      await store.save({ id: 'existing-copy', name: 'untitled (copy)', updatedAt: snap.updatedAt })
+      const loro = new FakeLoroStore()
+      await loro.save('c1', realSnapshotWithElements([]))
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let duplicated: CanvasSnapshot | undefined
+      await act(async () => {
+        duplicated = await result.current.duplicateCanvas()
+      })
+
+      expect(duplicated?.name).toBe('untitled (copy 2)')
+    })
+
+    it('flushes a pending rename before duplicating, so the copy is named from the latest title', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      await loro.save('c1', realSnapshotWithElements([]))
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      act(() => {
+        result.current.renameCanvas('Renamed before duplicate')
+      })
+
+      let duplicated: CanvasSnapshot | undefined
+      await act(async () => {
+        duplicated = await result.current.duplicateCanvas()
+      })
+
+      expect(duplicated?.name).toBe('Renamed before duplicate (copy)')
+    })
+
+    it('rolls back the metadata row when the Loro write fails', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      await loro.save('c1', realSnapshotWithElements([]))
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      loro.shouldThrow = true
+      let thrown: unknown
+      await act(async () => {
+        try {
+          await result.current.duplicateCanvas()
+        } catch (err) {
+          thrown = err
+        }
+      })
+      expect(thrown).toBeDefined()
+
+      const list = await store.listCanvases()
+      expect(list).toHaveLength(1)
+      expect(list[0].id).toBe('c1')
+      // Never switched away from the source canvas on failure.
+      expect(result.current.snapshot?.id).toBe('c1')
+    })
+
+    it('duplicating twice never mutates the original: editing the source after duplicating leaves the copy unchanged', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      const loro = new FakeLoroStore()
+      await loro.save('c1', realSnapshotWithElements([{ id: 'original-element' }]))
+      const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
+      await act(async () => {})
+
+      let duplicated: CanvasSnapshot | undefined
+      await act(async () => {
+        duplicated = await result.current.duplicateCanvas()
+      })
+
+      // Edit the ORIGINAL's stored Loro bytes directly (simulating further
+      // edits to the source canvas after duplicating) and confirm the
+      // duplicate's already-copied bytes are untouched.
+      const loadedOriginal = await loro.load('c1')
+      if (loadedOriginal.kind !== 'ok') throw new Error('unexpected load failure')
+      const originalDoc = new Loro()
+      originalDoc.import(loadedOriginal.snapshot)
+      originalDoc.getList('elements').push({ id: 'added-after-duplicate' })
+      await loro.save('c1', originalDoc.export({ mode: 'snapshot' }))
+
+      const copiedLoro = await loro.load(duplicated!.id)
+      expect(copiedLoro.kind).toBe('ok')
+      if (copiedLoro.kind === 'ok') {
+        const doc = new Loro()
+        doc.import(copiedLoro.snapshot)
+        expect(doc.getList('elements').toJSON()).toEqual([{ id: 'original-element' }])
+      }
     })
   })
 })

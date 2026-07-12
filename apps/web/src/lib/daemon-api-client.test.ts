@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createCanvas,
   createDaemonFetch,
+  getCanvasSnapshot,
   listCanvases,
   listWorkspaces,
+  setCanvasName,
+  updateCanvas,
 } from './daemon-api-client.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
@@ -168,5 +171,68 @@ describe('createCanvas', () => {
   it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Conflict' }, 409))
     await expect(createCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'x')).rejects.toThrow(/conflict/i)
+  })
+})
+
+describe('getCanvasSnapshot', () => {
+  it('returns the raw octet-stream body as a Uint8Array', async () => {
+    const bytes = new Uint8Array([1, 2, 3, 4])
+    const fetchFn = vi.fn().mockResolvedValue(
+      new Response(bytes, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      }),
+    )
+    const result = await getCanvasSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')
+    expect(new Uint8Array(result)).toEqual(bytes)
+    expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/canvas/w1/main/snapshot`)
+  })
+
+  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Not found' }, 404))
+    await expect(getCanvasSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')).rejects.toThrow(
+      /not found/i,
+    )
+  })
+})
+
+describe('updateCanvas', () => {
+  it('POSTs the snapshot bytes as the request body', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    const bytes = new Uint8Array([9, 9, 9])
+    const result = await updateCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'main', bytes)
+    expect(result).toEqual({ ok: true })
+    const [urlArg, initArg] = fetchFn.mock.calls[0]
+    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/canvas/w1/main/update`)
+    expect(initArg?.method).toBe('POST')
+    expect(initArg?.body).toBe(bytes)
+  })
+
+  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Server error' }, 500))
+    await expect(
+      updateCanvas(fetchFn, DAEMON_BASE_URL, 'w1', 'main', new Uint8Array()),
+    ).rejects.toThrow(/server error/i)
+  })
+})
+
+describe('setCanvasName', () => {
+  it('PUTs the name and parses the returned WorkspaceNames payload', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ canvases: { main: 'My canvas' }, pinned: [] }))
+    const result = await setCanvasName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'My canvas')
+    expect(result).toEqual({ canvases: { main: 'My canvas' }, pinned: [] })
+    const [urlArg, initArg] = fetchFn.mock.calls[0]
+    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/canvases/main/name`)
+    expect(initArg?.method).toBe('PUT')
+    expect(JSON.parse(String(initArg?.body))).toEqual({ name: 'My canvas' })
+  })
+
+  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Bad request' }, 400))
+    await expect(setCanvasName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'x')).rejects.toThrow(
+      /bad request/i,
+    )
   })
 })
