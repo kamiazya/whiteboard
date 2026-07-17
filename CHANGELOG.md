@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.0.16](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.15...whiteboard-plugin-v0.0.16) (2026-07-17)
+
+
+### Features
+
+* **mcp-server:** derive per-worktree dev daemon ports and guard daemon identity ([#246](https://github.com/kamiazya/whiteboard/issues/246)) ([90ea8c9](https://github.com/kamiazya/whiteboard/commit/90ea8c92a1b90cae13e3d419c201b214134d2c0b))
+
+
+### Bug Fixes
+
+* **mcp-server:** exempt the legitimate storage.dataDir value from the backup-restore smoke leak check ([#247](https://github.com/kamiazya/whiteboard/issues/247)) ([713ecf9](https://github.com/kamiazya/whiteboard/commit/713ecf91e7178e0527fd48696dfb4dc99a50a7de))
+
 ## [0.0.15](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.14...whiteboard-plugin-v0.0.15) (2026-07-17)
 
 
