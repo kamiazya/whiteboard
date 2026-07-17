@@ -170,6 +170,41 @@ function runCli(args, { env } = {}) {
   })
 }
 
+// Async twin of runCli, for CLI invocations that must fetch a JWKS mock
+// hosted in THIS same process (server doctor's server.jwks check). spawnSync
+// blocks this process's event loop for the child's whole lifetime, so the
+// parent can never service the child's incoming connection to its own mock
+// server — a self-deadlock the child's fetch only escapes by timing out.
+// spawn() keeps the event loop running, so the mock server can actually
+// answer while the child waits. Mirrors runCli's { status, stdout, stderr }
+// shape so call sites need no other changes.
+function runCliAsync(args, { env, timeoutMs = 15_000 } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [CLI, ...args], {
+      env: { ...scrubDevEnv(process.env), ...env },
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* already gone */
+      }
+    }, timeoutMs)
+    child.once('close', (status) => {
+      clearTimeout(timer)
+      resolve({ status, stdout, stderr })
+    })
+  })
+}
+
 const REQUIRED_FLAGS = [
   '--auth-strategy=oauth-jwt',
   '--jwt-issuer=https://auth.example.com',
@@ -677,9 +712,10 @@ const REQUIRED_FLAGS = [
     {
       const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s14-'))
       try {
-        const r = runCli(['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS], {
-          env: { NODE_EXTRA_CA_CERTS: drCertFile },
-        })
+        const r = await runCliAsync(
+          ['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS],
+          { env: { NODE_EXTRA_CA_CERTS: drCertFile } },
+        )
         if (r.status !== 0)
           fail(`scenario 14: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
         if (r.stderr.trim() !== '')
@@ -717,7 +753,7 @@ const REQUIRED_FLAGS = [
     {
       const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s15-'))
       try {
-        const r = runCli(
+        const r = await runCliAsync(
           [
             'server',
             'doctor',
@@ -775,9 +811,10 @@ const REQUIRED_FLAGS = [
         writeFileSync(recordPath, JSON.stringify(staleRecord))
         // chmodSync bypasses umask to reliably set broad permissions.
         chmodSync(recordPath, 0o644)
-        const r = runCli(['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS], {
-          env: { NODE_EXTRA_CA_CERTS: drCertFile },
-        })
+        const r = await runCliAsync(
+          ['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS],
+          { env: { NODE_EXTRA_CA_CERTS: drCertFile } },
+        )
         if (r.status === null) fail('scenario 16: doctor process was killed by signal')
         if (r.status !== 0)
           fail(`scenario 16: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
