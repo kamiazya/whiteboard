@@ -37,7 +37,10 @@ export type DaemonRunOutcome =
   | {
       kind: 'input-error'
       message: string
-      code?: 'invalid_allowed_web_origins' | 'invalid_oauth_client_registry'
+      code?:
+        | 'invalid_allowed_web_origins'
+        | 'invalid_oauth_client_registry'
+        | 'token_source_conflict'
     }
   | { kind: 'refused'; message: string }
   | { kind: 'running'; result: DaemonRunReadyResult }
@@ -137,6 +140,19 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
       kind: 'input-error',
       message: `Invalid WHITEBOARD_OAUTH_CLIENT_REGISTRY (${oauthRegistry.error}).`,
       code: 'invalid_oauth_client_registry',
+    }
+  }
+
+  // Fail fast on ambiguous token input: honouring one source silently would
+  // let an operator's script think stdin (or the env var) took effect when
+  // the other one actually did. Checked by presence only — never touches
+  // either token's value, so nothing can leak into this message.
+  if (options.tokenStdin && (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN !== undefined) {
+    return {
+      kind: 'input-error',
+      message:
+        'Conflicting token sources: --token-stdin and WHITEBOARD_DAEMON_TOKEN cannot both be set. Choose one.',
+      code: 'token_source_conflict',
     }
   }
 
