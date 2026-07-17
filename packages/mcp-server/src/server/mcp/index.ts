@@ -169,13 +169,12 @@ export async function createExcalidrawMcpServer() {
 export async function main() {
   // Install stdio/signal handling before any startup work (tracing init,
   // prepareDataDir, server creation, transport connect) runs. Those steps
-  // can take a while, and initTracing() below installs its own
-  // SIGTERM/SIGINT listeners; once *any* listener is registered for a
-  // signal, Node no longer applies its default terminate-the-process
-  // behavior. Registering our lifecycle handler first guarantees a signal
-  // arriving mid-startup still exits the process instead of being
-  // swallowed while nothing else is listening for it. closeServer starts
-  // as a no-op and is upgraded once the real server exists.
+  // can take a while, and once *any* listener is registered for a signal,
+  // Node no longer applies its default terminate-the-process behavior.
+  // Registering our lifecycle handler first guarantees a signal arriving
+  // mid-startup still exits the process instead of being swallowed while
+  // nothing else is listening for it. closeServer starts as a no-op and is
+  // upgraded once the real server exists.
   //
   // StdioServerTransport only listens for 'data'/'error' on stdin, never
   // 'end'/'close' — a client disconnect (parent process exit, pipe close)
@@ -190,9 +189,11 @@ export async function main() {
     stdin: process.stdin,
     signals: { on: (signal, listener) => process.on(signal, listener) },
     closeServer: () => closeServer(),
-    // Coordinates with tracing's own shutdown-signal handlers so the
-    // process does not exit while a pending span export is still in
-    // flight; bounded by the same GRACEFUL_SHUTDOWN_TIMEOUT_MS budget.
+    // Routes through shutdownTracing() so the process does not exit while
+    // a pending span export is still in flight; bounded by the same
+    // GRACEFUL_SHUTDOWN_TIMEOUT_MS budget. initTracing() below is told not
+    // to install its own SIGTERM/SIGINT listeners so this is the only
+    // signal-driven path that calls sdk.shutdown().
     shutdownExtra: () => shutdownTracing(),
     exit: (code) => process.exit(code),
   })
@@ -202,7 +203,11 @@ export async function main() {
   // is set; the fallback exporter writes JSON to stderr only, which is
   // safe alongside the stdout JSON-RPC channel this entrypoint owns.
   const { initTracing } = await import('../observability/tracing.js')
-  await initTracing({ role: 'stdio-mcp' })
+  // installStdioLifecycle() above already owns SIGTERM/SIGINT and routes
+  // them through shutdownExtra -> shutdownTracing(). Letting initTracing()
+  // also register its own SIGTERM/SIGINT listeners would call
+  // sdk.shutdown() twice concurrently on a real signal.
+  await initTracing({ role: 'stdio-mcp', installSignalHandlers: false })
 
   // The HTTP daemon runs prepareDataDir in src/server/index.ts; the stdio
   // entrypoint reaches createExcalidrawMcpServer first, so call the same
