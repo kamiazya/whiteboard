@@ -101,6 +101,18 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['versions:write'] }
   }
 
+  // Destructive maintenance routes mounted under /api/workspaces need their
+  // own narrower scope — without this rule they'd fall through to the
+  // workspace:write fallback below, which is broader than what they
+  // actually mutate (attachment blobs / canvas version history) and would
+  // let any workspace:write grant trigger them.
+  if (/^\/api\/workspaces\/[^/]+\/files\/purge-dangling$/.test(path) && method === 'POST') {
+    return { kind: 'scoped', scopes: ['files:write'] }
+  }
+  if (/^\/api\/workspaces\/[^/]+\/canvases\/optimize-all$/.test(path) && method === 'POST') {
+    return { kind: 'scoped', scopes: ['versions:write'] }
+  }
+
   // Workspace routes (including palette and library sub-resources, which are
   // workspace-scoped state): default write -> workspace:write, read -> workspace:read.
   if (path.startsWith('/api/workspaces')) {
