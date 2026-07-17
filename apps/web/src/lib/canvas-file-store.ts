@@ -62,8 +62,8 @@ export function dataUrlToBlob(dataURL: string, fallbackMimeType: string): Blob {
  *
  * Keying is global (not scoped per-canvas): Excalidraw fileIds are
  * content-hashes, so cross-canvas reuse of the same fileId is an acceptable,
- * intentional trade-off — see tmp/issues/canvas-files-gc-refcounting.md for
- * the follow-up on unbounded growth / GC.
+ * intentional trade-off. Records are never deleted here, so the store grows
+ * unbounded — GC / refcounting is a deliberate follow-up, not an oversight.
  */
 export class CanvasFileStore {
   async put(
