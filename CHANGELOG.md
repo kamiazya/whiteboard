@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.19](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.18...whiteboard-plugin-v0.0.19) (2026-07-17)
+
+
+### Bug Fixes
+
+* **release:** keep npm pack --json parseable when prepack prints its gate message ([#254](https://github.com/kamiazya/whiteboard/issues/254)) ([3513039](https://github.com/kamiazya/whiteboard/commit/35130395a66a35c399c65e72468908f8d1733829))
+
 ## [0.0.18](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.17...whiteboard-plugin-v0.0.18) (2026-07-17)
 
 
