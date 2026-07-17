@@ -78,7 +78,17 @@ export class CanvasFileStore {
         created: entry.created,
         blob: entry.blob,
       }
-      const tx = db.transaction('canvasFiles', 'readwrite')
+      // transaction() throws synchronously when the store is missing — e.g.
+      // the v3->v4 upgrade was blocked by a stale tab — so the connection
+      // must be closed here too, not only in the async lifecycle callbacks.
+      let tx: IDBTransaction
+      try {
+        tx = db.transaction('canvasFiles', 'readwrite')
+      } catch (err) {
+        db.close()
+        reject(err)
+        return
+      }
       tx.objectStore('canvasFiles').put(record, fileId)
       tx.oncomplete = () => {
         db.close()
@@ -110,7 +120,17 @@ export class CanvasFileStore {
       return null
     }
     return new Promise((resolve) => {
-      const tx = db.transaction('canvasFiles', 'readonly')
+      // Same synchronous-throw hazard as put(): a missing store must close
+      // the connection and degrade to null, per this method's never-throws
+      // contract.
+      let tx: IDBTransaction
+      try {
+        tx = db.transaction('canvasFiles', 'readonly')
+      } catch {
+        db.close()
+        resolve(null)
+        return
+      }
       const req = tx.objectStore('canvasFiles').get(fileId)
       req.onsuccess = () => {
         if (req.result === undefined) {
