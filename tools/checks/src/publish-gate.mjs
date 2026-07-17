@@ -22,6 +22,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { validateMatrix } from './release-gate-matrix-schema.mjs'
 import { splitCommand } from './split-command.mjs'
 
 export const USAGE = `Usage: pnpm --filter @whiteboard/checks publish-gate
@@ -100,6 +101,13 @@ function main() {
   const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
   const matrixPath = resolve(repoRoot, 'tests/e2e/distribution/release-gate-matrix.json')
   const matrix = JSON.parse(readFileSync(matrixPath, 'utf-8'))
+  // Fail loud on a structurally invalid matrix instead of silently running a
+  // gate subset that drifted from the policy the matrix is supposed to encode.
+  const validation = validateMatrix(matrix)
+  if (!validation.ok) {
+    process.stderr.write(`[publish-gate] invalid release-gate-matrix.json: ${validation.reason}\n`)
+    process.exit(1)
+  }
   const steps = planSteps(matrix.gates)
   if (steps.length === 0) {
     process.stderr.write('[publish-gate] no publish gates found in release-gate-matrix.json\n')

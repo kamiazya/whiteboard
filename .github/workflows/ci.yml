@@ -143,6 +143,29 @@ jobs:
       - name: Verify generated SBOM content
         run: pnpm exec vitest run --project=mcp-node packages/mcp-server/src/server/release/sbom-policy.test.ts
 
+  # Parallel to `verify`, own timeout budget: `test:e2e:distribution` already
+  # exercises smoke:distribution:packaged pre-build, but that combined
+  # release-candidate chain only runs on the release tag (see
+  # publish-gate-runner.test.ts / release-gate-matrix.json). This job runs the
+  # exact `publish`-tier smoke:distribution:packaged gate on every PR so it
+  # cannot go stale between release tags without a PR-side failure.
+  packaged-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Packaged distribution smoke
+        run: pnpm smoke:distribution:packaged
+
   verify:
     needs: [check, test-unit, test-jsdom, test-browser]
     runs-on: ubuntu-latest

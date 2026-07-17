@@ -35,52 +35,16 @@ interface GateMatrix {
   gates: ReleaseGate[]
 }
 
-type ValidationResult = { ok: true } | { ok: false; reason: string }
-
-// Exported for PBT below. Validates a single gate entry independent of
-// the live matrix file so property tests can exercise arbitrary inputs.
-export function validateGate(gate: unknown): ValidationResult {
-  if (typeof gate !== 'object' || gate === null) {
-    return { ok: false, reason: 'gate must be an object' }
-  }
-  const g = gate as Record<string, unknown>
-  if (typeof g.id !== 'string' || g.id.length === 0) {
-    return { ok: false, reason: 'id must be a non-empty string' }
-  }
-  if (typeof g.command !== 'string' || g.command.length === 0) {
-    return { ok: false, reason: 'command must be a non-empty string' }
-  }
-  if (typeof g.category !== 'string' || g.category.length === 0) {
-    return { ok: false, reason: 'category must be a non-empty string' }
-  }
-  if (!Array.isArray(g.requiredFor) || g.requiredFor.length === 0) {
-    return { ok: false, reason: 'requiredFor must be a non-empty array' }
-  }
-  if ((g.requiredFor as unknown[]).some((t) => typeof t !== 'string')) {
-    return { ok: false, reason: 'requiredFor entries must be strings' }
-  }
-  if (typeof g.requiresDocker !== 'boolean') {
-    return { ok: false, reason: 'requiresDocker must be boolean' }
-  }
-  if (typeof g.requiresNetwork !== 'boolean') {
-    return { ok: false, reason: 'requiresNetwork must be boolean' }
-  }
-  if (typeof g.expectedRuntimeBucket !== 'string' || g.expectedRuntimeBucket.length === 0) {
-    return { ok: false, reason: 'expectedRuntimeBucket must be a non-empty string' }
-  }
-  // Docker-required gates must never appear in non-Docker aggregates.
-  // ci and local-release scripts run without Docker; mixing Docker gates
-  // in would silently skip them on non-Docker runners.
-  if (g.requiresDocker === true) {
-    const tiers = g.requiredFor as string[]
-    if (tiers.includes('ci')) {
-      return { ok: false, reason: 'Docker-required gate must not be required for ci' }
-    }
-    if (tiers.includes('local-release')) {
-      return { ok: false, reason: 'Docker-required gate must not be required for local-release' }
-    }
-  }
-  return { ok: true }
+// validateGate lives in tools/checks/src/release-gate-matrix-schema.mjs — the
+// single validation authority shared with publish-gate.mjs and
+// gate-isomorphism.test.ts. Importing it here (rather than re-implementing it)
+// is what keeps this test and the runtime loader from drifting apart.
+const SCHEMA_MODULE_PATH = join(
+  __dirname,
+  '../../../../../tools/checks/src/release-gate-matrix-schema.mjs',
+)
+const { validateGate } = (await import(pathToFileURL(SCHEMA_MODULE_PATH).href)) as {
+  validateGate: (gate: unknown) => { ok: boolean; reason?: string }
 }
 
 const KNOWN_CATEGORIES = new Set([

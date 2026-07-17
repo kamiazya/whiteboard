@@ -118,6 +118,45 @@ describe('publish-gate runner is matrix-driven', () => {
   it('root package.json wires a publish-gate script delegating to @whiteboard/checks', () => {
     expect(rootPkg.scripts['publish-gate']).toBe('pnpm --filter @whiteboard/checks publish-gate')
   })
+
+  it('validates the matrix at load time via the shared schema validator, loud on invalid', () => {
+    const runner = readText('tools/checks/src/publish-gate.mjs')
+    expect(runner).toContain('release-gate-matrix-schema.mjs')
+    expect(runner).toContain('validateMatrix')
+  })
+})
+
+// Extending the matrix with the additive prCoverage/env fields (pillar A/C)
+// must not change publish-gate.mjs's or pages-release.mjs's matrix-loading
+// behavior — both consumers only read id/command/requiredFor off each gate.
+describe('publish-gate and pages-release tolerate additive matrix fields', () => {
+  const extendedGates = [
+    {
+      id: 'a',
+      command: 'pnpm a',
+      requiredFor: ['publish'],
+      prCoverage: { kind: 'exception', reason: 'test fixture' },
+      env: { WHITEBOARD_DEV: '1' },
+    },
+    { id: 'b', command: 'pnpm b', requiredFor: ['pages-release'] },
+  ]
+
+  it('publish-gate.mjs planSteps ignores unknown prCoverage/env fields on a gate', async () => {
+    const mod = (await import(
+      pathToFileURL(join(ROOT, 'tools/checks/src/publish-gate.mjs')).href
+    )) as { planSteps: (gates: typeof extendedGates) => { label: string; command: string }[] }
+    expect(mod.planSteps(extendedGates)).toEqual([{ label: 'a', command: 'pnpm a' }])
+  })
+
+  it('pages-release.mjs planSteps ignores unknown prCoverage/env fields on a gate', async () => {
+    const mod = (await import(
+      pathToFileURL(join(ROOT, 'tools/checks/src/pages-release.mjs')).href
+    )) as { planSteps: (gates: typeof extendedGates) => { label: string; command: string }[] }
+    expect(mod.planSteps(extendedGates)).toEqual([
+      { label: 'build', command: 'pnpm build' },
+      { label: 'b', command: 'pnpm b' },
+    ])
+  })
 })
 
 describe('publish-gate runner core loop (planSteps / runSteps)', () => {

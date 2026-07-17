@@ -1,0 +1,123 @@
+// Unit coverage for the shared release-gate-matrix validator
+// (tools/checks/src/release-gate-matrix-schema.mjs). This is the SINGLE
+// validation authority: release-gate-matrix.test.ts imports the same module
+// instead of re-implementing validateGate, so the two can never drift apart.
+
+import { dirname, join } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { describe, expect, it } from 'vitest'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const ROOT = join(__dirname, '../../../../..')
+const SCHEMA_MODULE = join(ROOT, 'tools/checks/src/release-gate-matrix-schema.mjs')
+
+async function importSchema() {
+  const mod = await import(pathToFileURL(SCHEMA_MODULE).href)
+  return mod as {
+    validateGate: (gate: unknown) => { ok: boolean; reason?: string }
+    validateMatrix: (matrix: unknown) => { ok: boolean; reason?: string }
+    validatePrCoverage: (prCoverage: unknown) => { ok: boolean; reason?: string }
+    validateGateEnv: (env: unknown) => { ok: boolean; reason?: string }
+  }
+}
+
+const VALID_GATE = {
+  id: 'test',
+  command: 'pnpm test',
+  category: 'unit',
+  requiredFor: ['ci'],
+  requiresDocker: false,
+  requiresNetwork: false,
+  expectedRuntimeBucket: 'fast',
+}
+
+describe('validateGate', () => {
+  it('accepts a minimal valid gate', async () => {
+    const { validateGate } = await importSchema()
+    expect(validateGate(VALID_GATE).ok).toBe(true)
+  })
+
+  it('rejects a gate missing a required field', async () => {
+    const { validateGate } = await importSchema()
+    const { id, ...rest } = VALID_GATE
+    expect(validateGate(rest).ok).toBe(false)
+  })
+
+  it('accepts a gate with a valid workflow-step prCoverage', async () => {
+    const { validateGate } = await importSchema()
+    const gate = {
+      ...VALID_GATE,
+      prCoverage: {
+        kind: 'workflow-step',
+        workflow: 'ci.yml',
+        jobId: 'check',
+        stepName: 'Typecheck',
+      },
+    }
+    expect(validateGate(gate).ok).toBe(true)
+  })
+
+  it('rejects a gate with prCoverage missing required fields for its kind', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, prCoverage: { kind: 'workflow-step', workflow: 'ci.yml' } }
+    expect(validateGate(gate).ok).toBe(false)
+  })
+
+  it('accepts a gate with a valid exception prCoverage', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, prCoverage: { kind: 'exception', reason: 'requires docker' } }
+    expect(validateGate(gate).ok).toBe(true)
+  })
+
+  it('rejects an exception prCoverage with an empty reason', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, prCoverage: { kind: 'exception', reason: '  ' } }
+    expect(validateGate(gate).ok).toBe(false)
+  })
+
+  it('rejects prCoverage with an unknown kind', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, prCoverage: { kind: 'bogus' } }
+    expect(validateGate(gate).ok).toBe(false)
+  })
+
+  it('accepts a gate with a valid env map', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, env: { WHITEBOARD_DEV: '1' } }
+    expect(validateGate(gate).ok).toBe(true)
+  })
+
+  it('rejects a gate whose env has a non-string value', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, env: { WHITEBOARD_DEV: 1 } }
+    expect(validateGate(gate).ok).toBe(false)
+  })
+})
+
+describe('validateMatrix', () => {
+  it('accepts a minimal valid matrix', async () => {
+    const { validateMatrix } = await importSchema()
+    expect(validateMatrix({ schemaVersion: 1, gates: [VALID_GATE] }).ok).toBe(true)
+  })
+
+  it('rejects a matrix with the wrong schemaVersion', async () => {
+    const { validateMatrix } = await importSchema()
+    expect(validateMatrix({ schemaVersion: 2, gates: [VALID_GATE] }).ok).toBe(false)
+  })
+
+  it('rejects a matrix with an empty gates array', async () => {
+    const { validateMatrix } = await importSchema()
+    expect(validateMatrix({ schemaVersion: 1, gates: [] }).ok).toBe(false)
+  })
+
+  it('rejects a matrix with duplicate gate ids', async () => {
+    const { validateMatrix } = await importSchema()
+    expect(validateMatrix({ schemaVersion: 1, gates: [VALID_GATE, VALID_GATE] }).ok).toBe(false)
+  })
+
+  it('rejects a matrix containing an invalid gate', async () => {
+    const { validateMatrix } = await importSchema()
+    const badGate = { ...VALID_GATE, requiresDocker: true, requiredFor: ['ci'] }
+    expect(validateMatrix({ schemaVersion: 1, gates: [badGate] }).ok).toBe(false)
+  })
+})
