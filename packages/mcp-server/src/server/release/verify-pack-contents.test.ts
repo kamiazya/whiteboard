@@ -96,7 +96,10 @@ describe('verifyPackContents (pure core)', () => {
 
   it('does not flag .map files — the pack legitimately ships source maps', async () => {
     const { verifyPackContents } = await importModule()
-    const entry = { ...VALID_ENTRY, files: [...VALID_ENTRY.files, { path: 'dist/server/index.js.map' }] }
+    const entry = {
+      ...VALID_ENTRY,
+      files: [...VALID_ENTRY.files, { path: 'dist/server/index.js.map' }],
+    }
     const result = verifyPackContents([entry]) as Extract<VerifyResult, { missing: string[] }>
     expect(result.ok).toBe(true)
     expect(result.forbidden).toEqual([])
@@ -104,7 +107,10 @@ describe('verifyPackContents (pure core)', () => {
 
   it('regex fidelity: a .test.ts SOURCE file is not flagged (only shipped .test.js/.test.d.ts artifacts are)', async () => {
     const { verifyPackContents } = await importModule()
-    const entry = { ...VALID_ENTRY, files: [...VALID_ENTRY.files, { path: 'src/server/foo.test.ts' }] }
+    const entry = {
+      ...VALID_ENTRY,
+      files: [...VALID_ENTRY.files, { path: 'src/server/foo.test.ts' }],
+    }
     const result = verifyPackContents([entry]) as Extract<VerifyResult, { missing: string[] }>
     expect(result.ok).toBe(true)
     expect(result.forbidden).toEqual([])
@@ -173,9 +179,22 @@ describe('verifyPackContents (pure core)', () => {
 })
 
 describe('extractPackJsonText', () => {
+  // `npm pack --dry-run --json` pretty-prints its array with the top-level
+  // `[` alone on its own line — real output confirmed by running the command
+  // locally. That is the anchor extractPackJsonText looks for, rather than a
+  // global first-`[`/last-`]` scan.
   it('extracts the JSON array even with prepack lifecycle noise before it', async () => {
     const { extractPackJsonText } = await importModule()
-    const raw = 'prepack gate: dist/web-app/index.html present — OK\n[{"size":1,"files":[]}]\n'
+    const raw =
+      'prepack gate: dist/web-app/index.html present — OK\n[\n  {"size":1,"files":[]}\n]\n'
+    expect(JSON.parse(extractPackJsonText(raw))).toEqual([{ size: 1, files: [] }])
+  })
+
+  it('extracts the JSON array when prelude noise itself contains brackets', async () => {
+    const { extractPackJsonText } = await importModule()
+    const raw =
+      '[warn] prepack gate: skipped optional check [dist/web-app/index.html]\n' +
+      '[\n  {"size":1,"files":[]}\n]\n'
     expect(JSON.parse(extractPackJsonText(raw))).toEqual([{ size: 1, files: [] }])
   })
 

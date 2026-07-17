@@ -97,19 +97,29 @@ export function verifyPackContents(doc) {
 
 // `npm pack --dry-run --json` output can be preceded by lifecycle-script
 // stdout (e.g. this package's own `prepack` gate prints a status line before
-// npm prints its JSON array), so the JSON payload is extracted from the
-// first `[` to the last `]` in the raw text rather than parsed verbatim.
+// npm prints its JSON array). npm always pretty-prints that array with the
+// top-level `[` alone on its own line, so the JSON payload is anchored on the
+// LAST such line (scanning from the end) rather than a global first-`[`/
+// last-`]` scan — a global scan mis-slices when prelude/diagnostic output
+// contains its own bracket characters (e.g. a `[warn]` tag). A line that is
+// itself a complete, self-closed `[...]` array is also accepted, to tolerate
+// compact (non-pretty-printed) JSON.
 /**
  * @param {string} raw
  * @returns {string}
  */
 export function extractPackJsonText(raw) {
-  const start = raw.indexOf('[')
-  const end = raw.lastIndexOf(']')
-  if (start === -1 || end === -1 || end < start) {
-    throw new Error('no JSON array found in npm pack output')
+  const lines = raw.split('\n')
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim()
+    if (line === '[') {
+      return lines.slice(i).join('\n')
+    }
+    if (line.startsWith('[') && line.endsWith(']')) {
+      return line
+    }
   }
-  return raw.slice(start, end + 1)
+  throw new Error('no JSON array found in npm pack output')
 }
 
 /**
@@ -203,7 +213,9 @@ export function main(options = {}) {
       stderr.write(`[verify-pack-contents] missing required files: ${result.missing.join(', ')}\n`)
     }
     if (result.forbidden.length > 0) {
-      stderr.write(`[verify-pack-contents] forbidden files in tarball: ${result.forbidden.join(', ')}\n`)
+      stderr.write(
+        `[verify-pack-contents] forbidden files in tarball: ${result.forbidden.join(', ')}\n`,
+      )
     }
     return 1
   }
