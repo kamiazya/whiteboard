@@ -32,7 +32,7 @@ async function signJwt(
   overrides: { issuer?: string; audience?: string; expiresIn?: string } = {},
 ) {
   return new SignJWT({ sub: 'test-user', scope: 'canvas:read', ...claims })
-    .setProtectedHeader({ alg: 'ES256' })
+    .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt' })
     .setIssuer(overrides.issuer ?? ISSUER)
     .setAudience(overrides.audience ?? AUDIENCE)
     .setIssuedAt()
@@ -140,7 +140,9 @@ describe('server-mode OAuth JWT auth wiring', () => {
     const validator = createOAuthJwtValidator({
       issuer: ISSUER,
       audience: AUDIENCE,
-      keyResolver: async () => { throw new Error('network error') },
+      keyResolver: async () => {
+        throw new Error('network error')
+      },
     })
     const strategy = createOAuthResourceServerAuthStrategy({ validator })
     const { privateKey } = await generateKeyPair('ES256')
