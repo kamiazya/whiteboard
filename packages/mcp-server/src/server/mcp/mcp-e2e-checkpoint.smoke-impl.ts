@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -60,6 +60,33 @@ export function triggerDaemonCanvasCreate(
   return options.retryDaemonStartup
     ? retryDaemonStartup({ attempt, maxRetries: options.maxDaemonStartupRetries })
     : attempt()
+}
+
+/**
+ * Reads every daemon-*.log file under <dataDir>/logs, which is where
+ * ensureDaemon (see ensure-daemon.ts openDaemonLogFile) redirects the
+ * detached daemon child's stdout/stderr. The caller's tmp data dir is
+ * deleted right after this smoke fails, so a "Daemon startup timeout"
+ * would otherwise discard the one artifact that explains why the daemon
+ * process never bound its port (crash on require, missing devDependency
+ * when run against an installed-only tree, etc.). Best-effort: absent or
+ * unreadable logs must never mask the original failure.
+ */
+export async function readDaemonLogsForFailure(dataDir: string): Promise<string> {
+  try {
+    const logsDir = join(dataDir, 'logs')
+    const files = readdirSync(logsDir).filter((f) => f.startsWith('daemon-') && f.endsWith('.log'))
+    if (files.length === 0) return ''
+    const contents = await Promise.all(
+      files.map(async (f) => {
+        const body = await readFile(join(logsDir, f), 'utf-8')
+        return `--- ${f} ---\n${body.trim()}`
+      }),
+    )
+    return `\n--- daemon log(s) ---\n${contents.join('\n')}\n--- end daemon log(s) ---`
+  } catch {
+    return ''
+  }
 }
 
 export async function runE2eCheckpointSmoke({
@@ -179,6 +206,7 @@ export async function runE2eCheckpointSmoke({
 
   try {
     console.log(`[e2e] entry → ${entry}`)
+    console.log(`[e2e] spawn → node ${childArgs.join(' ')} (dataDir=${tmpDataDir})`)
 
     await rpc('initialize', {
       protocolVersion: '2024-11-05',
@@ -457,7 +485,10 @@ export async function runE2eCheckpointSmoke({
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     const detail = stderrBuf ? `\n--- MCP stderr ---\n${stderrBuf}\n--- end ---` : ''
-    throw new Error(`${msg}${detail}`)
+    // Read before `finally` deletes tmpDataDir, so a startup failure still
+    // surfaces why the detached daemon process never bound its port.
+    const daemonLogDetail = await readDaemonLogsForFailure(tmpDataDir)
+    throw new Error(`${msg}${detail}${daemonLogDetail}`)
   } finally {
     process.removeListener('exit', exitHandler)
     try {
