@@ -93,37 +93,51 @@ describe('buildMcpHttpDevSpawnArgs', () => {
 })
 
 describe('verifyDevDaemonIdentity', () => {
-  it('returns "foreign" when no marker exists for this data dir', () => {
+  it('returns "no-marker" (not "foreign") when no marker exists for this data dir — e.g. a daemon started before this feature existed, or before it wrote its first marker; the caller should self-heal rather than hard-fail', () => {
     const verdict = verifyDevDaemonIdentity({
       marker: null,
       expectedPort: 3123,
+      expectedRepoRoot: '/repo',
       isPidAlive: () => true,
     })
 
-    expect(verdict).toBe('foreign')
+    expect(verdict).toBe('no-marker')
   })
 
   it('returns "foreign" when the marker records a different port (hash collision or stale)', () => {
     const verdict = verifyDevDaemonIdentity({
       marker: { port: 3099, repoRoot: '/other/repo', pid: 1, startedAt: '2026-01-01T00:00:00Z' },
       expectedPort: 3123,
+      expectedRepoRoot: '/repo',
       isPidAlive: () => true,
     })
 
     expect(verdict).toBe('foreign')
   })
 
-  it('returns "stale" when the marker port matches but the recorded pid is dead', () => {
+  it('returns "foreign" when the marker records a different repoRoot even though the port matches (guards a TOCTOU startup race between two worktrees that hash-collided on the same derived port)', () => {
+    const verdict = verifyDevDaemonIdentity({
+      marker: { port: 3123, repoRoot: '/other/repo', pid: 1, startedAt: '2026-01-01T00:00:00Z' },
+      expectedPort: 3123,
+      expectedRepoRoot: '/repo',
+      isPidAlive: () => true,
+    })
+
+    expect(verdict).toBe('foreign')
+  })
+
+  it('returns "stale" when the marker port and repoRoot match but the recorded pid is dead', () => {
     const verdict = verifyDevDaemonIdentity({
       marker: { port: 3123, repoRoot: '/repo', pid: 999999, startedAt: '2026-01-01T00:00:00Z' },
       expectedPort: 3123,
+      expectedRepoRoot: '/repo',
       isPidAlive: () => false,
     })
 
     expect(verdict).toBe('stale')
   })
 
-  it('returns "ours" when the marker port matches and the recorded pid is alive', () => {
+  it('returns "ours" when the marker port and repoRoot match and the recorded pid is alive', () => {
     const verdict = verifyDevDaemonIdentity({
       marker: {
         port: 3123,
@@ -132,6 +146,7 @@ describe('verifyDevDaemonIdentity', () => {
         startedAt: '2026-01-01T00:00:00Z',
       },
       expectedPort: 3123,
+      expectedRepoRoot: '/repo',
       isPidAlive: () => true,
     })
 

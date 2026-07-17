@@ -53,18 +53,28 @@ export function buildMcpHttpDevSpawnArgs(token, derivedPort) {
  * Decides whether a daemon that answered an authenticated MCP probe on this
  * worktree's derived port actually belongs to this worktree.
  *
- * A daemon that never wrote a marker for this data dir, or whose marker
- * names a different port, is "foreign" — it may be a hash-collision daemon
- * from another worktree sharing the default bearer token, or a stale
- * pre-port-split daemon. A marker whose recorded pid is no longer running
- * is "stale" (its process died without cleaning up); a marker whose port
- * matches and whose pid is alive is "ours".
+ * A missing marker is "no-marker", not "foreign" — it is indistinguishable
+ * from a daemon started before this feature existed (or before it wrote its
+ * first marker), which is overwhelmingly the common case on a first-adopt
+ * run. Treating that the same as an actual identity mismatch would hard-fail
+ * with no self-healing path. A marker whose port or repoRoot disagrees with
+ * what's expected is "foreign" — either a hash-collision daemon from a
+ * different worktree sharing the default bearer token, or a stale
+ * pre-port-split daemon. The repoRoot check (not just port) is what catches
+ * a startup race between two worktrees that both observed the same derived
+ * port free and raced to bind it — port equality alone can't tell those
+ * apart. A marker whose port and repoRoot both match, but whose recorded pid
+ * is no longer running, is "stale"; matching port, repoRoot, and a live pid
+ * is "ours".
  *
- * @param {{ marker: { port: number, pid: number } | null, expectedPort: number, isPidAlive: (pid: number) => boolean }} args
- * @returns {'ours' | 'stale' | 'foreign'}
+ * @param {{ marker: { port: number, repoRoot: string, pid: number } | null, expectedPort: number, expectedRepoRoot: string, isPidAlive: (pid: number) => boolean }} args
+ * @returns {'ours' | 'stale' | 'foreign' | 'no-marker'}
  */
-export function verifyDevDaemonIdentity({ marker, expectedPort, isPidAlive }) {
-  if (!marker || marker.port !== expectedPort) {
+export function verifyDevDaemonIdentity({ marker, expectedPort, expectedRepoRoot, isPidAlive }) {
+  if (!marker) {
+    return 'no-marker'
+  }
+  if (marker.port !== expectedPort || marker.repoRoot !== expectedRepoRoot) {
     return 'foreign'
   }
   return isPidAlive(marker.pid) ? 'ours' : 'stale'

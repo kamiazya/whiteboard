@@ -141,16 +141,27 @@ if (status === 'in-use') {
     const identity = verifyDevDaemonIdentity({
       marker: readDevDaemonMarker(EXPECTED_DATA_DIR),
       expectedPort: PORT,
+      expectedRepoRoot: REPO_ROOT,
       isPidAlive,
     })
     if (identity === 'ours') {
       info(`[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — verified`)
       process.exit(0)
     }
+    if (identity === 'no-marker') {
+      // A marker-less daemon on our own derived port predates this feature
+      // (or predates its own first marker write) — not evidence of a
+      // foreign daemon. Self-heal instead of hard-failing.
+      info(
+        `[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — no identity marker ` +
+          "found (daemon predates this check); assuming it is this worktree's own daemon",
+      )
+      process.exit(0)
+    }
     console.error(
       `[ensure-http-dev-daemon] http://${HOST}:${PORT} answers MCP but its ` +
         `${EXPECTED_DATA_DIR}/dev-daemon.json marker does not match this worktree ` +
-        `(${identity === 'stale' ? 'recorded pid is no longer running' : 'no marker or a different port recorded'}). ` +
+        `(${identity === 'stale' ? 'recorded pid is no longer running' : 'a different port or repo root is recorded'}). ` +
         "This is very likely a different worktree's daemon that hash-collided on this port. " +
         `Set WHITEBOARD_DEV_PORT to a distinct value for one of the worktrees, or stop the ` +
         'conflicting process (e.g. `pkill -f mcp:http:dev`) and rerun.',
@@ -208,6 +219,30 @@ if (!ready) {
   const detail = exitedEarly ? `; spawned process exited with code ${exitCode}` : ''
   console.error(
     `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}`,
+  )
+  process.exit(1)
+}
+
+// The initial probe() saw the port free, but another worktree's hook can
+// win a startup race and bind the same derived port between that probe and
+// our own spawn becoming ready (TOCTOU). An authenticated MCP response
+// alone doesn't prove it's OUR spawn that answered — cross-check the
+// identity marker before declaring success, exactly as the pre-existing
+// "port already in use" branch does.
+const postSpawnIdentity = verifyDevDaemonIdentity({
+  marker: readDevDaemonMarker(EXPECTED_DATA_DIR),
+  expectedPort: PORT,
+  expectedRepoRoot: REPO_ROOT,
+  isPidAlive,
+})
+if (postSpawnIdentity !== 'ours' && postSpawnIdentity !== 'no-marker') {
+  console.error(
+    `[ensure-http-dev-daemon] http://${HOST}:${PORT} answered MCP right after we spawned our own ` +
+      `daemon, but its ${EXPECTED_DATA_DIR}/dev-daemon.json marker does not match this worktree ` +
+      `(${postSpawnIdentity === 'stale' ? 'recorded pid is no longer running' : 'a different port or repo root is recorded'}). ` +
+      'This is very likely a startup race with another worktree that bound the same derived port ' +
+      'first. Rerun this hook; if it keeps happening, set WHITEBOARD_DEV_PORT to a distinct value ' +
+      'for one of the worktrees.',
   )
   process.exit(1)
 }
