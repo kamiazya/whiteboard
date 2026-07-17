@@ -92,14 +92,10 @@ function startDaemon({ dataDir, port, token, label }) {
       env: {
         ...scrubDevEnv(process.env),
         WHITEBOARD_DATA_DIR: dataDir,
-        // DAEMON_ENTRY is invoked directly (not via `whiteboard daemon run`),
-        // so the token is read by resolveToken() in server/index.ts, which
-        // only honours --token= or WHITEBOARD_TOKEN — WHITEBOARD_DAEMON_TOKEN
-        // (the env var the `daemon run` CLI subcommand reads instead) is a
-        // no-op here. Passing the wrong name meant `daemonMode && token` was
-        // always false, so the daemon never wrote its registry record, and
-        // every later `whiteboard daemon stop` for this dir failed with
-        // "record-not-found".
+        // DAEMON_ENTRY is spawned directly (not via `whiteboard daemon run`),
+        // so resolveToken() in server/index.ts only honours --token= or
+        // WHITEBOARD_TOKEN. WHITEBOARD_DAEMON_TOKEN is read by the `daemon
+        // run` CLI subcommand only and has no effect here.
         WHITEBOARD_TOKEN: token,
         WHITEBOARD_LOG_LEVEL: process.env.WHITEBOARD_LOG_LEVEL ?? 'warning',
       },
@@ -300,11 +296,12 @@ try {
     proc.stderr.on('data', (c) => {
       err += c.toString()
     })
-    proc.on('close', (status) => res({ status, stdout: out, stderr: err }))
+    proc.on('close', (status, signal) => res({ status, signal, stdout: out, stderr: err }))
   })
   if (stopA.status !== 0) {
+    const reason = stopA.signal ? `signal ${stopA.signal}` : `code ${stopA.status}`
     throw new Error(
-      `daemon A stop failed: ${stopA.status}\n--- stdout ---\n${stopA.stdout}\n--- stderr ---\n${stopA.stderr}`,
+      `daemon A stop failed: ${reason}\n--- stdout ---\n${stopA.stdout}\n--- stderr ---\n${stopA.stderr}`,
     )
   }
   assertNoLeak('daemon A stop stdout', stopA.stdout, [TOKEN_A])
@@ -472,11 +469,12 @@ try {
     proc.stderr.on('data', (c) => {
       err += c.toString()
     })
-    proc.on('close', (status) => res({ status, stdout: out, stderr: err }))
+    proc.on('close', (status, signal) => res({ status, signal, stdout: out, stderr: err }))
   })
   if (stopB.status !== 0) {
+    const reason = stopB.signal ? `signal ${stopB.signal}` : `code ${stopB.status}`
     throw new Error(
-      `daemon B stop failed: ${stopB.status}\n--- stdout ---\n${stopB.stdout}\n--- stderr ---\n${stopB.stderr}`,
+      `daemon B stop failed: ${reason}\n--- stdout ---\n${stopB.stdout}\n--- stderr ---\n${stopB.stderr}`,
     )
   }
   assertNoLeak('daemon B stop stdout', stopB.stdout, [TOKEN_B])

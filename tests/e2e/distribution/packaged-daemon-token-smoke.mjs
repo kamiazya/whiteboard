@@ -139,13 +139,15 @@ async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = scrubDevE
     } catch {
       /* gone */
     }
-    await Promise.race([closed, delay(SHUTDOWN_TIMEOUT_MS)])
-    try {
-      child.kill('SIGKILL')
-    } catch {
-      /* gone */
+    const winner = await Promise.race([closed, delay(SHUTDOWN_TIMEOUT_MS, 'timeout')])
+    if (winner === 'timeout') {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* gone */
+      }
+      await closed
     }
-    await closed
   }
 
   try {
