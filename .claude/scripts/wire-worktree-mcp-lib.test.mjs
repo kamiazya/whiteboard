@@ -24,6 +24,7 @@ import {
   resolveMainCheckoutRoot,
   removeStaleEntriesFromConfig,
   redactBearerTokens,
+  redactUrlCredentials,
 } from './wire-worktree-mcp-lib.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -114,6 +115,34 @@ test('classifyExistingConfig: never treats a differing entry as identical', () =
     assert.equal(result.outcome, 'conflict', `expected conflict for ${JSON.stringify(existing)}`)
     assert.ok(result.reason && result.reason.length > 0, 'conflict must carry an actionable reason')
   }
+})
+
+test('classifyExistingConfig: a conflicting existing URL is redacted (no userinfo/query) in the reported reason', () => {
+  const desired = { url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
+  const existing = {
+    type: 'http',
+    url: 'http://user:hunter2@127.0.0.1:9999/mcp?token=super-secret',
+    headers: { Authorization: 'Bearer whiteboard-dev' },
+  }
+  const result = classifyExistingConfig(existing, desired)
+  assert.equal(result.outcome, 'conflict')
+  assert.ok(!result.reason.includes('hunter2'), 'must not leak URL userinfo')
+  assert.ok(!result.reason.includes('super-secret'), 'must not leak a URL query-string secret')
+})
+
+test('redactUrlCredentials: strips userinfo and query string, keeps origin and path', () => {
+  assert.equal(
+    redactUrlCredentials('http://user:hunter2@127.0.0.1:9999/mcp?token=super-secret'),
+    'http://127.0.0.1:9999/mcp',
+  )
+})
+
+test('redactUrlCredentials: leaves a credential-free URL unchanged', () => {
+  assert.equal(redactUrlCredentials('http://127.0.0.1:3457/mcp'), 'http://127.0.0.1:3457/mcp')
+})
+
+test('redactUrlCredentials: returns non-URL input as-is rather than throwing', () => {
+  assert.equal(redactUrlCredentials('not-a-url'), 'not-a-url')
 })
 
 test('classifyExistingConfig: defensive against malformed/unknown shapes, never throws', () => {

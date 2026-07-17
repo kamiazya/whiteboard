@@ -24,7 +24,7 @@
 // a realpath comparison, so a symlinked worktree checkout doesn't trip a
 // naive string compare).
 import { execFileSync, spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, lstatSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -66,8 +66,12 @@ const DEFAULT_CONFIG_MODE = 0o600
  *    credentials.
  *
  * @param {string} configPath
+ * @param {{ writeFileSyncFn?: typeof writeFileSync }} [fsOverrides] injectable
+ *   fs seam for tests — only `writeFileSyncFn` is exposed today, to assert
+ *   the temp file's creation mode without racing a real umask window on
+ *   disk. Defaults to the real `node:fs` implementation.
  */
-export function createConfigIO(configPath) {
+export function createConfigIO(configPath, { writeFileSyncFn = writeFileSync } = {}) {
   let lastReadRawText
 
   function readConfig() {
@@ -100,11 +104,25 @@ export function createConfigIO(configPath) {
         )
       }
     }
-    const previousMode = existsSync(configPath) ? statSync(configPath).mode : DEFAULT_CONFIG_MODE
+    const configExists = existsSync(configPath)
+    const previousMode = configExists ? statSync(configPath).mode : DEFAULT_CONFIG_MODE
     const tmpPath = `${configPath}.tmp-${process.pid}`
-    writeFileSync(tmpPath, JSON.stringify(config, null, 2))
+    // Pass `mode` to writeFileSync itself (rather than creating with the
+    // process umask and narrowing after via chmodSync) so the file never
+    // exists on disk in a wider-than-intended state: fs open() honors an
+    // explicit mode as an upper bound regardless of umask, closing the
+    // brief world/group-readable window a common 0022 umask would otherwise
+    // leave on a config file that can carry MCP bearer tokens.
+    writeFileSyncFn(tmpPath, JSON.stringify(config, null, 2), { mode: DEFAULT_CONFIG_MODE })
     chmodSync(tmpPath, previousMode)
-    renameSync(tmpPath, configPath)
+    // renameSync replaces whatever inode currently sits at its destination.
+    // If configPath is itself a symlink (e.g. a dotfiles-managed
+    // ~/.claude.json), renaming onto the link path would sever the link and
+    // leave a plain file in its place; renaming onto the link's resolved
+    // target instead preserves the symlink and updates the real file it
+    // points at.
+    const writeTargetPath = configExists && lstatSync(configPath).isSymbolicLink() ? realpathSync(configPath) : configPath
+    renameSync(tmpPath, writeTargetPath)
   }
 
   return { readConfig, writeConfig }

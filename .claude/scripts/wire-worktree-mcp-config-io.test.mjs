@@ -11,7 +11,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { chmodSync, lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createConfigIO } from './wire-worktree-mcp.mjs'
@@ -94,5 +94,46 @@ test('createConfigIO writeConfig on a first write to a new file (no prior read) 
     // No paired readConfig() call at all — lastReadRawText stays undefined,
     // so the concurrency guard must not spuriously fire.
     assert.doesNotThrow(() => writeConfig({ projects: {} }))
+  })
+})
+
+test('createConfigIO writeConfig creates the temp file with an explicit restrictive mode, not a bare writeFileSync left to the process umask', () => {
+  withScratchDir((dir) => {
+    const configPath = join(dir, 'config.json')
+    const calls = []
+    const { writeConfig } = createConfigIO(configPath, {
+      writeFileSyncFn: (path, data, options) => {
+        calls.push({ path: String(path), options })
+        return writeFileSync(path, data, options)
+      },
+    })
+
+    writeConfig({ projects: {} })
+
+    const tmpCall = calls.find((call) => call.path.includes('.tmp-'))
+    assert.ok(tmpCall, 'expected the temp-file write to be captured')
+    assert.equal(
+      tmpCall.options?.mode,
+      0o600,
+      'temp file must be created with an explicit restrictive mode so it is never briefly wider than intended on disk, regardless of the process umask',
+    )
+  })
+})
+
+test('createConfigIO writeConfig replacing a symlinked config path updates the link target, not the link itself', () => {
+  withScratchDir((dir) => {
+    const realTarget = join(dir, 'real-config.json')
+    const linkPath = join(dir, 'config.json')
+    writeFileSync(realTarget, JSON.stringify({ projects: {} }))
+    symlinkSync(realTarget, linkPath)
+
+    const { readConfig, writeConfig } = createConfigIO(linkPath)
+    const config = readConfig()
+    writeConfig({ ...config, projects: { ...config.projects, added: true } })
+
+    assert.ok(lstatSync(linkPath).isSymbolicLink(), 'the symlink itself must survive the write')
+    assert.equal(realpathSync(linkPath), realpathSync(realTarget))
+    const written = JSON.parse(readFileSync(realTarget, 'utf8'))
+    assert.deepEqual(written, { projects: { added: true } })
   })
 })

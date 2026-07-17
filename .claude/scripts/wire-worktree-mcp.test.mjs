@@ -71,6 +71,77 @@ test('main: missing `claude` CLI skips wiring without touching config', async ()
   assert.ok(logs.some((line) => /not on PATH/i.test(line)))
 })
 
+test('main: absent registration + successful `claude mcp add` + matching post-write read reports "wired"', async () => {
+  const repoRoot = '/repo/.claude/worktrees/wt-a'
+  let addSpawns = 0
+  let readCalls = 0
+  let writtenUrl
+  let writtenAuthHeader
+  const logs = []
+  await main({
+    argv: [repoRoot],
+    isMainCheckoutOverride: false,
+    claudeCliAvailableOverride: true,
+    spawn: (cmd, args) => {
+      if (args?.includes('add')) {
+        addSpawns += 1
+        // Real `claude mcp add` writes the entry into ~/.claude.json itself;
+        // capture the url/header argv passed here so the post-write
+        // readConfig stub below can echo back a registration that matches
+        // exactly what was requested.
+        writtenUrl = args[5]
+        const headerIndex = args.indexOf('--header')
+        writtenAuthHeader = args[headerIndex + 1]
+      }
+      return fakeSpawnOk()
+    },
+    readConfig: () => {
+      readCalls += 1
+      // First read (pre-write classify): absent. Second read (post-write
+      // verify): `claude mcp add` succeeded and wrote exactly what was
+      // requested.
+      if (readCalls === 1) return { projects: {} }
+      const [headerName, headerValue] = writtenAuthHeader.split(': ')
+      return {
+        projects: {
+          [resolve(repoRoot)]: {
+            mcpServers: { whiteboard: { type: 'http', url: writtenUrl, headers: { [headerName]: headerValue } } },
+          },
+        },
+      }
+    },
+    writeConfig: () => {
+      throw new Error('writeConfig must not be called on the plain-wiring path — only `claude mcp add` writes')
+    },
+    log: (msg) => logs.push(msg),
+    env: {},
+  })
+
+  assert.equal(addSpawns, 1)
+  assert.equal(readCalls, 2)
+  assert.ok(logs.some((line) => /^\[wire-worktree-mcp\] wired "whiteboard" -> /.test(line)), `expected a "wired" success log, got: ${JSON.stringify(logs)}`)
+})
+
+test('main: WHITEBOARD_DEV_PORT set in the calling shell logs the override warning before wiring proceeds', async () => {
+  const repoRoot = '/repo/.claude/worktrees/wt-a'
+  const logs = []
+  await main({
+    argv: [repoRoot],
+    isMainCheckoutOverride: false,
+    claudeCliAvailableOverride: true,
+    spawn: () => fakeSpawnOk(),
+    readConfig: () => ({ projects: {} }),
+    writeConfig: () => {},
+    log: (msg) => logs.push(msg),
+    env: { WHITEBOARD_DEV_PORT: '9999' },
+  })
+
+  assert.ok(
+    logs.some((line) => /WHITEBOARD_DEV_PORT is set in this shell but is ignored for registration/.test(line)),
+    `expected the override warning to be logged, got: ${JSON.stringify(logs)}`,
+  )
+})
+
 test('main: a conflicting existing registration is left untouched — no `claude mcp add` spawn', async () => {
   const repoRoot = '/repo/.claude/worktrees/wt-a'
   let addSpawned = false

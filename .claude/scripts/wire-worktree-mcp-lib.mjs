@@ -84,6 +84,31 @@ function isPlainObject(value) {
 }
 
 /**
+ * Strips userinfo (user:pass@) and any query string out of a URL before it
+ * is embedded in a human-readable conflict reason. A pre-existing local
+ * registration a developer wired by hand can legitimately carry a
+ * credential in either position (e.g. a token query parameter), and
+ * classifyExistingConfig's conflict reason is logged verbatim by
+ * wire-worktree-mcp.mjs — this keeps that path from echoing a live secret
+ * into a terminal or log sink.
+ *
+ * @param {string} url
+ */
+export function redactUrlCredentials(url) {
+  try {
+    const parsed = new URL(url)
+    parsed.username = ''
+    parsed.password = ''
+    parsed.search = ''
+    return parsed.toString()
+  } catch {
+    // Not a parseable absolute URL — return as-is rather than guessing at a
+    // redaction that might mangle a value that was never a URL.
+    return url
+  }
+}
+
+/**
  * Compares an existing registration (as read back from `claude mcp get`,
  * shape owned by the Claude Code CLI and treated defensively here) against
  * the desired one. Any shape the caller doesn't fully recognize maps to
@@ -104,7 +129,11 @@ export function classifyExistingConfig(existing, desired) {
     return { outcome: 'conflict', reason: `existing registration uses transport ${JSON.stringify(existing.type)}, expected 'http'` }
   }
   if (typeof existing.url !== 'string' || existing.url !== desired.url) {
-    return { outcome: 'conflict', reason: `existing registration URL ${JSON.stringify(existing.url)} does not match desired ${JSON.stringify(desired.url)}` }
+    const existingUrlForDisplay = typeof existing.url === 'string' ? redactUrlCredentials(existing.url) : existing.url
+    return {
+      outcome: 'conflict',
+      reason: `existing registration URL ${JSON.stringify(existingUrlForDisplay)} does not match desired ${JSON.stringify(desired.url)}`,
+    }
   }
   const [headerName, headerValue] = desired.authHeader.split(': ')
   const existingHeaderValue = isPlainObject(existing.headers) ? existing.headers[headerName] : undefined
