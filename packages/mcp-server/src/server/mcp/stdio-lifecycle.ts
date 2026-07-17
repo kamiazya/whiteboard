@@ -23,6 +23,12 @@ export interface StdioLifecycleDeps {
   }
   closeServer: () => Promise<void>
   exit: (code: number) => void
+  /**
+   * Additional shutdown work to await alongside closeServer() before
+   * exiting (e.g. flushing OpenTelemetry spans), bounded by the same
+   * GRACEFUL_SHUTDOWN_TIMEOUT_MS budget. Defaults to a no-op.
+   */
+  shutdownExtra?: () => Promise<void>
 }
 
 /**
@@ -39,6 +45,18 @@ export interface StdioLifecycleDeps {
  */
 export function installStdioLifecycle(deps: StdioLifecycleDeps): (exitCode?: number) => void {
   let shuttingDown = false
+  // Guards deps.exit() from ever firing twice for one shutdown: the
+  // hard-exit timer and the closeServer()/shutdownExtra() settlement race
+  // each other, and either one can win. Without this flag a slow
+  // closeServer() that settles just after the timer fires would call
+  // deps.exit() a second time.
+  let exited = false
+
+  const exitOnce = (exitCode: number): void => {
+    if (exited) return
+    exited = true
+    deps.exit(exitCode)
+  }
 
   const shutdown = (exitCode = 0): void => {
     if (shuttingDown) return
@@ -47,26 +65,34 @@ export function installStdioLifecycle(deps: StdioLifecycleDeps): (exitCode?: num
     // unref so the pending timer never keeps the event loop alive on its own.
     const hardExitTimer = setTimeout(() => {
       log.warning('graceful MCP shutdown timed out, forcing exit')
-      deps.exit(exitCode)
+      exitOnce(exitCode)
     }, GRACEFUL_SHUTDOWN_TIMEOUT_MS).unref()
 
-    deps
-      .closeServer()
-      .catch((err: unknown) => {
-        log.warning(
-          { err: err instanceof Error ? err : new Error(String(err)) },
-          'error while closing MCP server during shutdown',
-        )
+    const shutdownExtra = deps.shutdownExtra ?? (() => Promise.resolve())
+
+    Promise.allSettled([deps.closeServer(), shutdownExtra()])
+      .then((results) => {
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            const err = result.reason
+            log.warning(
+              { err: err instanceof Error ? err : new Error(String(err)) },
+              'error during MCP shutdown',
+            )
+          }
+        }
       })
       .finally(() => {
         clearTimeout(hardExitTimer)
-        deps.exit(exitCode)
+        exitOnce(exitCode)
       })
   }
 
   deps.stdin.once('end', () => shutdown(0))
   deps.stdin.once('close', () => shutdown(0))
-  deps.stdin.once('error', () => shutdown(0))
+  // A stdin transport failure is not a clean disconnect: exit non-zero so
+  // supervisors and clients can tell the two apart.
+  deps.stdin.once('error', () => shutdown(1))
   deps.signals.on('SIGTERM', () => shutdown(0))
   deps.signals.on('SIGINT', () => shutdown(0))
 

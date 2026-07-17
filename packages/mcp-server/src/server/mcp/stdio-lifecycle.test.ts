@@ -31,10 +31,10 @@ describe('installStdioLifecycle', () => {
     expect(closeServer).toHaveBeenCalledOnce()
   })
 
-  it('exits once stdin emits "error"', async () => {
+  it('exits with code 1 when stdin emits "error", distinguishing it from a clean disconnect', async () => {
     const { stdin, exit, closeServer } = makeDeps()
     stdin.emit('error', new Error('boom'))
-    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(1))
     expect(closeServer).toHaveBeenCalledOnce()
   })
 
@@ -84,5 +84,66 @@ describe('installStdioLifecycle', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('does not call exit twice when closeServer settles just after the hard-exit timer fires', async () => {
+    vi.useFakeTimers()
+    try {
+      const stdin = new EventEmitter()
+      const signals = new EventEmitter()
+      const exit = vi.fn()
+      let resolveClose: () => void = () => undefined
+      const closeServer = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveClose = resolve
+          }),
+      )
+      installStdioLifecycle({
+        stdin,
+        signals: { on: (event, listener) => signals.on(event, listener) },
+        closeServer,
+        exit,
+      })
+
+      stdin.emit('end')
+      await vi.advanceTimersByTimeAsync(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
+      expect(exit).toHaveBeenCalledTimes(1)
+
+      // closeServer settles after the hard-exit timer already forced exit.
+      resolveClose()
+      await vi.runOnlyPendingTimersAsync()
+      expect(exit).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('awaits shutdownExtra alongside closeServer before exiting', async () => {
+    const stdin = new EventEmitter()
+    const signals = new EventEmitter()
+    const exit = vi.fn()
+    const closeServer = vi.fn(async () => undefined)
+    let resolveExtra: () => void = () => undefined
+    const shutdownExtra = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveExtra = resolve
+        }),
+    )
+    installStdioLifecycle({
+      stdin,
+      signals: { on: (event, listener) => signals.on(event, listener) },
+      closeServer,
+      exit,
+      shutdownExtra,
+    })
+
+    stdin.emit('end')
+    await vi.waitFor(() => expect(closeServer).toHaveBeenCalledOnce())
+    expect(exit).not.toHaveBeenCalled()
+
+    resolveExtra()
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
   })
 })
