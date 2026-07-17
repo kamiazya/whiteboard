@@ -159,6 +159,64 @@ describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
   })
 })
 
+describe('runDaemonRun token source conflict', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('rejects with an input-error and never starts the daemon when --token-stdin and WHITEBOARD_DAEMON_TOKEN are both set', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: true,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_DAEMON_TOKEN: 'env-token-should-never-leak' },
+    })
+    expect(outcome.kind).toBe('input-error')
+    if (outcome.kind === 'input-error') {
+      expect(outcome.code).toBe('token_source_conflict')
+      expect(outcome.message).not.toContain('env-token-should-never-leak')
+    }
+    expect(startHttpServerMock).not.toHaveBeenCalled()
+  })
+
+  it('still uses the env token when only WHITEBOARD_DAEMON_TOKEN is set (no --token-stdin)', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_DAEMON_TOKEN: 'env-only-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'env-only-token' }),
+    )
+  })
+
+  it('still reads the token from stdin when only --token-stdin is set (no env token)', async () => {
+    const fakeStdin = new EventEmitter() as EventEmitter & { setEncoding: (enc: string) => void }
+    fakeStdin.setEncoding = vi.fn()
+    const originalStdin = process.stdin
+    Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true })
+    try {
+      const outcomePromise = runDaemonRun({
+        host: '127.0.0.1',
+        tokenStdin: true,
+        dataDir: '/tmp/whiteboard-test',
+        env: {},
+      })
+      queueMicrotask(() => {
+        fakeStdin.emit('data', 'stdin-only-token\n')
+        fakeStdin.emit('end')
+      })
+      const outcome = await outcomePromise
+      expect(outcome.kind).toBe('running')
+      expect(startHttpServerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ token: 'stdin-only-token' }),
+      )
+    } finally {
+      Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true })
+    }
+  })
+})
+
 describe('runDaemonRun WHITEBOARD_OAUTH_CLIENT_REGISTRY wiring', () => {
   afterEach(() => vi.clearAllMocks())
 
