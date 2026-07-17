@@ -17,6 +17,7 @@ import {
   removeDevDaemonMarker,
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
+  resolveEffectivePort,
   resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
   writeDevDaemonMarker,
@@ -139,6 +140,26 @@ describe('injectDerivedPortArg', () => {
     expect(argv).toEqual(['--daemon'])
     expect(result).not.toBe(argv)
   })
+
+  it('still appends --port=<derived> for a bare "--port <value>" (space form), because parseArg in server/index.ts only recognizes the "--port=value" form and would otherwise silently fall back to the default port', () => {
+    const argv = ['--daemon', '--port', '4000']
+
+    expect(injectDerivedPortArg(argv, 3123)).toEqual(['--daemon', '--port', '4000', '--port=3123'])
+  })
+})
+
+describe('resolveEffectivePort', () => {
+  it('returns the derived port when argv has no --port=value flag', () => {
+    expect(resolveEffectivePort(['--daemon'], 3123)).toBe(3123)
+  })
+
+  it('returns the caller-provided --port=value when present, matching what parseArg resolves', () => {
+    expect(resolveEffectivePort(['--daemon', '--port=4000'], 3123)).toBe(4000)
+  })
+
+  it("returns the derived port for a bare '--port <value>' argv, since that form is not a recognized override", () => {
+    expect(resolveEffectivePort(['--daemon', '--port', '4000'], 3123)).toBe(3123)
+  })
 })
 
 describe('dev daemon identity marker', () => {
@@ -156,6 +177,17 @@ describe('dev daemon identity marker', () => {
     const raw = JSON.parse(readFileSync(join(tempRoot, 'dev-daemon.json'), 'utf8'))
     expect(raw).toMatchObject({ port: 3123, repoRoot: '/repo/worktree', pid: 4242 })
     expect(typeof raw.startedAt).toBe('string')
+  })
+
+  it('creates the data dir first when it does not exist yet (e.g. an explicit WHITEBOARD_DATA_DIR override that was never mkdir-ed)', () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'dev-daemon-marker-'))
+    const notYetCreated = join(tempRoot, 'override', 'nested')
+
+    expect(() =>
+      writeDevDaemonMarker(notYetCreated, { port: 3123, repoRoot: '/repo/worktree', pid: 4242 }),
+    ).not.toThrow()
+
+    expect(existsSync(join(notYetCreated, 'dev-daemon.json'))).toBe(true)
   })
 
   it('overwrites a malformed existing marker instead of throwing', () => {

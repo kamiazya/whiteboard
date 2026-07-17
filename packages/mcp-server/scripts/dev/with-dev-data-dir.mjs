@@ -10,6 +10,7 @@ import {
   removeDevDaemonMarker,
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
+  resolveEffectivePort,
   resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
   writeDevDaemonMarker,
@@ -50,12 +51,17 @@ const derivedPort = deriveDevPort({
   env: process.env,
 })
 const argvWithPort = injectDerivedPortArg(process.argv.slice(2), derivedPort)
+// A caller-provided `--port=value` (recognized by parseArg in
+// server/index.ts) always wins over derivedPort — record that same
+// effective value in the marker so it never disagrees with the port the
+// server actually binds to.
+const effectivePort = resolveEffectivePort(argvWithPort, derivedPort)
 
 const entryPath = resolve(packageRoot, 'src/server/index.ts')
 const { command, args } = resolveTsxWatchSpawn(packageRoot, entryPath, argvWithPort)
 
 writeDevDaemonMarker(env.WHITEBOARD_DATA_DIR, {
-  port: derivedPort,
+  port: effectivePort,
   repoRoot,
   pid: process.pid,
 })

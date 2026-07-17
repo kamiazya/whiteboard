@@ -73,19 +73,54 @@ export function reraiseSignalOrExit(
   }
 }
 
+const PORT_FLAG_PREFIX = '--port='
+
+/**
+ * Finds the effective `--port=<value>` flag in argv, matching exactly what
+ * `parseArg` in server/index.ts recognizes (first match wins). A bare,
+ * space-separated `--port <value>` is NOT a recognized override — parseArg
+ * only ever looks for the `--port=` prefix — so it must not be treated as
+ * one here either, or injection and the server's actual listening port
+ * disagree.
+ *
+ * @param {string[]} argv
+ * @returns {number | undefined}
+ */
+function findPortFlagValue(argv) {
+  const match = argv.find((arg) => arg.startsWith(PORT_FLAG_PREFIX))
+  return match === undefined ? undefined : Number(match.slice(PORT_FLAG_PREFIX.length))
+}
+
 /**
  * Appends `--port=<derivedPort>` to argv unless the caller already passed
- * an explicit `--port`, which always wins. Returns a new array (immutable).
+ * an explicit `--port=value`, which always wins. Returns a new array
+ * (immutable).
  *
  * @param {string[]} argv
  * @param {number} derivedPort
  * @returns {string[]}
  */
 export function injectDerivedPortArg(argv, derivedPort) {
-  if (argv.some((arg) => arg === '--port' || arg.startsWith('--port='))) {
+  if (findPortFlagValue(argv) !== undefined) {
     return [...argv]
   }
-  return [...argv, `--port=${derivedPort}`]
+  return [...argv, `${PORT_FLAG_PREFIX}${derivedPort}`]
+}
+
+/**
+ * Resolves the port the spawned server will actually listen on, given the
+ * argv passed to it after injectDerivedPortArg. Used to persist the true
+ * effective port into the identity marker instead of always recording
+ * derivedPort — a caller-provided `--port=value` override must be reflected
+ * here too, or the marker disagrees with the real listening port and later
+ * collision/identity checks make wrong decisions.
+ *
+ * @param {string[]} argvWithPort
+ * @param {number} derivedPort
+ * @returns {number}
+ */
+export function resolveEffectivePort(argvWithPort, derivedPort) {
+  return findPortFlagValue(argvWithPort) ?? derivedPort
 }
 
 const DEV_DAEMON_MARKER_FILENAME = 'dev-daemon.json'
@@ -98,10 +133,19 @@ const DEV_DAEMON_MARKER_FILENAME = 'dev-daemon.json'
  * daemon that happened to land on the same hashed port (or a stale process
  * from before per-worktree ports existed).
  *
+ * Ensures `dataDir` exists first: resolveDataDir()'s contract only mkdir's
+ * an explicit WHITEBOARD_DATA_DIR override lazily elsewhere (or not at all),
+ * so a caller-provided override that hasn't been created yet would otherwise
+ * make this throw ENOENT before the dev server is even spawned. This mkdir
+ * is unconditional but permission-neutral — it never chmod's, so it does
+ * not widen ensureDevDataDirSecured's hardening contract for the repo-local
+ * default path.
+ *
  * @param {string} dataDir
  * @param {{ port: number, repoRoot: string, pid: number }} args
  */
 export function writeDevDaemonMarker(dataDir, { port, repoRoot, pid }) {
+  mkdirSync(dataDir, { recursive: true })
   const marker = { port, repoRoot, pid, startedAt: new Date().toISOString() }
   writeFileSync(join(dataDir, DEV_DAEMON_MARKER_FILENAME), JSON.stringify(marker, null, 2))
 }
