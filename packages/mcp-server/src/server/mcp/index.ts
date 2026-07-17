@@ -167,6 +167,36 @@ export async function createExcalidrawMcpServer() {
 }
 
 export async function main() {
+  // Install stdio/signal handling before any startup work (tracing init,
+  // prepareDataDir, server creation, transport connect) runs. Those steps
+  // can take a while, and initTracing() below installs its own
+  // SIGTERM/SIGINT listeners; once *any* listener is registered for a
+  // signal, Node no longer applies its default terminate-the-process
+  // behavior. Registering our lifecycle handler first guarantees a signal
+  // arriving mid-startup still exits the process instead of being
+  // swallowed while nothing else is listening for it. closeServer starts
+  // as a no-op and is upgraded once the real server exists.
+  //
+  // StdioServerTransport only listens for 'data'/'error' on stdin, never
+  // 'end'/'close' — a client disconnect (parent process exit, pipe close)
+  // otherwise leaves this process parked on a stdin that will never
+  // produce another byte. Only wired here (not in
+  // createExcalidrawMcpServer, which the HTTP /mcp handler reuses
+  // per-request) so a stdio client's disconnect never affects the
+  // long-lived HTTP daemon.
+  let closeServer: () => Promise<void> = () => Promise.resolve()
+  const { shutdownTracing } = await import('../observability/tracing.js')
+  installStdioLifecycle({
+    stdin: process.stdin,
+    signals: { on: (signal, listener) => process.on(signal, listener) },
+    closeServer: () => closeServer(),
+    // Coordinates with tracing's own shutdown-signal handlers so the
+    // process does not exit while a pending span export is still in
+    // flight; bounded by the same GRACEFUL_SHUTDOWN_TIMEOUT_MS budget.
+    shutdownExtra: () => shutdownTracing(),
+    exit: (code) => process.exit(code),
+  })
+
   // Initialise OpenTelemetry so traces span the stdio entrypoint too. The
   // SDK is a no-op unless WHITEBOARD_OTEL=1 or OTEL_EXPORTER_OTLP_ENDPOINT
   // is set; the fallback exporter writes JSON to stderr only, which is
@@ -183,19 +213,7 @@ export async function main() {
   const transport = new StdioServerTransport()
   await server.connect(transport)
 
-  // StdioServerTransport only listens for 'data'/'error' on stdin, never
-  // 'end'/'close' — a client disconnect (parent process exit, pipe close)
-  // otherwise leaves this process parked on a stdin that will never
-  // produce another byte, with no signal handlers to fall back on either.
-  // Only wired here (not in createExcalidrawMcpServer, which the HTTP
-  // /mcp handler reuses per-request) so a stdio client's disconnect never
-  // affects the long-lived HTTP daemon.
-  installStdioLifecycle({
-    stdin: process.stdin,
-    signals: { on: (signal, listener) => process.on(signal, listener) },
-    closeServer: () => server.close(),
-    exit: (code) => process.exit(code),
-  })
+  closeServer = () => server.close()
 }
 
 const isEntryPoint = isDirectEntryPoint(import.meta.url)
