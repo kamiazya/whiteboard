@@ -23,8 +23,6 @@ export interface StdioLifecycleDeps {
   }
   closeServer: () => Promise<void>
   exit: (code: number) => void
-  setTimeoutFn?: typeof setTimeout
-  clearTimeoutFn?: typeof clearTimeout
 }
 
 /**
@@ -40,22 +38,17 @@ export interface StdioLifecycleDeps {
  * exit the long-lived HTTP daemon on an unrelated client's disconnect.
  */
 export function installStdioLifecycle(deps: StdioLifecycleDeps): (exitCode?: number) => void {
-  const scheduleTimeout = deps.setTimeoutFn ?? setTimeout
-  const cancelTimeout = deps.clearTimeoutFn ?? clearTimeout
   let shuttingDown = false
 
   const shutdown = (exitCode = 0): void => {
     if (shuttingDown) return
     shuttingDown = true
 
-    const hardExitTimer = scheduleTimeout(() => {
+    // unref so the pending timer never keeps the event loop alive on its own.
+    const hardExitTimer = setTimeout(() => {
       log.warning('graceful MCP shutdown timed out, forcing exit')
       deps.exit(exitCode)
-    }, GRACEFUL_SHUTDOWN_TIMEOUT_MS)
-    const maybeUnref = (hardExitTimer as unknown as { unref?: () => void }).unref
-    if (typeof maybeUnref === 'function') {
-      maybeUnref.call(hardExitTimer)
-    }
+    }, GRACEFUL_SHUTDOWN_TIMEOUT_MS).unref()
 
     deps
       .closeServer()
@@ -66,7 +59,7 @@ export function installStdioLifecycle(deps: StdioLifecycleDeps): (exitCode?: num
         )
       })
       .finally(() => {
-        cancelTimeout(hardExitTimer)
+        clearTimeout(hardExitTimer)
         deps.exit(exitCode)
       })
   }
