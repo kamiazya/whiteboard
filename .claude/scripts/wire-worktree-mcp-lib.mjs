@@ -61,6 +61,24 @@ export function buildClaudeMcpAddArgs(desired) {
   return ['mcp', 'add', '--transport', 'http', desired.name, desired.url, '--scope', 'local', '--header', desired.authHeader]
 }
 
+// Matches the literal "Bearer <token>" text produced by buildDesiredConfig's
+// authHeader (and echoed back verbatim by a failing `claude mcp add`'s own
+// argv/stderr/stdout) so it can be scrubbed before anything reaches a log
+// sink — a failed CLI invocation is exactly the kind of unexpected path that
+// otherwise prints the live WHITEBOARD_TOKEN in the clear.
+const BEARER_TOKEN_PATTERN = /Bearer\s+\S+/g
+
+/**
+ * Redacts any "Bearer <token>" occurrence in free-form text (CLI argv joined
+ * for a log line, or a spawned process's stdout/stderr) before it is logged.
+ *
+ * @param {string} text
+ */
+export function redactBearerTokens(text) {
+  if (typeof text !== 'string') return text
+  return text.replace(BEARER_TOKEN_PATTERN, 'Bearer [redacted]')
+}
+
 function isPlainObject(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }

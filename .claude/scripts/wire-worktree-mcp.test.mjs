@@ -134,6 +134,96 @@ test('main: a post-write mismatch is reported without retrying the write', async
   assert.ok(logs.some((line) => /does not match|mismatch/i.test(line)))
 })
 
+test('main: an already-identical registration is a no-op — no `claude mcp add` spawn, no write', async () => {
+  const repoRoot = '/repo/.claude/worktrees/wt-a'
+  const desiredUrl = 'http://127.0.0.1:3457/mcp'
+  let addSpawned = false
+  let writeCalls = 0
+  const logs = []
+  await main({
+    argv: [repoRoot],
+    isMainCheckoutOverride: false,
+    claudeCliAvailableOverride: true,
+    spawn: (cmd, args) => {
+      if (args?.includes('add')) addSpawned = true
+      return fakeSpawnOk()
+    },
+    readConfig: () => ({
+      projects: {
+        [resolve(repoRoot)]: {
+          mcpServers: {
+            whiteboard: {
+              type: 'http',
+              url: desiredUrl,
+              headers: { Authorization: 'Bearer whiteboard-dev' },
+            },
+          },
+        },
+      },
+    }),
+    writeConfig: () => {
+      writeCalls += 1
+    },
+    log: (msg) => logs.push(msg),
+    env: {},
+  })
+
+  // Only asserting the no-op behavior here, not the exact desired port —
+  // classifyExistingConfig itself is unit-tested for exact matching.
+  assert.equal(addSpawned, false)
+  assert.equal(writeCalls, 0)
+})
+
+test('main: a non-zero-exit `claude mcp add` is logged (redacted) without a post-write verify read', async () => {
+  const repoRoot = '/repo/.claude/worktrees/wt-a'
+  let readCalls = 0
+  const logs = []
+  await main({
+    argv: [repoRoot],
+    isMainCheckoutOverride: false,
+    claudeCliAvailableOverride: true,
+    spawn: (cmd, args) => {
+      if (args?.includes('add')) {
+        return { status: 1, stdout: '', stderr: 'boom: unauthorized', error: undefined }
+      }
+      return fakeSpawnOk()
+    },
+    readConfig: () => {
+      readCalls += 1
+      return { projects: {} }
+    },
+    writeConfig: () => {
+      throw new Error('writeConfig must not be called on this path')
+    },
+    log: (msg) => logs.push(msg),
+    env: {},
+  })
+
+  assert.equal(readCalls, 1, 'must not re-read config for a post-write verify after a failed add')
+  assert.ok(logs.some((line) => /failed \(exit 1\)/.test(line)))
+  assert.ok(logs.some((line) => /boom: unauthorized/.test(line)))
+})
+
+test('main --sweep: no ~/.claude.json projects found is a no-op — no write', async () => {
+  let writeCalls = 0
+  const logs = []
+  await main({
+    argv: ['--sweep'],
+    mainCheckoutRootOverride: '/repo',
+    liveWorktreePathsOverride: [],
+    spawn: () => fakeSpawnOk(),
+    readConfig: () => ({}),
+    writeConfig: () => {
+      writeCalls += 1
+    },
+    log: (msg) => logs.push(msg),
+    env: {},
+  })
+
+  assert.equal(writeCalls, 0)
+  assert.ok(logs.some((line) => /no ~\/\.claude\.json projects found/i.test(line)))
+})
+
 test('main --sweep: removes stale entries via a config write, keeps live entries, tolerates ENOENT-deleted paths', async () => {
   const mainRoot = '/repo'
   const stalePath = resolve('/repo/.claude/worktrees/gone')

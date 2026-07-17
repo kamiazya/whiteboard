@@ -24,9 +24,9 @@
 // a realpath comparison, so a symlinked worktree checkout doesn't trip a
 // naive string compare).
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { isMainCheckout } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
 import {
@@ -35,6 +35,7 @@ import {
   buildDesiredConfig,
   classifyExistingConfig,
   planStaleSweep,
+  redactBearerTokens,
   removeStaleEntriesFromConfig,
   resolveMainCheckoutRoot,
   verifyPostWrite,
@@ -42,23 +43,74 @@ import {
 
 const CLAUDE_CONFIG_PATH = join(homedir(), '.claude.json')
 
-function defaultReadConfig() {
-  if (!existsSync(CLAUDE_CONFIG_PATH)) return null
-  try {
-    return JSON.parse(readFileSync(CLAUDE_CONFIG_PATH, 'utf8'))
-  } catch {
-    // Malformed ~/.claude.json is the CLI's own concern to repair, not
-    // something this script should ever try to fix or overwrite.
-    return null
+// A freshly-created ~/.claude.json can hold MCP bearer tokens, so a brand
+// new file gets a restrictive mode by default instead of inheriting
+// whatever the process umask would otherwise allow.
+const DEFAULT_CONFIG_MODE = 0o600
+
+/**
+ * Builds a read/write pair scoped to one config path. Kept as a factory
+ * (rather than two free functions closing over a single module-level path)
+ * so tests can point it at a scratch file instead of the real, developer-
+ * global ~/.claude.json.
+ *
+ * The pair guards two things a naive read-JSON/write-JSON round trip does
+ * not:
+ *  - Concurrency: `writeConfig` refuses to overwrite the file if its raw
+ *    contents changed since the paired `readConfig` call — a `claude mcp`
+ *    invocation or another Claude Code session racing this script would
+ *    otherwise have its write silently discarded.
+ *  - Permissions: the temp-file-then-rename write preserves the existing
+ *    file's mode (or applies a restrictive default for a new file) instead
+ *    of letting the process umask decide, since this file can carry MCP
+ *    credentials.
+ *
+ * @param {string} configPath
+ */
+export function createConfigIO(configPath) {
+  let lastReadRawText
+
+  function readConfig() {
+    if (!existsSync(configPath)) {
+      lastReadRawText = null
+      return null
+    }
+    try {
+      const raw = readFileSync(configPath, 'utf8')
+      lastReadRawText = raw
+      return JSON.parse(raw)
+    } catch {
+      // Malformed ~/.claude.json is the CLI's own concern to repair, not
+      // something this script should ever try to fix or overwrite. Mark the
+      // snapshot as unknown so writeConfig's concurrency guard below is
+      // skipped rather than permanently blocking on unparsable content.
+      lastReadRawText = undefined
+      return null
+    }
   }
+
+  function writeConfig(config) {
+    assertNotTrackedSettingsPath(configPath)
+    if (lastReadRawText !== undefined) {
+      const currentRaw = existsSync(configPath) ? readFileSync(configPath, 'utf8') : null
+      if (currentRaw !== lastReadRawText) {
+        throw new Error(
+          `${configPath} changed since it was last read — another process wrote to it concurrently. ` +
+            'Rerun instead of overwriting that change.',
+        )
+      }
+    }
+    const previousMode = existsSync(configPath) ? statSync(configPath).mode : DEFAULT_CONFIG_MODE
+    const tmpPath = `${configPath}.tmp-${process.pid}`
+    writeFileSync(tmpPath, JSON.stringify(config, null, 2))
+    chmodSync(tmpPath, previousMode)
+    renameSync(tmpPath, configPath)
+  }
+
+  return { readConfig, writeConfig }
 }
 
-function defaultWriteConfig(config) {
-  assertNotTrackedSettingsPath(CLAUDE_CONFIG_PATH)
-  const tmpPath = `${CLAUDE_CONFIG_PATH}.tmp-${process.pid}`
-  writeFileSync(tmpPath, JSON.stringify(config, null, 2))
-  renameSync(tmpPath, CLAUDE_CONFIG_PATH)
-}
+const { readConfig: defaultReadConfig, writeConfig: defaultWriteConfig } = createConfigIO(CLAUDE_CONFIG_PATH)
 
 function defaultSpawn(cmd, args, options) {
   return spawnSync(cmd, args, { encoding: 'utf8', ...options })
@@ -146,7 +198,9 @@ function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckou
   const addArgs = buildClaudeMcpAddArgs(desired)
   const result = spawn('claude', addArgs, { cwd: repoRoot })
   if (result.status !== 0) {
-    log(`[wire-worktree-mcp] \`claude ${addArgs.join(' ')}\` failed (exit ${result.status}): ${result.stderr || result.stdout}`)
+    const redactedCommand = redactBearerTokens(`claude ${addArgs.join(' ')}`)
+    const redactedOutput = redactBearerTokens(String(result.stderr || result.stdout || ''))
+    log(`[wire-worktree-mcp] \`${redactedCommand}\` failed (exit ${result.status}): ${redactedOutput}`)
     return
   }
 
@@ -172,9 +226,13 @@ function sweepStaleEntries({ mainCheckoutRoot, liveWorktreePaths, readConfig, wr
 
   // Every project entry under this repo's worktrees directory that still
   // carries our desired name is a candidate for the sweep — entries under
-  // any other name (or another repo entirely) are out of scope.
+  // any other name (or another repo entirely) are out of scope. The prefix
+  // must use the platform separator (not a hardcoded '/'): project keys in
+  // ~/.claude.json are absolute paths in the OS's native form, so on
+  // Windows join() itself already returns backslashes and a hardcoded '/'
+  // would never match, silently sweeping nothing.
   const registered = Object.keys(config.projects)
-    .filter((projectPath) => projectPath.startsWith(join(mainCheckoutRoot, '.claude', 'worktrees') + '/'))
+    .filter((projectPath) => projectPath.startsWith(join(mainCheckoutRoot, '.claude', 'worktrees') + sep))
     .map((projectPath) => {
       const entry = config.projects[projectPath]?.mcpServers?.whiteboard
       return entry ? { name: 'whiteboard', path: resolve(projectPath) } : null

@@ -23,6 +23,7 @@ import {
   assertNotTrackedSettingsPath,
   resolveMainCheckoutRoot,
   removeStaleEntriesFromConfig,
+  redactBearerTokens,
 } from './wire-worktree-mcp-lib.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -245,6 +246,24 @@ test('removeStaleEntriesFromConfig: no-ops when the targeted project or server k
 test('removeStaleEntriesFromConfig: empty actions list returns an equivalent config', () => {
   const config = { projects: { '/repo/wt': { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } } }
   assert.deepEqual(removeStaleEntriesFromConfig(config, []), config)
+})
+
+test('redactBearerTokens: scrubs a "Bearer <token>" header value out of a failed-command log line', () => {
+  const message = "`claude mcp add --transport http whiteboard http://127.0.0.1:3457/mcp --scope local --header 'Authorization: Bearer super-secret-token'` failed"
+  const redacted = redactBearerTokens(message)
+  assert.ok(!redacted.includes('super-secret-token'), 'the live token must not appear in the redacted text')
+  assert.ok(redacted.includes('Bearer [redacted]'))
+})
+
+test('redactBearerTokens: scrubs every occurrence, including one echoed back in CLI stderr output', () => {
+  const message = 'sent Authorization: Bearer abc123 but server replied with Authorization: Bearer abc123 (unauthorized)'
+  const redacted = redactBearerTokens(message)
+  assert.ok(!redacted.includes('abc123'))
+  assert.equal((redacted.match(/Bearer \[redacted\]/g) ?? []).length, 2)
+})
+
+test('redactBearerTokens: leaves text with no bearer token untouched', () => {
+  assert.equal(redactBearerTokens('no secrets here'), 'no secrets here')
 })
 
 test('docs-lock: the manual fallback `claude mcp add` command in development.md matches buildClaudeMcpAddArgs argv order', () => {
