@@ -198,6 +198,10 @@ function runCliAsync(args, { env, timeoutMs = 15_000 } = {}) {
         /* already gone */
       }
     }, timeoutMs)
+    child.once('error', (err) => {
+      clearTimeout(timer)
+      resolve({ status: null, stdout, stderr: `${stderr}\nspawn error: ${err?.message ?? err}` })
+    })
     child.once('close', (status) => {
       clearTimeout(timer)
       resolve({ status, stdout, stderr })
