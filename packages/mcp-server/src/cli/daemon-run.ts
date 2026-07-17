@@ -108,7 +108,9 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   if (options.dataDir) {
     overrideDataDir(options.dataDir)
   }
-  const dataDir = options.dataDir ?? getDataDir()
+  // Read back through the seam (not options.dataDir) so the registry and the
+  // startup lock share the same resolved-absolute path the stores will use.
+  const dataDir = getDataDir()
   const host = options.host ?? '127.0.0.1'
 
   // Pre-startup guard: local-daemon is loopback-only regardless of --host.

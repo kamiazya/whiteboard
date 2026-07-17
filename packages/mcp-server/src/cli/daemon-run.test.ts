@@ -180,6 +180,21 @@ describe('runDaemonRun --data-dir storage redirection', () => {
     expect(getDataDir()).toBe(resolve(dir))
   })
 
+  it('hands the registry the resolved-absolute dir even when --data-dir is relative', async () => {
+    const rel = `./tmp-daemon-run-rel-${Date.now()}`
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      port: 3099,
+      dataDir: rel,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(getDataDir()).toBe(resolve(rel))
+    const registry = await import('../daemon/daemon-registry.js')
+    const saveMock = vi.mocked(registry.saveDaemonRecord)
+    expect(saveMock.mock.calls.at(-1)?.[1]).toBe(resolve(rel))
+  })
+
   it('leaves the seam untouched when no dataDir option is given', async () => {
     const before = getDataDir()
     const outcome = await runDaemonRun({
