@@ -100,6 +100,22 @@ function releaseOnlyGates(gates: ReleaseGate[]): ReleaseGate[] {
   )
 }
 
+// The only workflow file this test loads and resolves jobs/steps against.
+// prCoverage.workflow is a required, schema-validated field, but until this
+// constant is checked against it, a declaration naming a different or
+// nonexistent workflow file (e.g. a copy-pasted "release.yml") would still
+// resolve — because the job/step lookup below always searches ci.yml
+// regardless of what prCoverage.workflow says. Asserting the match is what
+// makes the field load-bearing instead of decorative.
+const LOADED_WORKFLOW_FILE = 'ci.yml'
+
+function expectCoverageWorkflowMatchesLoadedFile(gate: ReleaseGate, coverage: PrCoverage): void {
+  expect(
+    coverage.workflow,
+    `gate "${gate.id}": prCoverage.workflow "${coverage.workflow}" does not match the workflow file this check resolves against ("${LOADED_WORKFLOW_FILE}")`,
+  ).toBe(LOADED_WORKFLOW_FILE)
+}
+
 describe('release-gate-matrix.json is a valid matrix (schema authority)', () => {
   it('passes the shared validator', async () => {
     const { validateMatrix } = await loadSchema()
@@ -124,6 +140,7 @@ describe('gate isomorphism: workflow-step coverage resolves structurally', () =>
     for (const gate of releaseOnlyGates(matrix.gates)) {
       const coverage = gate.prCoverage
       if (coverage?.kind !== 'workflow-step') continue
+      expectCoverageWorkflowMatchesLoadedFile(gate, coverage)
       const job = jobs.find((j) => j.id === coverage.jobId)
       expect(job, `gate "${gate.id}": job "${coverage.jobId}" not found in ci.yml`).toBeDefined()
       expect(
@@ -154,6 +171,7 @@ describe('gate isomorphism: aggregate coverage resolves to a PR-reachable job', 
     for (const gate of releaseOnlyGates(matrix.gates)) {
       const coverage = gate.prCoverage
       if (coverage?.kind !== 'aggregate') continue
+      expectCoverageWorkflowMatchesLoadedFile(gate, coverage)
       const job = jobs.find((j) => j.id === coverage.jobId)
       expect(job, `gate "${gate.id}": job "${coverage.jobId}" not found in ci.yml`).toBeDefined()
       expect(
@@ -178,5 +196,31 @@ describe('gate isomorphism: exceptions are explicit and pinned', () => {
       .map((g) => g.id)
       .sort()
     expect(exceptionIds).toEqual([...EXCEPTION_ALLOWLIST].sort())
+  })
+})
+
+// Proves prCoverage.workflow is load-bearing rather than decorative: a
+// workflow-step/aggregate declaration naming a file other than the one this
+// test actually loads and resolves jobs/steps against must fail, even when
+// the jobId/stepName happen to exist in the loaded file.
+describe('gate isomorphism: prCoverage.workflow must name the workflow file this check resolves against', () => {
+  it('rejects a workflow-step coverage naming a different workflow file', async () => {
+    const { extractWorkflowJobs } = await loadExtractor()
+    const jobs = extractWorkflowJobs(ciYaml)
+    const gate: ReleaseGate = {
+      id: 'fixture',
+      command: 'pnpm typecheck',
+      requiredFor: ['publish'],
+      requiresDocker: false,
+      prCoverage: {
+        kind: 'workflow-step',
+        workflow: 'release.yml',
+        jobId: 'check',
+        stepName: 'Typecheck',
+      },
+    }
+    const job = jobs.find((j) => j.id === gate.prCoverage!.jobId)
+    expect(job, 'fixture job must exist in ci.yml for this to be a meaningful check').toBeDefined()
+    expect(() => expectCoverageWorkflowMatchesLoadedFile(gate, gate.prCoverage!)).toThrow()
   })
 })
