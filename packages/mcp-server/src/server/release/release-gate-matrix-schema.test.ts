@@ -17,7 +17,7 @@ async function importSchema() {
     validateGate: (gate: unknown) => { ok: boolean; reason?: string }
     validateMatrix: (matrix: unknown) => { ok: boolean; reason?: string }
     validatePrCoverage: (prCoverage: unknown) => { ok: boolean; reason?: string }
-    validateGateEnv: (env: unknown) => { ok: boolean; reason?: string }
+    validateGateEnv?: (env: unknown) => { ok: boolean; reason?: string }
   }
 }
 
@@ -81,16 +81,17 @@ describe('validateGate', () => {
     expect(validateGate(gate).ok).toBe(false)
   })
 
-  it('accepts a gate with a valid env map', async () => {
-    const { validateGate } = await importSchema()
-    const gate = { ...VALID_GATE, env: { WHITEBOARD_DEV: '1' } }
+  // No runner honors a per-gate `env` map (both publish-gate.mjs and
+  // pages-release.mjs only read id/command/requiredFor), so the schema does
+  // not validate it either — an unenforced validator on an unhonored field
+  // would look load-bearing but silently do nothing. Additive unknown fields
+  // are tolerated rather than rejected, matching the runners' own behavior
+  // (see publish-gate-runner.test.ts "tolerate additive matrix fields").
+  it('tolerates a gate carrying an arbitrary env field without validating its shape', async () => {
+    const { validateGate, validateGateEnv } = await importSchema()
+    const gate = { ...VALID_GATE, env: { WHITEBOARD_DEV: 1, nonsense: null } }
     expect(validateGate(gate).ok).toBe(true)
-  })
-
-  it('rejects a gate whose env has a non-string value', async () => {
-    const { validateGate } = await importSchema()
-    const gate = { ...VALID_GATE, env: { WHITEBOARD_DEV: 1 } }
-    expect(validateGate(gate).ok).toBe(false)
+    expect(validateGateEnv).toBeUndefined()
   })
 })
 

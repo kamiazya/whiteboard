@@ -68,25 +68,6 @@ export function validatePrCoverage(prCoverage) {
 }
 
 /**
- * Validate the optional per-gate `env` map: explicit environment variables the
- * runner passes to this gate's subprocess (the step-scoped-env hardening for
- * pillar C). Values must be strings — the same shape `process.env` requires.
- * @param {unknown} env
- * @returns {ValidationResult}
- */
-export function validateGateEnv(env) {
-  if (typeof env !== 'object' || env === null || Array.isArray(env)) {
-    return { ok: false, reason: 'env must be a plain object' }
-  }
-  for (const [key, value] of Object.entries(/** @type {Record<string, unknown>} */ (env))) {
-    if (typeof value !== 'string') {
-      return { ok: false, reason: `env.${key} must be a string` }
-    }
-  }
-  return { ok: true }
-}
-
-/**
  * Validate a single release-gate-matrix.json gate entry.
  * @param {unknown} gate
  * @returns {ValidationResult}
@@ -136,10 +117,11 @@ export function validateGate(gate) {
     const result = validatePrCoverage(g.prCoverage)
     if (!result.ok) return { ok: false, reason: `prCoverage: ${result.reason}` }
   }
-  if ('env' in g && g.env !== undefined) {
-    const result = validateGateEnv(g.env)
-    if (!result.ok) return { ok: false, reason: `env: ${result.reason}` }
-  }
+  // No runner honors a per-gate `env` map (publish-gate.mjs and
+  // pages-release.mjs only read id/command/requiredFor), so it is
+  // deliberately NOT schema-validated here — validating a field nothing
+  // consumes would look load-bearing but silently do nothing. Any shape
+  // under `env` is tolerated as an additive unknown field.
   return { ok: true }
 }
 
