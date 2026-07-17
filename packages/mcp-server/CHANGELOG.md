@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.17](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.16...mcp-server-v0.0.17) (2026-07-17)
+
+
+### Bug Fixes
+
+* **mcp-server:** reject conflicting daemon token sources (env + --token-stdin) ([#249](https://github.com/kamiazya/whiteboard/issues/249)) ([285da81](https://github.com/kamiazya/whiteboard/commit/285da81ba953c634bf9f3e0169d6b75b35e5349d))
+
 ## [0.0.16](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.15...mcp-server-v0.0.16) (2026-07-17)
 
 

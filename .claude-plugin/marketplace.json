@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugin distribution for the @kamiazya/whiteboard collaborative Excalidraw MCP.",
-    "version": "0.0.16"
+    "version": "0.0.17"
   },
   "plugins": [
     {
@@ -17,7 +17,7 @@
         "ref": "stable"
       },
       "description": "Collaborative Excalidraw canvas for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the bundled /drawing-visuals, /coauthoring-visuals, and /auditing-workspaces skills.",
-      "version": "0.0.16",
+      "version": "0.0.17",
       "author": {
         "name": "kamiazya",
         "url": "https://github.com/kamiazya"
