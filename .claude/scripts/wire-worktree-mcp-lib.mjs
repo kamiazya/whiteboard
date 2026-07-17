@@ -6,8 +6,7 @@
 // global ~/.claude.json.
 import { deriveDevPort } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
 
-const AUTH_HEADER_VALUE = 'Bearer whiteboard-dev'
-const AUTH_HEADER = `Authorization: ${AUTH_HEADER_VALUE}`
+const AUTH_HEADER = 'Authorization: Bearer whiteboard-dev'
 
 /** @param {number} port */
 export function buildMcpUrl(port) {
