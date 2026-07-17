@@ -4,6 +4,7 @@
 // `claude` CLI invocation or filesystem/network I/O so the classify/plan
 // decisions are unit-testable without ever touching the real, developer-
 // global ~/.claude.json.
+import { dirname, resolve } from 'node:path'
 import { deriveDevPort } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
 import { resolveDevBearerToken } from '../../packages/mcp-server/scripts/dev/ensure-http-dev-daemon-lib.mjs'
 
@@ -22,9 +23,16 @@ export function buildMcpUrl(port) {
  * the caller so it can surface a warning instead of silently registering
  * a possibly-stale port.
  *
+ * Registers under the tracked entry's own name ("whiteboard") by default,
+ * not a distinct one: a `--scope local` registration cleanly shadows the
+ * repo-tracked `.mcp.json` project-scope entry of the same name — verified
+ * against the real CLI — so an agent in this worktree only ever sees one
+ * "whiteboard" server, not a working one plus a permanently-broken decoy
+ * under a different name.
+ *
  * @param {{ repoRoot: string, env?: Record<string, string | undefined>, isMainCheckout?: boolean, name?: string }} args
  */
-export function buildDesiredConfig({ repoRoot, env = {}, isMainCheckout = false, name = 'whiteboard-wt' }) {
+export function buildDesiredConfig({ repoRoot, env = {}, isMainCheckout = false, name = 'whiteboard' }) {
   if (isMainCheckout) {
     throw new Error('refusing to build a wiring config for the main checkout — it is wired via tracked settings.json to port 3099')
   }
@@ -41,9 +49,16 @@ export function buildDesiredConfig({ repoRoot, env = {}, isMainCheckout = false,
   }
 }
 
-/** @param {{ name: string, url: string, authHeader: string }} desired */
+/**
+ * Builds the argv for `claude mcp add`. `<name>` and `<url>` must come
+ * right after `--transport http` — commander (the CLI's arg parser) reports
+ * "missing required argument 'name'" if they're placed after `--scope`/
+ * `--header` instead, confirmed against the real CLI.
+ *
+ * @param {{ name: string, url: string, authHeader: string }} desired
+ */
 export function buildClaudeMcpAddArgs(desired) {
-  return ['mcp', 'add', '--transport', 'http', '--scope', 'local', '--header', desired.authHeader, desired.name, desired.url]
+  return ['mcp', 'add', '--transport', 'http', desired.name, desired.url, '--scope', 'local', '--header', desired.authHeader]
 }
 
 function isPlainObject(value) {
@@ -133,4 +148,53 @@ export function assertNotTrackedSettingsPath(targetPath) {
 export function planStaleSweep(registered, liveWorktreePaths) {
   const live = new Set(liveWorktreePaths)
   return registered.filter((entry) => !live.has(entry.path)).map((entry) => ({ action: 'remove', name: entry.name, path: entry.path }))
+}
+
+/**
+ * Resolves the MAIN checkout root regardless of which worktree the caller
+ * is running from. `git rev-parse --show-toplevel` answers "top of THIS
+ * worktree", which is wrong for `--sweep` when invoked from inside a linked
+ * worktree — it needs the main repo root to know which `.claude/worktrees/`
+ * prefix its registered entries live under. Accepts either the porcelain
+ * output of `git worktree list --porcelain` (main entry is always listed
+ * first, independent of cwd) or a `--git-common-dir` path (the shared
+ * `.git` directory every worktree — main or linked — points at; its parent
+ * is always the main checkout root).
+ *
+ * @param {{ worktreeListPorcelain?: string, gitCommonDir?: string }} args
+ */
+export function resolveMainCheckoutRoot({ worktreeListPorcelain, gitCommonDir } = {}) {
+  if (gitCommonDir !== undefined) {
+    return resolve(dirname(gitCommonDir))
+  }
+  if (worktreeListPorcelain !== undefined) {
+    const match = worktreeListPorcelain.match(/^worktree (.+)$/m)
+    if (!match) {
+      throw new Error('could not find a `worktree <path>` entry in `git worktree list --porcelain` output')
+    }
+    return resolve(match[1])
+  }
+  throw new Error('resolveMainCheckoutRoot requires either gitCommonDir or worktreeListPorcelain')
+}
+
+/**
+ * Returns a NEW ~/.claude.json config with only the targeted stale entries
+ * removed. Spawning `claude mcp remove` with cwd set to an already-deleted
+ * worktree path fails (ENOENT) and removes nothing, so the sweep edits the
+ * config directly instead — this keeps the removal itself pure/testable
+ * and leaves the atomic file write to the thin I/O entry.
+ *
+ * @param {{ projects?: Record<string, { mcpServers?: Record<string, unknown> }> }} config
+ * @param {Array<{ action: 'remove', name: string, path: string }>} actions
+ */
+export function removeStaleEntriesFromConfig(config, actions) {
+  const projects = { ...(config.projects ?? {}) }
+  for (const action of actions) {
+    const project = projects[action.path]
+    if (!project?.mcpServers?.[action.name]) continue
+    const mcpServers = { ...project.mcpServers }
+    delete mcpServers[action.name]
+    projects[action.path] = { ...project, mcpServers }
+  }
+  return { ...config, projects }
 }

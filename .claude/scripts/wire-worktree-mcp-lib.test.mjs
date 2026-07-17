@@ -10,6 +10,9 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import {
   buildMcpUrl,
   buildDesiredConfig,
@@ -18,7 +21,11 @@ import {
   planStaleSweep,
   verifyPostWrite,
   assertNotTrackedSettingsPath,
+  resolveMainCheckoutRoot,
+  removeStaleEntriesFromConfig,
 } from './wire-worktree-mcp-lib.mjs'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const SERVER_NAME = 'whiteboard-wt'
 
@@ -42,6 +49,11 @@ test('buildDesiredConfig derives the port from repoRoot only, ignoring WHITEBOAR
   assert.equal(withoutOverride.overrideWarning, false)
 })
 
+test('buildDesiredConfig defaults to the tracked entry\'s own name ("whiteboard"), not a distinct name — verified against the real CLI: a local-scope registration under the SAME name cleanly shadows the tracked project-scope .mcp.json entry, so an agent never has to choose between two visibly different whiteboard-ish MCP servers', () => {
+  const desired = buildDesiredConfig({ repoRoot: '/repo/wt-a', env: {} })
+  assert.equal(desired.name, 'whiteboard')
+})
+
 test('buildDesiredConfig refuses to build a config for the main checkout', () => {
   assert.throws(() => buildDesiredConfig({ repoRoot: '/repo', env: {}, isMainCheckout: true }), /main checkout/i)
 })
@@ -59,19 +71,19 @@ test('buildDesiredConfig falls back to the package-script default token when WHI
   assert.equal(withDefaultToken.authHeader, 'Authorization: Bearer whiteboard-dev')
 })
 
-test('buildClaudeMcpAddArgs produces the exact argv for `claude mcp add`', () => {
+test('buildClaudeMcpAddArgs produces the exact argv for `claude mcp add` — <name> <url> must come right after --transport http, real-CLI-verified: putting them after --scope/--header makes commander report "missing required argument \'name\'"', () => {
   const desired = { name: SERVER_NAME, url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
   assert.deepEqual(buildClaudeMcpAddArgs(desired), [
     'mcp',
     'add',
     '--transport',
     'http',
+    SERVER_NAME,
+    'http://127.0.0.1:3457/mcp',
     '--scope',
     'local',
     '--header',
     'Authorization: Bearer whiteboard-dev',
-    SERVER_NAME,
-    'http://127.0.0.1:3457/mcp',
   ])
 })
 
@@ -163,4 +175,93 @@ test('planStaleSweep: empty registry yields zero actions', () => {
 test('planStaleSweep: all-live registry yields zero actions', () => {
   const registered = [{ name: 'whiteboard-wt', path: '/repo/.claude/worktrees/alive' }]
   assert.deepEqual(planStaleSweep(registered, ['/repo/.claude/worktrees/alive']), [])
+})
+
+test('resolveMainCheckoutRoot: reads the main root from `git worktree list --porcelain` output produced as-if from inside a linked worktree (main entry is always listed first, regardless of cwd)', () => {
+  const porcelainFromInsideLinkedWorktree = [
+    'worktree /repo',
+    'HEAD abc123',
+    'branch refs/heads/main',
+    '',
+    'worktree /repo/.claude/worktrees/client-wiring-b1',
+    'HEAD def456',
+    'branch refs/heads/client-wiring-b1',
+    '',
+  ].join('\n')
+  assert.equal(
+    resolveMainCheckoutRoot({ worktreeListPorcelain: porcelainFromInsideLinkedWorktree }),
+    resolve('/repo'),
+  )
+})
+
+test('resolveMainCheckoutRoot: derives the main root from a --git-common-dir path (parent of the common .git dir)', () => {
+  assert.equal(resolveMainCheckoutRoot({ gitCommonDir: '/repo/.git' }), resolve('/repo'))
+})
+
+test('resolveMainCheckoutRoot: throws a clear error when neither input is provided', () => {
+  assert.throws(() => resolveMainCheckoutRoot({}), /gitCommonDir|worktreeListPorcelain/)
+})
+
+test('resolveMainCheckoutRoot: throws a clear error when porcelain output has no worktree entry', () => {
+  assert.throws(() => resolveMainCheckoutRoot({ worktreeListPorcelain: '' }), /worktree/i)
+})
+
+test('removeStaleEntriesFromConfig: removes only the targeted project/server key, leaving siblings untouched', () => {
+  const config = {
+    projects: {
+      '/repo/.claude/worktrees/gone': {
+        mcpServers: { whiteboard: { type: 'http', url: 'http://127.0.0.1:3100/mcp' }, other: { type: 'http', url: 'x' } },
+      },
+      '/repo/.claude/worktrees/alive': {
+        mcpServers: { whiteboard: { type: 'http', url: 'http://127.0.0.1:3200/mcp' } },
+      },
+    },
+    someOtherTopLevelKey: 'untouched',
+  }
+  const result = removeStaleEntriesFromConfig(config, [{ action: 'remove', name: 'whiteboard', path: '/repo/.claude/worktrees/gone' }])
+
+  assert.equal(result.projects['/repo/.claude/worktrees/gone'].mcpServers.whiteboard, undefined)
+  assert.deepEqual(result.projects['/repo/.claude/worktrees/gone'].mcpServers.other, { type: 'http', url: 'x' })
+  assert.deepEqual(result.projects['/repo/.claude/worktrees/alive'], config.projects['/repo/.claude/worktrees/alive'])
+  assert.equal(result.someOtherTopLevelKey, 'untouched')
+})
+
+test('removeStaleEntriesFromConfig: does not mutate the original config object', () => {
+  const config = { projects: { '/repo/wt': { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } } }
+  const snapshot = JSON.parse(JSON.stringify(config))
+  removeStaleEntriesFromConfig(config, [{ action: 'remove', name: 'whiteboard', path: '/repo/wt' }])
+  assert.deepEqual(config, snapshot)
+})
+
+test('removeStaleEntriesFromConfig: no-ops when the targeted project or server key is missing', () => {
+  const config = { projects: { '/repo/wt': { mcpServers: {} } } }
+  const result = removeStaleEntriesFromConfig(config, [
+    { action: 'remove', name: 'whiteboard', path: '/repo/wt' },
+    { action: 'remove', name: 'whiteboard', path: '/repo/nonexistent' },
+  ])
+  assert.deepEqual(result, config)
+})
+
+test('removeStaleEntriesFromConfig: empty actions list returns an equivalent config', () => {
+  const config = { projects: { '/repo/wt': { mcpServers: { whiteboard: { type: 'http', url: 'x' } } } } }
+  assert.deepEqual(removeStaleEntriesFromConfig(config, []), config)
+})
+
+test('docs-lock: the manual fallback `claude mcp add` command in development.md matches buildClaudeMcpAddArgs argv order', () => {
+  const docsPath = resolve(__dirname, '../../docs/contributing/development.md')
+  const docs = readFileSync(docsPath, 'utf8')
+  const match = docs.match(/`claude mcp add ([^`]+)`/)
+  assert.ok(match, 'expected a `claude mcp add ...` fallback command in development.md')
+
+  const desired = { name: 'whiteboard', url: 'http://127.0.0.1:3100/mcp', authHeader: "Authorization: Bearer whiteboard-dev" }
+  const expectedArgs = buildClaudeMcpAddArgs(desired).slice(2) // drop the leading "mcp add" the regex already anchors on
+  const expectedFragment = expectedArgs
+    .map((arg) => (arg.includes(' ') ? `'${arg}'` : arg))
+    .join(' ')
+    .replace('http://127.0.0.1:3100/mcp', '<port-placeholder>')
+
+  const docsFragment = match[1]
+    .replace(/http:\/\/127\.0\.0\.1:<port>\/mcp/, '<port-placeholder>')
+
+  assert.equal(docsFragment, expectedFragment, 'docs fallback command argv order must match buildClaudeMcpAddArgs')
 })
