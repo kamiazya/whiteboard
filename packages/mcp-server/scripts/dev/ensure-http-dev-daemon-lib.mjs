@@ -79,3 +79,25 @@ export function verifyDevDaemonIdentity({ marker, expectedPort, expectedRepoRoot
   }
   return isPidAlive(marker.pid) ? 'ours' : 'stale'
 }
+
+/**
+ * Decides whether a verifyDevDaemonIdentity() verdict should let the caller
+ * self-heal (assume the daemon on the port is this worktree's own) instead
+ * of hard-failing.
+ *
+ * "stale" means the marker's port and repoRoot both matched this worktree —
+ * only the recorded pid is dead. The marker's pid is the with-dev-data-dir
+ * wrapper's own pid, written before it spawns the actual server as a child
+ * and removed on that child's normal exit; a dead wrapper pid with the port
+ * still answering MCP means the wrapper died abnormally (crash, SIGKILL, a
+ * platform-specific pid-liveness quirk) while its child kept running and
+ * bound. That is this worktree's own daemon, not a different worktree's
+ * hash-collision (which "foreign" already catches via port/repoRoot
+ * mismatch) — so treat it the same as "no-marker" rather than hard-failing.
+ *
+ * @param {'ours' | 'stale' | 'foreign' | 'no-marker'} identity
+ * @returns {boolean}
+ */
+export function isSelfHealableIdentity(identity) {
+  return identity === 'no-marker' || identity === 'stale'
+}

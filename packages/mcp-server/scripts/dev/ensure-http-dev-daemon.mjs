@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   buildMcpHttpDevSpawnArgs,
+  isSelfHealableIdentity,
   resolveDevBearerToken,
   verifyDevDaemonIdentity,
   waitForAuthenticatedMcp,
@@ -148,20 +149,28 @@ if (status === 'in-use') {
       info(`[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — verified`)
       process.exit(0)
     }
-    if (identity === 'no-marker') {
+    if (isSelfHealableIdentity(identity)) {
       // A marker-less daemon on our own derived port predates this feature
       // (or predates its own first marker write) — not evidence of a
-      // foreign daemon. Self-heal instead of hard-failing.
+      // foreign daemon. A "stale" marker (port + repoRoot match, recorded
+      // pid dead) means the with-dev-data-dir wrapper that owned that pid
+      // died abnormally while its spawned server child kept the port
+      // bound — also this worktree's own daemon, not a foreign one. Both
+      // self-heal instead of hard-failing.
+      const reason =
+        identity === 'stale'
+          ? 'its recorded pid is no longer running (the dev wrapper likely crashed or was killed without cleanup, but the daemon itself is still up)'
+          : 'no identity marker was found (daemon predates this check)'
       info(
-        `[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — no identity marker ` +
-          "found (daemon predates this check); assuming it is this worktree's own daemon",
+        `[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — ${reason}; ` +
+          "assuming it is this worktree's own daemon",
       )
       process.exit(0)
     }
     console.error(
       `[ensure-http-dev-daemon] http://${HOST}:${PORT} answers MCP but its ` +
         `${EXPECTED_DATA_DIR}/dev-daemon.json marker does not match this worktree ` +
-        `(${identity === 'stale' ? 'recorded pid is no longer running' : 'a different port or repo root is recorded'}). ` +
+        '(a different port or repo root is recorded). ' +
         "This is very likely a different worktree's daemon that hash-collided on this port. " +
         `Set WHITEBOARD_DEV_PORT to a distinct value for one of the worktrees, or stop the ` +
         'conflicting process (e.g. `pkill -f mcp:http:dev`) and rerun.',
@@ -235,11 +244,11 @@ const postSpawnIdentity = verifyDevDaemonIdentity({
   expectedRepoRoot: REPO_ROOT,
   isPidAlive,
 })
-if (postSpawnIdentity !== 'ours' && postSpawnIdentity !== 'no-marker') {
+if (postSpawnIdentity !== 'ours' && !isSelfHealableIdentity(postSpawnIdentity)) {
   console.error(
     `[ensure-http-dev-daemon] http://${HOST}:${PORT} answered MCP right after we spawned our own ` +
       `daemon, but its ${EXPECTED_DATA_DIR}/dev-daemon.json marker does not match this worktree ` +
-      `(${postSpawnIdentity === 'stale' ? 'recorded pid is no longer running' : 'a different port or repo root is recorded'}). ` +
+      '(a different port or repo root is recorded). ' +
       'This is very likely a startup race with another worktree that bound the same derived port ' +
       'first. Rerun this hook; if it keeps happening, set WHITEBOARD_DEV_PORT to a distinct value ' +
       'for one of the worktrees.',

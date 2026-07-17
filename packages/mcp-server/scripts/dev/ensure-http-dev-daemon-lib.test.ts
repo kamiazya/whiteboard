@@ -3,6 +3,7 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildMcpHttpDevSpawnArgs,
+  isSelfHealableIdentity,
   resolveDevBearerToken,
   verifyDevDaemonIdentity,
   waitForAuthenticatedMcp,
@@ -151,5 +152,23 @@ describe('verifyDevDaemonIdentity', () => {
     })
 
     expect(verdict).toBe('ours')
+  })
+})
+
+describe('isSelfHealableIdentity', () => {
+  it('treats "no-marker" as self-healable (daemon predates the marker feature)', () => {
+    expect(isSelfHealableIdentity('no-marker')).toBe(true)
+  })
+
+  it('treats "stale" as self-healable (the daemon on the port matches port+repoRoot; only the recorded pid is dead, most likely because the wrapper that owned that pid crashed or was killed without cleanup while its child kept the port bound)', () => {
+    expect(isSelfHealableIdentity('stale')).toBe(true)
+  })
+
+  it('does NOT treat "foreign" as self-healable (a different worktree really did hash-collide on this port)', () => {
+    expect(isSelfHealableIdentity('foreign')).toBe(false)
+  })
+
+  it('does NOT treat "ours" as self-healable (already a confirmed match, not a self-heal case)', () => {
+    expect(isSelfHealableIdentity('ours')).toBe(false)
   })
 })

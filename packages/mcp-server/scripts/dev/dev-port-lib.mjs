@@ -88,7 +88,11 @@ export function isMainCheckout(repoRoot) {
   try {
     stats = lstatSync(gitPath)
   } catch {
-    throw new Error(`Cannot determine checkout type: no .git found at ${gitPath}`)
+    // No .git at all (npm tarball extraction, some sandboxed checkouts) is
+    // not a linked worktree — fall back to the main-checkout port (3099)
+    // rather than crashing dev startup over a checkout-type check that has
+    // no bearing on whether the server itself can run.
+    return true
   }
   return stats.isDirectory()
 }

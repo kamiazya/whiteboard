@@ -132,10 +132,14 @@ describe('isMainCheckout', () => {
     expect(isMainCheckout(tempRoot)).toBe(false)
   })
 
-  it('throws a clear error when .git is missing entirely', () => {
+  it('falls back to true (main-checkout port 3099) when .git is missing entirely, instead of throwing', () => {
+    // A non-git checkout (npm tarball extraction, some sandboxed CI checkouts)
+    // has no .git at all. Throwing here would crash dev startup outright;
+    // falling back to the main-checkout port is the same safe default
+    // deriveDevPort already uses for the ordinary main-checkout case.
     tempRoot = mkdtempSync(join(tmpdir(), 'is-main-checkout-'))
 
-    expect(() => isMainCheckout(tempRoot)).toThrow(/\.git/)
+    expect(isMainCheckout(tempRoot)).toBe(true)
   })
 
   it('resolves relative to the repo root, not the process cwd', () => {
