@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 import {
   assertTarballFileList,
@@ -22,13 +22,11 @@ describe('packed tarball smoke', () => {
   // CI job env block that sets WHITEBOARD_DEV=1 for its src-mode checks must
   // not make this smoke spawn the installed (dist-only) daemon in watch mode.
   it('succeeds even when the ambient env carries WHITEBOARD_DEV=1', async () => {
-    const originalDev = process.env.WHITEBOARD_DEV
-    process.env.WHITEBOARD_DEV = '1'
+    vi.stubEnv('WHITEBOARD_DEV', '1')
     try {
       await runPackedTarballSmoke({ packageRoot, repoRoot })
     } finally {
-      if (originalDev === undefined) delete process.env.WHITEBOARD_DEV
-      else process.env.WHITEBOARD_DEV = originalDev
+      vi.unstubAllEnvs()
     }
   }, 120_000)
 })

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
-import { readFile, writeFile } from 'node:fs/promises'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { retryDaemonStartup } from './daemon-readiness.js'
@@ -75,7 +75,9 @@ export function triggerDaemonCanvasCreate(
 export async function readDaemonLogsForFailure(dataDir: string): Promise<string> {
   try {
     const logsDir = join(dataDir, 'logs')
-    const files = readdirSync(logsDir).filter((f) => f.startsWith('daemon-') && f.endsWith('.log'))
+    const files = (await readdir(logsDir)).filter(
+      (f) => f.startsWith('daemon-') && f.endsWith('.log'),
+    )
     if (files.length === 0) return ''
     const contents = await Promise.all(
       files.map(async (f) => {
