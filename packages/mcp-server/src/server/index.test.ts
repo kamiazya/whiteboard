@@ -32,6 +32,29 @@ vi.mock('./export/headless-renderer.js', () => ({
 // call the exported `main` directly instead.
 const { main } = await import('./index.js')
 
+describe('server/index main() data dir startup log', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+    delete process.env.WHITEBOARD_TOKEN
+  })
+
+  it('emits a notice-level record naming the resolved data dir before startHttpServer', async () => {
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const capture = captureLogsForTests('debug')
+    try {
+      await main()
+      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'notice')
+      expect(record).toBeDefined()
+      expect(typeof record?.data?.dataDir).toBe('string')
+      expect((record?.data?.dataDir as string).length).toBeGreaterThan(0)
+    } finally {
+      capture.restore()
+      stdoutSpy.mockRestore()
+    }
+  })
+})
+
 describe('server/index main() WHITEBOARD_ALLOWED_WEB_ORIGINS startup gate', () => {
   afterEach(() => {
     vi.clearAllMocks()

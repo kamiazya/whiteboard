@@ -16,7 +16,14 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
-import { resolveDataDir, WHITEBOARD_ROOT, DATA_DIR } from './data-dir-secure.js'
+import {
+  DATA_DIR,
+  getDataDir,
+  resetDataDirForTests,
+  resolveDataDir,
+  setDataDirForTests,
+  WHITEBOARD_ROOT,
+} from './data-dir-secure.js'
 
 describe('data-dir contract: probe and create resolvers agree in steady state', () => {
   let tempHome: string
@@ -156,6 +163,33 @@ describe('WHITEBOARD_ROOT depth: shared module resolves to package root', () => 
     // If the re-export chain is broken this import itself would throw.
     expect(typeof DATA_DIR).toBe('string')
     expect(DATA_DIR.length).toBeGreaterThan(0)
+  })
+})
+
+describe('getDataDir test-injection seam', () => {
+  afterEach(() => {
+    resetDataDirForTests()
+  })
+
+  it('returns the same value as the module-load-time DATA_DIR const by default', () => {
+    expect(getDataDir()).toBe(DATA_DIR)
+  })
+
+  it('setDataDirForTests overrides subsequent getDataDir() calls without touching DATA_DIR', () => {
+    const scratchDir = '/tmp/whiteboard-dev-data-dir-injection-test'
+    setDataDirForTests(scratchDir)
+
+    expect(getDataDir()).toBe(scratchDir)
+    // The frozen const must stay untouched — it is a separate, deprecated
+    // export kept only for callers that have not migrated to getDataDir().
+    expect(DATA_DIR).not.toBe(scratchDir)
+  })
+
+  it('resetDataDirForTests restores the default (memoized) resolution', () => {
+    setDataDirForTests('/tmp/whiteboard-dev-data-dir-injection-test-2')
+    resetDataDirForTests()
+
+    expect(getDataDir()).toBe(DATA_DIR)
   })
 })
 
