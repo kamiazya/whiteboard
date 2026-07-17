@@ -86,4 +86,8 @@ export function setDataDirForTests(dir: string): void {
 
 export function resetDataDirForTests(): void {
   dataDirOverride = undefined
+  // Also drop the memoized default: a test that changes WHITEBOARD_DATA_DIR
+  // (or homedir/tmpdir) after reset must see it reflected on the next
+  // getDataDir() call, not a resolution memoized before the reset.
+  memoizedDataDir = undefined
 }

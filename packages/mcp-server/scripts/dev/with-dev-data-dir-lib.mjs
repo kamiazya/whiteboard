@@ -56,6 +56,24 @@ export function resolveDevDataDirEnv(env, repoRoot) {
 }
 
 /**
+ * Re-raises a signal the child process died from so the parent's own exit
+ * reflects it (matching shell semantics for a wrapped command). `kill(pid,
+ * signal)` with a POSIX signal name can throw EINVAL on Windows — Windows
+ * has no POSIX signal delivery, so falling through uncaught would crash this
+ * wrapper instead of just exiting non-zero.
+ */
+export function reraiseSignalOrExit(
+  signal,
+  { pid = process.pid, kill = process.kill, exit = process.exit } = {},
+) {
+  try {
+    kill(pid, signal)
+  } catch {
+    exit(1)
+  }
+}
+
+/**
  * Resolves the command + args to launch `tsx watch <entry>` cross-platform.
  *
  * `node_modules/.bin/tsx` is a POSIX shell shim (paired with `.cmd`/`.ps1`

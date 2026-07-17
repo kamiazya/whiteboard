@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ensureDevDataDirSecured,
+  reraiseSignalOrExit,
   resolveDevDataDirEnv,
   resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
@@ -73,6 +74,34 @@ describe('resolveRepoRootFromScriptDir', () => {
     const scriptDir = '/repo/packages/mcp-server/scripts/dev'
 
     expect(resolveRepoRootFromScriptDir(scriptDir)).toBe(resolve('/repo'))
+  })
+})
+
+describe('reraiseSignalOrExit', () => {
+  it('re-raises the signal against the given pid via kill', () => {
+    const calls = []
+    reraiseSignalOrExit('SIGTERM', {
+      pid: 4242,
+      kill: (pid, signal) => calls.push({ pid, signal }),
+      exit: () => {
+        throw new Error('exit should not be called when kill succeeds')
+      },
+    })
+
+    expect(calls).toEqual([{ pid: 4242, signal: 'SIGTERM' }])
+  })
+
+  it('falls back to exit(1) when kill throws (e.g. Windows EINVAL on POSIX signals)', () => {
+    const exitCalls = []
+    reraiseSignalOrExit('SIGTERM', {
+      pid: 4242,
+      kill: () => {
+        throw new Error('EINVAL: invalid argument, kill')
+      },
+      exit: (code) => exitCalls.push(code),
+    })
+
+    expect(exitCalls).toEqual([1])
   })
 })
 

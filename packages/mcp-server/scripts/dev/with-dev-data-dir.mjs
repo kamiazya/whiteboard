@@ -5,6 +5,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   ensureDevDataDirSecured,
+  reraiseSignalOrExit,
   resolveDevDataDirEnv,
   resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
@@ -52,7 +53,7 @@ child.on('error', (error) => {
 
 child.on('exit', (code, signal) => {
   if (signal) {
-    process.kill(process.pid, signal)
+    reraiseSignalOrExit(signal)
     return
   }
   process.exit(code ?? 1)

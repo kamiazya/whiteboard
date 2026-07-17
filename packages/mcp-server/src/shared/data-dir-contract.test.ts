@@ -14,7 +14,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import {
   DATA_DIR,
@@ -190,6 +190,22 @@ describe('getDataDir test-injection seam', () => {
     resetDataDirForTests()
 
     expect(getDataDir()).toBe(DATA_DIR)
+  })
+
+  it('resetDataDirForTests clears the memoized default so a later env change is picked up', () => {
+    // Populate the memo with whatever the ambient env resolves to.
+    getDataDir()
+    resetDataDirForTests()
+
+    const overridePath = resolve('/tmp/whiteboard-dev-data-dir-env-after-reset')
+    vi.stubEnv('WHITEBOARD_DATA_DIR', overridePath)
+    try {
+      // If reset left the stale memo in place, this would still return the
+      // pre-reset value instead of picking up the new env override.
+      expect(getDataDir()).toBe(overridePath)
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })
 
