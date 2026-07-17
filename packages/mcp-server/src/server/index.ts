@@ -195,13 +195,21 @@ export async function main() {
   })
 
   if (daemonMode && token) {
-    await saveDaemonRecord({
-      pid: process.pid,
-      port: running.port,
-      token,
-      version,
-      startedAt: running.getRuntimeStatus().startedAt,
-    })
+    // Pass the resolved `dataDir` explicitly rather than relying on
+    // saveDaemonRecord's default parameter (the frozen DATA_DIR const) — the
+    // default would silently diverge from where this process actually
+    // prepared/serves data whenever getDataDir() has been redirected (tests,
+    // and any future dev entrypoint that redirects the seam).
+    await saveDaemonRecord(
+      {
+        pid: process.pid,
+        port: running.port,
+        token,
+        version,
+        startedAt: running.getRuntimeStatus().startedAt,
+      },
+      dataDir,
+    )
   }
 
   const shutdown = () => {
