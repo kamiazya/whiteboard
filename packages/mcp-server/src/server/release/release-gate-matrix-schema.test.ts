@@ -81,6 +81,29 @@ describe('validateGate', () => {
     expect(validateGate(gate).ok).toBe(false)
   })
 
+  // requiredFor is consumed by publish-gate.mjs / pages-release.mjs via an
+  // exact-string `.includes('publish')` check, so a typo'd tier is not a
+  // structural error there — it just silently drops the gate from the tier
+  // it was meant to guard. Validating against the closed vocabulary here is
+  // what turns that into a loud validateMatrix failure instead.
+  it('rejects a gate with a misspelled requiredFor tier', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, requiredFor: ['publsih'] }
+    expect(validateGate(gate).ok).toBe(false)
+  })
+
+  it('rejects a gate with an unknown category', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, category: 'bogus-category' }
+    expect(validateGate(gate).ok).toBe(false)
+  })
+
+  it('rejects a gate with an unknown expectedRuntimeBucket', async () => {
+    const { validateGate } = await importSchema()
+    const gate = { ...VALID_GATE, expectedRuntimeBucket: 'glacial' }
+    expect(validateGate(gate).ok).toBe(false)
+  })
+
   // No runner honors a per-gate `env` map (both publish-gate.mjs and
   // pages-release.mjs only read id/command/requiredFor), so the schema does
   // not validate it either — an unenforced validator on an unhonored field

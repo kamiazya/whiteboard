@@ -17,6 +17,35 @@
 
 const KNOWN_PR_COVERAGE_KINDS = new Set(['workflow-step', 'aggregate', 'exception'])
 
+// Single authority for the closed vocabularies a gate's category,
+// expectedRuntimeBucket, and requiredFor tiers may use. Runtime validation
+// only checked "is a non-empty string" before, so a typo'd tier (e.g.
+// "publsih") passed validateMatrix while publish-gate.mjs's exact-string
+// `.includes('publish')` filter silently excluded that gate from the publish
+// tier — a fail-open outcome behind a check whose whole purpose is fail-loud.
+export const KNOWN_REQUIRED_FOR_TIERS = new Set([
+  'ci',
+  'local-release',
+  'docker-release',
+  'publish',
+  'pages-release',
+])
+export const KNOWN_CATEGORIES = new Set([
+  'unit',
+  'typecheck',
+  'build',
+  'release-artifacts',
+  'tarball',
+  'mcp-protocol',
+  'codex-config',
+  'distribution',
+  'docker',
+  'mutation',
+  'publish',
+  'pages',
+])
+export const KNOWN_RUNTIME_BUCKETS = new Set(['fast', 'medium', 'slow'])
+
 /**
  * @param {unknown} value
  * @returns {value is string}
@@ -86,11 +115,26 @@ export function validateGate(gate) {
   if (!isNonEmptyString(g.category)) {
     return { ok: false, reason: 'category must be a non-empty string' }
   }
+  if (!KNOWN_CATEGORIES.has(g.category)) {
+    return {
+      ok: false,
+      reason: `category must be one of ${[...KNOWN_CATEGORIES].join(', ')}, got "${g.category}"`,
+    }
+  }
   if (!Array.isArray(g.requiredFor) || g.requiredFor.length === 0) {
     return { ok: false, reason: 'requiredFor must be a non-empty array' }
   }
   if (/** @type {unknown[]} */ (g.requiredFor).some((t) => typeof t !== 'string')) {
     return { ok: false, reason: 'requiredFor entries must be strings' }
+  }
+  const unknownTier = /** @type {string[]} */ (g.requiredFor).find(
+    (t) => !KNOWN_REQUIRED_FOR_TIERS.has(t),
+  )
+  if (unknownTier !== undefined) {
+    return {
+      ok: false,
+      reason: `requiredFor must be one of ${[...KNOWN_REQUIRED_FOR_TIERS].join(', ')}, got "${unknownTier}"`,
+    }
   }
   if (typeof g.requiresDocker !== 'boolean') {
     return { ok: false, reason: 'requiresDocker must be boolean' }
@@ -100,6 +144,12 @@ export function validateGate(gate) {
   }
   if (!isNonEmptyString(g.expectedRuntimeBucket)) {
     return { ok: false, reason: 'expectedRuntimeBucket must be a non-empty string' }
+  }
+  if (!KNOWN_RUNTIME_BUCKETS.has(g.expectedRuntimeBucket)) {
+    return {
+      ok: false,
+      reason: `expectedRuntimeBucket must be one of ${[...KNOWN_RUNTIME_BUCKETS].join(', ')}, got "${g.expectedRuntimeBucket}"`,
+    }
   }
   // Docker-required gates must never appear in non-Docker aggregates.
   // ci and local-release scripts run without Docker; mixing Docker gates

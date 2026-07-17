@@ -43,26 +43,17 @@ const SCHEMA_MODULE_PATH = join(
   __dirname,
   '../../../../../tools/checks/src/release-gate-matrix-schema.mjs',
 )
-const { validateGate } = (await import(pathToFileURL(SCHEMA_MODULE_PATH).href)) as {
+const {
+  validateGate,
+  KNOWN_CATEGORIES,
+  KNOWN_RUNTIME_BUCKETS: KNOWN_BUCKETS,
+  KNOWN_REQUIRED_FOR_TIERS: KNOWN_TIERS,
+} = (await import(pathToFileURL(SCHEMA_MODULE_PATH).href)) as {
   validateGate: (gate: unknown) => { ok: boolean; reason?: string }
+  KNOWN_CATEGORIES: Set<string>
+  KNOWN_RUNTIME_BUCKETS: Set<string>
+  KNOWN_REQUIRED_FOR_TIERS: Set<string>
 }
-
-const KNOWN_CATEGORIES = new Set([
-  'unit',
-  'typecheck',
-  'build',
-  'release-artifacts',
-  'tarball',
-  'mcp-protocol',
-  'codex-config',
-  'distribution',
-  'docker',
-  'mutation',
-  'publish',
-  'pages',
-])
-const KNOWN_BUCKETS = new Set(['fast', 'medium', 'slow'])
-const KNOWN_TIERS = new Set(['ci', 'local-release', 'docker-release', 'publish', 'pages-release'])
 
 // Count distribution test steps from the test:e2e:distribution script.
 // The script is: `pnpm build && <step1> && <step2> && ...`
@@ -542,14 +533,15 @@ describe('validateGate PBT', () => {
     'docker-release',
     'publish',
   )
-  const bucket = fc.constantFrom<'fast' | 'medium' | 'slow'>('fast', 'medium', 'slow')
+  const bucket = fc.constantFrom(...KNOWN_BUCKETS)
+  const category = fc.constantFrom(...KNOWN_CATEGORIES)
 
   fcTest.prop(
     [
       fc.record({
         id: nonEmptyStr,
         command: nonEmptyStr,
-        category: nonEmptyStr,
+        category,
         requiredFor: fc.uniqueArray(tier, { minLength: 1 }),
         requiresDocker: fc.constant(false),
         requiresNetwork: fc.boolean(),
@@ -566,7 +558,7 @@ describe('validateGate PBT', () => {
       fc.record({
         id: nonEmptyStr,
         command: nonEmptyStr,
-        category: nonEmptyStr,
+        category,
         requiredFor: fc.uniqueArray(tier, { minLength: 1 }).filter((arr) => arr.includes('ci')),
         requiresDocker: fc.constant(true),
         requiresNetwork: fc.boolean(),
@@ -583,7 +575,7 @@ describe('validateGate PBT', () => {
       fc.record({
         id: nonEmptyStr,
         command: nonEmptyStr,
-        category: nonEmptyStr,
+        category,
         requiredFor: fc
           .uniqueArray(tier, { minLength: 1 })
           .filter((arr) => arr.includes('local-release')),
