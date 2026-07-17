@@ -46,23 +46,23 @@ import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { spawn, spawnSync } from 'node:child_process'
-import { assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
-const DIST_CLI  = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
+const DIST_CLI = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
 
-const DAEMON_PORT   = 4292
-const SERVER_PORT   = 4295
-const SEED_TOKEN    = 'smoke-cli-seed-token-x7z9q'
-const SMOKE_ISSUER  = 'https://auth.server-cli-smoke.example'
+const DAEMON_PORT = 4292
+const SERVER_PORT = 4295
+const SEED_TOKEN = 'smoke-cli-seed-token-x7z9q'
+const SMOKE_ISSUER = 'https://auth.server-cli-smoke.example'
 const SMOKE_AUDIENCE = 'https://whiteboard.server-cli-smoke.example'
-const WORKSPACE_ID  = 'sess-cli-smoke'
-const CANVAS_SLUG   = 'canvas-cli-smoke'
+const WORKSPACE_ID = 'sess-cli-smoke'
+const CANVAS_SLUG = 'canvas-cli-smoke'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-const leakTexts = []   // accumulated for the final non-leak pass
+const leakTexts = [] // accumulated for the final non-leak pass
 
 function fail(msg, ctx = {}) {
   console.error(`[server-cli-smoke] FAIL: ${msg}`)
@@ -80,9 +80,13 @@ function cli(args, extraEnv = {}) {
   const r = spawnSync(process.execPath, [DIST_CLI, ...args], {
     encoding: 'utf8',
     timeout: 30_000,
-    env: { ...process.env, ...extraEnv },
+    env: { ...scrubDevEnv(process.env), ...extraEnv },
   })
-  leakTexts.push({ label: `cli ${args.slice(0, 3).join(' ')}`, stdout: r.stdout ?? '', stderr: r.stderr ?? '' })
+  leakTexts.push({
+    label: `cli ${args.slice(0, 3).join(' ')}`,
+    stdout: r.stdout ?? '',
+    stderr: r.stderr ?? '',
+  })
   return r
 }
 
@@ -103,53 +107,97 @@ async function waitForReadyJson(proc, timeoutMs = 30_000) {
             res(obj)
             return
           }
-        } catch { /* not JSON */ }
+        } catch {
+          /* not JSON */
+        }
       }
     })
-    proc.on('exit', () => { clearTimeout(timer); res(null) })
+    proc.on('exit', () => {
+      clearTimeout(timer)
+      res(null)
+    })
   })
 }
 
 async function waitForHttpReady(url, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    try { const r = await fetch(url); if (r.ok) return true } catch { /* not yet */ }
+    try {
+      const r = await fetch(url)
+      if (r.ok) return true
+    } catch {
+      /* not yet */
+    }
     await delay(300)
   }
   return false
 }
 
 function killProc(proc) {
-  try { proc.kill('SIGTERM') } catch { /* already gone */ }
+  try {
+    proc.kill('SIGTERM')
+  } catch {
+    /* already gone */
+  }
 }
 
 function generateTestTlsCert(dir) {
-  const keyFile  = join(dir, 'server.key')
+  const keyFile = join(dir, 'server.key')
   const certFile = join(dir, 'server.crt')
-  const cnfFile  = join(dir, 'openssl.cnf')
-  writeFileSync(cnfFile, [
-    '[req]', 'distinguished_name = req_dn', 'x509_extensions = san_ext', 'prompt = no',
-    '[req_dn]', 'CN = server-cli-smoke-ca',
-    '[san_ext]', 'subjectAltName = IP:127.0.0.1', 'basicConstraints = critical,CA:true',
-  ].join('\n'))
-  const r = spawnSync('openssl', [
-    'req', '-x509', '-newkey', 'rsa:2048', '-keyout', keyFile, '-out', certFile,
-    '-days', '1', '-nodes', '-config', cnfFile,
-  ], { stdio: 'pipe', encoding: 'utf8' })
+  const cnfFile = join(dir, 'openssl.cnf')
+  writeFileSync(
+    cnfFile,
+    [
+      '[req]',
+      'distinguished_name = req_dn',
+      'x509_extensions = san_ext',
+      'prompt = no',
+      '[req_dn]',
+      'CN = server-cli-smoke-ca',
+      '[san_ext]',
+      'subjectAltName = IP:127.0.0.1',
+      'basicConstraints = critical,CA:true',
+    ].join('\n'),
+  )
+  const r = spawnSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-keyout',
+      keyFile,
+      '-out',
+      certFile,
+      '-days',
+      '1',
+      '-nodes',
+      '-config',
+      cnfFile,
+    ],
+    { stdio: 'pipe', encoding: 'utf8' },
+  )
   if (r.status !== 0) throw new Error(`openssl cert gen failed: ${r.stderr}`)
   return { keyFile, certFile }
 }
 
-function base64url(data) { return Buffer.from(data).toString('base64url') }
+function base64url(data) {
+  return Buffer.from(data).toString('base64url')
+}
 function derToRawEs256(der) {
   let off = 2
-  const rLen = der[off + 1]; let r = der.slice(off + 2, off + 2 + rLen)
+  const rLen = der[off + 1]
+  let r = der.slice(off + 2, off + 2 + rLen)
   if (r[0] === 0x00) r = r.slice(1)
   off += 2 + rLen
-  const sLen = der[off + 1]; let s = der.slice(off + 2, off + 2 + sLen)
+  const sLen = der[off + 1]
+  let s = der.slice(off + 2, off + 2 + sLen)
   if (s[0] === 0x00) s = s.slice(1)
-  const rp = Buffer.alloc(32); r.copy(rp, 32 - r.length)
-  const sp = Buffer.alloc(32); s.copy(sp, 32 - s.length)
+  const rp = Buffer.alloc(32)
+  r.copy(rp, 32 - r.length)
+  const sp = Buffer.alloc(32)
+  s.copy(sp, 32 - s.length)
   return Buffer.concat([rp, sp])
 }
 function signEs256Jwt(priv, header, payload) {
@@ -162,9 +210,17 @@ function signEs256Jwt(priv, header, payload) {
 }
 function makeJwt(priv, scope) {
   const now = Math.floor(Date.now() / 1000)
-  return signEs256Jwt(priv,
+  return signEs256Jwt(
+    priv,
     { alg: 'ES256', kid: 'cli-smoke-key' },
-    { sub: 'cli-smoke-user', scope, iss: SMOKE_ISSUER, aud: SMOKE_AUDIENCE, iat: now, exp: now + 3600 },
+    {
+      sub: 'cli-smoke-user',
+      scope,
+      iss: SMOKE_ISSUER,
+      aud: SMOKE_AUDIENCE,
+      iat: now,
+      exp: now + 3600,
+    },
   )
 }
 
@@ -182,11 +238,11 @@ console.log('[server-cli-smoke] Starting server backup/restore CLI smoke.')
 
 // Canonicalize so paths don't traverse system-level symlinks (e.g. /var →
 // /private/var on macOS) that would trip the ancestor-symlink guard in the CLI.
-const tmpRoot        = realpathSync(mkdtempSync(join(tmpdir(), 'wb-cli-smoke-')))
-const certsDir       = join(tmpRoot, 'certs')
-const srcDataDir     = join(tmpRoot, 'src-data')
-const backupDir      = join(tmpRoot, 'backup')
-const restoredDir    = join(tmpRoot, 'restored')
+const tmpRoot = realpathSync(mkdtempSync(join(tmpdir(), 'wb-cli-smoke-')))
+const certsDir = join(tmpRoot, 'certs')
+const srcDataDir = join(tmpRoot, 'src-data')
+const backupDir = join(tmpRoot, 'backup')
+const restoredDir = join(tmpRoot, 'restored')
 mkdirSync(certsDir)
 mkdirSync(srcDataDir)
 
@@ -198,7 +254,7 @@ const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-256
 const jwkPublic = publicKey.export({ format: 'jwk' })
 const jwks = { keys: [{ ...jwkPublic, kid: 'cli-smoke-key', use: 'sig', alg: 'ES256' }] }
 const { certFile: tlsCertFile, keyFile: tlsKeyFile } = generateTestTlsCert(certsDir)
-const tlsKey  = readFileSync(tlsKeyFile)
+const tlsKey = readFileSync(tlsKeyFile)
 const tlsCert = readFileSync(tlsCertFile)
 
 const jwksServer = await new Promise((resolve, reject) => {
@@ -206,13 +262,16 @@ const jwksServer = await new Promise((resolve, reject) => {
     if (req.url === '/.well-known/jwks.json') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(jwks))
-    } else { res.writeHead(404); res.end() }
+    } else {
+      res.writeHead(404)
+      res.end()
+    }
   })
   srv.listen(0, '127.0.0.1', () => resolve(srv))
   srv.once('error', reject)
 })
 const jwksPort = jwksServer.address().port
-const jwksUri  = `https://127.0.0.1:${jwksPort}/.well-known/jwks.json`
+const jwksUri = `https://127.0.0.1:${jwksPort}/.well-known/jwks.json`
 SMOKE_LITERALS.push(jwksUri)
 
 let seedDaemon = null
@@ -223,14 +282,23 @@ try {
   // ── Scenario 2: seed data via daemon ───────────────────────────────────────
 
   {
-    seedDaemon = spawn(process.execPath, [
-      DIST_CLI, 'daemon', 'run', '--json',
-      '--host=127.0.0.1', `--port=${DAEMON_PORT}`, `--data-dir=${srcDataDir}`,
-    ], { stdio: 'pipe', env: { ...process.env, WHITEBOARD_DAEMON_TOKEN: SEED_TOKEN } })
+    seedDaemon = spawn(
+      process.execPath,
+      [
+        DIST_CLI,
+        'daemon',
+        'run',
+        '--json',
+        '--host=127.0.0.1',
+        `--port=${DAEMON_PORT}`,
+        `--data-dir=${srcDataDir}`,
+      ],
+      { stdio: 'pipe', env: { ...scrubDevEnv(process.env), WHITEBOARD_DAEMON_TOKEN: SEED_TOKEN } },
+    )
 
     const ready = await waitForReadyJson(seedDaemon)
     if (!ready) fail('scenario 2: daemon did not emit ready JSON')
-    if (!await waitForHttpReady(`http://127.0.0.1:${DAEMON_PORT}/api/runtime/ping`)) {
+    if (!(await waitForHttpReady(`http://127.0.0.1:${DAEMON_PORT}/api/runtime/ping`))) {
       fail('scenario 2: daemon HTTP not ready')
     }
 
@@ -239,7 +307,7 @@ try {
       `http://127.0.0.1:${DAEMON_PORT}/api/workspaces/${WORKSPACE_ID}/canvases`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SEED_TOKEN}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SEED_TOKEN}` },
         body: JSON.stringify({ slug: CANVAS_SLUG }),
       },
     )
@@ -255,16 +323,24 @@ try {
   // ── Scenario 3: backup via CLI ─────────────────────────────────────────────
 
   {
-    const r = cli(['server', 'backup', '--json', `--data-dir=${srcDataDir}`, `--output-dir=${backupDir}`])
+    const r = cli([
+      'server',
+      'backup',
+      '--json',
+      `--data-dir=${srcDataDir}`,
+      `--output-dir=${backupDir}`,
+    ])
     if (r.status !== 0) {
       fail('scenario 3: backup CLI failed', { stderrBytes: (r.stderr ?? '').length })
     }
     let backupJson
-    try { backupJson = JSON.parse(r.stdout.trim()) } catch {
+    try {
+      backupJson = JSON.parse(r.stdout.trim())
+    } catch {
       fail('scenario 3: backup stdout is not valid JSON')
     }
     if (backupJson.schemaVersion !== 1) fail('scenario 3: schemaVersion mismatch')
-    if (backupJson.ok !== true)         fail('scenario 3: ok not true')
+    if (backupJson.ok !== true) fail('scenario 3: ok not true')
     if (backupJson.operation !== 'backup') fail('scenario 3: operation mismatch')
     assertNoLeak('scenario 3 backup stdout', r.stdout, SMOKE_LITERALS)
     assertNoLeak('scenario 3 backup stderr', r.stderr ?? '')
@@ -274,16 +350,24 @@ try {
   // ── Scenario 4: restore via CLI ────────────────────────────────────────────
 
   {
-    const r = cli(['server', 'restore', '--json', `--backup-dir=${backupDir}`, `--target-dir=${restoredDir}`])
+    const r = cli([
+      'server',
+      'restore',
+      '--json',
+      `--backup-dir=${backupDir}`,
+      `--target-dir=${restoredDir}`,
+    ])
     if (r.status !== 0) {
       fail('scenario 4: restore CLI failed', { stderrBytes: (r.stderr ?? '').length })
     }
     let restoreJson
-    try { restoreJson = JSON.parse(r.stdout.trim()) } catch {
+    try {
+      restoreJson = JSON.parse(r.stdout.trim())
+    } catch {
       fail('scenario 4: restore stdout is not valid JSON')
     }
-    if (restoreJson.schemaVersion !== 1)   fail('scenario 4: schemaVersion mismatch')
-    if (restoreJson.ok !== true)           fail('scenario 4: ok not true')
+    if (restoreJson.schemaVersion !== 1) fail('scenario 4: schemaVersion mismatch')
+    if (restoreJson.ok !== true) fail('scenario 4: ok not true')
     if (restoreJson.operation !== 'restore') fail('scenario 4: operation mismatch')
 
     // server-mode.json must have been removed from restored dir.
@@ -292,33 +376,42 @@ try {
     }
     assertNoLeak('scenario 4 restore stdout', r.stdout, SMOKE_LITERALS)
     assertNoLeak('scenario 4 restore stderr', r.stderr ?? '')
-    console.log('[server-cli-smoke] scenario 4 PASS: restore CLI succeeded, server-mode.json neutralized')
+    console.log(
+      '[server-cli-smoke] scenario 4 PASS: restore CLI succeeded, server-mode.json neutralized',
+    )
   }
 
   // ── Scenario 5: restored server-mode can boot and serve seeded canvas ──────
 
   {
-    serverMode = spawn(process.execPath, [
-      DIST_CLI, 'server', 'run', '--json',
-      `--data-dir=${restoredDir}`,
-      `--external-url=${SMOKE_AUDIENCE}`,
-      '--auth-strategy=oauth-jwt',
-      `--jwt-issuer=${SMOKE_ISSUER}`,
-      `--jwt-audience=${SMOKE_AUDIENCE}`,
-      `--jwks-uri=${jwksUri}`,
-      `--allowed-origins=${SMOKE_AUDIENCE}`,
-    ], {
-      stdio: 'pipe',
-      env: {
-        ...process.env,
-        WHITEBOARD_SERVER_PORT: String(SERVER_PORT),
-        NODE_EXTRA_CA_CERTS: tlsCertFile,
+    serverMode = spawn(
+      process.execPath,
+      [
+        DIST_CLI,
+        'server',
+        'run',
+        '--json',
+        `--data-dir=${restoredDir}`,
+        `--external-url=${SMOKE_AUDIENCE}`,
+        '--auth-strategy=oauth-jwt',
+        `--jwt-issuer=${SMOKE_ISSUER}`,
+        `--jwt-audience=${SMOKE_AUDIENCE}`,
+        `--jwks-uri=${jwksUri}`,
+        `--allowed-origins=${SMOKE_AUDIENCE}`,
+      ],
+      {
+        stdio: 'pipe',
+        env: {
+          ...scrubDevEnv(process.env),
+          WHITEBOARD_SERVER_PORT: String(SERVER_PORT),
+          NODE_EXTRA_CA_CERTS: tlsCertFile,
+        },
       },
-    })
+    )
 
     const ready = await waitForReadyJson(serverMode)
     if (!ready) fail('scenario 5: restored server did not emit ready JSON')
-    if (!await waitForHttpReady(`http://127.0.0.1:${SERVER_PORT}/api/runtime/ping`)) {
+    if (!(await waitForHttpReady(`http://127.0.0.1:${SERVER_PORT}/api/runtime/ping`))) {
       fail('scenario 5: restored server HTTP not ready')
     }
     assertNoLeak('scenario 5 ready JSON', JSON.stringify(ready))
@@ -327,7 +420,7 @@ try {
     const jwt = makeJwt(privateKey, 'workspace:read canvas:read')
     const listRes = await fetch(
       `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/canvases`,
-      { headers: { 'Authorization': `Bearer ${jwt}` } },
+      { headers: { Authorization: `Bearer ${jwt}` } },
     )
     if (!listRes.ok) fail(`scenario 5: canvas list failed with ${listRes.status}`)
     const list = await listRes.json()
@@ -338,13 +431,18 @@ try {
     }
 
     // Auth contract: unauthenticated → 401, wrong scope → 403.
-    const noAuthRes = await fetch(`http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/canvases`)
-    if (noAuthRes.status !== 401) fail(`scenario 5: expected 401 for no-auth, got ${noAuthRes.status}`)
+    const noAuthRes = await fetch(
+      `http://127.0.0.1:${SERVER_PORT}/api/workspaces/${WORKSPACE_ID}/canvases`,
+    )
+    if (noAuthRes.status !== 401)
+      fail(`scenario 5: expected 401 for no-auth, got ${noAuthRes.status}`)
     assertNoLeak('scenario 5 no-auth body', await noAuthRes.text(), SMOKE_LITERALS)
 
     killProc(serverMode)
     serverMode = null
-    console.log('[server-cli-smoke] scenario 5 PASS: restored server booted, seeded canvas verified')
+    console.log(
+      '[server-cli-smoke] scenario 5 PASS: restored server booted, seeded canvas verified',
+    )
   }
 
   // ── Scenario 6: non-empty output dir is rejected ──────────────────────────
@@ -354,7 +452,13 @@ try {
     mkdirSync(nonEmptyOut)
     writeFileSync(join(nonEmptyOut, 'canary.txt'), 'content')
 
-    const r = cli(['server', 'backup', '--json', `--data-dir=${srcDataDir}`, `--output-dir=${nonEmptyOut}`])
+    const r = cli([
+      'server',
+      'backup',
+      '--json',
+      `--data-dir=${srcDataDir}`,
+      `--output-dir=${nonEmptyOut}`,
+    ])
     if (r.status === 0) fail('scenario 6: backup into non-empty output dir should have failed')
     if (r.stdout.trim() !== '') fail('scenario 6: stdout not empty on failure')
     assertNoLeak('scenario 6 stderr', r.stderr ?? '', SMOKE_LITERALS)
@@ -368,7 +472,13 @@ try {
     mkdirSync(nonEmptyTarget)
     writeFileSync(join(nonEmptyTarget, 'canary.txt'), 'content')
 
-    const r = cli(['server', 'restore', '--json', `--backup-dir=${backupDir}`, `--target-dir=${nonEmptyTarget}`])
+    const r = cli([
+      'server',
+      'restore',
+      '--json',
+      `--backup-dir=${backupDir}`,
+      `--target-dir=${nonEmptyTarget}`,
+    ])
     if (r.status === 0) fail('scenario 7: restore into non-empty target should have failed')
     if (r.stdout.trim() !== '') fail('scenario 7: stdout not empty on failure')
     assertNoLeak('scenario 7 stderr', r.stderr ?? '', SMOKE_LITERALS)
@@ -378,9 +488,9 @@ try {
   // ── Scenario 8: symlink inside data dir is rejected during backup ─────────
 
   {
-    const symlinkSrc  = join(tmpRoot, 'symlink-src')
+    const symlinkSrc = join(tmpRoot, 'symlink-src')
     const outsideFile = join(tmpRoot, 'outside-secret.txt')
-    const symlinkOut  = join(tmpRoot, 'symlink-out')
+    const symlinkOut = join(tmpRoot, 'symlink-out')
     mkdirSync(symlinkSrc)
     writeFileSync(outsideFile, 'outside-content')
     // Plant a symlink inside the data dir pointing to the outside file.
@@ -388,7 +498,13 @@ try {
     const { symlinkSync } = await import('node:fs')
     symlinkSync(outsideFile, join(symlinkSrc, 'evil-link.png'))
 
-    const r = cli(['server', 'backup', '--json', `--data-dir=${symlinkSrc}`, `--output-dir=${symlinkOut}`])
+    const r = cli([
+      'server',
+      'backup',
+      '--json',
+      `--data-dir=${symlinkSrc}`,
+      `--output-dir=${symlinkOut}`,
+    ])
     if (r.status === 0) fail('scenario 8: backup with symlink in data dir should have failed')
     if (r.stdout.trim() !== '') fail('scenario 8: stdout not empty on failure')
     assertNoLeak('scenario 8 stderr', r.stderr ?? '', SMOKE_LITERALS)
@@ -398,16 +514,23 @@ try {
   // ── Scenario 9: ancestor symlink in --output-dir path is rejected ─────────
 
   {
-    const realOut  = join(tmpRoot, 'anc-real-out')
-    const ancLink  = join(tmpRoot, 'anc-link-out')
+    const realOut = join(tmpRoot, 'anc-real-out')
+    const ancLink = join(tmpRoot, 'anc-link-out')
     const { symlinkSync } = await import('node:fs')
     mkdirSync(realOut)
     symlinkSync(realOut, ancLink)
 
     // Pass a path THROUGH the symlink as --output-dir so the ancestor walk
     // detects the symlink component and rejects the request.
-    const r = cli(['server', 'backup', '--json', `--data-dir=${srcDataDir}`, `--output-dir=${join(ancLink, 'backup')}`])
-    if (r.status === 0) fail('scenario 9: backup with symlinked ancestor in output-dir should have failed')
+    const r = cli([
+      'server',
+      'backup',
+      '--json',
+      `--data-dir=${srcDataDir}`,
+      `--output-dir=${join(ancLink, 'backup')}`,
+    ])
+    if (r.status === 0)
+      fail('scenario 9: backup with symlinked ancestor in output-dir should have failed')
     if (r.stdout.trim() !== '') fail('scenario 9: stdout not empty on failure')
     assertNoLeak('scenario 9 stderr', r.stderr ?? '', SMOKE_LITERALS)
     console.log('[server-cli-smoke] scenario 9 PASS: ancestor symlink in --output-dir rejected')
@@ -417,13 +540,20 @@ try {
 
   {
     const realTarget = join(tmpRoot, 'anc-real-target')
-    const ancLinkT   = join(tmpRoot, 'anc-link-target')
+    const ancLinkT = join(tmpRoot, 'anc-link-target')
     const { symlinkSync } = await import('node:fs')
     mkdirSync(realTarget)
     symlinkSync(realTarget, ancLinkT)
 
-    const r = cli(['server', 'restore', '--json', `--backup-dir=${backupDir}`, `--target-dir=${join(ancLinkT, 'restored')}`])
-    if (r.status === 0) fail('scenario 10: restore with symlinked ancestor in target-dir should have failed')
+    const r = cli([
+      'server',
+      'restore',
+      '--json',
+      `--backup-dir=${backupDir}`,
+      `--target-dir=${join(ancLinkT, 'restored')}`,
+    ])
+    if (r.status === 0)
+      fail('scenario 10: restore with symlinked ancestor in target-dir should have failed')
     if (r.stdout.trim() !== '') fail('scenario 10: stdout not empty on failure')
     assertNoLeak('scenario 10 stderr', r.stderr ?? '', SMOKE_LITERALS)
     console.log('[server-cli-smoke] scenario 10 PASS: ancestor symlink in --target-dir rejected')
@@ -433,20 +563,30 @@ try {
 
   {
     const liveDataDir = join(tmpRoot, 'live-src')
-    const liveOut     = join(tmpRoot, 'live-out')
+    const liveOut = join(tmpRoot, 'live-out')
     mkdirSync(liveDataDir)
     // Write a server-mode.json pointing to the smoke process itself (live PID).
-    writeFileSync(join(liveDataDir, 'server-mode.json'), JSON.stringify({
-      schemaVersion: 1,
-      pid: process.pid,
-      host: '127.0.0.1',
-      port: 3099,
-      publicBaseUrl: SMOKE_AUDIENCE,
-      authStrategy: 'oauth-jwt',
-      startedAt: new Date().toISOString(),
-    }), { mode: 0o600 })
+    writeFileSync(
+      join(liveDataDir, 'server-mode.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        pid: process.pid,
+        host: '127.0.0.1',
+        port: 3099,
+        publicBaseUrl: SMOKE_AUDIENCE,
+        authStrategy: 'oauth-jwt',
+        startedAt: new Date().toISOString(),
+      }),
+      { mode: 0o600 },
+    )
 
-    const r = cli(['server', 'backup', '--json', `--data-dir=${liveDataDir}`, `--output-dir=${liveOut}`])
+    const r = cli([
+      'server',
+      'backup',
+      '--json',
+      `--data-dir=${liveDataDir}`,
+      `--output-dir=${liveOut}`,
+    ])
     if (r.status === 0) fail('scenario 11: backup of running server should have been refused')
     if (r.stdout.trim() !== '') fail('scenario 11: stdout not empty on failure')
     if (!r.stderr?.includes('running')) fail('scenario 11: stderr should mention running')
@@ -459,18 +599,29 @@ try {
   {
     const liveTarget = join(tmpRoot, 'live-target')
     mkdirSync(liveTarget)
-    writeFileSync(join(liveTarget, 'server-mode.json'), JSON.stringify({
-      schemaVersion: 1,
-      pid: process.pid,
-      host: '127.0.0.1',
-      port: 3099,
-      publicBaseUrl: SMOKE_AUDIENCE,
-      authStrategy: 'oauth-jwt',
-      startedAt: new Date().toISOString(),
-    }), { mode: 0o600 })
+    writeFileSync(
+      join(liveTarget, 'server-mode.json'),
+      JSON.stringify({
+        schemaVersion: 1,
+        pid: process.pid,
+        host: '127.0.0.1',
+        port: 3099,
+        publicBaseUrl: SMOKE_AUDIENCE,
+        authStrategy: 'oauth-jwt',
+        startedAt: new Date().toISOString(),
+      }),
+      { mode: 0o600 },
+    )
 
-    const r = cli(['server', 'restore', '--json', `--backup-dir=${backupDir}`, `--target-dir=${liveTarget}`])
-    if (r.status === 0) fail('scenario 12: restore into running server target should have been refused')
+    const r = cli([
+      'server',
+      'restore',
+      '--json',
+      `--backup-dir=${backupDir}`,
+      `--target-dir=${liveTarget}`,
+    ])
+    if (r.status === 0)
+      fail('scenario 12: restore into running server target should have been refused')
     if (r.stdout.trim() !== '') fail('scenario 12: stdout not empty on failure')
     if (!r.stderr?.includes('running')) fail('scenario 12: stderr should mention running')
     assertNoLeak('scenario 12 stderr', r.stderr ?? '', SMOKE_LITERALS)
@@ -495,7 +646,12 @@ try {
     }
     // restore: missing --json
     {
-      const r = cli(['server', 'restore', `--backup-dir=${backupDir}`, `--target-dir=${restoredDir}`])
+      const r = cli([
+        'server',
+        'restore',
+        `--backup-dir=${backupDir}`,
+        `--target-dir=${restoredDir}`,
+      ])
       if (r.status !== 64) fail(`scenario 13c: expected exit 64, got ${r.status}`)
     }
     // restore: missing --target-dir
@@ -513,7 +669,14 @@ try {
     }
     // restore: bare positional must not echo value
     {
-      const r = cli(['server', 'restore', '--json', '--backup-dir=/b', '--target-dir=/t', 'bare-secret'])
+      const r = cli([
+        'server',
+        'restore',
+        '--json',
+        '--backup-dir=/b',
+        '--target-dir=/t',
+        'bare-secret',
+      ])
       if (r.status !== 64) fail(`scenario 13f: expected exit 64, got ${r.status}`)
       if ((r.stderr ?? '').includes('bare-secret')) {
         fail('scenario 13f: bare positional value leaked into stderr')
@@ -527,27 +690,47 @@ try {
   {
     // backup routes correctly (dry-run: --data-dir pointing to valid dir succeeds arg parse)
     {
-      const r = cli(['server', 'backup', '--json', `--output-dir=${join(tmpRoot, 'route-test')}`,
-        `--data-dir=${srcDataDir}`])
+      const r = cli([
+        'server',
+        'backup',
+        '--json',
+        `--output-dir=${join(tmpRoot, 'route-test')}`,
+        `--data-dir=${srcDataDir}`,
+      ])
       // The backup will succeed (srcDataDir exists and outputDir is new).
       // If routing were broken, we'd get exit 64 (usage) or a JSON from a wrong subcommand.
       if (r.status !== 0 && r.status !== 1) {
         fail(`scenario 14a: unexpected exit code ${r.status}`)
       }
       if (r.status === 0) {
-        let j; try { j = JSON.parse(r.stdout.trim()) } catch { fail('scenario 14a: invalid JSON') }
+        let j
+        try {
+          j = JSON.parse(r.stdout.trim())
+        } catch {
+          fail('scenario 14a: invalid JSON')
+        }
         if (j.operation !== 'backup') fail('scenario 14a: operation should be backup')
       }
     }
     // restore routes correctly
     {
-      const r = cli(['server', 'restore', '--json',
-        `--backup-dir=${backupDir}`, `--target-dir=${join(tmpRoot, 'route-restore')}`])
+      const r = cli([
+        'server',
+        'restore',
+        '--json',
+        `--backup-dir=${backupDir}`,
+        `--target-dir=${join(tmpRoot, 'route-restore')}`,
+      ])
       if (r.status !== 0 && r.status !== 1) {
         fail(`scenario 14b: unexpected exit code ${r.status}`)
       }
       if (r.status === 0) {
-        let j; try { j = JSON.parse(r.stdout.trim()) } catch { fail('scenario 14b: invalid JSON') }
+        let j
+        try {
+          j = JSON.parse(r.stdout.trim())
+        } catch {
+          fail('scenario 14b: invalid JSON')
+        }
         if (j.operation !== 'restore') fail('scenario 14b: operation should be restore')
       }
     }
@@ -569,10 +752,12 @@ try {
 
   {
     const bundleDataDir = join(tmpRoot, 'sb-data-missing')
-    const bundleOutDir  = join(tmpRoot, 'sb-out-missing')
+    const bundleOutDir = join(tmpRoot, 'sb-out-missing')
 
     const r = cli([
-      'server', 'support-bundle', '--json',
+      'server',
+      'support-bundle',
+      '--json',
       `--data-dir=${bundleDataDir}`,
       `--output-dir=${bundleOutDir}`,
     ])
@@ -582,28 +767,32 @@ try {
       })
     }
     let sbJson
-    try { sbJson = JSON.parse(r.stdout.trim()) } catch {
+    try {
+      sbJson = JSON.parse(r.stdout.trim())
+    } catch {
       fail('scenario 15: stdout is not valid JSON')
     }
-    if (sbJson.schemaVersion !== 1)          fail('scenario 15: schemaVersion mismatch')
-    if (sbJson.ok !== true)                  fail('scenario 15: ok not true')
+    if (sbJson.schemaVersion !== 1) fail('scenario 15: schemaVersion mismatch')
+    if (sbJson.ok !== true) fail('scenario 15: ok not true')
     if (sbJson.operation !== 'support-bundle') fail('scenario 15: operation mismatch')
-    if (!Array.isArray(sbJson.files))        fail('scenario 15: files not an array')
-    if ('outputDir' in sbJson)               fail('scenario 15: outputDir must not appear in success result')
+    if (!Array.isArray(sbJson.files)) fail('scenario 15: files not an array')
+    if ('outputDir' in sbJson) fail('scenario 15: outputDir must not appear in success result')
 
     for (const f of ['status.json', 'doctor.json', 'record.json', 'manifest.json']) {
       if (!existsSync(join(bundleOutDir, f))) fail(`scenario 15: missing bundle file ${f}`)
     }
     const manifest = JSON.parse(readFileSync(join(bundleOutDir, 'manifest.json'), 'utf-8'))
-    if (manifest.mode !== 'server-mode')    fail('scenario 15: manifest.mode must be server-mode')
-    if (!Array.isArray(manifest.sections))  fail('scenario 15: manifest.sections missing')
-    if (manifest.sections.includes('logs.jsonl')) fail('scenario 15: logs.jsonl must not appear in server-mode manifest')
+    if (manifest.mode !== 'server-mode') fail('scenario 15: manifest.mode must be server-mode')
+    if (!Array.isArray(manifest.sections)) fail('scenario 15: manifest.sections missing')
+    if (manifest.sections.includes('logs.jsonl'))
+      fail('scenario 15: logs.jsonl must not appear in server-mode manifest')
 
     const scenario15Literals = [...SMOKE_LITERALS, bundleDataDir, bundleOutDir]
     assertNoLeak('scenario 15 stdout', r.stdout, scenario15Literals)
     assertNoLeak('scenario 15 stderr', r.stderr ?? '', scenario15Literals)
     const allBundleContent = ['manifest.json', 'status.json', 'doctor.json', 'record.json']
-      .map((f) => readFileSync(join(bundleOutDir, f), 'utf-8')).join('')
+      .map((f) => readFileSync(join(bundleOutDir, f), 'utf-8'))
+      .join('')
     assertNoLeak('scenario 15 bundle files', allBundleContent, scenario15Literals)
     console.log('[server-cli-smoke] scenario 15 PASS: support-bundle with missing record succeeded')
   }
@@ -616,7 +805,9 @@ try {
     writeFileSync(join(bundleOutNonEmpty, 'canary.txt'), 'content')
 
     const r = cli([
-      'server', 'support-bundle', '--json',
+      'server',
+      'support-bundle',
+      '--json',
       `--data-dir=${tmpRoot}`,
       `--output-dir=${bundleOutNonEmpty}`,
     ])
@@ -632,14 +823,16 @@ try {
   // ── Scenario 17: server support-bundle: symlink final output dir → exit 1 ─
 
   {
-    const sbRealOut  = join(tmpRoot, 'sb-real-out')
-    const sbLinkOut  = join(tmpRoot, 'sb-link-out')
+    const sbRealOut = join(tmpRoot, 'sb-real-out')
+    const sbLinkOut = join(tmpRoot, 'sb-link-out')
     const { symlinkSync } = await import('node:fs')
     mkdirSync(sbRealOut)
     symlinkSync(sbRealOut, sbLinkOut)
 
     const r = cli([
-      'server', 'support-bundle', '--json',
+      'server',
+      'support-bundle',
+      '--json',
       `--data-dir=${tmpRoot}`,
       `--output-dir=${sbLinkOut}`,
     ])
@@ -652,18 +845,21 @@ try {
   // ── Scenario 18: server support-bundle: ancestor symlink in output path ───
 
   {
-    const sbAncReal  = join(tmpRoot, 'sb-anc-real')
-    const sbAncLink  = join(tmpRoot, 'sb-anc-link')
+    const sbAncReal = join(tmpRoot, 'sb-anc-real')
+    const sbAncLink = join(tmpRoot, 'sb-anc-link')
     const { symlinkSync } = await import('node:fs')
     mkdirSync(sbAncReal)
     symlinkSync(sbAncReal, sbAncLink)
 
     const r = cli([
-      'server', 'support-bundle', '--json',
+      'server',
+      'support-bundle',
+      '--json',
       `--data-dir=${tmpRoot}`,
       `--output-dir=${join(sbAncLink, 'bundle')}`,
     ])
-    if (r.status === 0) fail('scenario 18: ancestor symlink in output path should have been rejected')
+    if (r.status === 0)
+      fail('scenario 18: ancestor symlink in output path should have been rejected')
     if (r.stdout.trim() !== '') fail('scenario 18: stdout not empty on failure')
     assertNoLeak('scenario 18 stderr', r.stderr ?? '', SMOKE_LITERALS)
     console.log('[server-cli-smoke] scenario 18 PASS: ancestor symlink in output path rejected')
@@ -687,7 +883,13 @@ try {
     }
     // unknown flag must not echo its value
     {
-      const r = cli(['server', 'support-bundle', '--json', '--output-dir=/o', '--unknown-flag=verysecret'])
+      const r = cli([
+        'server',
+        'support-bundle',
+        '--json',
+        '--output-dir=/o',
+        '--unknown-flag=verysecret',
+      ])
       if (r.status !== 64) fail(`scenario 19c: expected exit 64, got ${r.status}`)
       if ((r.stderr ?? '').includes('verysecret')) {
         fail('scenario 19c: unknown flag value leaked into stderr')
@@ -721,35 +923,44 @@ try {
   // and record.json derives kind='ok' from that outcome (not from isPidAlive alone).
   {
     const BUNDLE_SERVER_PORT = 4296
-    const bundleLiveDataDir  = join(tmpRoot, 'sb-live-data')
-    const bundleLiveOutDir   = join(tmpRoot, 'sb-live-out')
+    const bundleLiveDataDir = join(tmpRoot, 'sb-live-data')
+    const bundleLiveOutDir = join(tmpRoot, 'sb-live-out')
 
-    bundleServer2 = spawn(process.execPath, [
-      DIST_CLI, 'server', 'run', '--json',
-      `--data-dir=${bundleLiveDataDir}`,
-      `--external-url=${SMOKE_AUDIENCE}`,
-      '--auth-strategy=oauth-jwt',
-      `--jwt-issuer=${SMOKE_ISSUER}`,
-      `--jwt-audience=${SMOKE_AUDIENCE}`,
-      `--jwks-uri=${jwksUri}`,
-      `--allowed-origins=${SMOKE_AUDIENCE}`,
-    ], {
-      stdio: 'pipe',
-      env: {
-        ...process.env,
-        WHITEBOARD_SERVER_PORT: String(BUNDLE_SERVER_PORT),
-        NODE_EXTRA_CA_CERTS: tlsCertFile,
+    bundleServer2 = spawn(
+      process.execPath,
+      [
+        DIST_CLI,
+        'server',
+        'run',
+        '--json',
+        `--data-dir=${bundleLiveDataDir}`,
+        `--external-url=${SMOKE_AUDIENCE}`,
+        '--auth-strategy=oauth-jwt',
+        `--jwt-issuer=${SMOKE_ISSUER}`,
+        `--jwt-audience=${SMOKE_AUDIENCE}`,
+        `--jwks-uri=${jwksUri}`,
+        `--allowed-origins=${SMOKE_AUDIENCE}`,
+      ],
+      {
+        stdio: 'pipe',
+        env: {
+          ...scrubDevEnv(process.env),
+          WHITEBOARD_SERVER_PORT: String(BUNDLE_SERVER_PORT),
+          NODE_EXTRA_CA_CERTS: tlsCertFile,
+        },
       },
-    })
+    )
 
     const ready21 = await waitForReadyJson(bundleServer2)
     if (!ready21) fail('scenario 21: server did not emit ready JSON')
-    if (!await waitForHttpReady(`http://127.0.0.1:${BUNDLE_SERVER_PORT}/api/runtime/ping`)) {
+    if (!(await waitForHttpReady(`http://127.0.0.1:${BUNDLE_SERVER_PORT}/api/runtime/ping`))) {
       fail('scenario 21: server HTTP not ready')
     }
 
     const r = cli([
-      'server', 'support-bundle', '--json',
+      'server',
+      'support-bundle',
+      '--json',
       `--data-dir=${bundleLiveDataDir}`,
       `--output-dir=${bundleLiveOutDir}`,
     ])
@@ -759,7 +970,9 @@ try {
       })
     }
     let sbJson21
-    try { sbJson21 = JSON.parse(r.stdout.trim()) } catch {
+    try {
+      sbJson21 = JSON.parse(r.stdout.trim())
+    } catch {
       fail('scenario 21: stdout is not valid JSON')
     }
     if (sbJson21.operation !== 'support-bundle') fail('scenario 21: operation mismatch')
@@ -780,16 +993,18 @@ try {
     const scenario21Literals = [...SMOKE_LITERALS, bundleLiveDataDir, bundleLiveOutDir]
     assertNoLeak('scenario 21 stdout', r.stdout, scenario21Literals)
     const allContent21 = ['manifest.json', 'status.json', 'doctor.json', 'record.json']
-      .map((f) => readFileSync(join(bundleLiveOutDir, f), 'utf-8')).join('')
+      .map((f) => readFileSync(join(bundleLiveOutDir, f), 'utf-8'))
+      .join('')
     assertNoLeak('scenario 21 bundle files', allContent21, scenario21Literals)
 
     killProc(bundleServer2)
     bundleServer2 = null
-    console.log('[server-cli-smoke] scenario 21 PASS: running-server bundle has identity-confirmed status/record')
+    console.log(
+      '[server-cli-smoke] scenario 21 PASS: running-server bundle has identity-confirmed status/record',
+    )
   }
 
   console.log('[server-cli-smoke] All scenarios PASSED.')
-
 } finally {
   if (seedDaemon) killProc(seedDaemon)
   if (serverMode) killProc(serverMode)

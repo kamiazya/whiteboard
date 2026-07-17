@@ -35,7 +35,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak as assertNoLeakHelper } from './smoke-helpers.mjs'
+import { assertNoLeak as assertNoLeakHelper, scrubDevEnv } from './smoke-helpers.mjs'
 
 // Minimal ES256 JWT helpers using Node.js built-in crypto only.
 // (Distribution smokes run with plain `node`, not in the pnpm workspace.)
@@ -103,24 +103,41 @@ function generateTestTlsCert(dir) {
   const keyFile = join(dir, 'tls-key.pem')
   const certFile = join(dir, 'tls-cert.pem')
   const cnfFile = join(dir, 'openssl.cnf')
-  writeFileSync(cnfFile, [
-    '[req]',
-    'distinguished_name = req_dn',
-    'x509_extensions = san_ext',
-    'prompt = no',
-    '',
-    '[req_dn]',
-    'CN = smoke-test-jwks-ca',
-    '',
-    '[san_ext]',
-    'subjectAltName = IP:127.0.0.1',
-    'basicConstraints = critical,CA:true',
-  ].join('\n'))
-  const r = spawnSync('openssl', [
-    'req', '-x509', '-newkey', 'rsa:2048',
-    '-keyout', keyFile, '-out', certFile,
-    '-days', '1', '-nodes', '-config', cnfFile,
-  ], { stdio: 'pipe', encoding: 'utf8' })
+  writeFileSync(
+    cnfFile,
+    [
+      '[req]',
+      'distinguished_name = req_dn',
+      'x509_extensions = san_ext',
+      'prompt = no',
+      '',
+      '[req_dn]',
+      'CN = smoke-test-jwks-ca',
+      '',
+      '[san_ext]',
+      'subjectAltName = IP:127.0.0.1',
+      'basicConstraints = critical,CA:true',
+    ].join('\n'),
+  )
+  const r = spawnSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-keyout',
+      keyFile,
+      '-out',
+      certFile,
+      '-days',
+      '1',
+      '-nodes',
+      '-config',
+      cnfFile,
+    ],
+    { stdio: 'pipe', encoding: 'utf8' },
+  )
   if (r.status !== 0) throw new Error(`openssl cert gen failed: ${r.stderr}`)
   return { keyFile, certFile }
 }
@@ -143,7 +160,7 @@ function assertNoLeak(label, text) {
 
 function runCli(args, { env } = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
-    env: { ...process.env, ...env },
+    env: { ...scrubDevEnv(process.env), ...env },
     encoding: 'utf8',
     timeout: 10_000,
   })
@@ -159,12 +176,17 @@ const REQUIRED_FLAGS = [
 // Scenario 1: non-HTTPS externalUrl → plan rejects → exit 1
 {
   const r = runCli([
-    'server', 'run', '--json', '--dry-run',
+    'server',
+    'run',
+    '--json',
+    '--dry-run',
     '--external-url=http://whiteboard.example.com',
     ...REQUIRED_FLAGS,
   ])
-  if (r.status !== 1) fail(`scenario 1: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
-  if (r.stdout.trim() !== '') fail('scenario 1: stdout must be empty', { lineLength: r.stdout.length })
+  if (r.status !== 1)
+    fail(`scenario 1: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
+  if (r.stdout.trim() !== '')
+    fail('scenario 1: stdout must be empty', { lineLength: r.stdout.length })
   assertNoLeak('scenario 1 stderr', r.stderr)
   console.log('[server-run-smoke] scenario 1 PASS: non-HTTPS externalUrl → exit 1, stderr safe')
 }
@@ -172,14 +194,23 @@ const REQUIRED_FLAGS = [
 // Scenario 2: valid dry-run → exit 0, stdout single JSON, fields correct
 {
   const r = runCli([
-    'server', 'run', '--json', '--dry-run',
+    'server',
+    'run',
+    '--json',
+    '--dry-run',
     '--external-url=https://whiteboard.example.com',
     ...REQUIRED_FLAGS,
   ])
-  if (r.status !== 0) fail(`scenario 2: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
-  if (r.stderr.trim() !== '') fail('scenario 2: stderr must be empty', { stderrBytes: r.stderr.length })
+  if (r.status !== 0)
+    fail(`scenario 2: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
+  if (r.stderr.trim() !== '')
+    fail('scenario 2: stderr must be empty', { stderrBytes: r.stderr.length })
   let obj
-  try { obj = JSON.parse(r.stdout) } catch { fail('scenario 2: stdout not valid JSON', { lineLength: r.stdout.length }) }
+  try {
+    obj = JSON.parse(r.stdout)
+  } catch {
+    fail('scenario 2: stdout not valid JSON', { lineLength: r.stdout.length })
+  }
   if (obj.schemaVersion !== 1) fail('scenario 2: schemaVersion must be 1')
   if (obj.ok !== true) fail('scenario 2: ok must be true')
   if (obj.dryRun !== true) fail('scenario 2: dryRun must be true')
@@ -196,15 +227,19 @@ const REQUIRED_FLAGS = [
 // Scenario 3: origin normalization https://whiteboard.example.com:443 → https://whiteboard.example.com
 {
   const r = runCli([
-    'server', 'run', '--json', '--dry-run',
+    'server',
+    'run',
+    '--json',
+    '--dry-run',
     '--external-url=https://whiteboard.example.com',
     '--allowed-origins=https://whiteboard.example.com:443',
     ...REQUIRED_FLAGS,
   ])
-  if (r.status !== 0) fail(`scenario 3: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
+  if (r.status !== 0)
+    fail(`scenario 3: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
   const obj = JSON.parse(r.stdout)
   if (!Array.isArray(obj.allowedOrigins)) fail('scenario 3: allowedOrigins must be array')
-  if (obj.allowedOrigins.some(o => o.includes(':443')))
+  if (obj.allowedOrigins.some((o) => o.includes(':443')))
     fail(`scenario 3: :443 not stripped from allowedOrigins: ${JSON.stringify(obj.allowedOrigins)}`)
   if (!obj.allowedOrigins.includes('https://whiteboard.example.com'))
     fail(`scenario 3: expected https://whiteboard.example.com in allowedOrigins`)
@@ -214,12 +249,16 @@ const REQUIRED_FLAGS = [
 // Scenario 4: wildcard origin → config-error → exit 1, stderr safe
 {
   const r = runCli([
-    'server', 'run', '--json', '--dry-run',
+    'server',
+    'run',
+    '--json',
+    '--dry-run',
     '--external-url=https://whiteboard.example.com',
     '--allowed-origins=*',
     ...REQUIRED_FLAGS,
   ])
-  if (r.status !== 1) fail(`scenario 4: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
+  if (r.status !== 1)
+    fail(`scenario 4: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
   if (r.stdout.trim() !== '') fail('scenario 4: stdout must be empty')
   assertNoLeak('scenario 4 stderr', r.stderr)
   console.log('[server-run-smoke] scenario 4 PASS: wildcard origin → exit 1, stderr safe')
@@ -238,7 +277,8 @@ const REQUIRED_FLAGS = [
 // Scenario 6: missing --json → exit 64, stdout empty
 {
   const r = runCli([
-    'server', 'run',
+    'server',
+    'run',
     '--dry-run',
     '--external-url=https://whiteboard.example.com',
     ...REQUIRED_FLAGS,
@@ -252,7 +292,10 @@ const REQUIRED_FLAGS = [
 {
   const r = runCli(
     [
-      'server', 'run', '--json', '--dry-run',
+      'server',
+      'run',
+      '--json',
+      '--dry-run',
       '--external-url=https://cli-override.example.com',
       ...REQUIRED_FLAGS,
     ],
@@ -266,7 +309,8 @@ const REQUIRED_FLAGS = [
       },
     },
   )
-  if (r.status !== 0) fail(`scenario 7: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
+  if (r.status !== 0)
+    fail(`scenario 7: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
   const obj = JSON.parse(r.stdout)
   if (obj.publicBaseUrl !== 'https://cli-override.example.com')
     fail(`scenario 7: CLI flag did not override env, got ${obj.publicBaseUrl}`)
@@ -312,12 +356,17 @@ const REQUIRED_FLAGS = [
   let stdoutBuf = ''
   let stderrBuf = ''
   let firstLineResolve
-  const firstLine = new Promise((r) => { firstLineResolve = r })
+  const firstLine = new Promise((r) => {
+    firstLineResolve = r
+  })
 
   const child = spawn(
     process.execPath,
     [
-      CLI, 'server', 'run', '--json',
+      CLI,
+      'server',
+      'run',
+      '--json',
       `--external-url=${SMOKE_AUDIENCE}`,
       '--auth-strategy=oauth-jwt',
       `--jwt-issuer=${SMOKE_ISSUER}`,
@@ -330,7 +379,7 @@ const REQUIRED_FLAGS = [
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
-        ...process.env,
+        ...scrubDevEnv(process.env),
         WHITEBOARD_DATA_DIR: dataDir,
         // Trust the self-signed CA so jose's createRemoteJWKSet (undici/fetch)
         // can reach the HTTPS JWKS mock. NODE_EXTRA_CA_CERTS works with undici
@@ -345,14 +394,24 @@ const REQUIRED_FLAGS = [
     const nl = stdoutBuf.indexOf('\n')
     if (nl !== -1) firstLineResolve(stdoutBuf.slice(0, nl))
   })
-  child.stderr.on('data', (chunk) => { stderrBuf += chunk.toString() })
+  child.stderr.on('data', (chunk) => {
+    stderrBuf += chunk.toString()
+  })
   const closed = new Promise((r) => child.once('close', r))
 
   const shutdown = async () => {
     if (child.exitCode !== null) return
-    try { child.kill('SIGTERM') } catch { /* gone */ }
+    try {
+      child.kill('SIGTERM')
+    } catch {
+      /* gone */
+    }
     await Promise.race([closed, delay(SHUTDOWN_TIMEOUT_MS)])
-    try { child.kill('SIGKILL') } catch { /* gone */ }
+    try {
+      child.kill('SIGKILL')
+    } catch {
+      /* gone */
+    }
     await closed
   }
 
@@ -366,7 +425,9 @@ const REQUIRED_FLAGS = [
     }
 
     let ready
-    try { ready = JSON.parse(winner) } catch {
+    try {
+      ready = JSON.parse(winner)
+    } catch {
       fail('scenario 8: first stdout line not valid JSON', {
         lineLength: typeof winner === 'string' ? winner.length : -1,
       })
@@ -415,7 +476,14 @@ const REQUIRED_FLAGS = [
     const validJwt = signEs256Jwt(
       privateKey,
       { alg: 'ES256', kid: 'smoke-key' },
-      { sub: 'smoke-user', scope: 'canvas:read', iss: SMOKE_ISSUER, aud: SMOKE_AUDIENCE, iat: now, exp: now + 3600 },
+      {
+        sub: 'smoke-user',
+        scope: 'canvas:read',
+        iss: SMOKE_ISSUER,
+        aud: SMOKE_AUDIENCE,
+        iat: now,
+        exp: now + 3600,
+      },
     )
     const authResp = await fetch(`${baseUrl}/api/canvas/test-ws/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${validJwt}` },
@@ -430,7 +498,14 @@ const REQUIRED_FLAGS = [
     const wrongScopeJwt = signEs256Jwt(
       privateKey,
       { alg: 'ES256', kid: 'smoke-key' },
-      { sub: 'smoke-user', scope: 'workspace:read', iss: SMOKE_ISSUER, aud: SMOKE_AUDIENCE, iat: now, exp: now + 3600 },
+      {
+        sub: 'smoke-user',
+        scope: 'workspace:read',
+        iss: SMOKE_ISSUER,
+        aud: SMOKE_AUDIENCE,
+        iat: now,
+        exp: now + 3600,
+      },
     )
     const scopeResp = await fetch(`${baseUrl}/api/canvas/test-ws/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${wrongScopeJwt}` },
@@ -438,19 +513,26 @@ const REQUIRED_FLAGS = [
     if (scopeResp.status !== 403)
       fail(`scenario 8: wrong scope expected 403, got ${scopeResp.status}`)
 
-    console.log('[server-run-smoke] scenario 8 PASS: server starts, ready JSON correct, auth contract verified')
+    console.log(
+      '[server-run-smoke] scenario 8 PASS: server starts, ready JSON correct, auth contract verified',
+    )
 
     // Scenario 9: server status while running → ok:true, state:running, fields match ready JSON
     {
       const r = runCli(['server', 'status', '--json', `--data-dir=${dataDir}`])
       if (r.status !== 0) fail('scenario 9: expected exit 0', { stderrBytes: r.stderr.length })
       let obj
-      try { obj = JSON.parse(r.stdout) } catch { fail('scenario 9: stdout not valid JSON', { lineLength: r.stdout.length }) }
+      try {
+        obj = JSON.parse(r.stdout)
+      } catch {
+        fail('scenario 9: stdout not valid JSON', { lineLength: r.stdout.length })
+      }
       if (obj.state !== 'running') fail(`scenario 9: expected state:running, got ${obj.state}`)
       if (obj.ok !== true) fail('scenario 9: ok must be true')
       if (obj.pid !== ready.pid) fail(`scenario 9: pid mismatch: ${obj.pid} vs ${ready.pid}`)
       if (obj.port !== ready.port) fail(`scenario 9: port mismatch: ${obj.port} vs ${ready.port}`)
-      if (obj.publicBaseUrl !== SMOKE_AUDIENCE) fail(`scenario 9: publicBaseUrl wrong: ${obj.publicBaseUrl}`)
+      if (obj.publicBaseUrl !== SMOKE_AUDIENCE)
+        fail(`scenario 9: publicBaseUrl wrong: ${obj.publicBaseUrl}`)
       if (obj.recordFresh !== true) fail('scenario 9: recordFresh must be true')
       assertNoLeak('scenario 9 status stdout', r.stdout)
       console.log('[server-run-smoke] scenario 9 PASS: status while running → correct fields')
@@ -461,7 +543,11 @@ const REQUIRED_FLAGS = [
       const r = runCli(['server', 'stop', '--json', `--data-dir=${dataDir}`])
       if (r.status !== 0) fail('scenario 10: expected exit 0', { stderrBytes: r.stderr.length })
       let obj
-      try { obj = JSON.parse(r.stdout) } catch { fail('scenario 10: stdout not valid JSON', { lineLength: r.stdout.length }) }
+      try {
+        obj = JSON.parse(r.stdout)
+      } catch {
+        fail('scenario 10: stdout not valid JSON', { lineLength: r.stdout.length })
+      }
       if (obj.action !== 'stopped') fail(`scenario 10: expected action:stopped, got ${obj.action}`)
       if (obj.ok !== true) fail('scenario 10: ok must be true')
       if (obj.pid !== ready.pid) fail(`scenario 10: pid mismatch: ${obj.pid} vs ${ready.pid}`)
@@ -478,7 +564,11 @@ const REQUIRED_FLAGS = [
       const r = runCli(['server', 'status', '--json', `--data-dir=${dataDir}`])
       if (r.status !== 1) fail(`scenario 11: expected exit 1, got ${r.status}`)
       let obj
-      try { obj = JSON.parse(r.stdout) } catch { fail('scenario 11: stdout not valid JSON', { lineLength: r.stdout.length }) }
+      try {
+        obj = JSON.parse(r.stdout)
+      } catch {
+        fail('scenario 11: stdout not valid JSON', { lineLength: r.stdout.length })
+      }
       if (obj.state !== 'missing') fail(`scenario 11: expected state:missing, got ${obj.state}`)
       if (obj.ok !== false) fail('scenario 11: ok must be false')
       assertNoLeak('scenario 11 status-after-stop stdout', r.stdout)
@@ -496,10 +586,15 @@ const REQUIRED_FLAGS = [
   const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s12-'))
   try {
     const r = runCli(['server', 'status', '--json', `--data-dir=${dataDir}`])
-    if (r.status !== 1) fail(`scenario 12: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
+    if (r.status !== 1)
+      fail(`scenario 12: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
     if (r.stdout.trim() === '') fail('scenario 12: stdout must not be empty (expected JSON)')
     let obj
-    try { obj = JSON.parse(r.stdout) } catch { fail('scenario 12: stdout not valid JSON', { lineLength: r.stdout.length }) }
+    try {
+      obj = JSON.parse(r.stdout)
+    } catch {
+      fail('scenario 12: stdout not valid JSON', { lineLength: r.stdout.length })
+    }
     if (obj.state !== 'missing') fail(`scenario 12: expected state:missing, got ${obj.state}`)
     if (obj.ok !== false) fail('scenario 12: ok must be false')
     assertNoLeak('scenario 12 output', r.stdout)
@@ -514,10 +609,16 @@ const REQUIRED_FLAGS = [
   const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s13-'))
   try {
     const r = runCli(['server', 'stop', '--json', `--data-dir=${dataDir}`])
-    if (r.status !== 0) fail(`scenario 13: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
+    if (r.status !== 0)
+      fail(`scenario 13: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
     let obj
-    try { obj = JSON.parse(r.stdout) } catch { fail('scenario 13: stdout not valid JSON', { lineLength: r.stdout.length }) }
-    if (obj.action !== 'not-running') fail(`scenario 13: expected action:not-running, got ${obj.action}`)
+    try {
+      obj = JSON.parse(r.stdout)
+    } catch {
+      fail('scenario 13: stdout not valid JSON', { lineLength: r.stdout.length })
+    }
+    if (obj.action !== 'not-running')
+      fail(`scenario 13: expected action:not-running, got ${obj.action}`)
     if (obj.ok !== true) fail('scenario 13: ok must be true')
     assertNoLeak('scenario 13 output', r.stdout)
     console.log('[server-run-smoke] scenario 13 PASS: stop no record → not-running, exit 0')
@@ -566,25 +667,37 @@ const REQUIRED_FLAGS = [
     {
       const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s14-'))
       try {
-        const r = runCli(
-          ['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS],
-          { env: { NODE_EXTRA_CA_CERTS: drCertFile } },
-        )
-        if (r.status !== 0) fail(`scenario 14: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
-        if (r.stderr.trim() !== '') fail('scenario 14: stderr must be empty', { stderrBytes: r.stderr.length })
+        const r = runCli(['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS], {
+          env: { NODE_EXTRA_CA_CERTS: drCertFile },
+        })
+        if (r.status !== 0)
+          fail(`scenario 14: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
+        if (r.stderr.trim() !== '')
+          fail('scenario 14: stderr must be empty', { stderrBytes: r.stderr.length })
         let obj
-        try { obj = JSON.parse(r.stdout) } catch { fail('scenario 14: stdout not valid JSON', { lineLength: r.stdout.length }) }
+        try {
+          obj = JSON.parse(r.stdout)
+        } catch {
+          fail('scenario 14: stdout not valid JSON', { lineLength: r.stdout.length })
+        }
         if (obj.ok !== true) fail(`scenario 14: ok must be true, got ok:${obj.ok}`)
         if (obj.schemaVersion !== 1) fail('scenario 14: schemaVersion must be 1')
         if (!Array.isArray(obj.checks)) fail('scenario 14: checks must be array')
-        const jwksCheck = obj.checks.find(c => c.id === 'server.jwks')
+        const jwksCheck = obj.checks.find((c) => c.id === 'server.jwks')
         if (!jwksCheck) fail('scenario 14: server.jwks check missing')
-        if (jwksCheck.status !== 'ok') fail(`scenario 14: expected server.jwks ok, got ${jwksCheck.status}`)
-        if (obj.status !== 'ok') fail(`scenario 14: expected status:ok (no warnings), got ${obj.status}`)
-        const badCheck = obj.checks.find(c => c.status !== 'ok' && c.status !== 'skipped')
-        if (badCheck) fail(`scenario 14: all checks must be ok or skipped, got ${badCheck.id}:${badCheck.status}`)
+        if (jwksCheck.status !== 'ok')
+          fail(`scenario 14: expected server.jwks ok, got ${jwksCheck.status}`)
+        if (obj.status !== 'ok')
+          fail(`scenario 14: expected status:ok (no warnings), got ${obj.status}`)
+        const badCheck = obj.checks.find((c) => c.status !== 'ok' && c.status !== 'skipped')
+        if (badCheck)
+          fail(
+            `scenario 14: all checks must be ok or skipped, got ${badCheck.id}:${badCheck.status}`,
+          )
         assertNoLeak('scenario 14 stdout', r.stdout)
-        console.log('[server-run-smoke] scenario 14 PASS: doctor valid config + JWKS → exit 0, ok:true')
+        console.log(
+          '[server-run-smoke] scenario 14 PASS: doctor valid config + JWKS → exit 0, ok:true',
+        )
       } finally {
         rmSync(dataDir, { recursive: true, force: true })
       }
@@ -596,7 +709,10 @@ const REQUIRED_FLAGS = [
       try {
         const r = runCli(
           [
-            'server', 'doctor', '--json', `--data-dir=${dataDir}`,
+            'server',
+            'doctor',
+            '--json',
+            `--data-dir=${dataDir}`,
             '--external-url=http://not-https.example.com',
             '--auth-strategy=oauth-jwt',
             '--jwt-issuer=https://smoke.example.com',
@@ -605,17 +721,27 @@ const REQUIRED_FLAGS = [
           ],
           { env: { NODE_EXTRA_CA_CERTS: drCertFile } },
         )
-        if (r.status !== 1) fail(`scenario 15: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
+        if (r.status !== 1)
+          fail(`scenario 15: expected exit 1, got ${r.status}`, { stderrBytes: r.stderr.length })
         if (r.stdout.trim() === '') fail('scenario 15: stdout must not be empty')
         let obj
-        try { obj = JSON.parse(r.stdout) } catch { fail('scenario 15: stdout not valid JSON', { lineLength: r.stdout.length }) }
+        try {
+          obj = JSON.parse(r.stdout)
+        } catch {
+          fail('scenario 15: stdout not valid JSON', { lineLength: r.stdout.length })
+        }
         if (obj.ok !== false) fail('scenario 15: ok must be false')
-        if (!obj.checks?.some(c => c.status === 'error')) fail('scenario 15: at least one check must have error status')
-        if (r.stdout.includes('not-https.example.com')) fail('scenario 15: stdout must not contain raw externalUrl')
-        if (r.stderr.trim() !== '') fail('scenario 15: stderr must be empty', { stderrBytes: r.stderr.length })
+        if (!obj.checks?.some((c) => c.status === 'error'))
+          fail('scenario 15: at least one check must have error status')
+        if (r.stdout.includes('not-https.example.com'))
+          fail('scenario 15: stdout must not contain raw externalUrl')
+        if (r.stderr.trim() !== '')
+          fail('scenario 15: stderr must be empty', { stderrBytes: r.stderr.length })
         assertNoLeak('scenario 15 stdout', r.stdout)
         assertNoLeak('scenario 15 stderr', r.stderr)
-        console.log('[server-run-smoke] scenario 15 PASS: invalid config → exit 1, ok:false, stderr safe')
+        console.log(
+          '[server-run-smoke] scenario 15 PASS: invalid config → exit 1, ok:false, stderr safe',
+        )
       } finally {
         rmSync(dataDir, { recursive: true, force: true })
       }
@@ -639,35 +765,44 @@ const REQUIRED_FLAGS = [
         writeFileSync(recordPath, JSON.stringify(staleRecord))
         // chmodSync bypasses umask to reliably set broad permissions.
         chmodSync(recordPath, 0o644)
-        const r = runCli(
-          ['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS],
-          { env: { NODE_EXTRA_CA_CERTS: drCertFile } },
-        )
+        const r = runCli(['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS], {
+          env: { NODE_EXTRA_CA_CERTS: drCertFile },
+        })
         if (r.status === null) fail('scenario 16: doctor process was killed by signal')
-        if (r.status !== 0) fail(`scenario 16: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
+        if (r.status !== 0)
+          fail(`scenario 16: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
         if (r.stdout.trim() === '') fail('scenario 16: stdout must not be empty')
         let obj
-        try { obj = JSON.parse(r.stdout) } catch { fail('scenario 16: stdout not valid JSON', { lineLength: r.stdout.length }) }
+        try {
+          obj = JSON.parse(r.stdout)
+        } catch {
+          fail('scenario 16: stdout not valid JSON', { lineLength: r.stdout.length })
+        }
         if (!Array.isArray(obj.checks)) fail('scenario 16: checks must be array')
-        const recordCheck = obj.checks.find(c => c.id === 'server.record')
+        const recordCheck = obj.checks.find((c) => c.id === 'server.record')
         if (!recordCheck) fail('scenario 16: server.record check missing')
-        if (recordCheck.status !== 'ok') fail(`scenario 16: expected server.record ok, got ${recordCheck.status}`)
-        const identityCheck = obj.checks.find(c => c.id === 'server.identity')
+        if (recordCheck.status !== 'ok')
+          fail(`scenario 16: expected server.record ok, got ${recordCheck.status}`)
+        const identityCheck = obj.checks.find((c) => c.id === 'server.identity')
         if (!identityCheck) fail('scenario 16: server.identity check missing')
-        if (identityCheck.status !== 'skipped') fail(`scenario 16: expected server.identity skipped, got ${identityCheck.status}`)
+        if (identityCheck.status !== 'skipped')
+          fail(`scenario 16: expected server.identity skipped, got ${identityCheck.status}`)
         if (process.platform !== 'win32') {
-          const permCheck = obj.checks.find(c => c.id === 'server.record_permissions')
+          const permCheck = obj.checks.find((c) => c.id === 'server.record_permissions')
           if (!permCheck) fail('scenario 16: server.record_permissions check missing')
-          if (permCheck.status !== 'warning') fail(`scenario 16: expected server.record_permissions warning, got ${permCheck.status}`)
+          if (permCheck.status !== 'warning')
+            fail(`scenario 16: expected server.record_permissions warning, got ${permCheck.status}`)
         }
         assertNoLeak('scenario 16 stdout', r.stdout)
-        console.log('[server-run-smoke] scenario 16 PASS: stale record → identity skipped, permissions warning')
+        console.log(
+          '[server-run-smoke] scenario 16 PASS: stale record → identity skipped, permissions warning',
+        )
       } finally {
         rmSync(dataDir, { recursive: true, force: true })
       }
     }
   } finally {
-    await new Promise(resolve => drJwksServer.close(resolve))
+    await new Promise((resolve) => drJwksServer.close(resolve))
     rmSync(drCertsDir, { recursive: true, force: true })
   }
 }
@@ -675,7 +810,8 @@ const REQUIRED_FLAGS = [
 // Regression: local daemon routing unchanged (unknown command still exits 64)
 {
   const r = runCli(['daemon', 'unknown-subcommand', '--json'])
-  if (r.status !== 64) fail(`regression: daemon unknown subcommand should still exit 64, got ${r.status}`)
+  if (r.status !== 64)
+    fail(`regression: daemon unknown subcommand should still exit 64, got ${r.status}`)
   console.log('[server-run-smoke] regression PASS: daemon routing unchanged')
 }
 
