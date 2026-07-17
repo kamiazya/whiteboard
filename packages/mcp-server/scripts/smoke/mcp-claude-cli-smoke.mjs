@@ -20,7 +20,7 @@
 // that chain into this one (smoke:distribution:packaged, test:e2e:distribution)
 // would otherwise always fail with `spawn claude ENOENT`. Skip cleanly instead.
 
-import { spawnSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve, dirname } from 'node:path'
@@ -30,7 +30,7 @@ import { isCliAvailable } from './lib/cli-available.mjs'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
 
-if (!isCliAvailable('claude', spawnSync)) {
+if (!isCliAvailable('claude')) {
   console.log(
     '[claude-smoke] SKIP: claude CLI not found on PATH — this smoke needs a local claude install and API quota (manual/dev-machine check)',
   )

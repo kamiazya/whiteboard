@@ -23,7 +23,7 @@
 //   that chain into this one (smoke:distribution:packaged, test:e2e:distribution)
 //   would otherwise always fail with `spawn codex ENOENT`. Skip cleanly instead.
 
-import { spawnSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -34,7 +34,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
 const repoRoot = resolve(root, '../..')
 
-if (!isCliAvailable('codex', spawnSync)) {
+if (!isCliAvailable('codex')) {
   console.log(
     '[codex-smoke] SKIP: codex CLI not found on PATH — this smoke needs a local codex install and API quota (manual/dev-machine check)',
   )

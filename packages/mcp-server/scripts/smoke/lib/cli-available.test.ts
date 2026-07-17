@@ -9,7 +9,10 @@ describe('isCliAvailable', () => {
     })
 
     expect(isCliAvailable('claude', spawnSyncImpl)).toBe(false)
-    expect(spawnSyncImpl).toHaveBeenCalledWith('claude', ['--version'], { stdio: 'ignore' })
+    expect(spawnSyncImpl).toHaveBeenCalledWith('claude', ['--version'], {
+      stdio: 'ignore',
+      shell: process.platform === 'win32',
+    })
   })
 
   it('returns false when the CLI exits with a non-zero status', () => {
