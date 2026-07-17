@@ -228,6 +228,15 @@ export function BrowserLocalCanvasPage({
   // upload so a transient failure doesn't stick around forever.
   const [fileUploadError, setFileUploadError] = useState<string | null>(null)
 
+  // This banner is page-level state, not scoped per backend connection, so a
+  // failure seen on canvas A would otherwise keep showing after switching to
+  // canvas B (which never fired the failure). Reset whenever the loaded
+  // canvas identity changes so a stale error never follows the user across
+  // canvases.
+  useEffect(() => {
+    setFileUploadError(null)
+  }, [canvasId])
+
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
