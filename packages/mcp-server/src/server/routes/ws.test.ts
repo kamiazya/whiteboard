@@ -629,7 +629,17 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
         ['canvas:read', 'canvas:write'],
       )
 
-      await ws.emitMessage(Buffer.from([1, 2, 3]), true)
+      // Embed a canary in the frame's raw bytes rather than asserting on the
+      // literal `[1, 2, 3]` payload: this frame is still garbage from Loro's
+      // perspective (fails to decode), so it still exercises the malformed-
+      // import branch, but if a future change ever logged the raw frame
+      // bytes (or a field literally named "token" that happened to hold
+      // this payload), the canary would surface in the serialized log and
+      // the assertions below would catch it. Asserting on `[1, 2, 3]` alone
+      // could never fail this way since that payload contains no string a
+      // token/secret redaction concern would ever match.
+      const canary = 'token-canary-must-not-be-logged'
+      await ws.emitMessage(Buffer.from(canary, 'utf8'), true)
 
       expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
 
@@ -643,7 +653,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
       expect(warnRecord?.data?.slug).toBe('canvas-malformed-2')
       expect(typeof warnRecord?.data?.updateBytes).toBe('number')
       const serialized = JSON.stringify(warnRecord)
-      expect(serialized).not.toContain('1,2,3')
+      expect(serialized).not.toContain(canary)
       expect(serialized.toLowerCase()).not.toContain('token')
 
       ws.emitClose()
