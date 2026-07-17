@@ -28,6 +28,7 @@ function indentOf(line) {
 // Collect top-level keys of an `env:` block whose body starts at `envIndent`,
 // returning whether `key` is among them and the index just past the block.
 function scanEnvBlockKeys(lines, startIndex, envIndent, key) {
+  const keyPattern = new RegExp(`^ {${envIndent}}([A-Za-z0-9_]+):`)
   let i = startIndex
   let found = false
   while (i < lines.length) {
@@ -39,7 +40,7 @@ function scanEnvBlockKeys(lines, startIndex, envIndent, key) {
     const indent = indentOf(line)
     if (indent < envIndent) break
     if (indent === envIndent) {
-      const keyMatch = line.match(new RegExp(`^ {${envIndent}}([A-Za-z0-9_]+):`))
+      const keyMatch = line.match(keyPattern)
       if (keyMatch && keyMatch[1] === key) found = true
     }
     i++
