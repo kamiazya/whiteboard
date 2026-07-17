@@ -69,7 +69,7 @@ async function clearDb(): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
+    req.onerror = () => reject(req.error ?? new Error('whiteboard database deletion failed'))
     req.onblocked = () => reject(new Error('whiteboard database deletion was blocked'))
   })
 }
