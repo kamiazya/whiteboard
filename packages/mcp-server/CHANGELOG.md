@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.18](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.17...mcp-server-v0.0.18) (2026-07-17)
+
+
+### Bug Fixes
+
+* **mcp-server:** make --data-dir govern all persistence, not just the daemon registry ([#251](https://github.com/kamiazya/whiteboard/issues/251)) ([bce72c9](https://github.com/kamiazya/whiteboard/commit/bce72c9d450a7bae078e85245062cc9f38f684c0))
+
 ## [0.0.17](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.16...mcp-server-v0.0.17) (2026-07-17)
 
 

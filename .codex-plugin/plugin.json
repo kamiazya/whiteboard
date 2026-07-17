@@ -1,6 +1,6 @@
 {
   "name": "whiteboard",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Collaborative Excalidraw whiteboard for Codex. Wraps the @kamiazya/whiteboard-mcp server and exposes the shared skills bundled with that package.",
   "author": {
     "name": "kamiazya",

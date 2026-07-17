@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.0.18](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.17...whiteboard-plugin-v0.0.18) (2026-07-17)
+
+
+### Bug Fixes
+
+* **mcp-server:** align distribution smoke expectations with the shipped auth design and fix smoke-harness bugs ([#253](https://github.com/kamiazya/whiteboard/issues/253)) ([cfc5927](https://github.com/kamiazya/whiteboard/commit/cfc5927bbedd41d14668f9e2656fcc480f1fdcd4))
+* **mcp-server:** make --data-dir govern all persistence, not just the daemon registry ([#251](https://github.com/kamiazya/whiteboard/issues/251)) ([bce72c9](https://github.com/kamiazya/whiteboard/commit/bce72c9d450a7bae078e85245062cc9f38f684c0))
+
 ## [0.0.17](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.16...whiteboard-plugin-v0.0.17) (2026-07-17)
 
 
