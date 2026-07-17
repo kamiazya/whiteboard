@@ -182,9 +182,11 @@ export class DaemonBackend implements CanvasBackend {
     ws.onclose = (event: CloseEvent) => {
       if (this.cancelled) return
       // 1008 = Policy Violation: server rejected the connection due to auth failure.
-      // Stop the retry loop and surface the error; retrying with the same token
-      // would just produce another 1008 indefinitely.
-      if (event.code === 1008) {
+      // 1003 = Unsupported Data: the server could not decode a binary frame we
+      // sent (see routes/ws.ts). Both are terminal from the client's
+      // perspective — reconnecting with the same token, or replaying the same
+      // buggy payload, would just reproduce the same close indefinitely.
+      if (event.code === 1008 || event.code === 1003) {
         handlers.onAuthError?.()
         return
       }
