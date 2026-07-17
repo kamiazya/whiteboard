@@ -158,11 +158,10 @@ if (status === 'in-use') {
     process.exit(1)
   }
   const why =
-    verdict === 'wrong-token'
-      ? 'rejected the dev bearer token (likely a stale daemon with a different token)'
-      : verdict === 'not-mcp'
-        ? 'is not speaking MCP'
-        : 'did not respond to a probe'
+    {
+      'wrong-token': 'rejected the dev bearer token (likely a stale daemon with a different token)',
+      'not-mcp': 'is not speaking MCP',
+    }[verdict] ?? 'did not respond to a probe'
   console.error(
     `[ensure-http-dev-daemon] http://${HOST}:${PORT} is in use but ${why}. ` +
       'Stop the conflicting process (e.g. `pkill -f mcp:http:dev`) and rerun.',
