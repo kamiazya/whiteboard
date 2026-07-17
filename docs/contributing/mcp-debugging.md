@@ -186,6 +186,6 @@ pnpm mcp:http:dev
 ```
 
 The repo-local `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`)
-probes port 3099 and auto-spawns the daemon when a session opens, so in normal use this
-situation should not arise. If the hook is disabled or the project is not yet trusted, start
-the daemon manually before opening the session.
+probes this checkout's derived dev port (3099 on the main checkout) and auto-spawns the daemon
+when a session opens, so in normal use this situation should not arise. If the hook is disabled
+or the project is not yet trusted, start the daemon manually before opening the session.
