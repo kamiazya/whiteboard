@@ -20,6 +20,12 @@ interface RunOptions {
   retryDaemonStartup?: boolean
   /** Extra RPC attempts beyond the first when retryDaemonStartup is set. */
   maxDaemonStartupRetries?: number
+  /**
+   * Ambient environment to spread into the spawned child. Defaults to
+   * process.env; callers that must not forward an ambient flag (e.g. the
+   * packaged tarball smoke excluding WHITEBOARD_DEV) pass a filtered copy.
+   */
+  env?: NodeJS.ProcessEnv
 }
 
 type RpcResponse = {
@@ -61,13 +67,14 @@ export async function runE2eCheckpointSmoke({
   root,
   retryDaemonStartup: shouldRetryDaemonStartup = false,
   maxDaemonStartupRetries = 1,
+  env: ambientEnv = process.env,
 }: RunOptions): Promise<void> {
   const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-e2e-'))
   const childArgs = entry.endsWith('.ts') ? ['--import', 'tsx/esm', entry] : [entry]
 
   const child = spawn('node', childArgs, {
     cwd: root,
-    env: buildCheckpointChildEnv(process.env, tmpDataDir),
+    env: buildCheckpointChildEnv(ambientEnv, tmpDataDir),
     stdio: ['pipe', 'pipe', 'pipe'],
   })
 
