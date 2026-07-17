@@ -144,29 +144,19 @@ jobs:
         # full web (jsdom)/web-browser matrix — that already ran on this
         # exact commit in ci.yml's verify job before the release PR was merged. See
         # docs/contributing/releasing.md "Publish gate scope".
+        #
+        # No WHITEBOARD_DEV here: every publish-tier gate that spawns the
+        # daemon runs after `build` (itself a publish-tier gate, always first
+        # in matrix order), so dist/ already exists and the daemon spawns in
+        # production mode. See docs/contributing/development.md
+        # "Shared-channel hygiene" for why env is passed explicitly per step
+        # rather than left ambient at job scope.
         working-directory: .
-        env:
-          WHITEBOARD_DEV: '1'
         run: pnpm publish-gate
 
-      - name: Verify pack contents (README / LICENSE / no test / no .map only)
+      - name: Verify pack contents (README / LICENSE / no test artifacts / no internal _artifacts)
         # Sanity-check the tarball contents before publish. Fail immediately if required files are missing or forbidden files are included.
-        run: |
-          set -eu
-          OUT=$(npm pack --dry-run --json)
-          echo "$OUT" | node -e '
-            let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{
-              const j=JSON.parse(d)[0];
-              const files = j.files.map(f=>f.path);
-              const must = ["README.md", "LICENSE", "package.json", "dist/server/mcp/index.js"];
-              const forbidden = [/\.test\.(js|d\.ts)$/, /\/_artifacts\//, /\.tsbuildinfo$/, /\.DS_Store$/];
-              const missing = must.filter(p => !files.includes(p));
-              const bad = files.filter(p => forbidden.some(rx => rx.test(p)));
-              if (missing.length) { console.error("Missing required files:", missing); process.exit(1); }
-              if (bad.length)     { console.error("Forbidden files in tarball:", bad); process.exit(1); }
-              console.log(`Pack OK: ${files.length} files, ${(j.size/1024/1024).toFixed(1)} MB`);
-            });
-          '
+        run: node ../../tools/checks/src/verify-pack-contents.mjs
 
       - name: Upload npm SBOM artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -230,8 +220,9 @@ jobs:
         run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
 
       - name: Release candidate gate (docker)
-        env:
-          WHITEBOARD_DEV: '1'
+        # No WHITEBOARD_DEV here either: check:release-candidate:docker runs
+        # `build` before any smoke (typecheck && build && ... && test:e2e:distribution),
+        # so dist/ always exists by the time a daemon spawn would need it.
         run: pnpm check:release-candidate:docker
 
       - name: Log in to GHCR

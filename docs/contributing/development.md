@@ -178,3 +178,11 @@ pnpm smoke:all      # smoke:e2e + smoke:claude
 ```
 
 The project-scoped skills `.claude/skills/whiteboard-mcp-smoke/SKILL.md` (restart triage) and `.claude/skills/whiteboard-smoke/SKILL.md` (smoke selection) encode this workflow so a "verify behavior" request can trigger it without restarting manually.
+
+## Shared-channel hygiene
+
+Three rules for anything that spawns a child process, writes to a shared stream, or reads ambient configuration — release scripts, smoke harnesses, `tools/checks/*`, and CI workflow steps alike:
+
+- **Pass child-process env explicitly, never rely on ambient job/step env.** A GitHub Actions job-level `env:` is inherited by every step in that job, not just the one that needs it — this silently widens the blast radius of a variable like `WHITEBOARD_DEV` (which switches the daemon spawn between `tsx`-from-source and the built `dist/`) to steps that never asked for it. Scope environment variables to the step (or the specific subprocess call) that actually consumes them.
+- **stdout is a data channel, not a log.** Anything that pipes a subprocess's stdout for parsing (`npm pack --dry-run --json`, MCP stdio framing, etc.) breaks the moment unrelated diagnostic output lands on the same stream. Server code logs through `getLogger` (stderr); CLI scripts that produce a machine-readable result write diagnostics to stderr and reserve stdout for the result.
+- **Configuration is read at the point of use, not frozen into a module constant at import time.** A constant computed once from `process.env` at module load survives past the point where the surrounding process legitimately changes that environment (e.g. a test stubbing it, or a long-lived watch process), and the drift is invisible until something depends on the frozen value. Read `process.env` (or an injected equivalent) where the decision is actually made.
