@@ -1,5 +1,84 @@
 # Changelog
 
+## [0.0.13](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.12...whiteboard-plugin-v0.0.13) (2026-07-17)
+
+
+### Features
+
+* **mcp-server:** add daemon exact-match hosted-origin allowlist (LNA prerequisite) ([#154](https://github.com/kamiazya/whiteboard/issues/154)) ([e1ea156](https://github.com/kamiazya/whiteboard/commit/e1ea156a93edcdc4f8e9a630a7ee07fafd46cf89))
+* **mcp-server:** add the /authorize consent screen and approval flow ([#230](https://github.com/kamiazya/whiteboard/issues/230)) ([fb8b4da](https://github.com/kamiazya/whiteboard/commit/fb8b4da5b27737153fb54c2c107905b121fa6b79))
+* **mcp-server:** auto-load .whiteboardrc / .whiteboard/config.yaml config files for the local daemon ([#187](https://github.com/kamiazya/whiteboard/issues/187)) ([4b12e6d](https://github.com/kamiazya/whiteboard/commit/4b12e6da7fcfb8a705ccc0337b6770822ba2717b))
+* **mcp-server:** auto-open the browser at the daemon's own origin ([#221](https://github.com/kamiazya/whiteboard/issues/221)) ([1df1f3e](https://github.com/kamiazya/whiteboard/commit/1df1f3e2dd122198a30011f7f6b7ef18fdf0281f))
+* **mcp-server:** bridge OAuth grants to WebSocket via short-lived connection tickets ([#232](https://github.com/kamiazya/whiteboard/issues/232)) ([f757485](https://github.com/kamiazya/whiteboard/commit/f757485d1ae0a0a6d6f5122a4a6fae989fc0335a))
+* **mcp-server:** create_pairing_link tool — mint #wb= daemon-pairing URLs ([#167](https://github.com/kamiazya/whiteboard/issues/167)) ([e3e32b3](https://github.com/kamiazya/whiteboard/commit/e3e32b3ed4cf956dcf97391393e7d4b16c7ea06c))
+* **mcp-server:** declare route/WS scopes in one registry, enforce WS scope per message ([#227](https://github.com/kamiazya/whiteboard/issues/227)) ([558b46f](https://github.com/kamiazya/whiteboard/commit/558b46fcbb336fcb305823645d4cfd52fb1f24d4))
+* **mcp-server:** delete the legacy src/app UI — apps/web is now the only frontend (ADR 0001 complete) ([#203](https://github.com/kamiazya/whiteboard/issues/203)) ([b0207f9](https://github.com/kamiazya/whiteboard/commit/b0207f9978a2cad4eabeed0e3ed1dfa6372cb162))
+* **mcp-server:** enforce approved OAuth grant scopes on /api/* ([#231](https://github.com/kamiazya/whiteboard/issues/231)) ([164fe01](https://github.com/kamiazya/whiteboard/commit/164fe01fa5769e5fabba502db2b0c98f54115904))
+* **mcp-server:** OAuth 2.1 authorization-server skeleton for hosted-origin access ([#229](https://github.com/kamiazya/whiteboard/issues/229)) ([0020619](https://github.com/kamiazya/whiteboard/commit/0020619b8e63fc8d950b1c3671bcc50e527ffde5))
+* **mcp-server:** serve the built apps/web as the daemon's same-origin canonical UI (R3 of MCP-UI retirement) ([#198](https://github.com/kamiazya/whiteboard/issues/198)) ([efca6d0](https://github.com/kamiazya/whiteboard/commit/efca6d060402ca339438fa672404fac00d5155c8))
+* **mcp-server:** support wildcard subdomain patterns in allowed-origin allowlists ([#186](https://github.com/kamiazya/whiteboard/issues/186)) ([d09687f](https://github.com/kamiazya/whiteboard/commit/d09687fffd8f3323a27bbe92486404504c2e7219))
+* **mcp-server:** unify canvas export behind export_canvas, add SVG support ([#220](https://github.com/kamiazya/whiteboard/issues/220)) ([372aec7](https://github.com/kamiazya/whiteboard/commit/372aec792c87234db81b252b7dc86d7fa066e6d1))
+* **web,mcp-server:** rename branch/merge UI copy to Variation/Combine ([#185](https://github.com/kamiazya/whiteboard/issues/185)) ([12e1d09](https://github.com/kamiazya/whiteboard/commit/12e1d0990039db5b866a9d2648b19b2729489e52))
+* **web:** add daemonConnectionPayloadSchema for the #wb= pairing fragment ([#153](https://github.com/kamiazya/whiteboard/issues/153)) ([d613644](https://github.com/kamiazya/whiteboard/commit/d61364420f1709c341898cf9e4a10fec5fa6eef6))
+* **web:** add delete confirmation dialog to browser-local canvas page ([#152](https://github.com/kamiazya/whiteboard/issues/152)) ([de6cf6e](https://github.com/kamiazya/whiteboard/commit/de6cf6e264fbd35b71ffeb611373b132900413f4))
+* **web:** add Duplicate canvas to the browser-local page and the daemon gallery ([#195](https://github.com/kamiazya/whiteboard/issues/195)) ([3487529](https://github.com/kamiazya/whiteboard/commit/34875294ff70567591f5300459a284b791d7103b))
+* **web:** daemon canvas gallery page with Storage tab and working back navigation ([#184](https://github.com/kamiazya/whiteboard/issues/184)) ([088fb67](https://github.com/kamiazya/whiteboard/commit/088fb673cc51bb4846c0b202ec463053ab63ca99))
+* **web:** daemon-detection probe, migration CTA banner, and copy-first browser-local import ([#163](https://github.com/kamiazya/whiteboard/issues/163)) ([c2c46e8](https://github.com/kamiazya/whiteboard/commit/c2c46e89850f3d5007677e7c22562cdbc213e0cc))
+* **web:** make canvases addressable — history routing, deep links, and Pages SPA fallback ([#204](https://github.com/kamiazya/whiteboard/issues/204)) ([a023244](https://github.com/kamiazya/whiteboard/commit/a0232444875a02ffe4aca515f6716e6cc01fcb12))
+* **web:** make the WS-rejected (live sync off) state unmissable on DaemonCanvasPage ([#171](https://github.com/kamiazya/whiteboard/issues/171)) ([f1fe3ed](https://github.com/kamiazya/whiteboard/commit/f1fe3ed50043bb8a406392711dc23bbeeba62458))
+* **web:** migrate the doc-screenshot pipeline to canonical apps/web components (R4 of MCP-UI retirement) ([#197](https://github.com/kamiazya/whiteboard/issues/197)) ([393de85](https://github.com/kamiazya/whiteboard/commit/393de8559543e0c8f5519938bc50756ee09cfac9))
+* **web:** probe-based capability tiers with an honest tier-2 notice ([#164](https://github.com/kamiazya/whiteboard/issues/164)) ([52e7e6e](https://github.com/kamiazya/whiteboard/commit/52e7e6e65ddbf6357868638927a863a40f835313))
+* **web:** PWA — manifest, service worker precache, prompt-based update flow ([#162](https://github.com/kamiazya/whiteboard/issues/162)) ([feff1ff](https://github.com/kamiazya/whiteboard/commit/feff1ff0524338838905efe01f2b80cbfa3b8b7d))
+* **web:** render the real daemon editor for the local-daemon provider state ([#181](https://github.com/kamiazya/whiteboard/issues/181)) ([41f2d83](https://github.com/kamiazya/whiteboard/commit/41f2d83eec89bd23f1ec28317b08ffbd12201cac))
+* **web:** surface PNG/SVG export from the canvas header ([#217](https://github.com/kamiazya/whiteboard/issues/217)) ([f717cb3](https://github.com/kamiazya/whiteboard/commit/f717cb3dbf06549b43ef45489136949e7362f1fa))
+* **web:** unify page chrome on WorkspaceTopBar and wire remaining components ([#168](https://github.com/kamiazya/whiteboard/issues/168)) ([6e0e3b6](https://github.com/kamiazya/whiteboard/commit/6e0e3b69f2fd02f7f070e8139fdc34d6db162580))
+* **web:** unify the top-bar skeleton — WorkspaceTopBar local mode adopted by the browser-local page ([#183](https://github.com/kamiazya/whiteboard/issues/183)) ([503316e](https://github.com/kamiazya/whiteboard/commit/503316e0d6241a4082e5da46b348bd71a9730191))
+* **web:** wire branch UI and merge into the daemon-paired canvas page ([#161](https://github.com/kamiazya/whiteboard/issues/161)) ([da6bbeb](https://github.com/kamiazya/whiteboard/commit/da6bbeb69d586203438576fd9d135b1f459c62c4))
+* **web:** wire DaemonBackend into apps/web via #wb= pairing fragment ([#159](https://github.com/kamiazya/whiteboard/issues/159)) ([6e4c2a1](https://github.com/kamiazya/whiteboard/commit/6e4c2a146ba6d36e87f129c850f8878e60eed8bb))
+* **web:** wire version history (list/restore) into the daemon-paired canvas page ([#160](https://github.com/kamiazya/whiteboard/issues/160)) ([ce4f2cb](https://github.com/kamiazya/whiteboard/commit/ce4f2cbd875d03f3d664277a740e1f6b36e9c8ec))
+* **web:** workspace switcher, manual save, authorized thumbnails, and WS auth-loop fix ([#165](https://github.com/kamiazya/whiteboard/issues/165)) ([2c50941](https://github.com/kamiazya/whiteboard/commit/2c50941e18218bdb65ebaa9cee2e80d709092850))
+
+
+### Bug Fixes
+
+* cleanup-worktrees must not delete never-published lanes ([#172](https://github.com/kamiazya/whiteboard/issues/172)) ([1943acc](https://github.com/kamiazya/whiteboard/commit/1943acce5126efe8124c61db8c643cc727dd470b))
+* close the open CodeQL alerts (ReDoS + case-insensitive tag matching) ([#210](https://github.com/kamiazya/whiteboard/issues/210)) ([7fed555](https://github.com/kamiazya/whiteboard/commit/7fed555caa2b921e4a6723d67174a98b755e6c75))
+* **mcp-server,web:** keep MergeDialog confirm footer reachable below 800px viewports ([#173](https://github.com/kamiazya/whiteboard/issues/173)) ([08a91ae](https://github.com/kamiazya/whiteboard/commit/08a91ae2d5bc6e4f8e5f336c64b26846593b0c86))
+* **mcp-server,web:** root-fix the two recurring CI test flakes ([#180](https://github.com/kamiazya/whiteboard/issues/180)) ([07be557](https://github.com/kamiazya/whiteboard/commit/07be55767efcdcc039066100a17039b47d5653d8))
+* **mcp-server:** admit cross-name loopback origins on the WS upgrade ([#169](https://github.com/kamiazya/whiteboard/issues/169)) ([5ce6b62](https://github.com/kamiazya/whiteboard/commit/5ce6b620e885e6555bf912f86dcc000b98ae098f))
+* **mcp-server:** allow targetless box-snapped arrows in the annotate tool schema ([#190](https://github.com/kamiazya/whiteboard/issues/190)) ([871dc02](https://github.com/kamiazya/whiteboard/commit/871dc022bca2ba2f2bf30538fa5e3f3be9a88611))
+* **mcp-server:** clear request-timeout timers on early resolve in viewport/export routes ([#188](https://github.com/kamiazya/whiteboard/issues/188)) ([1808dfe](https://github.com/kamiazya/whiteboard/commit/1808dfe7ca20bd6495286e9e5dadcea537532bc2))
+* **mcp-server:** correct box_with_label wrapping and expose frame names in canvas_inspect ([#219](https://github.com/kamiazya/whiteboard/issues/219)) ([81fce7d](https://github.com/kamiazya/whiteboard/commit/81fce7dd0bed6b94c9f091d8b4bf9ceb7edefd72))
+* **mcp-server:** document every MCP tool input field and honor annotate_batch per-item groupAs ([#205](https://github.com/kamiazya/whiteboard/issues/205)) ([7987bc2](https://github.com/kamiazya/whiteboard/commit/7987bc28e275ca52ed1117a17b3acabaccd7ac5a))
+* **mcp-server:** harden packaged tarball smoke daemon cold-start with opt-in bounded retry ([#156](https://github.com/kamiazya/whiteboard/issues/156)) ([680e076](https://github.com/kamiazya/whiteboard/commit/680e076dd31cc57299f2fdc045fb3fe9381ebb7a))
+* **mcp-server:** harden scope enforcement (file-route write verbs, WS close on scope violation) ([#228](https://github.com/kamiazya/whiteboard/issues/228)) ([87145f5](https://github.com/kamiazya/whiteboard/commit/87145f54ad9c350eedc8f67812249cac441ce40c))
+* **mcp-server:** harden WS binary import against malformed Loro frames ([#238](https://github.com/kamiazya/whiteboard/issues/238)) ([f404cbe](https://github.com/kamiazya/whiteboard/commit/f404cbea9dd2d8da004e07414f7397196d32f666))
+* **mcp-server:** make auto-compact disposal deterministic against mid-disposal reschedules ([#193](https://github.com/kamiazya/whiteboard/issues/193)) ([de3e961](https://github.com/kamiazya/whiteboard/commit/de3e961d50dd7f7b4f61ff0004f62659288139ff))
+* **mcp-server:** make export outputPath rejections name the allowed sandbox root ([#189](https://github.com/kamiazya/whiteboard/issues/189)) ([21ea32f](https://github.com/kamiazya/whiteboard/commit/21ea32fb406b566c0f2f0be6079747940154da03))
+* **mcp-server:** make restore overwrite reconcile onto the target instead of replacing it ([#209](https://github.com/kamiazya/whiteboard/issues/209)) ([6a862fa](https://github.com/kamiazya/whiteboard/commit/6a862faa55a6214a39e560d631fc6062f14dd27b))
+* **mcp-server:** redact secrets in log output ([#211](https://github.com/kamiazya/whiteboard/issues/211)) ([956dbc9](https://github.com/kamiazya/whiteboard/commit/956dbc93504336a3e837df069a25818e10247a12))
+* **mcp-server:** reject update_element text patches on arrows instead of lying ok:true ([#215](https://github.com/kamiazya/whiteboard/issues/215)) ([b20f808](https://github.com/kamiazya/whiteboard/commit/b20f808dd1b1faaef868274a9162b2b46c4d7867))
+* **mcp-server:** remove the unused create_canvas issueNumber slug prefix ([#202](https://github.com/kamiazya/whiteboard/issues/202)) ([b1a42cd](https://github.com/kamiazya/whiteboard/commit/b1a42cddad362d475e4126ac85c7e74c7bc76c1e))
+* **mcp-server:** require bearer auth on canvas/asset GET routes ([#226](https://github.com/kamiazya/whiteboard/issues/226)) ([f0d94ee](https://github.com/kamiazya/whiteboard/commit/f0d94ee83bb082ea90afdc5d2d510b9b89528e4a))
+* **mcp-server:** stop the packaged tarball smoke from inheriting WHITEBOARD_DEV ([#240](https://github.com/kamiazya/whiteboard/issues/240)) ([cdd5d6c](https://github.com/kamiazya/whiteboard/commit/cdd5d6caacd4d7c3f698383cfd24ba784847b93c))
+* never treat main-ancestry as a fold signal in cleanup-worktrees ([#177](https://github.com/kamiazya/whiteboard/issues/177)) ([9f5bb89](https://github.com/kamiazya/whiteboard/commit/9f5bb89addd4d791301015aece45a34d31ad7707))
+* **release:** narrow npm publish gate to publishability, not correctness ([#157](https://github.com/kamiazya/whiteboard/issues/157)) ([dbe61f9](https://github.com/kamiazya/whiteboard/commit/dbe61f9fa1b3cc8d1ab172e7acc7b6222a5e1002))
+* **release:** use un-prefixed root outputs so advance-stable actually runs ([#239](https://github.com/kamiazya/whiteboard/issues/239)) ([52c5359](https://github.com/kamiazya/whiteboard/commit/52c5359793c0c91a02cd94b88b695498b7879788))
+* **test:** pre-bundle testing-library deps to stop vitest browser dynamic-import flake ([#158](https://github.com/kamiazya/whiteboard/issues/158)) ([e86f298](https://github.com/kamiazya/whiteboard/commit/e86f2984753b04f8aeb56faf06873061610ffce0))
+* **web:** apply theme tokens to page root so dark mode text is readable ([#174](https://github.com/kamiazya/whiteboard/issues/174)) ([5053285](https://github.com/kamiazya/whiteboard/commit/50532855e54e83a35ccb9126c77ab16f9ea2e36c))
+* **web:** confirm copy-canvas-URL success/failure instead of failing silently ([#216](https://github.com/kamiazya/whiteboard/issues/216)) ([5f4b657](https://github.com/kamiazya/whiteboard/commit/5f4b657d52082c2dcc37461893a4305f1a6f7d40))
+* **web:** give unsupported-browser notice an escape hatch to the daemon origin ([#222](https://github.com/kamiazya/whiteboard/issues/222)) ([2dfbb52](https://github.com/kamiazya/whiteboard/commit/2dfbb52d6ee5c1b98139ba264227011579d09343))
+* **web:** keep the unsupported-browser notice and its escape hatch on one line ([#223](https://github.com/kamiazya/whiteboard/issues/223)) ([ebc951b](https://github.com/kamiazya/whiteboard/commit/ebc951bd89d7d9990a606a9e801808d27ff350fb))
+* **web:** percent-encode workspaceId and slug in the import fetch paths ([#166](https://github.com/kamiazya/whiteboard/issues/166)) ([f92e7a3](https://github.com/kamiazya/whiteboard/commit/f92e7a3d24035b64b2b0800b04974e14b9c83041))
+* **web:** polish the variation/combine UI — dark-mode preview panel, clearer hint copy, menu truncation, tooltip dismissal ([#199](https://github.com/kamiazya/whiteboard/issues/199)) ([cd8a658](https://github.com/kamiazya/whiteboard/commit/cd8a658c0903d0976773880119fb882a2a60565b))
+* **web:** route apps/web diagnostics through app-logger and guard console with Biome ([#213](https://github.com/kamiazya/whiteboard/issues/213)) ([23c4dc6](https://github.com/kamiazya/whiteboard/commit/23c4dc6801c60e2a132ad6a3512696ff29458a84))
+
+
+### Performance Improvements
+
+* **web:** cut apps/web critical-path JS from 555KB to 119KB gz and fix the bundle gate to measure it ([#192](https://github.com/kamiazya/whiteboard/issues/192)) ([8dd0a54](https://github.com/kamiazya/whiteboard/commit/8dd0a54ad9821494b23ed7b162b45edd76e0d4b7))
+* **web:** drop the loro-crdt manualChunks rule that dragged it into the entry's critical path ([#196](https://github.com/kamiazya/whiteboard/issues/196)) ([3220a8c](https://github.com/kamiazya/whiteboard/commit/3220a8c07918208e24057e913e71be7e41b45b5c))
+
 ## [0.0.12](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.11...whiteboard-plugin-v0.0.12) (2026-07-10)
 
 
