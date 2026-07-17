@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.16](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.15...mcp-server-v0.0.16) (2026-07-17)
+
+
+### Features
+
+* **mcp-server:** derive per-worktree dev daemon ports and guard daemon identity ([#246](https://github.com/kamiazya/whiteboard/issues/246)) ([90ea8c9](https://github.com/kamiazya/whiteboard/commit/90ea8c92a1b90cae13e3d419c201b214134d2c0b))
+
 ## [0.0.15](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.14...mcp-server-v0.0.15) (2026-07-17)
 
 
