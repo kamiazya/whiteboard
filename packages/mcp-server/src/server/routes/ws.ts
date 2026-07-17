@@ -384,13 +384,18 @@ export async function handleWsUpgrade(
         })
     } catch (err: unknown) {
       // A failure here (loadCanvas via getDoc, or saveCanvas) is a
-      // server-side/state problem rather than client misbehavior — the
-      // socket stays open and no close is sent. If the doc was already
-      // mutated in-memory by a successful import above but saveCanvas then
-      // rejected, evict the cache entry so the next getDoc reloads from
-      // disk instead of silently keeping the unpersisted mutation live.
+      // server-side/state problem rather than client misbehavior. If the doc
+      // was already mutated in-memory by a successful import above but
+      // saveCanvas then rejected, evict the cache entry so the next getDoc
+      // reloads from disk instead of silently keeping the unpersisted
+      // mutation live. The sender's local doc still has the import applied,
+      // so leaving the socket open would let it keep building on an edit the
+      // server never persisted and other clients never received — close
+      // 1011 (Internal Error) so the client reconnects and resyncs from the
+      // persisted (evicted, disk-backed) state instead.
       getLogger('ws').error({ workspaceId, slug, err }, 'ws binary update failed')
       evictDoc(workspaceId, slug)
+      closeSocket(1011, 'Failed to persist canvas update')
     } finally {
       wsSpan.end()
     }

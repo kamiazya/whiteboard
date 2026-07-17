@@ -109,4 +109,33 @@ describe('DaemonBackend close-code policy', () => {
     expect(scheduledDelay).toBe(500)
     backend.disconnect()
   })
+
+  it('reconnects after 1011: the server closes with 1011 when it fails to persist a canvas update, which is a server-side state problem, not a client protocol violation, so the client must retry rather than treat it as terminal', async () => {
+    const { DaemonBackend } = await import('./daemon-backend.js')
+    const backend = new DaemonBackend('ws-id', 'slug', 'http://localhost/')
+    let scheduledDelay: number | null = null
+    const setTimeoutSpy = ((fn: () => void, delay: number) => {
+      scheduledDelay = delay
+      return 0 as unknown as ReturnType<typeof setTimeout>
+    }) as unknown as typeof setTimeout
+    globalThis.setTimeout = setTimeoutSpy
+
+    backend.connect({
+      onSnapshot: () => {},
+      onRemoteUpdate: () => {},
+      onVersionCreated: () => {},
+      onRestoreStarted: () => {},
+      onRestoreComplete: () => {},
+      onHeadChanged: () => {},
+      onViewportRequest: () => {},
+      onExportRequest: () => {},
+      onConnected: () => {},
+      onAuthError: () => {},
+    })
+
+    FakeWebSocket.instances[0]?.onclose?.({ code: 1011 })
+
+    expect(scheduledDelay).toBe(500)
+    backend.disconnect()
+  })
 })

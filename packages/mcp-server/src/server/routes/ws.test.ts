@@ -682,3 +682,68 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
     ws.emitClose()
   })
 })
+
+describe('handleWsUpgrade binary update persistence failure', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-persist-fail-'))
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    clearCache()
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+    setAutoVersionTrigger(() => Promise.resolve(null))
+  })
+
+  it('closes 1011 and evicts the cache when saveCanvas fails after a valid import, without crashing', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const { peekDoc } = await import('../store/doc-cache.js')
+    const logs = captureLogsForTests()
+    try {
+      const ws = new FakeWebSocket()
+      await handleWsUpgrade(
+        { url: '/ws/session1/canvas-persist-fail', headers: { host: 'localhost:3099' } } as never,
+        ws as never,
+        ['canvas:read', 'canvas:write'],
+      )
+
+      const clientDoc = new LoroDoc()
+      const prevVV = clientDoc.version()
+      const list = clientDoc.getMovableList('elements')
+      const map = list.insertContainer(0, new LoroMap())
+      map.set('id', 'ws-elem')
+      clientDoc.commit()
+      const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+
+      // `currentDoc.import(bytes)` must succeed so the cached in-memory doc
+      // already absorbed the mutation; only the persistence step (which
+      // calls `doc.export` internally) fails.
+      const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
+        throw new Error('simulated snapshot failure')
+      })
+
+      await ws.emitMessage(Buffer.from(update), true)
+
+      exportSpy.mockRestore()
+
+      expect(ws.closes).toEqual([{ code: 1011, reason: 'Failed to persist canvas update' }])
+      expect(peekDoc('session1', 'canvas-persist-fail')).toBeUndefined()
+
+      const saved = await loadCanvas('session1', 'canvas-persist-fail')
+      expect(saved.getMovableList('elements').toJSON()).toEqual([])
+
+      const errorRecord = logs.records.find((r) => r.level === 'error' && r.scope === 'ws')
+      expect(errorRecord).toBeDefined()
+      expect(errorRecord?.data?.workspaceId).toBe('session1')
+      expect(errorRecord?.data?.slug).toBe('canvas-persist-fail')
+      const serialized = JSON.stringify(errorRecord)
+      expect(serialized).not.toContain('ws-elem')
+      expect(serialized.toLowerCase()).not.toContain('token')
+
+      ws.emitClose()
+    } finally {
+      logs.restore()
+    }
+  })
+})
