@@ -351,12 +351,15 @@ try {
   // storage.dataDir is a documented field of GET /api/runtime/status (asserted
   // below), not a leaked path — under /tmp on Linux CI it otherwise trips
   // BASE_LEAK_PATTERNS' blanket /tmp/ check. Redact only that known-good
-  // value before the leak scan so any other /tmp/ path (e.g. a stray stack
-  // frame) still fails the check.
-  const statusBTextForLeakCheck = statusB.storage?.dataDir
-    ? statusBText.split(statusB.storage.dataDir).join('<dataDir>')
-    : statusBText
-  assertNoLeak('runtime status B', statusBTextForLeakCheck, [TOKEN_B])
+  // field (via a parsed-object copy, not a raw-text replace, so a payload
+  // that happens to contain the same substring elsewhere or JSON-escaped
+  // characters in the path can't dodge or over-match the leak scan) before
+  // running it, so any other /tmp/ path (e.g. a stray stack frame) still
+  // fails the check.
+  const statusBForLeakCheck = statusB.storage
+    ? { ...statusB, storage: { ...statusB.storage, dataDir: '<dataDir>' } }
+    : statusB
+  assertNoLeak('runtime status B', JSON.stringify(statusBForLeakCheck), [TOKEN_B])
   if (statusB.storage?.dataDir !== restoredDataDir) {
     throw new Error(
       `daemon B storage.dataDir expected ${restoredDataDir}, got ${statusB.storage?.dataDir}`,
