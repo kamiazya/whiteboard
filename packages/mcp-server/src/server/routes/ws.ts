@@ -348,6 +348,12 @@ export async function handleWsUpgrade(
       : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
     try {
       const currentDoc = await getDoc(workspaceId, slug)
+      // A second (or later) frame's handler can pass the `isClosing` check
+      // above before this frame's `await getDoc` resolves — both were
+      // still false at the top when they started. Recheck immediately after
+      // the await so a frame that lost that race does not import, persist,
+      // or close a socket the earlier frame already tore down.
+      if (isClosing) return
 
       // `LoroDoc.import` throws synchronously (loro-crdt's wasm layer may
       // throw a non-Error value) whenever the bytes are not a valid Loro

@@ -681,6 +681,36 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
     expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
     ws.emitClose()
   })
+
+  it('two malformed frames dispatched concurrently (neither awaited before the next starts) still cause exactly one close', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const { getDoc } = await import('../store/doc-cache.js')
+    // Prime the cache so both concurrent `getDoc` calls below resolve off the
+    // cache-hit branch instead of racing two independent fs reads, whose
+    // completion order the test cannot control.
+    await getDoc('session1', 'canvas-malformed-race')
+
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-malformed-race', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read', 'canvas:write'],
+    )
+
+    // Dispatch both frames without awaiting in between, mirroring real `ws`
+    // EventEmitter semantics: both handler invocations pass the top-of-handler
+    // `isClosing` check before either's `await getDoc(...)` resolves, so only
+    // a recheck immediately after that await can stop the second one from
+    // also treating its frame as fresh and closing again.
+    ws.dispatchMessage(Buffer.from([1, 2, 3]), true)
+    ws.dispatchMessage(Buffer.from([4, 5, 6]), true)
+
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+    ws.emitClose()
+  })
 })
 
 describe('handleWsUpgrade binary update persistence failure', () => {
