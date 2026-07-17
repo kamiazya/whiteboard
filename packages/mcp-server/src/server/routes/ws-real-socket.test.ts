@@ -45,6 +45,24 @@ function connectAndWaitForOpen(url: string): Promise<WebSocket> {
   })
 }
 
+// Attaches the message listener at socket-creation time, not after `open`
+// resolves. With two connections opened sequentially, the first one's
+// initial snapshot frame can already have arrived (and be dropped, since
+// `ws`'s 'message' event has no listener-less buffering) by the time the
+// caller gets around to registering a `.once('message', ...)` for it.
+function connectAndCaptureSnapshot(
+  url: string,
+): Promise<{ ws: WebSocket; snapshot: Promise<Buffer> }> {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url)
+    const snapshot = new Promise<Buffer>((resolveSnapshot) => {
+      ws.once('message', (data: Buffer) => resolveSnapshot(data))
+    })
+    ws.once('open', () => resolve({ ws, snapshot }))
+    ws.once('error', reject)
+  })
+}
+
 describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
   const realHomeWhiteboard = join(homedir(), '.whiteboard')
   let realHomeStatBefore: ReturnType<typeof statSync> | undefined
@@ -119,5 +137,74 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       ? statSync(realHomeWhiteboard)
       : undefined
     expect(realHomeStatAfter?.mtimeMs).toBe(realHomeStatBefore?.mtimeMs)
+  })
+
+  it('closes only the offending socket with 1003 on a malformed binary frame while the daemon and concurrent connections survive', async () => {
+    const server = createServer()
+    const wss = new WebSocketServer({ server })
+    wss.on('connection', (ws, req) => {
+      void handleWsUpgrade(req, ws)
+    })
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (address === null || typeof address === 'string') {
+      throw new Error('expected server to bind to a TCP port')
+    }
+    const { port } = address
+
+    const { ws: clientA, snapshot: snapshotA } = await connectAndCaptureSnapshot(
+      `ws://127.0.0.1:${port}/ws/session1/canvas-a`,
+    )
+    const { ws: clientB, snapshot: snapshotB } = await connectAndCaptureSnapshot(
+      `ws://127.0.0.1:${port}/ws/session1/canvas-a`,
+    )
+    try {
+      // Drain each client's initial snapshot frame before sending anything else.
+      await snapshotA
+      const snapshotBytesB = await snapshotB
+
+      const closeEvent = new Promise<{ code: number; reason: string }>((resolve) => {
+        clientA.once('close', (code, reasonBuf) => resolve({ code, reason: reasonBuf.toString() }))
+      })
+
+      // Not a valid Loro update — Loro's decoder should reject this outright.
+      clientA.send(Buffer.from([1, 2, 3]))
+
+      const { code, reason } = await closeEvent
+      expect(code).toBe(1003)
+      expect(reason).toBe('Malformed canvas update')
+
+      // The daemon and the concurrent connection must survive the bad frame.
+      expect(clientB.readyState).toBe(WebSocket.OPEN)
+
+      const clientDoc = new LoroDoc()
+      clientDoc.import(new Uint8Array(snapshotBytesB))
+      const prevVV = clientDoc.version()
+      const list = clientDoc.getMovableList('elements')
+      const map = list.insertContainer(0, new LoroMap())
+      map.set('id', 'survivor-elem')
+      map.set('type', 'rectangle')
+      clientDoc.commit()
+      const update = Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array)
+      clientB.send(update)
+
+      await vi.waitFor(async () => {
+        const saved = await loadCanvas('session1', 'canvas-a')
+        const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
+        expect(elements.map((entry) => entry.id)).toContain('survivor-elem')
+      })
+
+      // Only B's element made it to disk; A's malformed bytes never
+      // decoded into anything that could be persisted.
+      const saved = await loadCanvas('session1', 'canvas-a')
+      const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
+      expect(elements.map((entry) => entry.id)).toEqual(['survivor-elem'])
+    } finally {
+      clientA.close()
+      clientB.close()
+      wss.close()
+      await new Promise<void>((resolve) => server.close(() => resolve()))
+    }
   })
 })
