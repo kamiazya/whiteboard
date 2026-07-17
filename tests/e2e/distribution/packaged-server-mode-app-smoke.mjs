@@ -352,23 +352,29 @@ try {
   }
   console.log('[server-mode-smoke] scenario 5c (workspace palette auth): PASS')
 
-  // --- Scenario 5d: GET /api/user-libraries — canvas:read ---
+  // --- Scenario 5d: GET /api/user-libraries — workspace:read ---
+  // route-scope-registry.ts requires workspace:read (not canvas:read) here
+  // deliberately: collapsing this onto canvas:read would let a canvas-only
+  // grant enumerate the user's shared library. The 403 check below is the
+  // positive assertion of that boundary — canvas:read alone must stay
+  // insufficient.
   {
     const appEmpty = makeApp([])
     const res401 = await req(appEmpty, 'GET', '/api/user-libraries')
     if (res401.status !== 401) fail('5d: expected 401 without auth', { status: res401.status })
     assertNoLeak('5d 401', await res401.text())
 
-    const res403 = await req(appEmpty, 'GET', '/api/user-libraries', { bearer: SMOKE_TOKEN })
+    const appCanvasRead = makeApp(['canvas:read'])
+    const res403 = await req(appCanvasRead, 'GET', '/api/user-libraries', { bearer: SMOKE_TOKEN })
     if (res403.status !== 403) {
-      fail('5d: no canvas:read must be 403 on user-libraries', { status: res403.status })
+      fail('5d: canvas:read alone must be 403 on user-libraries', { status: res403.status })
     }
     assertNoLeak('5d 403', await res403.text())
 
-    const appRead = makeApp(['canvas:read'])
+    const appRead = makeApp(['workspace:read'])
     const resPass = await req(appRead, 'GET', '/api/user-libraries', { bearer: SMOKE_TOKEN })
     if (resPass.status === 401 || resPass.status === 403) {
-      fail('5d: canvas:read must pass auth gate on user-libraries', { status: resPass.status })
+      fail('5d: workspace:read must pass auth gate on user-libraries', { status: resPass.status })
     }
   }
   console.log('[server-mode-smoke] scenario 5d (user-libraries auth): PASS')
