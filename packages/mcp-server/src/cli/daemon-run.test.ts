@@ -171,6 +171,7 @@ describe('runDaemonRun token source conflict', () => {
     })
     expect(outcome.kind).toBe('input-error')
     if (outcome.kind === 'input-error') {
+      expect(outcome.code).toBe('token_source_conflict')
       expect(outcome.message).not.toContain('env-token-should-never-leak')
     }
     expect(startHttpServerMock).not.toHaveBeenCalled()
