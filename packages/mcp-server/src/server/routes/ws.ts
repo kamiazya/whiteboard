@@ -12,7 +12,7 @@ import {
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
 import { saveCanvas } from '../store/canvas-store.js'
-import { getDoc } from '../store/doc-cache.js'
+import { evictDoc, getDoc } from '../store/doc-cache.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { setBroadcastFn } from './canvas.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
@@ -342,7 +342,28 @@ export async function handleWsUpgrade(
       : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
     try {
       const currentDoc = await getDoc(workspaceId, slug)
-      currentDoc.import(bytes)
+
+      // `LoroDoc.import` throws synchronously (loro-crdt's wasm layer may
+      // throw a non-Error value) whenever the bytes are not a valid Loro
+      // update/snapshot. A write-scope credential is real authorization to
+      // send edits, not a guarantee the bytes are well-formed CRDT data, so
+      // this boundary must not be able to crash the daemon on one bad frame.
+      // Treat it as a protocol violation: discard the frame, never persist
+      // or broadcast it, and close — consistent with the 1008 scope-violation
+      // close above, but 1003 (Unsupported Data) since the socket itself was
+      // authorized, only this frame's payload was not decodable.
+      try {
+        currentDoc.import(bytes)
+      } catch (err: unknown) {
+        getLogger('ws').warning(
+          { workspaceId, slug, updateBytes: bytes.byteLength, err },
+          'ws binary update rejected: malformed Loro import data',
+        )
+        isClosing = true
+        ws.close(1003, 'Malformed canvas update')
+        return
+      }
+
       await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
       broadcastLoroUpdate(workspaceId, slug, bytes, ws)
 
@@ -356,6 +377,15 @@ export async function handleWsUpgrade(
         .catch((err: unknown) => {
           getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
         })
+    } catch (err: unknown) {
+      // A failure here (loadCanvas via getDoc, or saveCanvas) is a
+      // server-side/state problem rather than client misbehavior — the
+      // socket stays open and no close is sent. If the doc was already
+      // mutated in-memory by a successful import above but saveCanvas then
+      // rejected, evict the cache entry so the next getDoc reloads from
+      // disk instead of silently keeping the unpersisted mutation live.
+      getLogger('ws').error({ workspaceId, slug, err }, 'ws binary update failed')
+      evictDoc(workspaceId, slug)
     } finally {
       wsSpan.end()
     }

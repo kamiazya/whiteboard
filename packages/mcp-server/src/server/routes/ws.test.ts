@@ -19,6 +19,7 @@ const { loadCanvas } = await import('../store/canvas-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createAutoVersionTrigger } = await import('./canvas.js')
 const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest } = await import('./ws.js')
+const { captureLogsForTests } = await import('../log.js')
 
 class FakeWebSocket {
   sent: Array<string | Uint8Array> = []
@@ -50,6 +51,18 @@ class FakeWebSocket {
   async emitMessage(data: Buffer, isBinary: boolean): Promise<void> {
     for (const handler of this.listeners.get('message') ?? []) {
       await handler(data, isBinary)
+    }
+  }
+
+  // Real `ws` sockets are EventEmitters: `emit('message', ...)` invokes the
+  // listener without awaiting whatever promise it returns. `emitMessage`
+  // above awaits the handler, which would hide a handler that lets its
+  // returned promise reject unhandled. This mirrors the real dispatch
+  // semantics so tests can prove the handler never produces an unhandled
+  // rejection even when nothing awaits it.
+  dispatchMessage(data: Buffer, isBinary: boolean): void {
+    for (const handler of this.listeners.get('message') ?? []) {
+      handler(data, isBinary)
     }
   }
 
@@ -553,6 +566,119 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
     await new Promise((resolve) => setTimeout(resolve, 10))
 
     expect(getReadyClientCount('session1', 'canvas-inflight')).toBe(0)
+    ws.emitClose()
+  })
+})
+
+describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-malformed-'))
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    clearCache()
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+    setAutoVersionTrigger(() => Promise.resolve(null))
+  })
+
+  it('never lets an undecodable binary frame become an unhandled promise rejection', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    let unhandled: unknown = null
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandled = reason
+    }
+    process.on('unhandledRejection', onUnhandledRejection)
+
+    try {
+      const ws = new FakeWebSocket()
+      await handleWsUpgrade(
+        { url: '/ws/session1/canvas-malformed', headers: { host: 'localhost:3099' } } as never,
+        ws as never,
+        ['canvas:read', 'canvas:write'],
+      )
+
+      // Dispatch without awaiting, mirroring real `ws` EventEmitter
+      // semantics: the 'message' listener's returned promise is never
+      // awaited by the caller.
+      ws.dispatchMessage(Buffer.from([1, 2, 3]), true)
+
+      // Flush microtasks and the macrotask queue so any unhandled
+      // rejection from the dispatched (but un-awaited) handler surfaces.
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(unhandled).toBeNull()
+      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+
+      ws.emitClose()
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection)
+    }
+  })
+
+  it('discards the malformed frame, closes 1003, and logs a structured warning without frame bytes or tokens', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const logs = captureLogsForTests()
+    try {
+      const ws = new FakeWebSocket()
+      await handleWsUpgrade(
+        { url: '/ws/session1/canvas-malformed-2', headers: { host: 'localhost:3099' } } as never,
+        ws as never,
+        ['canvas:read', 'canvas:write'],
+      )
+
+      await ws.emitMessage(Buffer.from([1, 2, 3]), true)
+
+      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+
+      clearCache()
+      const saved = await loadCanvas('session1', 'canvas-malformed-2')
+      expect(saved.getMovableList('elements').toJSON()).toEqual([])
+
+      const warnRecord = logs.records.find((r) => r.level === 'warning' && r.scope === 'ws')
+      expect(warnRecord).toBeDefined()
+      expect(warnRecord?.data?.workspaceId).toBe('session1')
+      expect(warnRecord?.data?.slug).toBe('canvas-malformed-2')
+      expect(typeof warnRecord?.data?.updateBytes).toBe('number')
+      const serialized = JSON.stringify(warnRecord)
+      expect(serialized).not.toContain('1,2,3')
+      expect(serialized.toLowerCase()).not.toContain('token')
+
+      ws.emitClose()
+    } finally {
+      logs.restore()
+    }
+  })
+
+  it('a read-only connection sending malformed bytes still closes 1008, never 1003 (scope precedes import)', async () => {
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-malformed-ro', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read'],
+    )
+
+    await ws.emitMessage(Buffer.from([1, 2, 3]), true)
+
+    expect(ws.closes).toEqual([{ code: 1008, reason: 'Insufficient scope' }])
+    ws.emitClose()
+  })
+
+  it('two malformed frames back-to-back cause exactly one close and no crash', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-malformed-3', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read', 'canvas:write'],
+    )
+
+    await ws.emitMessage(Buffer.from([1, 2, 3]), true)
+    await ws.emitMessage(Buffer.from([4, 5, 6]), true)
+
+    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
     ws.emitClose()
   })
 })
