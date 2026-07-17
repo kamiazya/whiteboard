@@ -7,11 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openWhiteboardDb } from './browser-idb.js'
 import { CanvasFileStore, canvasFileRecordSchema } from './canvas-file-store.js'
 
+// Rejects on failure: silently keeping stale fixed-key records would let
+// these persistence tests pass without exercising the current write.
 async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
+    req.onerror = () => reject(req.error)
+    req.onblocked = () => reject(new Error('whiteboard database deletion was blocked'))
   })
 }
 
