@@ -1,8 +1,7 @@
-import { constants as fsConstants } from 'node:fs'
-import { accessSync, chmodSync, mkdirSync } from 'node:fs'
+import { accessSync, chmodSync, constants as fsConstants, mkdirSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
-import { fileURLToPath } from 'node:url'
 import { dirname, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // From src/shared/data-dir-secure.ts, going up two directories reaches the package root.
 // src/shared -> src -> package root. Same depth as src/server, so '../..' is unchanged.
@@ -56,4 +55,39 @@ export function resolveDataDir(
   return resolve(options.tmpDir ?? tmpdir(), '.whiteboard')
 }
 
+// Deprecated: a module-load-time snapshot, frozen before a test (or a
+// future dev entrypoint) can redirect where data lives. Prefer getDataDir()
+// for any new call site — it stays lazily resolved so setDataDirForTests()
+// can retarget it before the first real read.
 export const DATA_DIR = resolveDataDir()
+
+let dataDirOverride: string | undefined
+let memoizedDataDir: string | undefined
+
+/**
+ * Lazily resolved, test-injectable counterpart to DATA_DIR. Memoizes the
+ * first resolveDataDir() call (or the injected override) so repeated reads
+ * stay cheap and consistent within a process, while still letting tests
+ * redirect persistence to a scratch directory before anything touches disk.
+ */
+export function getDataDir(): string {
+  if (dataDirOverride !== undefined) {
+    return dataDirOverride
+  }
+  if (memoizedDataDir === undefined) {
+    memoizedDataDir = resolveDataDir()
+  }
+  return memoizedDataDir
+}
+
+export function setDataDirForTests(dir: string): void {
+  dataDirOverride = dir
+}
+
+export function resetDataDirForTests(): void {
+  dataDirOverride = undefined
+  // Also drop the memoized default: a test that changes WHITEBOARD_DATA_DIR
+  // (or homedir/tmpdir) after reset must see it reflected on the next
+  // getDataDir() call, not a resolution memoized before the reset.
+  memoizedDataDir = undefined
+}

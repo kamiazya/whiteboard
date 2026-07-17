@@ -144,6 +144,12 @@ vite.config.ts.timestamp-*
 
 tmp
 
+# Repo-local dev daemon data (WHITEBOARD_DATA_DIR set by
+# packages/mcp-server/scripts/dev/with-dev-data-dir.mjs) — keeps `pnpm
+# mcp:http:dev` from writing into the real ~/.whiteboard. Durable across a
+# dev session (unlike tmp/), scoped per worktree since each has its own.
+.dev-data/
+
 # Generated artifacts (SBOM, dry-run outputs) — not committed, uploaded via CI
 packages/mcp-server/_artifacts/
 
