@@ -317,6 +317,85 @@ describe('publish-gate runner core loop (planSteps / runSteps)', () => {
   })
 })
 
+// pages-release.mjs mirrors publish-gate.mjs's matrix-driven shape, but until
+// now it read the matrix straight off disk and passed it to planSteps without
+// validating it via the shared schema authority — a malformed pages-release
+// gate would only surface as a runtime failure deep in an unrelated step
+// (or wouldn't surface at all), instead of the loud, immediate rejection
+// publish-gate.mjs gives the same class of problem.
+describe('pages-release runner main() rejects an invalid matrix before running any step', () => {
+  const importRunner = async () => {
+    const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/pages-release.mjs')).href)
+    return mod as {
+      main: (options?: {
+        argv?: string[]
+        repoRoot?: string
+        readMatrix?: (matrixPath: string) => unknown
+        spawn?: (
+          cmd: string,
+          args: string[],
+          opts: unknown,
+        ) => { status: number | null; error?: Error }
+        stdout?: { write: (s: string) => boolean }
+        stderr?: { write: (s: string) => boolean }
+      }) => number
+    }
+  }
+  const sink = () => {
+    const chunks: string[] = []
+    return { write: (s: string) => (chunks.push(s), true), chunks }
+  }
+
+  it('exits non-zero and never spawns a step when the matrix fails validation', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const spawn = () => {
+      throw new Error('spawn must not be called for an invalid matrix')
+    }
+    const exitCode = main({
+      readMatrix: () => ({ schemaVersion: 1, gates: [] }), // empty gates: fails validateMatrix
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).not.toBe(0)
+    expect(stderr.chunks.join('')).toMatch(/invalid release-gate-matrix\.json/)
+  })
+
+  it('runs pnpm build then the pages-release gates and succeeds when the matrix is valid', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const calls: string[] = []
+    const spawn = (cmd: string, args: string[]) => {
+      calls.push(`${cmd} ${args.join(' ')}`.trim())
+      return { status: 0 }
+    }
+    const exitCode = main({
+      readMatrix: () => ({
+        schemaVersion: 1,
+        gates: [
+          {
+            id: 'a',
+            command: 'pnpm a',
+            category: 'pages',
+            requiredFor: ['pages-release'],
+            requiresDocker: false,
+            requiresNetwork: false,
+            expectedRuntimeBucket: 'fast',
+          },
+        ],
+      }),
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).toBe(0)
+    expect(calls).toEqual(['pnpm build', 'pnpm a'])
+  })
+})
+
 describe('publish-gate runner CLI arg parsing (parseArgs)', () => {
   const importRunner = async () => {
     const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/publish-gate.mjs')).href)
