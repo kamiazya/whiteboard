@@ -126,6 +126,84 @@ describe('publish-gate runner is matrix-driven', () => {
   })
 })
 
+// Behavioral coverage for the fail-loud invalid-matrix branch: the text-grep
+// assertions above only prove the runner mentions validateMatrix, not that an
+// actually-invalid matrix is rejected before any step runs. main() is
+// injectable (readMatrix/spawn/stdout/stderr) specifically so this can be
+// exercised without touching the real repo checkout or spawning processes.
+describe('publish-gate runner main() rejects an invalid matrix before running any step', () => {
+  const importRunner = async () => {
+    const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/publish-gate.mjs')).href)
+    return mod as {
+      main: (options?: {
+        argv?: string[]
+        repoRoot?: string
+        readMatrix?: (matrixPath: string) => unknown
+        spawn?: (
+          cmd: string,
+          args: string[],
+          opts: unknown,
+        ) => { status: number | null; error?: Error }
+        stdout?: { write: (s: string) => boolean }
+        stderr?: { write: (s: string) => boolean }
+      }) => number
+    }
+  }
+  const sink = () => {
+    const chunks: string[] = []
+    return { write: (s: string) => (chunks.push(s), true), chunks }
+  }
+
+  it('exits non-zero and never spawns a step when the matrix fails validation', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const spawn = () => {
+      throw new Error('spawn must not be called for an invalid matrix')
+    }
+    const exitCode = main({
+      readMatrix: () => ({ schemaVersion: 1, gates: [] }), // empty gates: fails validateMatrix
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).not.toBe(0)
+    expect(stderr.chunks.join('')).toMatch(/invalid release-gate-matrix\.json/)
+  })
+
+  it('runs the publish-tier steps and succeeds when the matrix is valid', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const calls: string[] = []
+    const spawn = (cmd: string, args: string[]) => {
+      calls.push(`${cmd} ${args.join(' ')}`.trim())
+      return { status: 0 }
+    }
+    const exitCode = main({
+      readMatrix: () => ({
+        schemaVersion: 1,
+        gates: [
+          {
+            id: 'a',
+            command: 'pnpm a',
+            category: 'unit',
+            requiredFor: ['publish'],
+            requiresDocker: false,
+            requiresNetwork: false,
+            expectedRuntimeBucket: 'fast',
+          },
+        ],
+      }),
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).toBe(0)
+    expect(calls).toEqual(['pnpm a'])
+  })
+})
+
 // Extending the matrix with the additive prCoverage/env fields (pillar A/C)
 // must not change publish-gate.mjs's or pages-release.mjs's matrix-loading
 // behavior — both consumers only read id/command/requiredFor off each gate.
