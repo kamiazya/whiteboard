@@ -119,6 +119,15 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
 
+  // POST /api/ws-ticket (ADR-0005): mints a WS connection ticket bound to
+  // the caller's own OAuth grant scopes. canvas:read is the floor any live
+  // grant is assumed to hold — the minted ticket never carries more than
+  // the presented grant's own scopes regardless of this route's own
+  // requirement, so this is a "can you ask at all" gate, not an escalation.
+  if (path === '/api/ws-ticket') {
+    return { kind: 'scoped', scopes: ['canvas:read'] }
+  }
+
   // No rule matched: an undeclared /api/* route. Callers must fail closed.
   return null
 }

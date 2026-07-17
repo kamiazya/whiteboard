@@ -1,7 +1,11 @@
+import { createHash } from 'node:crypto'
 import { request } from 'node:http'
 import { afterEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
-import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
+import {
+  buildWhiteboardWsProtocolsWithTicket,
+  WHITEBOARD_WS_PROTOCOL,
+} from '../shared/ws-protocol.js'
 import { type RunningServer, startHttpServer } from './http-server.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
@@ -191,5 +195,140 @@ describe('startHttpServer oauth client registry', () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/token`, { method: 'POST' })
     expect(res.status).toBe(404)
+  })
+})
+
+// Performs a raw WS handshake offering an arbitrary Sec-WebSocket-Protocol
+// value and resolves with the response status code, mirroring
+// attemptWsUpgrade above but with a caller-controlled protocol header (needed
+// to offer a minted ticket rather than the fixed daemon-token protocol).
+function attemptWsUpgradeWithProtocol(port: number, protocolHeader: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const req = request({
+      host: '127.0.0.1',
+      port,
+      path: '/ws/ws_test/canvas',
+      method: 'GET',
+      headers: {
+        Connection: 'Upgrade',
+        Upgrade: 'websocket',
+        'Sec-WebSocket-Version': '13',
+        'Sec-WebSocket-Key': 'dGhlIHNhbXBsZSBub25jZQ==',
+        'Sec-WebSocket-Protocol': protocolHeader,
+      },
+    })
+    req.on('upgrade', (res, socket) => {
+      socket.destroy()
+      resolve(res.statusCode ?? 0)
+    })
+    req.on('response', (res) => {
+      res.resume()
+      resolve(res.statusCode ?? 0)
+    })
+    req.on('error', reject)
+    req.end()
+  })
+}
+
+function readSessionCookie(res: Response): string {
+  const raw = res.headers.get('set-cookie')
+  if (!raw) throw new Error('expected an approval-session cookie')
+  const match = /(?:^|,\s*)([^=;,\s]+)=([^;]+)/.exec(raw)
+  if (!match) throw new Error(`unparseable Set-Cookie: ${raw}`)
+  return `${match[1]}=${match[2]}`
+}
+
+function readHiddenField(html: string, name: string): string {
+  const match = new RegExp(`name="${name}" value="([^"]+)"`).exec(html)
+  if (!match?.[1]) throw new Error(`missing hidden field ${name}`)
+  return match[1]
+}
+
+// The wiring this covers: http-server.ts creates exactly one wsTicketStore
+// and threads it two ways -- into createApp (POST /api/ws-ticket mints into
+// it) and directly into the raw `upgrade` handler's authorizeWsUpgrade call
+// (which redeems it). Every other ws-ticket test constructs the router and
+// authorizeWsUpgrade directly against a manually-shared store, which cannot
+// catch a regression where http-server.ts accidentally wires two separate
+// store instances -- this test starts the real server and drives the whole
+// mint-then-upgrade path exactly as a hosted-origin client would.
+describe('startHttpServer ws-ticket mint→upgrade wiring (ADR-0005)', () => {
+  let running: RunningServer | undefined
+
+  afterEach(async () => {
+    await running?.close()
+    running = undefined
+  })
+
+  it('a ticket minted via POST /api/ws-ticket on the real server authorizes the real WS upgrade', async () => {
+    const port = await findAvailablePort(4400)
+    const clientId = 'whiteboard-hosted-web'
+    const redirectUri = 'https://whiteboard.pages.dev/oauth/callback'
+    const origin = `http://127.0.0.1:${port}`
+    const pkceVerifier = 'dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk'
+    const pkceChallenge = createHash('sha256').update(pkceVerifier).digest('base64url')
+
+    running = await startHttpServer({
+      port,
+      host: '127.0.0.1',
+      oauthClientRegistry: [{ clientId, redirectUris: [redirectUri] }],
+    })
+
+    const authorizeParams = new URLSearchParams({
+      response_type: 'code',
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      state: 'state-abc',
+      code_challenge: pkceChallenge,
+      code_challenge_method: 'S256',
+      scope: 'canvas:read',
+    })
+    const authorizeRes = await fetch(`${origin}/authorize?${authorizeParams.toString()}`)
+    const authorizeHtml = await authorizeRes.text()
+    const cookie = readSessionCookie(authorizeRes)
+    const transactionId = readHiddenField(authorizeHtml, 'transaction_id')
+    const csrfToken = readHiddenField(authorizeHtml, 'csrf_token')
+
+    const decisionRes = await fetch(`${origin}/authorize/decision`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded',
+        'sec-fetch-site': 'same-origin',
+        origin,
+        cookie,
+      },
+      body: new URLSearchParams({
+        transaction_id: transactionId,
+        csrf_token: csrfToken,
+        decision: 'approve',
+      }).toString(),
+      redirect: 'manual',
+    })
+    const code = new URL(decisionRes.headers.get('location') ?? '').searchParams.get('code')
+    expect(code).toBeTruthy()
+
+    const tokenRes = await fetch(`${origin}/token`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code ?? '',
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: pkceVerifier,
+      }).toString(),
+    })
+    expect(tokenRes.status).toBe(200)
+    const { access_token: accessToken } = (await tokenRes.json()) as { access_token: string }
+
+    const ticketRes = await fetch(`${origin}/api/ws-ticket`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${accessToken}` },
+    })
+    expect(ticketRes.status).toBe(200)
+    const { ticket } = (await ticketRes.json()) as { ticket: string }
+
+    const protocolHeader = buildWhiteboardWsProtocolsWithTicket(ticket).join(', ')
+    await expect(attemptWsUpgradeWithProtocol(port, protocolHeader)).resolves.toBe(101)
   })
 })

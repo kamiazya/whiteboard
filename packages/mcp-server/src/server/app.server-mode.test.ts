@@ -447,6 +447,26 @@ describe('app — server-mode composition', () => {
     })
   })
 
+  // POST /api/ws-ticket (ADR-0005) is local-daemon-only wiring in app.ts —
+  // route-scope-registry.ts still declares a scope for it so /api/*
+  // registry-wide coverage stays complete, but that declaration alone would
+  // let a regression that mounts the route for server-mode too go unnoticed
+  // (the auth middleware would just accept a well-scoped bearer and 401 an
+  // unscoped one, either way never proving the route itself is unreachable).
+  // Granting the declared scope here isolates that: if the route were ever
+  // mistakenly mounted, this request would reach its handler instead of
+  // falling through to the 404 catch-all.
+  describe('server-mode ws-ticket route stays unmounted', () => {
+    it('POST /api/ws-ticket → 404, not reachable even with the scope it declares', async () => {
+      const app = createApp(makeServerModeOptions(['canvas:read']))
+      const res = await app.request('/api/ws-ticket', {
+        method: 'POST',
+        headers: { authorization: BEARER },
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
   // Req 6: files scope through composed app
   describe('server-mode files scope via composed app', () => {
     it('GET /api/canvas/:wid/:slug/file/:fileId → 401 without auth', async () => {
