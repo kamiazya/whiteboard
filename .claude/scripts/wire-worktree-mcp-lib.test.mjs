@@ -46,6 +46,19 @@ test('buildDesiredConfig refuses to build a config for the main checkout', () =>
   assert.throws(() => buildDesiredConfig({ repoRoot: '/repo', env: {}, isMainCheckout: true }), /main checkout/i)
 })
 
+test('buildDesiredConfig authenticates with a custom WHITEBOARD_TOKEN when set', () => {
+  const withCustomToken = buildDesiredConfig({
+    repoRoot: '/repo/wt-a',
+    env: { WHITEBOARD_TOKEN: 'my-custom-token' },
+  })
+  assert.equal(withCustomToken.authHeader, 'Authorization: Bearer my-custom-token')
+})
+
+test('buildDesiredConfig falls back to the package-script default token when WHITEBOARD_TOKEN is unset', () => {
+  const withDefaultToken = buildDesiredConfig({ repoRoot: '/repo/wt-a', env: {} })
+  assert.equal(withDefaultToken.authHeader, 'Authorization: Bearer whiteboard-dev')
+})
+
 test('buildClaudeMcpAddArgs produces the exact argv for `claude mcp add`', () => {
   const desired = { name: SERVER_NAME, url: 'http://127.0.0.1:3457/mcp', authHeader: 'Authorization: Bearer whiteboard-dev' }
   assert.deepEqual(buildClaudeMcpAddArgs(desired), [
@@ -81,6 +94,7 @@ test('classifyExistingConfig: never treats a differing entry as identical', () =
     { type: 'http', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev' }, extra: 'field' }, // extra unknown field
     { type: 'sse', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev' } }, // different transport
     { type: 'http', url: 'http://127.0.0.1:9999/mcp', headers: { Authorization: 'Bearer whiteboard-dev' } }, // different URL
+    { type: 'http', url: desired.url, headers: { Authorization: 'Bearer whiteboard-dev', someExtra: 'x' } }, // extra unexpected header
   ]
   for (const existing of cases) {
     const result = classifyExistingConfig(existing, desired)
@@ -102,6 +116,20 @@ test('classifyExistingConfig: defensive against malformed/unknown shapes, never 
 test('assertNotTrackedSettingsPath rejects any path inside tracked .claude/ config', () => {
   assert.throws(() => assertNotTrackedSettingsPath('/repo/.claude/settings.json'), /tracked/i)
   assert.doesNotThrow(() => assertNotTrackedSettingsPath('/repo/.claude/worktrees/foo/.mcp.json'))
+})
+
+test('assertNotTrackedSettingsPath rejects the settings.local.json variant', () => {
+  assert.throws(() => assertNotTrackedSettingsPath('/repo/.claude/settings.local.json'), /tracked/i)
+})
+
+test('assertNotTrackedSettingsPath rejects repo-root-relative spellings (no leading slash)', () => {
+  assert.throws(() => assertNotTrackedSettingsPath('.claude/settings.json'), /tracked/i)
+  assert.throws(() => assertNotTrackedSettingsPath('.claude/settings.local.json'), /tracked/i)
+})
+
+test('assertNotTrackedSettingsPath rejects Windows-style backslash paths', () => {
+  assert.throws(() => assertNotTrackedSettingsPath('C:\\repo\\.claude\\settings.json'), /tracked/i)
+  assert.throws(() => assertNotTrackedSettingsPath('.claude\\settings.local.json'), /tracked/i)
 })
 
 test('verifyPostWrite: matching post-state reports wired', () => {

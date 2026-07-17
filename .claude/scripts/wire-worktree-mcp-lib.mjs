@@ -5,8 +5,7 @@
 // decisions are unit-testable without ever touching the real, developer-
 // global ~/.claude.json.
 import { deriveDevPort } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
-
-const AUTH_HEADER = 'Authorization: Bearer whiteboard-dev'
+import { resolveDevBearerToken } from '../../packages/mcp-server/scripts/dev/ensure-http-dev-daemon-lib.mjs'
 
 /** @param {number} port */
 export function buildMcpUrl(port) {
@@ -32,11 +31,12 @@ export function buildDesiredConfig({ repoRoot, env = {}, isMainCheckout = false,
   const envWithoutOverride = { ...env }
   delete envWithoutOverride.WHITEBOARD_DEV_PORT
   const port = deriveDevPort({ repoRoot, isMainCheckout: false, env: envWithoutOverride })
+  const token = resolveDevBearerToken(env)
   return {
     name,
     port,
     url: buildMcpUrl(port),
-    authHeader: AUTH_HEADER,
+    authHeader: `Authorization: Bearer ${token}`,
     overrideWarning: env.WHITEBOARD_DEV_PORT !== undefined,
   }
 }
@@ -116,7 +116,7 @@ export function verifyPostWrite(effective, desired) {
  */
 export function assertNotTrackedSettingsPath(targetPath) {
   const normalized = targetPath.replace(/\\/g, '/')
-  if (/\/\.claude\/settings(\.local)?\.json$/.test(normalized)) {
+  if (/(^|\/)\.claude\/settings(\.local)?\.json$/.test(normalized)) {
     throw new Error(`refusing to write to tracked settings path: ${targetPath}`)
   }
 }
