@@ -29,24 +29,18 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
  * @param {{ scriptPath: string, wtPath: string, spawn?: typeof spawnSync, log?: (msg: string) => void }} args
  */
 export function runWireStep({ scriptPath, wtPath, spawn = spawnSync, log = (msg) => console.warn(msg) }) {
-  let result
+  const fallback = `Wire manually: node .claude/scripts/wire-worktree-mcp.mjs ${wtPath}`
   try {
-    result = spawn('node', [scriptPath, wtPath], { stdio: 'inherit' })
+    const result = spawn('node', [scriptPath, wtPath], { stdio: 'inherit' })
+    if (result.status !== 0) {
+      log(`[new-worktree] wire step failed for ${wtPath} (exit ${result.status}). ${fallback}`)
+      return { success: false }
+    }
+    return { success: true }
   } catch (err) {
-    log(
-      `[new-worktree] failed to wire Claude Code MCP for ${wtPath} (${err.message}). ` +
-        `Wire manually: node .claude/scripts/wire-worktree-mcp.mjs ${wtPath}`,
-    )
+    log(`[new-worktree] failed to wire Claude Code MCP for ${wtPath} (${err.message}). ${fallback}`)
     return { success: false }
   }
-  if (result.status !== 0) {
-    log(
-      `[new-worktree] wire step failed for ${wtPath} (exit ${result.status}). ` +
-        `Wire manually: node .claude/scripts/wire-worktree-mcp.mjs ${wtPath}`,
-    )
-    return { success: false }
-  }
-  return { success: true }
 }
 
 function isRunAsScript() {
