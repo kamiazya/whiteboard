@@ -303,7 +303,9 @@ try {
     proc.on('close', (status) => res({ status, stdout: out, stderr: err }))
   })
   if (stopA.status !== 0) {
-    throw new Error(`daemon A stop failed: ${stopA.status} ${stopA.stderr}`)
+    throw new Error(
+      `daemon A stop failed: ${stopA.status}\n--- stdout ---\n${stopA.stdout}\n--- stderr ---\n${stopA.stderr}`,
+    )
   }
   assertNoLeak('daemon A stop stdout', stopA.stdout, [TOKEN_A])
   assertNoLeak('daemon A stop stderr', stopA.stderr, [TOKEN_A])
@@ -473,7 +475,9 @@ try {
     proc.on('close', (status) => res({ status, stdout: out, stderr: err }))
   })
   if (stopB.status !== 0) {
-    throw new Error(`daemon B stop failed: ${stopB.status} ${stopB.stderr}`)
+    throw new Error(
+      `daemon B stop failed: ${stopB.status}\n--- stdout ---\n${stopB.stdout}\n--- stderr ---\n${stopB.stderr}`,
+    )
   }
   assertNoLeak('daemon B stop stdout', stopB.stdout, [TOKEN_B])
   assertNoLeak('daemon B stop stderr', stopB.stderr, [TOKEN_B])
