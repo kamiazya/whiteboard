@@ -152,7 +152,11 @@ jobs:
           OUT=$(npm pack --dry-run --json)
           echo "$OUT" | node -e '
             let d=""; process.stdin.on("data",c=>d+=c); process.stdin.on("end",()=>{
-              const j=JSON.parse(d)[0];
+              // Lifecycle scripts (prepack etc.) may interleave their stdout with
+              // npm'"'"'s JSON payload; parse from the first JSON-array bracket.
+              const start = d.indexOf("[");
+              if (start === -1) { console.error("No JSON array found in npm pack output"); process.exit(1); }
+              const j=JSON.parse(d.slice(start))[0];
               const files = j.files.map(f=>f.path);
               const must = ["README.md", "LICENSE", "package.json", "dist/server/mcp/index.js"];
               const forbidden = [/\.test\.(js|d\.ts)$/, /\/_artifacts\//, /\.tsbuildinfo$/, /\.DS_Store$/];
