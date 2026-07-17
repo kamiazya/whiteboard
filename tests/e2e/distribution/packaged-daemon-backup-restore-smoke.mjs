@@ -92,7 +92,15 @@ function startDaemon({ dataDir, port, token, label }) {
       env: {
         ...process.env,
         WHITEBOARD_DATA_DIR: dataDir,
-        WHITEBOARD_DAEMON_TOKEN: token,
+        // DAEMON_ENTRY is invoked directly (not via `whiteboard daemon run`),
+        // so the token is read by resolveToken() in server/index.ts, which
+        // only honours --token= or WHITEBOARD_TOKEN — WHITEBOARD_DAEMON_TOKEN
+        // (the env var the `daemon run` CLI subcommand reads instead) is a
+        // no-op here. Passing the wrong name meant `daemonMode && token` was
+        // always false, so the daemon never wrote its registry record, and
+        // every later `whiteboard daemon stop` for this dir failed with
+        // "record-not-found".
+        WHITEBOARD_TOKEN: token,
         WHITEBOARD_LOG_LEVEL: process.env.WHITEBOARD_LOG_LEVEL ?? 'warning',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -183,10 +191,7 @@ async function shutdownDaemon(daemon) {
     return
   }
   daemon.child.kill('SIGTERM')
-  const winner = await Promise.race([
-    daemon.closed,
-    delay(SHUTDOWN_TIMEOUT_MS, 'timeout'),
-  ])
+  const winner = await Promise.race([daemon.closed, delay(SHUTDOWN_TIMEOUT_MS, 'timeout')])
   if (winner === 'timeout') {
     daemon.child.kill('SIGKILL')
     await daemon.closed
@@ -244,16 +249,11 @@ try {
   }
 
   const seededList = await (
-    await authedFetch(
-      daemonA,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
-    )
+    await authedFetch(daemonA, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
   ).json()
   const seededSlugs = (seededList?.canvases ?? []).map((c) => c.slug)
   if (!seededSlugs.includes(SEED_CANVAS_SLUG)) {
-    throw new Error(
-      `seeded canvas not present after POST: ${JSON.stringify(seededSlugs)}`,
-    )
+    throw new Error(`seeded canvas not present after POST: ${JSON.stringify(seededSlugs)}`)
   }
   console.log(`[packaged-daemon-backup-restore-smoke] seeded workspaceId → ${WORKSPACE_ID}`)
 
@@ -368,16 +368,11 @@ try {
     )
   }
   const restoredCanvases = await (
-    await authedFetch(
-      daemonB,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
-    )
+    await authedFetch(daemonB, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
   ).json()
   const restoredSlugs = (restoredCanvases?.canvases ?? []).map((c) => c.slug)
   if (!restoredSlugs.includes(SEED_CANVAS_SLUG)) {
-    throw new Error(
-      `restored daemon missing seeded canvas: ${JSON.stringify(restoredSlugs)}`,
-    )
+    throw new Error(`restored daemon missing seeded canvas: ${JSON.stringify(restoredSlugs)}`)
   }
   console.log(
     `[packaged-daemon-backup-restore-smoke] restored data round-tripped (workspace=${WORKSPACE_ID}, canvas=${SEED_CANVAS_SLUG})`,
@@ -422,12 +417,7 @@ try {
   )
 
   // ───────── Phase 4: packaged CLI status against restored dir ─────────
-  const cliRun = runCli([
-    'daemon',
-    'status',
-    '--json',
-    `--data-dir=${restoredDataDir}`,
-  ])
+  const cliRun = runCli(['daemon', 'status', '--json', `--data-dir=${restoredDataDir}`])
   if (cliRun.status !== 0) {
     throw new Error(
       `whiteboard daemon status --json (restored) exited ${cliRun.status}\n` +
@@ -437,13 +427,21 @@ try {
   assertNoLeak('cli status stdout', cliRun.stdout, [TOKEN_B])
   assertNoLeak('cli status stderr', cliRun.stderr, [TOKEN_B])
   const cliResult = JSON.parse(cliRun.stdout.trim())
+  // `whiteboard daemon status --json` (see daemon-status.ts DaemonStatusResult)
+  // has never had a top-level baseUrl field — only record.port/pid. Derive
+  // the expected base URL from record.port instead of asserting a field the
+  // CLI contract does not emit.
   const cliExpectations = [
     ['ok', cliResult.ok, true],
     ['reason', cliResult.reason, null],
     ['recordFresh', cliResult.recordFresh, true],
     ['record.pid', cliResult.record?.pid, daemonB.child.pid],
     ['record.port', cliResult.record?.port, PORT_B],
-    ['baseUrl', cliResult.baseUrl, `http://${HOST}:${PORT_B}`],
+    [
+      'derived baseUrl (host + record.port)',
+      `http://${HOST}:${cliResult.record?.port}`,
+      `http://${HOST}:${PORT_B}`,
+    ],
   ]
   for (const [field, actual, expected] of cliExpectations) {
     if (actual !== expected) {
