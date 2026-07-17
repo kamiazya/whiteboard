@@ -347,8 +347,16 @@ try {
   const statusBRes = await authedFetch(daemonB, '/api/runtime/status')
   if (!statusBRes.ok) throw new Error(`daemon B /status: ${statusBRes.status}`)
   const statusBText = await statusBRes.text()
-  assertNoLeak('runtime status B', statusBText, [TOKEN_B])
   const statusB = JSON.parse(statusBText)
+  // storage.dataDir is a documented field of GET /api/runtime/status (asserted
+  // below), not a leaked path — under /tmp on Linux CI it otherwise trips
+  // BASE_LEAK_PATTERNS' blanket /tmp/ check. Redact only that known-good
+  // value before the leak scan so any other /tmp/ path (e.g. a stray stack
+  // frame) still fails the check.
+  const statusBTextForLeakCheck = statusB.storage?.dataDir
+    ? statusBText.split(statusB.storage.dataDir).join('<dataDir>')
+    : statusBText
+  assertNoLeak('runtime status B', statusBTextForLeakCheck, [TOKEN_B])
   if (statusB.storage?.dataDir !== restoredDataDir) {
     throw new Error(
       `daemon B storage.dataDir expected ${restoredDataDir}, got ${statusB.storage?.dataDir}`,
