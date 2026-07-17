@@ -13,9 +13,24 @@ import {
 import { parseOAuthClientRegistryEnv } from './security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
 
-function readArg(name: string, fallback?: string): string | undefined {
+/**
+ * Reads a `--name=value` flag out of an argv list. When the same flag is
+ * passed more than once, `Array.prototype.find` returns the FIRST match —
+ * this is a load-bearing detail for `mcp:http:dev`, which relies on its
+ * caller-provided `--port` winning over any port this process's own
+ * wrapper might append later in the argv list.
+ */
+export function parseArg(
+  argv: readonly string[],
+  name: string,
+  fallback?: string,
+): string | undefined {
   const prefix = `--${name}=`
-  return process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length) ?? fallback
+  return argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length) ?? fallback
+}
+
+function readArg(name: string, fallback?: string): string | undefined {
+  return parseArg(process.argv, name, fallback)
 }
 
 function hasFlag(name: string): boolean {

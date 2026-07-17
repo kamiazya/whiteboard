@@ -1,23 +1,35 @@
 #!/usr/bin/env node
-// Idempotent: probe port 3099, and if nothing is listening start
-// `pnpm mcp:http:dev` detached so the next MCP request connects immediately.
+// Idempotent: probe this checkout's derived dev port (3099 on the main
+// checkout, a deterministic per-worktree port otherwise — see
+// dev-port-lib.mjs), and if nothing is listening start `pnpm mcp:http:dev`
+// detached so the next MCP request connects immediately.
 //
 // Wired into client `SessionStart` hooks so opening this repo auto-launches
 // the dev daemon. Re-running this script is safe; if the port is already in
 // use it exits without doing anything.
 
 import { spawn } from 'node:child_process'
-import { createServer } from 'node:net'
 import { mkdir, open } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
-  waitForAuthenticatedMcp,
-  resolveDevBearerToken,
   buildMcpHttpDevSpawnArgs,
+  resolveDevBearerToken,
+  verifyDevDaemonIdentity,
+  waitForAuthenticatedMcp,
 } from './ensure-http-dev-daemon-lib.mjs'
+import { readDevDaemonMarker, resolveDevDataDirEnv } from './with-dev-data-dir-lib.mjs'
 
-const PORT = 3099
+const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
+const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..', '..')
+const PORT = deriveDevPort({
+  repoRoot: REPO_ROOT,
+  isMainCheckout: isMainCheckout(REPO_ROOT),
+  env: process.env,
+})
+const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
 const HOST = '127.0.0.1'
 // Upper bound on how long we'll wait for `pnpm mcp:http:dev` to bind. tsx
 // + happy-dom + canvas + resvg cold start + node_modules linking can take
@@ -34,14 +46,24 @@ const READY_POLL_INTERVAL_MS = 200
 // is set the spawned daemon receives an explicit --token flag that overrides
 // the default baked into the pnpm script, keeping all three in sync.
 const DEV_BEARER_TOKEN = resolveDevBearerToken(process.env)
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..', '..')
 const LOG_DIR = join(REPO_ROOT, 'tmp', 'logs')
 const LOG_PATH = join(LOG_DIR, 'mcp-http-dev.log')
 const QUIET = process.argv.includes('--quiet')
 
 function info(message) {
   if (!QUIET) console.log(message)
+}
+
+// process.kill(pid, 0) throws (ESRCH) when no process with that pid exists;
+// it does not actually send a signal. This is the standard cross-platform
+// liveness check pattern.
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
 }
 
 function probe(port) {
@@ -112,8 +134,28 @@ if (status === 'in-use') {
   // before claiming success.
   const verdict = await probeAuthenticatedMcpDaemon()
   if (verdict === 'ours') {
-    info(`[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — verified`)
-    process.exit(0)
+    // An authenticated MCP daemon answers on our derived port — but with a
+    // shared default bearer token across worktrees, that alone doesn't rule
+    // out a hash-collision daemon from a DIFFERENT worktree. Cross-check
+    // against this worktree's own marker before claiming success.
+    const identity = verifyDevDaemonIdentity({
+      marker: readDevDaemonMarker(EXPECTED_DATA_DIR),
+      expectedPort: PORT,
+      isPidAlive,
+    })
+    if (identity === 'ours') {
+      info(`[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — verified`)
+      process.exit(0)
+    }
+    console.error(
+      `[ensure-http-dev-daemon] http://${HOST}:${PORT} answers MCP but its ` +
+        `${EXPECTED_DATA_DIR}/dev-daemon.json marker does not match this worktree ` +
+        `(${identity === 'stale' ? 'recorded pid is no longer running' : 'no marker or a different port recorded'}). ` +
+        "This is very likely a different worktree's daemon that hash-collided on this port. " +
+        `Set WHITEBOARD_DEV_PORT to a distinct value for one of the worktrees, or stop the ` +
+        'conflicting process (e.g. `pkill -f mcp:http:dev`) and rerun.',
+    )
+    process.exit(1)
   }
   const why =
     verdict === 'wrong-token'
@@ -132,7 +174,7 @@ await mkdir(LOG_DIR, { recursive: true })
 const logFile = await open(LOG_PATH, 'a')
 const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
-const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN), {
+const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN, PORT), {
   cwd: REPO_ROOT,
   detached: true,
   stdio: ['ignore', logFile.fd, logFile.fd],

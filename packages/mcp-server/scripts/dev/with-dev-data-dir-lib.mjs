@@ -1,5 +1,5 @@
-import { chmodSync, mkdirSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 
 // Owner-only, matching shared/data-dir-secure.ts's POSIX_DATA_DIR_MODE. Kept
 // as a separate literal here (rather than importing the TS module) because
@@ -70,6 +70,70 @@ export function reraiseSignalOrExit(
     kill(pid, signal)
   } catch {
     exit(1)
+  }
+}
+
+/**
+ * Appends `--port=<derivedPort>` to argv unless the caller already passed
+ * an explicit `--port`, which always wins. Returns a new array (immutable).
+ *
+ * @param {string[]} argv
+ * @param {number} derivedPort
+ * @returns {string[]}
+ */
+export function injectDerivedPortArg(argv, derivedPort) {
+  if (argv.some((arg) => arg === '--port' || arg.startsWith('--port='))) {
+    return [...argv]
+  }
+  return [...argv, `--port=${derivedPort}`]
+}
+
+const DEV_DAEMON_MARKER_FILENAME = 'dev-daemon.json'
+
+/**
+ * Writes a small identity marker into the dev data dir recording which
+ * worktree/port/pid started this daemon. ensure-http-dev-daemon reads this
+ * back after a healthy probe to confirm the daemon answering on its derived
+ * port actually belongs to this worktree, rather than being a foreign
+ * daemon that happened to land on the same hashed port (or a stale process
+ * from before per-worktree ports existed).
+ *
+ * @param {string} dataDir
+ * @param {{ port: number, repoRoot: string, pid: number }} args
+ */
+export function writeDevDaemonMarker(dataDir, { port, repoRoot, pid }) {
+  const marker = { port, repoRoot, pid, startedAt: new Date().toISOString() }
+  writeFileSync(join(dataDir, DEV_DAEMON_MARKER_FILENAME), JSON.stringify(marker, null, 2))
+}
+
+/**
+ * Reads the marker written by writeDevDaemonMarker. Returns null (never
+ * throws) when the marker is absent or unparseable — both are treated as
+ * "no trustworthy identity" by the caller, not as a crash.
+ *
+ * @param {string} dataDir
+ * @returns {{ port: number, repoRoot: string, pid: number, startedAt: string } | null}
+ */
+export function readDevDaemonMarker(dataDir) {
+  try {
+    return JSON.parse(readFileSync(join(dataDir, DEV_DAEMON_MARKER_FILENAME), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Best-effort removal of the identity marker on clean shutdown, so a
+ * restarted daemon on a different port/pid doesn't leave a stale marker
+ * behind that a probe could misread as still-valid.
+ *
+ * @param {string} dataDir
+ */
+export function removeDevDaemonMarker(dataDir) {
+  try {
+    rmSync(join(dataDir, DEV_DAEMON_MARKER_FILENAME))
+  } catch {
+    /* Absent marker (or unremovable) is fine — nothing to clean up. */
   }
 }
 

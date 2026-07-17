@@ -32,15 +32,40 @@ export function resolveDevBearerToken(env) {
  * Appends `--token=<value>` only when the token differs from the value
  * already baked into the package script (`--token=whiteboard-dev`), so
  * a custom WHITEBOARD_TOKEN is honoured without duplicating the flag on
- * the default path.
+ * the default path. Always appends `--port=<derivedPort>` — the package
+ * script itself no longer bakes in a port, so this is the one place the
+ * spawned daemon's port comes from.
  *
  * @param {string} token
+ * @param {number} derivedPort
  * @returns {string[]}
  */
-export function buildMcpHttpDevSpawnArgs(token) {
+export function buildMcpHttpDevSpawnArgs(token, derivedPort) {
   const base = ['mcp:http:dev']
   if (token !== PACKAGE_SCRIPT_DEFAULT_TOKEN) {
     base.push(`--token=${token}`)
   }
+  base.push(`--port=${derivedPort}`)
   return base
+}
+
+/**
+ * Decides whether a daemon that answered an authenticated MCP probe on this
+ * worktree's derived port actually belongs to this worktree.
+ *
+ * A daemon that never wrote a marker for this data dir, or whose marker
+ * names a different port, is "foreign" — it may be a hash-collision daemon
+ * from another worktree sharing the default bearer token, or a stale
+ * pre-port-split daemon. A marker whose recorded pid is no longer running
+ * is "stale" (its process died without cleaning up); a marker whose port
+ * matches and whose pid is alive is "ours".
+ *
+ * @param {{ marker: { port: number, pid: number } | null, expectedPort: number, isPidAlive: (pid: number) => boolean }} args
+ * @returns {'ours' | 'stale' | 'foreign'}
+ */
+export function verifyDevDaemonIdentity({ marker, expectedPort, isPidAlive }) {
+  if (!marker || marker.port !== expectedPort) {
+    return 'foreign'
+  }
+  return isPidAlive(marker.pid) ? 'ours' : 'stale'
 }

@@ -2,9 +2,10 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  waitForAuthenticatedMcp,
-  resolveDevBearerToken,
   buildMcpHttpDevSpawnArgs,
+  resolveDevBearerToken,
+  verifyDevDaemonIdentity,
+  waitForAuthenticatedMcp,
 } from './ensure-http-dev-daemon-lib.mjs'
 
 describe('HTTP dev daemon startup', () => {
@@ -75,13 +76,65 @@ describe('resolveDevBearerToken', () => {
 
 describe('buildMcpHttpDevSpawnArgs', () => {
   it('injects --token when token differs from the package-script default', () => {
-    const args = buildMcpHttpDevSpawnArgs('my-custom-token')
+    const args = buildMcpHttpDevSpawnArgs('my-custom-token', 3123)
     expect(args).toContain('--token=my-custom-token')
   })
 
   it('does NOT inject --token when token is the package-script default', () => {
     // pnpm mcp:http:dev already passes --token=whiteboard-dev; no duplication needed
-    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev')
+    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev', 3123)
     expect(args.some((a) => a.startsWith('--token='))).toBe(false)
+  })
+
+  it("appends --port=<derived> so the spawned daemon binds to this worktree's port", () => {
+    const args = buildMcpHttpDevSpawnArgs('whiteboard-dev', 3123)
+    expect(args).toContain('--port=3123')
+  })
+})
+
+describe('verifyDevDaemonIdentity', () => {
+  it('returns "foreign" when no marker exists for this data dir', () => {
+    const verdict = verifyDevDaemonIdentity({
+      marker: null,
+      expectedPort: 3123,
+      isPidAlive: () => true,
+    })
+
+    expect(verdict).toBe('foreign')
+  })
+
+  it('returns "foreign" when the marker records a different port (hash collision or stale)', () => {
+    const verdict = verifyDevDaemonIdentity({
+      marker: { port: 3099, repoRoot: '/other/repo', pid: 1, startedAt: '2026-01-01T00:00:00Z' },
+      expectedPort: 3123,
+      isPidAlive: () => true,
+    })
+
+    expect(verdict).toBe('foreign')
+  })
+
+  it('returns "stale" when the marker port matches but the recorded pid is dead', () => {
+    const verdict = verifyDevDaemonIdentity({
+      marker: { port: 3123, repoRoot: '/repo', pid: 999999, startedAt: '2026-01-01T00:00:00Z' },
+      expectedPort: 3123,
+      isPidAlive: () => false,
+    })
+
+    expect(verdict).toBe('stale')
+  })
+
+  it('returns "ours" when the marker port matches and the recorded pid is alive', () => {
+    const verdict = verifyDevDaemonIdentity({
+      marker: {
+        port: 3123,
+        repoRoot: '/repo',
+        pid: process.pid,
+        startedAt: '2026-01-01T00:00:00Z',
+      },
+      expectedPort: 3123,
+      isPidAlive: () => true,
+    })
+
+    expect(verdict).toBe('ours')
   })
 })

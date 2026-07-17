@@ -1,13 +1,25 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   ensureDevDataDirSecured,
+  injectDerivedPortArg,
+  readDevDaemonMarker,
+  removeDevDaemonMarker,
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
   resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
+  writeDevDaemonMarker,
 } from './with-dev-data-dir-lib.mjs'
 
 describe('resolveDevDataDirEnv', () => {
@@ -103,6 +115,99 @@ describe('reraiseSignalOrExit', () => {
 
     expect(exitCalls).toEqual([1])
   })
+})
+
+describe('injectDerivedPortArg', () => {
+  it('appends --port=<derived> when argv has no --port flag', () => {
+    expect(injectDerivedPortArg(['--daemon', '--token=whiteboard-dev'], 3123)).toEqual([
+      '--daemon',
+      '--token=whiteboard-dev',
+      '--port=3123',
+    ])
+  })
+
+  it('leaves argv untouched (no duplicate) when caller already passed --port', () => {
+    const argv = ['--daemon', '--port=4000']
+
+    expect(injectDerivedPortArg(argv, 3123)).toEqual(['--daemon', '--port=4000'])
+  })
+
+  it('does not mutate the input argv array', () => {
+    const argv = ['--daemon']
+    const result = injectDerivedPortArg(argv, 3123)
+
+    expect(argv).toEqual(['--daemon'])
+    expect(result).not.toBe(argv)
+  })
+})
+
+describe('dev daemon identity marker', () => {
+  let tempRoot: string
+
+  afterEach(() => {
+    if (tempRoot) rmSync(tempRoot, { recursive: true, force: true })
+  })
+
+  it('writes { port, repoRoot, pid, startedAt } to <dataDir>/dev-daemon.json', () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'dev-daemon-marker-'))
+
+    writeDevDaemonMarker(tempRoot, { port: 3123, repoRoot: '/repo/worktree', pid: 4242 })
+
+    const raw = JSON.parse(readFileSync(join(tempRoot, 'dev-daemon.json'), 'utf8'))
+    expect(raw).toMatchObject({ port: 3123, repoRoot: '/repo/worktree', pid: 4242 })
+    expect(typeof raw.startedAt).toBe('string')
+  })
+
+  it('overwrites a malformed existing marker instead of throwing', () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'dev-daemon-marker-'))
+    writeFileSyncMalformed(tempRoot)
+
+    expect(() =>
+      writeDevDaemonMarker(tempRoot, { port: 3123, repoRoot: '/repo/worktree', pid: 4242 }),
+    ).not.toThrow()
+
+    const raw = JSON.parse(readFileSync(join(tempRoot, 'dev-daemon.json'), 'utf8'))
+    expect(raw.port).toBe(3123)
+  })
+
+  it('readDevDaemonMarker returns null when the marker file is absent', () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'dev-daemon-marker-'))
+
+    expect(readDevDaemonMarker(tempRoot)).toBeNull()
+  })
+
+  it('readDevDaemonMarker returns null (not a throw) when the marker is malformed JSON', () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'dev-daemon-marker-'))
+    writeFileSyncMalformed(tempRoot)
+
+    expect(readDevDaemonMarker(tempRoot)).toBeNull()
+  })
+
+  it('readDevDaemonMarker round-trips a previously written marker', () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'dev-daemon-marker-'))
+    writeDevDaemonMarker(tempRoot, { port: 3123, repoRoot: '/repo/worktree', pid: 4242 })
+
+    expect(readDevDaemonMarker(tempRoot)).toMatchObject({
+      port: 3123,
+      repoRoot: '/repo/worktree',
+      pid: 4242,
+    })
+  })
+
+  it('removeDevDaemonMarker deletes the marker and is a no-op when already absent', () => {
+    tempRoot = mkdtempSync(join(tmpdir(), 'dev-daemon-marker-'))
+    writeDevDaemonMarker(tempRoot, { port: 3123, repoRoot: '/repo/worktree', pid: 4242 })
+
+    removeDevDaemonMarker(tempRoot)
+    expect(existsSync(join(tempRoot, 'dev-daemon.json'))).toBe(false)
+
+    expect(() => removeDevDaemonMarker(tempRoot)).not.toThrow()
+  })
+
+  function writeFileSyncMalformed(dataDir: string) {
+    mkdirSync(dataDir, { recursive: true })
+    writeFileSync(join(dataDir, 'dev-daemon.json'), '{ not valid json')
+  }
 })
 
 describe('resolveTsxWatchSpawn', () => {
