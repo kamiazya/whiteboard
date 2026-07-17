@@ -26,7 +26,7 @@ import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import { tmpdir } from 'node:os'
-import { join, resolve, dirname } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 // fetch() treats Host as a forbidden header and silently drops any override,
@@ -201,6 +201,18 @@ async function main() {
     throw new Error(`spoofed Host GET expected 403, got ${spoofedRes.status}`)
   }
   console.log('[e2e] /api/runtime/ping with spoofed Host → 403 OK')
+
+  // POST /api/ws-ticket (ADR-0005). No WHITEBOARD_OAUTH_CLIENT_REGISTRY is
+  // configured for this smoke's daemon, so no OAuth grant exists to redeem a
+  // bearer against — this proves the route is actually mounted and reachable
+  // through the real HTTP stack (unlike a unit test against the router in
+  // isolation) and that it fails closed with no live grant, rather than 404
+  // (unmounted) or a 200 with a ticket minted from nothing.
+  const wsTicketRes = await fetch(`${daemonOrigin}/api/ws-ticket`, { method: 'POST' })
+  if (wsTicketRes.status !== 401) {
+    throw new Error(`POST /api/ws-ticket with no bearer expected 401, got ${wsTicketRes.status}`)
+  }
+  console.log('[e2e] POST /api/ws-ticket with no bearer → 401 OK')
 
   // Token channel split (ADR-0002 addendum): the served HTML must never carry
   // the daemon token inside __WHITEBOARD_RUNTIME_CONFIG__. This is a
