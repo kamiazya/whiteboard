@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.14](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.13...whiteboard-plugin-v0.0.14) (2026-07-17)
+
+
+### Bug Fixes
+
+* **mcp-server:** skip LLM-CLI smokes when the CLI is absent so release gates pass on CI ([#241](https://github.com/kamiazya/whiteboard/issues/241)) ([1e0067f](https://github.com/kamiazya/whiteboard/commit/1e0067fa61d116d58aeb66d7de7a7b8183ba682a))
+
 ## [0.0.13](https://github.com/kamiazya/whiteboard/compare/whiteboard-plugin-v0.0.12...whiteboard-plugin-v0.0.13) (2026-07-17)
 
 
