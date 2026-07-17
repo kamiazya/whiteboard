@@ -2,6 +2,7 @@ import { resolve } from 'node:path'
 import {
   DATA_DIR,
   getDataDir,
+  overrideDataDir,
   resetDataDirForTests,
   resolveDataDir,
   setDataDirForTests,
@@ -15,6 +16,7 @@ import {
 export {
   DATA_DIR,
   getDataDir,
+  overrideDataDir,
   resetDataDirForTests,
   resolveDataDir,
   setDataDirForTests,

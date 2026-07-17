@@ -2,9 +2,9 @@
 // PNG buffer using the browser-less renderer. Used by routes/export.ts as a
 // fallback when no browser client is connected.
 //
-// Reads the data root from the daemon's configured DATA_DIR rather than
+// Reads the data root from the daemon's configured data dir rather than
 // taking it as a per-call argument. Mixing roots within one export was
-// previously possible because the doc cache reads from DATA_DIR while the
+// previously possible because the doc cache reads from the data dir while the
 // file loader took an explicit dataDir; tying both ends to the same
 // canonical path closes that mismatch.
 

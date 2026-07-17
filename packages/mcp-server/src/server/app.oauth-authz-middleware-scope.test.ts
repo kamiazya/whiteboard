@@ -9,6 +9,7 @@ vi.mock('./config.js', () => ({
   get DATA_DIR() {
     return join(tmp.dir, 'data')
   },
+  getDataDir: () => join(tmp.dir, 'data'),
   get DIST_WEB_APP_DIR() {
     return join(tmp.dir, 'web-app')
   },

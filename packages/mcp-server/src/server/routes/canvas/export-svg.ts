@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import { nanoid } from 'nanoid'
 import { exportSvgRequestSchema } from '../../../shared/api-contracts/export-svg.js'
 import type { ExportErrorBody } from '../../../shared/api-contracts/export.js'
-import { DATA_DIR } from '../../config.js'
+import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
 import { validationErrorBody, validateWorkspaceId, validateSlug } from '../../validators.js'
@@ -58,7 +58,7 @@ export function createCanvasSvgExportRouter() {
         await validateOutputPath(
           body.outputPath,
           body.overwrite === true,
-          join(DATA_DIR, workspaceId, 'exports'),
+          join(getDataDir(), workspaceId, 'exports'),
         )
       } catch (err) {
         if (err instanceof OutputPathError) {
@@ -103,5 +103,5 @@ function defaultSvgExportPath(workspaceId: string, slug: string): string {
   // uniqueness regardless of call timing, matching the PNG and JSON export
   // routes' default-path convention.
   const fileName = `${slug}-${timestamp}-${nanoid(6)}.svg`
-  return join(DATA_DIR, workspaceId, 'exports', fileName)
+  return join(getDataDir(), workspaceId, 'exports', fileName)
 }

@@ -9,7 +9,7 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
-import { DATA_DIR, DIST_WEB_APP_DIR } from './config.js'
+import { getDataDir, DIST_WEB_APP_DIR } from './config.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
 import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
@@ -81,10 +81,10 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       idleForMs: idleTimer.getIdleForMs(),
       auth: { mode: 'local-token', hasToken: Boolean(options.token) },
       storage: {
-        dataDir: DATA_DIR,
+        dataDir: getDataDir(),
         dataDirWritable: (() => {
           try {
-            accessSync(DATA_DIR, fsConstants.W_OK)
+            accessSync(getDataDir(), fsConstants.W_OK)
             return true
           } catch {
             return false

@@ -1,7 +1,7 @@
 // Read the binary files referenced by an exported canvas and shape them
 // as the `files` map that @excalidraw/utils.exportToSvg expects.
 //
-// Files are stored under DATA_DIR/{workspaceId}/files/{fileId}{ext}. The
+// Files are stored under getDataDir()/{workspaceId}/files/{fileId}{ext}. The
 // browser-facing route in routes/files.ts already reads from this same
 // layout and serves a 200 with Content-Type derived from the extension.
 //
@@ -14,7 +14,7 @@
 
 import { readFile, stat } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { isMissingFileError } from '../store/corrupt-stored-data.js'
 
 // `fileId` rides through Excalidraw element data, which any tool
@@ -53,7 +53,7 @@ export async function loadCanvasFiles(
   referencedFileIds: ReadonlySet<string>,
 ): Promise<Record<string, CanvasFile>> {
   if (referencedFileIds.size === 0) return {}
-  const dir = join(DATA_DIR, workspaceId, 'files')
+  const dir = join(getDataDir(), workspaceId, 'files')
   // Probe the directory once so a freshly-created workspace doesn't pay
   // for one stat() per referenced id when nothing is on disk yet.
   // Treat a non-directory at this path the same as a missing dir:

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import type { RuntimeStatus } from '../http-server.js'
 import { daemonPingResponseSchema } from '../../shared/api-contracts/runtime.js'
@@ -50,13 +50,13 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
     return c.json({ ok: true })
   })
 
-  // Storage usage report. Cheap stat()-only walk of DATA_DIR; nothing is cached.
+  // Storage usage report. Cheap stat()-only walk of getDataDir(); nothing is cached.
   // `lastAutoCompactedAt` is the freshest auto-Optimize timestamp across
   // every canvas, so the UI can surface "Auto-optimised Ns ago" without
   // a separate round trip.
   app.get('/api/runtime/storage', async (c) => {
     options.touch()
-    const report = await computeStorageReport(DATA_DIR)
+    const report = await computeStorageReport(getDataDir())
     const lastAutoCompactedAt = await readLatestCompactedAt()
     return c.json({ ...report, lastAutoCompactedAt })
   })
@@ -76,7 +76,7 @@ export function createRuntimeRouter(options: RuntimeRouterOptions) {
       return c.json({ error: 'unauthorized' }, 401)
     }
     options.touch()
-    const result = await purgeOldDaemonLogs(DATA_DIR)
+    const result = await purgeOldDaemonLogs(getDataDir())
     return c.json(result)
   })
 

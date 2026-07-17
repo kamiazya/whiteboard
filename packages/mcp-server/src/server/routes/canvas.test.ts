@@ -12,6 +12,7 @@ vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return tmp.dir
   },
+  getDataDir: () => tmp.dir,
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
 }))

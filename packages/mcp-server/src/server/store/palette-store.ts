@@ -1,12 +1,12 @@
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 export async function loadPalette(workspaceId: string): Promise<Record<string, string>> {
