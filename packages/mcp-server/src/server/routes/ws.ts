@@ -12,7 +12,7 @@ import {
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
 import { saveCanvas } from '../store/canvas-store.js'
-import { getDoc } from '../store/doc-cache.js'
+import { evictDoc, getDoc } from '../store/doc-cache.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { setBroadcastFn } from './canvas.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
@@ -252,9 +252,15 @@ export async function handleWsUpgrade(
   // could still have an in-scope follow-up frame (e.g. `client_ready`) take
   // effect on a socket that is on its way out.
   let isClosing = false
-  function closeForInsufficientScope(): void {
+  // Every server-initiated close must set `isClosing` first so an already-queued
+  // in-scope frame (e.g. `client_ready`) does not take effect on a socket that is
+  // on its way out. Funnel all closes through here to keep that invariant in one place.
+  function closeSocket(code: number, reason: string): void {
     isClosing = true
-    ws.close(1008, 'Insufficient scope')
+    ws.close(code, reason)
+  }
+  function closeForInsufficientScope(): void {
+    closeSocket(1008, 'Insufficient scope')
   }
 
   ws.on('message', async (data: RawData, isBinary: boolean) => {
@@ -342,7 +348,33 @@ export async function handleWsUpgrade(
       : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
     try {
       const currentDoc = await getDoc(workspaceId, slug)
-      currentDoc.import(bytes)
+      // A second (or later) frame's handler can pass the `isClosing` check
+      // above before this frame's `await getDoc` resolves — both were
+      // still false at the top when they started. Recheck immediately after
+      // the await so a frame that lost that race does not import, persist,
+      // or close a socket the earlier frame already tore down.
+      if (isClosing) return
+
+      // `LoroDoc.import` throws synchronously (loro-crdt's wasm layer may
+      // throw a non-Error value) whenever the bytes are not a valid Loro
+      // update/snapshot. A write-scope credential is real authorization to
+      // send edits, not a guarantee the bytes are well-formed CRDT data, so
+      // this boundary must not be able to crash the daemon on one bad frame.
+      // Treat it as a protocol violation: discard the frame, never persist
+      // or broadcast it, and close — consistent with the 1008 scope-violation
+      // close above, but 1003 (Unsupported Data) since the socket itself was
+      // authorized, only this frame's payload was not decodable.
+      try {
+        currentDoc.import(bytes)
+      } catch (err: unknown) {
+        getLogger('ws').warning(
+          { workspaceId, slug, updateBytes: bytes.byteLength, err },
+          'ws binary update rejected: malformed Loro import data',
+        )
+        closeSocket(1003, 'Malformed canvas update')
+        return
+      }
+
       await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
       broadcastLoroUpdate(workspaceId, slug, bytes, ws)
 
@@ -356,6 +388,20 @@ export async function handleWsUpgrade(
         .catch((err: unknown) => {
           getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
         })
+    } catch (err: unknown) {
+      // A failure here (loadCanvas via getDoc, or saveCanvas) is a
+      // server-side/state problem rather than client misbehavior. If the doc
+      // was already mutated in-memory by a successful import above but
+      // saveCanvas then rejected, evict the cache entry so the next getDoc
+      // reloads from disk instead of silently keeping the unpersisted
+      // mutation live. The sender's local doc still has the import applied,
+      // so leaving the socket open would let it keep building on an edit the
+      // server never persisted and other clients never received — close
+      // 1011 (Internal Error) so the client reconnects and resyncs from the
+      // persisted (evicted, disk-backed) state instead.
+      getLogger('ws').error({ workspaceId, slug, err }, 'ws binary update failed')
+      evictDoc(workspaceId, slug)
+      closeSocket(1011, 'Failed to persist canvas update')
     } finally {
       wsSpan.end()
     }
