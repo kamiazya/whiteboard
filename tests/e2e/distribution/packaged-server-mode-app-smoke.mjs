@@ -14,7 +14,8 @@
 //   5. Data-route auth gates: workspaces, canvas export, workspace palette,
 //      user-libraries — 401 without auth, 403 with wrong scope, pass with
 //      correct scope; error responses pass LEAK_PATTERNS guard
-//   6. Local-daemon unchanged: workspace list open without auth header
+//   6. Local-daemon auth: /api/* requires the daemon token (401 without,
+//      pass with) — only /api/runtime/ping is public
 //   7. WWW-Authenticate contract: 401 carries it, 403 does not
 
 import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
@@ -352,35 +353,45 @@ try {
   }
   console.log('[server-mode-smoke] scenario 5c (workspace palette auth): PASS')
 
-  // --- Scenario 5d: GET /api/user-libraries — canvas:read ---
+  // --- Scenario 5d: GET /api/user-libraries — workspace:read ---
+  // route-scope-registry.ts requires workspace:read (not canvas:read) here
+  // deliberately: collapsing this onto canvas:read would let a canvas-only
+  // grant enumerate the user's shared library. The 403 check below is the
+  // positive assertion of that boundary — canvas:read alone must stay
+  // insufficient.
   {
     const appEmpty = makeApp([])
     const res401 = await req(appEmpty, 'GET', '/api/user-libraries')
     if (res401.status !== 401) fail('5d: expected 401 without auth', { status: res401.status })
     assertNoLeak('5d 401', await res401.text())
 
-    const res403 = await req(appEmpty, 'GET', '/api/user-libraries', { bearer: SMOKE_TOKEN })
+    const appCanvasRead = makeApp(['canvas:read'])
+    const res403 = await req(appCanvasRead, 'GET', '/api/user-libraries', { bearer: SMOKE_TOKEN })
     if (res403.status !== 403) {
-      fail('5d: no canvas:read must be 403 on user-libraries', { status: res403.status })
+      fail('5d: canvas:read alone must be 403 on user-libraries', { status: res403.status })
     }
     assertNoLeak('5d 403', await res403.text())
 
-    const appRead = makeApp(['canvas:read'])
+    const appRead = makeApp(['workspace:read'])
     const resPass = await req(appRead, 'GET', '/api/user-libraries', { bearer: SMOKE_TOKEN })
     if (resPass.status === 401 || resPass.status === 403) {
-      fail('5d: canvas:read must pass auth gate on user-libraries', { status: resPass.status })
+      fail('5d: workspace:read must pass auth gate on user-libraries', { status: resPass.status })
     }
   }
   console.log('[server-mode-smoke] scenario 5d (user-libraries auth): PASS')
 
-  // --- Scenario 6: local-daemon unchanged ---
+  // --- Scenario 6: local-daemon auth — every /api/* route needs the daemon
+  // token (only /api/runtime/ping is public; see requiresDaemonAuth in
+  // routes/auth.ts). Local-daemon mode never had a truly unauthenticated
+  // /api/* surface once this hardening shipped.
   {
     let threw = false
     let appLocal
+    const LOCAL_TOKEN = 'local-daemon-token'
     try {
       appLocal = createApp({
         authMode: 'local-daemon',
-        token: 'local-daemon-token',
+        token: LOCAL_TOKEN,
         touch: () => {},
         getStatus: makeInternalStatus,
         shutdown: () => Promise.resolve(),
@@ -389,12 +400,25 @@ try {
       threw = true
     }
     if (threw) fail('6: local-daemon createApp must not throw')
-    const res = await appLocal.request('/api/workspaces')
-    if (res.status === 401 || res.status === 403) {
-      fail('6: local-daemon /api/workspaces must not require auth', { status: res.status })
+
+    const resNoAuth = await appLocal.request('/api/workspaces')
+    if (resNoAuth.status !== 401) {
+      fail('6: local-daemon /api/workspaces without a token must be 401', {
+        status: resNoAuth.status,
+      })
+    }
+    assertNoLeak('6 401', await resNoAuth.text())
+
+    const resAuthed = await appLocal.request('/api/workspaces', {
+      headers: { Authorization: `Bearer ${LOCAL_TOKEN}` },
+    })
+    if (resAuthed.status === 401 || resAuthed.status === 403) {
+      fail('6: local-daemon /api/workspaces with the daemon token must pass auth gate', {
+        status: resAuthed.status,
+      })
     }
   }
-  console.log('[server-mode-smoke] scenario 6 (local-daemon unchanged): PASS')
+  console.log('[server-mode-smoke] scenario 6 (local-daemon daemon-token auth): PASS')
 
   // --- Scenario 7: server-mode root serves the static placeholder, not apps/web ---
   // R5 of the MCP-UI retirement (ADR 0001): server-mode has no apps/web-compatible

@@ -162,7 +162,50 @@ function runCli(args, { env } = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
     env: { ...scrubDevEnv(process.env), ...env },
     encoding: 'utf8',
-    timeout: 10_000,
+    // `server stop` can itself wait up to 10s (DEFAULT_STOP_TIMEOUT_MS in
+    // server-stop.ts) for the child process to exit before escalating to
+    // SIGKILL. A CLI timeout equal to that budget races it — bump ours to
+    // leave real headroom over the production-side wait.
+    timeout: 15_000,
+  })
+}
+
+// Async twin of runCli, for CLI invocations that must fetch a JWKS mock
+// hosted in THIS same process (server doctor's server.jwks check). spawnSync
+// blocks this process's event loop for the child's whole lifetime, so the
+// parent can never service the child's incoming connection to its own mock
+// server — a self-deadlock the child's fetch only escapes by timing out.
+// spawn() keeps the event loop running, so the mock server can actually
+// answer while the child waits. Mirrors runCli's { status, stdout, stderr }
+// shape so call sites need no other changes.
+function runCliAsync(args, { env, timeoutMs = 15_000 } = {}) {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [CLI, ...args], {
+      env: { ...scrubDevEnv(process.env), ...env },
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString()
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString()
+    })
+    const timer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL')
+      } catch {
+        /* already gone */
+      }
+    }, timeoutMs)
+    child.once('error', (err) => {
+      clearTimeout(timer)
+      resolve({ status: null, stdout, stderr: `${stderr}\nspawn error: ${err?.message ?? err}` })
+    })
+    child.once('close', (status) => {
+      clearTimeout(timer)
+      resolve({ status, stdout, stderr })
+    })
   })
 }
 
@@ -462,7 +505,13 @@ const REQUIRED_FLAGS = [
       fail(`scenario 8: /api/runtime/ping expected 200, got ${pingResp.status}`)
     const pingBody = await pingResp.json()
     if (pingBody.ok !== true) fail('scenario 8: ping.ok must be true')
-    if (typeof pingBody.pid !== 'number') fail('scenario 8: ping.pid must be a number')
+    // daemonPingResponseSchema (shared/api-contracts/runtime.ts) deliberately
+    // carries instanceId, not pid: an OS pid is reused across processes, so a
+    // stale record comparing pid alone could misidentify an unrelated process
+    // as this server. instanceId is unique per start and never reused.
+    if (typeof pingBody.instanceId !== 'string') {
+      fail('scenario 8: ping.instanceId must be a string')
+    }
 
     // Protected route with no auth → 401
     const noAuthResp = await fetch(`${baseUrl}/api/canvas/test-ws/test-canvas/viewport`)
@@ -667,9 +716,10 @@ const REQUIRED_FLAGS = [
     {
       const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s14-'))
       try {
-        const r = runCli(['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS], {
-          env: { NODE_EXTRA_CA_CERTS: drCertFile },
-        })
+        const r = await runCliAsync(
+          ['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS],
+          { env: { NODE_EXTRA_CA_CERTS: drCertFile } },
+        )
         if (r.status !== 0)
           fail(`scenario 14: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
         if (r.stderr.trim() !== '')
@@ -707,7 +757,7 @@ const REQUIRED_FLAGS = [
     {
       const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-server-smoke-s15-'))
       try {
-        const r = runCli(
+        const r = await runCliAsync(
           [
             'server',
             'doctor',
@@ -765,9 +815,10 @@ const REQUIRED_FLAGS = [
         writeFileSync(recordPath, JSON.stringify(staleRecord))
         // chmodSync bypasses umask to reliably set broad permissions.
         chmodSync(recordPath, 0o644)
-        const r = runCli(['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS], {
-          env: { NODE_EXTRA_CA_CERTS: drCertFile },
-        })
+        const r = await runCliAsync(
+          ['server', 'doctor', '--json', `--data-dir=${dataDir}`, ...DOCTOR_FLAGS],
+          { env: { NODE_EXTRA_CA_CERTS: drCertFile } },
+        )
         if (r.status === null) fail('scenario 16: doctor process was killed by signal')
         if (r.status !== 0)
           fail(`scenario 16: expected exit 0, got ${r.status}`, { stderrBytes: r.stderr.length })
