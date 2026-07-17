@@ -18,6 +18,14 @@
 const KNOWN_PR_COVERAGE_KINDS = new Set(['workflow-step', 'aggregate', 'exception'])
 
 /**
+ * @param {unknown} value
+ * @returns {value is string}
+ */
+function isNonEmptyString(value) {
+  return typeof value === 'string' && value.length > 0
+}
+
+/**
  * Validate the optional per-gate `prCoverage` declaration: where this gate's
  * command is exercised on a pull request, so a machine check can confirm the
  * release-only gate isn't actually release-only.
@@ -35,28 +43,25 @@ export function validatePrCoverage(prCoverage) {
       reason: `prCoverage.kind must be one of ${[...KNOWN_PR_COVERAGE_KINDS].join(', ')}`,
     }
   }
-  if (p.kind === 'workflow-step') {
-    if (typeof p.workflow !== 'string' || p.workflow.length === 0) {
-      return { ok: false, reason: 'prCoverage.workflow must be a non-empty string' }
+  switch (p.kind) {
+    case 'workflow-step':
+    case 'aggregate': {
+      if (!isNonEmptyString(p.workflow)) {
+        return { ok: false, reason: 'prCoverage.workflow must be a non-empty string' }
+      }
+      if (!isNonEmptyString(p.jobId)) {
+        return { ok: false, reason: 'prCoverage.jobId must be a non-empty string' }
+      }
+      if (p.kind === 'workflow-step' && !isNonEmptyString(p.stepName)) {
+        return { ok: false, reason: 'prCoverage.stepName must be a non-empty string' }
+      }
+      break
     }
-    if (typeof p.jobId !== 'string' || p.jobId.length === 0) {
-      return { ok: false, reason: 'prCoverage.jobId must be a non-empty string' }
-    }
-    if (typeof p.stepName !== 'string' || p.stepName.length === 0) {
-      return { ok: false, reason: 'prCoverage.stepName must be a non-empty string' }
-    }
-  }
-  if (p.kind === 'aggregate') {
-    if (typeof p.workflow !== 'string' || p.workflow.length === 0) {
-      return { ok: false, reason: 'prCoverage.workflow must be a non-empty string' }
-    }
-    if (typeof p.jobId !== 'string' || p.jobId.length === 0) {
-      return { ok: false, reason: 'prCoverage.jobId must be a non-empty string' }
-    }
-  }
-  if (p.kind === 'exception') {
-    if (typeof p.reason !== 'string' || p.reason.trim().length === 0) {
-      return { ok: false, reason: 'prCoverage.reason must be a non-empty string' }
+    case 'exception': {
+      if (typeof p.reason !== 'string' || p.reason.trim().length === 0) {
+        return { ok: false, reason: 'prCoverage.reason must be a non-empty string' }
+      }
+      break
     }
   }
   return { ok: true }
@@ -91,13 +96,13 @@ export function validateGate(gate) {
     return { ok: false, reason: 'gate must be an object' }
   }
   const g = /** @type {Record<string, unknown>} */ (gate)
-  if (typeof g.id !== 'string' || g.id.length === 0) {
+  if (!isNonEmptyString(g.id)) {
     return { ok: false, reason: 'id must be a non-empty string' }
   }
-  if (typeof g.command !== 'string' || g.command.length === 0) {
+  if (!isNonEmptyString(g.command)) {
     return { ok: false, reason: 'command must be a non-empty string' }
   }
-  if (typeof g.category !== 'string' || g.category.length === 0) {
+  if (!isNonEmptyString(g.category)) {
     return { ok: false, reason: 'category must be a non-empty string' }
   }
   if (!Array.isArray(g.requiredFor) || g.requiredFor.length === 0) {
@@ -112,7 +117,7 @@ export function validateGate(gate) {
   if (typeof g.requiresNetwork !== 'boolean') {
     return { ok: false, reason: 'requiresNetwork must be boolean' }
   }
-  if (typeof g.expectedRuntimeBucket !== 'string' || g.expectedRuntimeBucket.length === 0) {
+  if (!isNonEmptyString(g.expectedRuntimeBucket)) {
     return { ok: false, reason: 'expectedRuntimeBucket must be a non-empty string' }
   }
   // Docker-required gates must never appear in non-Docker aggregates.
