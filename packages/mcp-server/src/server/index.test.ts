@@ -2,19 +2,22 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { resetDataDirForTests, setDataDirForTests } from './config.js'
 import { captureLogsForTests } from './log.js'
 
-const { startHttpServerMock } = vi.hoisted(() => ({
+const { startHttpServerMock, saveDaemonRecordMock, deleteDaemonRecordMock } = vi.hoisted(() => ({
   startHttpServerMock: vi.fn(async () => ({
     port: 3099,
     getRuntimeStatus: () => ({ startedAt: '2026-01-01T00:00:00.000Z' }),
   })),
+  saveDaemonRecordMock: vi.fn(async () => undefined),
+  deleteDaemonRecordMock: vi.fn(async () => undefined),
 }))
 
 vi.mock('./http-server.js', () => ({ startHttpServer: startHttpServerMock }))
 vi.mock('../daemon/daemon-registry.js', () => ({
-  saveDaemonRecord: vi.fn(async () => undefined),
-  deleteDaemonRecord: vi.fn(async () => undefined),
+  saveDaemonRecord: saveDaemonRecordMock,
+  deleteDaemonRecord: deleteDaemonRecordMock,
 }))
 vi.mock('./security/mcp-auth.js', () => ({
   createLocalTokenMcpHttpAuthStrategy: vi.fn(() => ({})),
@@ -31,6 +34,73 @@ vi.mock('./export/headless-renderer.js', () => ({
 // this module never triggers the top-level `main().catch(...)` path — tests
 // call the exported `main` directly instead.
 const { main } = await import('./index.js')
+
+describe('server/index main() data dir startup log', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+    delete process.env.WHITEBOARD_TOKEN
+  })
+
+  it('emits a notice-level record naming the resolved data dir before startHttpServer', async () => {
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const capture = captureLogsForTests('debug')
+    try {
+      await main()
+      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'notice')
+      expect(record).toBeDefined()
+      expect(typeof record?.data?.dataDir).toBe('string')
+      expect((record?.data?.dataDir as string).length).toBeGreaterThan(0)
+    } finally {
+      capture.restore()
+      stdoutSpy.mockRestore()
+    }
+  })
+})
+
+describe('server/index main() daemon mode data dir threading', () => {
+  const originalArgv = process.argv
+
+  afterEach(() => {
+    process.argv = originalArgv
+    resetDataDirForTests()
+    vi.clearAllMocks()
+    delete process.env.WHITEBOARD_TOKEN
+  })
+
+  it('passes the resolved dataDir (not the frozen DATA_DIR const) to saveDaemonRecord', async () => {
+    const scratchDir = '/tmp/whiteboard-index-daemon-mode-test'
+    setDataDirForTests(scratchDir)
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    process.argv = [...originalArgv, '--daemon']
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await main()
+      expect(saveDaemonRecordMock).toHaveBeenCalledWith(
+        expect.objectContaining({ pid: process.pid }),
+        scratchDir,
+      )
+    } finally {
+      stdoutSpy.mockRestore()
+    }
+  })
+
+  it('passes the resolved dataDir to deleteDaemonRecord via the close callback', async () => {
+    const scratchDir = '/tmp/whiteboard-index-daemon-mode-test-close'
+    setDataDirForTests(scratchDir)
+    process.env.WHITEBOARD_TOKEN = 'test-token'
+    process.argv = [...originalArgv, '--daemon']
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await main()
+      const onClose = startHttpServerMock.mock.calls[0][0].onClose as () => Promise<void>
+      await onClose()
+      expect(deleteDaemonRecordMock).toHaveBeenCalledWith(scratchDir)
+    } finally {
+      stdoutSpy.mockRestore()
+    }
+  })
+})
 
 describe('server/index main() WHITEBOARD_ALLOWED_WEB_ORIGINS startup gate', () => {
   afterEach(() => {

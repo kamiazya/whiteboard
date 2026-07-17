@@ -18,16 +18,29 @@
 // - When run inside the Codex sandbox it may fail because it cannot write to
 //   ~/.codex/sessions. If that happens, run it outside the sandbox.
 // - Set KEEP_SMOKE_TMP=1 to keep the temp directory instead of deleting it.
+// - CI images ship without the codex CLI installed (by design — this smoke
+//   needs a local install and live API quota), so the release-gate scripts
+//   that chain into this one (smoke:distribution:packaged, test:e2e:distribution)
+//   would otherwise always fail with `spawn codex ENOENT`. Skip cleanly instead.
 
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isCliAvailable } from './lib/cli-available.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
 const repoRoot = resolve(root, '../..')
+
+if (!isCliAvailable('codex')) {
+  console.log(
+    '[codex-smoke] SKIP: codex CLI not found on PATH — this smoke needs a local codex install and API quota (manual/dev-machine check)',
+  )
+  process.exit(0)
+}
+
 const keepTmp = process.env.KEEP_SMOKE_TMP === '1'
 const tmpRoot = mkdtempSync(join(tmpdir(), 'whiteboard-codex-smoke-'))
 const tmpDataDir = join(tmpRoot, 'data')
@@ -73,11 +86,16 @@ const args = [
   'exec',
   '--ephemeral',
   '--skip-git-repo-check',
-  '-C', repoRoot,
-  '-s', 'read-only',
-  '--output-schema', schemaPath,
-  '-o', outputPath,
-  '-c', configOverride,
+  '-C',
+  repoRoot,
+  '-s',
+  'read-only',
+  '--output-schema',
+  schemaPath,
+  '-o',
+  outputPath,
+  '-c',
+  configOverride,
   prompt,
 ]
 

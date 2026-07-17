@@ -2,8 +2,12 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { join, extname, basename } from 'node:path'
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises'
-import { DATA_DIR } from '../config.js'
-import { corruptStoredData, corruptStoredDataBody, isMissingFileError } from '../store/corrupt-stored-data.js'
+import { getDataDir } from '../config.js'
+import {
+  corruptStoredData,
+  corruptStoredDataBody,
+  isMissingFileError,
+} from '../store/corrupt-stored-data.js'
 import { purgeDanglingFiles } from '../store/file-gc.js'
 import type { VersionStore } from '../store/version-store.js'
 import {
@@ -92,7 +96,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
           415,
         )
       }
-      const dir = join(DATA_DIR, workspaceId, 'files')
+      const dir = join(getDataDir(), workspaceId, 'files')
       await mkdir(dir, { recursive: true })
       const filePath = join(dir, `${fileId}${ext}`)
       await writeFile(filePath, new Uint8Array(await c.req.arrayBuffer()))
@@ -114,7 +118,7 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
       throw err
     }
     try {
-      const dir = join(DATA_DIR, workspaceId, 'files')
+      const dir = join(getDataDir(), workspaceId, 'files')
       const files = await readStoredFileNames(dir)
       if (!files) {
         return c.notFound()

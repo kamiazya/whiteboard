@@ -1,4 +1,4 @@
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { validateBranchName, validateSlug, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -38,8 +38,8 @@ function defaultMain(): BranchMeta {
 }
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 export async function loadCanvasBranches(

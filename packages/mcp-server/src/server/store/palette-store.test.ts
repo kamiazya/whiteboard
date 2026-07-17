@@ -22,13 +22,12 @@ vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return join(tempDirRef, 'data')
   },
+  getDataDir: () => join(tempDirRef, 'data'),
 }))
 
-const {
-  deletePaletteEntries,
-  loadPalette,
-  mergePaletteEntries,
-} = await import('./palette-store.js')
+const { deletePaletteEntries, loadPalette, mergePaletteEntries } = await import(
+  './palette-store.js'
+)
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 interface StoreFixture {

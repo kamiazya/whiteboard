@@ -148,15 +148,15 @@ Database migration failed: corrupted migrations: previously executed migration 0
 
 or a similar "corrupted migrations" message, your local database is incompatible with the current codebase.
 
-**Pre-1.0 policy**: `~/.whiteboard` databases are **disposable**. On an incompatible upgrade, re-create the database:
+**Pre-1.0 policy**: the data dir's databases are **disposable**. On an incompatible upgrade, re-create the database. `pnpm mcp:http:dev` defaults to the repo-local `.dev-data/` dir (see [development.md](./development.md)) rather than the packaged install's `~/.whiteboard` — adjust the path below if you set `WHITEBOARD_DATA_DIR` yourself:
 
 ```bash
 # 1. Stop any running daemon first
 # 2. Back up any canvas files you want to keep
-cp -r ~/.whiteboard ~/.whiteboard.bak
+cp -r .dev-data .dev-data.bak
 
 # 3. Remove the database
-rm ~/.whiteboard/whiteboard.db
+rm .dev-data/whiteboard.db
 
 # 4. Restart the daemon — it will create a fresh database
 pnpm mcp:http:dev
@@ -186,6 +186,6 @@ pnpm mcp:http:dev
 ```
 
 The repo-local `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`)
-probes port 3099 and auto-spawns the daemon when a session opens, so in normal use this
-situation should not arise. If the hook is disabled or the project is not yet trusted, start
-the daemon manually before opening the session.
+probes this checkout's derived dev port (3099 on the main checkout) and auto-spawns the daemon
+when a session opens, so in normal use this situation should not arise. If the hook is disabled
+or the project is not yet trusted, start the daemon manually before opening the session.

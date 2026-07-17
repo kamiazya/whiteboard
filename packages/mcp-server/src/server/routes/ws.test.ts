@@ -10,6 +10,7 @@ vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return tempDir
   },
+  getDataDir: () => tempDir,
   WHITEBOARD_ROOT: '/tmp/whiteboard',
   REPO_ROOT: '/tmp',
 }))
@@ -19,6 +20,7 @@ const { loadCanvas } = await import('../store/canvas-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createAutoVersionTrigger } = await import('./canvas.js')
 const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest } = await import('./ws.js')
+const { captureLogsForTests } = await import('../log.js')
 
 class FakeWebSocket {
   sent: Array<string | Uint8Array> = []
@@ -50,6 +52,18 @@ class FakeWebSocket {
   async emitMessage(data: Buffer, isBinary: boolean): Promise<void> {
     for (const handler of this.listeners.get('message') ?? []) {
       await handler(data, isBinary)
+    }
+  }
+
+  // Real `ws` sockets are EventEmitters: `emit('message', ...)` invokes the
+  // listener without awaiting whatever promise it returns. `emitMessage`
+  // above awaits the handler, which would hide a handler that lets its
+  // returned promise reject unhandled. This mirrors the real dispatch
+  // semantics so tests can prove the handler never produces an unhandled
+  // rejection even when nothing awaits it.
+  dispatchMessage(data: Buffer, isBinary: boolean): void {
+    for (const handler of this.listeners.get('message') ?? []) {
+      handler(data, isBinary)
     }
   }
 
@@ -554,5 +568,223 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
 
     expect(getReadyClientCount('session1', 'canvas-inflight')).toBe(0)
     ws.emitClose()
+  })
+})
+
+describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-malformed-'))
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    clearCache()
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+    setAutoVersionTrigger(() => Promise.resolve(null))
+  })
+
+  it('never lets an undecodable binary frame become an unhandled promise rejection', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    let unhandled: unknown = null
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandled = reason
+    }
+    process.on('unhandledRejection', onUnhandledRejection)
+
+    try {
+      const ws = new FakeWebSocket()
+      await handleWsUpgrade(
+        { url: '/ws/session1/canvas-malformed', headers: { host: 'localhost:3099' } } as never,
+        ws as never,
+        ['canvas:read', 'canvas:write'],
+      )
+
+      // Dispatch without awaiting, mirroring real `ws` EventEmitter
+      // semantics: the 'message' listener's returned promise is never
+      // awaited by the caller.
+      ws.dispatchMessage(Buffer.from([1, 2, 3]), true)
+
+      // Flush microtasks and the macrotask queue so any unhandled
+      // rejection from the dispatched (but un-awaited) handler surfaces.
+      await new Promise((resolve) => setImmediate(resolve))
+      await new Promise((resolve) => setImmediate(resolve))
+
+      expect(unhandled).toBeNull()
+      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+
+      ws.emitClose()
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection)
+    }
+  })
+
+  it('discards the malformed frame, closes 1003, and logs a structured warning without frame bytes or tokens', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const logs = captureLogsForTests()
+    try {
+      const ws = new FakeWebSocket()
+      await handleWsUpgrade(
+        { url: '/ws/session1/canvas-malformed-2', headers: { host: 'localhost:3099' } } as never,
+        ws as never,
+        ['canvas:read', 'canvas:write'],
+      )
+
+      // Embed a canary in the frame's raw bytes rather than asserting on the
+      // literal `[1, 2, 3]` payload: this frame is still garbage from Loro's
+      // perspective (fails to decode), so it still exercises the malformed-
+      // import branch, but if a future change ever logged the raw frame
+      // bytes (or a field literally named "token" that happened to hold
+      // this payload), the canary would surface in the serialized log and
+      // the assertions below would catch it. Asserting on `[1, 2, 3]` alone
+      // could never fail this way since that payload contains no string a
+      // token/secret redaction concern would ever match.
+      const canary = 'token-canary-must-not-be-logged'
+      await ws.emitMessage(Buffer.from(canary, 'utf8'), true)
+
+      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+
+      clearCache()
+      const saved = await loadCanvas('session1', 'canvas-malformed-2')
+      expect(saved.getMovableList('elements').toJSON()).toEqual([])
+
+      const warnRecord = logs.records.find((r) => r.level === 'warning' && r.scope === 'ws')
+      expect(warnRecord).toBeDefined()
+      expect(warnRecord?.data?.workspaceId).toBe('session1')
+      expect(warnRecord?.data?.slug).toBe('canvas-malformed-2')
+      expect(typeof warnRecord?.data?.updateBytes).toBe('number')
+      const serialized = JSON.stringify(warnRecord)
+      expect(serialized).not.toContain(canary)
+      expect(serialized.toLowerCase()).not.toContain('token')
+
+      ws.emitClose()
+    } finally {
+      logs.restore()
+    }
+  })
+
+  it('a read-only connection sending malformed bytes still closes 1008, never 1003 (scope precedes import)', async () => {
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-malformed-ro', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read'],
+    )
+
+    await ws.emitMessage(Buffer.from([1, 2, 3]), true)
+
+    expect(ws.closes).toEqual([{ code: 1008, reason: 'Insufficient scope' }])
+    ws.emitClose()
+  })
+
+  it('two malformed frames back-to-back cause exactly one close and no crash', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-malformed-3', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read', 'canvas:write'],
+    )
+
+    await ws.emitMessage(Buffer.from([1, 2, 3]), true)
+    await ws.emitMessage(Buffer.from([4, 5, 6]), true)
+
+    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+    ws.emitClose()
+  })
+
+  it('two malformed frames dispatched concurrently (neither awaited before the next starts) still cause exactly one close', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const { getDoc } = await import('../store/doc-cache.js')
+    // Prime the cache so both concurrent `getDoc` calls below resolve off the
+    // cache-hit branch instead of racing two independent fs reads, whose
+    // completion order the test cannot control.
+    await getDoc('session1', 'canvas-malformed-race')
+
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-malformed-race', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+      ['canvas:read', 'canvas:write'],
+    )
+
+    // Dispatch both frames without awaiting in between, mirroring real `ws`
+    // EventEmitter semantics: both handler invocations pass the top-of-handler
+    // `isClosing` check before either's `await getDoc(...)` resolves, so only
+    // a recheck immediately after that await can stop the second one from
+    // also treating its frame as fresh and closing again.
+    ws.dispatchMessage(Buffer.from([1, 2, 3]), true)
+    ws.dispatchMessage(Buffer.from([4, 5, 6]), true)
+
+    await new Promise((resolve) => setImmediate(resolve))
+    await new Promise((resolve) => setImmediate(resolve))
+
+    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+    ws.emitClose()
+  })
+})
+
+describe('handleWsUpgrade binary update persistence failure', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-persist-fail-'))
+    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    clearCache()
+  })
+
+  afterEach(async () => {
+    await rm(tempDir, { recursive: true, force: true })
+    clearCache()
+    setAutoVersionTrigger(() => Promise.resolve(null))
+  })
+
+  it('closes 1011 and evicts the cache when saveCanvas fails after a valid import, without crashing', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const { peekDoc } = await import('../store/doc-cache.js')
+    const logs = captureLogsForTests()
+    try {
+      const ws = new FakeWebSocket()
+      await handleWsUpgrade(
+        { url: '/ws/session1/canvas-persist-fail', headers: { host: 'localhost:3099' } } as never,
+        ws as never,
+        ['canvas:read', 'canvas:write'],
+      )
+
+      const clientDoc = new LoroDoc()
+      const prevVV = clientDoc.version()
+      const list = clientDoc.getMovableList('elements')
+      const map = list.insertContainer(0, new LoroMap())
+      map.set('id', 'ws-elem')
+      clientDoc.commit()
+      const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+
+      // `currentDoc.import(bytes)` must succeed so the cached in-memory doc
+      // already absorbed the mutation; only the persistence step (which
+      // calls `doc.export` internally) fails.
+      const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
+        throw new Error('simulated snapshot failure')
+      })
+
+      await ws.emitMessage(Buffer.from(update), true)
+
+      exportSpy.mockRestore()
+
+      expect(ws.closes).toEqual([{ code: 1011, reason: 'Failed to persist canvas update' }])
+      expect(peekDoc('session1', 'canvas-persist-fail')).toBeUndefined()
+
+      const saved = await loadCanvas('session1', 'canvas-persist-fail')
+      expect(saved.getMovableList('elements').toJSON()).toEqual([])
+
+      const errorRecord = logs.records.find((r) => r.level === 'error' && r.scope === 'ws')
+      expect(errorRecord).toBeDefined()
+      expect(errorRecord?.data?.workspaceId).toBe('session1')
+      expect(errorRecord?.data?.slug).toBe('canvas-persist-fail')
+      const serialized = JSON.stringify(errorRecord)
+      expect(serialized).not.toContain('ws-elem')
+      expect(serialized.toLowerCase()).not.toContain('token')
+
+      ws.emitClose()
+    } finally {
+      logs.restore()
+    }
   })
 })

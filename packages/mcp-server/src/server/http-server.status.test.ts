@@ -30,6 +30,7 @@ vi.mock('./config.js', () => ({
   get DATA_DIR() {
     return tmpRoot
   },
+  getDataDir: () => tmpRoot,
   get DIST_WEB_APP_DIR() {
     return distWebAppDir
   },

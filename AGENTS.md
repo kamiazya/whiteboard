@@ -98,14 +98,18 @@ The repo ships HTTP-mode overrides for both clients:
 Both Claude Code (`.claude/settings.json`) and Codex
 (`.codex/config.toml`) wire a `SessionStart` hook to
 `packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`. The hook
-probes port 3099 and, if nothing is listening, spawns `pnpm mcp:http:dev`
-detached so the first MCP request can connect immediately. It is
-idempotent — if our authenticated daemon is already up it exits
-without touching anything; if a foreign service is on the port it
-fails loudly so the developer can investigate. Output goes to
-`tmp/logs/mcp-http-dev.log`. If hooks are disabled or the project is
-not trusted yet, run `pnpm mcp:http:dev` manually in another terminal
-before opening the repo.
+probes this checkout's derived dev port (3099 on the main checkout,
+a deterministic per-worktree port otherwise — see
+`docs/contributing/development.md`'s ".dev-data" section) and, if
+nothing is listening, spawns `pnpm mcp:http:dev` detached so the first
+MCP request can connect immediately. It is idempotent — if our
+authenticated daemon is already up **and its identity marker matches
+this worktree** it exits without touching anything; if a foreign
+service, or a different worktree's daemon that hash-collided on the
+same port, is on the port it fails loudly so the developer can
+investigate. Output goes to `tmp/logs/mcp-http-dev.log`. If hooks are
+disabled or the project is not trusted yet, run `pnpm mcp:http:dev`
+manually in another terminal before opening the repo.
 
 With HTTP transport every client reload connects to the same long-lived
 daemon, picking up source changes immediately and avoiding the stale-daemon

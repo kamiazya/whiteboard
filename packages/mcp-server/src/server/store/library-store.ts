@@ -1,4 +1,4 @@
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -12,8 +12,8 @@ import { type InstalledLibrariesResponse } from '../../shared/api-contracts/libr
 export type { InstalledLibrariesResponse }
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 export async function loadInstalledLibraries(

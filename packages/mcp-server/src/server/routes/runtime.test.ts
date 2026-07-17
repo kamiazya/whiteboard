@@ -23,6 +23,7 @@ const mockPurgeOldDaemonLogs = vi.fn(async () => ({ removed: 0, retained: 0 }))
 
 vi.mock('../config.js', () => ({
   DATA_DIR: '/__test__/runtime-routes-must-not-touch-real-disk',
+  getDataDir: () => '/__test__/runtime-routes-must-not-touch-real-disk',
   WHITEBOARD_ROOT: '/__test__',
   REPO_ROOT: '/__test__',
 }))

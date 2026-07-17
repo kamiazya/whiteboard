@@ -1,6 +1,6 @@
 {
   "name": "@kamiazya/whiteboard-mcp",
-  "version": "0.0.12",
+  "version": "0.0.18",
   "description": "MCP server + Excalidraw whiteboard UI for AI-assisted diagramming (Claude Code / Codex).",
   "author": "kamiazya",
   "license": "MIT",
@@ -125,7 +125,7 @@
     "mutation:contracts": "stryker run",
     "mcp": "node --import tsx/esm src/server/mcp/index.ts",
     "mcp:http": "node dist/server/index.js --daemon --port=3099 --token=whiteboard-dev",
-    "mcp:http:dev": "tsx watch src/server/index.ts --daemon --port=3099 --token=whiteboard-dev",
+    "mcp:http:dev": "node scripts/dev/with-dev-data-dir.mjs --daemon --token=whiteboard-dev",
     "mcp:inspect": "npx @modelcontextprotocol/inspector",
     "mcp:inspect:stdio": "npx @modelcontextprotocol/inspector node --import tsx/esm src/server/mcp/index.ts",
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",

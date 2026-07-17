@@ -2,16 +2,16 @@ import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, sql } from 'kysely'
-import { DATA_DIR } from '../../config.js'
+import { getDataDir } from '../../config.js'
 import type { DatabaseSchema } from './schema.js'
 
 export type Database = Kysely<DatabaseSchema>
 
 export const DB_FILENAME = 'whiteboard.db'
 
-// One Kysely instance per DATA_DIR. Tests swap DATA_DIR via vi.mock so multiple
+// One Kysely instance per getDataDir(). Tests swap getDataDir() via vi.mock so multiple
 // distinct DBs may be opened across the lifetime of the process; each gets its
-// own cache entry. Production only ever sees one DATA_DIR.
+// own cache entry. Production only ever sees one getDataDir().
 //
 // The cache stores the *promise* of the resolved Database rather than the
 // resolved value itself. Storing only the resolved value made concurrent
@@ -38,7 +38,7 @@ async function buildDb(dataDir: string): Promise<Database> {
   return db
 }
 
-export function getDb(dataDir: string = DATA_DIR): Promise<Database> {
+export function getDb(dataDir: string = getDataDir()): Promise<Database> {
   const existing = cache.get(dataDir)
   if (existing) return existing
   const pending = buildDb(dataDir)
@@ -94,7 +94,7 @@ export async function runDbDisposeHooks(): Promise<void> {
   )
 }
 
-export async function closeDb(dataDir: string = DATA_DIR): Promise<void> {
+export async function closeDb(dataDir: string = getDataDir()): Promise<void> {
   const pending = cache.get(dataDir)
   if (!pending) return
   // Run hooks BEFORE removing the cache entry. A hook (e.g. an already-fired
@@ -107,8 +107,8 @@ export async function closeDb(dataDir: string = DATA_DIR): Promise<void> {
   if (db) await db.destroy()
 }
 
-// Tests mutate DATA_DIR via vi.mock; clearDbCache removes every cached instance
-// without awaiting destroy() so the test setup can swap DATA_DIR without leaking
+// Tests mutate getDataDir() via vi.mock; clearDbCache removes every cached instance
+// without awaiting destroy() so the test setup can swap getDataDir() without leaking
 // connections. Production code should prefer closeDb() to release the underlying
 // libsql connection cleanly.
 //
@@ -137,7 +137,7 @@ export function clearDbCache(): void {
 }
 
 // Test-only seam. `createIsolatedDb` registers a memory-backed Database under
-// a real dataDir so production code calling `getDb(DATA_DIR)` hits the same
+// a real dataDir so production code calling `getDb(getDataDir())` hits the same
 // instance the test prepared. Production never reaches this path —
 // `buildDb()` is the sole entry on the cold cache path.
 export function injectCachedDb(dataDir: string, db: Database): void {

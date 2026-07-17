@@ -14,7 +14,7 @@ import {
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
-import { DATA_DIR } from '../shared/data-dir-secure.js'
+import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
 import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
@@ -37,7 +37,10 @@ export type DaemonRunOutcome =
   | {
       kind: 'input-error'
       message: string
-      code?: 'invalid_allowed_web_origins' | 'invalid_oauth_client_registry'
+      code?:
+        | 'invalid_allowed_web_origins'
+        | 'invalid_oauth_client_registry'
+        | 'token_source_conflict'
     }
   | { kind: 'refused'; message: string }
   | { kind: 'running'; result: DaemonRunReadyResult }
@@ -98,7 +101,16 @@ function installDaemonSignalHandlers(cleanup: () => Promise<void>): void {
 }
 
 export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRunOutcome> {
-  const dataDir = options.dataDir ?? DATA_DIR
+  // An explicit --data-dir must govern ALL persistence (sqlite db, canvas
+  // blobs, exports), not just the daemon registry file. Redirect the shared
+  // data-dir seam before anything below touches disk so every store that
+  // reads getDataDir() follows the requested directory.
+  if (options.dataDir) {
+    overrideDataDir(options.dataDir)
+  }
+  // Read back through the seam (not options.dataDir) so the registry and the
+  // startup lock share the same resolved-absolute path the stores will use.
+  const dataDir = getDataDir()
   const host = options.host ?? '127.0.0.1'
 
   // Pre-startup guard: local-daemon is loopback-only regardless of --host.
@@ -137,6 +149,19 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
       kind: 'input-error',
       message: `Invalid WHITEBOARD_OAUTH_CLIENT_REGISTRY (${oauthRegistry.error}).`,
       code: 'invalid_oauth_client_registry',
+    }
+  }
+
+  // Fail fast on ambiguous token input: honouring one source silently would
+  // let an operator's script think stdin (or the env var) took effect when
+  // the other one actually did. Checked by presence only — never touches
+  // either token's value, so nothing can leak into this message.
+  if (options.tokenStdin && (options.env ?? process.env).WHITEBOARD_DAEMON_TOKEN !== undefined) {
+    return {
+      kind: 'input-error',
+      message:
+        'Conflicting token sources: --token-stdin and WHITEBOARD_DAEMON_TOKEN cannot both be set. Choose one.',
+      code: 'token_source_conflict',
     }
   }
 

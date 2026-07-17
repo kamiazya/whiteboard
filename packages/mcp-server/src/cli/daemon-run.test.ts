@@ -1,6 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { captureLogsForTests } from '../server/log.js'
+import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
 
 const { createServerSpy } = vi.hoisted(() => ({ createServerSpy: vi.fn() }))
 
@@ -156,6 +159,109 @@ describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
     expect(startHttpServerMock).toHaveBeenCalledWith(
       expect.objectContaining({ allowedWebOrigins: [] }),
     )
+  })
+})
+
+describe('runDaemonRun --data-dir storage redirection', () => {
+  afterEach(() => {
+    resetDataDirForTests()
+    startHttpServerMock.mockClear()
+  })
+
+  it('redirects the shared data-dir seam so all storage follows the explicit dataDir', async () => {
+    const dir = join(tmpdir(), `daemon-run-datadir-${Date.now()}`)
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      port: 3099,
+      dataDir: dir,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(getDataDir()).toBe(resolve(dir))
+  })
+
+  it('hands the registry the resolved-absolute dir even when --data-dir is relative', async () => {
+    const rel = `./tmp-daemon-run-rel-${Date.now()}`
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      port: 3099,
+      dataDir: rel,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(getDataDir()).toBe(resolve(rel))
+    const registry = await import('../daemon/daemon-registry.js')
+    const saveMock = vi.mocked(registry.saveDaemonRecord)
+    expect(saveMock.mock.calls.at(-1)?.[1]).toBe(resolve(rel))
+  })
+
+  it('leaves the seam untouched when no dataDir option is given', async () => {
+    const before = getDataDir()
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      port: 3099,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(getDataDir()).toBe(before)
+  })
+})
+
+describe('runDaemonRun token source conflict', () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it('rejects with an input-error and never starts the daemon when --token-stdin and WHITEBOARD_DAEMON_TOKEN are both set', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: true,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_DAEMON_TOKEN: 'env-token-should-never-leak' },
+    })
+    expect(outcome.kind).toBe('input-error')
+    if (outcome.kind === 'input-error') {
+      expect(outcome.code).toBe('token_source_conflict')
+      expect(outcome.message).not.toContain('env-token-should-never-leak')
+    }
+    expect(startHttpServerMock).not.toHaveBeenCalled()
+  })
+
+  it('still uses the env token when only WHITEBOARD_DAEMON_TOKEN is set (no --token-stdin)', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_DAEMON_TOKEN: 'env-only-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'env-only-token' }),
+    )
+  })
+
+  it('still reads the token from stdin when only --token-stdin is set (no env token)', async () => {
+    const fakeStdin = new EventEmitter() as EventEmitter & { setEncoding: (enc: string) => void }
+    fakeStdin.setEncoding = vi.fn()
+    const originalStdin = process.stdin
+    Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true })
+    try {
+      const outcomePromise = runDaemonRun({
+        host: '127.0.0.1',
+        tokenStdin: true,
+        dataDir: '/tmp/whiteboard-test',
+        env: {},
+      })
+      queueMicrotask(() => {
+        fakeStdin.emit('data', 'stdin-only-token\n')
+        fakeStdin.emit('end')
+      })
+      const outcome = await outcomePromise
+      expect(outcome.kind).toBe('running')
+      expect(startHttpServerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ token: 'stdin-only-token' }),
+      )
+    } finally {
+      Object.defineProperty(process, 'stdin', { value: originalStdin, configurable: true })
+    }
   })
 })
 

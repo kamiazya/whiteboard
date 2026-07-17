@@ -1,7 +1,7 @@
 import type { LoroDoc } from 'loro-crdt'
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { listCanvases, loadCanvas } from './canvas-store.js'
@@ -10,7 +10,7 @@ import { assertPathWithinDir } from './path-guard.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
-// Garbage-collect files in <DATA_DIR>/<workspaceId>/files/ that are not
+// Garbage-collect files in <getDataDir()>/<workspaceId>/files/ that are not
 // referenced by any live canvas in the workspace — and, when a versionStore
 // is supplied, by any saved past version state either.
 //
@@ -29,8 +29,8 @@ export interface PurgeFilesResult {
 
 function workspaceFilesDir(workspaceId: string): string {
   validateWorkspaceId(workspaceId)
-  const dir = join(DATA_DIR, workspaceId, 'files')
-  return assertPathWithinDir(dir, DATA_DIR, 'files dir')
+  const dir = join(getDataDir(), workspaceId, 'files')
+  return assertPathWithinDir(dir, getDataDir(), 'files dir')
 }
 
 // Walk a single doc state and collect fileIds for image elements whose
@@ -44,9 +44,7 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
       typeof (el as { get?: unknown }).get === 'function'
         ? (k: string) => (el as { get: (k: string) => unknown }).get(k)
         : null
-    const obj = get
-      ? null
-      : ((el as { toJSON?: () => Record<string, unknown> }).toJSON?.() ?? null)
+    const obj = get ? null : ((el as { toJSON?: () => Record<string, unknown> }).toJSON?.() ?? null)
     const type = get ? get('type') : obj?.type
     if (type !== 'image') continue
     const isDeleted = get ? get('isDeleted') : obj?.isDeleted
@@ -92,10 +90,7 @@ async function collectReferencedFileIds(
         const past = await versionStore.load(workspaceId, v.id, live)
         if (past) collectFromDoc(past, referenced)
       } catch (err) {
-        getLogger('file-gc').warning(
-          { workspaceId, slug, versionId: v.id, err },
-          'skipped version',
-        )
+        getLogger('file-gc').warning({ workspaceId, slug, versionId: v.id, err }, 'skipped version')
         skipped.push({ slug, versionId: v.id, cause: err })
       }
     }

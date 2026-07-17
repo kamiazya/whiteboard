@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -90,9 +90,13 @@ function startDaemon({ dataDir, port, token, label }) {
     {
       cwd: REPO_ROOT,
       env: {
-        ...process.env,
+        ...scrubDevEnv(process.env),
         WHITEBOARD_DATA_DIR: dataDir,
-        WHITEBOARD_DAEMON_TOKEN: token,
+        // DAEMON_ENTRY is spawned directly (not via `whiteboard daemon run`),
+        // so resolveToken() in server/index.ts only honours --token= or
+        // WHITEBOARD_TOKEN. WHITEBOARD_DAEMON_TOKEN is read by the `daemon
+        // run` CLI subcommand only and has no effect here.
+        WHITEBOARD_TOKEN: token,
         WHITEBOARD_LOG_LEVEL: process.env.WHITEBOARD_LOG_LEVEL ?? 'warning',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -183,10 +187,7 @@ async function shutdownDaemon(daemon) {
     return
   }
   daemon.child.kill('SIGTERM')
-  const winner = await Promise.race([
-    daemon.closed,
-    delay(SHUTDOWN_TIMEOUT_MS, 'timeout'),
-  ])
+  const winner = await Promise.race([daemon.closed, delay(SHUTDOWN_TIMEOUT_MS, 'timeout')])
   if (winner === 'timeout') {
     daemon.child.kill('SIGKILL')
     await daemon.closed
@@ -194,7 +195,10 @@ async function shutdownDaemon(daemon) {
 }
 
 function runCli(args) {
-  return spawnSync(process.execPath, [CLI_ENTRY, ...args], { encoding: 'utf-8' })
+  return spawnSync(process.execPath, [CLI_ENTRY, ...args], {
+    encoding: 'utf-8',
+    env: scrubDevEnv(process.env),
+  })
 }
 
 // assertNoLeak (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
@@ -244,16 +248,11 @@ try {
   }
 
   const seededList = await (
-    await authedFetch(
-      daemonA,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
-    )
+    await authedFetch(daemonA, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
   ).json()
   const seededSlugs = (seededList?.canvases ?? []).map((c) => c.slug)
   if (!seededSlugs.includes(SEED_CANVAS_SLUG)) {
-    throw new Error(
-      `seeded canvas not present after POST: ${JSON.stringify(seededSlugs)}`,
-    )
+    throw new Error(`seeded canvas not present after POST: ${JSON.stringify(seededSlugs)}`)
   }
   console.log(`[packaged-daemon-backup-restore-smoke] seeded workspaceId → ${WORKSPACE_ID}`)
 
@@ -287,7 +286,7 @@ try {
     const proc = spawn(
       process.execPath,
       [CLI_ENTRY, 'daemon', 'stop', '--json', `--data-dir=${srcDataDir}`],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      { stdio: ['ignore', 'pipe', 'pipe'], env: scrubDevEnv(process.env) },
     )
     let out = ''
     let err = ''
@@ -297,10 +296,13 @@ try {
     proc.stderr.on('data', (c) => {
       err += c.toString()
     })
-    proc.on('close', (status) => res({ status, stdout: out, stderr: err }))
+    proc.on('close', (status, signal) => res({ status, signal, stdout: out, stderr: err }))
   })
   if (stopA.status !== 0) {
-    throw new Error(`daemon A stop failed: ${stopA.status} ${stopA.stderr}`)
+    const reason = stopA.signal ? `signal ${stopA.signal}` : `code ${stopA.status}`
+    throw new Error(
+      `daemon A stop failed: ${reason}\n--- stdout ---\n${stopA.stdout}\n--- stderr ---\n${stopA.stderr}`,
+    )
   }
   assertNoLeak('daemon A stop stdout', stopA.stdout, [TOKEN_A])
   assertNoLeak('daemon A stop stderr', stopA.stderr, [TOKEN_A])
@@ -345,8 +347,19 @@ try {
   const statusBRes = await authedFetch(daemonB, '/api/runtime/status')
   if (!statusBRes.ok) throw new Error(`daemon B /status: ${statusBRes.status}`)
   const statusBText = await statusBRes.text()
-  assertNoLeak('runtime status B', statusBText, [TOKEN_B])
   const statusB = JSON.parse(statusBText)
+  // storage.dataDir is a documented field of GET /api/runtime/status (asserted
+  // below), not a leaked path — under /tmp on Linux CI it otherwise trips
+  // BASE_LEAK_PATTERNS' blanket /tmp/ check. Redact only that known-good
+  // field (via a parsed-object copy, not a raw-text replace, so a payload
+  // that happens to contain the same substring elsewhere or JSON-escaped
+  // characters in the path can't dodge or over-match the leak scan) before
+  // running it, so any other /tmp/ path (e.g. a stray stack frame) still
+  // fails the check.
+  const statusBForLeakCheck = statusB.storage
+    ? { ...statusB, storage: { ...statusB.storage, dataDir: '<dataDir>' } }
+    : statusB
+  assertNoLeak('runtime status B', JSON.stringify(statusBForLeakCheck), [TOKEN_B])
   if (statusB.storage?.dataDir !== restoredDataDir) {
     throw new Error(
       `daemon B storage.dataDir expected ${restoredDataDir}, got ${statusB.storage?.dataDir}`,
@@ -368,16 +381,11 @@ try {
     )
   }
   const restoredCanvases = await (
-    await authedFetch(
-      daemonB,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
-    )
+    await authedFetch(daemonB, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
   ).json()
   const restoredSlugs = (restoredCanvases?.canvases ?? []).map((c) => c.slug)
   if (!restoredSlugs.includes(SEED_CANVAS_SLUG)) {
-    throw new Error(
-      `restored daemon missing seeded canvas: ${JSON.stringify(restoredSlugs)}`,
-    )
+    throw new Error(`restored daemon missing seeded canvas: ${JSON.stringify(restoredSlugs)}`)
   }
   console.log(
     `[packaged-daemon-backup-restore-smoke] restored data round-tripped (workspace=${WORKSPACE_ID}, canvas=${SEED_CANVAS_SLUG})`,
@@ -422,12 +430,7 @@ try {
   )
 
   // ───────── Phase 4: packaged CLI status against restored dir ─────────
-  const cliRun = runCli([
-    'daemon',
-    'status',
-    '--json',
-    `--data-dir=${restoredDataDir}`,
-  ])
+  const cliRun = runCli(['daemon', 'status', '--json', `--data-dir=${restoredDataDir}`])
   if (cliRun.status !== 0) {
     throw new Error(
       `whiteboard daemon status --json (restored) exited ${cliRun.status}\n` +
@@ -437,13 +440,21 @@ try {
   assertNoLeak('cli status stdout', cliRun.stdout, [TOKEN_B])
   assertNoLeak('cli status stderr', cliRun.stderr, [TOKEN_B])
   const cliResult = JSON.parse(cliRun.stdout.trim())
+  // `whiteboard daemon status --json` (see daemon-status.ts DaemonStatusResult)
+  // has never had a top-level baseUrl field — only record.port/pid. Derive
+  // the expected base URL from record.port instead of asserting a field the
+  // CLI contract does not emit.
   const cliExpectations = [
     ['ok', cliResult.ok, true],
     ['reason', cliResult.reason, null],
     ['recordFresh', cliResult.recordFresh, true],
     ['record.pid', cliResult.record?.pid, daemonB.child.pid],
     ['record.port', cliResult.record?.port, PORT_B],
-    ['baseUrl', cliResult.baseUrl, `http://${HOST}:${PORT_B}`],
+    [
+      'derived baseUrl (host + record.port)',
+      `http://${HOST}:${cliResult.record?.port}`,
+      `http://${HOST}:${PORT_B}`,
+    ],
   ]
   for (const [field, actual, expected] of cliExpectations) {
     if (actual !== expected) {
@@ -459,7 +470,7 @@ try {
     const proc = spawn(
       process.execPath,
       [CLI_ENTRY, 'daemon', 'stop', '--json', `--data-dir=${restoredDataDir}`],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      { stdio: ['ignore', 'pipe', 'pipe'], env: scrubDevEnv(process.env) },
     )
     let out = ''
     let err = ''
@@ -469,10 +480,13 @@ try {
     proc.stderr.on('data', (c) => {
       err += c.toString()
     })
-    proc.on('close', (status) => res({ status, stdout: out, stderr: err }))
+    proc.on('close', (status, signal) => res({ status, signal, stdout: out, stderr: err }))
   })
   if (stopB.status !== 0) {
-    throw new Error(`daemon B stop failed: ${stopB.status} ${stopB.stderr}`)
+    const reason = stopB.signal ? `signal ${stopB.signal}` : `code ${stopB.status}`
+    throw new Error(
+      `daemon B stop failed: ${reason}\n--- stdout ---\n${stopB.stdout}\n--- stderr ---\n${stopB.stderr}`,
+    )
   }
   assertNoLeak('daemon B stop stdout', stopB.stdout, [TOKEN_B])
   assertNoLeak('daemon B stop stderr', stopB.stderr, [TOKEN_B])

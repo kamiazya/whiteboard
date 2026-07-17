@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { nanoid } from 'nanoid'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateCanvasId, validateSlug, validateWorkspaceId } from '../validators.js'
 import {
@@ -30,7 +30,7 @@ export class ConflictError extends Error {
 // The canvasId is the stable nanoid PK from the canvases table, so renaming a
 // canvas slug does not move blobs around.
 function blobsRoot(): string {
-  return join(DATA_DIR, 'blobs')
+  return join(getDataDir(), 'blobs')
 }
 
 function canvasBlobPath(workspaceId: string, canvasId: string): string {
@@ -49,8 +49,8 @@ const SNAPSHOT_WARN_BYTES = 32 * 1024 * 1024 // 32 MiB
 const warnedSnapshots = new Set<string>()
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and

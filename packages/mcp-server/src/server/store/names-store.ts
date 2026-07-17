@@ -1,4 +1,4 @@
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { validateSlug, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -16,8 +16,8 @@ export type { WorkspaceNames }
 // .names.json was missing, so the contract is unchanged for callers.
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 export async function loadWorkspaceNames(workspaceId: string): Promise<WorkspaceNames> {
