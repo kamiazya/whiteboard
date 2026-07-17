@@ -162,7 +162,11 @@ function runCli(args, { env } = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
     env: { ...scrubDevEnv(process.env), ...env },
     encoding: 'utf8',
-    timeout: 10_000,
+    // `server stop` can itself wait up to 10s (DEFAULT_STOP_TIMEOUT_MS in
+    // server-stop.ts) for the child process to exit before escalating to
+    // SIGKILL. A CLI timeout equal to that budget races it — bump ours to
+    // leave real headroom over the production-side wait.
+    timeout: 15_000,
   })
 }
 
