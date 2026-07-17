@@ -35,6 +35,7 @@ import {
   setResolveExportFn,
   setResolveViewportFn,
 } from './routes/ws.js'
+import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import type { AuthScope } from './security/auth-strategy.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
@@ -50,6 +51,7 @@ import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
 import { resolveApiRouteScope } from './security/route-scope-registry.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
+import { createWsTicketStore, type WsTicketStore } from './security/ws-ticket-store.js'
 import {
   BranchNotFoundError,
   deleteBranch,
@@ -223,6 +225,13 @@ export interface LocalDaemonAppOptions {
    *  configures at least one client. See oauth-authz-registry.ts for why
    *  this is never derived from allowedWebOrigins. */
   oauthClientRegistry?: OAuthClientRegistry
+  /** Backing store for POST /api/ws-ticket (ADR-0005). Owned by
+   *  http-server.ts, which is the only other place that needs this exact
+   *  instance — the raw WS `upgrade` handler redeems the ticket the route
+   *  below mints. Defaults to a private, unshared store when omitted (tests
+   *  exercising this app in isolation), which still makes the route work,
+   *  just not reachable from a real WS upgrade outside this process. */
+  wsTicketStore?: WsTicketStore
 }
 
 export interface ServerModeAppOptions {
@@ -643,6 +652,22 @@ export function createApp(options: AppOptions) {
   app.route('/', createStatusRouter())
   app.route('/', createLibrariesRouter())
   app.route('/', createPaletteRouter())
+  // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
+  // OAuth grant to a WS upgrade — server-mode's WS auth goes through its own
+  // AsyncAuthStrategy and never needs this. Mounted even when no OAuth
+  // registry is configured (oauthAuthz undefined): the route always 401s in
+  // that case because there is no grantStore to verify a presented bearer
+  // against, same "declared but always-refuses when unconfigured" shape as
+  // the rest of this surface.
+  if (options.authMode === 'local-daemon') {
+    app.route(
+      '/',
+      createWsTicketRouter({
+        grantStore: oauthAuthz?.store,
+        ticketStore: options.wsTicketStore ?? createWsTicketStore(),
+      }),
+    )
+  }
   app.route(
     '/',
     createRuntimeRouter({

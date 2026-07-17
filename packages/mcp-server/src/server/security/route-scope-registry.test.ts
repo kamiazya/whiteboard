@@ -80,6 +80,58 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     ).toEqual([])
   })
 
+  it('every /api/* route mounted on the local-daemon app resolves to a scope decision', async () => {
+    // POST /api/ws-ticket only mounts under authMode: 'local-daemon' (see
+    // app.ts), so the server-mode walk above never sees it — a local-daemon
+    // app is built here too, or a newly local-daemon-only route could ship
+    // with a registry gap the guard above would never catch.
+    const { createApp } = await import('../app.js')
+    const app = createApp({
+      authMode: 'local-daemon',
+      touch: () => {},
+      getStatus: () => ({
+        ok: true,
+        pid: 1,
+        host: '127.0.0.1',
+        port: 3099,
+        baseUrl: 'http://127.0.0.1:3099',
+        version: '0.0.0',
+        startedAt: new Date().toISOString(),
+        uptimeMs: 0,
+        idleForMs: 0,
+        auth: { mode: 'local-token', hasToken: false },
+        storage: { dataDir: tempDir, dataDirWritable: true },
+        app: { served: true, buildPresent: true, ui: 'server-placeholder' },
+        mcp: { httpEnabled: true, endpoint: 'http://127.0.0.1:3099/mcp' },
+        clients: { connected: 0, ready: 0 },
+      }),
+      shutdown: () => Promise.resolve(),
+    })
+
+    const apiRoutes = app.routes.filter(
+      (route) => route.path.startsWith('/api/') && !route.path.endsWith('*'),
+    )
+    expect(apiRoutes.length).toBeGreaterThan(0)
+
+    const undeclared = apiRoutes
+      .map((route) => ({ ...route, decision: resolveApiRouteScope(route.method, route.path) }))
+      .filter((route) => route.decision === null)
+
+    expect(
+      undeclared,
+      `routes mounted with no scope declaration: ${undeclared
+        .map((r) => `${r.method} ${r.path}`)
+        .join(', ')}`,
+    ).toEqual([])
+  })
+
+  it('POST /api/ws-ticket requires canvas:read (ADR-0005 connection ticket mint)', () => {
+    expect(resolveApiRouteScope('POST', '/api/ws-ticket')).toEqual({
+      kind: 'scoped',
+      scopes: ['canvas:read'],
+    })
+  })
+
   it('an undeclared path resolves to null (fail-closed signal, not a default scope)', () => {
     expect(resolveApiRouteScope('GET', '/api/some-route-nobody-declared-yet')).toBeNull()
   })

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  type CapturedLogsHandle,
   captureLogsForTests,
   getLogger,
   isLogLevelEnabled,
   parseLogLevel,
   setLogLevel,
-  type CapturedLogsHandle,
 } from './log.js'
 
 describe('parseLogLevel', () => {
@@ -127,6 +127,7 @@ describe('redaction', () => {
     daemonToken: 'daemon-secret-token',
     bootstrapToken: 'bootstrap-secret-token',
     accessToken: 'oauth-secret-token',
+    wsTicket: 'ws-ticket-secret-value',
     authorization: 'Bearer super-secret',
     cookie: 'session=super-secret',
     password: 'hunter2',
