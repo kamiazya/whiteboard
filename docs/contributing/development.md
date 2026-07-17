@@ -72,6 +72,8 @@ The daemon listens on `http://127.0.0.1:3099/mcp`.
 
 > **Auto-start:** The repo's `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`) probes port 3099 and spawns the daemon automatically when Claude Code or Codex opens the repo. If the daemon does not start automatically (hooks disabled, project not yet trusted, or port 3099 already in use by another process), run `pnpm mcp:http:dev` manually in a separate terminal before making MCP calls.
 
+> **Data lives in `.dev-data/`, not your real `~/.whiteboard`:** `pnpm mcp:http:dev` (and anything that shells out to it — `mcp:debug:http`, the `SessionStart` hook) runs through `packages/mcp-server/scripts/dev/with-dev-data-dir.mjs`, which sets `WHITEBOARD_DATA_DIR` to `<repo root>/.dev-data` unless you already set it yourself. This keeps dev canvases, the SQLite metadata DB, and daemon tokens out of the real `~/.whiteboard` a packaged (npm/Docker/stdio) install uses. Launching from a `git worktree` gets that worktree's own `.dev-data` — intentional, so parallel dev-loop lanes never share (or corrupt) each other's canvas data. If you have existing dev data under `~/.whiteboard` from before this change, move it in from the repo root with `mv ~/.whiteboard .dev-data` — do this only while no dev daemon is running, and note that an already-running old daemon on `:3099` keeps writing to `~/.whiteboard` until you restart it.
+
 **Codex** — set in `~/.codex/config.toml`:
 
 ```toml
