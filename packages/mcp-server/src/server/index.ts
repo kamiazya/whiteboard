@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
+import { PACKAGE_VERSION } from '../shared/package-version.js'
+import { getDataDir } from './config.js'
+import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
+import { isDirectEntryPoint } from './entrypoint.js'
 import { startHttpServer } from './http-server.js'
-import { DATA_DIR } from './config.js'
+import { getLogger } from './log.js'
 import {
   createLocalTokenMcpHttpAuthStrategy,
   resolveMcpProtectedResourceMetadataFromEnv,
 } from './security/mcp-auth.js'
-import { isDirectEntryPoint } from './entrypoint.js'
 import { parseOAuthClientRegistryEnv } from './security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
-import { PACKAGE_VERSION } from '../shared/package-version.js'
-import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
-import { getLogger } from './log.js'
 
 function readArg(name: string, fallback?: string): string | undefined {
   const prefix = `--${name}=`
@@ -159,7 +159,17 @@ export async function main() {
   // Block startup until the schema is migrated and the v0 importer has run
   // so route handlers never see a half-initialized data directory.
   const { prepareDataDir } = await import('./store/db/prepare.js')
-  await prepareDataDir(DATA_DIR)
+  const dataDir = getDataDir()
+  await prepareDataDir(dataDir)
+
+  // Notice level (not info) because misdirected persistence — e.g. a dev
+  // daemon accidentally writing into the real ~/.whiteboard — is expensive
+  // to notice otherwise; this line is the one place that names where data
+  // actually landed for this process.
+  getLogger('server-index').notice(
+    { dataDir, source: process.env.WHITEBOARD_DATA_DIR ? 'env' : 'default' },
+    'resolved data dir',
+  )
 
   // Best-effort: warm the headless renderer in the background so the first
   // export_canvas call (when no browser is connected) does not pay the
@@ -179,19 +189,27 @@ export async function main() {
     oauthClientRegistry: oauthRegistry.registry,
     onClose: daemonMode
       ? async () => {
-          await deleteDaemonRecord(DATA_DIR)
+          await deleteDaemonRecord(dataDir)
         }
       : undefined,
   })
 
   if (daemonMode && token) {
-    await saveDaemonRecord({
-      pid: process.pid,
-      port: running.port,
-      token,
-      version,
-      startedAt: running.getRuntimeStatus().startedAt,
-    })
+    // Pass the resolved `dataDir` explicitly rather than relying on
+    // saveDaemonRecord's default parameter (the frozen DATA_DIR const) — the
+    // default would silently diverge from where this process actually
+    // prepared/serves data whenever getDataDir() has been redirected (tests,
+    // and any future dev entrypoint that redirects the seam).
+    await saveDaemonRecord(
+      {
+        pid: process.pid,
+        port: running.port,
+        token,
+        version,
+        startedAt: running.getRuntimeStatus().startedAt,
+      },
+      dataDir,
+    )
   }
 
   const shutdown = () => {
