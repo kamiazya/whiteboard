@@ -9,6 +9,7 @@ import { isDirectEntryPoint } from '../entrypoint.js'
 import { createDaemonClient } from './daemon-client.js'
 import { wireMcpLogging } from './logging.js'
 import { ensureWorkspaceId } from './session-resolver.js'
+import { installStdioLifecycle } from './stdio-lifecycle.js'
 import {
   buildDrawDiagramPrompt,
   formatInstalledLibrariesResource,
@@ -181,6 +182,20 @@ export async function main() {
   const server = await createExcalidrawMcpServer()
   const transport = new StdioServerTransport()
   await server.connect(transport)
+
+  // StdioServerTransport only listens for 'data'/'error' on stdin, never
+  // 'end'/'close' — a client disconnect (parent process exit, pipe close)
+  // otherwise leaves this process parked on a stdin that will never
+  // produce another byte, with no signal handlers to fall back on either.
+  // Only wired here (not in createExcalidrawMcpServer, which the HTTP
+  // /mcp handler reuses per-request) so a stdio client's disconnect never
+  // affects the long-lived HTTP daemon.
+  installStdioLifecycle({
+    stdin: process.stdin,
+    signals: { on: (signal, listener) => process.on(signal, listener) },
+    closeServer: () => server.close(),
+    exit: (code) => process.exit(code),
+  })
 }
 
 const isEntryPoint = isDirectEntryPoint(import.meta.url)
