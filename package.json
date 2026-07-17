@@ -64,7 +64,7 @@
     "prepare": "lefthook install || true"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.0.0",
+    "@biomejs/biome": "^2.5.3",
     "@cyclonedx/cyclonedx-npm": "^5.0.0",
     "@secretlint/secretlint-rule-pattern": "13.0.2",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.2",
