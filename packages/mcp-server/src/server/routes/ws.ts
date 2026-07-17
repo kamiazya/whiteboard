@@ -252,9 +252,15 @@ export async function handleWsUpgrade(
   // could still have an in-scope follow-up frame (e.g. `client_ready`) take
   // effect on a socket that is on its way out.
   let isClosing = false
-  function closeForInsufficientScope(): void {
+  // Every server-initiated close must set `isClosing` first so an already-queued
+  // in-scope frame (e.g. `client_ready`) does not take effect on a socket that is
+  // on its way out. Funnel all closes through here to keep that invariant in one place.
+  function closeSocket(code: number, reason: string): void {
     isClosing = true
-    ws.close(1008, 'Insufficient scope')
+    ws.close(code, reason)
+  }
+  function closeForInsufficientScope(): void {
+    closeSocket(1008, 'Insufficient scope')
   }
 
   ws.on('message', async (data: RawData, isBinary: boolean) => {
@@ -359,8 +365,7 @@ export async function handleWsUpgrade(
           { workspaceId, slug, updateBytes: bytes.byteLength, err },
           'ws binary update rejected: malformed Loro import data',
         )
-        isClosing = true
-        ws.close(1003, 'Malformed canvas update')
+        closeSocket(1003, 'Malformed canvas update')
         return
       }
 
