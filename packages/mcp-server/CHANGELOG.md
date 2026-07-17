@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.0.15](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.14...mcp-server-v0.0.15) (2026-07-17)
+
+
+### Features
+
+* **mcp-server:** isolate dev daemon data under repo-local .dev-data and make DATA_DIR test-injectable ([#243](https://github.com/kamiazya/whiteboard/issues/243)) ([9922f9d](https://github.com/kamiazya/whiteboard/commit/9922f9d98c24ea0f4ae85886235c0d1b09ded0db))
+
 ## [0.0.14](https://github.com/kamiazya/whiteboard/compare/mcp-server-v0.0.13...mcp-server-v0.0.14) (2026-07-17)
 
 
