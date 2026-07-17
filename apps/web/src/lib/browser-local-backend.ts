@@ -1,15 +1,27 @@
+import type {
+  BinaryFileDataLike,
+  CanvasBackend,
+  CanvasBackendHandlers,
+} from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
-import type { CanvasBackend, CanvasBackendHandlers, BinaryFileDataLike } from '@kamiazya/whiteboard-mcp/browser-contract'
+import { CanvasFileStore, dataUrlToBlob } from './canvas-file-store.js'
 import { LoroStore } from './loro-store.js'
 
 /**
  * BrowserLocalBackend: CanvasBackend implementation for fully offline,
  * browser-local use. Persists Loro CRDT snapshots and incremental deltas
- * in IndexedDB via LoroStore (DB v2 'loroCanvases' store).
+ * in IndexedDB via LoroStore (DB v2 'loroCanvases' store), and uploaded
+ * image files via CanvasFileStore (DB v4 'canvasFiles' store).
  *
- * getFile/putFile: OPFS file storage is deferred to a later slice. Both
- * methods are present to satisfy the CanvasBackend interface; getFile
- * returns null and putFile resolves without calling onFileSuccess.
+ * getFile/putFile: images are persisted to IndexedDB (not OPFS — see the
+ * class-level design note in canvas-file-store.ts for the rationale).
+ * putFile stores each entry keyed by its tuple fileId (never
+ * BinaryFileDataLike.id, which callers must not rely on for keying) and
+ * calls onFileSuccess once per successfully stored entry; it rejects on a
+ * storage failure so the caller never observes a false "success". getFile
+ * returns null (without signaling onError) for both unknown ids and
+ * corrupt/unknown-version records, so a damaged store degrades to a missing
+ * image instead of spamming onError on every render.
  *
  * sendClientReady/sendExportResponse: no WebSocket in browser-local mode;
  * both are no-ops.
@@ -26,14 +38,16 @@ import { LoroStore } from './loro-store.js'
 export class BrowserLocalBackend implements CanvasBackend {
   private readonly canvasId: string
   private readonly store: LoroStore
+  private readonly fileStore: CanvasFileStore
   private handlers: CanvasBackendHandlers | null = null
   private disconnected = false
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
 
-  constructor(canvasId: string, store?: LoroStore) {
+  constructor(canvasId: string, store?: LoroStore, fileStore?: CanvasFileStore) {
     this.canvasId = canvasId
     this.store = store ?? new LoroStore()
+    this.fileStore = fileStore ?? new CanvasFileStore()
   }
 
   connect(handlers: CanvasBackendHandlers): void {
@@ -86,27 +100,53 @@ export class BrowserLocalBackend implements CanvasBackend {
   }
 
   /**
-   * OPFS file storage is deferred. Returns null for every fileId.
+   * Returns the persisted Blob for fileId, or null for an unknown id and for
+   * a corrupt/unknown-version record — never calls onError, since a read-path
+   * miss is not a storage failure (see CanvasFileStore.get).
    */
-  async getFile(_fileId: string): Promise<Blob | null> {
-    return null
+  async getFile(fileId: string): Promise<Blob | null> {
+    return this.fileStore.get(fileId)
   }
 
   /**
-   * OPFS file storage is deferred. Resolves without calling onFileSuccess.
+   * Persists each entry keyed by its tuple fileId (the dedupe key
+   * useCanvasSync already uses — never `data.id`, which a caller's
+   * BinaryFileDataLike is not guaranteed to agree with). Calls
+   * onFileSuccess once per successfully stored entry. Rejects and routes
+   * handlers.onError?.('storage-failure') on any store failure so a failed
+   * upload is never observed as a silent success.
    */
   async putFile(
-    _newEntries: [string, BinaryFileDataLike][],
-    _onFileSuccess: (fileId: string) => void,
+    newEntries: [string, BinaryFileDataLike][],
+    onFileSuccess: (fileId: string) => void,
   ): Promise<void> {
-    // Intentionally a no-op: OPFS upload is not implemented in 3-C.
+    if (newEntries.length === 0) return
+
+    try {
+      for (const [fileId, data] of newEntries) {
+        const blob = dataUrlToBlob(data.dataURL, data.mimeType)
+        await this.fileStore.put(fileId, {
+          mimeType: blob.type,
+          blob,
+          created: data.created,
+        })
+        onFileSuccess(fileId)
+      }
+    } catch (err) {
+      this.handlers?.onError?.('storage-failure')
+      throw err
+    }
   }
 
   /** No WebSocket in browser-local mode. */
-  sendClientReady(): void { /* no-op */ }
+  sendClientReady(): void {
+    /* no-op */
+  }
 
   /** No WebSocket in browser-local mode. */
-  sendExportResponse(_requestId: string, _data: string): void { /* no-op */ }
+  sendExportResponse(_requestId: string, _data: string): void {
+    /* no-op */
+  }
 
   // ── Private ──────────────────────────────────────────────────────────────────
 
