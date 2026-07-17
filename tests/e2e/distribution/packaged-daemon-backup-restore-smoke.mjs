@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -90,7 +90,7 @@ function startDaemon({ dataDir, port, token, label }) {
     {
       cwd: REPO_ROOT,
       env: {
-        ...process.env,
+        ...scrubDevEnv(process.env),
         WHITEBOARD_DATA_DIR: dataDir,
         // DAEMON_ENTRY is invoked directly (not via `whiteboard daemon run`),
         // so the token is read by resolveToken() in server/index.ts, which
@@ -199,7 +199,10 @@ async function shutdownDaemon(daemon) {
 }
 
 function runCli(args) {
-  return spawnSync(process.execPath, [CLI_ENTRY, ...args], { encoding: 'utf-8' })
+  return spawnSync(process.execPath, [CLI_ENTRY, ...args], {
+    encoding: 'utf-8',
+    env: scrubDevEnv(process.env),
+  })
 }
 
 // assertNoLeak (BASE_LEAK_PATTERNS) is imported from smoke-helpers.mjs.
@@ -287,7 +290,7 @@ try {
     const proc = spawn(
       process.execPath,
       [CLI_ENTRY, 'daemon', 'stop', '--json', `--data-dir=${srcDataDir}`],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      { stdio: ['ignore', 'pipe', 'pipe'], env: scrubDevEnv(process.env) },
     )
     let out = ''
     let err = ''
@@ -457,7 +460,7 @@ try {
     const proc = spawn(
       process.execPath,
       [CLI_ENTRY, 'daemon', 'stop', '--json', `--data-dir=${restoredDataDir}`],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
+      { stdio: ['ignore', 'pipe', 'pipe'], env: scrubDevEnv(process.env) },
     )
     let out = ''
     let err = ''

@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -57,6 +57,7 @@ function fail(msg, ctx = {}) {
 
 function runCli(args, opts = {}) {
   return spawnSync(process.execPath, [CLI, ...args], {
+    env: scrubDevEnv(process.env),
     ...opts,
     encoding: 'utf8',
     timeout: 10_000,
@@ -70,7 +71,8 @@ function runCli(args, opts = {}) {
   if (r.stdout.trim() !== '') fail('scenario 1: stdout must be empty', { stdout: r.stdout })
   assertNoLeak('scenario 1 stderr', r.stderr)
   if (r.stderr.includes('smoke-argv-secret-token')) fail('scenario 1: raw token in stderr')
-  if (!r.stderr.includes('--token')) fail('scenario 1: error must mention --token', { stderr: r.stderr })
+  if (!r.stderr.includes('--token'))
+    fail('scenario 1: error must mention --token', { stderr: r.stderr })
   console.log('[token-smoke] scenario 1 PASS: --token=<value> → exit 64, stderr safe')
 }
 
@@ -79,13 +81,10 @@ function runCli(args, opts = {}) {
   const ENV_TOKEN = 'smoke-env-conflict-token-XYZ'
   const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-token-smoke-s2-'))
   try {
-    const r = runCli(
-      ['daemon', 'run', '--json', '--token-stdin', `--data-dir=${dataDir}`],
-      {
-        input: 'stdin-conflict-token\n',
-        env: { ...process.env, WHITEBOARD_DAEMON_TOKEN: ENV_TOKEN },
-      },
-    )
+    const r = runCli(['daemon', 'run', '--json', '--token-stdin', `--data-dir=${dataDir}`], {
+      input: 'stdin-conflict-token\n',
+      env: { ...scrubDevEnv(process.env), WHITEBOARD_DAEMON_TOKEN: ENV_TOKEN },
+    })
     if (r.status !== 1) fail(`scenario 2: expected exit 1, got ${r.status}`, { stderr: r.stderr })
     if (r.stdout.trim() !== '') fail('scenario 2: stdout must be empty', { stdout: r.stdout })
     assertNoLeak('scenario 2 stderr', r.stderr)
@@ -98,16 +97,27 @@ function runCli(args, opts = {}) {
 }
 
 // --- Scenarios 3 & 4: real daemon runs ----------------------------------
-async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = process.env) {
+async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = scrubDevEnv(process.env)) {
   const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-token-smoke-daemon-'))
   let stdoutBuf = ''
   let stderrBuf = ''
   let firstLineResolve
-  const firstLine = new Promise((r) => { firstLineResolve = r })
+  const firstLine = new Promise((r) => {
+    firstLineResolve = r
+  })
 
   const child = spawn(
     process.execPath,
-    [CLI, 'daemon', 'run', '--json', `--host=${HOST}`, `--port=${PORT}`, `--data-dir=${dataDir}`, ...extraArgs],
+    [
+      CLI,
+      'daemon',
+      'run',
+      '--json',
+      `--host=${HOST}`,
+      `--port=${PORT}`,
+      `--data-dir=${dataDir}`,
+      ...extraArgs,
+    ],
     { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: { ...baseEnv, ...extraEnv } },
   )
   child.stdout.on('data', (chunk) => {
@@ -116,15 +126,25 @@ async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = process.e
     const nl = stdoutBuf.indexOf('\n')
     if (nl !== -1) firstLineResolve(stdoutBuf.slice(0, nl))
   })
-  child.stderr.on('data', (chunk) => { stderrBuf += chunk.toString() })
+  child.stderr.on('data', (chunk) => {
+    stderrBuf += chunk.toString()
+  })
 
   const closed = new Promise((r) => child.once('close', r))
 
   async function shutdown() {
     if (child.exitCode !== null) return
-    try { child.kill('SIGTERM') } catch { /* gone */ }
+    try {
+      child.kill('SIGTERM')
+    } catch {
+      /* gone */
+    }
     await Promise.race([closed, delay(SHUTDOWN_TIMEOUT_MS)])
-    try { child.kill('SIGKILL') } catch { /* gone */ }
+    try {
+      child.kill('SIGKILL')
+    } catch {
+      /* gone */
+    }
     await closed
   }
 
@@ -132,11 +152,15 @@ async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = process.e
     const winner = await Promise.race([firstLine, delay(READINESS_TIMEOUT_MS, 'timeout')])
     if (winner === 'timeout') {
       await shutdown()
-      fail(`${label}: daemon did not emit ready JSON within ${READINESS_TIMEOUT_MS}ms`, { stderr: stderrBuf })
+      fail(`${label}: daemon did not emit ready JSON within ${READINESS_TIMEOUT_MS}ms`, {
+        stderr: stderrBuf,
+      })
     }
 
     let ready
-    try { ready = JSON.parse(winner) } catch {
+    try {
+      ready = JSON.parse(winner)
+    } catch {
       fail(`${label}: first stdout line not valid JSON`, { line: winner })
     }
     if (!ready.ok) fail(`${label}: ready.ok not true`, { ready })
@@ -145,7 +169,8 @@ async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = process.e
     const recordPath = join(dataDir, 'daemon.json')
     if (!existsSync(recordPath)) fail(`${label}: daemon.json not found`)
     const record = JSON.parse(readFileSync(recordPath, 'utf8'))
-    if (!record.token || record.token.length < 8) fail(`${label}: daemon record has no token or token too short`)
+    if (!record.token || record.token.length < 8)
+      fail(`${label}: daemon record has no token or token too short`)
 
     // Non-leak: the token from the record must not appear in stdout or stderr
     if (stdoutBuf.includes(record.token)) fail(`${label}: token leaked to stdout`)
@@ -169,7 +194,9 @@ async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = process.e
     [],
   )
   if (record.token !== ENV_TOKEN)
-    fail(`scenario 3: daemon record token does not match env token (got ${record.token.slice(0, 8)}…)`)
+    fail(
+      `scenario 3: daemon record token does not match env token (got ${record.token.slice(0, 8)}…)`,
+    )
   console.log('[token-smoke] scenario 3 PASS: env token in record, stdout/stderr safe')
 }
 
@@ -178,7 +205,7 @@ async function runDaemonScenario(label, extraEnv, extraArgs, baseEnv = process.e
 // environment that has the variable set doesn't silently exercise the
 // env-token path instead of the auto-generate path.
 {
-  const baseEnv = { ...process.env }
+  const baseEnv = { ...scrubDevEnv(process.env) }
   delete baseEnv.WHITEBOARD_DAEMON_TOKEN
   const envCanary = process.env.WHITEBOARD_DAEMON_TOKEN
   const { record } = await runDaemonScenario('scenario 4', {}, [], baseEnv)

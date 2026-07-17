@@ -27,13 +27,7 @@ export const BASE_LEAK_PATTERNS = [
  * Canvas plaintext deny-list. Used by scripts that exercise log/support-bundle
  * formatting where canvas content must be stripped before output.
  */
-export const CANVAS_LEAK_PATTERNS = [
-  /canvasText/,
-  /rawPayload/,
-  /"scene"/,
-  /"elements"/,
-  /"files"/,
-]
+export const CANVAS_LEAK_PATTERNS = [/canvasText/, /rawPayload/, /"scene"/, /"elements"/, /"files"/]
 
 /**
  * Assert that `text` does not match any BASE_LEAK_PATTERNS entry and does not
@@ -53,4 +47,23 @@ export function assertNoLeak(label, text, extraLiterals = []) {
   for (const literal of extraLiterals) {
     if (text.includes(literal)) throw new Error(`[smoke] ${label} leak: literal "${literal}"`)
   }
+}
+
+/**
+ * Strips WHITEBOARD_DEV from an env object before it is spread into a
+ * spawned child. Every distribution smoke here exercises the packaged
+ * `dist/` build, never the `src/` tree, so an ambient WHITEBOARD_DEV=1 (the
+ * publish-gate CI job sets it for its other src-mode e2e checks) must never
+ * leak in — ensureDaemon and the mcp-http child spawner both branch on this
+ * flag to run `node --watch --import tsx/esm <root>/src/...`, which fails
+ * against an installed-only tree that ships no `src/` and no `tsx`
+ * devDependency (see tarball.distribution-impl.ts buildTarballSmokeChildEnv
+ * for the TypeScript-side twin of this same fix).
+ *
+ * @param {NodeJS.ProcessEnv} processEnv
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function scrubDevEnv(processEnv) {
+  const { WHITEBOARD_DEV: _unused, ...rest } = processEnv
+  return rest
 }
