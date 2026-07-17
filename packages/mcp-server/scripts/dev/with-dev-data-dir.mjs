@@ -3,12 +3,17 @@
 import { spawn } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   ensureDevDataDirSecured,
+  injectDerivedPortArg,
+  removeDevDaemonMarker,
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
+  resolveEffectivePort,
   resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
+  writeDevDaemonMarker,
 } from './with-dev-data-dir-lib.mjs'
 
 // Keeps dev daemons started via `pnpm mcp:http:dev` (and anything that
@@ -37,8 +42,29 @@ if (!hadExplicitDataDirOverride) {
 // dist/cli.mjs rather than node_modules/.bin/tsx: that .bin entry is a POSIX
 // shell shim (with separate .cmd/.ps1 wrappers on Windows), which `shell:
 // false` cannot execute on native Windows.
+// Derived once here so with-dev-data-dir and ensure-http-dev-daemon can
+// never disagree about which port a given worktree's daemon belongs on —
+// both consult this same shared helper rather than a baked-in constant.
+const derivedPort = deriveDevPort({
+  repoRoot,
+  isMainCheckout: isMainCheckout(repoRoot),
+  env: process.env,
+})
+const argvWithPort = injectDerivedPortArg(process.argv.slice(2), derivedPort)
+// A caller-provided `--port=value` (recognized by parseArg in
+// server/index.ts) always wins over derivedPort — record that same
+// effective value in the marker so it never disagrees with the port the
+// server actually binds to.
+const effectivePort = resolveEffectivePort(argvWithPort, derivedPort)
+
 const entryPath = resolve(packageRoot, 'src/server/index.ts')
-const { command, args } = resolveTsxWatchSpawn(packageRoot, entryPath, process.argv.slice(2))
+const { command, args } = resolveTsxWatchSpawn(packageRoot, entryPath, argvWithPort)
+
+writeDevDaemonMarker(env.WHITEBOARD_DATA_DIR, {
+  port: effectivePort,
+  repoRoot,
+  pid: process.pid,
+})
 
 const child = spawn(command, args, {
   cwd: packageRoot,
@@ -52,6 +78,7 @@ child.on('error', (error) => {
 })
 
 child.on('exit', (code, signal) => {
+  removeDevDaemonMarker(env.WHITEBOARD_DATA_DIR)
   if (signal) {
     reraiseSignalOrExit(signal)
     return

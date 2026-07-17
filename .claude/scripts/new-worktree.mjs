@@ -12,6 +12,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { deriveDevPort } from '../../packages/mcp-server/scripts/dev/dev-port-lib.mjs'
 
 const [, , nameArg, baseArg] = process.argv
 if (!nameArg) {
@@ -32,7 +33,16 @@ const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
 run('git', ['-C', repoRoot, 'worktree', 'add', wtPath, '-b', name, base])
 run('pnpm', ['--dir', wtPath, 'install', '--prefer-offline'])
 
+// A linked worktree always has a `.git` FILE (not a directory) at its root,
+// so it's never the main checkout — deriveDevPort hashes its path instead
+// of returning the 3099 main-checkout default.
+const devPort = deriveDevPort({ repoRoot: wtPath, isMainCheckout: false, env: process.env })
+
 console.log(`\nready worktree: ${wtPath}`)
 console.log(`  branch: ${name} (from ${base})`)
 console.log(`  launch a dev-loop with cwd="${wtPath}" (tests run isolated here).`)
+console.log(`  dev daemon port: ${devPort} (pnpm mcp:http:dev in this worktree binds here)`)
+console.log(
+  '  client wiring for this port is a manual step until the B1/B2 follow-ups land — see docs/contributing/development.md',
+)
 console.log(`  cleanup: git worktree remove --force ${wtPath}`)
