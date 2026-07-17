@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
-import { canvasFileRecordSchema, dataUrlToBlob } from './canvas-file-store.js'
+import { describe, expect, it, vi } from 'vitest'
+
+const openWhiteboardDbMock = vi.hoisted(() => vi.fn())
+vi.mock('./browser-idb.js', () => ({ openWhiteboardDb: openWhiteboardDbMock }))
+
+const { CanvasFileStore, canvasFileRecordSchema, dataUrlToBlob } = await import(
+  './canvas-file-store.js'
+)
 
 describe('dataUrlToBlob', () => {
   it('decodes a valid PNG dataURL into a Blob with the correct mimeType and byte length', async () => {
@@ -63,5 +69,14 @@ describe('canvasFileRecordSchema', () => {
     expect(
       canvasFileRecordSchema.safeParse({ v: 2, mimeType: 'image/png', created: 123, blob }).success,
     ).toBe(false)
+  })
+})
+
+describe('CanvasFileStore.get', () => {
+  it('resolves null instead of rejecting when opening the database fails', async () => {
+    openWhiteboardDbMock.mockRejectedValueOnce(new Error('VersionError: boom'))
+    const store = new CanvasFileStore()
+
+    await expect(store.get('file-1')).resolves.toBeNull()
   })
 })

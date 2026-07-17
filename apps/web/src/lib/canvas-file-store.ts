@@ -96,12 +96,19 @@ export class CanvasFileStore {
   }
 
   /**
-   * Returns the stored Blob for fileId, or null for an unknown id AND for a
-   * corrupt/unknown-version record. Never throws — a damaged record degrades
-   * to a missing image rather than crashing the read path.
+   * Returns the stored Blob for fileId, or null for an unknown id, a
+   * corrupt/unknown-version record, AND a failure to open the database
+   * (VersionError, denied access, etc). Never throws — a damaged record or an
+   * unreachable store degrades to a missing image rather than crashing the
+   * read path.
    */
   async get(fileId: string): Promise<Blob | null> {
-    const db = await openWhiteboardDb()
+    let db: IDBDatabase
+    try {
+      db = await openWhiteboardDb()
+    } catch {
+      return null
+    }
     return new Promise((resolve) => {
       const tx = db.transaction('canvasFiles', 'readonly')
       const req = tx.objectStore('canvasFiles').get(fileId)
