@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
+  TICKET_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '../../shared/ws-protocol.js'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
+import { createWsTicketStore } from '../security/ws-ticket-store.js'
 import { authorizeWsUpgrade } from './ws-auth.js'
 
 // authorizeWsUpgrade is the gate between an inbound WS upgrade and the
@@ -239,6 +241,159 @@ describe('authorizeWsUpgrade', () => {
         wildcardAllowedOrigins,
       )
       expect(decision).toEqual({ accept: false, statusCode: 403 })
+    })
+  })
+
+  describe('ADR-0005 connection ticket', () => {
+    it('redeems an offered ticket and returns exactly the redeemed scopes, never ALL_AUTH_SCOPES', () => {
+      const decision = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}abc123`,
+        },
+        'daemon-token-irrelevant-here',
+        [],
+        (ticket) =>
+          ticket === 'abc123' ? { scopes: ['canvas:read'], clientId: 'client-a' } : null,
+      )
+      expect(decision).toEqual({
+        accept: true,
+        protocol: WHITEBOARD_WS_PROTOCOL,
+        scopes: ['canvas:read'],
+      })
+    })
+
+    it('rejects with 401 when redeemTicket reports the ticket as unknown/expired/replayed', () => {
+      const decision = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}spent`,
+        },
+        undefined,
+        [],
+        () => null,
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 401 })
+    })
+
+    it('rejects with 401 when no redeemTicket dependency is wired even though a ticket was offered', () => {
+      const decision = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}abc123`,
+        },
+        undefined,
+        [],
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 401 })
+    })
+
+    it('preserves the daemon-token path exactly: still returns ALL_AUTH_SCOPES when no ticket is offered', () => {
+      const decision = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
+        },
+        'secret',
+        [],
+        () => null,
+      )
+      expect(decision).toEqual({
+        accept: true,
+        protocol: WHITEBOARD_WS_PROTOCOL,
+        scopes: ALL_AUTH_SCOPES,
+      })
+    })
+
+    it('preserves the no-auth-required path: still returns ALL_AUTH_SCOPES when no token is configured', () => {
+      const decision = authorizeWsUpgrade({
+        host: 'localhost:3099',
+        'sec-websocket-protocol': WHITEBOARD_WS_PROTOCOL,
+      })
+      expect(decision).toEqual({
+        accept: true,
+        protocol: WHITEBOARD_WS_PROTOCOL,
+        scopes: ALL_AUTH_SCOPES,
+      })
+    })
+
+    it('does not accept a raw OAuth access token offered directly in the subprotocol (no ticket prefix)', () => {
+      // A hosted-origin caller must go through POST /api/ws-ticket first —
+      // offering the bearer itself, unprefixed, must fail exactly like any
+      // other unrecognized protocol entry.
+      const decision = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, oauth-access-token-raw-value`,
+        },
+        'daemon-secret',
+        [],
+        () => ({ scopes: ALL_AUTH_SCOPES, clientId: 'should-not-be-reached' }),
+      )
+      expect(decision).toEqual({ accept: false, statusCode: 401 })
+    })
+
+    it('round-trips through a real ws-ticket-store: mint, then redeem exactly once via authorizeWsUpgrade', () => {
+      const ticketStore = createWsTicketStore()
+      const { ticket } = ticketStore.mintTicket(['canvas:write'], 'client-a')
+
+      const first = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
+        },
+        undefined,
+        [],
+        ticketStore.redeemTicket,
+      )
+      expect(first).toEqual({
+        accept: true,
+        protocol: WHITEBOARD_WS_PROTOCOL,
+        scopes: ['canvas:write'],
+      })
+
+      const replay = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
+        },
+        undefined,
+        [],
+        ticketStore.redeemTicket,
+      )
+      expect(replay).toEqual({ accept: false, statusCode: 401 })
+    })
+
+    it('does not redeem the ticket when the base protocol is missing, so the ticket stays usable for a valid retry', () => {
+      const ticketStore = createWsTicketStore()
+      const { ticket } = ticketStore.mintTicket(['canvas:write'], 'client-a')
+
+      const malformed = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          // Base protocol (WHITEBOARD_WS_PROTOCOL) omitted, ticket only.
+          'sec-websocket-protocol': `${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
+        },
+        undefined,
+        [],
+        ticketStore.redeemTicket,
+      )
+      expect(malformed).toEqual({ accept: false, statusCode: 401 })
+
+      const retry = authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${TICKET_WS_PROTOCOL_PREFIX}${ticket}`,
+        },
+        undefined,
+        [],
+        ticketStore.redeemTicket,
+      )
+      expect(retry).toEqual({
+        accept: true,
+        protocol: WHITEBOARD_WS_PROTOCOL,
+        scopes: ['canvas:write'],
+      })
     })
   })
 })

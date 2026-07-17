@@ -38,8 +38,12 @@ jobs:
     outputs:
       mcp_release_created: ${{ steps.release.outputs['packages/mcp-server--release_created'] }}
       mcp_tag_name: ${{ steps.release.outputs['packages/mcp-server--tag_name'] }}
-      root_release_created: ${{ steps.release.outputs['--release_created'] }}
-      root_tag_name: ${{ steps.release.outputs['--tag_name'] }}
+      # Root-path (".") outputs are NOT path-prefixed: release-please-action
+      # emits plain `release_created` / `tag_name` for the root component.
+      # The previous `['--release_created']` keys never existed, so
+      # advance-stable was silently skipped on every release.
+      root_release_created: ${{ steps.release.outputs.release_created }}
+      root_tag_name: ${{ steps.release.outputs.tag_name }}
       releases_created: ${{ steps.release.outputs.releases_created }}
     steps:
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0

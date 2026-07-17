@@ -15,10 +15,10 @@ catalog:
   react-dom: "^19"
   # cross-process contract cores — one version everywhere
   zod: "^4.4.2"
-  loro-crdt: "1.13.5"
+  loro-crdt: "1.13.6"
   # shared build/test tooling
   typescript: "^6.0.3"
-  vite: "^8.1.0"
+  vite: "^8.1.3"
   vitest: "^4.1.8"
   "@vitest/browser-playwright": "^4.1.8"
   "@vitest/coverage-v8": "^4.1.8"
