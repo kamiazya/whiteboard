@@ -10,7 +10,7 @@ import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
-import { DATA_DIR } from './config.js'
+import { getDataDir } from './config.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 
 export interface StartServerModeHttpOptions {
@@ -80,8 +80,8 @@ export async function startServerModeHttp(
       idleForMs: 0,
       auth: { mode: 'oauth', hasToken: false },
       storage: {
-        dataDir: DATA_DIR,
-        dataDirWritable: isDataDirWritable(DATA_DIR),
+        dataDir: getDataDir(),
+        dataDirWritable: isDataDirWritable(getDataDir()),
       },
       app: {
         // The static placeholder page is always available — it ships inline
@@ -120,7 +120,7 @@ export async function startServerModeHttp(
     port: options.port,
     host: options.host,
     startedAt,
-    resolvedDataDir: DATA_DIR,
+    resolvedDataDir: getDataDir(),
     instanceId,
     close,
   }

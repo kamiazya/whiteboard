@@ -3,7 +3,7 @@
 // Goals (in order):
 //   1. Visibility — users / operators need to see what is growing before we
 //      can sensibly enforce caps.
-//   2. Cheapness — recursively walk DATA_DIR with stat() but never read blob
+//   2. Cheapness — recursively walk getDataDir() with stat() but never read blob
 //      contents. The numbers refresh on demand from the filesystem; nothing
 //      is cached or background-scheduled.
 //
@@ -43,7 +43,7 @@ function emptyBucket(): Bucket {
   return { bytes: 0, files: 0 }
 }
 
-// Categorise a path under DATA_DIR. Mirrors the layout the daemon actually
+// Categorise a path under getDataDir(). Mirrors the layout the daemon actually
 // writes today:
 //   blobs/<workspaceId>/canvas/<id>.loro         — canvas Loro snapshots
 //   blobs/<workspaceId>/versions/<id>.png        — version thumbnails

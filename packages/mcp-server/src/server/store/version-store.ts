@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import {
   validateBranchName,
@@ -94,7 +94,7 @@ export interface VersionStore {
 }
 
 function blobsRoot(): string {
-  return join(DATA_DIR, 'blobs')
+  return join(getDataDir(), 'blobs')
 }
 
 function versionsBlobDir(workspaceId: string): string {
@@ -122,8 +122,8 @@ function errorMessage(error: unknown): string {
 }
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 interface VersionRow {

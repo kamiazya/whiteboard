@@ -14,7 +14,7 @@ import {
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
-import { DATA_DIR } from '../shared/data-dir-secure.js'
+import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
 import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
@@ -101,7 +101,14 @@ function installDaemonSignalHandlers(cleanup: () => Promise<void>): void {
 }
 
 export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRunOutcome> {
-  const dataDir = options.dataDir ?? DATA_DIR
+  // An explicit --data-dir must govern ALL persistence (sqlite db, canvas
+  // blobs, exports), not just the daemon registry file. Redirect the shared
+  // data-dir seam before anything below touches disk so every store that
+  // reads getDataDir() follows the requested directory.
+  if (options.dataDir) {
+    overrideDataDir(options.dataDir)
+  }
+  const dataDir = options.dataDir ?? getDataDir()
   const host = options.host ?? '127.0.0.1'
 
   // Pre-startup guard: local-daemon is loopback-only regardless of --host.

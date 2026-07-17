@@ -8,7 +8,7 @@ import {
   type ExportResponse,
   exportRequestSchema,
 } from '../../shared/api-contracts/export.js'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { canvasExists } from '../store/canvas-store.js'
@@ -88,7 +88,7 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
         await validateOutputPath(
           body.outputPath,
           body.overwrite === true,
-          join(DATA_DIR, workspaceId, 'exports'),
+          join(getDataDir(), workspaceId, 'exports'),
         )
       } catch (err) {
         if (err instanceof OutputPathError) {
@@ -223,7 +223,7 @@ function defaultExportPath(workspaceId: string, slug: string): string {
   // write would silently clobber the first. The random suffix guarantees
   // uniqueness regardless of call timing.
   const fileName = `${slug}-${timestamp}-${nanoid(6)}.excalidraw.png`
-  return join(DATA_DIR, workspaceId, 'exports', fileName)
+  return join(getDataDir(), workspaceId, 'exports', fileName)
 }
 
 class ExportError extends Error {

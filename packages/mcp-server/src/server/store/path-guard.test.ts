@@ -10,6 +10,7 @@ async function importWithRelaxedValidators<T>(modulePath: string): Promise<T> {
     get DATA_DIR() {
       return tempDir
     },
+    getDataDir: () => tempDir,
     WHITEBOARD_ROOT: '/tmp',
     REPO_ROOT: '/tmp',
   }))

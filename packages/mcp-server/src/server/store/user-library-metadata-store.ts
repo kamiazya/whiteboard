@@ -2,7 +2,7 @@ import {
   type UserLibraryMetadataManifest,
   userLibraryMetadataManifestSchema,
 } from '../../shared/api-contracts/libraries.js'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { validateUserLibraryName } from '../validators.js'
 import { corruptStoredData } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
@@ -39,8 +39,8 @@ function emptyManifest(): UserLibraryMetadataManifest {
 }
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 function parseUserLibraryMetadata(name: string, raw: string): UserLibraryMetadataManifest {

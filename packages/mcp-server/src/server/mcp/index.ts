@@ -4,7 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { ensureDaemon } from '../../daemon/ensure-daemon.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
 import { createDaemonClient } from './daemon-client.js'
 import { wireMcpLogging } from './logging.js'
@@ -24,9 +24,9 @@ import { libraryListInstalledTool } from './tools/library.js'
 import { registerAllTools } from './tool-registration.js'
 
 export async function createExcalidrawMcpServer() {
-  // ensureWorkspaceId memoizes the resolve+save sequence per DATA_DIR so the
+  // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
   // HTTP /mcp handler does not race concurrent requests on the marker file.
-  const workspaceId = await ensureWorkspaceId(DATA_DIR)
+  const workspaceId = await ensureWorkspaceId(getDataDir())
 
   // Read `version` from package.json at runtime so release-please bumps propagate
   // without source edits.
@@ -177,7 +177,7 @@ export async function main() {
   // entrypoint reaches createExcalidrawMcpServer first, so call the same
   // hook here to keep schema and v0 import bootstrapping symmetric.
   const { prepareDataDir } = await import('../store/db/prepare.js')
-  await prepareDataDir(DATA_DIR)
+  await prepareDataDir(getDataDir())
   const server = await createExcalidrawMcpServer()
   const transport = new StdioServerTransport()
   await server.connect(transport)

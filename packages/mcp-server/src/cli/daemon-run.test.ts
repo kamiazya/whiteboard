@@ -1,6 +1,9 @@
 import { EventEmitter } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { captureLogsForTests } from '../server/log.js'
+import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
 
 const { createServerSpy } = vi.hoisted(() => ({ createServerSpy: vi.fn() }))
 
@@ -156,6 +159,36 @@ describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
     expect(startHttpServerMock).toHaveBeenCalledWith(
       expect.objectContaining({ allowedWebOrigins: [] }),
     )
+  })
+})
+
+describe('runDaemonRun --data-dir storage redirection', () => {
+  afterEach(() => {
+    resetDataDirForTests()
+    startHttpServerMock.mockClear()
+  })
+
+  it('redirects the shared data-dir seam so all storage follows the explicit dataDir', async () => {
+    const dir = join(tmpdir(), `daemon-run-datadir-${Date.now()}`)
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      port: 3099,
+      dataDir: dir,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(getDataDir()).toBe(resolve(dir))
+  })
+
+  it('leaves the seam untouched when no dataDir option is given', async () => {
+    const before = getDataDir()
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      port: 3099,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+    expect(outcome.kind).toBe('running')
+    expect(getDataDir()).toBe(before)
   })
 })
 

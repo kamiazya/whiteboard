@@ -10,6 +10,7 @@ vi.mock('../config.js', () => ({
   get DATA_DIR() {
     return join(tempDir, 'data')
   },
+  getDataDir: () => join(tempDir, 'data'),
 }))
 
 const { createPaletteRouter } = await import('./palette.js')

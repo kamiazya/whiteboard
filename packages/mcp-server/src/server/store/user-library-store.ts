@@ -5,7 +5,7 @@ import {
   type UserLibrarySummary,
   userLibraryContentSchema,
 } from '../../shared/api-contracts/libraries.js'
-import { DATA_DIR } from '../config.js'
+import { getDataDir } from '../config.js'
 import { validateUserLibraryName } from '../validators.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
@@ -26,7 +26,7 @@ const EXT = '.excalidrawlib'
 export type { UserLibrarySummary }
 
 function userLibraryBlobsDir(): string {
-  return join(DATA_DIR, 'blobs', USER_LIBRARY_DIRNAME)
+  return join(getDataDir(), 'blobs', USER_LIBRARY_DIRNAME)
 }
 
 function pathFor(name: string): string {
@@ -34,8 +34,8 @@ function pathFor(name: string): string {
 }
 
 async function dbReady() {
-  await prepareDataDir(DATA_DIR)
-  return getDb(DATA_DIR)
+  await prepareDataDir(getDataDir())
+  return getDb(getDataDir())
 }
 
 function parseUserLibraryContent(path: string, raw: string): UserLibraryContent {
@@ -47,7 +47,10 @@ function parseUserLibraryContent(path: string, raw: string): UserLibraryContent 
   }
   const result = userLibraryContentSchema.safeParse(parsed)
   if (!result.success) {
-    throw corruptStoredData(path, result.error.issues[0]?.message ?? 'invalid .excalidrawlib payload')
+    throw corruptStoredData(
+      path,
+      result.error.issues[0]?.message ?? 'invalid .excalidrawlib payload',
+    )
   }
   return result.data
 }

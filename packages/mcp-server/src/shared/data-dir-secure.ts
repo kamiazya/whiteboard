@@ -80,6 +80,18 @@ export function getDataDir(): string {
   return memoizedDataDir
 }
 
+/**
+ * Redirect the effective data dir for this process. Production entrypoints
+ * (e.g. `daemon run --data-dir=<path>`) call this before anything touches
+ * disk so the ENTIRE storage layer — sqlite db, canvas blobs, exports,
+ * per-workspace files — follows the requested directory instead of only the
+ * daemon registry. The path is resolved to absolute so later cwd changes
+ * cannot silently retarget persistence.
+ */
+export function overrideDataDir(dir: string): void {
+  dataDirOverride = resolve(dir)
+}
+
 export function setDataDirForTests(dir: string): void {
   dataDirOverride = dir
 }

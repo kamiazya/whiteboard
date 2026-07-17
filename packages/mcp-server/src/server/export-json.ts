@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
-import { DATA_DIR } from './config.js'
+import { getDataDir } from './config.js'
 import { getLogger } from './log.js'
 import { validateOutputPath } from './output-path.js'
 import { resolveParentedElements } from '../shared/resolve-parented-elements.js'
@@ -51,7 +51,7 @@ async function resolveOutputPath(args: {
   overwrite?: boolean
 }): Promise<string> {
   if (args.outputPath !== undefined) {
-    const exportsDir = join(args.dataDir ?? DATA_DIR, args.workspaceId, 'exports')
+    const exportsDir = join(args.dataDir ?? getDataDir(), args.workspaceId, 'exports')
     await validateOutputPath(args.outputPath, args.overwrite === true, exportsDir)
     return args.outputPath
   }
@@ -62,7 +62,7 @@ async function resolveOutputPath(args: {
   // write would silently clobber the first. The random suffix guarantees
   // uniqueness regardless of call timing.
   const fileName = `${args.slug}-${timestamp}-${nanoid(6)}.excalidraw`
-  const exportsDir = join(args.dataDir ?? DATA_DIR, args.workspaceId, 'exports')
+  const exportsDir = join(args.dataDir ?? getDataDir(), args.workspaceId, 'exports')
   return join(exportsDir, fileName)
 }
 
