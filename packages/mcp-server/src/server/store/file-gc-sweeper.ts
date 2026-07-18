@@ -28,17 +28,23 @@ const log = getLogger('file-gc-sweeper')
 
 const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000
 
+// setTimeout() only supports delays up to a signed 32-bit int; Node silently
+// truncates anything larger to 1ms (with a TimeoutOverflowWarning), which
+// would turn an intended "run monthly" interval into a near-continuous
+// full-workspace scan. Clamp instead of trusting every safe integer through.
+const MAX_TIMER_DELAY_MS = 2_147_483_647
+
 // Env parsing is deliberately STRICTER than file-gc.ts's resolveGraceMs
 // (which uses Number.parseInt and would silently accept "1x" as 1): only a
 // bare non-negative base-10 integer string is accepted. Anything else falls
 // back to the default rather than risking a mistyped env var arming a much
 // shorter (or negative) sweep interval than intended.
 function resolveIntervalMs(explicit: number | undefined): number {
-  if (typeof explicit === 'number') return Math.max(0, explicit)
+  if (typeof explicit === 'number') return Math.min(Math.max(0, explicit), MAX_TIMER_DELAY_MS)
   const raw = process.env.WHITEBOARD_FILE_GC_INTERVAL_MS
   if (typeof raw === 'string' && /^\d+$/.test(raw)) {
     const parsed = Number(raw)
-    if (Number.isSafeInteger(parsed)) return parsed
+    if (Number.isSafeInteger(parsed)) return Math.min(parsed, MAX_TIMER_DELAY_MS)
   }
   return DEFAULT_INTERVAL_MS
 }
@@ -119,6 +125,53 @@ async function discoverFsWorkspaces(): Promise<string[]> {
   return result
 }
 
+// DB-listed workspaces are trusted less than they look: a workspace row can
+// exist while its on-disk directory has since been replaced by a symlink (or
+// never matched the DB row's containment at all). discoverFsWorkspaces()
+// applies this same lstat+realpath containment check to every workspace it
+// discovers from the filesystem, but a DB row bypasses that discovery path
+// entirely -- without this check runPass() would purge through a symlinked
+// dir straight into purgeDanglingFiles(), which only does lexical
+// containment (assertPathWithinDir) and cannot see through a symlink.
+async function isDbWorkspaceDirSafe(workspaceId: string): Promise<boolean> {
+  const dataDir = getDataDir()
+  const entryPath = join(dataDir, workspaceId)
+
+  let stats: Awaited<ReturnType<typeof lstat>>
+  try {
+    stats = await lstat(entryPath)
+  } catch (err) {
+    // No on-disk directory yet (e.g. a workspace row created but never
+    // written to) is not a containment risk -- purgeDanglingFiles() itself
+    // handles a missing files dir by returning zero purged.
+    if (isMissingFileError(err)) return true
+    log.warning({ workspaceId, err }, 'file-gc sweep: skipped DB workspace, could not stat dir')
+    return false
+  }
+  if (stats.isSymbolicLink()) {
+    log.warning({ workspaceId }, 'file-gc sweep: skipped DB workspace with symlinked dir')
+    return false
+  }
+
+  let realDataDir: string
+  let realEntryPath: string
+  try {
+    realDataDir = await realpath(dataDir)
+    realEntryPath = await realpath(entryPath)
+  } catch (err) {
+    log.warning(
+      { workspaceId, err },
+      'file-gc sweep: skipped DB workspace, could not resolve realpath',
+    )
+    return false
+  }
+  if (realEntryPath !== realDataDir && !realEntryPath.startsWith(realDataDir + sep)) {
+    log.warning({ workspaceId }, 'file-gc sweep: skipped DB workspace dir escaping data dir')
+    return false
+  }
+  return true
+}
+
 export interface FileGcSweeperOptions {
   // Overrides WHITEBOARD_FILE_GC_INTERVAL_MS / the 24h default. 0 disables
   // the sweeper entirely (tick() remains manually callable; start() arms
@@ -136,6 +189,20 @@ export interface FileGcSweeperOptions {
   versionStore?: VersionStore
 }
 
+export interface FileGcSweeperStopOptions {
+  // Caps how long stop() waits for an in-flight pass before returning. A
+  // full pass can be expensive (Loro fork+checkout per branch/version per
+  // canvas, across every workspace), and stop() is invoked from the daemon's
+  // shutdown path (idle timeout, explicit shutdown route, normal close) --
+  // without a cap, shutdown blocks for the entire remaining pass duration.
+  // The in-flight pass itself is NOT cancelled: it keeps running in the
+  // background and its own .finally() still fires (scheduleNext() is a
+  // no-op once stopped=true), so leaving it to finish costs nothing beyond
+  // the already-open workspace lock. Omit to wait unbounded (existing
+  // behavior, still used by tests that need a real completion signal).
+  timeoutMs?: number
+}
+
 export interface FileGcSweeper {
   start(): void
   // Runs one pass. Single-flight: a second call while a pass is in flight
@@ -144,7 +211,7 @@ export interface FileGcSweeper {
   // explicitly as the concurrency-test seam — a completion-rescheduled
   // one-shot timer cannot be forced to overlap by timer advancement alone.
   tick(): Promise<void>
-  stop(): Promise<void>
+  stop(options?: FileGcSweeperStopOptions): Promise<void>
 }
 
 export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcSweeper {
@@ -164,8 +231,13 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
   async function runPass(): Promise<void> {
     const [dbWorkspaces, fsWorkspaces] = await Promise.all([listWs(), discoverFs()])
     const ids = new Set<string>()
-    for (const w of dbWorkspaces) ids.add(w.workspaceId)
     for (const id of fsWorkspaces) ids.add(id)
+    // fsWorkspaces already passed containment checks inside discoverFs();
+    // a DB row has not, so it gets its own check before joining the set.
+    for (const w of dbWorkspaces) {
+      if (ids.has(w.workspaceId)) continue
+      if (await isDbWorkspaceDirSafe(w.workspaceId)) ids.add(w.workspaceId)
+    }
 
     // Sequential, not parallel: purgeDanglingFiles holds a per-workspace
     // write lock and forks Loro docs internally, so running every workspace
@@ -217,13 +289,24 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
     scheduleNext()
   }
 
-  async function stop(): Promise<void> {
+  async function stop(options: FileGcSweeperStopOptions = {}): Promise<void> {
     stopped = true
     if (timer) {
       clearTimeout(timer)
       timer = null
     }
-    if (inFlight) await inFlight
+    if (!inFlight) return
+    if (typeof options.timeoutMs !== 'number') {
+      await inFlight
+      return
+    }
+    await Promise.race([
+      inFlight,
+      new Promise<void>((resolve) => {
+        const timeoutTimer = setTimeout(resolve, options.timeoutMs)
+        timeoutTimer.unref()
+      }),
+    ])
   }
 
   return { start, tick, stop }

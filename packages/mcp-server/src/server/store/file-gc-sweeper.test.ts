@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setImmediate as realSetImmediate } from 'node:timers'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -35,6 +36,28 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
+// vi.advanceTimersByTimeAsync() fast-forwards the fake JS clock and flushes
+// the microtasks that produces, but runPass() now also awaits real
+// (libuv-backed) fs.promises calls -- the DB-workspace containment check's
+// lstat/realpath -- which fake timers cannot fast-forward or see, and which
+// only settle once the real event loop actually turns. process.nextTick()
+// alone is not enough (it never yields to libuv's poll/check phases); the
+// real node:timers setImmediate captured above -- unaffected by
+// vi.useFakeTimers(), which only patches globalThis -- forces genuine
+// event-loop turns so pending fs completions land before assertions run.
+async function advanceTimersAndFlush(ms: number): Promise<void> {
+  await vi.advanceTimersByTimeAsync(ms)
+  await flushRealAsync()
+}
+
+// Same real-event-loop-turn flush as advanceTimersAndFlush(), for call sites
+// that race tick() directly instead of going through the fake-timer clock.
+async function flushRealAsync(): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    await new Promise<void>((resolve) => realSetImmediate(resolve))
+  }
+}
+
 // Deferred-promise helper: lets a test control exactly when a stubbed purge
 // resolves, so overlap/single-flight scenarios are deterministic instead of
 // racing real filesystem timing.
@@ -56,7 +79,7 @@ describe('createFileGcSweeper scheduling', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(999)
+    await advanceTimersAndFlush(999)
     expect(purge).not.toHaveBeenCalled()
     await sweeper.stop()
   })
@@ -70,11 +93,11 @@ describe('createFileGcSweeper scheduling', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(1000)
+    await advanceTimersAndFlush(1000)
     expect(purge).toHaveBeenCalledTimes(1)
     expect(purge).toHaveBeenCalledWith('ws_a')
 
-    await vi.advanceTimersByTimeAsync(1000)
+    await advanceTimersAndFlush(1000)
     expect(purge).toHaveBeenCalledTimes(2)
     await sweeper.stop()
   })
@@ -88,7 +111,7 @@ describe('createFileGcSweeper scheduling', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(10 * 24 * 60 * 60 * 1000)
+    await advanceTimersAndFlush(10 * 24 * 60 * 60 * 1000)
     expect(purge).not.toHaveBeenCalled()
     await sweeper.stop()
   })
@@ -109,15 +132,15 @@ describe('createFileGcSweeper single-flight', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(1000)
+    await advanceTimersAndFlush(1000)
     expect(purgeCalls).toBe(1)
 
     // Advance several more intervals while the first pass's purge is still
     // pending -- a naive implementation without a single-flight guard would
     // fire a new pass on every elapsed interval.
-    await vi.advanceTimersByTimeAsync(1000)
-    await vi.advanceTimersByTimeAsync(1000)
-    await vi.advanceTimersByTimeAsync(1000)
+    await advanceTimersAndFlush(1000)
+    await advanceTimersAndFlush(1000)
+    await advanceTimersAndFlush(1000)
     expect(purgeCalls).toBe(1)
 
     d.resolve({ purgedCount: 0, purgedBytes: 0 })
@@ -125,7 +148,7 @@ describe('createFileGcSweeper single-flight', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    await vi.advanceTimersByTimeAsync(1000)
+    await advanceTimersAndFlush(1000)
     expect(purgeCalls).toBe(2)
 
     await sweeper.stop()
@@ -146,10 +169,10 @@ describe('createFileGcSweeper single-flight', () => {
     })
 
     const first = sweeper.tick()
-    // Let the pass's discovery (listWorkspaces/discoverFsWorkspaces) and its
-    // purge call resolve their microtasks before the second tick() races in.
-    await Promise.resolve()
-    await Promise.resolve()
+    // Let the pass's discovery (listWorkspaces/discoverFsWorkspaces), its DB
+    // workspace containment check, and its purge call resolve their
+    // microtasks before the second tick() races in.
+    await flushRealAsync()
     const second = sweeper.tick()
     expect(purgeCalls).toBe(1)
 
@@ -172,7 +195,7 @@ describe('createFileGcSweeper stop()', () => {
     })
     sweeper.start()
     await sweeper.stop()
-    await vi.advanceTimersByTimeAsync(10_000)
+    await advanceTimersAndFlush(10_000)
     expect(purge).not.toHaveBeenCalled()
   })
 
@@ -186,7 +209,7 @@ describe('createFileGcSweeper stop()', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(1000)
+    await advanceTimersAndFlush(1000)
 
     let stopped = false
     const stopPromise = sweeper.stop().then(() => {
@@ -201,6 +224,45 @@ describe('createFileGcSweeper stop()', () => {
     d.resolve({ purgedCount: 0, purgedBytes: 0 })
     await stopPromise
     expect(stopped).toBe(true)
+  })
+
+  it('resolves once timeoutMs elapses even though the in-flight pass has not settled', async () => {
+    const d = deferred<{ purgedCount: number; purgedBytes: number }>()
+    const purge = vi.fn(async () => d.promise)
+    const sweeper = createFileGcSweeper({
+      intervalMs: 1000,
+      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      discoverFsWorkspaces: async () => [],
+      purge,
+    })
+    sweeper.start()
+    await advanceTimersAndFlush(1000)
+
+    let stopped = false
+    const stopPromise = sweeper.stop({ timeoutMs: 5000 }).then(() => {
+      stopped = true
+    })
+    await advanceTimersAndFlush(4999)
+    expect(stopped).toBe(false)
+
+    await advanceTimersAndFlush(1)
+    await stopPromise
+    expect(stopped).toBe(true)
+
+    // The pass itself was never cancelled -- resolving it afterward must
+    // not throw or reschedule (stopped=true already suppresses that).
+    d.resolve({ purgedCount: 0, purgedBytes: 0 })
+  })
+
+  it('still resolves promptly via timeoutMs when there is no in-flight pass to wait for', async () => {
+    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+    const sweeper = createFileGcSweeper({
+      intervalMs: 1000,
+      listWorkspaces: async () => [],
+      discoverFsWorkspaces: async () => [],
+      purge,
+    })
+    await sweeper.stop({ timeoutMs: 5000 })
   })
 
   it('double stop() and tick()-after-stop are no-ops', async () => {
@@ -249,9 +311,9 @@ describe('createFileGcSweeper env parsing', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(24 * 60 * 60 * 1000 - 1)
+    await advanceTimersAndFlush(24 * 60 * 60 * 1000 - 1)
     expect(purge).not.toHaveBeenCalled()
-    await vi.advanceTimersByTimeAsync(1)
+    await advanceTimersAndFlush(1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -265,7 +327,7 @@ describe('createFileGcSweeper env parsing', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(2000)
+    await advanceTimersAndFlush(2000)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -279,7 +341,7 @@ describe('createFileGcSweeper env parsing', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(10 * 24 * 60 * 60 * 1000)
+    await advanceTimersAndFlush(10 * 24 * 60 * 60 * 1000)
     expect(purge).not.toHaveBeenCalled()
     await sweeper.stop()
   })
@@ -294,7 +356,46 @@ describe('createFileGcSweeper env parsing', () => {
       purge,
     })
     sweeper.start()
-    await vi.advanceTimersByTimeAsync(500)
+    await advanceTimersAndFlush(500)
+    expect(purge).toHaveBeenCalledTimes(1)
+    await sweeper.stop()
+  })
+
+  it("clamps an explicit intervalMs above setTimeout()'s max delay to that max, not the raw value", async () => {
+    // Node truncates any setTimeout() delay beyond 2_147_483_647ms to 1ms
+    // rather than throwing, so a naive pass-through of a value above that
+    // ceiling (e.g. a plausible "every 30 days" setting) would fire almost
+    // continuously instead of on the intended cadence.
+    const MAX_TIMER_DELAY_MS = 2_147_483_647
+    const overflowMs = 3_000_000_000
+    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+    const sweeper = createFileGcSweeper({
+      intervalMs: overflowMs,
+      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      discoverFsWorkspaces: async () => [],
+      purge,
+    })
+    sweeper.start()
+    await advanceTimersAndFlush(MAX_TIMER_DELAY_MS - 1)
+    expect(purge).not.toHaveBeenCalled()
+    await advanceTimersAndFlush(1)
+    expect(purge).toHaveBeenCalledTimes(1)
+    await sweeper.stop()
+  })
+
+  it("clamps an env-provided interval above setTimeout()'s max delay to that max", async () => {
+    const MAX_TIMER_DELAY_MS = 2_147_483_647
+    process.env[ENV_KEY] = String(3_000_000_000)
+    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+    const sweeper = createFileGcSweeper({
+      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      discoverFsWorkspaces: async () => [],
+      purge,
+    })
+    sweeper.start()
+    await advanceTimersAndFlush(MAX_TIMER_DELAY_MS - 1)
+    expect(purge).not.toHaveBeenCalled()
+    await advanceTimersAndFlush(1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -343,7 +444,7 @@ describe('createFileGcSweeper per-workspace isolation', () => {
         purge,
       })
       sweeper.start()
-      await vi.advanceTimersByTimeAsync(1000)
+      await advanceTimersAndFlush(1000)
       expect(purge).not.toHaveBeenCalled()
       const errRecords = cap.records.filter(
         (r) => r.scope === 'file-gc-sweeper' && r.level === 'error',
@@ -353,7 +454,7 @@ describe('createFileGcSweeper per-workspace isolation', () => {
       // Next interval, discovery succeeds -- proves the failed pass still
       // rescheduled the next one instead of getting stuck.
       shouldFail = false
-      await vi.advanceTimersByTimeAsync(1000)
+      await advanceTimersAndFlush(1000)
       expect(purge).toHaveBeenCalledTimes(1)
       await sweeper.stop()
     } finally {
@@ -456,6 +557,40 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
       await sweeper.tick()
       await sweeper.stop()
 
+      const remaining = await import('node:fs/promises').then((m) => m.readdir(outsideFilesDir))
+      expect(remaining).toEqual(['secret.png'])
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
+  })
+
+  it('skips a DB-listed workspace whose directory is a symlink escaping the data dir', async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-db-outside-'))
+    try {
+      const outsideFilesDir = join(outsideDir, 'files')
+      await mkdir(outsideFilesDir, { recursive: true })
+      await writeFile(join(outsideFilesDir, 'secret.png'), Buffer.alloc(10, 4))
+      const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
+      await import('node:fs/promises').then((m) =>
+        m.utimes(join(outsideFilesDir, 'secret.png'), past, past),
+      )
+
+      // The workspace's directory is a symlink pointing outside the data
+      // dir, but the DB still lists it as a workspace -- unlike the
+      // filesystem-discovery path, this is not filtered by
+      // discoverFsWorkspaces()'s own containment check.
+      await symlink(outsideDir, join(tempDir, 'evil_db_ws'), 'dir')
+
+      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+      const sweeper = createFileGcSweeper({
+        listWorkspaces: async () => [{ workspaceId: 'evil_db_ws' }],
+        discoverFsWorkspaces: async () => [],
+        purge,
+      })
+      await sweeper.tick()
+      await sweeper.stop()
+
+      expect(purge).not.toHaveBeenCalledWith('evil_db_ws')
       const remaining = await import('node:fs/promises').then((m) => m.readdir(outsideFilesDir))
       expect(remaining).toEqual(['secret.png'])
     } finally {
