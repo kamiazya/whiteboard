@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
+import { readDaemonTokenOnce, resetTokenStoreForTests, seedDaemonToken } from './token-store.js'
 
 function setWindow(value: unknown): void {
   ;(globalThis as { window?: unknown }).window = value
@@ -65,6 +65,19 @@ describe('token-store', () => {
     deleteWindow()
     expect(() => readDaemonTokenOnce()).not.toThrow()
     expect(readDaemonTokenOnce()).toBeNull()
+  })
+
+  it('seedDaemonToken makes readDaemonTokenOnce return the seeded token with no window global', () => {
+    deleteWindow()
+    seedDaemonToken('silent-reconnect-token')
+    expect(readDaemonTokenOnce()).toBe('silent-reconnect-token')
+  })
+
+  it('seedDaemonToken does not clobber a token already consumed from the fragment global', () => {
+    setWindow({ __WHITEBOARD_DAEMON_TOKEN__: 'fragment-token' })
+    expect(readDaemonTokenOnce()).toBe('fragment-token')
+    seedDaemonToken('reconnect-token')
+    expect(readDaemonTokenOnce()).toBe('fragment-token')
   })
 
   it('resetTokenStoreForTests restores first-read semantics between tests', () => {
