@@ -1,14 +1,11 @@
 import { z } from 'zod'
 
 // Single source of truth for both /api/reconnect-credential and
-// /api/reconnect-session response shapes (server/routes/reconnect.ts). Kept
-// under shared/api-contracts rather than inline in the route module so the
-// wire contract has exactly one definition instead of a schema on the server
-// side and a hand-maintained mirror on the client side drifting apart.
-//
-// Deliberately excluded from index.ts's published npm barrel (same
-// carve-out as runtime.ts) — reconnect is a server-runtime concern, not a
-// public API surface for external consumers of @kamiazya/whiteboard-mcp.
+// /api/reconnect-session response shapes. server/routes/reconnect.ts and
+// apps/web's reconnect-client.ts both import these, so the wire contract
+// has exactly one definition instead of a server schema and a
+// hand-maintained client mirror drifting apart (hence the export through
+// the api-contracts barrel).
 export const reconnectCredentialResponseSchema = z.object({
   reconnectSecret: z.string().min(1),
   expiresInDays: z.number().positive(),

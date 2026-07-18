@@ -1,31 +1,12 @@
-import { z } from 'zod'
-
-// Client-side mirrors of
-// packages/mcp-server/src/shared/api-contracts/reconnect.ts's
-// reconnectCredentialResponseSchema / reconnectSessionResponseSchema (that
-// module is the server's single source of truth — server/routes/reconnect.ts
-// imports it too). Kept as manual copies here rather than a build-time
-// import: that module stays off the published npm barrel (see its own
-// comment), so reaching into mcp-server internals at build time would be a
-// fragile, undocumented coupling for a separately-deployed app. A dedicated
-// reconnect-client.schema-drift.test.ts test-only deep-imports it to pin
-// this mirror against field-level drift — keep this file's two schemas
-// byte-for-byte in sync with the shared source when either changes.
-export const reconnectCredentialResponseSchema = z.object({
-  reconnectSecret: z.string().min(1),
-  expiresInDays: z.number().positive(),
-})
-export type ReconnectCredentialResponse = z.infer<typeof reconnectCredentialResponseSchema>
-
-export const reconnectSessionResponseSchema = z.object({
-  // Not `.min(1)`: a tokenless local daemon legally returns '' here (see the
-  // server schema's own comment) — the reconnect surface must accept that
-  // the same way every other /api/* route treats a no-op auth configuration.
-  token: z.string(),
-  reconnectSecret: z.string().min(1),
-  expiresInDays: z.number().positive(),
-})
-export type ReconnectSessionResponse = z.infer<typeof reconnectSessionResponseSchema>
+// The wire contract is imported from its single definition
+// (shared/api-contracts/reconnect.ts, exported through the package's
+// api-contracts barrel) — the same module server/routes/reconnect.ts
+// validates its responses with, so client and server cannot drift.
+import {
+  reconnectCredentialResponseSchema,
+  reconnectSessionResponseSchema,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { z } from 'zod'
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
