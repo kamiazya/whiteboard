@@ -27,6 +27,7 @@ const {
   DEFAULT_MAIN_COLOR,
 } = await import('./branches-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
+const { withWorkspaceWriteLock, _resetWorkspaceLocksForTests } = await import('./workspace-lock.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -39,6 +40,7 @@ describe('branches-store', () => {
   afterEach(async () => {
     await handle.dispose()
     await rm(tempDir, { recursive: true, force: true })
+    _resetWorkspaceLocksForTests()
   })
 
   describe('loadCanvasBranches (lazy default)', () => {
@@ -354,6 +356,102 @@ describe('branches-store', () => {
       const state = await loadCanvasBranches('sess-a', 'canvas-x')
       const v2 = state.branches.find((b) => b.name === 'feature-v2')
       expect(v2?.baseBranch).toBe('experimental')
+    })
+  })
+
+  // Every read-modify-write mutator funnels through mutateCanvasBranches,
+  // which is documented to take the same per-workspace write lock that
+  // file-gc's collect-then-unlink pass holds — the read and the write must
+  // happen inside a SINGLE lock acquisition, otherwise a GC pass can
+  // interleave between them. These tests assert the lock coverage directly
+  // (by holding the workspace lock externally, the way file-gc does, and
+  // checking the mutator blocks until it is released) rather than only via
+  // the comment on mutateCanvasBranches — a regression that reintroduced an
+  // unlocked read before the write would leave the mutator free to run
+  // concurrently with the held lock and this test would catch that.
+  describe('workspace write lock coverage', () => {
+    async function holdLockUntil(
+      workspaceId: string,
+    ): Promise<{ release: () => void; held: Promise<void> }> {
+      let release!: () => void
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const held = withWorkspaceWriteLock(workspaceId, () => gate)
+      // Let the lock-acquisition microtask actually run before returning.
+      await Promise.resolve()
+      return { release, held }
+    }
+
+    it('createBranch waits for an externally held workspace lock before reading state', async () => {
+      const { release, held } = await holdLockUntil('sess-lock-create')
+      let settled = false
+      const createPromise = createBranch('sess-lock-create', 'canvas', { name: 'feature' }).then(
+        (r) => {
+          settled = true
+          return r
+        },
+      )
+      await new Promise((r) => setTimeout(r, 20))
+      expect(settled).toBe(false)
+      release()
+      await held
+      const result = await createPromise
+      expect(settled).toBe(true)
+      expect(result.name).toBe('feature')
+    })
+
+    it('deleteBranch waits for an externally held workspace lock before reading state', async () => {
+      await createBranch('sess-lock-delete', 'canvas', { name: 'feature' })
+      const { release, held } = await holdLockUntil('sess-lock-delete')
+      let settled = false
+      const deletePromise = deleteBranch('sess-lock-delete', 'canvas', 'feature').then((r) => {
+        settled = true
+        return r
+      })
+      await new Promise((r) => setTimeout(r, 20))
+      expect(settled).toBe(false)
+      release()
+      await held
+      const result = await deletePromise
+      expect(settled).toBe(true)
+      expect(result.ok).toBe(true)
+    })
+
+    it('setHead waits for an externally held workspace lock before reading state', async () => {
+      await createBranch('sess-lock-sethead', 'canvas', { name: 'feature' })
+      const { release, held } = await holdLockUntil('sess-lock-sethead')
+      let settled = false
+      const setHeadPromise = setHead('sess-lock-sethead', 'canvas', 'feature').then((r) => {
+        settled = true
+        return r
+      })
+      await new Promise((r) => setTimeout(r, 20))
+      expect(settled).toBe(false)
+      release()
+      await held
+      const result = await setHeadPromise
+      expect(settled).toBe(true)
+      expect(result.head).toBe('feature')
+    })
+
+    it('renameBranch waits for an externally held workspace lock before reading state', async () => {
+      await createBranch('sess-lock-rename', 'canvas', { name: 'feature' })
+      const { release, held } = await holdLockUntil('sess-lock-rename')
+      let settled = false
+      const renamePromise = renameBranch('sess-lock-rename', 'canvas', 'feature', 'renamed').then(
+        (r) => {
+          settled = true
+          return r
+        },
+      )
+      await new Promise((r) => setTimeout(r, 20))
+      expect(settled).toBe(false)
+      release()
+      await held
+      const result = await renamePromise
+      expect(settled).toBe(true)
+      expect(result.name).toBe('renamed')
     })
   })
 })
