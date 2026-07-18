@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { setImmediate as realSetImmediate } from 'node:timers'
+import { setImmediate as realSetImmediate, setTimeout as realSetTimeout } from 'node:timers'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -91,10 +91,17 @@ async function advanceUntilCalls(
   fn: { mock: { calls: unknown[] } },
   calls: number,
   stepMs = 1000,
-  maxSteps = 10,
+  maxSteps = 50,
 ): Promise<void> {
   for (let i = 0; i < maxSteps && fn.mock.calls.length < calls; i++) {
-    await advanceTimersAndFlush(stepMs)
+    if (stepMs > 0) {
+      await advanceTimersAndFlush(stepMs)
+    } else {
+      // Real-wait only: for passes already started (direct tick()), where
+      // advancing the fake clock is irrelevant and only threadpool time is
+      // missing.
+      await flushRealAsync()
+    }
   }
 }
 
@@ -104,6 +111,12 @@ async function flushRealAsync(): Promise<void> {
   for (let i = 0; i < 10; i++) {
     await new Promise<void>((resolve) => realSetImmediate(resolve))
   }
+  // setImmediate turns do NOT wait for libuv threadpool completions -- a
+  // slow-disk CI runner can leave an lstat/realpath from the containment
+  // check un-landed after any number of immediate turns. One short REAL
+  // sleep (node:timers, unaffected by fake timers) yields wall-clock time
+  // to the threadpool.
+  await new Promise<void>((resolve) => realSetTimeout(resolve, 5))
 }
 
 // Deferred-promise helper: lets a test control exactly when a stubbed purge
@@ -190,6 +203,7 @@ describe('createFileGcSweeper single-flight', () => {
     })
     sweeper.start()
     await advanceTimersAndFlush(1000)
+    await advanceUntilCalls(purge, 1, 0)
     expect(purgeCalls).toBe(1)
 
     // Advance several more intervals while the first pass's purge is still
@@ -206,6 +220,7 @@ describe('createFileGcSweeper single-flight', () => {
     await Promise.resolve()
 
     await advanceTimersAndFlush(1000)
+    await advanceUntilCalls(purge, 2)
     expect(purgeCalls).toBe(2)
 
     await sweeper.stop()
@@ -226,10 +241,10 @@ describe('createFileGcSweeper single-flight', () => {
     })
 
     const first = sweeper.tick()
-    // Let the pass's discovery (listWorkspaces/discoverFsWorkspaces), its DB
-    // workspace containment check, and its purge call resolve their
-    // microtasks before the second tick() races in.
-    await flushRealAsync()
+    // Wait (condition-based) until the pass's discovery + DB containment
+    // check + purge call have actually landed before the second tick()
+    // races in -- fixed flush turns are not enough on slow-disk runners.
+    await advanceUntilCalls(purge, 1, 0)
     const second = sweeper.tick()
     expect(purgeCalls).toBe(1)
 
