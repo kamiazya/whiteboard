@@ -222,10 +222,30 @@ export function BrowserLocalCanvasPage({
     [canvasId],
   )
 
+  // Surfaced when the backend's putFile rejects (IDB write/quota failure),
+  // so a failed image upload is never silent — see useCanvasSync's own
+  // no-silent-success contract for putFile. Cleared on the next successful
+  // upload so a transient failure doesn't stick around forever.
+  const [fileUploadError, setFileUploadError] = useState<string | null>(null)
+
+  // This banner is page-level state, not scoped per backend connection, so a
+  // failure seen on canvas A would otherwise keep showing after switching to
+  // canvas B (which never fired the failure). Reset whenever the loaded
+  // canvas identity changes so a stale error never follows the user across
+  // canvases.
+  useEffect(() => {
+    setFileUploadError(null)
+  }, [canvasId])
+
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
-  const { setExcalidrawAPI, onChange, exportScene } = useCanvasSync(backend)
+  const { setExcalidrawAPI, onChange, exportScene } = useCanvasSync(backend, {
+    onFileUploadFailed: () => {
+      setFileUploadError('Could not save an image to this browser. It may not survive a reload.')
+    },
+    onFileUploadSucceeded: () => setFileUploadError(null),
+  })
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
@@ -343,6 +363,11 @@ export function BrowserLocalCanvasPage({
         {duplicateError && (
           <div role="alert" aria-live="assertive" className="text-destructive">
             {duplicateError}
+          </div>
+        )}
+        {fileUploadError && (
+          <div role="alert" aria-live="assertive" className="text-destructive">
+            {fileUploadError}
           </div>
         )}
         <span className="ml-auto text-muted-foreground">
