@@ -82,16 +82,23 @@ export function useSilentReconnect({
   useEffect(() => {
     const myGeneration = ++generationRef.current
     const isCurrent = () => generationRef.current === myGeneration
+    // Cleanup invalidates this run's generation so completions that land
+    // after unmount (not only after an input change) are also treated as
+    // stale — without it, the LAST mounted generation would stay "current"
+    // forever.
+    const invalidate = () => {
+      generationRef.current += 1
+    }
 
     if (!enabled) {
       setState({ status: 'idle' })
-      return
+      return invalidate
     }
 
     const initialSecret = load(origin)
     if (initialSecret === null) {
       setState({ status: 'idle' })
-      return
+      return invalidate
     }
 
     setState({ status: 'connecting' })
@@ -104,9 +111,13 @@ export function useSilentReconnect({
         // before seeding the token) so a failed persist still leaves the
         // in-memory token usable for this session — the next load simply
         // 403s on the stale secret and falls back to the banner.
+        // The persist is deliberately NOT generation-gated (a server-side
+        // rotation must never be lost), but seeding the shared token store
+        // is: a stale completion for a superseded (enabled, origin) must not
+        // install its token as this page's daemon auth.
         save(origin, result.secret)
-        seedDaemonToken(result.token)
         if (isCurrent()) {
+          seedDaemonToken(result.token)
           setState({ status: 'connected', token: result.token })
         }
         return
@@ -137,6 +148,7 @@ export function useSilentReconnect({
     }
 
     void attempt(initialSecret, false)
+    return invalidate
   }, [enabled, origin, fetchImpl])
 
   return state

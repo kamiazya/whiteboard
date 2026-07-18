@@ -156,5 +156,35 @@ describe('useSilentReconnect', () => {
     expect(result.current).toEqual({ status: 'idle' })
     // ...but the rotation was still persisted.
     await waitFor(() => expect(load(ORIGIN)).toBe('secret-2'))
+    // The stale completion must NOT install its token into the shared store.
+    expect(readDaemonTokenOnce()).toBeNull()
+  })
+
+  it('a late completion after unmount persists the rotation but does not seed the token store', async () => {
+    save(ORIGIN, 'secret-1')
+    let resolveFetch: ((value: Response) => void) | undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        }),
+    )
+    const { result, unmount } = renderHook(() =>
+      useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock }),
+    )
+    expect(result.current).toEqual({ status: 'connecting' })
+
+    unmount()
+
+    await act(async () => {
+      resolveFetch?.(
+        jsonResponse({ token: 'daemon-token', reconnectSecret: 'secret-2', expiresInDays: 30 }),
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitFor(() => expect(load(ORIGIN)).toBe('secret-2'))
+    expect(readDaemonTokenOnce()).toBeNull()
   })
 })
