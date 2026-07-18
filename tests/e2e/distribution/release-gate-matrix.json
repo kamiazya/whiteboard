@@ -8,7 +8,12 @@
       "requiredFor": ["ci", "local-release", "docker-release"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "fast"
+      "expectedRuntimeBucket": "fast",
+      "prCoverage": {
+        "kind": "aggregate",
+        "workflow": "ci.yml",
+        "jobId": "test-unit"
+      }
     },
     {
       "id": "typecheck",
@@ -17,7 +22,13 @@
       "requiredFor": ["ci", "local-release", "docker-release", "publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "fast"
+      "expectedRuntimeBucket": "fast",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "check",
+        "stepName": "Typecheck"
+      }
     },
     {
       "id": "test:mcp-node",
@@ -26,7 +37,12 @@
       "requiredFor": ["publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "fast"
+      "expectedRuntimeBucket": "fast",
+      "prCoverage": {
+        "kind": "aggregate",
+        "workflow": "ci.yml",
+        "jobId": "test-unit"
+      }
     },
     {
       "id": "build",
@@ -35,7 +51,13 @@
       "requiredFor": ["ci", "local-release", "docker-release", "publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "medium"
+      "expectedRuntimeBucket": "medium",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "verify",
+        "stepName": "Build"
+      }
     },
     {
       "id": "check:release-artifacts",
@@ -44,7 +66,13 @@
       "requiredFor": ["ci", "local-release", "docker-release", "publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "fast"
+      "expectedRuntimeBucket": "fast",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "verify",
+        "stepName": "Check release artifacts"
+      }
     },
     {
       "id": "generate:sbom:npm",
@@ -53,7 +81,13 @@
       "requiredFor": ["publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "fast"
+      "expectedRuntimeBucket": "fast",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "sbom-npm",
+        "stepName": "Generate npm SBOM"
+      }
     },
     {
       "id": "smoke:tarball",
@@ -62,7 +96,13 @@
       "requiredFor": ["ci", "local-release", "docker-release", "publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "medium"
+      "expectedRuntimeBucket": "medium",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "verify",
+        "stepName": "Packed tarball smoke"
+      }
     },
     {
       "id": "smoke:packaged",
@@ -71,7 +111,13 @@
       "requiredFor": ["ci", "local-release", "docker-release", "publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "medium"
+      "expectedRuntimeBucket": "medium",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "verify",
+        "stepName": "Packaged stdio smoke"
+      }
     },
     {
       "id": "smoke:distribution:packaged",
@@ -80,7 +126,13 @@
       "requiredFor": ["publish"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "medium"
+      "expectedRuntimeBucket": "medium",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "packaged-smoke",
+        "stepName": "Packaged distribution smoke"
+      }
     },
     {
       "id": "smoke:codex-config",
@@ -89,7 +141,13 @@
       "requiredFor": ["ci", "local-release", "docker-release"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "fast"
+      "expectedRuntimeBucket": "fast",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "verify",
+        "stepName": "Codex config smoke"
+      }
     },
     {
       "id": "test:e2e:distribution",
@@ -98,7 +156,12 @@
       "requiredFor": ["local-release", "docker-release"],
       "requiresDocker": false,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "slow"
+      "expectedRuntimeBucket": "slow",
+      "prCoverage": {
+        "kind": "aggregate",
+        "workflow": "ci.yml",
+        "jobId": "verify"
+      }
     },
     {
       "id": "smoke:docker",
@@ -107,7 +170,11 @@
       "requiredFor": ["docker-release"],
       "requiresDocker": true,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "slow"
+      "expectedRuntimeBucket": "slow",
+      "prCoverage": {
+        "kind": "exception",
+        "reason": "requires docker daemon + multi-minute image builds; release-candidate docker path exercised by the dry-run-docker job"
+      }
     },
     {
       "id": "smoke:docker-backup-restore",
@@ -116,7 +183,11 @@
       "requiredFor": ["docker-release"],
       "requiresDocker": true,
       "requiresNetwork": false,
-      "expectedRuntimeBucket": "slow"
+      "expectedRuntimeBucket": "slow",
+      "prCoverage": {
+        "kind": "exception",
+        "reason": "requires docker daemon + multi-minute image builds; release-candidate docker path exercised by the dry-run-docker job"
+      }
     },
     {
       "id": "mutation:contracts",

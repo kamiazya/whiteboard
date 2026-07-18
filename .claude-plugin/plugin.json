@@ -8,10 +8,7 @@
   "mcpServers": {
     "whiteboard": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@kamiazya/whiteboard-mcp@latest"
-      ]
+      "args": ["-y", "@kamiazya/whiteboard-mcp@latest"]
     }
   }
 }
