@@ -39,32 +39,15 @@
 // token, issuer URL, audience value, key IDs, or thrown error messages.
 // The `reason` string alone reaches callers.
 
-import {
-  type CryptoKey,
-  type JWTHeaderParameters,
-  type JWTVerifyGetKey,
-  jwtVerify,
-} from 'jose'
-import type { AuthScope } from './auth-strategy.js'
+import { type CryptoKey, type JWTHeaderParameters, type JWTVerifyGetKey, jwtVerify } from 'jose'
+import { AUTH_SCOPES, type AuthScope } from './auth-strategy.js'
 import type {
   OAuthResourceTokenValidationInput,
   OAuthResourceTokenValidationResult,
   OAuthResourceTokenValidator,
 } from './oauth-resource-strategy.js'
 
-const KNOWN_AUTH_SCOPES = new Set<string>([
-  'canvas:read',
-  'canvas:write',
-  'workspace:read',
-  'workspace:write',
-  'versions:read',
-  'versions:write',
-  'files:read',
-  'files:write',
-  'runtime:read',
-  'runtime:admin',
-  'mcp:call',
-])
+const KNOWN_AUTH_SCOPES: ReadonlySet<string> = new Set<string>(AUTH_SCOPES)
 
 function isAuthScope(s: string): s is AuthScope {
   return KNOWN_AUTH_SCOPES.has(s)

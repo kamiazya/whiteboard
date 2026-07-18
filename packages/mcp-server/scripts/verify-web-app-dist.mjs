@@ -23,5 +23,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     )
     process.exit(1)
   }
-  console.log('prepack gate: dist/web-app/index.html present — OK')
+  // stderr, not stdout: npm interleaves lifecycle-script stdout with the
+  // `npm pack --json` payload, so anything printed here on stdout corrupts
+  // JSON consumers of the pack output (e.g. the release pack-contents check).
+  console.error('prepack gate: dist/web-app/index.html present — OK')
 }

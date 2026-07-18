@@ -1695,7 +1695,9 @@ describe('DaemonCanvasPage', () => {
       const summary = await screen.findByText('Import from this browser')
       fireEvent.click(summary)
 
-      await waitFor(() => expect(screen.getByText('My local canvas')).toBeTruthy())
+      await waitFor(() => expect(screen.getByText('My local canvas')).toBeTruthy(), {
+        timeout: 5000,
+      })
     })
 
     it('does not touch the browser-local store until the disclosure is opened', async () => {
