@@ -9,7 +9,7 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
-import { getDataDir, DIST_WEB_APP_DIR } from './config.js'
+import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
 import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
@@ -17,6 +17,7 @@ import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
+import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { validationErrorBody } from './validators.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
@@ -35,6 +36,9 @@ export interface StartHttpServerOptions {
    *  (WHITEBOARD_OAUTH_CLIENT_REGISTRY). Empty by default, which leaves the
    *  hosted-origin authorization-server surface entirely unmounted. */
   oauthClientRegistry?: OAuthClientRegistry
+  /** Test-only seam: overrides the real createFileGcSweeper so wiring tests
+   *  can observe start/stop without waiting on a real 24h interval. */
+  fileGcSweeperFactory?: typeof createFileGcSweeper
 }
 
 export interface RunningServer {
@@ -61,6 +65,13 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   let wss: WebSocketServer
   let closing = false
   const sockets = new Set<Socket>()
+
+  // Constructed once per daemon start, independent of the WS ticket store
+  // above -- there is no shared-instance hazard here (see
+  // file-gc-sweeper.ts's own comment on why it constructs its own
+  // FileVersionStore), so this can be created any time before close() needs
+  // to reference it.
+  const fileGcSweeper: FileGcSweeper = (options.fileGcSweeperFactory ?? createFileGcSweeper)()
 
   const idleTimer = new IdleTimer(options.idleTimeoutMs ?? 15 * 60_000, () => {
     void close()
@@ -105,6 +116,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     if (closing) return
     closing = true
     idleTimer.stop()
+    await fileGcSweeper.stop()
     setRuntimeTouchFn(() => {})
 
     await new Promise<void>((resolve, reject) => {
@@ -155,6 +167,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
 
   setRuntimeTouchFn(touch)
   idleTimer.start()
+  fileGcSweeper.start()
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
   server.on('connection', (socket) => {

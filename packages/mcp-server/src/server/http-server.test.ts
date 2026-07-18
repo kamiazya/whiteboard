@@ -332,3 +332,60 @@ describe('startHttpServer ws-ticket mint→upgrade wiring (ADR-0005)', () => {
     await expect(attemptWsUpgradeWithProtocol(port, protocolHeader)).resolves.toBe(101)
   })
 })
+
+// Wiring this covers: startHttpServer must construct exactly one file-gc
+// sweeper and start it, and close() must stop it exactly once even if close()
+// is (accidentally or deliberately) called twice -- the periodic sweep is
+// otherwise invisible from outside the daemon (no HTTP surface), so only a
+// test that drives the real startHttpServer/close() path can catch a
+// regression where the sweeper is never started, started twice, or never
+// stopped on shutdown.
+describe('startHttpServer file-gc sweeper wiring', () => {
+  let running: RunningServer | undefined
+
+  afterEach(async () => {
+    await running?.close()
+    running = undefined
+  })
+
+  it('creates exactly one sweeper, starts it once, and close() stops it exactly once', async () => {
+    const port = await findAvailablePort(4500)
+    let factoryCalls = 0
+    let startCalls = 0
+    let stopCalls = 0
+    const fileGcSweeperFactory = () => {
+      factoryCalls += 1
+      return {
+        start: () => {
+          startCalls += 1
+        },
+        tick: async () => {},
+        stop: async () => {
+          stopCalls += 1
+        },
+      }
+    }
+
+    running = await startHttpServer({ port, host: '127.0.0.1', fileGcSweeperFactory })
+
+    // Drive a real request through the server before closing it -- @hono/
+    // node-server's serve() returns before the underlying socket has
+    // finished its async bind, and closing before any request has been
+    // dispatched can race Node's http.Server into treating itself as
+    // "not running" yet. Every other startHttpServer test in this file
+    // exercises a real request first for the same reason.
+    const res = await fetch(`http://127.0.0.1:${port}/token`, { method: 'POST' })
+    expect(res.status).toBe(404)
+
+    expect(factoryCalls).toBe(1)
+    expect(startCalls).toBe(1)
+    expect(stopCalls).toBe(0)
+
+    await running.close()
+    expect(stopCalls).toBe(1)
+
+    // Double close must not stop the sweeper a second time.
+    await running.close()
+    expect(stopCalls).toBe(1)
+  })
+})
