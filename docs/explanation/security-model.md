@@ -73,6 +73,15 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   correctly configured Identity Provider, a correctly scoped origin
   allowlist, and TLS termination are all prerequisites the operator must
   provide — server mode does not ship "safe out of the box" without them.
+- JWTs must self-identify as **access tokens**, not ID tokens: the server
+  requires either the RFC 9068 `typ: at+jwt` header or a `token_use: access`
+  payload claim (the AWS Cognito convention) before accepting the token.
+  This stops a leaked/stolen ID token from an IdP that reuses the same
+  audience for both token kinds from being replayed as an access token. If
+  your IdP's access tokens omit both discriminators, set
+  `WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS=true` to opt out —
+  only do this when you have confirmed the IdP truly never issues typed
+  access tokens.
 
 ## Current limitations
 
