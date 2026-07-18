@@ -8,7 +8,7 @@ import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { loadCanvasBranches } from './branches-store.js'
 import { listCanvases, loadCanvas } from './canvas-store.js'
-import { isMissingFileError } from './corrupt-stored-data.js'
+import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { assertPathWithinDir } from './path-guard.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -129,8 +129,20 @@ async function collectReferencedFileIds(
         const doc = checkoutFrontiersBase64(live, branch.tipFrontiers)
         if (doc) collectFromDoc(doc, referenced)
       } catch (err) {
-        log.warning({ workspaceId, slug, branch: branch.name, err }, 'skipped branch')
-        skipped.push({ kind: 'branch', slug, branch: branch.name, cause: err })
+        // Unlike a version load failure (which can stem from ambiguous
+        // causes worth a retryable fail-closed refusal), a branch tip that
+        // fails to decode/checkout means the persisted tipFrontiers bytes
+        // themselves are malformed. No retry repairs that, so surface it
+        // as corrupt_stored_data (500) instead of folding it into the
+        // retryable incomplete-scan (503) path.
+        log.error(
+          { workspaceId, slug, branch: branch.name, err },
+          'corrupt branch tipFrontiers; refusing to purge',
+        )
+        throw corruptStoredData(
+          `${workspaceId}/${slug} branch "${branch.name}"`,
+          `tipFrontiers could not be decoded or checked out (${err instanceof Error ? err.message : String(err)})`,
+        )
       }
     }
 

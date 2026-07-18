@@ -27,6 +27,7 @@ vi.mock('../store/file-gc.js', async () => {
 
 const { createFilesRouter } = await import('./files.js')
 const { IncompleteFileGcScanError } = await import('../store/file-gc.js')
+const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 
 describe('PUT /api/canvas/:workspaceId/:slug/file/:fileId', () => {
   beforeEach(async () => {
@@ -179,6 +180,25 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
     await expect(res.json()).resolves.toEqual({
       error: 'incomplete_file_gc_scan',
       message: expect.stringContaining('session1'),
+    })
+  })
+
+  it('returns a structured 500 corrupt_stored_data when a branch tip is unrecoverably corrupt, not a retryable 503', async () => {
+    // A corrupt persisted tipFrontiers can never be fixed by retrying, so
+    // it must not be folded into the retryable incomplete-scan (503) path.
+    purgeDanglingFilesMock.mockRejectedValue(
+      corruptStoredData('session1/canvas-a branch "feature"', 'tipFrontiers could not be decoded'),
+    )
+
+    const app = createFilesRouter()
+    const res = await app.request('/api/workspaces/session1/files/purge-dangling', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      error: 'corrupt_stored_data',
+      message: expect.stringContaining('tipFrontiers could not be decoded'),
     })
   })
 })

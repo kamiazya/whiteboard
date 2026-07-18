@@ -17,6 +17,7 @@ vi.mock('../config.js', () => ({
 
 const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
+const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createBranch, loadCanvasBranches, saveCanvasBranches, updateBranchTip } = await import(
@@ -323,7 +324,12 @@ describe('purgeDanglingFiles', () => {
     expect(remaining).toEqual(['branch-only-image.png'])
   })
 
-  it('refuses to purge when a branch tip cannot be checked out', async () => {
+  it('refuses to purge with a corrupt_stored_data failure when a branch tip cannot be checked out', async () => {
+    // Unlike a version load failure (ambiguous cause, retryable 503), a
+    // branch tip that fails to decode/checkout means the persisted bytes
+    // themselves are corrupt — no retry fixes that, so this must surface
+    // as CorruptStoredDataError (mapped to 500 corrupt_stored_data by the
+    // route), not the retryable IncompleteFileGcScanError (503).
     await saveCanvas('ws_brk2', 'broken-branch', makeDocWithImage('only-by-broken-branch'))
     await createBranch('ws_brk2', 'broken-branch', {
       name: 'feature',
@@ -332,8 +338,8 @@ describe('purgeDanglingFiles', () => {
     await seedFile('ws_brk2', 'only-by-broken-branch', '.png', 111)
     await seedFile('ws_brk2', 'really-dangling-2', '.png', 22)
 
-    await expect(purgeDanglingFiles('ws_brk2', { graceMs: 0 })).rejects.toBeInstanceOf(
-      IncompleteFileGcScanError,
+    await expect(purgeDanglingFiles('ws_brk2', { graceMs: 0 })).rejects.toSatisfy(
+      isCorruptStoredDataError,
     )
 
     const remaining = (await readdir(join(tempDir, 'ws_brk2', 'files'))).sort()
