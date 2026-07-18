@@ -8,15 +8,15 @@
   "types": "./src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --config vitest.node.config.ts && vitest run --config vitest.jsdom.config.ts && vitest run --config vitest.browser.config.ts"
   },
   "dependencies": {
+    "@excalidraw/excalidraw": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@excalidraw/excalidraw": "catalog:",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
