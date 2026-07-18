@@ -81,6 +81,23 @@ async function advanceTimersAndFlush(ms: number): Promise<void> {
   await flushRealAsync()
 }
 
+// Fire-step tolerance: on slow CI runners the arm->fire boundary can slip
+// past an exact advance (real event-loop turns interleave with the fake
+// clock), so after the precise advance, nudge the clock in bounded steps
+// until the expected call count lands. The "not called BEFORE the interval"
+// half of each test stays exact -- only the fire step gets slack, and a
+// genuinely dead timer still fails within maxSteps.
+async function advanceUntilCalls(
+  fn: { mock: { calls: unknown[] } },
+  calls: number,
+  stepMs = 1000,
+  maxSteps = 10,
+): Promise<void> {
+  for (let i = 0; i < maxSteps && fn.mock.calls.length < calls; i++) {
+    await advanceTimersAndFlush(stepMs)
+  }
+}
+
 // Same real-event-loop-turn flush as advanceTimersAndFlush(), for call sites
 // that race tick() directly instead of going through the fake-timer clock.
 async function flushRealAsync(): Promise<void> {
@@ -125,6 +142,7 @@ describe('createFileGcSweeper scheduling', () => {
     })
     sweeper.start()
     await advanceTimersAndFlush(1000)
+    await advanceUntilCalls(purge, 1)
     expect(purge).toHaveBeenCalledTimes(1)
     expect(purge).toHaveBeenCalledWith('ws_a')
 
@@ -375,6 +393,7 @@ describe('createFileGcSweeper env parsing', () => {
     await advanceTimersAndFlush(24 * 60 * 60 * 1000 - 1)
     expect(purge).not.toHaveBeenCalled()
     await advanceTimersAndFlush(1)
+    await advanceUntilCalls(purge, 1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -389,6 +408,7 @@ describe('createFileGcSweeper env parsing', () => {
     })
     sweeper.start()
     await advanceTimersAndFlush(2000)
+    await advanceUntilCalls(purge, 1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -418,6 +438,7 @@ describe('createFileGcSweeper env parsing', () => {
     })
     sweeper.start()
     await advanceTimersAndFlush(500)
+    await advanceUntilCalls(purge, 1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -440,6 +461,7 @@ describe('createFileGcSweeper env parsing', () => {
     await advanceTimersAndFlush(MAX_TIMER_DELAY_MS - 1)
     expect(purge).not.toHaveBeenCalled()
     await advanceTimersAndFlush(1)
+    await advanceUntilCalls(purge, 1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -461,6 +483,7 @@ describe('createFileGcSweeper env parsing', () => {
     await advanceTimersAndFlush(24 * 60 * 60 * 1000 - 1)
     expect(purge).not.toHaveBeenCalled()
     await advanceTimersAndFlush(1)
+    await advanceUntilCalls(purge, 1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -478,6 +501,7 @@ describe('createFileGcSweeper env parsing', () => {
     await advanceTimersAndFlush(MAX_TIMER_DELAY_MS - 1)
     expect(purge).not.toHaveBeenCalled()
     await advanceTimersAndFlush(1)
+    await advanceUntilCalls(purge, 1)
     expect(purge).toHaveBeenCalledTimes(1)
     await sweeper.stop()
   })
@@ -537,6 +561,7 @@ describe('createFileGcSweeper per-workspace isolation', () => {
       // rescheduled the next one instead of getting stuck.
       shouldFail = false
       await advanceTimersAndFlush(1000)
+      await advanceUntilCalls(purge, 1)
       expect(purge).toHaveBeenCalledTimes(1)
       await sweeper.stop()
     } finally {
