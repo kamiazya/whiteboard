@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { EXTENSION_ID, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server'
@@ -34,11 +34,14 @@ let cachedWidgetHtml: string | undefined
 
 // Reads and caches the widget HTML at module scope. A per-request McpServer
 // (the HTTP /mcp handler constructs one per request) must not re-read this
-// file from disk on every resources/read call.
-function readWidgetHtml(): string {
+// ~8.5 MB file from disk on every resources/read call, and the read is
+// async so the first request never blocks the event loop on it. Only a
+// successful read is cached — a missing file stays retryable (e.g. a build
+// finishing after the daemon started).
+async function readWidgetHtml(): Promise<string> {
   if (cachedWidgetHtml !== undefined) return cachedWidgetHtml
   try {
-    cachedWidgetHtml = readFileSync(activeWidgetHtmlPath, 'utf-8')
+    cachedWidgetHtml = await readFile(activeWidgetHtmlPath, 'utf-8')
   } catch (err) {
     getLogger('mcp-apps').error(
       { path: activeWidgetHtmlPath, err },
@@ -90,7 +93,7 @@ export function registerMcpAppsExtension(server: McpServer): void {
         {
           uri: CANVAS_VIEW_RESOURCE_URI,
           mimeType: RESOURCE_MIME_TYPE,
-          text: readWidgetHtml(),
+          text: await readWidgetHtml(),
         },
       ],
     }),
