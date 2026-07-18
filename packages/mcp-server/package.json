@@ -222,7 +222,7 @@
     "jsdom": "^29.0.2",
     "libsql": "^0.5.29",
     "lucide-react": "^1.11.0",
-    "playwright": "^1.59.1",
+    "playwright": "^1.61.1",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router-dom": "^7.18.0",
