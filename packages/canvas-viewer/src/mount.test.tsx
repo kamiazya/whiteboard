@@ -66,7 +66,7 @@ describe('mountCanvasViewer', () => {
     handle.dispose()
   })
 
-  it('registers a window message listener that forwards event.data to messageHandler', () => {
+  it('registers a window message listener that forwards the full MessageEvent to messageHandler', () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
     const messageHandler = vi.fn()
@@ -76,8 +76,13 @@ describe('mountCanvasViewer', () => {
       messageHandler,
     })
 
-    window.dispatchEvent(new MessageEvent('message', { data: { hello: 'world' } }))
-    expect(messageHandler).toHaveBeenCalledWith({ hello: 'world' })
+    window.dispatchEvent(
+      new MessageEvent('message', { data: { hello: 'world' }, origin: 'https://host.example' }),
+    )
+    expect(messageHandler).toHaveBeenCalledTimes(1)
+    const receivedEvent = messageHandler.mock.calls[0]?.[0] as MessageEvent
+    expect(receivedEvent.data).toEqual({ hello: 'world' })
+    expect(receivedEvent.origin).toBe('https://host.example')
 
     handle.dispose()
   })

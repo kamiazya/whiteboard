@@ -13,8 +13,12 @@ export interface MountCanvasViewerOptions {
   testId?: string
   // Hand-off seam for embedding hosts (e.g. an MCP Apps widget iframe) to
   // receive postMessage traffic without this package owning any bridge
-  // protocol. Registered on `window`, unbound by dispose().
-  messageHandler?: (data: unknown) => void
+  // protocol. Registered on `window`, unbound by dispose(). Receives the
+  // full MessageEvent (not just `.data`) so the host MUST inspect
+  // `event.origin` / `event.source` itself before trusting the payload —
+  // this package has no way to know the host's expected origin, so it
+  // cannot filter on the host's behalf.
+  messageHandler?: (event: MessageEvent) => void
 }
 
 export interface CanvasViewerHandle {
@@ -63,7 +67,7 @@ export function mountCanvasViewer(
   })
 
   const onMessage = opts.messageHandler
-    ? (event: MessageEvent) => opts.messageHandler?.(event.data)
+    ? (event: MessageEvent) => opts.messageHandler?.(event)
     : undefined
   if (onMessage) {
     window.addEventListener('message', onMessage)
