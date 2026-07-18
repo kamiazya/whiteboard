@@ -60,6 +60,7 @@ vi.mock('@excalidraw/excalidraw', () => ({
         addFiles: vi.fn(),
         getSceneElements: () => [],
         getAppState: () => ({}),
+        getFiles: () => ({}),
       })
     }
     // Surfaces the received theme so tests can assert the page actually
@@ -797,6 +798,37 @@ describe('BrowserLocalCanvasPage', () => {
       await screen.findByText('Other canvas')
       expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)
       expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
+    })
+  })
+
+  describe('Export → JSON routes through the commands layer', () => {
+    it('downloads a .excalidraw envelope produced by commands.exportJson', async () => {
+      vi.useRealTimers()
+      const store = new MemoryStore()
+      await store.setDefaultCanvasId('c1')
+      await store.save(snap)
+      vi.stubGlobal('URL', {
+        ...URL,
+        createObjectURL: vi.fn(() => 'blob:mock-url'),
+        revokeObjectURL: vi.fn(),
+      })
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+      await act(async () => {
+        render(<BrowserLocalCanvasPage store={store} />)
+      })
+      const canvasActions = await screen.findByLabelText('Canvas actions')
+      fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+      const jsonItem = await screen.findByText('Export as JSON')
+      await act(async () => {
+        fireEvent.pointerUp(jsonItem)
+      })
+
+      await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+      const anchor = clickSpy.mock.instances[0] as HTMLAnchorElement
+      expect(anchor.download).toBe('untitled.excalidraw')
+
+      vi.unstubAllGlobals()
     })
   })
 })

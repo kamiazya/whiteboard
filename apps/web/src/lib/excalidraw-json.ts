@@ -1,5 +1,6 @@
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types'
+import { z } from 'zod'
 
 // Producing the .excalidraw payload by hand rather than via excalidraw's own
 // serializeAsJSON: that helper is a top-level export ONLY in the package's
@@ -11,14 +12,23 @@ import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types'
 // Excalidraw desktop / excalidraw.com.
 const EXCALIDRAW_FILE_SOURCE = '@kamiazya/whiteboard'
 
-export interface ExcalidrawJsonDoc {
-  type: 'excalidraw'
-  version: 2
-  source: string
-  elements: readonly ExcalidrawElement[]
-  appState: { gridSize: number | null; viewBackgroundColor: string }
-  files: BinaryFiles
-}
+// Deliberately loose on elements/files: validating their internal shape is
+// Excalidraw's own job (its scene reducer already does it). This schema only
+// guards the envelope (type/version/source/appState) that this repo's own
+// serializer and consumers depend on.
+export const excalidrawJsonDocSchema = z.object({
+  type: z.literal('excalidraw'),
+  version: z.literal(2),
+  source: z.string(),
+  elements: z.array(z.custom<ExcalidrawElement>()).readonly(),
+  appState: z.object({
+    gridSize: z.number().nullable(),
+    viewBackgroundColor: z.string(),
+  }),
+  files: z.custom<BinaryFiles>(),
+})
+
+export type ExcalidrawJsonDoc = z.infer<typeof excalidrawJsonDocSchema>
 
 // gridSize/viewBackgroundColor are the only appState fields the .excalidraw
 // format persists; both are read defensively since a caller may hand a

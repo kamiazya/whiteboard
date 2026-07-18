@@ -1,18 +1,20 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
+import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
-import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
@@ -137,6 +139,36 @@ export function DaemonCanvasPage({
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
     identity: canvas ?? undefined,
   })
+
+  // Fans out to both useCanvasSync's own imperative-API ref (via
+  // setExcalidrawAPI below) and this page-local ref, so the commands layer
+  // can read the live Excalidraw API without useCanvasSync needing to expose
+  // its internal ref.
+  const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null)
+
+  const commands = useWhiteboardCommands({
+    getExcalidrawApi: () => excalidrawApiRef.current,
+    provider: { kind: 'local-daemon', daemonBaseUrl, capabilities },
+    // The daemon canvas summary carries no display name yet (only
+    // slug/updatedAt) — the slug doubles as `name` until that changes.
+    canvas:
+      canvas !== null
+        ? { workspaceId: canvas.workspaceId, canvasId: canvas.slug, name: canvas.slug }
+        : null,
+  })
+
+  // Preserves the existing onExport contract (format => Blob | null):
+  // png/svg still go straight through exportScene, while json now delegates
+  // scene serialization to the shared commands layer.
+  const handleExport = async (format: Parameters<typeof exportScene>[0]) => {
+    if (format !== 'json') return exportScene(format)
+    try {
+      const doc = await commands.exportJson()
+      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
+    } catch {
+      return null
+    }
+  }
 
   const saveVersion = async (): Promise<void> => {
     if (!capabilities.versions || canvas === null || savingVersion) return
@@ -292,7 +324,7 @@ export function DaemonCanvasPage({
             onRestored={clearLocalUndo}
             versionPanelExtra={versionPanelExtra}
             onNavigateBack={onNavigateBack}
-            onExport={exportScene}
+            onExport={handleExport}
           />
         )}
         {capabilities.branches && canvas && (
@@ -407,7 +439,13 @@ export function DaemonCanvasPage({
           </div>
         ) : (
           <div className="min-h-0 flex-1">
-            <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} />
+            <Excalidraw
+              excalidrawAPI={(api) => {
+                excalidrawApiRef.current = api
+                setExcalidrawAPI(api)
+              }}
+              onChange={onChange}
+            />
           </div>
         )}
         {capabilities.merge && canvas && (

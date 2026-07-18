@@ -1,5 +1,6 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
+import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
@@ -19,6 +20,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -148,7 +150,14 @@ export function BrowserLocalCanvasPage({
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
+  const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
+
+  // Fans out to both useCanvasSync's own imperative-API ref (via
+  // setExcalidrawAPI below) and this page-local ref, so the commands layer
+  // can read the live Excalidraw API without useCanvasSync needing to expose
+  // its internal ref.
+  const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null)
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
@@ -247,6 +256,25 @@ export function BrowserLocalCanvasPage({
     onFileUploadSucceeded: () => setFileUploadError(null),
   })
 
+  const commands = useWhiteboardCommands({
+    getExcalidrawApi: () => excalidrawApiRef.current,
+    provider: { kind: 'browser-local', capabilities },
+    canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
+  })
+
+  // Preserves the existing onExport contract (format => Blob | null):
+  // png/svg still go straight through exportScene, while json now delegates
+  // scene serialization to the shared commands layer.
+  const handleExport = async (format: Parameters<typeof exportScene>[0]) => {
+    if (format !== 'json') return exportScene(format)
+    try {
+      const doc = await commands.exportJson()
+      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
+    } catch {
+      return null
+    }
+  }
+
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
   // fallback option for the gap between those two so the controlled
@@ -343,7 +371,7 @@ export function BrowserLocalCanvasPage({
             branches: capabilities.branches,
             merge: capabilities.merge,
           }}
-          onExport={exportScene}
+          onExport={handleExport}
         />
       </Suspense>
       {/* Page-specific bits that WorkspaceTopBar has no slot for. A plain
@@ -414,7 +442,14 @@ export function BrowserLocalCanvasPage({
         </AlertDialog>
       </div>
       <div data-testid="excalidraw-container" className="min-h-0 flex-1">
-        <Excalidraw excalidrawAPI={setExcalidrawAPI} onChange={onChange} theme={resolvedTheme} />
+        <Excalidraw
+          excalidrawAPI={(api) => {
+            excalidrawApiRef.current = api
+            setExcalidrawAPI(api)
+          }}
+          onChange={onChange}
+          theme={resolvedTheme}
+        />
       </div>
     </main>
   )
