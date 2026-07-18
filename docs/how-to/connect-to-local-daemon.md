@@ -126,6 +126,45 @@ that covers it (see
 verify it yourself before sharing a hosted pairing link. Loopback origins
 need no allowlist entry.
 
+## Silent reconnect after a reload (server support)
+
+The daemon can remember that a specific web origin was paired and hand it a
+fresh session without a confirmation prompt on a later request — this is the
+server-side half of the silent-reconnect flow (the web app does not yet call
+it automatically; see the project's task backlog for that follow-up).
+
+How it works:
+
+- After pairing, the web origin calls `POST /api/reconnect-credential`
+  (authenticated with the daemon token) to enroll and receive a
+  **reconnect secret** — a random value distinct from the daemon token
+  itself. The daemon persists only a hash of this secret, keyed to the exact
+  origin that requested it, in `trusted-web-origins.json` under the data
+  directory (owner-only file permissions, same as `daemon.json`).
+- To reconnect later, that origin calls `POST /api/reconnect-session` with
+  `Authorization: Bearer <reconnect secret>`. If the request's `Origin`
+  header exactly matches the enrolled origin and the secret's hash matches,
+  the daemon responds with a fresh daemon token and a **rotated** reconnect
+  secret — the old secret stops working immediately.
+- A trust record expires automatically 30 days after its last successful
+  use (a sliding TTL), so an origin that stops reconnecting eventually loses
+  its standing access on its own.
+
+This is deliberately **not** an Origin-only check: the `Origin` header is
+just an HTTP header a same-machine process can set to anything, so trusting
+it alone would not add anything beyond what `daemon.json`'s file permissions
+already provide, and would be weaker for a request coming from anywhere the
+daemon is reachable. Reconnecting requires *possessing* the rotating secret,
+not merely claiming an origin.
+
+**Revoking trust.** If a reconnect secret is ever suspected of being
+compromised (e.g. an XSS on the paired origin), stop the daemon and delete
+or edit `trusted-web-origins.json` in the data directory to remove that
+origin's entry — the entry disappearing is picked up by a running daemon on
+its next request for that origin (no restart required). A dedicated
+`whiteboard trust revoke <origin>` command is planned but not yet wired into
+the CLI.
+
 ## Copy-first import
 
 If you have canvases stored only in this browser (from before a daemon was

@@ -76,6 +76,10 @@ function isAuthorizedOAuthGrant(
   const required = resolveApiRouteScope(method, path)
   if (required === null) return false
   if (required.kind === 'public') return true
+  // `daemon-token-only` routes never accept an OAuth grant, no matter its
+  // scopes — see route-scope-registry.ts for why (escalation to the full
+  // daemon token via a route like /api/reconnect-credential).
+  if (required.kind === 'daemon-token-only') return false
   return hasRequiredScopes(grant.scopes, required.scopes)
 }
 

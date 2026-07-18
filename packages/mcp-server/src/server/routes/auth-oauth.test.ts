@@ -120,4 +120,22 @@ describe('createDaemonAuthMiddleware with an OAuth grant store', () => {
       (await request(createApp(createOAuthTransactionStore()), '/api/runtime/ping', 'GET')).status,
     ).toBe(200)
   })
+
+  it('refuses even a runtime:admin-scoped grant on the daemon-token-only reconnect-credential route', async () => {
+    // /api/reconnect-credential mints a secret that /api/reconnect-session
+    // later exchanges for the full, unscoped daemon token (see reconnect.ts).
+    // A grant scoped only to runtime:admin (legitimately issued for
+    // touch/shutdown/logs-prune/debug) must not be able to reach it — that
+    // would let a scope-limited hosted client escalate itself to full daemon
+    // authority. route-scope-registry.ts declares this route
+    // `daemon-token-only`, which this middleware must never treat as
+    // satisfiable by any OAuth grant.
+    const store = createOAuthTransactionStore()
+    const { accessToken } = store.mintAccessToken(['runtime:admin'], 'hosted-client')
+    const app = createApp(store)
+
+    expect((await request(app, '/api/reconnect-credential', 'POST', accessToken)).status).toBe(401)
+    // The daemon token itself keeps its unchanged authority.
+    expect((await request(app, '/api/reconnect-credential', 'POST', DAEMON_TOKEN)).status).toBe(200)
+  })
 })
