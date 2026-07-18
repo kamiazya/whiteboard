@@ -16,6 +16,7 @@ vi.mock('@excalidraw/excalidraw', () => ({
         addFiles: vi.fn(),
         getSceneElements: () => [],
         getAppState: () => ({}),
+        getFiles: () => ({}),
       })
     }
     return <div data-testid="excalidraw-container" />
@@ -1625,6 +1626,39 @@ describe('DaemonCanvasPage', () => {
       await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
 
       vi.unstubAllGlobals()
+    })
+  })
+
+  describe('Export → JSON routes through the commands layer', () => {
+    it('downloads a .excalidraw envelope produced by commands.exportJson', async () => {
+      // Spy rather than vi.stubGlobal('URL', {...}) — the page's daemonFetch
+      // wiring calls `new URL(...)`, which a plain-object stub can't satisfy.
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+      await act(async () => {
+        render(
+          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+
+      const canvasActions = screen.getByLabelText('Canvas actions')
+      fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
+      const jsonItem = await screen.findByText('Export as JSON')
+      await act(async () => {
+        fireEvent.pointerUp(jsonItem)
+      })
+
+      await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+      const anchor = clickSpy.mock.instances[0] as HTMLAnchorElement
+      expect(anchor.download).toBe('main.excalidraw')
+
+      createObjectURL.mockRestore()
+      revokeObjectURL.mockRestore()
+      clickSpy.mockRestore()
     })
   })
 

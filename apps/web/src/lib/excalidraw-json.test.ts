@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { serializeSceneAsExcalidrawJson } from './excalidraw-json.js'
+import { excalidrawJsonDocSchema, serializeSceneAsExcalidrawJson } from './excalidraw-json.js'
 
 const el = (over: Record<string, unknown>) =>
   ({ id: 'e', type: 'rectangle', x: 0, y: 0, ...over }) as never
@@ -53,5 +53,15 @@ describe('serializeSceneAsExcalidrawJson', () => {
     const doc = serializeSceneAsExcalidrawJson([], { gridSize: null } as never, {})
 
     expect(doc.appState.viewBackgroundColor).toBe('#ffffff')
+  })
+
+  it('always produces a doc satisfying excalidrawJsonDocSchema', () => {
+    const doc = serializeSceneAsExcalidrawJson(
+      [el({ id: 'a' })],
+      { gridSize: 20, viewBackgroundColor: '#fff' },
+      {},
+    )
+
+    expect(() => excalidrawJsonDocSchema.parse(doc)).not.toThrow()
   })
 })
