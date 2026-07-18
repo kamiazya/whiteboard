@@ -75,4 +75,54 @@ describe('withWorkspaceWriteLock', () => {
     const result = await withWorkspaceWriteLock('ws_a', async () => 42)
     expect(result).toBe(42)
   })
+
+  it('lets the current holder re-enter the same workspace lock without deadlocking', async () => {
+    // A single logical write transaction (e.g. the branches HEAD-switch
+    // route) can call something like saveCanvas() from within its own
+    // already-held critical section. Queueing again would await its own
+    // completion and hang forever — the nested call must run immediately.
+    const events: string[] = []
+    await withWorkspaceWriteLock('ws_reentrant', async () => {
+      events.push('outer-enter')
+      await withWorkspaceWriteLock('ws_reentrant', async () => {
+        events.push('inner-ran')
+      })
+      events.push('outer-exit')
+    })
+    expect(events).toEqual(['outer-enter', 'inner-ran', 'outer-exit'])
+  })
+
+  it('still serializes a genuinely separate concurrent caller behind the current holder', async () => {
+    // Reentrancy detection must not let an UNRELATED concurrent acquirer
+    // (different call chain, same workspace) skip the queue — only the
+    // current holder's own continuation may bypass it.
+    let releaseHolder: () => void = () => undefined
+    const holderReleased = new Promise<void>((resolve) => {
+      releaseHolder = resolve
+    })
+    const events: string[] = []
+
+    const holderPromise = withWorkspaceWriteLock('ws_b', async () => {
+      events.push('holder-enter')
+      await holderReleased
+      events.push('holder-exit')
+    })
+
+    // Give the holder a chance to actually acquire the lock first.
+    await new Promise((r) => setTimeout(r, 5))
+
+    let otherSettled = false
+    const otherPromise = withWorkspaceWriteLock('ws_b', async () => {
+      events.push('other-ran')
+    }).then(() => {
+      otherSettled = true
+    })
+
+    await new Promise((r) => setTimeout(r, 5))
+    expect(otherSettled).toBe(false)
+
+    releaseHolder()
+    await Promise.all([holderPromise, otherPromise])
+    expect(events).toEqual(['holder-enter', 'holder-exit', 'other-ran'])
+  })
 })

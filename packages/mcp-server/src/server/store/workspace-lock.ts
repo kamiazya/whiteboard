@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks'
+
 // Per-workspace write barrier.
 //
 // Background: file-gc walks every canvas + version of a workspace to
@@ -15,10 +17,28 @@
 
 const queues = new Map<string, Promise<void>>()
 
+// Reentrancy tracking. A single logical write transaction can legitimately
+// nest lock acquisitions for the SAME workspace — e.g. the HEAD-switch
+// route holds the lock across its whole read-modify-write, and the
+// checkoutTo hook it awaits in the middle calls saveCanvas(), which also
+// takes this lock. Since only one holder can ever be active per workspace
+// at a time, a nested acquisition can only be the current holder's own
+// continuation re-entering (queueing again would await its own completion
+// and deadlock forever). AsyncLocalStorage propagates through awaits along
+// the exact call chain that acquired the lock, so it distinguishes true
+// reentrancy from a genuinely separate concurrent caller (e.g. an
+// unrelated websocket handler's saveCanvas firing at the same time), which
+// must still queue normally rather than run concurrently.
+const heldByThisChain = new AsyncLocalStorage<ReadonlySet<string>>()
+
 export async function withWorkspaceWriteLock<T>(
   workspaceId: string,
   fn: () => Promise<T>,
 ): Promise<T> {
+  const alreadyHeld = heldByThisChain.getStore()
+  if (alreadyHeld?.has(workspaceId)) {
+    return fn()
+  }
   // Read the current tail (may be undefined for a fresh workspace).
   const previous = queues.get(workspaceId) ?? Promise.resolve()
   // Create a new tail that waits for the previous one to settle, then
@@ -42,7 +62,9 @@ export async function withWorkspaceWriteLock<T>(
     // surfaced to that caller.
   }
   try {
-    return await fn()
+    const nextHeld = new Set(alreadyHeld ?? [])
+    nextHeld.add(workspaceId)
+    return await heldByThisChain.run(nextHeld, fn)
   } finally {
     release()
     // Once we drain, drop the entry if we are still the tail so the
