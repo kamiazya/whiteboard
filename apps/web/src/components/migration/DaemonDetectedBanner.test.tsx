@@ -4,7 +4,7 @@ import type { DaemonProbeResult, ProbeDaemonOptions } from '../../lib/daemon-pro
 import {
   load as loadReconnectSecret,
   save as saveReconnectSecret,
-} from '../../lib/reconnect-secret-store.js'
+} from '../../lib/reconnect-credential-store.js'
 import { createUserSettingsStore, type UserSettingsStore } from '../../lib/user-settings-store.js'
 import {
   DaemonDetectedBanner,

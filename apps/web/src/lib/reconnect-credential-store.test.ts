@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clear, clearIfMatches, load, STORAGE_KEY, save } from './reconnect-secret-store.js'
+import { clear, clearIfMatches, load, STORAGE_KEY, save } from './reconnect-credential-store.js'
 
-describe('reconnect-secret-store', () => {
+describe('reconnect-credential-store', () => {
   afterEach(() => {
     localStorage.clear()
   })

@@ -6,7 +6,7 @@ import {
   type ProbeDaemonOptions,
   probeDaemon,
 } from '../../lib/daemon-probe.js'
-import { clear as clearReconnectSecret } from '../../lib/reconnect-secret-store.js'
+import { clear as clearReconnectSecret } from '../../lib/reconnect-credential-store.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 

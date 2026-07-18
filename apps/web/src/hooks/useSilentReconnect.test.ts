@@ -1,7 +1,7 @@
 import { readDaemonTokenOnce, resetTokenStoreForTests } from '@kamiazya/whiteboard-mcp/api-client'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { clear as clearSecretStore, load, save } from '../lib/reconnect-secret-store.js'
+import { clear as clearSecretStore, load, save } from '../lib/reconnect-credential-store.js'
 import { resetSilentReconnectForTests, useSilentReconnect } from './useSilentReconnect.js'
 
 const ORIGIN = 'http://localhost:3099'

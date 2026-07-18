@@ -1,5 +1,5 @@
 import { enrollReconnectCredential, type FetchLike } from './reconnect-client.js'
-import { save } from './reconnect-secret-store.js'
+import { save } from './reconnect-credential-store.js'
 
 function defaultFetchImpl(input: string | URL, init?: RequestInit): Promise<Response> {
   return globalThis.fetch(input, init)

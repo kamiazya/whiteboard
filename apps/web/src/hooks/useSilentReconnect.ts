@@ -5,7 +5,7 @@ import {
   type RedeemResult,
   redeemReconnectSession,
 } from '../lib/reconnect-client.js'
-import { clearIfMatches, load, save } from '../lib/reconnect-secret-store.js'
+import { clearIfMatches, load, save } from '../lib/reconnect-credential-store.js'
 
 export interface UseSilentReconnectOptions {
   // False when a #wb= pairing fragment was present, or when there is no
@@ -63,7 +63,7 @@ function defaultFetchImpl(input: string | URL, init?: RequestInit): Promise<Resp
 /**
  * Silently redeems a stored reconnect secret for a daemon token on page
  * load, without a confirmation dialog. See reconnect-client.ts /
- * reconnect-secret-store.ts for the wire contract and persistence rules.
+ * reconnect-credential-store.ts for the wire contract and persistence rules.
  *
  * A completion that arrives after this hook's (enabled, origin) inputs have
  * changed, or after unmount, still persists a rotated secret (never lose a

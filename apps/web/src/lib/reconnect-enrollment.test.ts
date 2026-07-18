@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { enrollForReconnectOnce, resetReconnectEnrollmentForTests } from './reconnect-enrollment.js'
-import { clear as clearSecretStore, load } from './reconnect-secret-store.js'
+import { clear as clearSecretStore, load } from './reconnect-credential-store.js'
 
 const ORIGIN = 'http://localhost:3099'
 

@@ -22,7 +22,7 @@ import { createUserSettingsStore } from './lib/user-settings-store.js'
 
 // A stored localDaemonBaseUrl can carry a trailing slash or non-default port
 // casing; canonicalizing to a bare origin here matches what
-// reconnect-secret-store.ts enforces on write, so a load() lookup for the
+// reconnect-credential-store.ts enforces on write, so a load() lookup for the
 // same target always hits.
 function canonicalizeDaemonOrigin(raw: string | undefined): string | undefined {
   if (!raw) return undefined
@@ -146,7 +146,7 @@ export function App({ providerState }: AppProps) {
   // Read once at mount: the reconnect target this tab would silently
   // reconnect to, if any. Read from the SAME settings store the pairing
   // effect below writes to, canonicalized to a bare origin so it matches
-  // reconnect-secret-store.ts's stored key.
+  // reconnect-credential-store.ts's stored key.
   const [reconnectOrigin] = useState(() =>
     canonicalizeDaemonOrigin(userSettingsStore.load().storage.localDaemonBaseUrl),
   )

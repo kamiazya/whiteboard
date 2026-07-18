@@ -17,7 +17,7 @@ import {
   clear as clearReconnectSecretStore,
   load as loadReconnectSecret,
   save as saveReconnectSecret,
-} from './lib/reconnect-secret-store.js'
+} from './lib/reconnect-credential-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
 
 afterEach(cleanup)
