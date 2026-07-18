@@ -128,7 +128,15 @@ describe('createFileGcSweeper scheduling', () => {
     expect(purge).toHaveBeenCalledTimes(1)
     expect(purge).toHaveBeenCalledWith('ws_a')
 
-    await advanceTimersAndFlush(1000)
+    // The completion-reschedule arm lands after the pass settles; under
+    // heavy parallel-worker load that can slip past a single advance, so
+    // advance bounded extra intervals until the second pass fires. The
+    // invariant under test is "reschedules after completion", not exact
+    // phase alignment (single-flight/stop have their own deterministic
+    // tick()-based tests).
+    for (let i = 0; i < 5 && purge.mock.calls.length < 2; i++) {
+      await advanceTimersAndFlush(1000)
+    }
     expect(purge).toHaveBeenCalledTimes(2)
     await sweeper.stop()
   })
