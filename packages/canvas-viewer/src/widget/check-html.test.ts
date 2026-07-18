@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_INERT_URL_ALLOWLIST, findExternalResourceUrls } from './check-html.js'
+import { findExternalResourceUrls } from './check-html.js'
 
 describe('findExternalResourceUrls', () => {
   it('returns an empty array for a fully self-contained document', () => {
@@ -36,6 +36,14 @@ describe('findExternalResourceUrls', () => {
     expect(found).toContain('https://evil.example.com/b.png')
   })
 
+  it('flags an UNQUOTED src/href attribute value', () => {
+    const html = `<img src=https://example.com/a.png><a href=http://example.com/b>x</a>`
+
+    const found = findExternalResourceUrls(html)
+    expect(found).toContain('https://example.com/a.png')
+    expect(found).toContain('http://example.com/b')
+  })
+
   it('does not flag inert http(s) strings such as xmlns or license comment URLs', () => {
     const html = `<!doctype html><html><head></head><body>
       <svg xmlns="http://www.w3.org/2000/svg"></svg>
@@ -45,26 +53,25 @@ describe('findExternalResourceUrls', () => {
     expect(findExternalResourceUrls(html)).toEqual([])
   })
 
-  it('does not flag Excalidraw-embedded social-embed string constants covered by the default allowlist', () => {
-    // Excalidraw's minified bundle assigns these as a literal
-    // `.src = "https://…"` for its optional tweet/reddit embed feature —
-    // a string constant that only becomes a real request if a scene
-    // contains that embed type, never at rest.
+  it('ignores URL string constants inside inline script bodies', () => {
+    // Excalidraw's minified bundle assigns these as literal
+    // `.src = "https://…"` strings for its optional tweet/reddit embed
+    // feature — compiled JS text, not a resource-loading position in the
+    // document. Script BODIES are stripped before scanning, so no URL
+    // allowlist is needed (an allowlist would also have suppressed a
+    // genuine external tag for the same URL).
     const html = `<script>t.src="https://platform.twitter.com/widgets.js";u.src="https://embed.reddit.com/widgets.js"</script>`
 
     expect(findExternalResourceUrls(html)).toEqual([])
   })
 
-  it('still flags an unknown URL even when a default allowlist is in effect', () => {
-    const html = `<img src="https://platform.twitter.com/widgets.js"><img src="https://tracker.example.com/pixel.gif">`
+  it('still flags a genuine external tag even for URLs that also appear as script string constants', () => {
+    const html = `<script>t.src="https://platform.twitter.com/widgets.js"</script>
+      <script src="https://platform.twitter.com/widgets.js"></script>
+      <img src="https://tracker.example.com/pixel.gif">`
 
-    expect(findExternalResourceUrls(html)).toEqual(['https://tracker.example.com/pixel.gif'])
-  })
-
-  it('allows the allowlist to be overridden explicitly', () => {
-    const html = `<img src="https://example.com/pic.png">`
-
-    expect(findExternalResourceUrls(html, new Set())).toEqual(['https://example.com/pic.png'])
-    expect(DEFAULT_INERT_URL_ALLOWLIST.size).toBeGreaterThan(0)
+    const found = findExternalResourceUrls(html)
+    expect(found).toContain('https://platform.twitter.com/widgets.js')
+    expect(found).toContain('https://tracker.example.com/pixel.gif')
   })
 })

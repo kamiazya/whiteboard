@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,13 +22,21 @@ const RESOLVED_VIRTUAL_MODULE_ID = `\0${VIRTUAL_MODULE_ID}`
 function resolveExcalidrawFontsDir(): string {
   // No `./package.json` subpath in @excalidraw/excalidraw's `exports` map, so
   // resolve the real entry point instead and derive the fonts dir from it.
-  // `production` is forced via customConditions because this is a prod vite
-  // build and the fonts only exist under dist/prod, not dist/dev.
-  const entryPath = require.resolve('@excalidraw/excalidraw', {
-    // @ts-expect-error -- Node's resolve options type doesn't include customConditions yet.
-    customConditions: ['production'],
-  })
-  return join(dirname(entryPath), 'fonts')
+  // Node's require.resolve has no conditions override — this resolves the
+  // package's DEFAULT export condition, which for @excalidraw/excalidraw
+  // 0.18.x is the production build (dist/prod), the only variant that ships
+  // font files. The existence check below fails the build loudly if a
+  // future version changes its default entry away from a fonts-bearing
+  // directory, instead of silently bundling nothing.
+  const entryPath = require.resolve('@excalidraw/excalidraw')
+  const fontsDir = join(dirname(entryPath), 'fonts')
+  if (!existsSync(fontsDir)) {
+    throw new Error(
+      `@excalidraw/excalidraw's default entry (${entryPath}) has no sibling fonts/ directory — ` +
+        'the widget font embedding expects the production dist layout; check the installed version.',
+    )
+  }
+  return fontsDir
 }
 
 // Bakes the fonts the widget needs (see src/widget/font-assets.ts) into a

@@ -11,5 +11,12 @@
 // decodes the escape back to a literal less-than during hydration in
 // mount.ts's readEmbeddedScene, so parsed scene content is unaffected.
 export function serializeSceneForScriptTag(scene: unknown): string {
-  return JSON.stringify(scene).replace(/</g, '\\u003c')
+  const json = JSON.stringify(scene)
+  if (json === undefined) {
+    // JSON.stringify returns undefined (not a string) for root undefined,
+    // functions, and symbols — fail with a clear contract error instead of
+    // a confusing TypeError from .replace on undefined.
+    throw new TypeError('serializeSceneForScriptTag requires a JSON-serializable scene value')
+  }
+  return json.replace(/</g, '\\u003c')
 }

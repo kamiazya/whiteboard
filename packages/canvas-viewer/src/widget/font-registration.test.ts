@@ -33,6 +33,16 @@ describe('resolveFontFetchDataUri', () => {
     ).toBe('data:font/woff2;base64,AAAA')
   })
 
+  it('resolves a URL carrying query parameters or a hash fragment', () => {
+    const map = { 'Excalifont.woff2': 'data:font/woff2;base64,AAAA' }
+    expect(resolveFontFetchDataUri('https://x/fonts/Excalifont.woff2?v=2', map)).toBe(
+      'data:font/woff2;base64,AAAA',
+    )
+    expect(resolveFontFetchDataUri('https://x/fonts/Excalifont.woff2#frag', map)).toBe(
+      'data:font/woff2;base64,AAAA',
+    )
+  })
+
   it('resolves a URL instance input against the filename map', () => {
     expect(
       resolveFontFetchDataUri(

@@ -31,6 +31,8 @@ export function resolveFontFetchDataUri(
 ): string | undefined {
   const url =
     typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-  const filename = url.split('/').pop() ?? ''
+  // Strip query/hash before taking the last path segment — cache-busting
+  // suffixes like `Excalifont.woff2?v=2` must still hit the embedded map.
+  const filename = (url.split(/[?#]/, 1)[0] ?? '').split('/').pop() ?? ''
   return filenameMap[filename]
 }

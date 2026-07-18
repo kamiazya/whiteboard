@@ -17,6 +17,8 @@ declare global {
     // reader — without this, "is Excalifont loaded" is ambiguous because
     // Excalidraw's own unrelated placeholders share the same family name.
     __whiteboardWidgetFonts__?: readonly FontFace[]
+    // Pre-set by the smoke harness (init script) to opt into the hook above.
+    __WHITEBOARD_WIDGET_DEBUG__?: boolean
   }
 }
 
@@ -51,7 +53,12 @@ function registerFonts(): void {
   const style = document.createElement('style')
   style.textContent = rules.join('\n')
   document.head.appendChild(style)
-  window.__whiteboardWidgetFonts__ = registeredFaces
+  // Smoke-only instrumentation: only populated when the harness pre-sets
+  // the debug flag (via an init script, before this entry runs). The
+  // production widget never retains the FontFace list.
+  if (window.__WHITEBOARD_WIDGET_DEBUG__ === true) {
+    window.__whiteboardWidgetFonts__ = registeredFaces
+  }
 
   // EXCALIDRAW_ASSET_PATH must be a string; Excalidraw resolves any font URL
   // it still needs (one this build didn't anticipate) against it. Since

@@ -139,9 +139,15 @@ async function main() {
   writeFileSync(tmpHtmlPath, injectedHtml, 'utf8')
 
   const executablePath = process.env.WHITEBOARD_CHROME_PATH?.trim() || undefined
-  const browser = await chromium.launch({ executablePath })
+  let browser
   try {
+    browser = await chromium.launch({ executablePath })
     const page = await browser.newPage()
+    // Opt into the widget's smoke-only FontFace instrumentation BEFORE any
+    // page script runs — the production widget leaves the hook unset.
+    await page.addInitScript(() => {
+      window.__WHITEBOARD_WIDGET_DEBUG__ = true
+    })
     const networkRequests = []
     await page.route('http://**', (route) => {
       networkRequests.push(route.request().url())
@@ -184,11 +190,70 @@ async function main() {
       )
     }
 
+    // Non-Latin fallback actually RENDERS: load a second copy whose scene
+    // contains only the Japanese text element and assert the canvas has a
+    // meaningful number of dark pixels. Scanning the whole canvas avoids
+    // scene->canvas coordinate math (zoom/scroll/devicePixelRatio); the
+    // only dark ink possible in this scene is the JP text itself, so a
+    // blank render (glyphs silently dropped) fails deterministically.
+    const jpOnlyScene = {
+      ...SAMPLE_SCENE,
+      elements: SAMPLE_SCENE.elements.filter((el) => el.id === 'text-jp'),
+    }
+    const jpHtml = html.replace(
+      /(<script type="application\/json" data-whiteboard-scene>)(.*?)(<\/script>)/s,
+      (_match, open, _placeholder, close) =>
+        `${open}${serializeSceneForScriptTag(jpOnlyScene)}${close}`,
+    )
+    const jpHtmlPath = join(tmpDir, 'canvas-viewer-jp.html')
+    writeFileSync(jpHtmlPath, jpHtml, 'utf8')
+    const jpPage = await browser.newPage()
+    await jpPage.route('http://**', (route) => {
+      networkRequests.push(route.request().url())
+      return route.abort()
+    })
+    await jpPage.route('https://**', (route) => {
+      networkRequests.push(route.request().url())
+      return route.abort()
+    })
+    await jpPage.goto(`file://${jpHtmlPath}`)
+    await jpPage.waitForSelector('canvas', { timeout: 10_000 })
+    const jpDarkPixels = await jpPage.evaluate(async () => {
+      await document.fonts.ready
+      // Give Excalidraw one frame to paint after fonts settle.
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
+      let dark = 0
+      for (const canvas of document.querySelectorAll('canvas')) {
+        const ctx = canvas.getContext('2d')
+        if (!ctx || canvas.width === 0 || canvas.height === 0) continue
+        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
+        for (let i = 0; i < data.length; i += 4) {
+          const alpha = data[i + 3] ?? 0
+          if (alpha > 128 && (data[i] ?? 255) < 100) dark += 1
+        }
+      }
+      return dark
+    })
+    if (jpDarkPixels < 50) {
+      fail(
+        `expected the Japanese-only scene to paint fallback glyphs (>=50 dark pixels), got ${jpDarkPixels}`,
+      )
+    }
+    if (networkRequests.length > 0) {
+      fail(`expected zero network requests after the JP render, saw: ${networkRequests.join(', ')}`)
+    }
+
     if (process.exitCode !== 1) {
-      console.log('[widget-smoke] PASS: zero network requests, canvas rendered, fonts loaded')
+      console.log(
+        '[widget-smoke] PASS: zero network requests, canvas rendered, fonts loaded, JP fallback painted',
+      )
     }
   } finally {
-    await browser.close()
+    // Guarded close + always-run cleanup: a launch failure must not strand
+    // the temp dir, and a close failure must not skip it either.
+    if (browser) {
+      await browser.close().catch(() => {})
+    }
     rmSync(tmpDir, { recursive: true, force: true })
   }
 }

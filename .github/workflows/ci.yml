@@ -192,6 +192,10 @@ jobs:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # This job never performs authenticated git operations; keep the
+          # job token away from dependency/build tooling.
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
 
