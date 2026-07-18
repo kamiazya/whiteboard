@@ -1,16 +1,23 @@
 import { resetTokenStoreForTests } from '@kamiazya/whiteboard-mcp/api-client'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
+import { resetSilentReconnectForTests } from './hooks/useSilentReconnect.js'
 import {
   BROWSER_LOCAL_CAPABILITIES,
   type ProviderState,
   resolveHostedProviderStateFromRaw,
   type WhiteboardCapabilities,
 } from './lib/provider.js'
+import { resetReconnectEnrollmentForTests } from './lib/reconnect-enrollment.js'
+import {
+  clear as clearReconnectSecretStore,
+  load as loadReconnectSecret,
+  save as saveReconnectSecret,
+} from './lib/reconnect-secret-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
 
 afterEach(cleanup)
@@ -793,5 +800,140 @@ describe('App error boundary', () => {
       mockDaemonConnectionResult = { status: 'none' }
       reportSpy.mockRestore()
     }
+  })
+})
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  })
+}
+
+describe('App silent daemon reconnect', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    clearReconnectSecretStore()
+    resetSilentReconnectForTests()
+    resetReconnectEnrollmentForTests()
+    resetTokenStoreForTests()
+    mockDaemonConnectionResult = { status: 'none' }
+    receivedDaemonIndexPageProps = undefined
+    receivedDaemonPageProps = undefined
+  })
+  afterEach(() => {
+    localStorage.clear()
+    clearReconnectSecretStore()
+    resetSilentReconnectForTests()
+    resetReconnectEnrollmentForTests()
+    resetTokenStoreForTests()
+    mockDaemonConnectionResult = { status: 'none' }
+    vi.unstubAllGlobals()
+  })
+
+  it('enrolls this origin for silent reconnect right after a successful pairing', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+      jsonResponse({ reconnectSecret: 'enrolled-secret', expiresInDays: 30 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok12345',
+      },
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    await screen.findByTestId('daemon-canvas-page')
+
+    await waitFor(() =>
+      expect(loadReconnectSecret('http://127.0.0.1:3099')).toBe('enrolled-secret'),
+    )
+    const [, init] = fetchMock.mock.calls[0]
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      'http://127.0.0.1:3099/api/reconnect-credential',
+    )
+    expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe(
+      'Bearer tok12345',
+    )
+  })
+
+  it('shows a visible connecting state, then the daemon view, on a fragment-free load with a stored secret', async () => {
+    const settingsStore = createUserSettingsStore()
+    settingsStore.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: 'http://127.0.0.1:3099',
+        lastConnectedWorkspaceId: 'w1',
+        lastConnectedSlug: 'main',
+      },
+    }))
+    saveReconnectSecret('http://127.0.0.1:3099', 'stored-secret')
+
+    let resolveFetch: ((value: Response) => void) | undefined
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveFetch = resolve
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    mockDaemonConnectionResult = { status: 'none' }
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+
+    const statusEl = await screen.findByRole('status')
+    expect(statusEl.textContent).toMatch(/Reconnecting to local daemon/i)
+
+    await act(async () => {
+      resolveFetch?.(
+        jsonResponse({
+          token: 'redeemed-token',
+          reconnectSecret: 'rotated-secret',
+          expiresInDays: 30,
+        }),
+      )
+      await Promise.resolve()
+    })
+
+    await screen.findByTestId('daemon-canvas-page')
+    expect(receivedDaemonPageProps?.token).toBe('redeemed-token')
+    expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
+    expect(receivedDaemonPageProps?.slug).toBe('main')
+    await waitFor(() => expect(loadReconnectSecret('http://127.0.0.1:3099')).toBe('rotated-secret'))
+  })
+
+  it('falls back to browser-local rendering when the reconnect session is rejected (403)', async () => {
+    const settingsStore = createUserSettingsStore()
+    settingsStore.update((current) => ({
+      ...current,
+      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+    }))
+    saveReconnectSecret('http://127.0.0.1:3099', 'stale-secret')
+
+    const fetchMock = vi.fn(async () => jsonResponse({ error: 'unauthorized' }, 403))
+    vi.stubGlobal('fetch', fetchMock)
+    mockDaemonConnectionResult = { status: 'none' }
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+
+    await screen.findByTestId('browser-local-canvas-page')
+    expect(loadReconnectSecret('http://127.0.0.1:3099')).toBeNull()
   })
 })

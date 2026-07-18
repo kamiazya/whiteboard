@@ -126,29 +126,40 @@ that covers it (see
 verify it yourself before sharing a hosted pairing link. Loopback origins
 need no allowlist entry.
 
-## Silent reconnect after a reload (server support)
+## Silent reconnect after a reload
 
-The daemon can remember that a specific web origin was paired and hand it a
-fresh session without a confirmation prompt on a later request — this is the
-server-side half of the silent-reconnect flow (the web app does not yet call
-it automatically; see the project's task backlog for that follow-up).
+After pairing once via a `#wb=` link, reloading the hosted web app (or
+opening it again in a fresh tab, same browser, same origin) silently
+reconnects to the same daemon and reopens the canvas you were last on — no
+pairing link, no confirmation prompt. If that fails for any reason, the app
+falls back to the existing one-click `DaemonDetectedBanner` reconnect.
 
 How it works:
 
-- After pairing, the web origin calls `POST /api/reconnect-credential`
-  (authenticated with the daemon token) to enroll and receive a
-  **reconnect secret** — a random value distinct from the daemon token
-  itself. The daemon persists only a hash of this secret, keyed to the exact
-  origin that requested it, in `trusted-web-origins.json` under the data
-  directory (owner-only file permissions, same as `daemon.json`).
-- To reconnect later, that origin calls `POST /api/reconnect-session` with
-  `Authorization: Bearer <reconnect secret>`. If the request's `Origin`
-  header exactly matches the enrolled origin and the secret's hash matches,
-  the daemon responds with a fresh daemon token and a **rotated** reconnect
-  secret — the old secret stops working immediately.
+- Right after a successful `#wb=` pairing, the web app calls
+  `POST /api/reconnect-credential` (authenticated with the daemon token it
+  just received) to enroll this origin and receive a **reconnect secret** —
+  a random value distinct from the daemon token itself. The daemon persists
+  only a hash of this secret, keyed to the exact origin that requested it,
+  in `trusted-web-origins.json` under the data directory (owner-only file
+  permissions, same as `daemon.json`). The web app stores the secret in this
+  origin's `localStorage`; the daemon token itself is never persisted.
+- On a later load with no `#wb=` fragment, the web app calls
+  `POST /api/reconnect-session` with `Authorization: Bearer <reconnect
+  secret>`. If the request's `Origin` header exactly matches the enrolled
+  origin and the secret's hash matches, the daemon responds with a fresh
+  daemon token and a **rotated** reconnect secret — the old secret stops
+  working immediately, and the web app persists the new one before using
+  the token. While this request is in flight the app shows a visible
+  "Reconnecting to local daemon…" status (bounded by a ~10 second timeout,
+  never an indefinite hang).
 - A trust record expires automatically 30 days after its last successful
   use (a sliding TTL), so an origin that stops reconnecting eventually loses
   its standing access on its own.
+- If two tabs race to redeem the same secret, the first to arrive wins and
+  rotates it; the loser's request is rejected, and if a concurrent rotation
+  is visible by then the app retries once with the winner's secret — the
+  loser otherwise clears its stale secret and falls back to the banner.
 
 This is deliberately **not** an Origin-only check: the `Origin` header is
 just an HTTP header a same-machine process can set to anything, so trusting
@@ -157,13 +168,23 @@ already provide, and would be weaker for a request coming from anywhere the
 daemon is reachable. Reconnecting requires *possessing* the rotating secret,
 not merely claiming an origin.
 
-**Revoking trust.** If a reconnect secret is ever suspected of being
-compromised (e.g. an XSS on the paired origin), stop the daemon and delete
-or edit `trusted-web-origins.json` in the data directory to remove that
-origin's entry — the entry disappearing is picked up by a running daemon on
-its next request for that origin (no restart required). A dedicated
-`whiteboard trust revoke <origin>` command is planned but not yet wired into
-the CLI.
+**Threat model.** The stored reconnect secret is a long-lived *possession*
+credential: whoever presents it from the enrolled origin gets back a
+full-authority daemon token (a scoped OAuth grant is deliberately barred
+from enrolling one). Origin binding stops a *different* origin from
+redeeming it, but it is **not** a
+defense against same-origin XSS on the paired origin — any script running
+there can read `localStorage` the same way the app does. Treat it with the
+same care as a long-lived session cookie.
+
+**Revoking trust.** Clicking "Forget this daemon" in the `DaemonDetectedBanner`
+clears the locally stored secret and reconnect target for that browser. To
+revoke the daemon-side trust record itself (e.g. after a suspected
+compromise), stop the daemon and delete or edit `trusted-web-origins.json`
+in the data directory to remove that origin's entry — the entry
+disappearing is picked up by a running daemon on its next request for that
+origin (no restart required). A dedicated `whiteboard trust revoke
+<origin>` command is planned but not yet wired into the CLI.
 
 ## Copy-first import
 
