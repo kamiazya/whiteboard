@@ -280,28 +280,35 @@ async function main() {
     // CI runners parse+execute the ~8.5 MB inline bundle noticeably slower
     // than the file:// pages above; give the sandboxed frame extra headroom.
     const srcdocDeadline = Date.now() + 30_000
-    let srcdocFrame
     let srcdocCanvasCount = 0
     while (Date.now() < srcdocDeadline) {
-      srcdocFrame = srcdocPage.frames().find((f) => f.url() === 'about:srcdoc')
-      if (srcdocFrame) {
-        srcdocCanvasCount = await srcdocFrame
+      // Any non-main frame is the widget frame — matching on
+      // url() === 'about:srcdoc' is Chrome-build-dependent (chrome-stable
+      // under CDP can report a sandboxed srcdoc frame's URL differently
+      // than bundled Chromium).
+      for (const frame of srcdocPage.frames()) {
+        if (frame === srcdocPage.mainFrame()) continue
+        srcdocCanvasCount = await frame
           .evaluate(() => document.querySelectorAll('canvas').length)
           .catch(() => 0)
         if (srcdocCanvasCount > 0) break
       }
+      if (srcdocCanvasCount > 0) break
       await new Promise((resolve) => setTimeout(resolve, 200))
     }
     if (srcdocCanvasCount === 0) {
+      const frameUrls = srcdocPage
+        .frames()
+        .map((f) => f.url() || '(empty)')
+        .join(', ')
       const diagnostics = [
+        `frames: ${frameUrls}`,
         srcdocPageErrors.length ? `page errors: ${srcdocPageErrors.join(' | ')}` : '',
         srcdocConsoleErrors.length ? `console errors: ${srcdocConsoleErrors.join(' | ')}` : '',
       ]
         .filter(Boolean)
         .join('; ')
-      fail(
-        `widget did not render a canvas under sandboxed srcdoc hosting${diagnostics ? ` (${diagnostics})` : ''}`,
-      )
+      fail(`widget did not render a canvas under sandboxed srcdoc hosting (${diagnostics})`)
     }
     if (srcdocPageErrors.length > 0) {
       fail(`uncaught page error(s) under srcdoc hosting: ${srcdocPageErrors.join(' | ')}`)
