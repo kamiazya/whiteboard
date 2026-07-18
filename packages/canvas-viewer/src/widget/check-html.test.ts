@@ -65,14 +65,17 @@ describe('findExternalResourceUrls', () => {
     expect(findExternalResourceUrls(html)).toEqual([])
   })
 
-  it('terminates a script body at an end tag with whitespace (</script >)', () => {
-    // HTML closes the element at `</script >` too; if the stripper missed
-    // it, the following genuine external tag would be swallowed into the
-    // "body" and hidden from the scan.
-    const html = `<script>t.src="https://inert.example.com/in-js.js"</script >
+  it('terminates a script body at malformed-but-valid end tags (</script >, </script\\t\\n bar>)', () => {
+    // HTML closes the element at these end tags too; if the stripper
+    // missed them, the following genuine external tag would be swallowed
+    // into the "body" and hidden from the scan.
+    const spaced = `<script>t.src="https://inert.example.com/in-js.js"</script >
       <img src="https://tracker.example.com/pixel.gif">`
+    expect(findExternalResourceUrls(spaced)).toEqual(['https://tracker.example.com/pixel.gif'])
 
-    expect(findExternalResourceUrls(html)).toEqual(['https://tracker.example.com/pixel.gif'])
+    const garbage = `<script>t.src="https://inert.example.com/in-js.js"</script\t\n bar>
+      <img src="https://tracker.example.com/pixel.gif">`
+    expect(findExternalResourceUrls(garbage)).toEqual(['https://tracker.example.com/pixel.gif'])
   })
 
   it('still flags a genuine external tag even for URLs that also appear as script string constants', () => {
