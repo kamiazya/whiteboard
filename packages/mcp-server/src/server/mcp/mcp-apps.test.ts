@@ -1,14 +1,15 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// Widget HTML fixture lives under WHITEBOARD_ROOT/dist/widget in this test
-// run — module-scope caching means each test must reset the cache and
-// remove any file it wrote so runs don't leak into each other.
+// The widget HTML fixture lives in a per-test temp dir, injected via
+// resetWidgetHtmlCacheForTests — never the real WIDGET_HTML_PATH, whose
+// build output a test must not delete out from under a same-machine
+// smoke run.
 const {
   registerMcpAppsExtension,
   resetWidgetHtmlCacheForTests,
-  WIDGET_HTML_PATH,
   CANVAS_VIEW_RESOURCE_URI,
   RESOURCE_MIME_TYPE,
   EXTENSION_ID,
@@ -25,12 +26,17 @@ function fakeServer() {
 }
 
 describe('registerMcpAppsExtension', () => {
+  let fixtureDir: string
+  let fixtureHtmlPath: string
+
   beforeEach(() => {
-    resetWidgetHtmlCacheForTests()
+    fixtureDir = mkdtempSync(join(tmpdir(), 'mcp-apps-widget-'))
+    fixtureHtmlPath = join(fixtureDir, 'canvas-viewer.html')
+    resetWidgetHtmlCacheForTests(fixtureHtmlPath)
   })
 
   afterEach(() => {
-    rmSync(WIDGET_HTML_PATH, { force: true })
+    rmSync(fixtureDir, { recursive: true, force: true })
     resetWidgetHtmlCacheForTests()
   })
 
@@ -55,9 +61,8 @@ describe('registerMcpAppsExtension', () => {
     expect(RESOURCE_MIME_TYPE).toBe('text/html;profile=mcp-app')
   })
 
-  it('reads the widget HTML from WIDGET_HTML_PATH on resources/read', async () => {
-    mkdirSync(dirname(WIDGET_HTML_PATH), { recursive: true })
-    writeFileSync(WIDGET_HTML_PATH, '<html><body>widget</body></html>', 'utf-8')
+  it('reads the widget HTML from the widget path on resources/read', async () => {
+    writeFileSync(fixtureHtmlPath, '<html><body>widget</body></html>', 'utf-8')
 
     const server = fakeServer()
     registerMcpAppsExtension(server)
@@ -79,7 +84,7 @@ describe('registerMcpAppsExtension', () => {
     await expect(readCallback()).rejects.toThrow('widget asset unavailable')
     // The MCP SDK surfaces a rejected resources/read error's message
     // verbatim to the calling client, so the raw fs ENOENT — which embeds
-    // WIDGET_HTML_PATH — must never be the thrown error itself.
-    await expect(readCallback()).rejects.not.toThrow(WIDGET_HTML_PATH)
+    // the widget's absolute path — must never be the thrown error itself.
+    await expect(readCallback()).rejects.not.toThrow(fixtureHtmlPath)
   })
 })

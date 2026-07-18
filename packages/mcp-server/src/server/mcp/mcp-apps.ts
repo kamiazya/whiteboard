@@ -29,6 +29,7 @@ export const CANVAS_VIEW_RESOURCE_URI = 'ui://whiteboard/canvas-view'
 // pattern with apps/web's bundle.
 export const WIDGET_HTML_PATH = resolve(WHITEBOARD_ROOT, 'dist/widget/canvas-viewer.html')
 
+let activeWidgetHtmlPath = WIDGET_HTML_PATH
 let cachedWidgetHtml: string | undefined
 
 // Reads and caches the widget HTML at module scope. A per-request McpServer
@@ -37,10 +38,10 @@ let cachedWidgetHtml: string | undefined
 function readWidgetHtml(): string {
   if (cachedWidgetHtml !== undefined) return cachedWidgetHtml
   try {
-    cachedWidgetHtml = readFileSync(WIDGET_HTML_PATH, 'utf-8')
+    cachedWidgetHtml = readFileSync(activeWidgetHtmlPath, 'utf-8')
   } catch (err) {
     getLogger('mcp-apps').error(
-      { path: WIDGET_HTML_PATH, err },
+      { path: activeWidgetHtmlPath, err },
       'canvas-viewer widget HTML missing — run `pnpm build` (packages/canvas-viewer build:widget + copy-widget-into-dist.mjs) before serving ui://whiteboard/canvas-view',
     )
     // The raw fs error message embeds WIDGET_HTML_PATH, the server's
@@ -52,10 +53,14 @@ function readWidgetHtml(): string {
   return cachedWidgetHtml
 }
 
-// Test-only hook: clears the module-scope cache so a test can point
-// WIDGET_HTML_PATH-dependent behavior at a fresh fixture between cases.
-export function resetWidgetHtmlCacheForTests(): void {
+// Test-only hook: clears the module-scope cache and optionally redirects
+// reads at a temp fixture path. Tests must pass an override instead of
+// writing to the real WIDGET_HTML_PATH — deleting the genuine build output
+// in an afterEach breaks any later same-machine smoke run that expects the
+// built widget to still exist.
+export function resetWidgetHtmlCacheForTests(overridePath?: string): void {
   cachedWidgetHtml = undefined
+  activeWidgetHtmlPath = overridePath ?? WIDGET_HTML_PATH
 }
 
 // Declares MCP Apps (SEP-1865) support and registers the ui:// resource
