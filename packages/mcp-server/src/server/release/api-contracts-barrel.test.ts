@@ -1,7 +1,7 @@
 // Guard against scope creep on the `./api-contracts` public npm subpath.
 //
 // The barrel at src/shared/api-contracts/index.ts is deliberately narrow
-// (branches + canvas only). web-app-boundary.test.ts scans every file under
+// (branches + canvas + reconnect only). web-app-boundary.test.ts scans every file under
 // src/shared/api-contracts/ for browser-safety, but it does not — and
 // structurally cannot — assert what the barrel itself re-exports. Without
 // this test, someone could add `export * from './runtime.js'` (or
@@ -23,9 +23,9 @@ function reExportSpecifiers(source: string): string[] {
 }
 
 describe('api-contracts barrel scope', () => {
-  it('re-exports exactly branches and canvas — no other api-contracts modules', () => {
+  it('re-exports exactly branches, canvas, and reconnect — no other api-contracts modules', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
-    expect(specifiers).toEqual(['./branches.js', './canvas.js'])
+    expect(specifiers).toEqual(['./branches.js', './canvas.js', './reconnect.js'])
   })
 })

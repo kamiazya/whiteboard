@@ -18,29 +18,23 @@
 //     carved out of.
 
 import { Hono } from 'hono'
-import { z } from 'zod'
+import {
+  type ReconnectCredentialResponse,
+  reconnectCredentialResponseSchema,
+  type ReconnectSessionResponse,
+  reconnectSessionResponseSchema,
+} from '../../shared/api-contracts/reconnect.js'
 import { isLoopbackHostname, normalizeOriginHostname } from '../security/cors-loopback.js'
 import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
 import { TRUST_TTL_MS, type WebOriginTrustStore } from '../security/web-origin-trust-store.js'
 import { parseBearerAuthorizationHeader } from './auth.js'
 
-export const reconnectCredentialResponseSchema = z.object({
-  reconnectSecret: z.string().min(1),
-  expiresInDays: z.number().positive(),
-})
-export type ReconnectCredentialResponse = z.infer<typeof reconnectCredentialResponseSchema>
-
-export const reconnectSessionResponseSchema = z.object({
-  // Not `.min(1)`: tokenless local-daemon dev mode mounts this router with
-  // `daemonToken: ''` (app.ts) and deliberately hands that empty token back
-  // rather than refusing the whole reconnect surface — the same "auth is a
-  // no-op when no token is configured" behavior every other /api/* route
-  // already has.
-  token: z.string(),
-  reconnectSecret: z.string().min(1),
-  expiresInDays: z.number().positive(),
-})
-export type ReconnectSessionResponse = z.infer<typeof reconnectSessionResponseSchema>
+export {
+  type ReconnectCredentialResponse,
+  reconnectCredentialResponseSchema,
+  type ReconnectSessionResponse,
+  reconnectSessionResponseSchema,
+}
 
 // Derived from the store's actually-enforced TTL rather than a second
 // hardcoded constant, so the value reported to clients can never drift from

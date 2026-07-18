@@ -1,6 +1,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DaemonProbeResult, ProbeDaemonOptions } from '../../lib/daemon-probe.js'
+import {
+  load as loadReconnectSecret,
+  save as saveReconnectSecret,
+} from '../../lib/reconnect-credential-store.js'
 import { createUserSettingsStore, type UserSettingsStore } from '../../lib/user-settings-store.js'
 import {
   DaemonDetectedBanner,
@@ -225,6 +229,29 @@ describe('DaemonDetectedBanner', () => {
     expect(saved.storage.localDaemonBaseUrl).toBeUndefined()
     expect(saved.storage.lastConnectedWorkspaceId).toBeUndefined()
     expect(saved.storage.lastConnectedSlug).toBeUndefined()
+  })
+
+  it('"Forget this daemon" also clears the stored silent-reconnect secret', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+    }))
+    saveReconnectSecret('http://127.0.0.1:3099', 'stored-secret')
+
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /forget this daemon/i }))
+
+    expect(loadReconnectSecret('http://127.0.0.1:3099')).toBeNull()
   })
 
   it('does not render "Forget this daemon" when no target has ever been persisted', async () => {
