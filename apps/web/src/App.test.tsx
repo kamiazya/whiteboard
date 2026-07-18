@@ -915,6 +915,76 @@ describe('App silent daemon reconnect', () => {
     await waitFor(() => expect(loadReconnectSecret('http://127.0.0.1:3099')).toBe('rotated-secret'))
   })
 
+  it('keeps the URL-encoded canvas view on connect instead of overriding it with last-connected settings', async () => {
+    const settingsStore = createUserSettingsStore()
+    settingsStore.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: 'http://127.0.0.1:3099',
+        lastConnectedWorkspaceId: 'settings-workspace',
+        lastConnectedSlug: 'settings-slug',
+      },
+    }))
+    saveReconnectSecret('http://127.0.0.1:3099', 'stored-secret')
+
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        token: 'redeemed-token',
+        reconnectSecret: 'rotated-secret',
+        expiresInDays: 30,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    mockDaemonConnectionResult = { status: 'none' }
+
+    render(
+      <MemoryRouter initialEntries={['/canvas/url-workspace/url-slug']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+
+    await screen.findByTestId('daemon-canvas-page')
+    expect(receivedDaemonPageProps?.workspaceId).toBe('url-workspace')
+    expect(receivedDaemonPageProps?.slug).toBe('url-slug')
+  })
+
+  it('seeds the index view scoped to the last-connected workspace when no slug is stored', async () => {
+    const settingsStore = createUserSettingsStore()
+    settingsStore.update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        localDaemonBaseUrl: 'http://127.0.0.1:3099',
+        lastConnectedWorkspaceId: 'w1',
+      },
+    }))
+    saveReconnectSecret('http://127.0.0.1:3099', 'stored-secret')
+
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({
+        token: 'redeemed-token',
+        reconnectSecret: 'rotated-secret',
+        expiresInDays: 30,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    mockDaemonConnectionResult = { status: 'none' }
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+
+    await screen.findByTestId('daemon-index-page')
+    // The view-seeding effect commits the 'connected' render first (with
+    // daemonView still at its unscoped default) and only re-renders with
+    // initialWorkspaceId set on its own subsequent tick — wait for that
+    // second render rather than asserting on the first commit.
+    await waitFor(() => expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('w1'))
+  })
+
   it('falls back to browser-local rendering when the reconnect session is rejected (403)', async () => {
     const settingsStore = createUserSettingsStore()
     settingsStore.update((current) => ({
