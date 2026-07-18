@@ -40,7 +40,7 @@ const REPO_ROOT = resolve(__dirname, '../../..')
 const IMAGE_TAG = 'whiteboard-server-smoke:test'
 const SMOKE_ISSUER = 'https://auth.docker-smoke.example'
 const SMOKE_AUDIENCE = 'https://whiteboard.docker-smoke.example'
-const HOST_SERVER_PORT = 4293   // host port mapped to container's 3099
+const HOST_SERVER_PORT = 4293 // host port mapped to container's 3099
 const READINESS_TIMEOUT_MS = 60_000
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -74,20 +74,46 @@ function generateTestTlsCert(dir) {
   const keyFile = join(dir, 'server.key')
   const certFile = join(dir, 'server.crt')
   const cnfFile = join(dir, 'openssl.cnf')
-  writeFileSync(cnfFile, [
-    '[req]', 'distinguished_name = req_dn', 'x509_extensions = san_ext', 'prompt = no',
-    '[req_dn]', 'CN = docker-smoke-ca',
-    '[san_ext]', 'subjectAltName = IP:127.0.0.1', 'basicConstraints = critical,CA:true',
-  ].join('\n'))
-  const r = spawnSync('openssl', [
-    'req', '-x509', '-newkey', 'rsa:2048',
-    '-keyout', keyFile, '-out', certFile, '-days', '1', '-nodes', '-config', cnfFile,
-  ], { stdio: 'pipe', encoding: 'utf8' })
+  writeFileSync(
+    cnfFile,
+    [
+      '[req]',
+      'distinguished_name = req_dn',
+      'x509_extensions = san_ext',
+      'prompt = no',
+      '[req_dn]',
+      'CN = docker-smoke-ca',
+      '[san_ext]',
+      'subjectAltName = IP:127.0.0.1',
+      'basicConstraints = critical,CA:true',
+    ].join('\n'),
+  )
+  const r = spawnSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-keyout',
+      keyFile,
+      '-out',
+      certFile,
+      '-days',
+      '1',
+      '-nodes',
+      '-config',
+      cnfFile,
+    ],
+    { stdio: 'pipe', encoding: 'utf8' },
+  )
   if (r.status !== 0) throw new Error(`openssl failed: ${r.stderr}`)
   return { keyFile, certFile }
 }
 
-function base64url(data) { return Buffer.from(data).toString('base64url') }
+function base64url(data) {
+  return Buffer.from(data).toString('base64url')
+}
 
 function derToRawEs256(derSig) {
   let offset = 2
@@ -98,8 +124,10 @@ function derToRawEs256(derSig) {
   const sLen = derSig[offset + 1]
   let s = derSig.slice(offset + 2, offset + 2 + sLen)
   if (s[0] === 0x00) s = s.slice(1)
-  const rPad = Buffer.alloc(32); r.copy(rPad, 32 - r.length)
-  const sPad = Buffer.alloc(32); s.copy(sPad, 32 - s.length)
+  const rPad = Buffer.alloc(32)
+  r.copy(rPad, 32 - r.length)
+  const sPad = Buffer.alloc(32)
+  s.copy(sPad, 32 - s.length)
   return Buffer.concat([rPad, sPad])
 }
 
@@ -121,9 +149,13 @@ async function waitForReadyJson(containerName) {
       try {
         const obj = JSON.parse(line)
         if (obj.ok === true && typeof obj.pid === 'number') return obj
-      } catch { /* not JSON */ }
+      } catch {
+        /* not JSON */
+      }
     }
-    const inspect = docker(['inspect', '--format={{.State.Running}}', containerName], { timeout: 5_000 })
+    const inspect = docker(['inspect', '--format={{.State.Running}}', containerName], {
+      timeout: 5_000,
+    })
     if (inspect.stdout.trim() !== 'true') return null
   }
   return null
@@ -154,9 +186,10 @@ const serverBaseUrl = useHostNetwork
 
 console.log('[docker-smoke] Building image (may take several minutes)…')
 {
-  const r = docker([
-    'build', '-f', resolve(REPO_ROOT, 'Dockerfile.server'), '-t', IMAGE_TAG, REPO_ROOT,
-  ], { timeout: 600_000, stdio: 'inherit' })
+  const r = docker(
+    ['build', '-f', resolve(REPO_ROOT, 'Dockerfile.server'), '-t', IMAGE_TAG, REPO_ROOT],
+    { timeout: 600_000, stdio: 'inherit' },
+  )
   if (r.status !== 0) fail('scenario 1: docker build failed')
   console.log('[docker-smoke] scenario 1 PASS: docker build succeeded')
 }
@@ -164,30 +197,46 @@ console.log('[docker-smoke] Building image (may take several minutes)…')
 // ── Scenario 2: invalid config ────────────────────────────────────────────────
 
 {
-  const r = docker([
-    'run', '--rm', '--name', 'wb-smoke-invalid',
-    '-e', 'WHITEBOARD_SERVER_EXTERNAL_URL=http://not-https.example.com',
-    '-e', 'WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt',
-    '-e', 'WHITEBOARD_SERVER_JWT_ISSUER=https://idp.example.com',
-    '-e', 'WHITEBOARD_SERVER_JWT_AUDIENCE=https://whiteboard.example.com',
-    '-e', 'WHITEBOARD_SERVER_JWKS_URI=https://idp.example.com/.well-known/jwks.json',
-    '-e', 'WHITEBOARD_SERVER_ALLOWED_ORIGINS=https://whiteboard.example.com',
-    IMAGE_TAG,
-  ], { timeout: 30_000 })
+  const r = docker(
+    [
+      'run',
+      '--rm',
+      '--name',
+      'wb-smoke-invalid',
+      '-e',
+      'WHITEBOARD_SERVER_EXTERNAL_URL=http://not-https.example.com',
+      '-e',
+      'WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt',
+      '-e',
+      'WHITEBOARD_SERVER_JWT_ISSUER=https://idp.example.com',
+      '-e',
+      'WHITEBOARD_SERVER_JWT_AUDIENCE=https://whiteboard.example.com',
+      '-e',
+      'WHITEBOARD_SERVER_JWKS_URI=https://idp.example.com/.well-known/jwks.json',
+      '-e',
+      'WHITEBOARD_SERVER_ALLOWED_ORIGINS=https://whiteboard.example.com',
+      IMAGE_TAG,
+    ],
+    { timeout: 30_000 },
+  )
   if (r.status === 0) fail('scenario 2: expected non-zero exit for invalid config')
   // If stdout has content it must be JSON with ok:false (not raw config or error text).
   const stdoutTrim = r.stdout.trim()
   if (stdoutTrim !== '') {
     let obj
-    try { obj = JSON.parse(stdoutTrim) } catch {
+    try {
+      obj = JSON.parse(stdoutTrim)
+    } catch {
       fail('scenario 2: unexpected non-JSON stdout', { lineLength: r.stdout.length })
     }
     if (obj.ok !== false) fail('scenario 2: stdout JSON must have ok:false')
   }
   assertNoLeak('scenario 2 stderr', r.stderr)
   assertNoLeak('scenario 2 stdout', r.stdout)
-  if (r.stdout.includes('not-https.example.com')) fail('scenario 2: raw external URL leaked into stdout')
-  if (r.stderr.includes('not-https.example.com')) fail('scenario 2: raw external URL leaked into stderr')
+  if (r.stdout.includes('not-https.example.com'))
+    fail('scenario 2: raw external URL leaked into stdout')
+  if (r.stderr.includes('not-https.example.com'))
+    fail('scenario 2: raw external URL leaked into stderr')
   console.log('[docker-smoke] scenario 2 PASS: invalid config → non-zero exit, stderr safe')
 }
 
@@ -210,7 +259,8 @@ const jwksServer = await new Promise((resolve, reject) => {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(jwks))
     } else {
-      res.writeHead(404); res.end()
+      res.writeHead(404)
+      res.end()
     }
   })
   srv.listen(0, '0.0.0.0', () => resolve(srv))
@@ -224,27 +274,45 @@ let activeContainer = null
 try {
   // Scenario 3: start container with valid config.
   {
-    const r = docker([
-      'run', '--rm', '-d', '--name', 'wb-smoke-valid',
-      ...networkRunArgs,
-      '-v', `${dataDir}:/data`,
-      '-v', `${tlsCertFile}:/extra-ca.crt:ro`,
-      '-e', `NODE_EXTRA_CA_CERTS=/extra-ca.crt`,
-      '-e', `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
-      '-e', `WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt`,
-      '-e', `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
-      '-e', `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
-      '-e', `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
-      '-e', `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-      IMAGE_TAG,
-    ], { timeout: 15_000 })
+    const r = docker(
+      [
+        'run',
+        '--rm',
+        '-d',
+        '--name',
+        'wb-smoke-valid',
+        ...networkRunArgs,
+        '-v',
+        `${dataDir}:/data`,
+        '-v',
+        `${tlsCertFile}:/extra-ca.crt:ro`,
+        '-e',
+        `NODE_EXTRA_CA_CERTS=/extra-ca.crt`,
+        '-e',
+        `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
+        '-e',
+        `WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt`,
+        '-e',
+        `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
+        '-e',
+        `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
+        '-e',
+        `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
+        '-e',
+        `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
+        IMAGE_TAG,
+      ],
+      { timeout: 15_000 },
+    )
     if (r.status !== 0) fail('scenario 3: docker run failed', { stderrBytes: r.stderr.length })
     activeContainer = 'wb-smoke-valid'
 
     const ready = await waitForReadyJson('wb-smoke-valid')
     if (!ready) {
       const logs = docker(['logs', 'wb-smoke-valid'], { timeout: 5_000 })
-      fail('scenario 3: server did not emit ready JSON within timeout', { stderrBytes: logs.stderr.length })
+      fail('scenario 3: server did not emit ready JSON within timeout', {
+        stderrBytes: logs.stderr.length,
+      })
     }
     assertNoLeak('scenario 3 ready JSON', JSON.stringify(ready))
     console.log('[docker-smoke] scenario 3 PASS: container started, ready JSON emitted')
@@ -274,13 +342,21 @@ try {
     const now = Math.floor(Date.now() / 1000)
     const jwt = signEs256Jwt(
       privateKey,
-      { alg: 'ES256', kid: 'smoke-key' },
-      { sub: 'smoke-user', scope: 'canvas:read', iss: SMOKE_ISSUER, aud: SMOKE_AUDIENCE, iat: now, exp: now + 3600 },
+      { alg: 'ES256', typ: 'at+jwt', kid: 'smoke-key' },
+      {
+        sub: 'smoke-user',
+        scope: 'canvas:read',
+        iss: SMOKE_ISSUER,
+        aud: SMOKE_AUDIENCE,
+        iat: now,
+        exp: now + 3600,
+      },
     )
     const resp = await fetch(`${serverBaseUrl}/api/canvas/test-ws/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${jwt}` },
     })
-    if (resp.status === 401 || resp.status === 403) fail(`scenario 6: valid JWT should pass auth, got ${resp.status}`)
+    if (resp.status === 401 || resp.status === 403)
+      fail(`scenario 6: valid JWT should pass auth, got ${resp.status}`)
     const body = await resp.text()
     if (body.includes(jwt)) fail('scenario 6: raw JWT leaked to response body')
     assertNoLeak('scenario 6 body', body)
@@ -292,8 +368,15 @@ try {
     const now = Math.floor(Date.now() / 1000)
     const jwt = signEs256Jwt(
       privateKey,
-      { alg: 'ES256', kid: 'smoke-key' },
-      { sub: 'smoke-user', scope: 'workspace:read', iss: SMOKE_ISSUER, aud: SMOKE_AUDIENCE, iat: now, exp: now + 3600 },
+      { alg: 'ES256', typ: 'at+jwt', kid: 'smoke-key' },
+      {
+        sub: 'smoke-user',
+        scope: 'workspace:read',
+        iss: SMOKE_ISSUER,
+        aud: SMOKE_AUDIENCE,
+        iat: now,
+        exp: now + 3600,
+      },
     )
     const resp = await fetch(`${serverBaseUrl}/api/canvas/test-ws/test-canvas/viewport`, {
       headers: { Authorization: `Bearer ${jwt}` },
@@ -316,20 +399,36 @@ try {
 
   // Scenario 9: restart with same volume → stale record handled, server starts
   {
-    const r = docker([
-      'run', '--rm', '-d', '--name', 'wb-smoke-restart',
-      ...networkRunArgs,
-      '-v', `${dataDir}:/data`,
-      '-v', `${tlsCertFile}:/extra-ca.crt:ro`,
-      '-e', `NODE_EXTRA_CA_CERTS=/extra-ca.crt`,
-      '-e', `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
-      '-e', `WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt`,
-      '-e', `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
-      '-e', `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
-      '-e', `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
-      '-e', `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-      IMAGE_TAG,
-    ], { timeout: 15_000 })
+    const r = docker(
+      [
+        'run',
+        '--rm',
+        '-d',
+        '--name',
+        'wb-smoke-restart',
+        ...networkRunArgs,
+        '-v',
+        `${dataDir}:/data`,
+        '-v',
+        `${tlsCertFile}:/extra-ca.crt:ro`,
+        '-e',
+        `NODE_EXTRA_CA_CERTS=/extra-ca.crt`,
+        '-e',
+        `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
+        '-e',
+        `WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt`,
+        '-e',
+        `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
+        '-e',
+        `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
+        '-e',
+        `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
+        '-e',
+        `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
+        IMAGE_TAG,
+      ],
+      { timeout: 15_000 },
+    )
     if (r.status !== 0) fail('scenario 9: docker run (restart) failed')
     activeContainer = 'wb-smoke-restart'
 
@@ -337,14 +436,17 @@ try {
     if (!ready) fail('scenario 9: server did not start after restart with stale volume')
     stopContainer('wb-smoke-restart')
     activeContainer = null
-    console.log('[docker-smoke] scenario 9 PASS: restart with mounted volume → server starts cleanly')
+    console.log(
+      '[docker-smoke] scenario 9 PASS: restart with mounted volume → server starts cleanly',
+    )
   }
 
-  console.log('[docker-smoke] scenario 10 PASS: no raw JWT/credentials/paths leaked across all scenarios')
-
+  console.log(
+    '[docker-smoke] scenario 10 PASS: no raw JWT/credentials/paths leaked across all scenarios',
+  )
 } finally {
   if (activeContainer) stopContainer(activeContainer)
-  await new Promise(resolve => jwksServer.close(resolve))
+  await new Promise((resolve) => jwksServer.close(resolve))
   rmSync(certsDir, { recursive: true, force: true })
   rmSync(dataDir, { recursive: true, force: true })
   docker(['rmi', IMAGE_TAG], { timeout: 30_000 })
