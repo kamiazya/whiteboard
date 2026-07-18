@@ -1,9 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022"],
+    "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
     "strict": true,
     "noEmit": true,
     "noUnusedLocals": true,
@@ -11,5 +13,5 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src", "vitest.node.config.ts"]
+  "include": ["src", "vitest.node.config.ts", "vitest.jsdom.config.ts"]
 }

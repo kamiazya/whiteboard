@@ -11,11 +11,20 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "react": "catalog:",
+    "react-dom": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@excalidraw/excalidraw": "catalog:",
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/browser-playwright": "catalog:",
+    "playwright": "1.61.1",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }
