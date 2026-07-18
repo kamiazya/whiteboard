@@ -23,6 +23,8 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 // that protects images that only the past states reference, at the cost
 // of one Loro fork+checkout per version per canvas.
 
+const log = getLogger('file-gc')
+
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
 
 // Single source of truth for the wire shape is purgeResultSchema
@@ -112,10 +114,7 @@ async function collectReferencedFileIds(
         const doc = checkoutFrontiersBase64(live, branch.tipFrontiers)
         if (doc) collectFromDoc(doc, referenced)
       } catch (err) {
-        getLogger('file-gc').warning(
-          { workspaceId, slug, branch: branch.name, err },
-          'skipped branch',
-        )
+        log.warning({ workspaceId, slug, branch: branch.name, err }, 'skipped branch')
         skipped.push({ kind: 'branch', slug, branch: branch.name, cause: err })
       }
     }
@@ -139,7 +138,7 @@ async function collectReferencedFileIds(
         }
         collectFromDoc(past, referenced)
       } catch (err) {
-        getLogger('file-gc').warning({ workspaceId, slug, versionId: v.id, err }, 'skipped version')
+        log.warning({ workspaceId, slug, versionId: v.id, err }, 'skipped version')
         skipped.push({ kind: 'version', slug, versionId: v.id, cause: err })
       }
     }
@@ -222,7 +221,7 @@ export async function purgeDanglingFiles(
         // Race: file vanished between stat and unlink, or unlink failed
         // for another reason — log and move on. Subsequent runs will
         // retry.
-        getLogger('file-gc').warning({ workspaceId, entry, err }, 'purge skipped')
+        log.warning({ workspaceId, entry, err }, 'purge skipped')
       }
     }
     return { purgedCount, purgedBytes }
