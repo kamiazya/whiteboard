@@ -744,6 +744,48 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
   })
 })
 
+describe('createFileGcSweeper per-workspace containment revalidation', () => {
+  it('skips a later workspace whose dir was swapped for a symlink after discovery but before its own purge turn', async () => {
+    // Both workspaces pass containment at discovery time. Processing
+    // ws_first (which happens first -- fsWorkspaces order is preserved
+    // into the purge loop) swaps ws_second's directory for a symlink
+    // escaping the data dir, simulating another process racing the
+    // sweeper mid-pass. Without revalidating immediately before each
+    // purge call, ws_second's one-time discovery-time check would be
+    // stale by the time its turn comes.
+    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-race-outside-'))
+    try {
+      const outsideFilesDir = join(outsideDir, 'files')
+      await mkdir(outsideFilesDir, { recursive: true })
+      await writeFile(join(outsideFilesDir, 'secret.png'), Buffer.alloc(10, 7))
+
+      await mkdir(join(tempDir, 'ws_first', 'files'), { recursive: true })
+      await mkdir(join(tempDir, 'ws_second', 'files'), { recursive: true })
+
+      const purge = vi.fn(async (workspaceId: string) => {
+        if (workspaceId === 'ws_first') {
+          await rm(join(tempDir, 'ws_second'), { recursive: true, force: true })
+          await symlink(outsideDir, join(tempDir, 'ws_second'), 'dir')
+        }
+        return { purgedCount: 0, purgedBytes: 0 }
+      })
+
+      const sweeper = createFileGcSweeper({
+        listWorkspaces: async () => [],
+        discoverFsWorkspaces: async () => ['ws_first', 'ws_second'],
+        purge,
+      })
+      await sweeper.tick()
+      await sweeper.stop()
+
+      expect(purge).toHaveBeenCalledWith('ws_first')
+      expect(purge).not.toHaveBeenCalledWith('ws_second')
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('isDbWorkspaceDirSafe generic (non-ENOENT) stat/realpath failures', () => {
   it('fails closed and logs a warning when stat rejects with a permission error', async () => {
     const cap = captureLogsForTests('debug')

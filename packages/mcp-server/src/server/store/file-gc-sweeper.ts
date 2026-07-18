@@ -307,6 +307,24 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
     // benefit at a 24h-default cadence.
     for (const workspaceId of ids) {
       try {
+        // Revalidate containment again, immediately before the destructive
+        // call, rather than trusting the check done once above while
+        // building `ids`. A pass over every workspace can take a while (a
+        // full canvas scan per workspace), and re-running the check here
+        // narrows the window in which a workspace dir (or its files/
+        // child) could have been swapped for a symlink between discovery
+        // and this specific workspace's purge -- for BOTH fs-discovered and
+        // DB-listed ids, since either could still be re-pointed after its
+        // one-time check above. This does not make the check atomic with
+        // purgeDanglingFiles' own readdir/unlink (that would need
+        // directory-handle/no-follow semantics purgeDanglingFiles does not
+        // have), but it meaningfully shrinks the exposure from "the whole
+        // pass" to "this one iteration".
+        // isDbWorkspaceDirSafe() already logs the specific reason (symlinked
+        // dir, symlinked files/ child, unresolvable realpath, ...) when it
+        // returns false, so there is nothing more to log here beyond
+        // skipping the purge.
+        if (!(await isDbWorkspaceDirSafe(workspaceId))) continue
         await purge(workspaceId)
       } catch (err) {
         log.error({ workspaceId, err }, 'file-gc sweep failed for workspace')
