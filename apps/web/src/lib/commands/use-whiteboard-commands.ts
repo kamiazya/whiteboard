@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { createWhiteboardCommands } from './create-commands.js'
 import type { WhiteboardCommandDeps, WhiteboardCommands } from './types.js'
 
@@ -13,7 +13,14 @@ import type { WhiteboardCommandDeps, WhiteboardCommands } from './types.js'
  */
 export function useWhiteboardCommands(deps: WhiteboardCommandDeps): WhiteboardCommands {
   const depsRef = useRef<WhiteboardCommandDeps>(deps)
-  depsRef.current = deps
+  // Updated at commit time (layout effect), not in the render body:
+  // concurrent rendering may pause, abort, or retry a render, and a
+  // render-body write could publish deps from a render that never
+  // committed. Layout effects run synchronously at commit, before paint —
+  // earlier than any user event that could invoke a command.
+  useLayoutEffect(() => {
+    depsRef.current = deps
+  })
 
   const commandsRef = useRef<WhiteboardCommands | null>(null)
   if (commandsRef.current === null) {
