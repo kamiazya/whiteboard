@@ -3,7 +3,6 @@ import {
   exportToBlob,
   exportToSvg,
   restoreElements,
-  serializeAsJSON,
 } from '@excalidraw/excalidraw'
 import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types'
 import type {
@@ -28,6 +27,7 @@ import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { getAppLogger } from '../lib/app-logger.js'
+import { serializeSceneAsExcalidrawJson } from '../lib/excalidraw-json.js'
 import {
   type ExportRequestHandlerDeps,
   flushPendingExportRequests,
@@ -714,12 +714,11 @@ export function useCanvasSync(
       return exportToBlob({ elements, appState, files, exportPadding: 10 })
     }
     if (format === 'json') {
-      // serializeAsJSON is the canonical producer of the .excalidraw file
-      // format ({type:'excalidraw', version:2, ...}), matching what the
-      // daemon's canvas_export_json emits and what Excalidraw's own
-      // save-to-file dialog writes.
-      const json = serializeAsJSON(elements, appState, files, 'local')
-      return new Blob([json], { type: 'application/json' })
+      // Produces the standard .excalidraw envelope ({type:'excalidraw',
+      // version:2, ...}) matching the daemon's canvas_export_json, so the
+      // file round-trips with Excalidraw desktop / excalidraw.com.
+      const doc = serializeSceneAsExcalidrawJson(elements, appState, files)
+      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
     }
     const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
     const serialized = new XMLSerializer().serializeToString(svg)

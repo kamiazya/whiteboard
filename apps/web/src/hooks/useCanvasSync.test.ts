@@ -25,13 +25,10 @@ vi.mock('@excalidraw/excalidraw', () => ({
     svg.setAttribute('data-testid', 'exported-svg')
     return svg
   }),
-  serializeAsJSON: vi.fn((elements: unknown[]) =>
-    JSON.stringify({ type: 'excalidraw', version: 2, source: 'test', elements }),
-  ),
 }))
 
 // eslint-disable-next-line import/first
-import { exportToBlob, exportToSvg, serializeAsJSON } from '@excalidraw/excalidraw'
+import { exportToBlob, exportToSvg } from '@excalidraw/excalidraw'
 // eslint-disable-next-line import/first
 import { useCanvasSync } from './useCanvasSync.js'
 
@@ -1850,7 +1847,7 @@ describe('useCanvasSync', () => {
       expect(text).toContain('data-testid="exported-svg"')
     })
 
-    it('exports a standard .excalidraw JSON blob via serializeAsJSON using the live scene', async () => {
+    it('exports a standard .excalidraw JSON blob built from the live scene', async () => {
       const backend = makeFakeBackend()
       const api = makeApiStub()
       const { result } = renderHook(() => useCanvasSync(backend))
@@ -1861,16 +1858,11 @@ describe('useCanvasSync', () => {
 
       const blob = await result.current.exportScene('json')
 
-      expect(serializeAsJSON).toHaveBeenCalledWith(
-        api.getSceneElements(),
-        api.getAppState(),
-        api.getFiles(),
-        'local',
-      )
       expect(blob).not.toBeNull()
       expect(blob!.type).toBe('application/json')
       const parsed = JSON.parse(await blob!.text())
       expect(parsed).toMatchObject({ type: 'excalidraw', version: 2 })
+      expect(Array.isArray(parsed.elements)).toBe(true)
     })
   })
 })
