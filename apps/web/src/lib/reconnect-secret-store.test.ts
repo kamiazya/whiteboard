@@ -24,6 +24,11 @@ describe('reconnect-secret-store', () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
   })
 
+  it('rejects an empty secret and does not persist it', () => {
+    expect(save('http://localhost:3099', '')).toBe(false)
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull()
+  })
+
   it('returns null when the stored origin does not match the requested origin', () => {
     save('http://localhost:3099', 'secret-1')
     expect(load('http://localhost:4000')).toBeNull()
