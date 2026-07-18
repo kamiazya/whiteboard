@@ -81,6 +81,29 @@ describe('parseDaemonRecord', () => {
     expect(result.kind).toBe('token-missing')
   })
 
+  it('returns "malformed" for a present-but-wrong-typed token (not token-missing)', async () => {
+    const record = {
+      pid: 123,
+      port: 3099,
+      version: '0.1.0',
+      startedAt: '2026-04-23T00:00:00.000Z',
+      token: 123,
+    }
+    await writeFile(getDaemonRecordPath(dataDir), JSON.stringify(record), 'utf-8')
+
+    const result = await parseDaemonRecord(dataDir)
+
+    expect(result.kind).toBe('malformed')
+  })
+
+  it('returns "malformed" for a top-level JSON array', async () => {
+    await writeFile(getDaemonRecordPath(dataDir), '[]', 'utf-8')
+
+    const result = await parseDaemonRecord(dataDir)
+
+    expect(result).toEqual({ kind: 'malformed', message: 'Daemon record is not an object.' })
+  })
+
   it('returns "valid" with the full record when all fields including token parse', async () => {
     const record = {
       pid: 123,

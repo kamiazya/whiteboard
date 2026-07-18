@@ -34,6 +34,10 @@ export async function parseDaemonRecord(dataDir: string): Promise<DaemonRecordPa
     return { kind: 'malformed', message: 'Daemon record is not valid JSON.' }
   }
 
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return { kind: 'malformed', message: 'Daemon record is not an object.' }
+  }
+
   const fullResult = daemonRecordSchema.safeParse(parsed)
   if (fullResult.success) {
     return { kind: 'valid', record: fullResult.data }
@@ -41,14 +45,15 @@ export async function parseDaemonRecord(dataDir: string): Promise<DaemonRecordPa
 
   // The full schema also fails for missing/empty token, so re-check against
   // the token-less base schema to distinguish "token missing" (a record we
-  // can still report on) from genuinely malformed data.
+  // can still report on) from genuinely malformed data. The base schema
+  // strips `token` entirely, so a present-but-wrong-typed token (e.g. a
+  // number) would slip through as token-missing — guard that explicitly so it
+  // is reported as malformed instead.
+  const token = (parsed as Record<string, unknown>).token
+  const tokenIsAbsentOrEmpty = token === undefined || token === ''
   const baseResult = daemonRecordBaseSchema.safeParse(parsed)
-  if (baseResult.success) {
+  if (baseResult.success && tokenIsAbsentOrEmpty) {
     return { kind: 'token-missing', record: baseResult.data }
-  }
-
-  if (typeof parsed !== 'object' || parsed === null) {
-    return { kind: 'malformed', message: 'Daemon record is not an object.' }
   }
 
   return { kind: 'malformed', message: 'Daemon record is missing required fields.' }
