@@ -63,15 +63,31 @@ function registerFonts(): void {
 
 // Scoped fallback for the case Excalidraw's lazy font loader still issues a
 // `fetch()` for one of the filenames above (e.g. it re-resolves the URL
-// itself rather than reusing the pre-registered FontFace). Matches ONLY the
-// known embedded font filenames — every other request falls through to the
-// real fetch unchanged, so this can never mask an unrelated network call.
+// itself rather than reusing the pre-registered FontFace). Known embedded
+// font filenames are served from the inline data URIs; a request for any
+// OTHER font file (a family/subset this bundle does not embed — e.g. CJK
+// glyph subsets) gets a deterministic synthetic 404 so the widget degrades
+// to system-font fallback glyphs offline instead of attempting a network
+// fetch the host's sandbox would block anyway. Non-font requests fall
+// through to the real fetch unchanged, so this can never mask an
+// unrelated network call.
+const FONT_FILE_RE = /\.(?:woff2?|ttf|otf)(?:[?#]|$)/i
+
+function requestUrlOf(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input
+  if (input instanceof URL) return input.href
+  return input.url
+}
+
 function installFontFetchShim(): void {
   const originalFetch = window.fetch.bind(window)
   window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const dataUri = resolveFontFetchDataUri(input, FONT_FILENAME_MAP)
     if (dataUri) {
       return originalFetch(dataUri, init)
+    }
+    if (FONT_FILE_RE.test(requestUrlOf(input))) {
+      return Promise.resolve(new Response(null, { status: 404, statusText: 'Not Found' }))
     }
     return originalFetch(input, init)
   }

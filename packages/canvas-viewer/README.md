@@ -35,6 +35,13 @@ placeholder `<script>` tag without touching the rest of the file, using
 a rendered `<canvas>`, and that the embedded font actually loaded (not a
 silent fallback to a system font).
 
+Font coverage: only Excalifont's Basic-Latin subset is embedded. Text
+using other families or non-Latin glyphs (e.g. Japanese labels) renders
+with the browser's system fallback fonts — visually different but
+readable — and never triggers a network request: the widget's fetch shim
+answers any non-embedded font-file request with a synthetic 404 (the
+smoke includes a Japanese text element to pin exactly this behavior).
+
 ## Dev/prod export gap
 
 `@excalidraw/excalidraw`'s `development` and `production` export conditions
