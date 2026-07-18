@@ -49,6 +49,12 @@ export async function runStdioExitSmoke({
     stderrBuf += chunk.toString()
   })
 
+  // Without a listener here, a premature child exit (e.g. EPIPE on a write
+  // after the process has already gone away) throws an unhandled 'error'
+  // event and crashes the test runner instead of surfacing as a normal
+  // assertion failure below.
+  child.stdin.on('error', () => {})
+
   let stdoutBuf = ''
   let sawInitializeResponse = false
   child.stdout.on('data', (chunk: Buffer) => {
@@ -68,7 +74,10 @@ export async function runStdioExitSmoke({
     try {
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
     } catch {}
-    rmSync(tmpDataDir, { recursive: true, force: true })
+    // maxRetries/retryDelay absorb the window where the OS hasn't yet
+    // released its handle on tmpDataDir right after killing the child
+    // (observed as EBUSY/EPERM on Windows).
+    rmSync(tmpDataDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
   }
   process.once('exit', cleanup)
 
@@ -88,6 +97,14 @@ export async function runStdioExitSmoke({
 
     const deadline = Date.now() + exitTimeoutMs
     while (!sawInitializeResponse && Date.now() < deadline) {
+      // A child that has already died can never produce the response we're
+      // waiting for; fail immediately instead of spinning until the timeout.
+      if (child.exitCode !== null || child.signalCode !== null) {
+        throw new Error(
+          `[stdio-exit-smoke] child exited before sending an initialize response ` +
+            `(code=${child.exitCode} signal=${child.signalCode})\n${stderrBuf}`,
+        )
+      }
       await new Promise((r) => setTimeout(r, 50))
     }
     if (!sawInitializeResponse) {

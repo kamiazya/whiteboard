@@ -146,4 +146,24 @@ describe('installStdioLifecycle', () => {
     resolveExtra()
     await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
   })
+
+  it('still exits when closeServer throws synchronously instead of returning a rejected promise', async () => {
+    const stdin = new EventEmitter()
+    const signals = new EventEmitter()
+    const exit = vi.fn()
+    const closeServer = vi.fn((): never => {
+      throw new Error('boom: synchronous throw')
+    })
+    installStdioLifecycle({
+      stdin,
+      signals: { on: (event, listener) => signals.on(event, listener) },
+      // @ts-expect-error -- deliberately violating the () => Promise<void> contract to
+      // simulate a caller that throws before ever returning a promise.
+      closeServer,
+      exit,
+    })
+
+    stdin.emit('end')
+    await vi.waitFor(() => expect(exit).toHaveBeenCalledWith(0))
+  })
 })

@@ -70,7 +70,20 @@ export function installStdioLifecycle(deps: StdioLifecycleDeps): (exitCode?: num
 
     const shutdownExtra = deps.shutdownExtra ?? (() => Promise.resolve())
 
-    Promise.allSettled([deps.closeServer(), shutdownExtra()])
+    // deps.closeServer() / shutdownExtra() are typed as returning a Promise,
+    // but a caller can still throw synchronously before ever producing one
+    // (e.g. a bug in the SDK's close() path). Calling through settle() turns
+    // that throw into a rejection so it always lands in the Promise.allSettled
+    // below instead of escaping this function and skipping the finally block.
+    const settle = (fn: () => Promise<void>): Promise<void> => {
+      try {
+        return fn()
+      } catch (err) {
+        return Promise.reject(err)
+      }
+    }
+
+    Promise.allSettled([settle(deps.closeServer), settle(shutdownExtra)])
       .then((results) => {
         for (const result of results) {
           if (result.status === 'rejected') {
