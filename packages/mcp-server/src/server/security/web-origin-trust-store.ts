@@ -23,8 +23,10 @@ import { join } from 'node:path'
 import { pid } from 'node:process'
 import { z } from 'zod'
 import { DATA_DIR } from '../../shared/data-dir-secure.js'
+import { withMkdirLock } from '../../shared/mkdir-lock.js'
 
 const WEB_ORIGIN_TRUST_FILENAME = 'trusted-web-origins.json'
+const WEB_ORIGIN_TRUST_LOCK_DIRNAME = 'trusted-web-origins.lock'
 
 // Sliding TTL since last successful use: bounds how long a trusted loopback
 // dev origin (e.g. http://localhost:5173, which a *different* project's dev
@@ -56,6 +58,10 @@ const EMPTY_FILE: TrustedWebOriginsFile = { schemaVersion: 1, origins: [] }
 
 export function getWebOriginTrustFilePath(dataDir: string = DATA_DIR): string {
   return join(dataDir, WEB_ORIGIN_TRUST_FILENAME)
+}
+
+function getWebOriginTrustLockPath(dataDir: string): string {
+  return join(dataDir, WEB_ORIGIN_TRUST_LOCK_DIRNAME)
 }
 
 export function hashReconnectSecret(secret: string): string {
@@ -177,7 +183,20 @@ export function createWebOriginTrustStore(
   }
 
   function enqueue<T>(fn: () => Promise<T>): Promise<T> {
-    const result = writeQueue.then(fn)
+    // The in-process writeQueue only orders calls within this one store
+    // instance. A separate process (the daemon and the `whiteboard trust`
+    // CLI both mutate this same file) can read the current record set
+    // between this instance's own read and write — its later persist()
+    // would then overwrite the whole file from that stale read, discarding
+    // whatever this instance just wrote (e.g. a CLI revoke undone by a
+    // daemon rotation that read before the revoke landed). Holding the
+    // mkdir-based cross-process lock for the whole read-modify-write
+    // closes that gap: readCurrent() inside `fn` only ever sees state no
+    // other process is concurrently about to overwrite.
+    const result = writeQueue.then(async () => {
+      await mkdir(dataDir, { recursive: true })
+      return withMkdirLock(getWebOriginTrustLockPath(dataDir), fn)
+    })
     // Swallow rejections in the chain itself (each caller still awaits its
     // own `result` and sees the real error) so one failed write doesn't
     // wedge the queue for every write after it.

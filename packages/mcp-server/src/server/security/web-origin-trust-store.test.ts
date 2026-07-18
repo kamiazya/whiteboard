@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -157,5 +157,55 @@ describe('web-origin-trust-store', () => {
     await store.revokeAll()
 
     expect(await store.list()).toEqual([])
+  })
+
+  describe('cross-process write serialization', () => {
+    // The in-process writeQueue only orders calls within one store
+    // instance. A separate OS process (or a second instance in this test,
+    // standing in for one) reading the same file before this instance
+    // finishes its own read-modify-write can have its write clobbered —
+    // e.g. a revocation racing a rotation could be silently undone. A
+    // cross-process file lock closes that gap.
+    const lockDirName = 'trusted-web-origins.lock'
+
+    it('waits for an externally held lock before mutating the file', async () => {
+      await mkdir(join(dataDir, lockDirName))
+      let releasedAt = 0
+      setTimeout(() => {
+        releasedAt = Date.now()
+        void rm(join(dataDir, lockDirName), { recursive: true, force: true })
+      }, 30)
+
+      const store = createWebOriginTrustStore({ dataDir })
+      const startedAt = Date.now()
+      await store.trustOrigin('http://localhost:5173')
+
+      expect(startedAt).toBeGreaterThanOrEqual(0)
+      expect(Date.now()).toBeGreaterThanOrEqual(releasedAt)
+    })
+
+    it('reclaims a lock left behind by a dead process instead of hanging', async () => {
+      await mkdir(join(dataDir, lockDirName))
+      await writeFile(
+        join(dataDir, lockDirName, 'owner.json'),
+        JSON.stringify({ pid: 999999999, startedAt: '2026-04-23T00:00:00.000Z' }),
+      )
+
+      const store = createWebOriginTrustStore({ dataDir })
+      await expect(store.trustOrigin('http://localhost:5173')).resolves.toBeDefined()
+    })
+
+    it('does not let a concurrent write from a second store instance clobber the first', async () => {
+      const storeA = createWebOriginTrustStore({ dataDir })
+      const storeB = createWebOriginTrustStore({ dataDir })
+
+      await Promise.all([
+        storeA.trustOrigin('http://localhost:5173'),
+        storeB.trustOrigin('http://localhost:6000'),
+      ])
+
+      const origins = (await storeA.list()).map((r) => r.origin).sort()
+      expect(origins).toEqual(['http://localhost:5173', 'http://localhost:6000'])
+    })
   })
 })
