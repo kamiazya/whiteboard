@@ -1,4 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { DirtyEventDetail } from '../lib/canvas-sync-types.js'
+
+// Re-exported so existing call sites (e.g. WorkspaceTopBar) can keep
+// importing this from the hook module; the canonical definition lives in
+// lib/canvas-sync-types.ts alongside dispatchIdentityEvent, which produces it.
+export type { DirtyEventDetail }
 
 // Track unsaved state with the same minimal affordance as a mail-style unread dot.
 // - default (dirty=false): show nothing
@@ -15,11 +21,6 @@ export interface UseDirtyStateResult {
   // Call this when the UI needs to mark the document clean explicitly, such as right after Cmd+S succeeds.
   // Most callers can rely on excalidraw:version_saved instead.
   markSaved: () => void
-}
-
-export interface DirtyEventDetail {
-  workspaceId: string
-  slug: string
 }
 
 export function useDirtyState(workspaceId: string, slug: string): UseDirtyStateResult {
