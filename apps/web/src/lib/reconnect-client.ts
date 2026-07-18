@@ -1,13 +1,16 @@
 import { z } from 'zod'
 
-// Client-side mirrors of packages/mcp-server/src/server/routes/reconnect.ts's
-// reconnectCredentialResponseSchema / reconnectSessionResponseSchema. Kept as
-// manual copies, NOT a deep test-only import like daemon-probe's schema-drift
-// pin: reconnect.ts lives under src/server/**, and
-// web-app-boundary.test.ts's import-boundary guard forbids apps/web (even
-// test files) from importing anything under src/server, src/cli, or
-// src/daemon — only src/shared is reachable. Keep this file's two schemas
-// byte-for-byte in sync with reconnect.ts's when either changes.
+// Client-side mirrors of
+// packages/mcp-server/src/shared/api-contracts/reconnect.ts's
+// reconnectCredentialResponseSchema / reconnectSessionResponseSchema (that
+// module is the server's single source of truth — server/routes/reconnect.ts
+// imports it too). Kept as manual copies here rather than a build-time
+// import: that module stays off the published npm barrel (see its own
+// comment), so reaching into mcp-server internals at build time would be a
+// fragile, undocumented coupling for a separately-deployed app. A dedicated
+// reconnect-client.schema-drift.test.ts test-only deep-imports it to pin
+// this mirror against field-level drift — keep this file's two schemas
+// byte-for-byte in sync with the shared source when either changes.
 export const reconnectCredentialResponseSchema = z.object({
   reconnectSecret: z.string().min(1),
   expiresInDays: z.number().positive(),
