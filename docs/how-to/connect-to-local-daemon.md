@@ -151,7 +151,7 @@ How it works:
   daemon token and a **rotated** reconnect secret — the old secret stops
   working immediately, and the web app persists the new one before using
   the token. While this request is in flight the app shows a visible
-  "Reconnecting to local daemon…" status (bounded by a ~10 second timeout,
+  "Reconnecting to local daemon…" status (bounded by a ~10-second timeout,
   never an indefinite hang).
 - A trust record expires automatically 30 days after its last successful
   use (a sliding TTL), so an origin that stops reconnecting eventually loses
@@ -180,11 +180,14 @@ same care as a long-lived session cookie.
 **Revoking trust.** Clicking "Forget this daemon" in the `DaemonDetectedBanner`
 clears the locally stored secret and reconnect target for that browser. To
 revoke the daemon-side trust record itself (e.g. after a suspected
-compromise), stop the daemon and delete or edit `trusted-web-origins.json`
-in the data directory to remove that origin's entry — the entry
-disappearing is picked up by a running daemon on its next request for that
-origin (no restart required). A dedicated `whiteboard trust revoke
-<origin>` command is planned but not yet wired into the CLI.
+compromise), use the CLI — the daemon re-reads the trust file on each
+reconnect request, so revocation takes effect immediately with no restart:
+
+```bash
+whiteboard trust list                # show trusted origins
+whiteboard trust revoke <origin>    # revoke one origin
+whiteboard trust revoke --all       # revoke every trusted origin
+```
 
 ## Copy-first import
 
