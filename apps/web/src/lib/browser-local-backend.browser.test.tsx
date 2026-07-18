@@ -172,7 +172,13 @@ describe('BrowserLocalBackend', () => {
     expect(result).toBeNull()
   })
 
-  it('putFile resolves without calling onFileSuccess (deferred OPFS)', async () => {
+  it('putFile rejects instead of silently discarding the upload (deferred OPFS)', async () => {
+    // OPFS storage is not implemented yet, so putFile must not resolve as if
+    // the upload succeeded: a silent success would let useCanvasSync commit
+    // an image element whose fileId can never be resolved by getFile() again
+    // (e.g. after a reload), losing the image with no error surfaced to the
+    // user. Rejecting routes the failure through the existing
+    // onFileUploadFailed signal instead of pretending success.
     const backend = new BrowserLocalBackend('canvas-1')
     const onFileSuccess = vi.fn()
     await expect(
@@ -190,7 +196,7 @@ describe('BrowserLocalBackend', () => {
         ],
         onFileSuccess,
       ),
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow(/not (yet )?(implemented|supported)/i)
     expect(onFileSuccess).not.toHaveBeenCalled()
   })
 

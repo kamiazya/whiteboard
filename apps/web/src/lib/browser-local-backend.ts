@@ -1,5 +1,9 @@
 import { Loro } from 'loro-crdt'
-import type { CanvasBackend, CanvasBackendHandlers, BinaryFileDataLike } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type {
+  CanvasBackend,
+  CanvasBackendHandlers,
+  BinaryFileDataLike,
+} from '@kamiazya/whiteboard-mcp/browser-contract'
 import { LoroStore } from './loro-store.js'
 
 /**
@@ -9,7 +13,12 @@ import { LoroStore } from './loro-store.js'
  *
  * getFile/putFile: OPFS file storage is deferred to a later slice. Both
  * methods are present to satisfy the CanvasBackend interface; getFile
- * returns null and putFile resolves without calling onFileSuccess.
+ * returns null (a miss) and putFile REJECTS rather than resolving — a
+ * resolved-but-not-persisted putFile would let useCanvasSync commit an
+ * image element referencing a fileId that can never be resolved again
+ * (e.g. after a reload), silently losing the image with no error surfaced
+ * to the user. Rejecting routes the failure through the existing
+ * onFileUploadFailed signal on the calling hook instead.
  *
  * sendClientReady/sendExportResponse: no WebSocket in browser-local mode;
  * both are no-ops.
@@ -93,20 +102,29 @@ export class BrowserLocalBackend implements CanvasBackend {
   }
 
   /**
-   * OPFS file storage is deferred. Resolves without calling onFileSuccess.
+   * OPFS file storage is deferred. Rejects rather than resolving as a
+   * silent no-op: the caller (useCanvasSync) treats a resolved putFile as
+   * "uploaded", and would otherwise commit an image element whose fileId
+   * is never actually persisted.
    */
   async putFile(
     _newEntries: [string, BinaryFileDataLike][],
     _onFileSuccess: (fileId: string) => void,
   ): Promise<void> {
-    // Intentionally a no-op: OPFS upload is not implemented in 3-C.
+    throw new Error(
+      'BrowserLocalBackend: file upload is not yet implemented (OPFS storage deferred)',
+    )
   }
 
   /** No WebSocket in browser-local mode. */
-  sendClientReady(): void { /* no-op */ }
+  sendClientReady(): void {
+    /* no-op */
+  }
 
   /** No WebSocket in browser-local mode. */
-  sendExportResponse(_requestId: string, _data: string): void { /* no-op */ }
+  sendExportResponse(_requestId: string, _data: string): void {
+    /* no-op */
+  }
 
   // ── Private ──────────────────────────────────────────────────────────────────
 
