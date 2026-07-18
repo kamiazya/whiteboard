@@ -42,9 +42,17 @@ export function isExplicitHexColor(input: string): boolean {
 // colors pass through this module unresolved, and the contrast guard simply
 // skips them rather than guessing.
 export function relativeLuminance(hex: string): number | null {
-  const m = /^#(?:([0-9a-f]{3})|([0-9a-f]{6}))$/i.exec(hex)
+  // Accepts 3/4/6/8-digit hex. An alpha channel (4th/8th) is dropped: the
+  // effective luminance of a translucent fill depends on the canvas behind
+  // it, which is unknown here, so the guard treats the color as opaque.
+  const m = /^#(?:([0-9a-f]{3,4})|([0-9a-f]{6})|([0-9a-f]{8}))$/i.exec(hex)
   if (!m) return null
-  const digits = m[1] ? [...m[1]].map((c) => c + c).join('') : m[2]!
+  let digits: string
+  if (m[1]) {
+    digits = [...m[1].slice(0, 3)].map((c) => c + c).join('')
+  } else {
+    digits = (m[2] ?? m[3]!).slice(0, 6)
+  }
   const channel = (i: number) => {
     const v = Number.parseInt(digits.slice(i * 2, i * 2 + 2), 16) / 255
     return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
