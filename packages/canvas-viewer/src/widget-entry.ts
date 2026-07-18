@@ -62,11 +62,27 @@ function registerFonts(): void {
   }
 
   // EXCALIDRAW_ASSET_PATH must be a string; Excalidraw resolves any font URL
-  // it still needs (one this build didn't anticipate) against it. Since
-  // this document is the only thing that prefix could ever point at, and
-  // the fetch shim below intercepts requests before they reach the
-  // network, the exact value is inert.
-  window.EXCALIDRAW_ASSET_PATH = new URL('.', window.location.href).toString()
+  // it still needs (one this build didn't anticipate) against it. The exact
+  // value is inert (the fetch shim intercepts before the network), but
+  // constructing it must not throw: MCP Apps hosts load this widget via a
+  // sandboxed srcdoc iframe where location.href is the non-URL
+  // "about:srcdoc" and `new URL('.', location.href)` throws, killing the
+  // whole bootstrap. document.baseURI (inherited from the embedding
+  // document in srcdoc) usually works; a fixed inert prefix is the final
+  // fallback.
+  window.EXCALIDRAW_ASSET_PATH = resolveInertAssetPrefix()
+}
+
+function resolveInertAssetPrefix(): string {
+  try {
+    return new URL('.', window.location.href).toString()
+  } catch {
+    try {
+      return new URL('.', document.baseURI).toString()
+    } catch {
+      return 'https://whiteboard-widget.invalid/'
+    }
+  }
 }
 
 // Scoped fallback for the case Excalidraw's lazy font loader still issues a
@@ -118,18 +134,21 @@ function installFontFetchShim(): void {
 // slot instead of hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000
 
-// `onMount` is the single place a handle produced by this bridge gets
-// recorded. `app.connect()` racing HOST_CONNECT_TIMEOUT_MS means a
-// tool-result can legitimately arrive AFTER the caller already decided
-// `connectedToHost` was false and mounted its own embedded-scene fallback
-// (a connect() that resolves just past the timeout, or a host that answers
-// the handshake slowly). Routing every mount through the same callback lets
-// the caller dispose whichever handle — fallback or a previous tool-result
-// — is currently live before mounting the new one, so two React roots never
-// compete for the same container.
+// `remount` is the single place a mount produced by this bridge happens.
+// `app.connect()` racing HOST_CONNECT_TIMEOUT_MS means a tool-result can
+// legitimately arrive AFTER the caller already decided `connectedToHost`
+// was false and mounted its own embedded-scene fallback (a connect() that
+// resolves just past the timeout, or a host that answers the handshake
+// slowly), and a host may deliver tool-results more than once. Routing
+// every mount through the same callback — which disposes whichever handle
+// is currently live and clears the container BEFORE the factory creates
+// the next root — is what keeps two React roots from ever competing for
+// the same container (createRoot on a container whose children still
+// belong to an undisposed root crashes React with a removeChild
+// NotFoundError).
 async function mountFromHost(
   container: HTMLElement,
-  onMount: (handle: CanvasViewerHandle) => void,
+  remount: (mount: () => CanvasViewerHandle) => void,
 ): Promise<boolean> {
   // No parent frame — this document cannot be an embedded MCP Apps view.
   if (window.parent === window) return false
@@ -143,7 +162,7 @@ async function mountFromHost(
     // mountCanvasViewer.
     const structuredContent = (result as { structuredContent?: { scene?: unknown } })
       .structuredContent
-    onMount(mountCanvasViewer(container, { scene: structuredContent?.scene }))
+    remount(() => mountCanvasViewer(container, { scene: structuredContent?.scene }))
   }
 
   const connected = await Promise.race([
@@ -164,9 +183,12 @@ async function bootstrap(): Promise<void> {
   }
 
   let handle: CanvasViewerHandle | undefined
-  const connectedToHost = await mountFromHost(container, (newHandle) => {
+  const connectedToHost = await mountFromHost(container, (mount) => {
+    // Order matters: dispose the live root and clear its DOM BEFORE the
+    // factory creates the next root — see mountFromHost's doc comment.
     handle?.dispose()
-    handle = newHandle
+    container.replaceChildren()
+    handle = mount()
   })
   if (!connectedToHost) {
     handle = mountCanvasViewer(container)
