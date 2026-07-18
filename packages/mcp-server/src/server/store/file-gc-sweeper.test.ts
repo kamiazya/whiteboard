@@ -16,6 +16,35 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
+// Lets tests inject a one-off, path-scoped rejection from lstat/realpath to
+// exercise isDbWorkspaceDirSafe's generic (non-ENOENT) failure branches,
+// which a real filesystem can't reliably reproduce (permission checks are
+// bypassed for the root user, which many CI containers run as). Every path
+// not matching the override falls through to the real implementation.
+const { fsFailureOverrides } = vi.hoisted(() => ({
+  fsFailureOverrides: {
+    lstat: null as null | { path: string; err: unknown },
+    realpath: null as null | { path: string; err: unknown },
+  },
+}))
+
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>()
+  return {
+    ...actual,
+    lstat: (path: Parameters<typeof actual.lstat>[0], ...rest: unknown[]) => {
+      const override = fsFailureOverrides.lstat
+      if (override && path === override.path) return Promise.reject(override.err)
+      return (actual.lstat as (...args: unknown[]) => unknown)(path, ...rest)
+    },
+    realpath: (path: Parameters<typeof actual.realpath>[0], ...rest: unknown[]) => {
+      const override = fsFailureOverrides.realpath
+      if (override && path === override.path) return Promise.reject(override.err)
+      return (actual.realpath as (...args: unknown[]) => unknown)(path, ...rest)
+    },
+  }
+})
+
 const { createFileGcSweeper } = await import('./file-gc-sweeper.js')
 const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
 const { FileVersionStore } = await import('./version-store.js')
@@ -32,6 +61,8 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.useRealTimers()
+  fsFailureOverrides.lstat = null
+  fsFailureOverrides.realpath = null
   await handle.dispose()
   await rm(tempDir, { recursive: true, force: true })
 })
@@ -252,6 +283,28 @@ describe('createFileGcSweeper stop()', () => {
     // The pass itself was never cancelled -- resolving it afterward must
     // not throw or reschedule (stopped=true already suppresses that).
     d.resolve({ purgedCount: 0, purgedBytes: 0 })
+  })
+
+  it('clears the timeoutMs race timer once the in-flight pass finishes normally (no leaked timer)', async () => {
+    const d = deferred<{ purgedCount: number; purgedBytes: number }>()
+    const purge = vi.fn(async () => d.promise)
+    const sweeper = createFileGcSweeper({
+      intervalMs: 1000,
+      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      discoverFsWorkspaces: async () => [],
+      purge,
+    })
+    sweeper.start()
+    await advanceTimersAndFlush(1000)
+
+    const stopPromise = sweeper.stop({ timeoutMs: 5000 })
+    d.resolve({ purgedCount: 0, purgedBytes: 0 })
+    await stopPromise
+
+    // stopped=true suppresses scheduleNext(), so the only timer that could
+    // still be pending here is a leaked stop() race timeout -- without
+    // clearing it, this stays 1 until the full 5000ms elapses.
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('still resolves promptly via timeoutMs when there is no in-flight pass to wait for', async () => {
@@ -607,5 +660,108 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     await sweeper.tick()
     await sweeper.stop()
     expect(purge).not.toHaveBeenCalledWith('blobs')
+  })
+
+  it('skips a DB-listed workspace whose top-level dir is safe but files/ is a symlink escaping the data dir', async () => {
+    const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-sweeper-db-files-outside-'))
+    try {
+      await writeFile(join(outsideDir, 'secret.png'), Buffer.alloc(10, 5))
+      const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
+      await import('node:fs/promises').then((m) =>
+        m.utimes(join(outsideDir, 'secret.png'), past, past),
+      )
+
+      // The workspace's own top-level dir is a real, non-symlinked directory
+      // (so it passes isDbWorkspaceDirSafe's first containment check on its
+      // own), but its files/ CHILD is a symlink pointing outside the data
+      // dir. purgeDanglingFiles() only lexically joins <dir>/files and
+      // follows whatever that resolves to.
+      const workspaceDir = join(tempDir, 'ws_files_symlink')
+      await mkdir(workspaceDir, { recursive: true })
+      await symlink(outsideDir, join(workspaceDir, 'files'), 'dir')
+
+      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+      const sweeper = createFileGcSweeper({
+        listWorkspaces: async () => [{ workspaceId: 'ws_files_symlink' }],
+        discoverFsWorkspaces: async () => [],
+        purge,
+      })
+      await sweeper.tick()
+      await sweeper.stop()
+
+      expect(purge).not.toHaveBeenCalledWith('ws_files_symlink')
+      const remaining = await import('node:fs/promises').then((m) => m.readdir(outsideDir))
+      expect(remaining).toEqual(['secret.png'])
+    } finally {
+      await rm(outsideDir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('isDbWorkspaceDirSafe generic (non-ENOENT) stat/realpath failures', () => {
+  it('fails closed and logs a warning when stat rejects with a permission error', async () => {
+    const cap = captureLogsForTests('debug')
+    try {
+      const workspaceDir = join(tempDir, 'ws_locked')
+      await mkdir(workspaceDir, { recursive: true })
+      const boom = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
+      fsFailureOverrides.lstat = { path: workspaceDir, err: boom }
+
+      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+      const sweeper = createFileGcSweeper({
+        listWorkspaces: async () => [{ workspaceId: 'ws_locked' }],
+        discoverFsWorkspaces: async () => [],
+        purge,
+      })
+      await sweeper.tick()
+      await sweeper.stop()
+
+      expect(purge).not.toHaveBeenCalledWith('ws_locked')
+      const warnRecords = cap.records.filter(
+        (r) => r.scope === 'file-gc-sweeper' && r.level === 'warning',
+      )
+      expect(
+        warnRecords.some(
+          (r) =>
+            r.data?.workspaceId === 'ws_locked' &&
+            String((r.data?.err as Error | undefined)?.message).includes('EACCES'),
+        ),
+      ).toBe(true)
+    } finally {
+      cap.restore()
+    }
+  })
+
+  it('fails closed and logs a warning when realpath rejects with a non-ENOENT error', async () => {
+    const cap = captureLogsForTests('debug')
+    try {
+      const workspaceDir = join(tempDir, 'ws_unresolvable')
+      await mkdir(workspaceDir, { recursive: true })
+      const boom = Object.assign(new Error('EIO: i/o error'), { code: 'EIO' })
+      fsFailureOverrides.realpath = { path: workspaceDir, err: boom }
+
+      const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+      const sweeper = createFileGcSweeper({
+        listWorkspaces: async () => [{ workspaceId: 'ws_unresolvable' }],
+        discoverFsWorkspaces: async () => [],
+        purge,
+      })
+      await sweeper.tick()
+      await sweeper.stop()
+
+      expect(purge).not.toHaveBeenCalledWith('ws_unresolvable')
+      const warnRecords = cap.records.filter(
+        (r) => r.scope === 'file-gc-sweeper' && r.level === 'warning',
+      )
+      expect(
+        warnRecords.some(
+          (r) =>
+            r.data?.workspaceId === 'ws_unresolvable' &&
+            String((r.data?.err as Error | undefined)?.message).includes('EIO'),
+        ),
+      ).toBe(true)
+    } finally {
+      cap.restore()
+    }
   })
 })

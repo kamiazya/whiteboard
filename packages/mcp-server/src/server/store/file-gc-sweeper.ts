@@ -125,6 +125,58 @@ async function discoverFsWorkspaces(): Promise<string[]> {
   return result
 }
 
+type ContainmentCheck = 'missing' | 'safe' | 'unsafe'
+
+// Shared lstat+realpath containment check used for both a DB workspace's
+// top-level directory and its files/ child (see isDbWorkspaceDirSafe below).
+// `treatNonDirectoryAsMissing` only applies to the files/ child: a files
+// entry that exists but is not a directory can't be an escape vector
+// (realpath of a regular file just resolves in place) and purgeDanglingFiles'
+// own readdir() will fail loudly on it later, so there is nothing to fail
+// closed over here.
+async function checkSubpathContainment(
+  workspaceId: string,
+  targetPath: string,
+  realDataDir: string,
+  label: string,
+  treatNonDirectoryAsMissing = false,
+): Promise<ContainmentCheck> {
+  let stats: Awaited<ReturnType<typeof lstat>>
+  try {
+    stats = await lstat(targetPath)
+  } catch (err) {
+    // Missing is not a containment risk -- purgeDanglingFiles() itself
+    // handles a missing files dir by returning zero purged.
+    if (isMissingFileError(err)) return 'missing'
+    log.warning(
+      { workspaceId, err },
+      `file-gc sweep: skipped DB workspace, could not stat ${label}`,
+    )
+    return 'unsafe'
+  }
+  if (stats.isSymbolicLink()) {
+    log.warning({ workspaceId }, `file-gc sweep: skipped DB workspace with symlinked ${label}`)
+    return 'unsafe'
+  }
+  if (treatNonDirectoryAsMissing && !stats.isDirectory()) return 'missing'
+
+  let realTargetPath: string
+  try {
+    realTargetPath = await realpath(targetPath)
+  } catch (err) {
+    log.warning(
+      { workspaceId, err },
+      `file-gc sweep: skipped DB workspace, could not resolve ${label} realpath`,
+    )
+    return 'unsafe'
+  }
+  if (realTargetPath !== realDataDir && !realTargetPath.startsWith(realDataDir + sep)) {
+    log.warning({ workspaceId }, `file-gc sweep: skipped DB workspace ${label} escaping data dir`)
+    return 'unsafe'
+  }
+  return 'safe'
+}
+
 // DB-listed workspaces are trusted less than they look: a workspace row can
 // exist while its on-disk directory has since been replaced by a symlink (or
 // never matched the DB row's containment at all). discoverFsWorkspaces()
@@ -133,43 +185,42 @@ async function discoverFsWorkspaces(): Promise<string[]> {
 // entirely -- without this check runPass() would purge through a symlinked
 // dir straight into purgeDanglingFiles(), which only does lexical
 // containment (assertPathWithinDir) and cannot see through a symlink.
+//
+// The top-level workspace dir passing containment is not enough on its own:
+// purgeDanglingFiles() only lexically joins <workspaceDir>/files and follows
+// whatever that resolves to, so a workspace dir that is itself safe can still
+// have its files/ CHILD replaced by a symlink escaping the data dir. A
+// filesystem-discovered workspace never reaches purge with such a files/ dir
+// (discoverFsWorkspaces()'s lstat().isDirectory() check is false for a
+// symlink), so a DB-listed workspace needs the same files/ subpath check.
 async function isDbWorkspaceDirSafe(workspaceId: string): Promise<boolean> {
   const dataDir = getDataDir()
   const entryPath = join(dataDir, workspaceId)
 
-  let stats: Awaited<ReturnType<typeof lstat>>
-  try {
-    stats = await lstat(entryPath)
-  } catch (err) {
-    // No on-disk directory yet (e.g. a workspace row created but never
-    // written to) is not a containment risk -- purgeDanglingFiles() itself
-    // handles a missing files dir by returning zero purged.
-    if (isMissingFileError(err)) return true
-    log.warning({ workspaceId, err }, 'file-gc sweep: skipped DB workspace, could not stat dir')
-    return false
-  }
-  if (stats.isSymbolicLink()) {
-    log.warning({ workspaceId }, 'file-gc sweep: skipped DB workspace with symlinked dir')
-    return false
-  }
-
   let realDataDir: string
-  let realEntryPath: string
   try {
     realDataDir = await realpath(dataDir)
-    realEntryPath = await realpath(entryPath)
   } catch (err) {
     log.warning(
       { workspaceId, err },
-      'file-gc sweep: skipped DB workspace, could not resolve realpath',
+      'file-gc sweep: skipped DB workspace, could not resolve data dir realpath',
     )
     return false
   }
-  if (realEntryPath !== realDataDir && !realEntryPath.startsWith(realDataDir + sep)) {
-    log.warning({ workspaceId }, 'file-gc sweep: skipped DB workspace dir escaping data dir')
-    return false
-  }
-  return true
+
+  const dirCheck = await checkSubpathContainment(workspaceId, entryPath, realDataDir, 'dir')
+  if (dirCheck === 'unsafe') return false
+  if (dirCheck === 'missing') return true
+
+  const filesPath = join(entryPath, 'files')
+  const filesCheck = await checkSubpathContainment(
+    workspaceId,
+    filesPath,
+    realDataDir,
+    'files dir',
+    true,
+  )
+  return filesCheck !== 'unsafe'
 }
 
 export interface FileGcSweeperOptions {
@@ -300,13 +351,22 @@ export function createFileGcSweeper(options: FileGcSweeperOptions = {}): FileGcS
       await inFlight
       return
     }
-    await Promise.race([
-      inFlight,
-      new Promise<void>((resolve) => {
-        const timeoutTimer = setTimeout(resolve, options.timeoutMs)
-        timeoutTimer.unref()
-      }),
-    ])
+    // Hold the handle so it can be cleared once either side of the race
+    // settles -- an unref'd timer still keeps its closure (and the resolve
+    // it captures) alive until it fires, even though it can't block process
+    // exit on its own.
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null
+    try {
+      await Promise.race([
+        inFlight,
+        new Promise<void>((resolve) => {
+          timeoutTimer = setTimeout(resolve, options.timeoutMs)
+          timeoutTimer.unref()
+        }),
+      ])
+    } finally {
+      if (timeoutTimer) clearTimeout(timeoutTimer)
+    }
   }
 
   return { start, tick, stop }
