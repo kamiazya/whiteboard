@@ -29,6 +29,12 @@ describe('ScenePreview', () => {
     expect(el.style.height).toBe('300px')
   })
 
+  it('throws when viewOnly={false} is requested, since CanvasViewer is read-only', () => {
+    expect(() =>
+      render(<ScenePreview width={100} height={100} elements={[]} viewOnly={false} />),
+    ).toThrow('ScenePreview no longer supports viewOnly={false}; CanvasViewer is read-only')
+  })
+
   it('locks the canvas to read-only mode by default', () => {
     excalidrawProps.length = 0
     render(<ScenePreview width={100} height={100} elements={[]} />)
