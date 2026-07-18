@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Stub heavy/irrelevant dependencies so the component mounts without network or browser-only requirements.
@@ -1291,5 +1292,51 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)
     expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
+  })
+})
+
+describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke', () => {
+  it('closes the rename input after a successful daemon rename under StrictMode', async () => {
+    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
+      if (String(url).includes('/names')) return mkNamesOk()
+      if (String(url).includes('/name') && init?.method === 'PUT') {
+        return new Response(JSON.stringify({ workspace: 'My WS', canvases: {}, pinned: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
+      return new Response('{}', { status: 200 })
+    })
+
+    render(
+      <StrictMode>
+        <WorkspaceTopBar
+          workspaceId="ws_1"
+          slug="canvas-a"
+          canvases={[{ slug: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          onEnterFullscreen={() => {}}
+          onNavigateBack={() => {}}
+          onNavigateToCanvas={() => {}}
+        />
+      </StrictMode>,
+      { container: document.body },
+    )
+
+    const actionsButton = screen.getByRole('button', { name: 'Canvas actions' })
+    fireEvent.pointerDown(actionsButton, { button: 0, ctrlKey: false })
+    const renameItem = await screen.findByText('Rename canvas')
+    fireEvent.pointerUp(renameItem)
+
+    const input = await screen.findByLabelText('Canvas title')
+    fireEvent.change(input, { target: { value: 'Renamed Canvas' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    // Under React StrictMode's dev-only double-invoke (setup -> cleanup ->
+    // setup), a mountedRef that never re-arms on setup would stay stuck
+    // false, so the rename completion path (gated on mountedRef.current)
+    // would never close the input.
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Canvas title')).toBeNull()
+    })
   })
 })

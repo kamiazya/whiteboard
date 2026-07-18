@@ -2,7 +2,7 @@ import type { SaveVersionResponse } from '@kamiazya/whiteboard-mcp/api-contracts
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import '../index.css'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
@@ -593,5 +593,24 @@ describe('WorkspaceTopBar browser mode', () => {
 
     // @ts-expect-error -- test-only cleanup of a property defined above
     delete navigator.clipboard
+  })
+
+  it('does not leave sibling top-bar controls aria-hidden after the Canvas actions menu closes', async () => {
+    renderTopBar()
+
+    const backButton = screen.getByRole('button', { name: 'Back to canvas list' })
+    expect(backButton.getAttribute('aria-hidden')).toBeNull()
+
+    await page.getByRole('button', { name: 'Canvas actions' }).click()
+    await screen.findByRole('menu')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+
+    // Radix's DismissableLayer inerts (aria-hides) the rest of the page while
+    // this menu is open; closing it must fully restore every sibling rather
+    // than leaving some of them permanently aria-hidden.
+    expect(backButton.getAttribute('aria-hidden')).toBeNull()
+    const rightActions = screen.getByTestId('topbar-right-actions-exposed')
+    expect(rightActions.getAttribute('aria-hidden')).toBeNull()
   })
 })
