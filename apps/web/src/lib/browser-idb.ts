@@ -14,8 +14,18 @@ export const DB_NAME = 'whiteboard'
  * 'canvases' row is demoted to metadata only (id/name/updatedAt). Any legacy
  * 'scene' field left over from a pre-v3 row is stripped during upgrade so no
  * old-schema shape survives to fail canvasSnapshotSchema.parse.
+ *
+ * v3 -> v4: additive — adds the 'canvasFiles' object store (uploaded image
+ * Blobs, see canvas-file-store.ts). Existing 'meta'/'canvases'/'loroCanvases'
+ * data is untouched.
+ *
+ * Known limitation (accepted, not handled): if another tab holds a
+ * connection open at the previous version, this open blocks
+ * (onblocked/onversionchange) until that tab closes or upgrades — the same
+ * behavior every prior DB_VERSION bump in this file has had. No new handling
+ * is added for it here.
  */
-export const DB_VERSION = 3
+export const DB_VERSION = 4
 
 function stripLegacySceneField(tx: IDBTransaction): void {
   const store = tx.objectStore('canvases')
@@ -42,6 +52,7 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
       if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
       if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('canvasFiles')) db.createObjectStore('canvasFiles')
 
       // oldVersion === 0 is a fresh install (empty 'canvases' store), so the
       // scene-strip is a pure no-op there — only run it for a real v1/v2 upgrade.
