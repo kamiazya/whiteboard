@@ -19,7 +19,9 @@ const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
-const { createBranch, loadCanvasBranches, saveCanvasBranches } = await import('./branches-store.js')
+const { createBranch, loadCanvasBranches, saveCanvasBranches, updateBranchTip } = await import(
+  './branches-store.js'
+)
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -425,5 +427,39 @@ describe('purgeDanglingFiles', () => {
     expect(purgeResult.purgedCount).toBe(0)
     const remaining = (await readdir(join(tempDir, 'ws_branch_race', 'files'))).sort()
     expect(remaining).toEqual(['about-to-be-tip-referenced.png'])
+  })
+
+  it('serialises purge against updateBranchTip called through its real production path', async () => {
+    // Unlike the test above (which precomputes state to sidestep
+    // updateBranchTip's own unlocked read), this drives updateBranchTip
+    // itself. updateBranchTip must acquire the workspace write lock
+    // before it reads the current branch state — otherwise GC can
+    // acquire the lock first despite starting second, scan the state
+    // before the tip lands, and permanently delete the file the new
+    // tip is about to reference.
+    const doc = makeDocWithImage('about-to-be-tip-referenced-live')
+    await saveCanvas('ws_branch_race_live', 'page', doc)
+    await createBranch('ws_branch_race_live', 'page', { name: 'feature' })
+    const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+
+    // Head (main) no longer references the image — only the about-to-land
+    // "feature" tip update will.
+    const live = await loadCanvas('ws_branch_race_live', 'page')
+    const liveList = live.getMovableList('elements')
+    liveList.delete(0, liveList.length)
+    live.commit()
+    await saveCanvas('ws_branch_race_live', 'page', live, { overwrite: true })
+
+    await seedFile('ws_branch_race_live', 'about-to-be-tip-referenced-live', '.png', 77)
+
+    // Kick updateBranchTip first so it should win the lock if its entire
+    // read-modify-write is inside the workspace write barrier.
+    const updatePromise = updateBranchTip('ws_branch_race_live', 'page', 'feature', branchTip)
+    const purgePromise = purgeDanglingFiles('ws_branch_race_live', { graceMs: 0 })
+    const [, purgeResult] = await Promise.all([updatePromise, purgePromise])
+
+    expect(purgeResult.purgedCount).toBe(0)
+    const remaining = (await readdir(join(tempDir, 'ws_branch_race_live', 'files'))).sort()
+    expect(remaining).toEqual(['about-to-be-tip-referenced-live.png'])
   })
 })
