@@ -44,5 +44,5 @@ export async function runTrustCommand(
     return { exitCode: 0, output: `revoked ${origin}` }
   }
 
-  return { exitCode: 1, output: 'usage: whiteboard trust list | trust revoke <origin> | --all' }
+  return { exitCode: 1, output: 'usage: whiteboard trust list | revoke <origin> | revoke --all' }
 }

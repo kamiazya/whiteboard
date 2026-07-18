@@ -37,6 +37,41 @@ async function loadOwnerMetadata(lockDirPath: string): Promise<LockOwner | null>
   }
 }
 
+// Reclaims a lock whose recorded holder pid is dead. A plain rm-and-retry
+// here would let two waiters both observe the dead pid, with the slower rm
+// destroying the lock the faster waiter has already re-acquired — breaking
+// mutual exclusion. Reclamation is therefore serialized through a second
+// mkdir lock (`<lock>.break`): only the waiter holding the break lock may
+// remove the main lock, and it re-checks the owner while holding it. That
+// re-check is sound because while the break lock is held the main lock
+// cannot transition dead→live: acquiring requires the directory to be gone,
+// and removing it requires the break lock. Losers of the break-lock race
+// simply return to the acquire loop. A break lock orphaned by a crash is
+// itself removed once its recorded pid is dead.
+async function reclaimDeadLock(lockDirPath: string): Promise<void> {
+  const breakLockPath = `${lockDirPath}.break`
+  try {
+    await mkdir(breakLockPath, { recursive: false })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'EEXIST') {
+      const breaker = await loadOwnerMetadata(breakLockPath)
+      if (breaker && !isPidAlive(breaker.pid)) {
+        await rm(breakLockPath, { recursive: true, force: true })
+      }
+    }
+    return
+  }
+  try {
+    await writeOwnerMetadata(breakLockPath)
+    const owner = await loadOwnerMetadata(lockDirPath)
+    if (owner && !isPidAlive(owner.pid)) {
+      await rm(lockDirPath, { recursive: true, force: true })
+    }
+  } finally {
+    await rm(breakLockPath, { recursive: true, force: true })
+  }
+}
+
 export interface MkdirLockOptions {
   retryDelayMs?: number
   timeoutMs?: number
@@ -68,7 +103,7 @@ export async function withMkdirLock<T>(
       }
       const owner = await loadOwnerMetadata(lockDirPath)
       if (owner && !isPidAlive(owner.pid)) {
-        await rm(lockDirPath, { recursive: true, force: true })
+        await reclaimDeadLock(lockDirPath)
         continue
       }
       if (Date.now() >= deadline) {
