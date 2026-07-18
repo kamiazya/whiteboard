@@ -428,6 +428,24 @@ export async function runE2eCheckpointSmoke({
     )
     console.log('[e2e] viewport_set → no_client OK (route wiring verified)')
 
+    // export_canvas(format:'svg') delegates in-process to exportSvgTool().execute(),
+    // bypassing the registered export_svg tool's own registerToolWithAnnotations
+    // binding and structuredContent validation entirely. Call export_svg directly
+    // too so a drift confined to that standalone registration wrapper (as opposed
+    // to the shared execute() body) is still caught here.
+    const svgDirect = await callTool('export_svg', { canvasId: created.id })
+    if (!(svgDirect.filePath as string).endsWith('.svg')) {
+      throw new Error(`export_svg returned unexpected shape: ${JSON.stringify(svgDirect)}`)
+    }
+    const svgDirectMarkup =
+      typeof svgDirect.svgMarkup === 'string'
+        ? svgDirect.svgMarkup
+        : await readFile(svgDirect.filePath as string, 'utf-8')
+    if (!svgDirectMarkup.trim().startsWith('<svg')) {
+      throw new Error('export_svg did not produce real SVG markup')
+    }
+    console.log('[e2e] export_svg (direct) OK (real <svg> markup on disk)')
+
     // export_canvas unifies png/svg/json behind one tool — exercise all three
     // formats so structuredContent validation against each format's branch of
     // exportCanvasOutputSchema runs at least once. PNG also falls back to
