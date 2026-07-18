@@ -40,7 +40,7 @@ export interface WhiteboardCommandDeps {
   canvas: WhiteboardCommandCanvasIdentity | null
 }
 
-export type CommandErrorCode = 'no-api' | 'no-canvas' | 'invalid-input'
+export type CommandErrorCode = 'no-api' | 'no-canvas' | 'invalid-input' | 'export-failed'
 
 // Every command failure surfaces as this typed error rather than a raw
 // TypeError from an undefined access (e.g. a null Excalidraw API), so every

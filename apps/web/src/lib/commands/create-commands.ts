@@ -63,19 +63,31 @@ export function createWhiteboardCommands(depsRef: {
     // canvas switch, provider change) can never mutate the identity this
     // in-flight call already committed to.
     const deps = depsRef.current
+    if (!deps.canvas) {
+      throw new CommandError('no-canvas', 'No canvas is selected to export from.')
+    }
     const api = deps.getExcalidrawApi()
     if (!api) {
       throw new CommandError('no-api', 'No Excalidraw canvas is mounted to export from.')
     }
 
-    // `await`ing a plain value still yields one microtask — proving that the
-    // `api` captured above stays the one this call uses even if depsRef is
-    // swapped in that window.
-    const elements = await Promise.resolve(api.getSceneElements())
-    const appState = api.getAppState()
-    const files = api.getFiles()
-    const doc = serializeSceneAsExcalidrawJson(elements, appState, files)
-    return exportJsonResultSchema.parse(doc)
+    try {
+      // `await`ing a plain value still yields one microtask — proving that the
+      // `api` captured above stays the one this call uses even if depsRef is
+      // swapped in that window.
+      const elements = await Promise.resolve(api.getSceneElements())
+      const appState = api.getAppState()
+      const files = api.getFiles()
+      const doc = serializeSceneAsExcalidrawJson(elements, appState, files)
+      return exportJsonResultSchema.parse(doc)
+    } catch (err) {
+      // Every documented failure mode of this command is a CommandError so
+      // consumers (WebMCP adapter, debug panel) can branch on `.code` instead
+      // of parsing an arbitrary thrown error/message.
+      throw new CommandError('export-failed', 'Failed to read or serialize the live scene.', {
+        cause: err,
+      })
+    }
   }
 
   return { exportJson }

@@ -54,6 +54,34 @@ describe('createWhiteboardCommands.exportJson', () => {
     await expect(commands.exportJson()).rejects.toBeInstanceOf(CommandError)
   })
 
+  it('throws a no-canvas CommandError when no canvas is selected, even with a mounted API', async () => {
+    const api = {
+      getSceneElements: () => [el({ id: 'a' })],
+      getAppState: () => ({ gridSize: null, viewBackgroundColor: '#fff' }),
+      getFiles: () => ({}),
+    }
+    const depsRef = refOf(baseDeps({ getExcalidrawApi: () => api as never, canvas: null }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    await expect(commands.exportJson()).rejects.toMatchObject({ code: 'no-canvas' })
+    await expect(commands.exportJson()).rejects.toBeInstanceOf(CommandError)
+  })
+
+  it('wraps a scene-read failure in an export-failed CommandError rather than letting it escape raw', async () => {
+    const api = {
+      getSceneElements: () => {
+        throw new Error('boom')
+      },
+      getAppState: () => ({ gridSize: null, viewBackgroundColor: '#fff' }),
+      getFiles: () => ({}),
+    }
+    const depsRef = refOf(baseDeps({ getExcalidrawApi: () => api as never }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    await expect(commands.exportJson()).rejects.toMatchObject({ code: 'export-failed' })
+    await expect(commands.exportJson()).rejects.toBeInstanceOf(CommandError)
+  })
+
   it('throws an invalid-input CommandError for a non-object input', async () => {
     const depsRef = refOf(baseDeps())
     const commands = createWhiteboardCommands(depsRef)
