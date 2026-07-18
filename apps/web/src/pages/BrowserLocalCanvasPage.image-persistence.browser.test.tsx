@@ -65,12 +65,15 @@ const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
 // Rejects on failure: silently keeping stale image-persistence records
 // would let both halves of this regression test pass on stale data.
+// 'blocked' is NOT a failure — connections close asynchronously
+// (tx.oncomplete), so deletion can be briefly blocked and then proceed;
+// waiting keeps that benign race quiet while a stuck connection still
+// surfaces as a loud test timeout.
 async function clearDb(): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error ?? new Error('whiteboard database deletion failed'))
-    req.onblocked = () => reject(new Error('whiteboard database deletion was blocked'))
   })
 }
 
