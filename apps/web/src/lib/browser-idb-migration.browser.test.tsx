@@ -4,9 +4,10 @@
  * ('loroCanvases'), so a legacy 'scene' field on a v2 'canvases' row must be
  * stripped on upgrade without ever touching 'loroCanvases'.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
 import { Loro } from 'loro-crdt'
-import { openWhiteboardDb, DB_VERSION } from './browser-idb.js'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DB_VERSION, openWhiteboardDb } from './browser-idb.js'
 import { IndexedDBStore } from './browser-local-store.js'
 import { LoroStore } from './loro-store.js'
 
@@ -77,6 +78,74 @@ async function readRawCanvasesRow(canvasId: string): Promise<unknown> {
     req.onerror = () => reject(req.error)
   })
 }
+
+/** Seed a pre-v4 ("v3 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
+async function seedV3Fixture(canvasId: string, loroSnapshot: Uint8Array): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', 3)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
+      tx.objectStore('meta').put(canvasId, 'defaultCanvasId')
+      tx.objectStore('canvases').put(
+        { id: canvasId, name: 'Pre-v4 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
+        canvasId,
+      )
+      tx.objectStore('loroCanvases').put(
+        { v: 1, snapshot: loroSnapshot, updatedAt: '2026-01-01T00:00:00.000Z' },
+        canvasId,
+      )
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('current DB_VERSION is 4 or higher (guards against reverting the bump alone)', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(4)
+  })
+
+  it('opening a v3 database at v4 creates canvasFiles and preserves existing loroCanvases/canvases/meta contents', async () => {
+    const canvasId = 'canvas-migrate-v4'
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'canonical-el' })
+    const loroSnapshot = doc.export({ mode: 'snapshot' })
+    await seedV3Fixture(canvasId, loroSnapshot)
+
+    const db = await openWhiteboardDb()
+    expect(db.objectStoreNames.contains('canvasFiles')).toBe(true)
+    db.close()
+
+    const loroStore = new LoroStore()
+    const loroResult = await loroStore.load(canvasId)
+    expect(loroResult.kind).toBe('ok')
+
+    const metaStore = new IndexedDBStore()
+    expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
+    const loadResult = await metaStore.load(canvasId)
+    expect(loadResult.kind).toBe('ok')
+    if (loadResult.kind === 'ok') {
+      expect(loadResult.snapshot.name).toBe('Pre-v4 canvas')
+    }
+  })
+})
 
 describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
   beforeEach(clearDb)

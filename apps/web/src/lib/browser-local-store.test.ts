@@ -1,5 +1,6 @@
 import { IDBFactory } from 'fake-indexeddb'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { DB_VERSION } from './browser-idb.js'
 import { IndexedDBStore, MemoryStore } from './browser-local-store.js'
 import type { CanvasSnapshot } from './whiteboard-client.js'
 
@@ -201,7 +202,7 @@ describe('IndexedDBStore', () => {
     await store.save(a)
     // Write a malformed row directly via raw IDB (bypasses canvasSnapshotSchema).
     await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open('whiteboard', 3)
+      const req = indexedDB.open('whiteboard', DB_VERSION)
       req.onsuccess = () => {
         const db = req.result
         const tx = db.transaction('canvases', 'readwrite')

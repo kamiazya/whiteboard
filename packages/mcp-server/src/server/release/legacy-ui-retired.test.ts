@@ -83,7 +83,12 @@ function collectFiles(dir: string): string[] {
   }
   const results: string[] = []
   for (const entry of entries) {
-    if (entry.name === 'node_modules' || entry.name === 'dist' || entry.name.startsWith('.git')) {
+    if (
+      entry.name === 'node_modules' ||
+      entry.name === 'dist' ||
+      entry.name === 'tmp' ||
+      entry.name.startsWith('.git')
+    ) {
       continue
     }
     const fullPath = join(dir, entry.name)
