@@ -2,14 +2,9 @@ import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { platform } from 'node:os'
 import { join } from 'node:path'
 import { DATA_DIR } from '../shared/data-dir-secure.js'
+import { type DaemonRecord, daemonRecordSchema } from './daemon-record-schema.js'
 
-export interface DaemonRecord {
-  pid: number
-  port: number
-  token: string
-  version: string
-  startedAt: string
-}
+export type { DaemonRecord } from './daemon-record-schema.js'
 
 const DAEMON_RECORD_FILENAME = 'daemon.json'
 
@@ -19,23 +14,9 @@ export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
 
 export async function loadDaemonRecord(dataDir: string = DATA_DIR): Promise<DaemonRecord | null> {
   try {
-    const raw = JSON.parse(await readFile(getDaemonRecordPath(dataDir), 'utf-8')) as Partial<DaemonRecord>
-    if (
-      typeof raw.pid !== 'number' ||
-      typeof raw.port !== 'number' ||
-      typeof raw.token !== 'string' ||
-      typeof raw.version !== 'string' ||
-      typeof raw.startedAt !== 'string'
-    ) {
-      return null
-    }
-    return {
-      pid: raw.pid,
-      port: raw.port,
-      token: raw.token,
-      version: raw.version,
-      startedAt: raw.startedAt,
-    }
+    const raw: unknown = JSON.parse(await readFile(getDaemonRecordPath(dataDir), 'utf-8'))
+    const result = daemonRecordSchema.safeParse(raw)
+    return result.success ? result.data : null
   } catch {
     return null
   }
