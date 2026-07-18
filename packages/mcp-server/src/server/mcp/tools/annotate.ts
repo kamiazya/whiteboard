@@ -9,7 +9,12 @@ import {
 } from './annotation-fields.js'
 import { decomposeBoxWithLabel, type SubTextPosition } from './box-with-label.js'
 import { parseCanvasId } from './canvas-id.js'
-import { resolvePaletteColor } from './color-palette.js'
+import {
+  contrastRatio,
+  isExplicitHexColor,
+  readableInkForFill,
+  resolvePaletteColor,
+} from './color-palette.js'
 import { decomposeGroup } from './group.js'
 import { apiGetPalette } from './palette.js'
 import { resolveAnnotationPosition, type CoordsMode } from './resolve-annotation-position.js'
@@ -106,7 +111,7 @@ export const annotateInputShape = {
     .string()
     .optional()
     .describe(
-      'Stroke / text color. Accepts semantic keys ("primary","success","danger","warning","neutral","info") or palette key (declared via palette_set) or hex (#RRGGBB).',
+      'Stroke / text color. Accepts semantic keys ("primary","success","danger","warning","neutral","info") or palette key (declared via palette_set) or hex (#RRGGBB). For box_with_label on a solid fill, a semantic/palette text ink that would be unreadable against the fill is auto-adjusted for contrast; pass an explicit hex to opt out.',
     ),
   backgroundColor: z
     .string()
@@ -655,6 +660,32 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
     { coords: spec.coords, imageId: spec.imageId, target: spec.target },
     elements,
   )
+  // Text-ink contrast guard: when the caller delegated the color choice
+  // (semantic key / palette key / omitted — anything but an explicit hex)
+  // and the box has a solid fill, an ink below WCAG's large-text 3:1 against
+  // that fill is swapped for a readable one picked by the fill's luminance.
+  // The rectangle stroke keeps the requested color: the outline borders the
+  // canvas background, not the fill, and recoloring it would change the
+  // box's semantic identity.
+  const MIN_TEXT_FILL_CONTRAST = 3
+  const effectiveFillStyle = spec.fillStyle ?? (spec.backgroundColor ? 'solid' : undefined)
+  let readableTextInk: string | undefined
+  if (
+    spec.backgroundColor !== undefined &&
+    effectiveFillStyle === 'solid' &&
+    (spec.color === undefined || !isExplicitHexColor(spec.color))
+  ) {
+    const fill = resolvePaletteColor(spec.backgroundColor, spec.sessionPalette ?? {}).color
+    const ink = spec.color
+      ? resolvePaletteColor(spec.color, spec.sessionPalette ?? {}).color
+      : DEFAULT_COLORS.text
+    const ratio = contrastRatio(ink, fill)
+    if (ratio !== null && ratio < MIN_TEXT_FILL_CONTRAST) {
+      readableTextInk = readableInkForFill(fill) ?? undefined
+    }
+  }
+  const textInkOverride = readableTextInk !== undefined ? { color: readableTextInk } : {}
+
   const [rectSpec, textSpec, , subTextSpec, titleSpec] = decomposeBoxWithLabel({
     target: absoluteTarget,
     width: spec.width,
@@ -681,6 +712,7 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   const titleId = titleSpec
     ? appendSingleAnnotation(doc, {
         ...titleSpec,
+        ...textInkOverride,
         coords: 'absolute',
         sessionPalette: spec.sessionPalette,
       }).elementId
@@ -688,6 +720,7 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   const textId = textSpec
     ? appendSingleAnnotation(doc, {
         ...textSpec,
+        ...textInkOverride,
         coords: 'absolute',
         sessionPalette: spec.sessionPalette,
       }).elementId
@@ -695,6 +728,7 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   const subTextId = subTextSpec
     ? appendSingleAnnotation(doc, {
         ...subTextSpec,
+        ...textInkOverride,
         coords: 'absolute',
         sessionPalette: spec.sessionPalette,
       }).elementId
