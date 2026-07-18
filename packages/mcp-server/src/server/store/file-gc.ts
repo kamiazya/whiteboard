@@ -211,8 +211,11 @@ export async function purgeDanglingFiles(
   // as "dangling".
   const graceMs = resolveGraceMs(options)
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
-
+    // List the candidate files BEFORE the reference scan: collecting
+    // references forks + checks out every branch/version of every canvas,
+    // which is far too expensive to pay for a workspace that has no files
+    // directory (or an empty one) — the common case for every workspace
+    // the periodic sweeper visits that never had an upload.
     const dir = workspaceFilesDir(workspaceId)
     let entries: string[]
     try {
@@ -221,6 +224,9 @@ export async function purgeDanglingFiles(
       if (isMissingFileError(err)) return { purgedCount: 0, purgedBytes: 0 }
       throw err
     }
+    if (entries.length === 0) return { purgedCount: 0, purgedBytes: 0 }
+
+    const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
 
     let purgedCount = 0
     let purgedBytes = 0

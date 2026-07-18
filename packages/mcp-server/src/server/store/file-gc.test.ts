@@ -346,6 +346,24 @@ describe('purgeDanglingFiles', () => {
     expect(remaining).toEqual(['only-by-broken-branch.png', 'really-dangling-2.png'])
   })
 
+  it('skips the expensive reference scan entirely when there are no candidate files', async () => {
+    // Same corrupt branch as above — but with no files/ dir the purge must
+    // return zero WITHOUT running collectReferencedFileIds (which would
+    // throw on the corrupt tip). This is what keeps the periodic sweeper
+    // cheap on the common no-uploads workspace; reordering the scan back
+    // in front of the readdir turns this test red.
+    await saveCanvas('ws_noscan', 'broken-branch', makeDocWithImage('never-uploaded'))
+    await createBranch('ws_noscan', 'broken-branch', {
+      name: 'feature',
+      initialTipFrontiers: 'not-valid-base64-frontiers!!',
+    })
+
+    await expect(purgeDanglingFiles('ws_noscan', { graceMs: 0 })).resolves.toEqual({
+      purgedCount: 0,
+      purgedBytes: 0,
+    })
+  })
+
   it('refuses to purge when a listed version cannot be loaded at all (returns null)', async () => {
     // A silent `if (past) collectFromDoc(...)` skip is equivalent to
     // treating a version we could not load as "referencing nothing" —
