@@ -253,6 +253,15 @@ async function main() {
     srcdocPage.on('pageerror', (err) => {
       srcdocPageErrors.push(String(err))
     })
+    // Diagnostics only, never a fail condition on their own: Excalidraw's
+    // own font manager issues CSS-level loads for font subsets this bundle
+    // does not embed (they resolve against the inert asset prefix and fail
+    // by design — the widget degrades to fallback glyphs). A real bootstrap
+    // crash surfaces as a pageerror or as no canvas appearing.
+    const srcdocConsoleErrors = []
+    srcdocPage.on('console', (msg) => {
+      if (msg.type() === 'error') srcdocConsoleErrors.push(msg.text())
+    })
     await srcdocPage.route('http://**', (route) => {
       networkRequests.push(route.request().url())
       return route.abort()
@@ -268,7 +277,9 @@ async function main() {
       iframe.srcdoc = widgetHtml
       document.body.appendChild(iframe)
     }, injectedHtml)
-    const srcdocDeadline = Date.now() + 10_000
+    // CI runners parse+execute the ~8.5 MB inline bundle noticeably slower
+    // than the file:// pages above; give the sandboxed frame extra headroom.
+    const srcdocDeadline = Date.now() + 30_000
     let srcdocFrame
     let srcdocCanvasCount = 0
     while (Date.now() < srcdocDeadline) {
@@ -282,8 +293,14 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 200))
     }
     if (srcdocCanvasCount === 0) {
+      const diagnostics = [
+        srcdocPageErrors.length ? `page errors: ${srcdocPageErrors.join(' | ')}` : '',
+        srcdocConsoleErrors.length ? `console errors: ${srcdocConsoleErrors.join(' | ')}` : '',
+      ]
+        .filter(Boolean)
+        .join('; ')
       fail(
-        `widget did not render a canvas under sandboxed srcdoc hosting${srcdocPageErrors.length ? ` (page errors: ${srcdocPageErrors.join(' | ')})` : ''}`,
+        `widget did not render a canvas under sandboxed srcdoc hosting${diagnostics ? ` (${diagnostics})` : ''}`,
       )
     }
     if (srcdocPageErrors.length > 0) {
