@@ -10,6 +10,7 @@ import {
 } from '../store/corrupt-stored-data.js'
 import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
 import type { VersionStore } from '../store/version-store.js'
+import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import {
   validateFileId,
   validateSlug,
@@ -97,9 +98,17 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
         )
       }
       const dir = join(getDataDir(), workspaceId, 'files')
-      await mkdir(dir, { recursive: true })
       const filePath = join(dir, `${fileId}${ext}`)
-      await writeFile(filePath, new Uint8Array(await c.req.arrayBuffer()))
+      const bytes = new Uint8Array(await c.req.arrayBuffer())
+      // file-gc's purge pass stat()s then unlink()s dangling files while
+      // holding this same per-workspace lock (file-gc.ts / workspace-lock.ts).
+      // Without joining that lock here, a retried upload could land between
+      // GC's stat() and unlink() and have its freshly written file deleted
+      // as the stale one it was replacing.
+      await withWorkspaceWriteLock(workspaceId, async () => {
+        await mkdir(dir, { recursive: true })
+        await writeFile(filePath, bytes)
+      })
       return c.body(null, 204)
     },
   )

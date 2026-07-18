@@ -25,6 +25,21 @@ vi.mock('../store/file-gc.js', async () => {
   }
 })
 
+const withWorkspaceWriteLockMock = vi.fn(async (_workspaceId: string, fn: () => Promise<unknown>) =>
+  fn(),
+)
+
+vi.mock('../store/workspace-lock.js', async () => {
+  const actual = await vi.importActual<typeof import('../store/workspace-lock.js')>(
+    '../store/workspace-lock.js',
+  )
+  return {
+    ...actual,
+    withWorkspaceWriteLock: (...args: Parameters<typeof actual.withWorkspaceWriteLock>) =>
+      withWorkspaceWriteLockMock(...args),
+  }
+})
+
 const { createFilesRouter } = await import('./files.js')
 const { IncompleteFileGcScanError } = await import('../store/file-gc.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
@@ -54,6 +69,64 @@ describe('PUT /api/canvas/:workspaceId/:slug/file/:fileId', () => {
     const { readFile } = await import('node:fs/promises')
     const saved = await readFile(join(tempDir, 'session1', 'files', 'file-001.png'))
     expect(saved[0]).toBe(0x89) // PNG magic
+  })
+
+  it('writes the upload inside the per-workspace write lock, the same barrier file-gc holds across its stat+unlink pass', async () => {
+    withWorkspaceWriteLockMock.mockClear()
+    const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+
+    const app = createFilesRouter()
+    const res = await app.request('/api/canvas/session1/canvas-a/file/file-001', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: imageData,
+    })
+
+    expect(res.status).toBe(204)
+    // Without this, a retried upload racing a concurrent GC purge could have
+    // its freshly written file deleted between GC's stat() and unlink().
+    expect(withWorkspaceWriteLockMock).toHaveBeenCalledWith('session1', expect.any(Function))
+  })
+
+  it('does not write the file to disk until the lock callback runs, proving the write happens inside the lock', async () => {
+    // The assertion above only checks that withWorkspaceWriteLock() was
+    // CALLED with a function -- it would still pass if production invoked
+    // the lock with an empty callback and performed the actual
+    // mkdir/writeFile outside of it. Holding the lock callback open here and
+    // asserting the file is absent until it is released proves the write
+    // itself is gated by the lock, not merely wrapped by an unrelated call.
+    let releaseLock: (() => void) | undefined
+    const lockGate = new Promise<void>((resolve) => {
+      releaseLock = resolve
+    })
+    withWorkspaceWriteLockMock.mockImplementationOnce(async (_workspaceId, fn) => {
+      await lockGate
+      return fn()
+    })
+
+    const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+    const app = createFilesRouter()
+    const responsePromise = app.request('/api/canvas/session1/canvas-a/file/file-001', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: imageData,
+    })
+
+    // Flush microtasks so the request reaches the (gated) lock call, without
+    // ever letting the gate open.
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const { readFile } = await import('node:fs/promises')
+    await expect(readFile(join(tempDir, 'session1', 'files', 'file-001.png'))).rejects.toThrow()
+
+    releaseLock?.()
+    const res = await responsePromise
+    expect(res.status).toBe(204)
+
+    const saved = await readFile(join(tempDir, 'session1', 'files', 'file-001.png'))
+    expect(saved[0]).toBe(0x89)
   })
 })
 

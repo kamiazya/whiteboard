@@ -9,7 +9,7 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
-import { getDataDir, DIST_WEB_APP_DIR } from './config.js'
+import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
 import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
@@ -17,6 +17,7 @@ import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
+import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { validationErrorBody } from './validators.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
@@ -35,6 +36,9 @@ export interface StartHttpServerOptions {
    *  (WHITEBOARD_OAUTH_CLIENT_REGISTRY). Empty by default, which leaves the
    *  hosted-origin authorization-server surface entirely unmounted. */
   oauthClientRegistry?: OAuthClientRegistry
+  /** Test-only seam: overrides the real createFileGcSweeper so wiring tests
+   *  can observe start/stop without waiting on a real 24h interval. */
+  fileGcSweeperFactory?: typeof createFileGcSweeper
 }
 
 export interface RunningServer {
@@ -52,6 +56,13 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
   closeAllConnections?: () => void
 }
 
+// Bounds how long close() waits for an in-flight file-gc pass (see
+// file-gc-sweeper.ts's FileGcSweeperStopOptions) before proceeding with the
+// rest of shutdown. A full pass can be expensive; without this cap an
+// idle-timeout-triggered close() could make the daemon appear to hang
+// instead of shutting down promptly.
+const FILE_GC_STOP_TIMEOUT_MS = 5_000
+
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
   const host = normalizeBindHost(options.host ?? '127.0.0.1')
   const instanceId = randomUUID()
@@ -59,8 +70,15 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const startedAt = new Date(startedAtMs).toISOString()
   let server: ReturnType<typeof serve>
   let wss: WebSocketServer
-  let closing = false
+  let closePromise: Promise<void> | null = null
   const sockets = new Set<Socket>()
+
+  // Constructed once per daemon start, independent of the WS ticket store
+  // above -- there is no shared-instance hazard here (see
+  // file-gc-sweeper.ts's own comment on why it constructs its own
+  // FileVersionStore), so this can be created any time before close() needs
+  // to reference it.
+  const fileGcSweeper: FileGcSweeper = (options.fileGcSweeperFactory ?? createFileGcSweeper)()
 
   const idleTimer = new IdleTimer(options.idleTimeoutMs ?? 15 * 60_000, () => {
     void close()
@@ -101,10 +119,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     }
   }
 
-  const close = async () => {
-    if (closing) return
-    closing = true
+  const performClose = async (): Promise<void> => {
     idleTimer.stop()
+    await fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
     setRuntimeTouchFn(() => {})
 
     await new Promise<void>((resolve, reject) => {
@@ -133,6 +150,15 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     await options.onClose?.()
   }
 
+  // Memoized so concurrent/repeated close() calls (idle timeout racing an
+  // explicit shutdown route, or a caller invoking close() twice) all await
+  // the SAME shutdown instead of a second call resolving immediately while
+  // the listener and WebSockets are still tearing down.
+  const close = (): Promise<void> => {
+    if (!closePromise) closePromise = performClose()
+    return closePromise
+  }
+
   // Shared with the raw `upgrade` handler below (ADR-0005): a ticket minted
   // by the POST /api/ws-ticket route mounted inside `app` must be redeemable
   // by the WS upgrade that follows it, which happens outside Hono entirely.
@@ -155,6 +181,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
 
   setRuntimeTouchFn(touch)
   idleTimer.start()
+  fileGcSweeper.start()
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
   server.on('connection', (socket) => {

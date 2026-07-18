@@ -59,13 +59,14 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
   }
 }
 
-// Internal-only description of a canvas/version/branch that GC could not
-// safely inspect. Not a persisted or wire type, so no Zod schema — kept as
-// a discriminated union purely to make the fail-closed reason legible in
-// logs and error messages.
-type SkippedScanTarget =
-  | { kind: 'version'; slug: string; versionId: string; cause: unknown }
-  | { kind: 'branch'; slug: string; branch: string; cause: unknown }
+// Internal-only description of a canvas/version that GC could not safely
+// inspect. Not a persisted or wire type, so no Zod schema — kept as a
+// discriminated union purely to make the fail-closed reason legible in logs
+// and error messages. A branch tip that fails to decode/checkout is NOT
+// represented here: that failure means the persisted tipFrontiers bytes are
+// corrupt (no retry repairs it), so it throws corruptStoredData directly
+// instead of being collected as a skipped, retryable target.
+type SkippedScanTarget = { kind: 'version'; slug: string; versionId: string; cause: unknown }
 
 // Walk every canvas in the workspace (live state, plus past versions and
 // every branch tip) and collect referenced fileIds.
@@ -210,8 +211,11 @@ export async function purgeDanglingFiles(
   // as "dangling".
   const graceMs = resolveGraceMs(options)
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
-
+    // List the candidate files BEFORE the reference scan: collecting
+    // references forks + checks out every branch/version of every canvas,
+    // which is far too expensive to pay for a workspace that has no files
+    // directory (or an empty one) — the common case for every workspace
+    // the periodic sweeper visits that never had an upload.
     const dir = workspaceFilesDir(workspaceId)
     let entries: string[]
     try {
@@ -220,6 +224,9 @@ export async function purgeDanglingFiles(
       if (isMissingFileError(err)) return { purgedCount: 0, purgedBytes: 0 }
       throw err
     }
+    if (entries.length === 0) return { purgedCount: 0, purgedBytes: 0 }
+
+    const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
 
     let purgedCount = 0
     let purgedBytes = 0
