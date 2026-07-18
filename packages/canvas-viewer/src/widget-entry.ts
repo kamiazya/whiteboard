@@ -118,17 +118,32 @@ function installFontFetchShim(): void {
 // slot instead of hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000
 
-async function mountFromHost(container: HTMLElement): Promise<boolean> {
+// `onMount` is the single place a handle produced by this bridge gets
+// recorded. `app.connect()` racing HOST_CONNECT_TIMEOUT_MS means a
+// tool-result can legitimately arrive AFTER the caller already decided
+// `connectedToHost` was false and mounted its own embedded-scene fallback
+// (a connect() that resolves just past the timeout, or a host that answers
+// the handshake slowly). Routing every mount through the same callback lets
+// the caller dispose whichever handle — fallback or a previous tool-result
+// — is currently live before mounting the new one, so two React roots never
+// compete for the same container.
+async function mountFromHost(
+  container: HTMLElement,
+  onMount: (handle: CanvasViewerHandle) => void,
+): Promise<boolean> {
   // No parent frame — this document cannot be an embedded MCP Apps view.
   if (window.parent === window) return false
 
   const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
-  let handle: CanvasViewerHandle | undefined
 
   app.ontoolresult = (result) => {
-    const structuredContent = (result as { structuredContent?: unknown }).structuredContent
-    handle?.dispose()
-    handle = mountCanvasViewer(container, { scene: structuredContent })
+    // canvas_view's outputSchema wraps the scene as {canvasId, scene}; only
+    // the `scene` field matches parseViewerScene's strict {elements,
+    // appState?, files?} contract, so the wrapper itself must never reach
+    // mountCanvasViewer.
+    const structuredContent = (result as { structuredContent?: { scene?: unknown } })
+      .structuredContent
+    onMount(mountCanvasViewer(container, { scene: structuredContent?.scene }))
   }
 
   const connected = await Promise.race([
@@ -148,9 +163,13 @@ async function bootstrap(): Promise<void> {
     throw new Error('widget-entry: expected a #root element in the widget HTML shell')
   }
 
-  const connectedToHost = await mountFromHost(container)
+  let handle: CanvasViewerHandle | undefined
+  const connectedToHost = await mountFromHost(container, (newHandle) => {
+    handle?.dispose()
+    handle = newHandle
+  })
   if (!connectedToHost) {
-    mountCanvasViewer(container)
+    handle = mountCanvasViewer(container)
   }
 }
 

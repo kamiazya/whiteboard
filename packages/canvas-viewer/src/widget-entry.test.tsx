@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { parseViewerScene } from './scene.js'
 
 // widget-entry.ts bootstraps immediately on import (`void bootstrap()`), so
 // each test needs a fresh module instance + fresh DOM to observe one
@@ -84,14 +85,25 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     expect(fakeAppInstances).toHaveLength(1)
+    // canvas_view's outputSchema wraps the scene as {canvasId, scene}; only
+    // the `scene` field is a valid mountCanvasViewer payload.
     const scene = { elements: [{ id: 'a' }] }
     fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
 
     const { mountCanvasViewer } = await import('./mount.js')
     expect(mountCanvasViewer).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      expect.objectContaining({ scene: { canvasId: 'ws/slug', scene } }),
+      expect.objectContaining({ scene }),
     )
+    // mount.js itself is mocked above (constructing a real Excalidraw root
+    // in jsdom is out of scope here), so re-run the argument through the
+    // real, unmocked scene parser — the same one mountCanvasViewer would
+    // apply — to guarantee this is a value parseViewerScene actually
+    // accepts, not just a value the mock happened to receive. This is what
+    // catches passing the whole {canvasId, scene} wrapper: viewerSceneSchema
+    // is .strict() and would reject the extra `canvasId`/`scene` keys.
+    const call = vi.mocked(mountCanvasViewer).mock.calls[0]?.[1]
+    expect(() => parseViewerScene(call?.scene)).not.toThrow()
   })
 
   it('falls back to the embedded-scene slot when there is no parent frame', async () => {
@@ -115,6 +127,52 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
 
     const { mountCanvasViewer } = await import('./mount.js')
     expect(mountCanvasViewer).toHaveBeenLastCalledWith(expect.any(HTMLElement))
+    vi.useRealTimers()
+  })
+
+  it('does not mount a fallback when the host connects but never sends a tool-result', async () => {
+    // A host that completes the ext-apps handshake but does not support (or
+    // has not yet sent) ui/notifications/tool-result — a plausible
+    // real-world host-integration gap for a new SEP-1865 bridge, distinct
+    // from "no host at all" and "connect() never resolves" above.
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(fakeAppInstances).toHaveLength(1)
+    const { mountCanvasViewer } = await import('./mount.js')
+    // bootstrap() must not fall back to the embedded-scene mount here: doing
+    // so would risk a second React root racing whatever ontoolresult mounts
+    // if the host answers late (see the next test).
+    expect(mountCanvasViewer).not.toHaveBeenCalled()
+  })
+
+  it('disposes the timeout fallback mount when the host answers late with a tool-result', async () => {
+    vi.useFakeTimers()
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(() => new Promise(() => {})) // never resolves within the test
+
+    await importFreshWidgetEntry()
+    await vi.advanceTimersByTimeAsync(2_100) // past HOST_CONNECT_TIMEOUT_MS
+
+    const { mountCanvasViewer } = await import('./mount.js')
+    expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
+    const fallbackHandle = vi.mocked(mountCanvasViewer).mock.results[0]?.value
+
+    // The host's connect() attempt was never cancelled by the timeout, so a
+    // tool-result notification can still arrive afterward.
+    const scene = { elements: [{ id: 'b' }] }
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
+
+    expect(mountCanvasViewer).toHaveBeenCalledTimes(2)
+    expect(mountCanvasViewer).toHaveBeenLastCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ scene }),
+    )
+    expect(fallbackHandle.dispose).toHaveBeenCalledTimes(1)
     vi.useRealTimers()
   })
 })
