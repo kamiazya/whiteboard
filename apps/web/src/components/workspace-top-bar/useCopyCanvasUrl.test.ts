@@ -28,9 +28,10 @@ describe('useCopyCanvasUrl', () => {
     expect(result.current.copyStatus).toBe('error')
   })
 
-  it('does not update state after unmount', async () => {
+  it('clears the pending reset timeout on unmount', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+    const clearTimeoutSpy = vi.spyOn(global, 'clearTimeout')
     const { result, unmount } = renderHook(() =>
       useCopyCanvasUrl('https://example.test/canvas/ws/foo'),
     )
@@ -38,9 +39,10 @@ describe('useCopyCanvasUrl', () => {
       await result.current.copyCanvasUrl()
     })
     expect(result.current.copyStatus).toBe('copied')
+    const callsBeforeUnmount = clearTimeoutSpy.mock.calls.length
     unmount()
-    // Advancing timers after unmount must not throw or trigger a
-    // setState-after-unmount warning; the reset callback checks mountedRef first.
-    expect(() => vi.advanceTimersByTime(5000)).not.toThrow()
+    // The cleanup effect must clear the pending "reset to idle" timer —
+    // otherwise it fires after unmount and only the mountedRef check saves it.
+    expect(clearTimeoutSpy.mock.calls.length).toBeGreaterThan(callsBeforeUnmount)
   })
 })
