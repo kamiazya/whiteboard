@@ -143,6 +143,10 @@ pnpm publish:dry-run:docker # docker build (no push)
   artifacts to `npm-tarball-dry-run` (`if-no-files-found: error`).
 - `dry-run-docker`: installs, runs `pnpm publish:dry-run:docker`, uploads metadata to
   `docker-image-dry-run` (`if-no-files-found: warn` — Docker daemon may be unavailable).
+- `packaged-smoke`: installs, builds, then runs `pnpm smoke:distribution:packaged` — the
+  same **publish**-tier packaged-distribution smoke that `pnpm publish-gate` runs at
+  release time — on every PR, so that gate cannot go stale between release tags without
+  a PR-side failure.
 
 ---
 

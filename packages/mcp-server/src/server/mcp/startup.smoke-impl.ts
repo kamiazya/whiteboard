@@ -19,10 +19,15 @@ export async function runStartupSmoke({
   const tmpDataDir = mkdtempSync(join(tmpdir(), 'whiteboard-smoke-'))
 
   const childArgs = entry.endsWith('.ts') ? ['--import', 'tsx/esm', entry] : [entry]
+  // stdin must stay a live, open pipe (never 'ignore') and is never closed
+  // by us: the real MCP entrypoint now exits on stdin EOF/close (see
+  // stdio-lifecycle.ts), so 'ignore' presents an immediate EOF and turns
+  // this smoke into a false pass — "stayed alive for Nms" would actually
+  // mean "exited almost instantly and we didn't check".
   const child = spawn('node', childArgs, {
     cwd: root,
     env: { ...process.env, WHITEBOARD_DATA_DIR: tmpDataDir },
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['pipe', 'pipe', 'pipe'],
   })
 
   let stderrBuf = ''
@@ -56,7 +61,10 @@ export async function runStartupSmoke({
     if (fatal) {
       throw new Error(`[mcp-smoke] matched ${fatal}${stderrBuf ? `\n${stderrBuf}` : ''}`)
     }
-    if (exited && exitCode !== 0 && exitCode !== null) {
+    // Any exit within waitMs is premature, regardless of exit code: this
+    // smoke's whole point is confirming the server stays up, so an early
+    // "clean" exit (code 0) is just as much a failure as a crash.
+    if (exited) {
       throw new Error(
         `[mcp-smoke] MCP exited with code ${exitCode} within ${waitMs}ms${
           stderrBuf ? `\n${stderrBuf}` : ''

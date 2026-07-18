@@ -118,6 +118,123 @@ describe('publish-gate runner is matrix-driven', () => {
   it('root package.json wires a publish-gate script delegating to @whiteboard/checks', () => {
     expect(rootPkg.scripts['publish-gate']).toBe('pnpm --filter @whiteboard/checks publish-gate')
   })
+
+  it('validates the matrix at load time via the shared schema validator, loud on invalid', () => {
+    const runner = readText('tools/checks/src/publish-gate.mjs')
+    expect(runner).toContain('release-gate-matrix-schema.mjs')
+    expect(runner).toContain('validateMatrix')
+  })
+})
+
+// Behavioral coverage for the fail-loud invalid-matrix branch: the text-grep
+// assertions above only prove the runner mentions validateMatrix, not that an
+// actually-invalid matrix is rejected before any step runs. main() is
+// injectable (readMatrix/spawn/stdout/stderr) specifically so this can be
+// exercised without touching the real repo checkout or spawning processes.
+describe('publish-gate runner main() rejects an invalid matrix before running any step', () => {
+  const importRunner = async () => {
+    const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/publish-gate.mjs')).href)
+    return mod as {
+      main: (options?: {
+        argv?: string[]
+        repoRoot?: string
+        readMatrix?: (matrixPath: string) => unknown
+        spawn?: (
+          cmd: string,
+          args: string[],
+          opts: unknown,
+        ) => { status: number | null; error?: Error }
+        stdout?: { write: (s: string) => boolean }
+        stderr?: { write: (s: string) => boolean }
+      }) => number
+    }
+  }
+  const sink = () => {
+    const chunks: string[] = []
+    return { write: (s: string) => (chunks.push(s), true), chunks }
+  }
+
+  it('exits non-zero and never spawns a step when the matrix fails validation', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const spawn = () => {
+      throw new Error('spawn must not be called for an invalid matrix')
+    }
+    const exitCode = main({
+      readMatrix: () => ({ schemaVersion: 1, gates: [] }), // empty gates: fails validateMatrix
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).not.toBe(0)
+    expect(stderr.chunks.join('')).toMatch(/invalid release-gate-matrix\.json/)
+  })
+
+  it('runs the publish-tier steps and succeeds when the matrix is valid', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const calls: string[] = []
+    const spawn = (cmd: string, args: string[]) => {
+      calls.push(`${cmd} ${args.join(' ')}`.trim())
+      return { status: 0 }
+    }
+    const exitCode = main({
+      readMatrix: () => ({
+        schemaVersion: 1,
+        gates: [
+          {
+            id: 'a',
+            command: 'pnpm a',
+            category: 'unit',
+            requiredFor: ['publish'],
+            requiresDocker: false,
+            requiresNetwork: false,
+            expectedRuntimeBucket: 'fast',
+          },
+        ],
+      }),
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).toBe(0)
+    expect(calls).toEqual(['pnpm a'])
+  })
+})
+
+// Extending the matrix with the additive prCoverage/env fields (pillar A/C)
+// must not change publish-gate.mjs's or pages-release.mjs's matrix-loading
+// behavior — both consumers only read id/command/requiredFor off each gate.
+describe('publish-gate and pages-release tolerate additive matrix fields', () => {
+  const extendedGates = [
+    {
+      id: 'a',
+      command: 'pnpm a',
+      requiredFor: ['publish'],
+      prCoverage: { kind: 'exception', reason: 'test fixture' },
+      env: { WHITEBOARD_DEV: '1' },
+    },
+    { id: 'b', command: 'pnpm b', requiredFor: ['pages-release'] },
+  ]
+
+  it('publish-gate.mjs planSteps ignores unknown prCoverage/env fields on a gate', async () => {
+    const mod = (await import(
+      pathToFileURL(join(ROOT, 'tools/checks/src/publish-gate.mjs')).href
+    )) as { planSteps: (gates: typeof extendedGates) => { label: string; command: string }[] }
+    expect(mod.planSteps(extendedGates)).toEqual([{ label: 'a', command: 'pnpm a' }])
+  })
+
+  it('pages-release.mjs planSteps ignores unknown prCoverage/env fields on a gate', async () => {
+    const mod = (await import(
+      pathToFileURL(join(ROOT, 'tools/checks/src/pages-release.mjs')).href
+    )) as { planSteps: (gates: typeof extendedGates) => { label: string; command: string }[] }
+    expect(mod.planSteps(extendedGates)).toEqual([
+      { label: 'build', command: 'pnpm build' },
+      { label: 'b', command: 'pnpm b' },
+    ])
+  })
 })
 
 describe('publish-gate runner core loop (planSteps / runSteps)', () => {
@@ -197,6 +314,85 @@ describe('publish-gate runner core loop (planSteps / runSteps)', () => {
     expect(r.exitCode).toBe(2)
     expect(calls).toEqual(['pnpm build', 'pnpm boom'])
     expect(r.ranLabels).toEqual(['build', 'fails'])
+  })
+})
+
+// pages-release.mjs mirrors publish-gate.mjs's matrix-driven shape, but until
+// now it read the matrix straight off disk and passed it to planSteps without
+// validating it via the shared schema authority — a malformed pages-release
+// gate would only surface as a runtime failure deep in an unrelated step
+// (or wouldn't surface at all), instead of the loud, immediate rejection
+// publish-gate.mjs gives the same class of problem.
+describe('pages-release runner main() rejects an invalid matrix before running any step', () => {
+  const importRunner = async () => {
+    const mod = await import(pathToFileURL(join(ROOT, 'tools/checks/src/pages-release.mjs')).href)
+    return mod as {
+      main: (options?: {
+        argv?: string[]
+        repoRoot?: string
+        readMatrix?: (matrixPath: string) => unknown
+        spawn?: (
+          cmd: string,
+          args: string[],
+          opts: unknown,
+        ) => { status: number | null; error?: Error }
+        stdout?: { write: (s: string) => boolean }
+        stderr?: { write: (s: string) => boolean }
+      }) => number
+    }
+  }
+  const sink = () => {
+    const chunks: string[] = []
+    return { write: (s: string) => (chunks.push(s), true), chunks }
+  }
+
+  it('exits non-zero and never spawns a step when the matrix fails validation', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const spawn = () => {
+      throw new Error('spawn must not be called for an invalid matrix')
+    }
+    const exitCode = main({
+      readMatrix: () => ({ schemaVersion: 1, gates: [] }), // empty gates: fails validateMatrix
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).not.toBe(0)
+    expect(stderr.chunks.join('')).toMatch(/invalid release-gate-matrix\.json/)
+  })
+
+  it('runs pnpm build then the pages-release gates and succeeds when the matrix is valid', async () => {
+    const { main } = await importRunner()
+    const stdout = sink()
+    const stderr = sink()
+    const calls: string[] = []
+    const spawn = (cmd: string, args: string[]) => {
+      calls.push(`${cmd} ${args.join(' ')}`.trim())
+      return { status: 0 }
+    }
+    const exitCode = main({
+      readMatrix: () => ({
+        schemaVersion: 1,
+        gates: [
+          {
+            id: 'a',
+            command: 'pnpm a',
+            category: 'pages',
+            requiredFor: ['pages-release'],
+            requiresDocker: false,
+            requiresNetwork: false,
+            expectedRuntimeBucket: 'fast',
+          },
+        ],
+      }),
+      spawn,
+      stdout,
+      stderr,
+    })
+    expect(exitCode).toBe(0)
+    expect(calls).toEqual(['pnpm build', 'pnpm a'])
   })
 })
 

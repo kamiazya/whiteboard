@@ -336,6 +336,20 @@ describe('initTracing() signal-handler flush registration', () => {
 
     expect(process.listenerCount('SIGTERM')).toBe(baselineSIGTERM)
   })
+
+  it('does not register SIGTERM/SIGINT listeners when installSignalHandlers is false, so a coordinator like installStdioLifecycle stays the sole signal-driven caller of sdk.shutdown()', async () => {
+    const beforeSIGTERM = process.listenerCount('SIGTERM')
+    const beforeSIGINT = process.listenerCount('SIGINT')
+    const beforeExit = process.listenerCount('beforeExit')
+
+    await initTracing({ installSignalHandlers: false })
+
+    expect(process.listenerCount('SIGTERM')).toBe(beforeSIGTERM)
+    expect(process.listenerCount('SIGINT')).toBe(beforeSIGINT)
+    // beforeExit only fires on natural event-loop drain, never on a signal,
+    // so it never races an external shutdown coordinator and stays wired.
+    expect(process.listenerCount('beforeExit')).toBe(beforeExit + 1)
+  })
 })
 
 // ---------------------------------------------------------------------------
