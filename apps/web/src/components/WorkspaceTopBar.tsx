@@ -148,9 +148,10 @@ export default function WorkspaceTopBar({
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
   const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
-  // Guards async callbacks (onRenameCanvas/onCreateCanvas) against
-  // setState-after-unmount when a canvas switch/delete resolves mid-flight.
-  // Shared by useCanvasRename and useCreateCanvas below.
+  // Guards async callbacks (onRenameCanvas/onCreateCanvas/clipboard writes)
+  // against setState-after-unmount when a canvas switch/delete resolves
+  // mid-flight. Shared by useCanvasRename, useCreateCanvas, and
+  // useCopyCanvasUrl below.
   const mountedRef = useRef(true)
   useEffect(() => {
     // Re-arm on every setup so React StrictMode's dev-only double-invoke
@@ -233,7 +234,11 @@ export default function WorkspaceTopBar({
   // Kept outside copyCanvasUrl so the failure-path fallback can render the
   // same URL as selectable text without recomputing it.
   const canvasUrl = `${window.location.origin}/canvas/${workspaceId}/${encodeURIComponent(slug)}`
-  const { copyStatus, copyCanvasUrl, resetCopyStatus } = useCopyCanvasUrl(canvasUrl, log)
+  const { copyStatus, copyCanvasUrl, resetCopyStatus } = useCopyCanvasUrl(
+    canvasUrl,
+    log,
+    mountedRef,
+  )
 
   // A trailing slash-segment (the canvas leaf) makes the safest download
   // filename; falling back to the raw slug covers the ungrouped case.

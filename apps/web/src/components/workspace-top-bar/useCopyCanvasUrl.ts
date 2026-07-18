@@ -1,17 +1,26 @@
+import type { MutableRefObject } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AppLogger } from '@/lib/app-logger'
 
 // Copy-URL confirmation: the button itself reports success/failure instead
 // of a separate toast, since the affordance already has a fixed home (the
 // canvas actions menu) and a transient label swap is enough signal.
-export function useCopyCanvasUrl(canvasUrl: string, log?: AppLogger) {
+//
+// mountedRef is shared with (and re-armed by) the parent — see
+// useCreateCanvas's mountedRef doc. A private ref here would only ever be
+// cleared to false on cleanup and never reset to true on setup, so under
+// React StrictMode's dev-only setup->cleanup->setup double-invoke it would
+// stay permanently false and silently stop reporting copy status.
+export function useCopyCanvasUrl(
+  canvasUrl: string,
+  log: AppLogger | undefined,
+  mountedRef: MutableRefObject<boolean>,
+) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
   const copyStatusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const mountedRef = useRef(true)
 
   useEffect(
     () => () => {
-      mountedRef.current = false
       if (copyStatusTimeoutRef.current) clearTimeout(copyStatusTimeoutRef.current)
     },
     [],
