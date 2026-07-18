@@ -4,6 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
 import { mountCanvasViewer } from './mount.js'
+import { buildFontFaceDescriptors, resolveFontFetchDataUri } from './widget/font-registration.js'
 
 declare global {
   interface Window {
@@ -28,10 +29,7 @@ function registerFonts(): void {
   const rules: string[] = []
   const registeredFaces: FontFace[] = []
   for (const font of WIDGET_FONTS) {
-    const descriptors: FontFaceDescriptors = {}
-    if (font.weight) descriptors.weight = font.weight
-    if (font.style) descriptors.style = font.style
-    if (font.unicodeRange) descriptors.unicodeRange = font.unicodeRange
+    const descriptors = buildFontFaceDescriptors(font)
 
     const face = new FontFace(font.family, `url(${font.dataUri})`, descriptors)
     document.fonts.add(face)
@@ -71,10 +69,7 @@ function registerFonts(): void {
 function installFontFetchShim(): void {
   const originalFetch = window.fetch.bind(window)
   window.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url =
-      typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-    const filename = url.split('/').pop() ?? ''
-    const dataUri = FONT_FILENAME_MAP[filename]
+    const dataUri = resolveFontFetchDataUri(input, FONT_FILENAME_MAP)
     if (dataUri) {
       return originalFetch(dataUri, init)
     }
