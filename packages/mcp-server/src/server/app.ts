@@ -290,6 +290,13 @@ function createServerModeApiAuthMiddleware(authStrategy: AsyncAuthStrategy): Mid
     // The `public` decision is a deliberate, documented carve-out (currently
     // only GET /api/runtime/ping — a liveness probe) — never an omission.
     if (routeScope.kind === 'public') return next()
+    // `daemon-token-only` routes (e.g. /api/reconnect-credential) exist only
+    // in local-daemon mode, which has no AsyncAuthStrategy — server-mode has
+    // no daemon token to compare against, so any request that resolves here
+    // is refused outright rather than guessed at.
+    if (routeScope.kind === 'daemon-token-only') {
+      return c.json({ error: 'forbidden' }, 403)
+    }
     const decision = await authStrategy.authorize({
       method,
       path: c.req.path,

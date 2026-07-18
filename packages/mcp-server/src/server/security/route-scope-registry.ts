@@ -21,6 +21,13 @@ import type { AuthScope } from './auth-strategy.js'
 export type RouteScopeDecision =
   | { kind: 'scoped'; scopes: readonly AuthScope[] }
   | { kind: 'public' }
+  // Never satisfiable by an OAuth access token, regardless of its granted
+  // scopes — only the literal shared daemon token authorizes this route.
+  // Reserved for routes whose whole purpose is to hand out daemon-level
+  // authority (see reconnect.ts): a scope-limited hosted-origin grant that
+  // could reach this route would let itself mint a path back to the full,
+  // unscoped daemon token, escaping the very scopes it was approved for.
+  | { kind: 'daemon-token-only' }
 
 function isWriteMethod(method: string): boolean {
   const normalized = method.toUpperCase()
@@ -129,11 +136,14 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   }
 
   // Silent-reconnect enrollment (see reconnect.ts): mints a reconnect secret
-  // for the caller's own admitted Origin. Requires the same daemon-token
-  // auth as any other mutating route — a caller must already hold the
-  // daemon token (e.g. right after a #wb= pairing) to enroll.
+  // for the caller's own admitted Origin, which /api/reconnect-session later
+  // exchanges for the full daemon token. `daemon-token-only`, not
+  // `runtime:admin` — an OAuth grant scoped to `runtime:admin` (issued for
+  // touch/shutdown/logs-prune/debug) must not be able to reach this route,
+  // or it could use it as a one-way escalation to the unrestricted daemon
+  // token the grant was never approved for.
   if (path === '/api/reconnect-credential') {
-    return { kind: 'scoped', scopes: ['runtime:admin'] }
+    return { kind: 'daemon-token-only' }
   }
   // The ONLY deliberately public /api/* route besides the liveness probe.
   // Its purpose is to hand back a daemon token to a caller that no longer

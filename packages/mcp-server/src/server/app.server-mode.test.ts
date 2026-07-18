@@ -475,17 +475,21 @@ describe('app — server-mode composition', () => {
   // this pins that a server-mode app never mounts either route at all, so a
   // registry-only regression could not accidentally make it reachable here.
   describe('server-mode reconnect routes stay unmounted', () => {
-    it('POST /api/reconnect-credential → 404', async () => {
-      // Grant exactly the scope reconnect-credential declares in
-      // route-scope-registry.ts, same as the ws-ticket case above: this
-      // proves the 404 comes from the route never being mounted, not from
-      // the shared auth middleware rejecting an under-scoped bearer first.
+    it('POST /api/reconnect-credential → 403, refused by the auth middleware before dispatch', async () => {
+      // reconnect-credential is declared `daemon-token-only` in
+      // route-scope-registry.ts — never satisfiable by any OAuth grant,
+      // however scoped — so server-mode's auth middleware refuses it
+      // outright (no daemon token exists in server-mode) instead of ever
+      // reaching route dispatch. Unlike the ws-ticket case above, there is
+      // no scope this test could grant to prove the route itself is
+      // unmounted; the 403 here is the middleware's own fail-closed branch
+      // for this decision kind (app.ts), not a 404 from the router.
       const app = createApp(makeServerModeOptions(['runtime:admin']))
       const res = await app.request('/api/reconnect-credential', {
         method: 'POST',
         headers: { authorization: BEARER, origin: 'https://example.com' },
       })
-      expect(res.status).toBe(404)
+      expect(res.status).toBe(403)
     })
 
     it('POST /api/reconnect-session → 404, not reachable despite being declared public', async () => {
