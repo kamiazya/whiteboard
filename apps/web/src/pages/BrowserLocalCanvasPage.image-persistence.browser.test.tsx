@@ -63,12 +63,14 @@ vi.mock('@excalidraw/excalidraw', () => ({
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
+// Rejects on failure: silently keeping stale image-persistence records
+// would let both halves of this regression test pass on stale data.
 async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-    req.onblocked = () => resolve()
+    req.onerror = () => reject(req.error ?? new Error('whiteboard database deletion failed'))
+    req.onblocked = () => reject(new Error('whiteboard database deletion was blocked'))
   })
 }
 
