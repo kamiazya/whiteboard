@@ -45,6 +45,7 @@ non-zero exit code if any are missing or invalid.
 | Variable | Description |
 |---|---|
 | `WHITEBOARD_SERVER_ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins. Defaults to `WHITEBOARD_SERVER_EXTERNAL_URL` when unset. Each entry must be an explicit `https://` origin **or** a `https://*.example.com` leftmost-label wildcard subdomain pattern (e.g. for Cloudflare Pages branch previews); bare `*` is never permitted. See [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns). |
+| `WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS` | `true`/`false` (default `false`). By default the server rejects a JWT that doesn't self-identify as an access token (RFC 9068 `typ: at+jwt` header or `token_use: access` claim), to stop an ID token from the same IdP being replayed as an access token. Set `true` only if your IdP's access tokens carry neither discriminator. See [Security model](../explanation/security-model.md#server-mode-trust-boundary). |
 
 See `.env.server.example` for a filled-in template.
 

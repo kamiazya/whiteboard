@@ -524,7 +524,7 @@ const REQUIRED_FLAGS = [
     const now = Math.floor(Date.now() / 1000)
     const validJwt = signEs256Jwt(
       privateKey,
-      { alg: 'ES256', kid: 'smoke-key' },
+      { alg: 'ES256', typ: 'at+jwt', kid: 'smoke-key' },
       {
         sub: 'smoke-user',
         scope: 'canvas:read',
@@ -546,7 +546,7 @@ const REQUIRED_FLAGS = [
     // JWT with wrong scope → 403
     const wrongScopeJwt = signEs256Jwt(
       privateKey,
-      { alg: 'ES256', kid: 'smoke-key' },
+      { alg: 'ES256', typ: 'at+jwt', kid: 'smoke-key' },
       {
         sub: 'smoke-user',
         scope: 'workspace:read',

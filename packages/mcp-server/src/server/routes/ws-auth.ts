@@ -10,6 +10,7 @@ import {
   normalizeHostHeader,
   normalizeOriginHostname,
 } from '../security/cors-loopback.js'
+import { timingSafeEqualStrings } from '../security/timing-safe.js'
 import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
 
 function parseProtocolHeader(header: string | string[] | undefined): string[] {
@@ -130,7 +131,12 @@ export function authorizeWsUpgrade(
   const offeredToken = protocols.find((protocol) =>
     protocol.startsWith(DAEMON_TOKEN_WS_PROTOCOL_PREFIX),
   )
-  if (!offeredBaseProtocol || offeredToken !== `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`) {
+  const expectedToken = `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`
+  if (
+    !offeredBaseProtocol ||
+    offeredToken === undefined ||
+    !timingSafeEqualStrings(offeredToken, expectedToken)
+  ) {
     return { accept: false, statusCode: 401 }
   }
 

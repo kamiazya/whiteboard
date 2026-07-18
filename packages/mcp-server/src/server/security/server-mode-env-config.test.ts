@@ -39,6 +39,34 @@ describe('parseServerModeEnvConfig — valid config', () => {
     expect(result.config.dataDir).toBeUndefined()
   })
 
+  it('defaults jwtAllowUntypedAccessTokens to false (safe default — RFC 9068 typ discrimination required)', () => {
+    const result = parseServerModeEnvConfig(VALID_ENV)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.config.jwtAllowUntypedAccessTokens).toBe(false)
+  })
+
+  it('parses WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS=true', () => {
+    const result = parseServerModeEnvConfig({
+      ...VALID_ENV,
+      WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS: 'true',
+    })
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.config.jwtAllowUntypedAccessTokens).toBe(true)
+  })
+
+  it('invalid WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS value → jwt_allow_untyped_access_tokens_invalid', () => {
+    const result = parseServerModeEnvConfig({
+      ...VALID_ENV,
+      WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS: 'yes',
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.code).toBe('server_mode_env.jwt_allow_untyped_access_tokens_invalid')
+    expect(result.field).toBe('WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS')
+  })
+
   it('defaults allowedOrigins to [externalUrl origin] when not set', () => {
     const result = parseServerModeEnvConfig(VALID_ENV)
     expect(result.ok).toBe(true)
