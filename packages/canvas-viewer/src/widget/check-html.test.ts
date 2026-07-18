@@ -65,6 +65,16 @@ describe('findExternalResourceUrls', () => {
     expect(findExternalResourceUrls(html)).toEqual([])
   })
 
+  it('terminates a script body at an end tag with whitespace (</script >)', () => {
+    // HTML closes the element at `</script >` too; if the stripper missed
+    // it, the following genuine external tag would be swallowed into the
+    // "body" and hidden from the scan.
+    const html = `<script>t.src="https://inert.example.com/in-js.js"</script >
+      <img src="https://tracker.example.com/pixel.gif">`
+
+    expect(findExternalResourceUrls(html)).toEqual(['https://tracker.example.com/pixel.gif'])
+  })
+
   it('still flags a genuine external tag even for URLs that also appear as script string constants', () => {
     const html = `<script>t.src="https://platform.twitter.com/widgets.js"</script>
       <script src="https://platform.twitter.com/widgets.js"></script>

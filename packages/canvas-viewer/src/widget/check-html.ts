@@ -11,7 +11,11 @@
 // including a genuine `<script src="https://…">` — live on the tag itself,
 // which is kept, so this is strictly safer than a URL allowlist (which
 // would also have suppressed a real external tag for the same URL).
-const SCRIPT_BODY_PATTERN = /(<script\b[^>]*>)[\s\S]*?(<\/script>)/gi
+// The end tag allows whitespace between the name and `>` per the HTML
+// spec (`</script >` closes the element) — omitting `\s*` would let such
+// a tag extend the stripped "body" over later, genuine attribute
+// positions and hide them from the scan.
+const SCRIPT_BODY_PATTERN = /(<script\b[^>]*>)[\s\S]*?(<\/script\s*>)/gi
 
 // `src=`/`href=` in quoted OR unquoted attribute form, and CSS `url()`,
 // are resource-loading positions. This deliberately does NOT match
