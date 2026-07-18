@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { excalidrawJsonDocSchema } from '../excalidraw-json.js'
+import { excalidrawJsonDocSchema } from '@kamiazya/whiteboard-canvas-viewer/scene'
 import { BROWSER_LOCAL_CAPABILITIES } from '../provider.js'
 import { createWhiteboardCommands } from './create-commands.js'
 import { CommandError, exportJsonResultSchema, type WhiteboardCommandDeps } from './types.js'

@@ -38,6 +38,17 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/index.ts',
       ),
+      // Subpath alias must precede the root alias: rollup-alias prefix-matches,
+      // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
+      '@kamiazya/whiteboard-canvas-viewer/scene': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/scene.ts',
+      ),
+      // Resolve canvas-viewer from source so tests run before `pnpm build`.
+      '@kamiazya/whiteboard-canvas-viewer': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/index.ts',
+      ),
     },
   },
   // tailwindcss: layout browser tests import src/index.css to assert real

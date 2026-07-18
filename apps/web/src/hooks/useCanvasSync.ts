@@ -10,7 +10,7 @@ import {
 } from '../lib/canvas-sync-session.js'
 import type { SyncStatus, UseCanvasSyncOptions } from '../lib/canvas-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/canvas-sync-types.js'
-import { serializeSceneAsExcalidrawJson } from '../lib/excalidraw-json.js'
+import { serializeSceneAsExcalidrawJson } from '@kamiazya/whiteboard-canvas-viewer/scene'
 
 export type { SyncStatus, UseCanvasSyncOptions }
 // Re-exported so existing call sites (e.g. DaemonCanvasPage) can keep

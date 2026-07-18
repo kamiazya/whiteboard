@@ -1,4 +1,4 @@
-import { serializeSceneAsExcalidrawJson } from '../excalidraw-json.js'
+import { serializeSceneAsExcalidrawJson } from '@kamiazya/whiteboard-canvas-viewer/scene'
 import {
   CommandError,
   type ExportJsonInput,

@@ -1,6 +1,6 @@
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { z } from 'zod'
-import { excalidrawJsonDocSchema } from '../excalidraw-json.js'
+import { excalidrawJsonDocSchema } from '@kamiazya/whiteboard-canvas-viewer/scene'
 import type { ProviderState } from '../provider.js'
 
 // exportJson takes no options today; parsed anyway so every command in this
