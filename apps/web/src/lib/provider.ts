@@ -1,9 +1,22 @@
 import {
+  type RuntimeConfig,
+  RuntimeConfigPolicyError,
   resolveHostedRuntimeConfig,
   resolveRuntimeConfig,
-  type RuntimeConfig,
 } from '../runtime-config.js'
 import { classifyPagesOrigin } from './pages-origin-policy.js'
+
+const GENERIC_INVALID_CONFIG_MESSAGE = 'Runtime configuration is invalid.'
+
+// Only a RuntimeConfigPolicyError carries authored, known-safe, user-facing
+// copy. Zod/unknown errors keep the generic message so raw input (query,
+// path, credential fragments) is never reflected back to the user.
+function toInvalidConfigState(err: unknown): Extract<ProviderState, { kind: 'invalid-config' }> {
+  if (err instanceof RuntimeConfigPolicyError) {
+    return { kind: 'invalid-config', message: err.message }
+  }
+  return { kind: 'invalid-config', message: GENERIC_INVALID_CONFIG_MESSAGE }
+}
 
 export type ProviderKind = 'browser-local' | 'local-daemon'
 
@@ -69,7 +82,7 @@ export function resolveProviderStateFromRaw(raw: unknown): ProviderState {
   } catch {
     // Return a safe message without reflecting the raw input to avoid leaking
     // credential, query, or path fragments in user-facing error output.
-    return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
+    return { kind: 'invalid-config', message: GENERIC_INVALID_CONFIG_MESSAGE }
   }
 }
 
@@ -82,20 +95,15 @@ export function resolveHostedProviderStateFromRaw(
   raw: unknown,
   browserOrigin?: string,
 ): ProviderState {
-  if (browserOrigin !== undefined && classifyPagesOrigin(browserOrigin) === 'preview') {
-    try {
-      const state = resolveProviderState(resolveHostedRuntimeConfig(raw))
-      if (state.kind === 'local-daemon') {
-        return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
-      }
-      return state
-    } catch {
-      return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
-    }
-  }
+  const isPreviewOrigin =
+    browserOrigin !== undefined && classifyPagesOrigin(browserOrigin) === 'preview'
   try {
-    return resolveProviderState(resolveHostedRuntimeConfig(raw))
-  } catch {
-    return { kind: 'invalid-config', message: 'Runtime configuration is invalid.' }
+    const state = resolveProviderState(resolveHostedRuntimeConfig(raw))
+    if (isPreviewOrigin && state.kind === 'local-daemon') {
+      return { kind: 'invalid-config', message: GENERIC_INVALID_CONFIG_MESSAGE }
+    }
+    return state
+  } catch (err) {
+    return toInvalidConfigState(err)
   }
 }

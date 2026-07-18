@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { isProductionPagesOrigin } from './lib/pages-origin-policy.js'
 import {
   EMPTY_RUNTIME_CONFIG,
+  RuntimeConfigPolicyError,
   resolveHostedRuntimeConfig,
   resolveRuntimeConfig,
   runtimeConfigSchema,
 } from './runtime-config.js'
-import { isProductionPagesOrigin } from './lib/pages-origin-policy.js'
 
 describe('runtimeConfigSchema', () => {
   it('parses an empty object as a valid config', () => {
@@ -114,6 +115,32 @@ describe('resolveHostedRuntimeConfig', () => {
     expect(() =>
       resolveHostedRuntimeConfig({ publicOrigin: 'https://custom.example.com' }),
     ).toThrow()
+  })
+
+  it('rejects custom domain publicOrigin with a RuntimeConfigPolicyError explaining it is unsupported', () => {
+    expect(() =>
+      resolveHostedRuntimeConfig({ publicOrigin: 'https://custom.example.com' }),
+    ).toThrow(RuntimeConfigPolicyError)
+    try {
+      resolveHostedRuntimeConfig({ publicOrigin: 'https://custom.example.com' })
+      expect.unreachable('expected resolveHostedRuntimeConfig to throw')
+    } catch (e) {
+      expect(e).toBeInstanceOf(RuntimeConfigPolicyError)
+      const message = e instanceof Error ? e.message : String(e)
+      expect(message).toMatch(/custom domain/i)
+      expect(message).toMatch(/not (yet )?supported/i)
+    }
+  })
+
+  it('custom domain rejection message does not expose the raw origin value', () => {
+    let message = ''
+    try {
+      resolveHostedRuntimeConfig({ publicOrigin: 'https://secret.example.com' })
+    } catch (e) {
+      message = e instanceof Error ? e.message : String(e)
+    }
+    expect(message).not.toContain('secret')
+    expect(message).not.toMatch(/https?:\/\//)
   })
 
   it('error message is a safe generic copy — does not expose raw publicOrigin value', () => {
