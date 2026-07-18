@@ -53,6 +53,11 @@ export function registerToolWithAnnotations<
     description?: string
     inputSchema?: I
     outputSchema?: O
+    // MCP Apps (SEP-1865) tool-linkage metadata, e.g.
+    // `{ ui: { resourceUri: 'ui://whiteboard/canvas-view' } }`. Passed
+    // through to server.registerTool untouched — see mcp-apps.ts for the
+    // resource this links against.
+    _meta?: Record<string, unknown>
   },
   handler: (
     args: { [K in keyof I]: z.infer<I[K]> },

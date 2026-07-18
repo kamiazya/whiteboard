@@ -44,6 +44,7 @@ const VALID_ENTRY = {
     { path: 'LICENSE' },
     { path: 'package.json' },
     { path: 'dist/server/mcp/index.js' },
+    { path: 'dist/widget/canvas-viewer.html' },
   ],
 }
 
@@ -59,11 +60,17 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.ok).toBe(true)
     expect(result.missing).toEqual([])
     expect(result.forbidden).toEqual([])
-    expect(result.fileCount).toBe(4)
+    expect(result.fileCount).toBe(5)
     expect(result.sizeBytes).toBe(1024)
   })
 
-  for (const required of ['README.md', 'LICENSE', 'package.json', 'dist/server/mcp/index.js']) {
+  for (const required of [
+    'README.md',
+    'LICENSE',
+    'package.json',
+    'dist/server/mcp/index.js',
+    'dist/widget/canvas-viewer.html',
+  ]) {
     it(`flags ${required} as missing when it is absent`, async () => {
       const { verifyPackContents } = await importModule()
       const entry = {

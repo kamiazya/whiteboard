@@ -40,6 +40,7 @@ vi.mock('./tool-registration.js', () => ({
 }))
 vi.mock('../config.js', () => ({
   getDataDir: vi.fn(() => '/tmp/whiteboard-index-test'),
+  WHITEBOARD_ROOT: '/tmp/whiteboard-index-test-root',
 }))
 vi.mock('../observability/tracing.js', () => ({
   initTracing: vi.fn(async () => null),
@@ -53,7 +54,7 @@ vi.mock('./stdio-lifecycle.js', () => ({
 }))
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: vi.fn(function FakeMcpServer(this: Record<string, unknown>) {
-    this.server = {}
+    this.server = { registerCapabilities: vi.fn() }
     this.registerResource = vi.fn()
     this.registerPrompt = vi.fn()
     this.connect = vi.fn(async () => undefined)

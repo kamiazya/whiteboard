@@ -2,8 +2,9 @@
 // (vite.widget.config.ts -> dist/widget/canvas-viewer.html). Never exported
 // from the package's public surface — this file is a build INPUT, loaded
 // only by the widget's own <script type="module"> tag.
+import { App } from '@modelcontextprotocol/ext-apps'
 import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
-import { mountCanvasViewer } from './mount.js'
+import { mountCanvasViewer, type CanvasViewerHandle } from './mount.js'
 import { buildFontFaceDescriptors, resolveFontFetchDataUri } from './widget/font-registration.js'
 
 declare global {
@@ -100,7 +101,45 @@ function installFontFetchShim(): void {
   }
 }
 
-function bootstrap(): void {
+// MCP Apps (SEP-1865) bridge bootstrap. The host sends the canvas_view tool
+// result via `ui/notifications/tool-result`; `structuredContent` there is
+// the same `{canvasId, scene}` shape returned by canvas_view's Zod
+// outputSchema. This widget never receives daemon credentials — only the
+// scene snapshot — so it cannot call anything back into the daemon
+// directly (the only outbound path, when a host supports it, is
+// re-invoking canvas_view through the host's own MCP session, which this
+// Phase-A bootstrap does not yet do; there is no Refresh action here).
+//
+// When no ext-apps host is embedding this document (e.g. the widget opened
+// directly in a browser, or the widget-smoke harness), `app.connect()`
+// never resolves because no PostMessageTransport peer answers on the other
+// end — `mountFromHost` races that against `hasHostContext` timeout below
+// so bootstrap always falls back to mountCanvasViewer's own embedded-scene
+// slot instead of hanging forever.
+const HOST_CONNECT_TIMEOUT_MS = 2_000
+
+async function mountFromHost(container: HTMLElement): Promise<boolean> {
+  // No parent frame — this document cannot be an embedded MCP Apps view.
+  if (window.parent === window) return false
+
+  const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
+  let handle: CanvasViewerHandle | undefined
+
+  app.ontoolresult = (result) => {
+    const structuredContent = (result as { structuredContent?: unknown }).structuredContent
+    handle?.dispose()
+    handle = mountCanvasViewer(container, { scene: structuredContent })
+  }
+
+  const connected = await Promise.race([
+    app.connect().then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), HOST_CONNECT_TIMEOUT_MS)),
+  ]).catch(() => false)
+
+  return connected
+}
+
+async function bootstrap(): Promise<void> {
   registerFonts()
   installFontFetchShim()
 
@@ -108,7 +147,11 @@ function bootstrap(): void {
   if (!container) {
     throw new Error('widget-entry: expected a #root element in the widget HTML shell')
   }
-  mountCanvasViewer(container)
+
+  const connectedToHost = await mountFromHost(container)
+  if (!connectedToHost) {
+    mountCanvasViewer(container)
+  }
 }
 
-bootstrap()
+void bootstrap()

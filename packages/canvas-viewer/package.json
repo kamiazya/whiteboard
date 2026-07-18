@@ -20,11 +20,13 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.node.config.ts && vitest run --config vitest.jsdom.config.ts && vitest run --config vitest.browser.config.ts",
+    "build": "pnpm run build:widget",
     "build:widget": "vite build --config vite.widget.config.ts && node scripts/rename-widget-html.mjs",
     "smoke:widget": "node scripts/smoke-widget.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "catalog:",
+    "@modelcontextprotocol/ext-apps": "1.7.4",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"

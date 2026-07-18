@@ -23,8 +23,10 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
     expect(mcpPackage.scripts?.['build:app']).toBeUndefined()
   })
 
-  it('build is build:server only', () => {
-    expect(mcpPackage.scripts?.build).toBe('pnpm build:server')
+  it('build runs build:server plus the MCP Apps widget copy step, nothing else', () => {
+    expect(mcpPackage.scripts?.build).toBe(
+      'pnpm build:server && node scripts/copy-widget-into-dist.mjs',
+    )
   })
 
   it('dev does not spawn vite', () => {

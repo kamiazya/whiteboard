@@ -7,6 +7,7 @@ import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getDataDir } from '../config.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
 import { createDaemonClient } from './daemon-client.js'
+import { registerMcpAppsExtension } from './mcp-apps.js'
 import { wireMcpLogging } from './logging.js'
 import { ensureWorkspaceId } from './session-resolver.js'
 import { installStdioLifecycle } from './stdio-lifecycle.js'
@@ -162,6 +163,7 @@ export async function createExcalidrawMcpServer() {
   )
 
   registerAllTools(server, workspaceId, withDaemon)
+  registerMcpAppsExtension(server)
 
   return server
 }
