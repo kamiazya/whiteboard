@@ -181,8 +181,31 @@ jobs:
       - name: Packaged distribution smoke
         run: pnpm smoke:distribution:packaged
 
+  # Prod vite build of packages/canvas-viewer's self-contained widget HTML,
+  # verified against a real browser (not just the static grep): zero
+  # network requests and the embedded font actually loaded, not silently
+  # falling back to a system font.
+  widget-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build canvas-viewer widget
+        run: pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
+
+      - name: Widget smoke
+        run: pnpm --filter @kamiazya/whiteboard-canvas-viewer smoke:widget
+
   verify:
-    needs: [check, test-unit, test-jsdom, test-browser]
+    needs: [check, test-unit, test-jsdom, test-browser, widget-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:

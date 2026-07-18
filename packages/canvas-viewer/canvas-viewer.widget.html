@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Canvas Viewer</title>
+  </head>
+  <body>
+    <div id="root" style="width: 100vw; height: 100vh"></div>
+    <!--
+      Embedded-scene slot (see mountCanvasViewer's readEmbeddedScene). Empty
+      by default; a downstream export/widget-bundling step replaces this
+      script's textContent with the real scene JSON before serving the file.
+    -->
+    <script type="application/json" data-whiteboard-scene>{"elements":[],"appState":{},"files":{}}</script>
+    <script type="module" src="/src/widget-entry.ts"></script>
+  </body>
+</html>

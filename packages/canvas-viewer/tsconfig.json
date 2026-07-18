@@ -13,5 +13,11 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src", "vitest.node.config.ts", "vitest.jsdom.config.ts"]
+  "include": [
+    "src",
+    "vitest.node.config.ts",
+    "vitest.jsdom.config.ts",
+    "vitest.browser.config.ts",
+    "vite.widget.config.ts"
+  ]
 }
