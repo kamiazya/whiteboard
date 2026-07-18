@@ -27,6 +27,15 @@ describe('findExternalResourceUrls', () => {
     expect(found).toContain('http://example.com/pic.png')
   })
 
+  it('flags a quoted url() form the same as the unquoted form', () => {
+    const html = `<style>.a { background: url("https://evil.example.com/a.png") }
+      .b { background: url('https://evil.example.com/b.png') }</style>`
+
+    const found = findExternalResourceUrls(html)
+    expect(found).toContain('https://evil.example.com/a.png')
+    expect(found).toContain('https://evil.example.com/b.png')
+  })
+
   it('does not flag inert http(s) strings such as xmlns or license comment URLs', () => {
     const html = `<!doctype html><html><head></head><body>
       <svg xmlns="http://www.w3.org/2000/svg"></svg>
