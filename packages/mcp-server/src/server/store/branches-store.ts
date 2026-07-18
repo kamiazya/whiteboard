@@ -3,6 +3,7 @@ import { validateBranchName, validateSlug, validateWorkspaceId } from '../valida
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
 //   branches table         -> one row per branch keyed on (canvasId, name)
@@ -85,13 +86,15 @@ export async function loadCanvasBranches(
   return { branches, head }
 }
 
-export async function saveCanvasBranches(
+// The actual write, assuming the workspace write lock is already held by
+// the caller. Never call this directly from outside this module — always
+// go through saveCanvasBranches() or mutateCanvasBranches() so the lock is
+// guaranteed.
+async function saveCanvasBranchesLocked(
   workspaceId: string,
   slug: string,
   state: CanvasBranches,
 ): Promise<void> {
-  validateWorkspaceId(workspaceId)
-  validateSlug(slug)
   for (const branch of state.branches) {
     validateBranchName(branch.name)
   }
@@ -121,6 +124,80 @@ export async function saveCanvasBranches(
       .set({ currentBranch: state.head, updatedAt: Date.now() })
       .where('id', '=', canvasId)
       .execute()
+  })
+}
+
+// Every branch mutation (createBranch, deleteBranch, updateBranchTip,
+// setHead, renameBranch) funnels through this single write path, so
+// taking the per-workspace write lock here — rather than in each caller —
+// closes the GC-vs-branch-write race for all of them at once: file-gc's
+// collect-then-unlink pass (purgeDanglingFiles) also holds this lock, so a
+// branch tip can never be created/updated between GC's snapshot of
+// referenced fileIds and its unlink pass.
+export async function saveCanvasBranches(
+  workspaceId: string,
+  slug: string,
+  state: CanvasBranches,
+): Promise<void> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(slug)
+  await withWorkspaceWriteLock(workspaceId, () =>
+    saveCanvasBranchesLocked(workspaceId, slug, state),
+  )
+}
+
+// Read-modify-write helper for every mutator below (createBranch,
+// deleteBranch, setHead, renameBranch, updateBranchTip). The read
+// (loadCanvasBranches) and the write (saveCanvasBranchesLocked) must
+// happen inside the SAME lock acquisition — acquiring the lock only
+// around the final write (as saveCanvasBranches did on its own) leaves a
+// window between the read and the write where file-gc's collect-then-
+// unlink pass can acquire the lock, snapshot the pre-mutation branch
+// state, and delete a file that `mutate`'s computed next state is about
+// to start referencing.
+//
+// `mutate` returns `next: null` to signal "no write needed" (e.g. setHead
+// to the branch that is already HEAD). See withCanvasBranchesLock below for
+// the async-callback variant used by callers that must await external work
+// (e.g. a doc checkout) between the read and the write.
+async function mutateCanvasBranches<T>(
+  workspaceId: string,
+  slug: string,
+  mutate: (state: CanvasBranches) => { next: CanvasBranches | null; result: T },
+): Promise<T> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(slug)
+  return withWorkspaceWriteLock(workspaceId, async () => {
+    const state = await loadCanvasBranches(workspaceId, slug)
+    const { next, result } = mutate(state)
+    if (next) {
+      await saveCanvasBranchesLocked(workspaceId, slug, next)
+    }
+    return result
+  })
+}
+
+// Lock-spanning helper for callers whose read-modify-write needs to
+// interleave AWAITED external work (e.g. routes/branches.ts's PUT /head,
+// which must capture the outgoing HEAD's live frontiers and reconcile the
+// live doc to the new tip before persisting the updated branch state).
+// mutateCanvasBranches's `mutate` callback is synchronous by design and
+// cannot express that shape, so this exposes the same load + a `save`
+// bound to the same per-workspace lock: everything the caller does inside
+// `fn`, including its own awaits, runs while holding the lock, so
+// file-gc's collect-then-unlink pass cannot observe a state where the
+// live doc has already moved to the new HEAD but the outgoing branch's
+// tipFrontiers has not been persisted yet.
+export async function withCanvasBranchesLock<T>(
+  workspaceId: string,
+  slug: string,
+  fn: (state: CanvasBranches, save: (next: CanvasBranches) => Promise<void>) => Promise<T>,
+): Promise<T> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(slug)
+  return withWorkspaceWriteLock(workspaceId, async () => {
+    const state = await loadCanvasBranches(workspaceId, slug)
+    return fn(state, (next) => saveCanvasBranchesLocked(workspaceId, slug, next))
   })
 }
 
@@ -168,21 +245,23 @@ export async function createBranch(
   validateSlug(slug)
   validateBranchName(opts.name)
 
-  const state = await loadCanvasBranches(workspaceId, slug)
-  if (state.branches.some((b) => b.name === opts.name)) {
-    throw new BranchConflictError(`Branch "${opts.name}" already exists on ${workspaceId}/${slug}`)
-  }
-  const branch: BranchMeta = {
-    name: opts.name,
-    tipFrontiers: opts.initialTipFrontiers ?? '',
-    color: opts.color ?? nextColor(state.branches),
-    createdAt: new Date().toISOString(),
-    ...(opts.baseBranch !== undefined ? { baseBranch: opts.baseBranch } : {}),
-    ...(opts.baseVersionId !== undefined ? { baseVersionId: opts.baseVersionId } : {}),
-  }
-  const next: CanvasBranches = { ...state, branches: [...state.branches, branch] }
-  await saveCanvasBranches(workspaceId, slug, next)
-  return branch
+  return mutateCanvasBranches(workspaceId, slug, (state) => {
+    if (state.branches.some((b) => b.name === opts.name)) {
+      throw new BranchConflictError(
+        `Branch "${opts.name}" already exists on ${workspaceId}/${slug}`,
+      )
+    }
+    const branch: BranchMeta = {
+      name: opts.name,
+      tipFrontiers: opts.initialTipFrontiers ?? '',
+      color: opts.color ?? nextColor(state.branches),
+      createdAt: new Date().toISOString(),
+      ...(opts.baseBranch !== undefined ? { baseBranch: opts.baseBranch } : {}),
+      ...(opts.baseVersionId !== undefined ? { baseVersionId: opts.baseVersionId } : {}),
+    }
+    const next: CanvasBranches = { ...state, branches: [...state.branches, branch] }
+    return { next, result: branch }
+  })
 }
 
 export async function deleteBranch(
@@ -196,21 +275,21 @@ export async function deleteBranch(
   if (name === 'main') {
     throw new BranchConflictError('Cannot delete main branch')
   }
-  const state = await loadCanvasBranches(workspaceId, slug)
-  if (!state.branches.some((b) => b.name === name)) {
-    throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
-  }
-  if (state.head === name) {
-    throw new BranchConflictError(
-      `Cannot delete branch "${name}" while it is HEAD. setHead to another branch first.`,
-    )
-  }
-  const next: CanvasBranches = {
-    ...state,
-    branches: state.branches.filter((b) => b.name !== name),
-  }
-  await saveCanvasBranches(workspaceId, slug, next)
-  return { ok: true, unmergedCommits: 0 }
+  return mutateCanvasBranches(workspaceId, slug, (state) => {
+    if (!state.branches.some((b) => b.name === name)) {
+      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
+    }
+    if (state.head === name) {
+      throw new BranchConflictError(
+        `Cannot delete branch "${name}" while it is HEAD. setHead to another branch first.`,
+      )
+    }
+    const next: CanvasBranches = {
+      ...state,
+      branches: state.branches.filter((b) => b.name !== name),
+    }
+    return { next, result: { ok: true as const, unmergedCommits: 0 } }
+  })
 }
 
 export async function setHead(
@@ -221,16 +300,16 @@ export async function setHead(
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(name)
-  const state = await loadCanvasBranches(workspaceId, slug)
-  if (!state.branches.some((b) => b.name === name)) {
-    throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
-  }
-  const previousHead = state.head
-  if (previousHead === name) {
-    return { head: name, previousHead }
-  }
-  await saveCanvasBranches(workspaceId, slug, { ...state, head: name })
-  return { head: name, previousHead }
+  return mutateCanvasBranches(workspaceId, slug, (state) => {
+    if (!state.branches.some((b) => b.name === name)) {
+      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
+    }
+    const previousHead = state.head
+    if (previousHead === name) {
+      return { next: null, result: { head: name, previousHead } }
+    }
+    return { next: { ...state, head: name }, result: { head: name, previousHead } }
+  })
 }
 
 export async function renameBranch(
@@ -246,26 +325,26 @@ export async function renameBranch(
   if (oldName === 'main') {
     throw new BranchConflictError('Cannot rename main branch')
   }
-  const state = await loadCanvasBranches(workspaceId, slug)
-  const current = state.branches.find((b) => b.name === oldName)
-  if (!current) {
-    throw new BranchNotFoundError(`Branch "${oldName}" not found on ${workspaceId}/${slug}`)
-  }
-  if (oldName === newName) {
-    return current
-  }
-  if (state.branches.some((b) => b.name === newName)) {
-    throw new BranchConflictError(`Branch "${newName}" already exists on ${workspaceId}/${slug}`)
-  }
-  const renamed: BranchMeta = { ...current, name: newName }
-  const nextBranches = state.branches.map((b) => {
-    if (b.name === oldName) return renamed
-    if (b.baseBranch === oldName) return { ...b, baseBranch: newName }
-    return b
+  return mutateCanvasBranches(workspaceId, slug, (state) => {
+    const current = state.branches.find((b) => b.name === oldName)
+    if (!current) {
+      throw new BranchNotFoundError(`Branch "${oldName}" not found on ${workspaceId}/${slug}`)
+    }
+    if (oldName === newName) {
+      return { next: null, result: current }
+    }
+    if (state.branches.some((b) => b.name === newName)) {
+      throw new BranchConflictError(`Branch "${newName}" already exists on ${workspaceId}/${slug}`)
+    }
+    const renamed: BranchMeta = { ...current, name: newName }
+    const nextBranches = state.branches.map((b) => {
+      if (b.name === oldName) return renamed
+      if (b.baseBranch === oldName) return { ...b, baseBranch: newName }
+      return b
+    })
+    const nextHead = state.head === oldName ? newName : state.head
+    return { next: { branches: nextBranches, head: nextHead }, result: renamed }
   })
-  const nextHead = state.head === oldName ? newName : state.head
-  await saveCanvasBranches(workspaceId, slug, { branches: nextBranches, head: nextHead })
-  return renamed
 }
 
 export async function getBranchTipBase64(
@@ -290,22 +369,25 @@ export async function updateBranchTip(
   validateWorkspaceId(workspaceId)
   validateSlug(slug)
   validateBranchName(name)
-  const state = await loadCanvasBranches(workspaceId, slug)
-  const idx = state.branches.findIndex((b) => b.name === name)
-  if (idx === -1) {
-    throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
-  }
-  const current = state.branches[idx]!
-  if (current.tipFrontiers === tipFrontiers) return
-  const next: CanvasBranches = {
-    ...state,
-    branches: [
-      ...state.branches.slice(0, idx),
-      { ...current, tipFrontiers },
-      ...state.branches.slice(idx + 1),
-    ],
-  }
-  await saveCanvasBranches(workspaceId, slug, next)
+  await mutateCanvasBranches(workspaceId, slug, (state) => {
+    const idx = state.branches.findIndex((b) => b.name === name)
+    if (idx === -1) {
+      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${slug}`)
+    }
+    const current = state.branches[idx]!
+    if (current.tipFrontiers === tipFrontiers) {
+      return { next: null, result: undefined }
+    }
+    const next: CanvasBranches = {
+      ...state,
+      branches: [
+        ...state.branches.slice(0, idx),
+        { ...current, tipFrontiers },
+        ...state.branches.slice(idx + 1),
+      ],
+    }
+    return { next, result: undefined }
+  })
 }
 
 // ── slug rename ──

@@ -19,7 +19,7 @@ import {
   deleteBranch,
   loadCanvasBranches,
   renameBranch,
-  saveCanvasBranches,
+  withCanvasBranchesLock,
 } from '../store/branches-store.js'
 import { corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
@@ -43,11 +43,7 @@ export interface CreateBranchesRouterOptions {
   getCurrentFrontiers?: (workspaceId: string, slug: string) => Promise<string | null>
   // Hook for PUT /head to reconcile and broadcast the doc to the new branch tipFrontiers.
   // Not called when tipFrontiersBase64 === "" because that branch is still uninitialized.
-  checkoutTo?: (
-    workspaceId: string,
-    slug: string,
-    tipFrontiersBase64: string,
-  ) => Promise<void>
+  checkoutTo?: (workspaceId: string, slug: string, tipFrontiersBase64: string) => Promise<void>
   // Notify all peers on the same key when a HEAD switch completes.
   // This is only a UI signal because checkoutTo already broadcasts the Loro update.
   notifyHeadChanged?: (workspaceId: string, slug: string, head: string) => void
@@ -88,16 +84,14 @@ export interface CreateBranchesRouterOptions {
   ) => Promise<number>
   // Count function used by DELETE /branches/:name to return actual unmergedCommits.
   // If omitted, the route falls back to 0.
-  countVersionsOnBranch?: (
-    workspaceId: string,
-    slug: string,
-    branchName: string,
-  ) => Promise<number>
+  countVersionsOnBranch?: (workspaceId: string, slug: string, branchName: string) => Promise<number>
 }
 
 // Helper that turns ValidationError into a structured 400 response.
 // Re-throw everything else so the caller can handle it as a 500.
-function handleValidation(err: unknown): { status: 400; body: { error: string; message: string } } | null {
+function handleValidation(
+  err: unknown,
+): { status: 400; body: { error: string; message: string } } | null {
   const body = validationErrorBody(err)
   if (body) return { status: 400, body }
   return null
@@ -290,46 +284,54 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     const bn = validateBranchNameOrRespond(targetBranch)
     if (bn) return c.json(bn.body, bn.status)
     try {
-      // Read current state first so switching to the same HEAD can short-circuit without side effects.
-      const before = await loadCanvasBranches(sid, slug)
-      if (!before.branches.some((b) => b.name === targetBranch)) {
-        throw new BranchNotFoundError(`Branch "${targetBranch}" not found on ${sid}/${slug}`)
-      }
-      if (before.head === targetBranch) {
-        const same: SetHeadResponse = { head: targetBranch, previousHead: before.head }
-        return c.json(same)
-      }
-
-      // First ensure current-frontiers read and target checkout succeed.
-      // Only then write branches.json once, avoiding partial writes on corruption.
-      let currentFrontiers: string | null = null
-      if (getCurrentFrontiers) {
-        currentFrontiers = await getCurrentFrontiers(sid, slug)
-      }
-
-      // Reconcile to the new HEAD tipFrontiers only when non-empty.
-      // checkoutTo handles strict prevalidation.
-      const newTip = before.branches.find((b) => b.name === targetBranch)?.tipFrontiers ?? ''
-      if (checkoutTo) {
-        if (newTip.length > 0) {
-          await checkoutTo(sid, slug, newTip)
+      // The entire read-modify-write — including the awaited
+      // getCurrentFrontiers/checkoutTo calls in between — runs inside the
+      // single workspace write lock acquisition that withCanvasBranchesLock
+      // provides. Without that, file-gc's collect-then-unlink pass could
+      // interleave right after checkoutTo moves the live doc onto the new
+      // HEAD but before the outgoing HEAD's captured frontiers land in
+      // branches.json, and would see a file as unreferenced by either.
+      const response = await withCanvasBranchesLock(sid, slug, async (before, save) => {
+        if (!before.branches.some((b) => b.name === targetBranch)) {
+          throw new BranchNotFoundError(`Branch "${targetBranch}" not found on ${sid}/${slug}`)
         }
-      }
+        if (before.head === targetBranch) {
+          const same: SetHeadResponse = { head: targetBranch, previousHead: before.head }
+          return same
+        }
 
-      const next = {
-        head: targetBranch,
-        branches: before.branches.map((branch) => {
-          if (branch.name !== before.head || currentFrontiers === null) return branch
-          return { ...branch, tipFrontiers: currentFrontiers }
-        }),
-      }
-      await saveCanvasBranches(sid, slug, next)
-      const response: SetHeadResponse = { head: targetBranch, previousHead: before.head }
+        // First ensure current-frontiers read and target checkout succeed.
+        // Only then write branches.json once, avoiding partial writes on corruption.
+        let currentFrontiers: string | null = null
+        if (getCurrentFrontiers) {
+          currentFrontiers = await getCurrentFrontiers(sid, slug)
+        }
 
-      // Notify all peers on the same key that HEAD changed.
-      // checkoutTo may already have broadcast state, but the UI still needs an explicit
-      // semantic signal that the active HEAD switched.
-      if (notifyHeadChanged) {
+        // Reconcile to the new HEAD tipFrontiers only when non-empty.
+        // checkoutTo handles strict prevalidation.
+        const newTip = before.branches.find((b) => b.name === targetBranch)?.tipFrontiers ?? ''
+        if (checkoutTo) {
+          if (newTip.length > 0) {
+            await checkoutTo(sid, slug, newTip)
+          }
+        }
+
+        const next = {
+          head: targetBranch,
+          branches: before.branches.map((branch) => {
+            if (branch.name !== before.head || currentFrontiers === null) return branch
+            return { ...branch, tipFrontiers: currentFrontiers }
+          }),
+        }
+        await save(next)
+        const result: SetHeadResponse = { head: targetBranch, previousHead: before.head }
+        return result
+      })
+
+      // Notify all peers on the same key that HEAD changed. Skip the
+      // no-op case (switching to the branch that is already HEAD) so
+      // idempotent re-switches don't fire a spurious signal.
+      if (notifyHeadChanged && response.previousHead !== targetBranch) {
         notifyHeadChanged(sid, slug, targetBranch)
       }
 
@@ -349,9 +351,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // ── POST /api/workspaces/:sid/canvases/:slug/branches/:source/merge ──
   // Spec §7. Merge source (URL param) into target (body). dryRun can return a preview without committing.
   // LWW edge-case detection lives in merge-engine.detectMergeBadges; document operations are delegated to performMerge.
-  app.post(
-    '/api/workspaces/:sid/canvases/:slug/branches/:source/merge',
-    async (c) => {
+  app.post('/api/workspaces/:sid/canvases/:slug/branches/:source/merge', async (c) => {
     const { sid, slug, source } = c.req.param()
     try {
       validateWorkspaceId(sid)
@@ -373,10 +373,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
     if (intoValidation) return c.json(intoValidation.body, intoValidation.status)
 
     if (source === reqBody.into) {
-      return c.json(
-        { error: 'invalid_body', message: 'source and into must differ' },
-        400,
-      )
+      return c.json({ error: 'invalid_body', message: 'source and into must differ' }, 400)
     }
 
     if (!performMerge) {
@@ -417,8 +414,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
         if (typeof result.preMergeVersionId === 'string')
           response.preMergeVersionId = result.preMergeVersionId
         if (result.switchedHead) response.switchedHead = result.switchedHead
-        if (typeof result.deletedSource === 'string')
-          response.deletedSource = result.deletedSource
+        if (typeof result.deletedSource === 'string') response.deletedSource = result.deletedSource
       }
       return c.json(response)
     } catch (err) {
