@@ -9,12 +9,21 @@ import { CanvasFileStore, canvasFileRecordSchema } from './canvas-file-store.js'
 
 // Rejects on failure: silently keeping stale fixed-key records would let
 // these persistence tests pass without exercising the current write.
+// 'blocked' is NOT a failure — store operations close their connections in
+// tx.oncomplete, which can land after the op's promise resolves, so the
+// deletion is briefly blocked and then proceeds (onsuccess still fires).
+// Waiting keeps that benign race quiet; a genuinely stuck connection still
+// surfaces as a loud test timeout.
 async function clearDb(): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error ?? new Error('whiteboard database deletion failed'))
-    req.onblocked = () => reject(new Error('whiteboard database deletion was blocked'))
+    req.onblocked = () => {
+      console.warn(
+        'clearDb: whiteboard database deletion blocked — waiting for open connections to close',
+      )
+    }
   })
 }
 
