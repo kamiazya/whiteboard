@@ -4,6 +4,18 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import type { CanvasInfo } from './types'
 
+interface CanvasItemProps {
+  canvas: CanvasInfo
+  workspaceId: string
+  customName: string | undefined
+  leafLabel: string
+  active: boolean
+  pinned: boolean
+  isLocalMode: boolean
+  onNavigate: () => void
+  onTogglePin: (slug: string, nextPinned: boolean) => void
+}
+
 // Dropdown item with thumbnail, name, optional slug subtitle, and a pin toggle.
 // Keep the pin control on the right edge. Show it constantly when pinned, otherwise reveal it on hover.
 // Stop propagation on mouse down because Radix selection is driven from that event.
@@ -17,17 +29,7 @@ export function CanvasItem({
   isLocalMode,
   onNavigate,
   onTogglePin,
-}: {
-  canvas: CanvasInfo
-  workspaceId: string
-  customName: string | undefined
-  leafLabel: string
-  active: boolean
-  pinned: boolean
-  isLocalMode: boolean
-  onNavigate: () => void
-  onTogglePin: (slug: string, nextPinned: boolean) => void
-}) {
+}: CanvasItemProps) {
   return (
     <DropdownMenuItem
       onSelect={onNavigate}
