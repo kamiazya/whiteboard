@@ -479,10 +479,12 @@ export async function runE2eCheckpointSmoke({
     if (!svgDirectMarkup.trim().startsWith('<svg')) {
       throw new Error('export_svg did not produce real SVG markup')
     }
-    if (!svgDirectMarkup.includes('#121212')) {
+    // Hex colors are compared case-insensitively — serializers are free to
+    // emit uppercase hex.
+    if (!svgDirectMarkup.toLowerCase().includes('#121212')) {
       throw new Error(`export_svg ignored theme: expected dark background in ${svgDirectMarkup}`)
     }
-    if (svgDirectMarkup.includes('#1971c2')) {
+    if (svgDirectMarkup.toLowerCase().includes('#1971c2')) {
       throw new Error(
         'export_svg ignored frameId: scoping to the empty frame should exclude the rectangle',
       )
@@ -500,7 +502,7 @@ export async function runE2eCheckpointSmoke({
     })
     const svgWidePaddingMarkup = await readSvgMarkup(svgWidePadding)
     const extractViewBoxWidth = (markup: string): number => {
-      const match = markup.match(/viewBox="[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+[-\d.]+"/)
+      const match = markup.match(/viewBox=["'][-\d.]+\s+[-\d.]+\s+([\d.]+)\s+[-\d.]+["']/)
       if (!match) throw new Error(`export_svg output missing viewBox: ${markup.slice(0, 200)}`)
       return Number.parseFloat(match[1])
     }
