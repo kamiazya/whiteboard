@@ -40,24 +40,22 @@ export type RedeemResult =
 
 export type FetchLike = (input: string | URL, init?: RequestInit) => Promise<Response>
 
-/**
- * POSTs /api/reconnect-credential to enroll `origin` for silent reconnect.
- * `daemonToken` is sent as `Authorization: Bearer` when present; omitted
- * entirely for a tokenless dev daemon (whose auth middleware treats an
- * absent header as authenticated — sending an empty Bearer would not).
- */
-export async function enrollReconnectCredential(
-  origin: string,
-  daemonToken: string | null,
-  fetchImpl: FetchLike,
-  signal: AbortSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
-): Promise<EnrollResult> {
-  const url = new URL('/api/reconnect-credential', origin)
-  const headers: HeadersInit = {}
-  if (daemonToken) {
-    headers.Authorization = `Bearer ${daemonToken}`
-  }
+// Shared failure shape for both endpoints: a 401/403 means the credential
+// was rejected, anything else non-2xx / unparseable is an invalid response,
+// and a thrown fetch is a network error.
+type PostFailure =
+  | { status: 'rejected' }
+  | { status: 'network-error' }
+  | { status: 'invalid-response' }
+type PostOutcome<T> = { status: 'ok'; data: T } | PostFailure
 
+async function postAndParse<T>(
+  url: URL,
+  headers: HeadersInit,
+  schema: z.ZodType<T>,
+  fetchImpl: FetchLike,
+  signal: AbortSignal,
+): Promise<PostOutcome<T>> {
   let res: Response
   try {
     res = await fetchImpl(url, { method: 'POST', headers, signal })
@@ -79,11 +77,40 @@ export async function enrollReconnectCredential(
     return { status: 'invalid-response' }
   }
 
-  const parsed = reconnectCredentialResponseSchema.safeParse(json)
+  const parsed = schema.safeParse(json)
   if (!parsed.success) {
     return { status: 'invalid-response' }
   }
-  return { status: 'ok', secret: parsed.data.reconnectSecret }
+  return { status: 'ok', data: parsed.data }
+}
+
+/**
+ * POSTs /api/reconnect-credential to enroll `origin` for silent reconnect.
+ * `daemonToken` is sent as `Authorization: Bearer` when present; omitted
+ * entirely for a tokenless dev daemon (whose auth middleware treats an
+ * absent header as authenticated — sending an empty Bearer would not).
+ */
+export async function enrollReconnectCredential(
+  origin: string,
+  daemonToken: string | null,
+  fetchImpl: FetchLike,
+  signal: AbortSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
+): Promise<EnrollResult> {
+  const url = new URL('/api/reconnect-credential', origin)
+  const headers: HeadersInit = {}
+  if (daemonToken) {
+    headers.Authorization = `Bearer ${daemonToken}`
+  }
+
+  const outcome = await postAndParse(
+    url,
+    headers,
+    reconnectCredentialResponseSchema,
+    fetchImpl,
+    signal,
+  )
+  if (outcome.status !== 'ok') return outcome
+  return { status: 'ok', secret: outcome.data.reconnectSecret }
 }
 
 /**
@@ -100,35 +127,15 @@ export async function redeemReconnectSession(
   signal: AbortSignal = AbortSignal.timeout(DEFAULT_TIMEOUT_MS),
 ): Promise<RedeemResult> {
   const url = new URL('/api/reconnect-session', origin)
+  const headers: HeadersInit = { Authorization: `Bearer ${secret}` }
 
-  let res: Response
-  try {
-    res = await fetchImpl(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${secret}` },
-      signal,
-    })
-  } catch {
-    return { status: 'network-error' }
-  }
-
-  if (res.status === 401 || res.status === 403) {
-    return { status: 'rejected' }
-  }
-  if (!res.ok) {
-    return { status: 'invalid-response' }
-  }
-
-  let json: unknown
-  try {
-    json = await res.json()
-  } catch {
-    return { status: 'invalid-response' }
-  }
-
-  const parsed = reconnectSessionResponseSchema.safeParse(json)
-  if (!parsed.success) {
-    return { status: 'invalid-response' }
-  }
-  return { status: 'ok', token: parsed.data.token, secret: parsed.data.reconnectSecret }
+  const outcome = await postAndParse(
+    url,
+    headers,
+    reconnectSessionResponseSchema,
+    fetchImpl,
+    signal,
+  )
+  if (outcome.status !== 'ok') return outcome
+  return { status: 'ok', token: outcome.data.token, secret: outcome.data.reconnectSecret }
 }
