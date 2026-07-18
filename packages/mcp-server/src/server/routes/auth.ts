@@ -1,23 +1,8 @@
 import type { MiddlewareHandler } from 'hono'
-import { timingSafeEqual } from 'node:crypto'
 import { hasRequiredScopes } from '../security/auth-strategy.js'
 import type { OAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { resolveApiRouteScope } from '../security/route-scope-registry.js'
-
-// Timing-safe string comparison. Even length mismatches avoid early return by doing
-// a dummy comparison so timing stays uniform.
-// The practical risk is low for loopback-only use, but this is still useful
-// defense in depth for remote or multi-tenant deployments.
-function safeStringEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a, 'utf8')
-  const bBuf = Buffer.from(b, 'utf8')
-  if (aBuf.length !== bBuf.length) {
-    // Do a same-length dummy comparison to keep timing uniform.
-    timingSafeEqual(aBuf, aBuf)
-    return false
-  }
-  return timingSafeEqual(aBuf, bBuf)
-}
+import { timingSafeEqualStrings } from '../security/timing-safe.js'
 
 // Returns the raw Bearer token from a well-formed `Authorization: Bearer <token>`
 // header, or null for any malformed / missing input. Strict: requires exactly one
@@ -37,7 +22,7 @@ export function isAuthorized(
 ): boolean {
   if (!token) return true
   const parsed = parseBearerAuthorizationHeader(authorization)
-  return parsed !== null && safeStringEqual(parsed, token)
+  return parsed !== null && timingSafeEqualStrings(parsed, token)
 }
 
 // Local-daemon mode requires the shared bearer token on every /api/* request,

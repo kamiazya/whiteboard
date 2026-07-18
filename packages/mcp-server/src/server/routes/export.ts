@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { join, dirname } from 'node:path'
 import { writeFile, mkdir } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
@@ -15,6 +16,13 @@ import { canvasExists } from '../store/canvas-store.js'
 import { sendExportRequest, getClientCount } from './ws.js'
 import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
 import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
+
+// The body is a small JSON options object (padding/scale/frameId/theme/
+// outputPath), never canvas content — the PNG is rendered from the browser
+// (WS round-trip) or headless from the persisted doc, not from a
+// client-supplied payload. 1 MiB is a generous ceiling for that shape while
+// still bounding an adversarial request.
+const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 
 // requestId -> { resolve, reject }
 const pendingExports = new Map<
@@ -37,122 +45,136 @@ export function createExportRouter(options: CreateExportRouterOptions = {}) {
   const app = new Hono()
 
   // POST /api/canvas/:workspaceId/:slug/export
-  app.post('/api/canvas/:workspaceId/:slug/export', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-
-    // The body is optional. Forward { padding?, scale?, minFontPx?, frameId? }
-    // to the browser. Empty body is fine; malformed JSON or schema-invalid
-    // payloads are rejected with 400 instead of being silently dropped.
-    const rawText = await c.req.text()
-    let body: z.infer<typeof exportRequestSchema> = {}
-    if (rawText.length > 0) {
-      let json: unknown
+  app.post(
+    '/api/canvas/:workspaceId/:slug/export',
+    bodyLimit({
+      maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,
+      onError: (c) =>
+        c.json(
+          {
+            error: 'payload_too_large',
+            message: `Request body exceeds ${EXPORT_OPTIONS_BODY_LIMIT_BYTES} bytes limit.`,
+          },
+          413,
+        ),
+    }),
+    async (c) => {
+      const { workspaceId, slug } = c.req.param()
       try {
-        json = JSON.parse(rawText)
-      } catch {
-        const errBody: ExportErrorBody = { error: 'invalid_request', message: 'malformed JSON' }
-        return c.json(errBody, 400)
-      }
-      const parsed = exportRequestSchema.safeParse(json)
-      if (!parsed.success) {
-        const errBody: ExportErrorBody = {
-          error: 'invalid_request',
-          message: 'invalid export options',
-        }
-        return c.json(errBody, 400)
-      }
-      body = parsed.data
-    }
-    const options: Pick<typeof body, 'padding' | 'scale' | 'minFontPx' | 'frameId' | 'theme'> = {}
-    if (body.padding !== undefined) options.padding = body.padding
-    if (body.scale !== undefined) options.scale = body.scale
-    if (body.minFontPx !== undefined) options.minFontPx = body.minFontPx
-    if (body.frameId !== undefined) options.frameId = body.frameId
-    if (body.theme !== undefined) options.theme = body.theme
-    const hasOptions = Object.keys(options).length > 0
-
-    // Validate outputPath up front, before contacting the browser. Reject
-    // relative paths and pre-existing files (unless overwrite=true) so the
-    // caller does not waste a browser round-trip on a write that will fail.
-    let outputPath: string | undefined
-    if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
-      try {
-        await validateOutputPath(
-          body.outputPath,
-          body.overwrite === true,
-          join(getDataDir(), workspaceId, 'exports'),
-        )
+        validateWorkspaceId(workspaceId)
+        validateSlug(slug)
       } catch (err) {
-        if (err instanceof OutputPathError) {
-          const { status, body: errBody } = toCanvasOutputPathErrorBody(err, workspaceId)
-          return c.json(errBody as ExportErrorBody, status)
-        }
+        const body = validationErrorBody(err)
+        if (body) return c.json(body, 400)
         throw err
       }
-      outputPath = body.outputPath
-    }
 
-    // Two PNG production paths share the same input validation and the same
-    // disk-write step; they only differ in where the bytes come from.
-    //   • browser path:  send a request over WS and wait for a base64 reply
-    //   • headless path: render directly from the LoroDoc using @resvg
-    // The browser path is preferred when a client is connected because it
-    // matches what the user is currently looking at (zoom, selection, etc.).
-    // The headless path operates directly on the LoroDoc and does NOT verify
-    // that the canvas actually exists — getDoc / loadCanvas return an empty
-    // doc on cache miss, so a typoed slug would otherwise emit a blank PNG.
-    // Reject up front with 404 so callers learn about the typo instead of
-    // shipping the silently-empty file.
-    const useHeadless = getClientCount(workspaceId, slug) === 0
-    if (useHeadless && !(await canvasExists(workspaceId, slug))) {
-      const errBody: ExportErrorBody = {
-        error: 'canvas_not_found',
-        message: `Canvas not found: ${workspaceId}/${slug}`,
-      }
-      return c.json(errBody, 404)
-    }
-
-    let pngBuffer: Buffer
-    try {
-      pngBuffer = await (useHeadless
-        ? renderHeadless(workspaceId, slug, body)
-        : renderViaBrowser(workspaceId, slug, options, hasOptions, timeoutMs))
-    } catch (err) {
-      // Browser path failure where the WS clients have all disconnected
-      // since the count check is recoverable: the headless path can
-      // still produce a PNG. Re-sample the count and only fall back if
-      // the canvas exists, so a typo still surfaces as canvas_not_found
-      // instead of silently rendering blank bytes.
-      if (
-        !useHeadless &&
-        getClientCount(workspaceId, slug) === 0 &&
-        (await canvasExists(workspaceId, slug))
-      ) {
+      // The body is optional. Forward { padding?, scale?, minFontPx?, frameId? }
+      // to the browser. Empty body is fine; malformed JSON or schema-invalid
+      // payloads are rejected with 400 instead of being silently dropped.
+      const rawText = await c.req.text()
+      let body: z.infer<typeof exportRequestSchema> = {}
+      if (rawText.length > 0) {
+        let json: unknown
         try {
-          pngBuffer = await renderHeadless(workspaceId, slug, body)
-        } catch (headlessErr) {
-          return c.json(toErrorBody(headlessErr, timeoutMs), errorStatus(headlessErr))
+          json = JSON.parse(rawText)
+        } catch {
+          const errBody: ExportErrorBody = { error: 'invalid_request', message: 'malformed JSON' }
+          return c.json(errBody, 400)
         }
-      } else {
-        return c.json(toErrorBody(err, timeoutMs), errorStatus(err))
+        const parsed = exportRequestSchema.safeParse(json)
+        if (!parsed.success) {
+          const errBody: ExportErrorBody = {
+            error: 'invalid_request',
+            message: 'invalid export options',
+          }
+          return c.json(errBody, 400)
+        }
+        body = parsed.data
       }
-    }
+      const options: Pick<typeof body, 'padding' | 'scale' | 'minFontPx' | 'frameId' | 'theme'> = {}
+      if (body.padding !== undefined) options.padding = body.padding
+      if (body.scale !== undefined) options.scale = body.scale
+      if (body.minFontPx !== undefined) options.minFontPx = body.minFontPx
+      if (body.frameId !== undefined) options.frameId = body.frameId
+      if (body.theme !== undefined) options.theme = body.theme
+      const hasOptions = Object.keys(options).length > 0
 
-    const filePath = outputPath ?? defaultExportPath(workspaceId, slug)
-    // Slug may contain "/" or outputPath may point into a missing directory.
-    await mkdir(dirname(filePath), { recursive: true })
-    await writeFile(filePath, pngBuffer)
-    const response: ExportResponse = { filePath }
-    return c.json(response)
-  })
+      // Validate outputPath up front, before contacting the browser. Reject
+      // relative paths and pre-existing files (unless overwrite=true) so the
+      // caller does not waste a browser round-trip on a write that will fail.
+      let outputPath: string | undefined
+      if (typeof body.outputPath === 'string' && body.outputPath.length > 0) {
+        try {
+          await validateOutputPath(
+            body.outputPath,
+            body.overwrite === true,
+            join(getDataDir(), workspaceId, 'exports'),
+          )
+        } catch (err) {
+          if (err instanceof OutputPathError) {
+            const { status, body: errBody } = toCanvasOutputPathErrorBody(err, workspaceId)
+            return c.json(errBody as ExportErrorBody, status)
+          }
+          throw err
+        }
+        outputPath = body.outputPath
+      }
+
+      // Two PNG production paths share the same input validation and the same
+      // disk-write step; they only differ in where the bytes come from.
+      //   • browser path:  send a request over WS and wait for a base64 reply
+      //   • headless path: render directly from the LoroDoc using @resvg
+      // The browser path is preferred when a client is connected because it
+      // matches what the user is currently looking at (zoom, selection, etc.).
+      // The headless path operates directly on the LoroDoc and does NOT verify
+      // that the canvas actually exists — getDoc / loadCanvas return an empty
+      // doc on cache miss, so a typoed slug would otherwise emit a blank PNG.
+      // Reject up front with 404 so callers learn about the typo instead of
+      // shipping the silently-empty file.
+      const useHeadless = getClientCount(workspaceId, slug) === 0
+      if (useHeadless && !(await canvasExists(workspaceId, slug))) {
+        const errBody: ExportErrorBody = {
+          error: 'canvas_not_found',
+          message: `Canvas not found: ${workspaceId}/${slug}`,
+        }
+        return c.json(errBody, 404)
+      }
+
+      let pngBuffer: Buffer
+      try {
+        pngBuffer = await (useHeadless
+          ? renderHeadless(workspaceId, slug, body)
+          : renderViaBrowser(workspaceId, slug, options, hasOptions, timeoutMs))
+      } catch (err) {
+        // Browser path failure where the WS clients have all disconnected
+        // since the count check is recoverable: the headless path can
+        // still produce a PNG. Re-sample the count and only fall back if
+        // the canvas exists, so a typo still surfaces as canvas_not_found
+        // instead of silently rendering blank bytes.
+        if (
+          !useHeadless &&
+          getClientCount(workspaceId, slug) === 0 &&
+          (await canvasExists(workspaceId, slug))
+        ) {
+          try {
+            pngBuffer = await renderHeadless(workspaceId, slug, body)
+          } catch (headlessErr) {
+            return c.json(toErrorBody(headlessErr, timeoutMs), errorStatus(headlessErr))
+          }
+        } else {
+          return c.json(toErrorBody(err, timeoutMs), errorStatus(err))
+        }
+      }
+
+      const filePath = outputPath ?? defaultExportPath(workspaceId, slug)
+      // Slug may contain "/" or outputPath may point into a missing directory.
+      await mkdir(dirname(filePath), { recursive: true })
+      await writeFile(filePath, pngBuffer)
+      const response: ExportResponse = { filePath }
+      return c.json(response)
+    },
+  )
 
   return app
 

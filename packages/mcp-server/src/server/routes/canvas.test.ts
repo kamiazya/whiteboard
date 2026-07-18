@@ -460,6 +460,19 @@ describe('POST /api/canvas/:workspaceId/:slug/update', () => {
     expect(elements[0].type).toBe('ellipse')
   })
 
+  it('rejects an oversized update body with 413 payload_too_large', async () => {
+    const app = createCanvasRouter()
+    const oversized = new Uint8Array(16 * 1024 * 1024 + 1)
+    const res = await app.request('/api/canvas/session1/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: oversized,
+    })
+    expect(res.status).toBe(413)
+    const body: unknown = await res.json()
+    expect(body).toMatchObject({ error: 'payload_too_large' })
+  })
+
   it('evicts the cached doc when saveCanvas fails, so a subsequent read does not serve the unpersisted update', async () => {
     const app = createCanvasRouter()
 
@@ -1290,6 +1303,30 @@ describe('versions API', () => {
     expect(Array.from(bytes)).toEqual(Array.from(png))
   })
 
+  it('rejects an oversized thumbnail body with 413 payload_too_large', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const saveBody = (await saveRes.json()) as { version: { id: string } }
+    const id = saveBody.version.id
+
+    const oversized = new Uint8Array(16 * 1024 * 1024 + 1)
+    const putRes = await app.request(
+      `/api/workspaces/session1/canvases/canvas-a/versions/${id}/thumbnail`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        body: oversized,
+      },
+    )
+    expect(putRes.status).toBe(413)
+    const body: unknown = await putRes.json()
+    expect(body).toMatchObject({ error: 'payload_too_large' })
+  })
+
   it('rejects non-PNG magic bytes such as JPEG with 400 on PUT /thumbnail', async () => {
     const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
     const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
@@ -1432,6 +1469,19 @@ describe('versions API', () => {
     const body = (await res.json()) as { filePath: string; elementCount: number }
     expect(body.filePath).toMatch(/\.excalidraw$/)
     expect(body.elementCount).toBe(1)
+  })
+
+  it('export-json rejects an oversized request body with 413 payload_too_large', async () => {
+    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
+    const oversized = 'x'.repeat(1024 * 1024 + 1)
+    const res = await app.request('/api/canvas/session1/canvas-a/export-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: oversized,
+    })
+    expect(res.status).toBe(413)
+    const body: unknown = await res.json()
+    expect(body).toMatchObject({ error: 'payload_too_large' })
   })
 
   it('export-json writes to an explicit absolute outputPath when provided', async () => {

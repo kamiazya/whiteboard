@@ -149,6 +149,7 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     audience: [...parsed.config.jwtAudience],
     clockSkewSeconds: parsed.config.jwtClockSkewSeconds,
     scopeClaim: parsed.config.jwtScopeClaim,
+    allowUntypedAccessTokens: parsed.config.jwtAllowUntypedAccessTokens,
     keyResolver,
   })
   const authStrategy = createOAuthResourceServerAuthStrategy({ validator })

@@ -31,6 +31,7 @@ export const ENV_KEYS = {
   TRUSTED_PROXY: 'WHITEBOARD_SERVER_TRUSTED_PROXY',
   JWT_CLOCK_SKEW_SECONDS: 'WHITEBOARD_SERVER_JWT_CLOCK_SKEW_SECONDS',
   JWT_SCOPE_CLAIM: 'WHITEBOARD_SERVER_JWT_SCOPE_CLAIM',
+  JWT_ALLOW_UNTYPED_ACCESS_TOKENS: 'WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS',
   DATA_DIR: 'WHITEBOARD_DATA_DIR',
 } as const
 
@@ -49,6 +50,14 @@ export interface ServerModeEnvConfig {
   jwtClockSkewSeconds: number
   /** Which JWT claim holds scopes. Default: 'scope'. */
   jwtScopeClaim: 'scope' | 'scp'
+  /**
+   * Accept access tokens with no RFC 9068 `typ: at+jwt` header and no
+   * `token_use: 'access'` claim. Default: false — a false default risks
+   * an ID token (issued with the same audience) being accepted as an
+   * access token; only opt in when the configured IdP is known to omit
+   * both discriminators.
+   */
+  jwtAllowUntypedAccessTokens: boolean
   /** Bind host. Default: '0.0.0.0'. */
   host: string
   /** Bind port. 1–65535. Default: 3099. */
@@ -76,6 +85,7 @@ export type ServerModeEnvConfigFailureCode =
   | 'server_mode_env.trusted_proxy_invalid'
   | 'server_mode_env.jwt_clock_skew_invalid'
   | 'server_mode_env.jwt_scope_claim_invalid'
+  | 'server_mode_env.jwt_allow_untyped_access_tokens_invalid'
 
 export type ServerModeEnvConfigResult =
   | { readonly ok: true; readonly config: ServerModeEnvConfig }
@@ -225,6 +235,21 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
     jwtScopeClaim = v
   }
 
+  // --- Optional: jwtAllowUntypedAccessTokens ---
+
+  const allowUntypedRaw = env[ENV_KEYS.JWT_ALLOW_UNTYPED_ACCESS_TOKENS]
+  let jwtAllowUntypedAccessTokens = false
+  if (allowUntypedRaw !== undefined && allowUntypedRaw.trim() !== '') {
+    const v = allowUntypedRaw.trim()
+    if (v !== 'true' && v !== 'false') {
+      return fail(
+        'server_mode_env.jwt_allow_untyped_access_tokens_invalid',
+        ENV_KEYS.JWT_ALLOW_UNTYPED_ACCESS_TOKENS,
+      )
+    }
+    jwtAllowUntypedAccessTokens = v === 'true'
+  }
+
   // --- Optional: host ---
 
   const host = (env[ENV_KEYS.HOST] ?? '0.0.0.0').trim() || '0.0.0.0'
@@ -245,6 +270,7 @@ export function parseServerModeEnvConfig(env: NodeJS.ProcessEnv): ServerModeEnvC
       jwksUri,
       jwtClockSkewSeconds,
       jwtScopeClaim,
+      jwtAllowUntypedAccessTokens,
       host,
       port,
       trustedProxy,

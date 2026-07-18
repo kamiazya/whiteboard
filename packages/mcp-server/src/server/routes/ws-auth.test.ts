@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   TICKET_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
 } from '../../shared/ws-protocol.js'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
+import * as timingSafe from '../security/timing-safe.js'
 import { createWsTicketStore } from '../security/ws-ticket-store.js'
 import { authorizeWsUpgrade } from './ws-auth.js'
 
@@ -88,6 +89,38 @@ describe('authorizeWsUpgrade', () => {
       protocol: WHITEBOARD_WS_PROTOCOL,
       scopes: ALL_AUTH_SCOPES,
     })
+  })
+
+  it('compares the offered daemon token through the shared timing-safe helper, not a plain !==', () => {
+    const spy = vi.spyOn(timingSafe, 'timingSafeEqualStrings')
+    try {
+      authorizeWsUpgrade(
+        {
+          host: 'localhost:3099',
+          'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
+        },
+        'secret',
+      )
+      expect(spy).toHaveBeenCalledWith(
+        `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
+        `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}secret`,
+      )
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('rejects with 401 for a same-length but wrong offered token', () => {
+    const decision = authorizeWsUpgrade(
+      {
+        host: 'localhost:3099',
+        // Same length as 'secret' — must still be rejected, not accepted by a
+        // partial/prefix comparison bug.
+        'sec-websocket-protocol': `${WHITEBOARD_WS_PROTOCOL}, ${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}wrongy`,
+      },
+      'secret',
+    )
+    expect(decision).toEqual({ accept: false, statusCode: 401 })
   })
 
   it('rejects with 403 for a non-loopback Origin even with a valid token (Origin check precedes token check)', () => {

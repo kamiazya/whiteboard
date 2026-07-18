@@ -34,6 +34,8 @@
 //   ERR_JWT_MALFORMED (and other JOSE err)  → malformed
 //   keyResolver threw                      → validator_unavailable
 //     (error message discarded — may contain IdP URLs, stack frames)
+//   missing typ:at+jwt / token_use:access  → not_access_token
+//     (unless allowUntypedAccessTokens: true — see below)
 //
 // Non-leak guarantee: no failure result field ever contains the raw JWT
 // token, issuer URL, audience value, key IDs, or thrown error messages.
@@ -80,6 +82,17 @@ export type JwtKeyResolver = (
   protectedHeader: JWTHeaderParameters,
 ) => Promise<CryptoKey | Uint8Array>
 
+// RFC 9068 §2.1 requires the JWT access token `typ` header to be `at+jwt`
+// (or the `application/at+jwt` media-type form). Some IdPs instead mark
+// access tokens with a `token_use: 'access'` payload claim (AWS Cognito
+// convention). Either discriminator is accepted; comparison is
+// case-insensitive per JOSE `typ` header conventions (RFC 7515 §4.1.9).
+const ACCESS_TOKEN_TYP_VALUES: ReadonlySet<string> = new Set(['at+jwt', 'application/at+jwt'])
+
+function isAccessTokenTyped(typ: unknown): boolean {
+  return typeof typ === 'string' && ACCESS_TOKEN_TYP_VALUES.has(typ.toLowerCase())
+}
+
 export interface OAuthJwtValidatorOptions {
   issuer: string
   audience: string | readonly string[]
@@ -89,6 +102,15 @@ export interface OAuthJwtValidatorOptions {
   allowedAlgorithms?: readonly string[]
   /** Which claim holds the granted scopes. Default: 'scope'. */
   scopeClaim?: 'scope' | 'scp'
+  /**
+   * Skip the access-token-vs-ID-token discrimination check (RFC 9068 `typ`
+   * header / `token_use` claim). Default: false — an IdP that issues both
+   * access tokens and ID tokens with the same `audience` would otherwise let
+   * a stolen/leaked ID token authenticate to this resource server as if it
+   * were an access token. Only set true when the configured IdP is known to
+   * omit both discriminators from its access tokens.
+   */
+  allowUntypedAccessTokens?: boolean
   keyResolver: JwtKeyResolver
 }
 
@@ -101,6 +123,7 @@ export function createOAuthJwtValidator(
     clockSkewSeconds = 60,
     allowedAlgorithms = ['RS256', 'ES256'],
     scopeClaim = 'scope',
+    allowUntypedAccessTokens = false,
     keyResolver,
   } = options
 
@@ -142,6 +165,15 @@ export function createOAuthJwtValidator(
           requiredClaims: ['exp'],
         })
         payload = verified.payload as Record<string, unknown>
+
+        if (!allowUntypedAccessTokens) {
+          const tokenUse = payload.token_use
+          const hasAccessTokenDiscriminator =
+            isAccessTokenTyped(verified.protectedHeader.typ) || tokenUse === 'access'
+          if (!hasAccessTokenDiscriminator) {
+            return { ok: false, reason: 'not_access_token' }
+          }
+        }
       } catch (err) {
         if (resolverFailed) {
           return { ok: false, reason: 'validator_unavailable' }
