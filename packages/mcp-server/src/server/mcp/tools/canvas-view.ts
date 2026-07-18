@@ -3,18 +3,30 @@ import { z } from 'zod'
 import { resolveParentedElements } from '../../../shared/resolve-parented-elements.js'
 import { loroRawElementSchema, validateLoroRawElements } from '../../../shared/loro-raw-element.js'
 import { getLogger } from '../../log.js'
+import { loadCanvasFiles } from '../../export/load-canvas-files.js'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
 
 // Scene shape mirrors packages/canvas-viewer's viewerSceneSchema
 // ({elements, appState?, files?}, .strict()) so the widget's
 // parseViewerScene accepts this structuredContent verbatim — no adapter
-// layer between this tool and the widget. appState/files are omitted here
-// (undefined, not present) because the daemon's Loro document only
-// persists the elements list; the widget falls back to its own defaults.
+// layer between this tool and the widget. appState is omitted (undefined,
+// not present) because the daemon's Loro document only persists the
+// elements list; the widget falls back to its own defaults. `files` IS
+// populated below — an image element only carries a `fileId` (the binary
+// lives on disk, see load_image), so without it the widget would render
+// broken/unresolved images for any canvas containing one.
+const canvasViewFileSchema = z.object({
+  mimeType: z.string(),
+  id: z.string(),
+  dataURL: z.string(),
+  created: z.number(),
+})
+
 const canvasViewSceneSchema = z
   .object({
     elements: z.array(loroRawElementSchema),
+    files: z.record(z.string(), canvasViewFileSchema),
   })
   .strict()
 
@@ -62,7 +74,20 @@ export function canvasViewTool() {
       })
       const resolved = resolveParentedElements(validated)
       const elements = resolved.filter((el) => el.isDeleted !== true)
-      return { canvasId: args.canvasId, scene: { elements } }
+
+      // Mirror headless-export.ts's buildExportScene: image elements only
+      // carry a fileId, so the referenced binaries must be loaded and
+      // embedded as dataURLs — the sandboxed widget has no daemon access
+      // to fetch them itself.
+      const referencedFileIds = new Set<string>()
+      for (const el of elements as Array<Record<string, unknown>>) {
+        if (el.type !== 'image') continue
+        const fileId = el.fileId
+        if (typeof fileId === 'string' && fileId.length > 0) referencedFileIds.add(fileId)
+      }
+      const files = await loadCanvasFiles(workspaceId, referencedFileIds)
+
+      return { canvasId: args.canvasId, scene: { elements, files } }
     },
   }
 }
