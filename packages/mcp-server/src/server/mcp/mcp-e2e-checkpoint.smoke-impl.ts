@@ -428,6 +428,103 @@ export async function runE2eCheckpointSmoke({
     )
     console.log('[e2e] viewport_set → no_client OK (route wiring verified)')
 
+    // A frame whose bounding box is disjoint from the rectangle drawn above
+    // (x:10 y:20 w:80 h:40), so a frameId-scoped export can be distinguished
+    // from a full-canvas export by the rectangle's stroke color (#1971c2)
+    // being absent from the scoped output.
+    const emptyFrame = await callTool('create_frame', {
+      canvasId: created.id,
+      x: 500,
+      y: 500,
+      width: 100,
+      height: 100,
+      name: 'e2e-empty-frame',
+    })
+    if (!emptyFrame.elementId) {
+      throw new Error(`create_frame returned unexpected shape: ${JSON.stringify(emptyFrame)}`)
+    }
+    console.log(`[e2e] create_frame → ${emptyFrame.elementId}`)
+
+    const readSvgMarkup = async (result: Record<string, unknown>): Promise<string> =>
+      typeof result.svgMarkup === 'string'
+        ? result.svgMarkup
+        : await readFile(result.filePath as string, 'utf-8')
+
+    // export_canvas(format:'svg') delegates in-process to exportSvgTool().execute(),
+    // bypassing the registered export_svg tool's own registerToolWithAnnotations
+    // binding and structuredContent validation entirely. Call export_svg directly
+    // too so a drift confined to that standalone registration wrapper (as opposed
+    // to the shared execute() body) is still caught here. Exercise every optional
+    // field the wrapper destructures and forwards
+    // (packages/mcp-server/src/server/mcp/tool-registration.ts) and assert an
+    // effect specific to each one, so dropping any single field from that
+    // forwarding list turns this red rather than staying green:
+    //  - outputPath: returned filePath matches the requested path
+    //  - theme: rendered background switches to the dark default (#121212)
+    //  - frameId: scoping to the empty frame excludes the rectangle (#1971c2)
+    const svgOutputPath = join(tmpDataDir, workspaceId, 'exports', 'e2e-direct.svg')
+    const svgDirect = await callTool('export_svg', {
+      canvasId: created.id,
+      outputPath: svgOutputPath,
+      theme: 'dark',
+      frameId: emptyFrame.elementId,
+      padding: 5,
+    })
+    if (svgDirect.filePath !== svgOutputPath) {
+      throw new Error(
+        `export_svg ignored outputPath: expected ${svgOutputPath}, got ${JSON.stringify(svgDirect)}`,
+      )
+    }
+    const svgDirectMarkup = await readSvgMarkup(svgDirect)
+    if (!svgDirectMarkup.trim().startsWith('<svg')) {
+      throw new Error('export_svg did not produce real SVG markup')
+    }
+    // Hex colors are compared case-insensitively — serializers are free to
+    // emit uppercase hex.
+    if (!svgDirectMarkup.toLowerCase().includes('#121212')) {
+      throw new Error(`export_svg ignored theme: expected dark background in ${svgDirectMarkup}`)
+    }
+    if (svgDirectMarkup.toLowerCase().includes('#1971c2')) {
+      throw new Error(
+        'export_svg ignored frameId: scoping to the empty frame should exclude the rectangle',
+      )
+    }
+    console.log('[e2e] export_svg (direct, outputPath+theme+frameId forwarded) OK')
+
+    // padding: re-export the same frame-scoped canvas with a much larger
+    // padding and assert the viewBox actually widened, so dropping `padding`
+    // from the forwarding list (which would silently fall back to the
+    // default) also turns this red.
+    const svgWidePadding = await callTool('export_svg', {
+      canvasId: created.id,
+      frameId: emptyFrame.elementId,
+      padding: 300,
+    })
+    const svgWidePaddingMarkup = await readSvgMarkup(svgWidePadding)
+    const extractViewBoxWidth = (markup: string): number => {
+      const match = markup.match(/viewBox=["'][-\d.]+\s+[-\d.]+\s+([\d.]+)\s+[-\d.]+["']/)
+      if (!match) throw new Error(`export_svg output missing viewBox: ${markup.slice(0, 200)}`)
+      return Number.parseFloat(match[1])
+    }
+    if (extractViewBoxWidth(svgWidePaddingMarkup) <= extractViewBoxWidth(svgDirectMarkup)) {
+      throw new Error('export_svg ignored padding: a wider padding did not widen the viewBox')
+    }
+    console.log('[e2e] export_svg padding forwarded (viewBox widened) OK')
+
+    // overwrite: without it, re-exporting to the same outputPath must be
+    // rejected; with it, the same call must succeed.
+    await expectRejected(
+      callTool('export_svg', { canvasId: created.id, outputPath: svgOutputPath }),
+      /already exists/,
+      'export_svg duplicate outputPath without overwrite',
+    )
+    await callTool('export_svg', {
+      canvasId: created.id,
+      outputPath: svgOutputPath,
+      overwrite: true,
+    })
+    console.log('[e2e] export_svg overwrite forwarded OK')
+
     // export_canvas unifies png/svg/json behind one tool — exercise all three
     // formats so structuredContent validation against each format's branch of
     // exportCanvasOutputSchema runs at least once. PNG also falls back to
