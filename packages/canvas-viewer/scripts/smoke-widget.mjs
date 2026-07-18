@@ -243,9 +243,56 @@ async function main() {
       fail(`expected zero network requests after the JP render, saw: ${networkRequests.join(', ')}`)
     }
 
+    // srcdoc hosting: MCP Apps hosts embed this widget via a sandboxed
+    // srcdoc iframe (no allow-same-origin), where location.href is the
+    // non-URL "about:srcdoc". A widget that assumes a real document URL
+    // (e.g. `new URL('.', location.href)`) dies only under THIS hosting
+    // mode — file:// and http(s) loads cannot catch it.
+    const srcdocPage = await browser.newPage()
+    const srcdocPageErrors = []
+    srcdocPage.on('pageerror', (err) => {
+      srcdocPageErrors.push(String(err))
+    })
+    await srcdocPage.route('http://**', (route) => {
+      networkRequests.push(route.request().url())
+      return route.abort()
+    })
+    await srcdocPage.route('https://**', (route) => {
+      networkRequests.push(route.request().url())
+      return route.abort()
+    })
+    await srcdocPage.setContent('<!doctype html><body></body>')
+    await srcdocPage.evaluate((widgetHtml) => {
+      const iframe = document.createElement('iframe')
+      iframe.setAttribute('sandbox', 'allow-scripts')
+      iframe.srcdoc = widgetHtml
+      document.body.appendChild(iframe)
+    }, injectedHtml)
+    const srcdocDeadline = Date.now() + 10_000
+    let srcdocFrame
+    let srcdocCanvasCount = 0
+    while (Date.now() < srcdocDeadline) {
+      srcdocFrame = srcdocPage.frames().find((f) => f.url() === 'about:srcdoc')
+      if (srcdocFrame) {
+        srcdocCanvasCount = await srcdocFrame
+          .evaluate(() => document.querySelectorAll('canvas').length)
+          .catch(() => 0)
+        if (srcdocCanvasCount > 0) break
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    if (srcdocCanvasCount === 0) {
+      fail(
+        `widget did not render a canvas under sandboxed srcdoc hosting${srcdocPageErrors.length ? ` (page errors: ${srcdocPageErrors.join(' | ')})` : ''}`,
+      )
+    }
+    if (srcdocPageErrors.length > 0) {
+      fail(`uncaught page error(s) under srcdoc hosting: ${srcdocPageErrors.join(' | ')}`)
+    }
+
     if (process.exitCode !== 1) {
       console.log(
-        '[widget-smoke] PASS: zero network requests, canvas rendered, fonts loaded, JP fallback painted',
+        '[widget-smoke] PASS: zero network requests, canvas rendered, fonts loaded, JP fallback painted, srcdoc hosting OK',
       )
     }
   } finally {
