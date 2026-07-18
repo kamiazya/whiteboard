@@ -468,6 +468,36 @@ describe('app — server-mode composition', () => {
     })
   })
 
+  // The silent-reconnect surface (reconnect.ts) hands back the shared
+  // daemon token, which server-mode has no equivalent of — it authenticates
+  // through its own external-IdP AsyncAuthStrategy. reconnect-session is
+  // declared `public` in route-scope-registry.ts for the local-daemon walk;
+  // this pins that a server-mode app never mounts either route at all, so a
+  // registry-only regression could not accidentally make it reachable here.
+  describe('server-mode reconnect routes stay unmounted', () => {
+    it('POST /api/reconnect-credential → 404', async () => {
+      // Grant exactly the scope reconnect-credential declares in
+      // route-scope-registry.ts, same as the ws-ticket case above: this
+      // proves the 404 comes from the route never being mounted, not from
+      // the shared auth middleware rejecting an under-scoped bearer first.
+      const app = createApp(makeServerModeOptions(['runtime:admin']))
+      const res = await app.request('/api/reconnect-credential', {
+        method: 'POST',
+        headers: { authorization: BEARER, origin: 'https://example.com' },
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('POST /api/reconnect-session → 404, not reachable despite being declared public', async () => {
+      const app = createApp(makeServerModeOptions(['canvas:read']))
+      const res = await app.request('/api/reconnect-session', {
+        method: 'POST',
+        headers: { origin: 'https://example.com' },
+      })
+      expect(res.status).toBe(404)
+    })
+  })
+
   // Req 6: files scope through composed app
   describe('server-mode files scope via composed app', () => {
     it('GET /api/canvas/:wid/:slug/file/:fileId → 401 without auth', async () => {

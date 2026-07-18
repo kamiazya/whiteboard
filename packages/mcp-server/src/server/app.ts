@@ -26,6 +26,7 @@ import {
   OAUTH_AUTHZ_PATHS,
 } from './routes/oauth-authz.js'
 import { createPaletteRouter } from './routes/palette.js'
+import { createReconnectRouter } from './routes/reconnect.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
@@ -51,6 +52,10 @@ import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
 import { resolveApiRouteScope } from './security/route-scope-registry.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
+import {
+  createWebOriginTrustStore,
+  type WebOriginTrustStore,
+} from './security/web-origin-trust-store.js'
 import { createWsTicketStore, type WsTicketStore } from './security/ws-ticket-store.js'
 import {
   BranchNotFoundError,
@@ -232,6 +237,11 @@ export interface LocalDaemonAppOptions {
    *  exercising this app in isolation), which still makes the route work,
    *  just not reachable from a real WS upgrade outside this process. */
   wsTicketStore?: WsTicketStore
+  /** Backing store for the silent-reconnect surface (POST /api/reconnect-
+   *  credential, POST /api/reconnect-session). Defaults to a store rooted at
+   *  the real data dir when omitted; tests inject one rooted at a scratch
+   *  dir the same way wsTicketStore is injected above. */
+  webOriginTrustStore?: WebOriginTrustStore
 }
 
 export interface ServerModeAppOptions {
@@ -665,6 +675,23 @@ export function createApp(options: AppOptions) {
       createWsTicketRouter({
         grantStore: oauthAuthz?.store,
         ticketStore: options.wsTicketStore ?? createWsTicketStore(),
+      }),
+    )
+  }
+  // Silent-reconnect surface (see reconnect.ts + web-origin-trust-store.ts):
+  // local-daemon only. Server-mode authenticates through its own OAuth
+  // resource-server strategy and has no daemon token to hand back here.
+  // Mounted even when `token` is undefined (dev/tokenless mode) — the
+  // reconnect-session response simply carries an empty token in that case,
+  // same as every other /api/* route being unauthenticated when no token is
+  // configured at all.
+  if (options.authMode === 'local-daemon') {
+    app.route(
+      '/',
+      createReconnectRouter({
+        trustStore: options.webOriginTrustStore ?? createWebOriginTrustStore(),
+        allowedWebOrigins: options.allowedWebOrigins ?? [],
+        daemonToken: token ?? '',
       }),
     )
   }

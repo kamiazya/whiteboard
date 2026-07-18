@@ -128,6 +128,24 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['canvas:read'] }
   }
 
+  // Silent-reconnect enrollment (see reconnect.ts): mints a reconnect secret
+  // for the caller's own admitted Origin. Requires the same daemon-token
+  // auth as any other mutating route — a caller must already hold the
+  // daemon token (e.g. right after a #wb= pairing) to enroll.
+  if (path === '/api/reconnect-credential') {
+    return { kind: 'scoped', scopes: ['runtime:admin'] }
+  }
+  // The ONLY deliberately public /api/* route besides the liveness probe.
+  // Its purpose is to hand back a daemon token to a caller that no longer
+  // has one, so it cannot itself require that token. Its internal gates
+  // (reconnect.ts) are Origin admission + secret possession + non-expired
+  // trust record — see web-origin-trust-store.ts for why that combination
+  // does not weaken the daemon-token boundary the way an Origin-only check
+  // would.
+  if (path === '/api/reconnect-session') {
+    return { kind: 'public' }
+  }
+
   // No rule matched: an undeclared /api/* route. Callers must fail closed.
   return null
 }
