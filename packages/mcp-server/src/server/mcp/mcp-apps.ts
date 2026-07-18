@@ -43,7 +43,11 @@ function readWidgetHtml(): string {
       { path: WIDGET_HTML_PATH, err },
       'canvas-viewer widget HTML missing — run `pnpm build` (packages/canvas-viewer build:widget + copy-widget-into-dist.mjs) before serving ui://whiteboard/canvas-view',
     )
-    throw err
+    // The raw fs error message embeds WIDGET_HTML_PATH, the server's
+    // absolute install path — the MCP SDK surfaces this error verbatim to
+    // the calling client, so re-throw a generic message instead. The
+    // detailed path already reached the structured log above.
+    throw new Error('widget asset unavailable')
   }
   return cachedWidgetHtml
 }

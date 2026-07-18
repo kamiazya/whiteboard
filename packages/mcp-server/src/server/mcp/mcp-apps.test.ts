@@ -71,11 +71,15 @@ describe('registerMcpAppsExtension', () => {
     })
   })
 
-  it('throws and logs loudly when the widget HTML is missing', async () => {
+  it('throws a generic error (never the absolute install path) when the widget HTML is missing', async () => {
     const server = fakeServer()
     registerMcpAppsExtension(server)
     const readCallback = server.registerResource.mock.calls[0][3]
 
-    await expect(readCallback()).rejects.toThrow()
+    await expect(readCallback()).rejects.toThrow('widget asset unavailable')
+    // The MCP SDK surfaces a rejected resources/read error's message
+    // verbatim to the calling client, so the raw fs ENOENT — which embeds
+    // WIDGET_HTML_PATH — must never be the thrown error itself.
+    await expect(readCallback()).rejects.not.toThrow(WIDGET_HTML_PATH)
   })
 })
