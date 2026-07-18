@@ -40,7 +40,15 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647
 // back to the default rather than risking a mistyped env var arming a much
 // shorter (or negative) sweep interval than intended.
 function resolveIntervalMs(explicit: number | undefined): number {
-  if (typeof explicit === 'number') return Math.min(Math.max(0, explicit), MAX_TIMER_DELAY_MS)
+  // Number.isFinite (not just typeof === 'number') also rejects NaN --
+  // Math.max(0, NaN) and Math.min(NaN, MAX) both evaluate to NaN, and
+  // scheduleNext()'s `intervalMs <= 0` guard does not short-circuit on NaN
+  // (NaN <= 0 is false), so an unguarded NaN would arm setTimeout(fn, NaN),
+  // which Node coerces to a ~1ms delay -- turning an intended disable/no-op
+  // into a near-continuous full-workspace sweep.
+  if (typeof explicit === 'number' && Number.isFinite(explicit)) {
+    return Math.min(Math.max(0, explicit), MAX_TIMER_DELAY_MS)
+  }
   const raw = process.env.WHITEBOARD_FILE_GC_INTERVAL_MS
   if (typeof raw === 'string' && /^\d+$/.test(raw)) {
     const parsed = Number(raw)
@@ -69,10 +77,6 @@ async function discoverFsWorkspaces(): Promise<string[]> {
   const result: string[] = []
   for (const entry of entries) {
     const name = entry.name
-    // Canvas snapshots live under <dataDir>/blobs/, not a workspace dir —
-    // never treat it as one.
-    if (name === 'blobs') continue
-
     const entryPath = join(dataDir, name)
 
     // lstat BEFORE any further inspection: a symlinked top-level entry could
@@ -113,6 +117,13 @@ async function discoverFsWorkspaces(): Promise<string[]> {
       continue
     }
 
+    // 'blobs' is a valid workspace id (validateWorkspaceId permits it) and
+    // canvas-store.ts also uses <dataDir>/blobs as the snapshot root
+    // (<dataDir>/blobs/<workspaceId>/canvas/...), so this directory serves
+    // double duty. The snapshot layout has no files/ child of its own, so
+    // this containment check alone already tells the two apart: only an
+    // upload-only workspace literally named 'blobs' — which the upload
+    // route would have written to <dataDir>/blobs/files — passes here.
     try {
       const filesStat = await lstat(join(entryPath, 'files'))
       if (!filesStat.isDirectory()) continue

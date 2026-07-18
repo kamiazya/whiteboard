@@ -436,6 +436,27 @@ describe('createFileGcSweeper env parsing', () => {
     await sweeper.stop()
   })
 
+  it('falls back to the 24h default when an explicit intervalMs is NaN', async () => {
+    // typeof NaN === 'number', so a naive `typeof explicit === 'number'`
+    // guard would let it through: Math.max(0, NaN) / Math.min(NaN, MAX) both
+    // evaluate to NaN, and scheduleNext()'s `intervalMs <= 0` check does not
+    // short-circuit on NaN, arming setTimeout(fn, NaN) -- which Node
+    // coerces to a ~1ms delay instead of the intended disable/no-op.
+    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+    const sweeper = createFileGcSweeper({
+      intervalMs: Number.NaN,
+      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      discoverFsWorkspaces: async () => [],
+      purge,
+    })
+    sweeper.start()
+    await advanceTimersAndFlush(24 * 60 * 60 * 1000 - 1)
+    expect(purge).not.toHaveBeenCalled()
+    await advanceTimersAndFlush(1)
+    expect(purge).toHaveBeenCalledTimes(1)
+    await sweeper.stop()
+  })
+
   it("clamps an env-provided interval above setTimeout()'s max delay to that max", async () => {
     const MAX_TIMER_DELAY_MS = 2_147_483_647
     process.env[ENV_KEY] = String(3_000_000_000)
@@ -651,8 +672,11 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     }
   })
 
-  it('skips the literal blobs dir', async () => {
-    const blobsDir = join(tempDir, 'blobs')
+  it('skips the blobs dir when it only holds canvas snapshots (no files/ child)', async () => {
+    // canvas-store.ts's snapshot layout is <dataDir>/blobs/<workspaceId>/canvas/...
+    // -- no files/ child of its own -- so the shared discovery containment
+    // check already excludes it without a name-based special case.
+    const blobsDir = join(tempDir, 'blobs', 'some_other_ws', 'canvas')
     await mkdir(blobsDir, { recursive: true })
     const listWorkspaces = vi.fn(async () => [])
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
@@ -660,6 +684,28 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     await sweeper.tick()
     await sweeper.stop()
     expect(purge).not.toHaveBeenCalledWith('blobs')
+  })
+
+  it('sweeps an upload-only workspace literally named "blobs" that has a files/ dir', async () => {
+    // 'blobs' is a valid workspace id and the upload route can write to
+    // <dataDir>/blobs/files before any canvas ever creates a DB row for it
+    // -- this is exactly the upload-only-workspace case the sweeper exists
+    // to cover, and it must not be excluded just because the name is
+    // 'blobs'.
+    const filesDir = join(tempDir, 'blobs', 'files')
+    await mkdir(filesDir, { recursive: true })
+    await writeFile(join(filesDir, 'orphan.png'), Buffer.alloc(10, 6))
+    const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    await import('node:fs/promises').then((m) => m.utimes(join(filesDir, 'orphan.png'), past, past))
+
+    const sweeper = createFileGcSweeper({
+      listWorkspaces: async () => [],
+    })
+    await sweeper.tick()
+    await sweeper.stop()
+
+    const remaining = await import('node:fs/promises').then((m) => m.readdir(filesDir))
+    expect(remaining).toEqual([])
   })
 
   it('skips a DB-listed workspace whose top-level dir is safe but files/ is a symlink escaping the data dir', async () => {
