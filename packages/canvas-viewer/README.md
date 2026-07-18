@@ -12,6 +12,12 @@ published to npm.
   (`<script data-whiteboard-scene>` or `window.__WHITEBOARD_VIEWER_SCENE__`).
 - `parseViewerScene` (from `./scene`) — validates a `.excalidraw` JSON
   document or a structuredContent-shaped scene payload.
+- `serializeSceneForScriptTag` (from `./widget/embed-scene`) — the required
+  serializer for a downstream consumer injecting scene JSON into the widget
+  build's embedded-scene `<script>` slot (see "Widget build" below). Plain
+  `JSON.stringify` is unsafe there: HTML terminates a `<script>` element at
+  the literal `</script` byte sequence even inside a JSON string, so scene
+  text containing that sequence could break out of the tag.
 
 ## Widget build
 
@@ -20,7 +26,9 @@ self-contained file with all JS, CSS, and the fonts it needs inlined as
 base64 data URIs. It mounts via `mountCanvasViewer`, sourcing its scene
 exclusively from the embedded-scene slot — a downstream consumer (HTML
 export, MCP Apps `ui://` resource) injects the real scene JSON into that
-placeholder `<script>` tag without touching the rest of the file.
+placeholder `<script>` tag without touching the rest of the file, using
+`serializeSceneForScriptTag` rather than raw `JSON.stringify` to avoid a
+`</script>` breakout.
 
 `pnpm smoke:widget` is the runtime gate: it loads the built HTML over
 `file://` with full network interception and asserts zero HTTP(S) requests,

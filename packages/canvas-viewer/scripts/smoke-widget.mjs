@@ -15,6 +15,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { findExternalResourceUrls } from '../src/widget/check-html.ts'
+import { serializeSceneForScriptTag } from '../src/widget/embed-scene.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(__dirname, '..')
@@ -86,7 +87,8 @@ async function main() {
 
   const injectedHtml = html.replace(
     /(<script type="application\/json" data-whiteboard-scene>)(.*?)(<\/script>)/s,
-    (_match, open, _placeholder, close) => `${open}${JSON.stringify(SAMPLE_SCENE)}${close}`,
+    (_match, open, _placeholder, close) =>
+      `${open}${serializeSceneForScriptTag(SAMPLE_SCENE)}${close}`,
   )
   if (injectedHtml === html) {
     fail('could not find the embedded-scene <script> slot to inject the sample scene into')
