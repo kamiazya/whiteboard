@@ -1,7 +1,11 @@
 import { playwright } from '@vitest/browser-playwright'
 import react from '@vitejs/plugin-react'
 import { defineProject } from 'vitest/config'
-import { resolveBrowserLaunchOptions } from '@kamiazya/whiteboard-mcp/test-utils'
+// Import the source file directly rather than `@kamiazya/whiteboard-mcp/test-utils`:
+// that package export resolves to the built `dist/` output, which is gitignored
+// and not produced by a plain `pnpm install` on a clean checkout (CI's browser
+// job never builds packages/mcp-server before running Vitest).
+import { resolveBrowserLaunchOptions } from '../mcp-server/src/server/browser-test-config.js'
 
 export default defineProject({
   plugins: [react()],
