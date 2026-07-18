@@ -96,6 +96,14 @@ interface InitTracingOptions {
   // attribute so the same name works for both the HTTP daemon and stdio
   // MCP entrypoint without collapsing into a single trace stream.
   role?: string
+  // Whether initTracing() should install its own SIGTERM/SIGINT listeners
+  // that flush spans directly via sdk.shutdown(). Defaults to true (the
+  // HTTP daemon has no other shutdown-signal coordinator). The stdio MCP
+  // entrypoint sets this to false because installStdioLifecycle() already
+  // owns SIGTERM/SIGINT there and routes them through shutdownTracing() —
+  // leaving both listeners registered would call sdk.shutdown() twice
+  // concurrently on a real signal.
+  installSignalHandlers?: boolean
 }
 
 interface TracingHandle {
@@ -122,6 +130,7 @@ export async function initTracing(options: InitTracingOptions = {}): Promise<Tra
   if (!tracingEnabled()) return null
 
   const role = options.role ?? process.env.WHITEBOARD_OTEL_ROLE ?? 'unknown'
+  const installSignalHandlers = options.installSignalHandlers ?? true
   try {
     const [
       { NodeSDK, tracing: sdkTracing },
@@ -173,9 +182,14 @@ export async function initTracing(options: InitTracingOptions = {}): Promise<Tra
     const onSIGTERM = () => void flushOnExit()
     const onSIGINT = () => void flushOnExit()
     const onBeforeExit = () => void flushOnExit()
-    process.once('SIGTERM', onSIGTERM)
-    process.once('SIGINT', onSIGINT)
+    // beforeExit always gets our own listener: it fires only on natural
+    // event-loop drain, never on a signal, so it never races an external
+    // shutdown coordinator like installStdioLifecycle.
     process.once('beforeExit', onBeforeExit)
+    if (installSignalHandlers) {
+      process.once('SIGTERM', onSIGTERM)
+      process.once('SIGINT', onSIGINT)
+    }
 
     const handle: TracingHandle = {
       async shutdown(): Promise<void> {

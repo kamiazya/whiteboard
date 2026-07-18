@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 
 // Pin the runtime contract for `whiteboard mcp` at the dispatcher
@@ -20,7 +23,9 @@ const { main } = await import('./dispatcher.js')
 // previous racing-against-a-sentinel approach left I/O spies
 // installed AND skipped stdout assertions on the sentinel branch,
 // which silently masked stdout pollution.
-async function runMcpAndCapture(argv: readonly string[] = ['mcp']): Promise<{ stdout: string; stderr: string }> {
+async function runMcpAndCapture(
+  argv: readonly string[] = ['mcp'],
+): Promise<{ stdout: string; stderr: string }> {
   const stdoutChunks: string[] = []
   const stderrChunks: string[] = []
   const writeStdout = vi
@@ -137,11 +142,26 @@ describe('CLI dispatcher: whiteboard mcp', () => {
 
   it('top-level USAGE block lists `whiteboard mcp`', async () => {
     vi.mocked(mcpModule.main).mockImplementation(async () => {})
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['this-is-not-a-real-command']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['this-is-not-a-real-command']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/whiteboard mcp/)
+  })
+
+  it('dispatchMcp comment describes the process.exit()-driven lifecycle, not the stale "keeps the process alive until SIGTERM / EOF" wording', () => {
+    // dispatcher.ts never installed a SIGTERM/EOF handler itself — that
+    // comment described stdio-lifecycle.ts's job before it existed. Guard
+    // against it silently reappearing (e.g. a careless revert) so the
+    // comment stays truthful about where shutdown actually happens.
+    const dispatcherSource = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'dispatcher.ts'),
+      'utf-8',
+    )
+    expect(dispatcherSource).not.toContain('keeps the process alive')
+    expect(dispatcherSource).not.toContain('until SIGTERM / EOF on stdin')
   })
 })

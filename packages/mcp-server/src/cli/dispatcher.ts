@@ -180,9 +180,10 @@ async function dispatchMcp(): Promise<number> {
     process.stderr.write(`MCP server error: ${redacted}\n`)
     return 1
   }
-  // Never resolves: StdioServerTransport keeps the process alive
-  // until SIGTERM / EOF on stdin, matching the previous
-  // `dist/server/mcp/index.js` bin behaviour.
+  // Never resolves from this dispatcher's point of view: the stdio
+  // lifecycle installed inside `runMcp()` (see stdio-lifecycle.ts) calls
+  // process.exit() directly on stdin EOF/close/error or SIGTERM/SIGINT,
+  // so control never actually returns here — it exits the process instead.
   return await new Promise<never>(() => undefined)
 }
 

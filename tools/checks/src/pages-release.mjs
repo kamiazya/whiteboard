@@ -17,6 +17,7 @@ import { spawnSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { validateMatrix } from './release-gate-matrix-schema.mjs'
 import { splitCommand } from './split-command.mjs'
 
 export const USAGE = `Usage: pnpm --filter @whiteboard/checks pages-release
@@ -48,12 +49,7 @@ export function planSteps(gates) {
 // (defaults to spawnSync) so tests can assert ordering / fail-fast without real processes.
 // Returns { ok, exitCode, ranLabels } instead of calling process.exit, so it stays testable.
 export function runSteps(steps, options = {}) {
-  const {
-    cwd,
-    spawn = spawnSync,
-    stdout = process.stdout,
-    stderr = process.stderr,
-  } = options
+  const { cwd, spawn = spawnSync, stdout = process.stdout, stderr = process.stderr } = options
   const ranLabels = []
   for (let i = 0; i < steps.length; i++) {
     const { label, command } = steps[i]
@@ -85,36 +81,68 @@ export function runSteps(steps, options = {}) {
 // so only a no-argument invocation runs; -h/--help prints usage; anything else errors.
 export function parseArgs(args) {
   if (args.includes('-h') || args.includes('--help')) return { mode: 'help' }
-  if (args.length > 0) return { mode: 'error', message: `unexpected argument(s): ${args.join(' ')}` }
+  if (args.length > 0)
+    return { mode: 'error', message: `unexpected argument(s): ${args.join(' ')}` }
   return { mode: 'run' }
 }
 
-function main() {
-  const parsed = parseArgs(process.argv.slice(2))
+// Testable core of the CLI entry point: every I/O boundary (argv, matrix
+// read, spawn, stdout/stderr) is injectable, matching publish-gate.mjs's
+// main() so both matrix-driven runners share the same fail-loud invalid-
+// matrix behavior and the same test shape. Returns an exit code instead of
+// calling process.exit, so it stays testable.
+/**
+ * @param {{
+ *   argv?: string[],
+ *   repoRoot?: string,
+ *   readMatrix?: (matrixPath: string) => unknown,
+ *   spawn?: (cmd: string, args: string[], opts: Record<string, unknown>) => { status: number | null, error?: Error },
+ *   stdout?: { write: (chunk: string) => boolean },
+ *   stderr?: { write: (chunk: string) => boolean },
+ * }} [options]
+ * @returns {number} process exit code
+ */
+export function main(options = {}) {
+  const {
+    argv = process.argv.slice(2),
+    repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..'),
+    readMatrix = (matrixPath) => JSON.parse(readFileSync(matrixPath, 'utf-8')),
+    spawn = spawnSync,
+    stdout = process.stdout,
+    stderr = process.stderr,
+  } = options
+
+  const parsed = parseArgs(argv)
   if (parsed.mode === 'help') {
-    process.stdout.write(USAGE)
-    process.exit(0)
+    stdout.write(USAGE)
+    return 0
   }
   if (parsed.mode === 'error') {
-    process.stderr.write(`[pages-release] ${parsed.message}\n\n`)
-    process.stderr.write(USAGE)
-    process.exit(1)
+    stderr.write(`[pages-release] ${parsed.message}\n\n`)
+    stderr.write(USAGE)
+    return 1
   }
-  const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
   const matrixPath = resolve(repoRoot, 'tests/e2e/distribution/release-gate-matrix.json')
-  const matrix = JSON.parse(readFileSync(matrixPath, 'utf-8'))
+  const matrix = readMatrix(matrixPath)
+  // Fail loud on a structurally invalid matrix instead of silently running a
+  // gate subset that drifted from the policy the matrix is supposed to encode.
+  const validation = validateMatrix(matrix)
+  if (!validation.ok) {
+    stderr.write(`[pages-release] invalid release-gate-matrix.json: ${validation.reason}\n`)
+    return 1
+  }
   const steps = planSteps(matrix.gates)
   // steps always contains the build prerequisite; <= 1 means no pages-release gates.
   if (steps.length <= 1) {
-    process.stderr.write('[pages-release] no pages-release gates found in release-gate-matrix.json\n')
-    process.exit(1)
+    stderr.write('[pages-release] no pages-release gates found in release-gate-matrix.json\n')
+    return 1
   }
-  const { exitCode } = runSteps(steps, { cwd: repoRoot })
-  process.exit(exitCode)
+  const { exitCode } = runSteps(steps, { cwd: repoRoot, spawn, stdout, stderr })
+  return exitCode
 }
 
 // Direct-run guard: execute the gates only when this file is the CLI entry point,
 // never when imported by a test.
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main()
+  process.exit(main())
 }

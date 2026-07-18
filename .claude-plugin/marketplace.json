@@ -25,21 +25,9 @@
       "homepage": "https://github.com/kamiazya/whiteboard",
       "repository": "https://github.com/kamiazya/whiteboard",
       "license": "MIT",
-      "keywords": [
-        "excalidraw",
-        "diagramming",
-        "mcp",
-        "whiteboard",
-        "claude-code",
-        "codex"
-      ],
+      "keywords": ["excalidraw", "diagramming", "mcp", "whiteboard", "claude-code", "codex"],
       "category": "productivity",
-      "tags": [
-        "diagramming",
-        "mcp",
-        "excalidraw",
-        "visualization"
-      ]
+      "tags": ["diagramming", "mcp", "excalidraw", "visualization"]
     }
   ]
 }
