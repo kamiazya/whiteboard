@@ -21,15 +21,6 @@ function resolveMaxInlineSvgBytes(): number {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_MAX_INLINE_SVG_BYTES
 }
 
-interface ExportSvgArgs {
-  canvasId: string
-  padding?: number
-  frameId?: string
-  outputPath?: string
-  overwrite?: boolean
-  theme?: 'light' | 'dark'
-}
-
 function buildExportSvgBody(args: ExportSvgArgs): Record<string, number | string | boolean> {
   const body: Record<string, number | string | boolean> = {}
   if (args.padding !== undefined) body.padding = args.padding
@@ -72,12 +63,15 @@ export const exportSvgInputShape = {
     ),
 } satisfies z.ZodRawShape
 
+const exportSvgInputSchema = z.object(exportSvgInputShape)
+type ExportSvgArgs = z.infer<typeof exportSvgInputSchema>
+
 export function exportSvgTool() {
   return {
     name: 'export_svg',
     description:
       'Export the whiteboard canvas as an SVG file, rendered headlessly straight from the persisted document (no browser connection required).',
-    inputSchema: z.toJSONSchema(z.object(exportSvgInputShape)) as {
+    inputSchema: z.toJSONSchema(exportSvgInputSchema) as {
       type: 'object'
       properties: Record<string, unknown>
       required?: string[]
