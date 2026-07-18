@@ -644,15 +644,20 @@ export default function WorkspaceTopBar({
   // filename; falling back to the raw slug covers the ungrouped case.
   const exportFilenameBase = (canvasFlat ?? canvasLeaf ?? slug).replace(/[\\/:*?"<>|]/g, '-')
 
+  // JSON exports carry the standard .excalidraw extension (the file format
+  // Excalidraw and the daemon's canvas_export_json both use); png/svg map to
+  // their own extension. Keyed by SceneExportFormat so a new format must add
+  // its own entry rather than silently inheriting a default.
+  const EXPORT_CONFIG: Record<SceneExportFormat, { extension: string; label: string }> = {
+    png: { extension: 'png', label: 'PNG' },
+    svg: { extension: 'svg', label: 'SVG' },
+    json: { extension: 'excalidraw', label: 'Excalidraw JSON' },
+  }
+
   const handleExport = async (format: SceneExportFormat) => {
     if (!onExport) return
     setExportError(null)
-    // JSON exports carry the standard .excalidraw extension (the file format
-    // Excalidraw and the daemon's canvas_export_json both use); png/svg map
-    // to their own extension directly. The label shown on failure follows
-    // the same distinction.
-    const extension = format === 'json' ? 'excalidraw' : format
-    const label = format === 'json' ? 'Excalidraw JSON' : format.toUpperCase()
+    const { extension, label } = EXPORT_CONFIG[format]
     try {
       const blob = await onExport(format)
       if (!blob) {
