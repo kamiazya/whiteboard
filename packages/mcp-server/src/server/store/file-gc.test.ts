@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
+import { decodeFrontiers, encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -461,5 +461,67 @@ describe('purgeDanglingFiles', () => {
     expect(purgeResult.purgedCount).toBe(0)
     const remaining = (await readdir(join(tempDir, 'ws_branch_race_live', 'files'))).sort()
     expect(remaining).toEqual(['about-to-be-tip-referenced-live.png'])
+  })
+
+  it('serialises purge against the real PUT /head route (HEAD-switch tipFrontiers persist race)', async () => {
+    // The multi-step production HEAD-switch flow (read state -> capture
+    // current frontiers -> checkout -> save canvas -> save branches) must
+    // run as a single atomic unit against file-gc. Without a lock spanning
+    // the whole thing, a purge could interleave right after the live doc
+    // has moved to the new HEAD (no longer referencing the image) but
+    // before the outgoing HEAD's captured frontiers are persisted — and
+    // see the file as unreferenced by either state.
+    const { createBranchesRouter } = await import('../routes/branches.js')
+
+    // "feature" branches off an earlier, image-free point in the SAME
+    // doc's history, so its tip is a real, checkoutable frontiers value.
+    const doc = new LoroDoc()
+    doc.commit()
+    const baselineFrontiers = doc.frontiers()
+    const featureTip = Buffer.from(encodeFrontiers(baselineFrontiers)).toString('base64')
+
+    const list = doc.getMovableList('elements')
+    const map = list.insertContainer(0, new LoroMap())
+    map.set('id', 'el-head-race')
+    map.set('type', 'image')
+    map.set('fileId', 'about-to-be-captured-on-head-switch')
+    map.set('isDeleted', false)
+    doc.commit()
+
+    await saveCanvas('ws_head_race', 'page', doc)
+    await createBranch('ws_head_race', 'page', {
+      name: 'feature',
+      initialTipFrontiers: featureTip,
+    })
+    await seedFile('ws_head_race', 'about-to-be-captured-on-head-switch', '.png', 90)
+
+    const app = createBranchesRouter({
+      getCurrentFrontiers: async (sid, slug) => {
+        const live = await loadCanvas(sid, slug)
+        return Buffer.from(encodeFrontiers(live.frontiers())).toString('base64')
+      },
+      checkoutTo: async (sid, slug, tipFrontiersBase64) => {
+        const live = await loadCanvas(sid, slug)
+        const clone = LoroDoc.fromSnapshot(live.export({ mode: 'snapshot' }))
+        const targetFrontiers = decodeFrontiers(
+          new Uint8Array(Buffer.from(tipFrontiersBase64, 'base64')),
+        )
+        clone.checkout(targetFrontiers)
+        await saveCanvas(sid, slug, clone, { overwrite: true })
+      },
+    })
+
+    const putHeadPromise = app.request('/api/workspaces/ws_head_race/canvases/page/head', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ branch: 'feature' }),
+    })
+    const purgePromise = purgeDanglingFiles('ws_head_race', { graceMs: 0 })
+    const [headRes, purgeResult] = await Promise.all([putHeadPromise, purgePromise])
+
+    expect(headRes.status).toBe(200)
+    expect(purgeResult.purgedCount).toBe(0)
+    const remaining = (await readdir(join(tempDir, 'ws_head_race', 'files'))).sort()
+    expect(remaining).toEqual(['about-to-be-captured-on-head-switch.png'])
   })
 })

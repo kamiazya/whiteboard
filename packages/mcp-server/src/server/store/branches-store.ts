@@ -157,7 +157,9 @@ export async function saveCanvasBranches(
 // to start referencing.
 //
 // `mutate` returns `next: null` to signal "no write needed" (e.g. setHead
-// to the branch that is already HEAD).
+// to the branch that is already HEAD). See withCanvasBranchesLock below for
+// the async-callback variant used by callers that must await external work
+// (e.g. a doc checkout) between the read and the write.
 async function mutateCanvasBranches<T>(
   workspaceId: string,
   slug: string,
@@ -172,6 +174,30 @@ async function mutateCanvasBranches<T>(
       await saveCanvasBranchesLocked(workspaceId, slug, next)
     }
     return result
+  })
+}
+
+// Lock-spanning helper for callers whose read-modify-write needs to
+// interleave AWAITED external work (e.g. routes/branches.ts's PUT /head,
+// which must capture the outgoing HEAD's live frontiers and reconcile the
+// live doc to the new tip before persisting the updated branch state).
+// mutateCanvasBranches's `mutate` callback is synchronous by design and
+// cannot express that shape, so this exposes the same load + a `save`
+// bound to the same per-workspace lock: everything the caller does inside
+// `fn`, including its own awaits, runs while holding the lock, so
+// file-gc's collect-then-unlink pass cannot observe a state where the
+// live doc has already moved to the new HEAD but the outgoing branch's
+// tipFrontiers has not been persisted yet.
+export async function withCanvasBranchesLock<T>(
+  workspaceId: string,
+  slug: string,
+  fn: (state: CanvasBranches, save: (next: CanvasBranches) => Promise<void>) => Promise<T>,
+): Promise<T> {
+  validateWorkspaceId(workspaceId)
+  validateSlug(slug)
+  return withWorkspaceWriteLock(workspaceId, async () => {
+    const state = await loadCanvasBranches(workspaceId, slug)
+    return fn(state, (next) => saveCanvasBranchesLocked(workspaceId, slug, next))
   })
 }
 
