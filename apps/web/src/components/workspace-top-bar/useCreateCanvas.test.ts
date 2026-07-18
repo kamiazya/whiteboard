@@ -24,7 +24,7 @@ describe('useCreateCanvas', () => {
     expect(result.current.newCanvasOpen).toBe(false)
   })
 
-  it('does not update state after unmount when a local-mode create rejects', async () => {
+  it('does not update state once mountedRef flips false mid-create', async () => {
     let rejectCreate: (err: Error) => void = () => {}
     const onCreateCanvas = vi.fn().mockReturnValue(
       new Promise((_resolve, reject) => {
@@ -32,7 +32,7 @@ describe('useCreateCanvas', () => {
       }),
     )
     const mountedRef = { current: true }
-    const { result, unmount } = renderHook(() =>
+    const { result } = renderHook(() =>
       useCreateCanvas({
         workspaceId: 'ws1',
         slug: 'foo',
@@ -46,12 +46,19 @@ describe('useCreateCanvas', () => {
     act(() => {
       result.current.openNewCanvas()
     })
+    expect(result.current.newCanvasBusy).toBe(true)
+    // Simulate unmount happening while the create call is still in flight —
+    // flip the ref without unmounting so a re-render would still be observed
+    // if the guard were removed.
     mountedRef.current = false
-    unmount()
-    // Rejecting after unmount must not throw a setState-after-unmount error —
-    // the hook's finally-block guards every write behind mountedRef.current.
-    expect(() => rejectCreate(new Error('boom'))).not.toThrow()
-    await Promise.resolve().catch(() => {})
+    await act(async () => {
+      rejectCreate(new Error('boom'))
+      await Promise.resolve().catch(() => {})
+    })
+    // The guard must keep busy/error untouched rather than reflecting the
+    // rejected create.
+    expect(result.current.newCanvasBusy).toBe(true)
+    expect(result.current.newCanvasError).toBeNull()
   })
 
   it('daemon mode opens the dialog seeded with the current slug prefix', () => {
