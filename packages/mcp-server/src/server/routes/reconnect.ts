@@ -69,12 +69,23 @@ function isAdmittedOrigin(origin: string, allowedWebOrigins: readonly string[]):
   return isAllowedWebOrigin(origin, allowedWebOrigins)
 }
 
+// Returns the canonicalized Origin iff it is admitted (loopback or explicitly
+// allowlisted), otherwise null — both reconnect routes gate on this first.
+function admittedOrigin(
+  originHeader: string | undefined,
+  allowedWebOrigins: readonly string[],
+): string | null {
+  const origin = canonicalizeOrigin(originHeader)
+  if (origin === null || !isAdmittedOrigin(origin, allowedWebOrigins)) return null
+  return origin
+}
+
 export function createReconnectRouter(options: ReconnectRouterOptions) {
   const app = new Hono()
 
   app.post('/api/reconnect-credential', async (c) => {
-    const canonicalOrigin = canonicalizeOrigin(c.req.header('origin'))
-    if (canonicalOrigin === null || !isAdmittedOrigin(canonicalOrigin, options.allowedWebOrigins)) {
+    const canonicalOrigin = admittedOrigin(c.req.header('origin'), options.allowedWebOrigins)
+    if (canonicalOrigin === null) {
       return c.json({ error: 'forbidden_origin' }, 403)
     }
     const { secret } = await options.trustStore.trustOrigin(canonicalOrigin)
@@ -87,8 +98,8 @@ export function createReconnectRouter(options: ReconnectRouterOptions) {
   })
 
   app.post('/api/reconnect-session', async (c) => {
-    const canonicalOrigin = canonicalizeOrigin(c.req.header('origin'))
-    if (canonicalOrigin === null || !isAdmittedOrigin(canonicalOrigin, options.allowedWebOrigins)) {
+    const canonicalOrigin = admittedOrigin(c.req.header('origin'), options.allowedWebOrigins)
+    if (canonicalOrigin === null) {
       return c.json({ error: 'forbidden_origin' }, 403)
     }
     const presentedSecret = parseBearerAuthorizationHeader(c.req.header('authorization'))

@@ -164,7 +164,8 @@ export function createWebOriginTrustStore(
     return result
   }
 
-  async function persist(file: TrustedWebOriginsFile): Promise<void> {
+  async function persist(origins: readonly WebOriginTrustRecord[]): Promise<void> {
+    const file: TrustedWebOriginsFile = { schemaVersion: 1, origins: [...origins] }
     await saveFile(path, dataDir, file)
     cached = file
     cachedMtime = (await readFileMtime(path)) ?? null
@@ -182,7 +183,7 @@ export function createWebOriginTrustStore(
         lastUsedAt: nowIso,
       }
       const nextOrigins = [...current.origins.filter((o) => o.origin !== origin), record]
-      await persist({ schemaVersion: 1, origins: nextOrigins })
+      await persist(nextOrigins)
       return { secret }
     })
   }
@@ -202,7 +203,7 @@ export function createWebOriginTrustStore(
         lastUsedAt: nowIso,
       }
       const nextOrigins = current.origins.map((o) => (o.origin === origin ? record : o))
-      await persist({ schemaVersion: 1, origins: nextOrigins })
+      await persist(nextOrigins)
       return { secret }
     })
   }
@@ -224,13 +225,13 @@ export function createWebOriginTrustStore(
     await enqueue(async () => {
       const current = await readCurrent()
       const nextOrigins = current.origins.filter((o) => o.origin !== origin)
-      await persist({ schemaVersion: 1, origins: nextOrigins })
+      await persist(nextOrigins)
     })
   }
 
   async function revokeAll(): Promise<void> {
     await enqueue(async () => {
-      await persist({ schemaVersion: 1, origins: [] })
+      await persist([])
     })
   }
 
