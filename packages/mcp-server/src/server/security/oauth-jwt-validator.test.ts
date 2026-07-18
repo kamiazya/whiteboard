@@ -28,12 +28,19 @@ beforeAll(async () => {
 interface TokenOptions {
   alg?: string
   kid?: string
+  /** Protected header `typ`. Default: 'at+jwt' (a valid access token per
+   * RFC 9068) so tests unrelated to type discrimination don't need to
+   * think about it. Pass `omitTyp: true` to build a token with no `typ`
+   * header at all. */
+  typ?: string
+  omitTyp?: boolean
   key?: CryptoKey | Uint8Array
   sub?: string | null
   iss?: string
   aud?: string | string[]
   scope?: string
   scp?: string[] | string
+  tokenUse?: string
   expOffset?: number // seconds from now, default +3600
   nbf?: number // absolute epoch
   omitExp?: boolean
@@ -43,12 +50,15 @@ interface TokenOptions {
 async function buildToken({
   alg = 'ES256',
   kid = TEST_KID,
+  typ = 'at+jwt',
+  omitTyp = false,
   key,
   sub = 'user-42',
   iss = TEST_ISSUER,
   aud = TEST_AUDIENCE,
   scope,
   scp,
+  tokenUse,
   expOffset = 3600,
   nbf,
   omitExp = false,
@@ -58,9 +68,12 @@ async function buildToken({
   const payload: Record<string, unknown> = { ...extra }
   if (scope !== undefined) payload.scope = scope
   if (scp !== undefined) payload.scp = scp
+  if (tokenUse !== undefined) payload.token_use = tokenUse
   if (nbf !== undefined) payload.nbf = nbf
 
-  const builder = new SignJWT(payload).setProtectedHeader({ alg, kid })
+  const header: Record<string, unknown> = { alg, kid }
+  if (!omitTyp) header.typ = typ
+  const builder = new SignJWT(payload).setProtectedHeader(header)
   if (sub !== null) builder.setSubject(sub)
   if (iss) builder.setIssuer(iss)
   if (aud) builder.setAudience(aud)
@@ -151,7 +164,8 @@ describe('createOAuthJwtValidator — scope handling', () => {
     const result = await validator.validate({ token, requiredScopes: [] })
 
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.scopes).toEqual(expect.arrayContaining(['canvas:read', 'canvas:write']))
+    if (result.ok)
+      expect(result.scopes).toEqual(expect.arrayContaining(['canvas:read', 'canvas:write']))
   })
 
   it('parses scp space-delimited string when scopeClaim is scp', async () => {
@@ -160,7 +174,8 @@ describe('createOAuthJwtValidator — scope handling', () => {
     const result = await validator.validate({ token, requiredScopes: [] })
 
     expect(result.ok).toBe(true)
-    if (result.ok) expect(result.scopes).toEqual(expect.arrayContaining(['canvas:read', 'workspace:write']))
+    if (result.ok)
+      expect(result.scopes).toEqual(expect.arrayContaining(['canvas:read', 'workspace:write']))
   })
 
   it('unknown scope strings are silently discarded — not present in result.scopes', async () => {
@@ -224,7 +239,10 @@ describe('createOAuthJwtValidator — claim validation', () => {
 
   it('expired token → expired', async () => {
     const token = await buildToken({ expOffset: -60 }) // expired 60s ago
-    const result = await makeValidator({ clockSkewSeconds: 0 }).validate({ token, requiredScopes: [] })
+    const result = await makeValidator({ clockSkewSeconds: 0 }).validate({
+      token,
+      requiredScopes: [],
+    })
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toBe('expired')
@@ -233,7 +251,10 @@ describe('createOAuthJwtValidator — claim validation', () => {
   it('nbf in future → malformed', async () => {
     const nbf = Math.floor(Date.now() / 1000) + 7200 // valid in 2h
     const token = await buildToken({ nbf })
-    const result = await makeValidator({ clockSkewSeconds: 0 }).validate({ token, requiredScopes: [] })
+    const result = await makeValidator({ clockSkewSeconds: 0 }).validate({
+      token,
+      requiredScopes: [],
+    })
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toBe('malformed')
@@ -261,6 +282,67 @@ describe('createOAuthJwtValidator — claim validation', () => {
 
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.reason).toBe('malformed')
+  })
+})
+
+// ── Access-token type discrimination (RFC 9068 / token_use) ─────────────────
+
+describe('createOAuthJwtValidator — access token type discrimination', () => {
+  it('typ:JWT with no token_use claim → not_access_token by default (ID-token shaped)', async () => {
+    const token = await buildToken({ typ: 'JWT', scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('not_access_token')
+  })
+
+  it('no typ header and no token_use claim → not_access_token by default', async () => {
+    const token = await buildToken({ omitTyp: true, scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('not_access_token')
+  })
+
+  it('typ: at+jwt is accepted', async () => {
+    const token = await buildToken({ typ: 'at+jwt', scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+    expect(result.ok).toBe(true)
+  })
+
+  it('typ: application/at+jwt is accepted', async () => {
+    const token = await buildToken({ typ: 'application/at+jwt', scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+    expect(result.ok).toBe(true)
+  })
+
+  it('typ header comparison is case-insensitive (AT+JWT)', async () => {
+    const token = await buildToken({ typ: 'AT+JWT', scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+    expect(result.ok).toBe(true)
+  })
+
+  it('token_use: access with plain typ is accepted', async () => {
+    const token = await buildToken({ typ: 'JWT', tokenUse: 'access', scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+    expect(result.ok).toBe(true)
+  })
+
+  it('token_use: id is rejected as not_access_token (an ID token bearing a discriminator)', async () => {
+    const token = await buildToken({ typ: 'JWT', tokenUse: 'id', scope: 'canvas:read' })
+    const result = await makeValidator().validate({ token, requiredScopes: [] })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe('not_access_token')
+  })
+
+  it('allowUntypedAccessTokens:true accepts a plain-typ, no-token_use JWT (explicit opt-out)', async () => {
+    const token = await buildToken({ omitTyp: true, scope: 'canvas:read' })
+    const result = await makeValidator({ allowUntypedAccessTokens: true }).validate({
+      token,
+      requiredScopes: [],
+    })
+    expect(result.ok).toBe(true)
   })
 })
 
@@ -436,13 +518,25 @@ describe('createOAuthJwtValidator — non-leak sweep', () => {
 fcTest.prop(
   [
     fc.array(
-      fc.string({ minLength: 1, maxLength: 20 }).filter(
-        (s) =>
-          !s.includes(' ') &&
-          !['canvas:read', 'canvas:write', 'workspace:read', 'workspace:write',
-            'versions:read', 'versions:write', 'files:read', 'files:write',
-            'runtime:read', 'runtime:admin', 'mcp:call'].includes(s),
-      ),
+      fc
+        .string({ minLength: 1, maxLength: 20 })
+        .filter(
+          (s) =>
+            !s.includes(' ') &&
+            ![
+              'canvas:read',
+              'canvas:write',
+              'workspace:read',
+              'workspace:write',
+              'versions:read',
+              'versions:write',
+              'files:read',
+              'files:write',
+              'runtime:read',
+              'runtime:admin',
+              'mcp:call',
+            ].includes(s),
+        ),
       { minLength: 1, maxLength: 5 },
     ),
   ],
@@ -532,7 +626,9 @@ describe('createOAuthJwtValidator — factory validation', () => {
 // ── Integration: strategy + validator ────────────────────────────────────────
 
 describe('createOAuthResourceServerAuthStrategy + createOAuthJwtValidator — integration', () => {
-  function makeApp(requiredScopes: Parameters<typeof createAsyncAuthStrategyMiddleware>[0]['requiredScopes']) {
+  function makeApp(
+    requiredScopes: Parameters<typeof createAsyncAuthStrategyMiddleware>[0]['requiredScopes'],
+  ) {
     const strategy = createOAuthResourceServerAuthStrategy({
       validator: makeValidator(),
     })

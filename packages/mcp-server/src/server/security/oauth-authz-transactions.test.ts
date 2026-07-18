@@ -188,6 +188,33 @@ describe('createOAuthTransactionStore', () => {
     expect(result).toEqual({ ok: false, reason: 'pkce_verification_failed' })
   })
 
+  // Locks the deliberate CAS-before-validation ordering in
+  // redeemAuthorizationCode: the code is consumed by the failed PKCE
+  // attempt above, so a second redemption with the CORRECT verifier must
+  // still fail — the code was already spent. This is what stops a stolen
+  // code + guessed verifiers from being retried indefinitely; reordering
+  // validation ahead of the CAS would make this test fail.
+  it('a failed PKCE redemption still consumes the code — a later correct-verifier retry gets invalid_grant', () => {
+    const store = createOAuthTransactionStore()
+    const { code } = createApprovedCodeIssuedTransaction(store)
+
+    const failed = store.redeemAuthorizationCode({
+      code,
+      clientId: baseInput.clientId,
+      redirectUri: baseInput.redirectUri,
+      codeVerifier: 'wrong-verifier-entirely',
+    })
+    expect(failed).toEqual({ ok: false, reason: 'pkce_verification_failed' })
+
+    const retry = store.redeemAuthorizationCode({
+      code,
+      clientId: baseInput.clientId,
+      redirectUri: baseInput.redirectUri,
+      codeVerifier: PKCE_VERIFIER,
+    })
+    expect(retry).toEqual({ ok: false, reason: 'invalid_grant' })
+  })
+
   it('redeems successfully with the exact matching code_verifier', () => {
     const store = createOAuthTransactionStore()
     const { code } = createApprovedCodeIssuedTransaction(store)

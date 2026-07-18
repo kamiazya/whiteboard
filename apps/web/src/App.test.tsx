@@ -8,6 +8,7 @@ import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
 import {
   BROWSER_LOCAL_CAPABILITIES,
   type ProviderState,
+  resolveHostedProviderStateFromRaw,
   type WhiteboardCapabilities,
 } from './lib/provider.js'
 import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
@@ -133,6 +134,20 @@ describe('App backend configuration chip', () => {
     )
     expect(screen.queryByText('Browser only')).toBeNull()
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
+  })
+
+  it('renders the custom-domain-unsupported guidance without echoing the rejected origin', () => {
+    const state = resolveHostedProviderStateFromRaw({
+      publicOrigin: 'https://custom.example.com',
+    })
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={state} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText(/custom domain/i)).toBeTruthy()
+    expect(screen.queryByText(/custom\.example\.com/)).toBeNull()
+    expect(document.body.textContent).not.toMatch(/https?:\/\//)
   })
 
   it('lets the browser-local escape override invalid-config after a failed pairing', () => {

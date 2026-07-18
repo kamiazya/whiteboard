@@ -25,6 +25,7 @@
 //   401 auth.required   ─ missing | malformed | invalid_signature
 //                        | invalid_issuer | invalid_audience
 //                        | expired | revoked | validator_unavailable
+//                        | not_access_token
 //   403 auth.forbidden  ─ insufficient_scope
 //
 // 401 is "credentials missing or invalid; retry with auth" — a
@@ -54,6 +55,7 @@ export type OAuthResourceTokenValidationFailureReason =
   | 'insufficient_scope'
   | 'revoked'
   | 'validator_unavailable'
+  | 'not_access_token'
 
 export interface OAuthResourceTokenValidationInput {
   token: string
@@ -129,6 +131,7 @@ export function createOAuthResourceServerAuthStrategy(options: {
           case 'expired':
           case 'revoked':
           case 'validator_unavailable':
+          case 'not_access_token':
             return UNAUTHORIZED
           default: {
             const _exhaustive: never = result.reason
