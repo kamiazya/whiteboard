@@ -43,21 +43,26 @@ export function CanvasViewer({
   hideChrome = false,
   testId = DEFAULT_TEST_ID,
 }: CanvasViewerProps) {
+  // The testId is interpolated into a <style> block below; restrict it to a
+  // safe identifier charset so no prop value can break out of the attribute
+  // selector (CSS injection hardening — this component will eventually run
+  // inside embedded widget surfaces).
+  const safeTestId = /^[A-Za-z0-9_-]+$/.test(testId) ? testId : 'canvas-viewer'
   const chromeStyle = hideChrome
     ? `
-      [data-testid="${testId}"] .App-menu,
-      [data-testid="${testId}"] .App-bottom-bar,
-      [data-testid="${testId}"] .layer-ui__wrapper__footer,
-      [data-testid="${testId}"] .Island.App-menu_top__left,
-      [data-testid="${testId}"] .Island.App-menu_bottom,
-      [data-testid="${testId}"] .Stack.zen-mode-transition,
-      [data-testid="${testId}"] .help-icon,
-      [data-testid="${testId}"] .scroll-back-to-content { display: none !important; }
+      [data-testid="${safeTestId}"] .App-menu,
+      [data-testid="${safeTestId}"] .App-bottom-bar,
+      [data-testid="${safeTestId}"] .layer-ui__wrapper__footer,
+      [data-testid="${safeTestId}"] .Island.App-menu_top__left,
+      [data-testid="${safeTestId}"] .Island.App-menu_bottom,
+      [data-testid="${safeTestId}"] .Stack.zen-mode-transition,
+      [data-testid="${safeTestId}"] .help-icon,
+      [data-testid="${safeTestId}"] .scroll-back-to-content { display: none !important; }
     `
     : null
 
   return (
-    <div data-testid={testId} style={{ width, height, overflow: 'hidden' }}>
+    <div data-testid={safeTestId} style={{ width, height, overflow: 'hidden' }}>
       {chromeStyle && <style>{chromeStyle}</style>}
       <Excalidraw
         viewModeEnabled

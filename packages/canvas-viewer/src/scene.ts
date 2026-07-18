@@ -22,12 +22,19 @@ const looseElementSchema = z.record(z.string(), z.unknown())
 // subset of AppState a real .excalidraw file persists): every field is
 // optional there too, so a standard on-disk document with grid settings
 // omitted (or gridStep/gridModeEnabled present) must still parse.
-const appStateShape = z.object({
-  gridSize: z.number().nullable().optional(),
-  viewBackgroundColor: z.string().optional(),
-  gridStep: z.number().optional(),
-  gridModeEnabled: z.boolean().optional(),
-})
+// .catchall keeps unrecognized appState keys instead of stripping them —
+// same opaque pass-through stance as elements/files: whatever a document
+// carries (theme, viewport state, future Excalidraw fields) is threaded
+// back to Excalidraw untouched; only the fields this package reads are
+// validated.
+const appStateShape = z
+  .object({
+    gridSize: z.number().nullable().optional(),
+    viewBackgroundColor: z.string().optional(),
+    gridStep: z.number().optional(),
+    gridModeEnabled: z.boolean().optional(),
+  })
+  .catchall(z.unknown())
 
 // Parse-side authority for the on-disk / exported .excalidraw envelope.
 export const excalidrawJsonDocSchema = z.object({
@@ -53,7 +60,7 @@ export const excalidrawJsonDocSchema = z.object({
 export const viewerSceneSchema = z
   .object({
     elements: z.array(looseElementSchema).readonly(),
-    appState: appStateShape.partial().optional(),
+    appState: appStateShape.optional(),
     // Opaque pass-through, same rationale as excalidrawJsonDocSchema.files.
     files: z.record(z.string(), z.unknown()).optional(),
   })
@@ -61,7 +68,7 @@ export const viewerSceneSchema = z
 
 const normalizedSceneSchema = z.object({
   elements: z.array(looseElementSchema).readonly(),
-  appState: appStateShape.partial(),
+  appState: appStateShape,
   // Opaque pass-through, same rationale as excalidrawJsonDocSchema.files.
   files: z.record(z.string(), z.unknown()),
 })

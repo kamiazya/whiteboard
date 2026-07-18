@@ -67,8 +67,6 @@ export function mountCanvasViewer(
   })
 
   const onMessage = opts.messageHandler
-    ? (event: MessageEvent) => opts.messageHandler?.(event)
-    : undefined
   if (onMessage) {
     window.addEventListener('message', onMessage)
   }
