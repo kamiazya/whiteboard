@@ -152,12 +152,15 @@ export default function WorkspaceTopBar({
   // setState-after-unmount when a canvas switch/delete resolves mid-flight.
   // Shared by useCanvasRename and useCreateCanvas below.
   const mountedRef = useRef(true)
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Re-arm on every setup so React StrictMode's dev-only double-invoke
+    // (setup -> cleanup -> setup) doesn't leave this permanently false
+    // after the first synthetic unmount/remount.
+    mountedRef.current = true
+    return () => {
       mountedRef.current = false
-    },
-    [],
-  )
+    }
+  }, [])
 
   const canvasCustomName = effectiveNames.canvases[slug]
   // Prefer the custom name when present; otherwise split the slug into prefix and leaf.
