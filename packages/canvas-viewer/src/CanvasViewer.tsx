@@ -11,6 +11,11 @@ export interface CanvasViewerProps {
   // interactive either way — only editing affordances are locked via
   // viewModeEnabled + UIOptions below.
   hideChrome?: boolean
+  // The chrome-hiding <style> below is scoped by this data-testid via a
+  // plain CSS attribute selector, which is NOT DOM-subtree scoped. Callers
+  // that mount more than one CanvasViewer in the same document MUST pass
+  // distinct testIds, or a hideChrome on one instance leaks its
+  // chrome-hiding rule onto every sibling still using the default.
   testId?: string
 }
 

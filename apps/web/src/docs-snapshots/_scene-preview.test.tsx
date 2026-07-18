@@ -20,13 +20,16 @@ const { ScenePreview } = await import('./_scene-preview.js')
 describe('ScenePreview', () => {
   it('renders a fixed-size container tagged with the given testId', () => {
     excalidrawProps.length = 0
-    const { getByTestId } = render(
+    const { getAllByTestId } = render(
       <ScenePreview width={400} height={300} elements={[]} testId="my-preview" />,
     )
 
-    const el = getByTestId('my-preview') as HTMLElement
-    expect(el.style.width).toBe('400px')
-    expect(el.style.height).toBe('300px')
+    // Both the outer sizing wrapper and the forwarded CanvasViewer carry
+    // this testId (the latter so hideChrome's CSS scoping tracks the same
+    // instance) — the outer one is the fixed-size element under test.
+    const [outer] = getAllByTestId('my-preview') as HTMLElement[]
+    expect(outer.style.width).toBe('400px')
+    expect(outer.style.height).toBe('300px')
   })
 
   it('throws when viewOnly={false} is requested, since CanvasViewer is read-only', () => {
@@ -49,6 +52,17 @@ describe('ScenePreview', () => {
     )
 
     expect(container.querySelector('style')?.textContent).toContain('.App-menu')
+  })
+
+  it('scopes the chrome-hiding style to the given testId, not the CanvasViewer default', () => {
+    excalidrawProps.length = 0
+    const { container } = render(
+      <ScenePreview width={100} height={100} elements={[]} hideChrome testId="chrome-off" />,
+    )
+
+    const styleText = container.querySelector('style')?.textContent
+    expect(styleText).toContain('[data-testid="chrome-off"]')
+    expect(styleText).not.toContain('canvas-viewer')
   })
 
   it('forwards elements, appState and files into the underlying scene', () => {

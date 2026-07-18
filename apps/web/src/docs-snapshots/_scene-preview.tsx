@@ -3,7 +3,7 @@
 // <CanvasViewer> in a fixed-size container so screenshots are deterministic
 // regardless of the browser's actual viewport.
 
-import { CanvasViewer, type ViewerScene } from '@kamiazya/whiteboard-canvas-viewer'
+import { CanvasViewer, parseViewerScene } from '@kamiazya/whiteboard-canvas-viewer'
 
 export interface ScenePreviewProps {
   width: number
@@ -36,11 +36,11 @@ export function ScenePreview({
     throw new Error('ScenePreview no longer supports viewOnly={false}; CanvasViewer is read-only')
   }
 
-  const scene: ViewerScene = {
-    elements: elements as ViewerScene['elements'],
+  const scene = parseViewerScene({
+    elements,
     appState: { viewBackgroundColor: '#ffffff', ...(appState ?? {}) },
-    files: (files ?? {}) as ViewerScene['files'],
-  }
+    files: files ?? {},
+  })
 
   return (
     <div
@@ -52,7 +52,7 @@ export function ScenePreview({
         overflow: 'hidden',
       }}
     >
-      <CanvasViewer scene={scene} hideChrome={hideChrome} />
+      <CanvasViewer scene={scene} hideChrome={hideChrome} testId={testId} />
     </div>
   )
 }
