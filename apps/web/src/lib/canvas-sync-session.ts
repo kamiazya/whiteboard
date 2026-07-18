@@ -15,13 +15,13 @@ import {
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import type { z } from 'zod'
+import { getAppLogger } from './app-logger.js'
 import {
   type ExportRequestHandlerDeps,
   flushPendingExportRequests,
   handleIncomingExportRequest,
-} from '../hooks/canvas-sync-export.js'
-import type { SyncStatus, UseCanvasSyncOptions } from '../hooks/useCanvasSync.js'
-import { getAppLogger } from './app-logger.js'
+} from './canvas-sync-export.js'
+import type { SyncStatus, UseCanvasSyncOptions } from './canvas-sync-types.js'
 
 const log = getAppLogger('canvas-sync')
 

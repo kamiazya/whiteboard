@@ -1,50 +1,26 @@
 import { exportToBlob, exportToSvg } from '@excalidraw/excalidraw'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
-import type {
-  CanvasBackend,
-  HeadChangedPayload,
-  VersionCreatedPayload,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   type CanvasSyncSession,
   createCanvasSyncSession,
   createGenerationCounters,
 } from '../lib/canvas-sync-session.js'
+import type { SyncStatus, UseCanvasSyncOptions } from '../lib/canvas-sync-types.js'
+import { dispatchIdentityEvent } from '../lib/canvas-sync-types.js'
 import { serializeSceneAsExcalidrawJson } from '../lib/excalidraw-json.js'
-import type { DirtyEventDetail } from './useDirtyState.js'
 
-export type SyncStatus = 'idle' | 'connected' | 'error'
+export type { SyncStatus, UseCanvasSyncOptions }
+// Re-exported so existing call sites (e.g. DaemonCanvasPage) can keep
+// importing these from the hook module; the canonical definitions live in
+// lib/canvas-sync-types.ts alongside the session module that also needs them.
+export { dispatchIdentityEvent }
 
 // Raster/vector are the only formats the underlying @excalidraw/excalidraw
 // export utilities support; there is no PDF export anywhere in the library.
 export type SceneExportFormat = 'png' | 'svg' | 'json'
-
-// Daemon-only callback seam. Every member is read via optionsRef (see below)
-// so passing a fresh inline object on every render never forces a backend
-// reconnect. A browser-local backend never fires any of these events, so
-// none of them are called and the hook behaves exactly as before this seam
-// was added.
-export interface UseCanvasSyncOptions {
-  onVersionCreated?: (payload: VersionCreatedPayload) => void
-  onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
-  onFileUploadFailed?: () => void
-  onFileUploadSucceeded?: () => void
-  // Fired in addition to (not instead of) the hook's own syncStatus:'error'
-  // transition on a WS auth failure (close 1008), so a daemon-backed page
-  // can surface a dedicated banner instead of the generic error state.
-  onAuthError?: () => void
-  // When set, drives the window-event contract that useDirtyState/HeaderSaveDot
-  // listen for: 'excalidraw:doc_changed' on local/remote doc edits and
-  // 'excalidraw:version_saved' on a version_created broadcast. Read via
-  // optionsRef (never in the connect effect's dep array) so passing a fresh
-  // identity object every render never forces a reconnect. Only dispatched
-  // when both fields are present — a browser-local caller that never sets
-  // this option (or a daemon caller whose identity is still resolving)
-  // dispatches nothing, leaving its dirty-state behavior unchanged.
-  identity?: { workspaceId: string; slug: string }
-}
 
 export interface UseCanvasSyncResult {
   syncStatus: SyncStatus
@@ -57,20 +33,6 @@ export interface UseCanvasSyncResult {
   // callers treat that the same as "export unavailable right now" rather
   // than throwing.
   exportScene: (format: SceneExportFormat) => Promise<Blob | null>
-}
-
-// Dispatches a window event carrying { workspaceId, slug } as detail, but only
-// when identity is fully resolved — a partial or absent identity means the
-// caller (browser-local, or a daemon page whose identity is still loading)
-// never wired the dirty-state contract and must see no events at all.
-export function dispatchIdentityEvent(
-  eventName: string,
-  identity: UseCanvasSyncOptions['identity'],
-): void {
-  if (typeof window === 'undefined') return
-  if (!identity || !identity.workspaceId || !identity.slug) return
-  const detail: DirtyEventDetail = { workspaceId: identity.workspaceId, slug: identity.slug }
-  window.dispatchEvent(new CustomEvent(eventName, { detail }))
 }
 
 /**
