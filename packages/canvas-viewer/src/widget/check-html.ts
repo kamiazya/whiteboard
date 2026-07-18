@@ -26,11 +26,10 @@ export function findExternalResourceUrls(
   allowlist: ReadonlySet<string> = DEFAULT_INERT_URL_ALLOWLIST,
 ): string[] {
   const found = new Set<string>()
-  for (const url of matchAll(html, RESOURCE_ATTR_PATTERN)) {
-    if (!allowlist.has(url)) found.add(url)
-  }
-  for (const url of matchAll(html, CSS_URL_PATTERN)) {
-    if (!allowlist.has(url)) found.add(url)
+  for (const pattern of [RESOURCE_ATTR_PATTERN, CSS_URL_PATTERN]) {
+    for (const url of matchAll(html, pattern)) {
+      if (!allowlist.has(url)) found.add(url)
+    }
   }
   return [...found]
 }
