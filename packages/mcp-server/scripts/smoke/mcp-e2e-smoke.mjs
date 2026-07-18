@@ -23,7 +23,7 @@
 // execution, use scripts/smoke/mcp-claude-cli-smoke.mjs.
 
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -221,7 +221,7 @@ async function main() {
     'widget',
     'canvas-viewer.html',
   )
-  const expectedWidgetHtml = (await import('node:fs')).readFileSync(widgetHtmlPath, 'utf-8')
+  const expectedWidgetHtml = readFileSync(widgetHtmlPath, 'utf-8')
   const actualWidgetHtml = resourceRead.contents?.[0]?.text
   if (actualWidgetHtml !== expectedWidgetHtml) {
     throw new Error(
