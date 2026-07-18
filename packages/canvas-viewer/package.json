@@ -17,6 +17,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@kamiazya/whiteboard-mcp": "workspace:*",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",

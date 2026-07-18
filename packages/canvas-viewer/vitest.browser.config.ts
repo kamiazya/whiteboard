@@ -1,7 +1,7 @@
 import { playwright } from '@vitest/browser-playwright'
 import react from '@vitejs/plugin-react'
 import { defineProject } from 'vitest/config'
-import { resolveBrowserLaunchOptions } from '../mcp-server/src/server/browser-test-config.js'
+import { resolveBrowserLaunchOptions } from '@kamiazya/whiteboard-mcp/test-utils'
 
 export default defineProject({
   plugins: [react()],

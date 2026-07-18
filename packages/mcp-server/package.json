@@ -54,6 +54,10 @@
       "types": "./src/shared/api-contracts/index.ts",
       "import": "./dist/shared/api-contracts/index.js"
     },
+    "./test-utils": {
+      "types": "./src/server/browser-test-config.ts",
+      "import": "./dist/server/browser-test-config.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -103,6 +107,10 @@
       "./api-contracts": {
         "types": "./dist/shared/api-contracts/index.d.ts",
         "import": "./dist/shared/api-contracts/index.js"
+      },
+      "./test-utils": {
+        "types": "./dist/server/browser-test-config.d.ts",
+        "import": "./dist/server/browser-test-config.js"
       },
       "./package.json": "./package.json"
     }
