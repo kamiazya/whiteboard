@@ -27,6 +27,7 @@ import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { getAppLogger } from '../lib/app-logger.js'
+import { serializeSceneAsExcalidrawJson } from '../lib/excalidraw-json.js'
 import {
   type ExportRequestHandlerDeps,
   flushPendingExportRequests,
@@ -40,7 +41,7 @@ export type SyncStatus = 'idle' | 'connected' | 'error'
 
 // Raster/vector are the only formats the underlying @excalidraw/excalidraw
 // export utilities support; there is no PDF export anywhere in the library.
-export type SceneExportFormat = 'png' | 'svg'
+export type SceneExportFormat = 'png' | 'svg' | 'json'
 
 // Daemon-only callback seam. Every member is stored in a ref (see optionsRef
 // below) so passing a fresh inline object on every render never forces a
@@ -711,6 +712,13 @@ export function useCanvasSync(
     const files = api.getFiles()
     if (format === 'png') {
       return exportToBlob({ elements, appState, files, exportPadding: 10 })
+    }
+    if (format === 'json') {
+      // Produces the standard .excalidraw envelope ({type:'excalidraw',
+      // version:2, ...}) matching the daemon's canvas_export_json, so the
+      // file round-trips with Excalidraw desktop / excalidraw.com.
+      const doc = serializeSceneAsExcalidrawJson(elements, appState, files)
+      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
     }
     const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
     const serialized = new XMLSerializer().serializeToString(svg)
