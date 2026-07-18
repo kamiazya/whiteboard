@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -19,6 +19,7 @@ const { saveCanvas, loadCanvas } = await import('./canvas-store.js')
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
+const { createBranch, loadCanvasBranches, saveCanvasBranches } = await import('./branches-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -295,5 +296,134 @@ describe('purgeDanglingFiles', () => {
     expect(purgeResult.purgedCount).toBe(0)
     const remaining = (await readdir(join(tempDir, 'ws_race', 'files'))).sort()
     expect(remaining).toEqual(['about-to-reference.png'])
+  })
+
+  it('keeps a file referenced only by a non-head branch tip', async () => {
+    // Image element lives at the point where "feature" branches off.
+    const doc = makeDocWithImage('branch-only-image')
+    await saveCanvas('ws_branch', 'page', doc)
+    const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    await createBranch('ws_branch', 'page', { name: 'feature', initialTipFrontiers: branchTip })
+
+    // At head (main), the image element is removed — main's live state no
+    // longer references it, but "feature"'s tip still does.
+    const live = await loadCanvas('ws_branch', 'page')
+    const list = live.getMovableList('elements')
+    list.delete(0, list.length)
+    live.commit()
+    await saveCanvas('ws_branch', 'page', live, { overwrite: true })
+
+    await seedFile('ws_branch', 'branch-only-image', '.png', 42)
+
+    const result = await purgeDanglingFiles('ws_branch', { graceMs: 0 })
+    expect(result.purgedCount).toBe(0)
+    const remaining = (await readdir(join(tempDir, 'ws_branch', 'files'))).sort()
+    expect(remaining).toEqual(['branch-only-image.png'])
+  })
+
+  it('refuses to purge when a branch tip cannot be checked out', async () => {
+    await saveCanvas('ws_brk2', 'broken-branch', makeDocWithImage('only-by-broken-branch'))
+    await createBranch('ws_brk2', 'broken-branch', {
+      name: 'feature',
+      initialTipFrontiers: 'not-valid-base64-frontiers!!',
+    })
+    await seedFile('ws_brk2', 'only-by-broken-branch', '.png', 111)
+    await seedFile('ws_brk2', 'really-dangling-2', '.png', 22)
+
+    await expect(purgeDanglingFiles('ws_brk2', { graceMs: 0 })).rejects.toBeInstanceOf(
+      IncompleteFileGcScanError,
+    )
+
+    const remaining = (await readdir(join(tempDir, 'ws_brk2', 'files'))).sort()
+    expect(remaining).toEqual(['only-by-broken-branch.png', 'really-dangling-2.png'])
+  })
+
+  it('refuses to purge when a listed version cannot be loaded at all (returns null)', async () => {
+    // A silent `if (past) collectFromDoc(...)` skip is equivalent to
+    // treating a version we could not load as "referencing nothing" —
+    // the same permanent-data-loss hazard as a thrown load() error.
+    await saveCanvas('ws_nullver', 'page', makeDocWithImage('only-by-null-version'))
+    await seedFile('ws_nullver', 'only-by-null-version', '.png', 55)
+    await seedFile('ws_nullver', 'really-dangling-3', '.png', 11)
+
+    const fakeStore = {
+      list: async () => [
+        {
+          id: 'v-missing',
+          slug: 'page',
+          createdAt: '2026-04-25T00:00:00.000Z',
+          elementCount: 1,
+          auto: false,
+          hasThumbnail: false,
+          branchName: 'main',
+        },
+      ],
+      load: async () => null,
+      save: async () => {
+        throw new Error('not used')
+      },
+      saveThumbnail: async () => {
+        throw new Error('not used')
+      },
+      loadThumbnail: async () => null,
+      earliestFrontiers: async () => null,
+      getFrontiersBase64: async () => null,
+    }
+
+    await expect(
+      // biome-ignore lint/suspicious/noExplicitAny: minimal VersionStore stub for the failure path
+      purgeDanglingFiles('ws_nullver', { versionStore: fakeStore as any, graceMs: 0 }),
+    ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
+
+    const remaining = (await readdir(join(tempDir, 'ws_nullver', 'files'))).sort()
+    expect(remaining).toEqual(['only-by-null-version.png', 'really-dangling-3.png'])
+  })
+
+  it('serialises purge against a concurrent updateBranchTip (GC-vs-branch-write race)', async () => {
+    // The mirror image of the saveCanvas race above: a branch tip is
+    // updated (e.g. after a commit on that branch) concurrently with a
+    // purge pass. Without branches-store also taking the workspace write
+    // lock, the purge could snapshot branch state before the tip update
+    // lands and unlink a file the new tip references.
+    const doc = makeDocWithImage('about-to-be-tip-referenced')
+    await saveCanvas('ws_branch_race', 'page', doc)
+    await createBranch('ws_branch_race', 'page', { name: 'feature' })
+    const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+
+    // Head (main) no longer references the image — only the about-to-land
+    // "feature" tip update will.
+    const live = await loadCanvas('ws_branch_race', 'page')
+    const liveList = live.getMovableList('elements')
+    liveList.delete(0, liveList.length)
+    live.commit()
+    await saveCanvas('ws_branch_race', 'page', live, { overwrite: true })
+
+    await seedFile('ws_branch_race', 'about-to-be-tip-referenced', '.png', 77)
+
+    // updateBranchTip's own async read (loadCanvasBranches) happens before
+    // it reaches the lock, which would make lock-acquisition order
+    // non-deterministic under Promise.all. Pre-compute the next branches
+    // state here (mirroring exactly what updateBranchTip does internally)
+    // so the race below starts both sides at the same synchronous point —
+    // saveCanvasBranches is the single write path updateBranchTip funnels
+    // through, so this exercises the identical lock.
+    const preRaceState = await loadCanvasBranches('ws_branch_race', 'page')
+    const idx = preRaceState.branches.findIndex((b) => b.name === 'feature')
+    const nextState = {
+      ...preRaceState,
+      branches: [
+        ...preRaceState.branches.slice(0, idx),
+        { ...preRaceState.branches[idx]!, tipFrontiers: branchTip },
+        ...preRaceState.branches.slice(idx + 1),
+      ],
+    }
+
+    const updatePromise = saveCanvasBranches('ws_branch_race', 'page', nextState)
+    const purgePromise = purgeDanglingFiles('ws_branch_race', { graceMs: 0 })
+    const [, purgeResult] = await Promise.all([updatePromise, purgePromise])
+
+    expect(purgeResult.purgedCount).toBe(0)
+    const remaining = (await readdir(join(tempDir, 'ws_branch_race', 'files'))).sort()
+    expect(remaining).toEqual(['about-to-be-tip-referenced.png'])
   })
 })

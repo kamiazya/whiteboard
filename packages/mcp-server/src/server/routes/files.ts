@@ -1,7 +1,7 @@
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
+import { basename, extname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { join, extname, basename } from 'node:path'
-import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises'
 import { getDataDir } from '../config.js'
 import {
   corruptStoredData,
@@ -11,10 +11,10 @@ import {
 import { purgeDanglingFiles } from '../store/file-gc.js'
 import type { VersionStore } from '../store/version-store.js'
 import {
-  validationErrorBody,
   validateFileId,
-  validateWorkspaceId,
   validateSlug,
+  validateWorkspaceId,
+  validationErrorBody,
 } from '../validators.js'
 
 // Per-file size limit. Loro thumbnails are around 2 MiB and assets pasted into
@@ -152,9 +152,11 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
 
   // POST /api/workspaces/:workspaceId/files/purge-dangling
   // Delete files under <workspaceId>/files/ whose stem is not referenced
-  // by any image element in the workspace's live canvases. Safe and
-  // idempotent — past versions referencing dropped images render as
-  // broken images, matching the existing op-log compaction trade-off.
+  // by any image element in the workspace's live canvases OR any branch
+  // tip (main and every other branch), and — when a versionStore is
+  // supplied — any saved version either. Safe and idempotent; a file is
+  // only ever removed once nothing across that full reference set points
+  // at it, so branch/version restore never regresses to a broken image.
   app.post('/api/workspaces/:workspaceId/files/purge-dangling', async (c) => {
     const { workspaceId } = c.req.param()
     try {

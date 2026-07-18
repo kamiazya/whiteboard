@@ -1,9 +1,12 @@
-import type { LoroDoc } from 'loro-crdt'
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import { decodeFrontiers, LoroDoc } from 'loro-crdt'
+import type { z } from 'zod'
+import type { purgeResultSchema } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
+import { loadCanvasBranches } from './branches-store.js'
 import { listCanvases, loadCanvas } from './canvas-store.js'
 import { isMissingFileError } from './corrupt-stored-data.js'
 import { assertPathWithinDir } from './path-guard.js'
@@ -22,10 +25,10 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
 
-export interface PurgeFilesResult {
-  purgedCount: number
-  purgedBytes: number
-}
+// Single source of truth for the wire shape is purgeResultSchema
+// (shared/api-contracts/canvas.ts) — both routes/files.ts's response and
+// this internal return type derive from it so they cannot drift apart.
+export type PurgeFilesResult = z.infer<typeof purgeResultSchema>
 
 function workspaceFilesDir(workspaceId: string): string {
   validateWorkspaceId(workspaceId)
@@ -54,18 +57,38 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
   }
 }
 
-// Walk every canvas in the workspace (live state, plus past versions when
-// a versionStore is supplied) and collect referenced fileIds.
+// Internal-only description of a canvas/version/branch that GC could not
+// safely inspect. Not a persisted or wire type, so no Zod schema — kept as
+// a discriminated union purely to make the fail-closed reason legible in
+// logs and error messages.
+type SkippedScanTarget =
+  | { kind: 'version'; slug: string; versionId: string; cause: unknown }
+  | { kind: 'branch'; slug: string; branch: string; cause: unknown }
+
+// Walk every canvas in the workspace (live state, plus past versions and
+// every branch tip) and collect referenced fileIds.
 export class IncompleteFileGcScanError extends Error {
   constructor(
     public readonly workspaceId: string,
-    public readonly skipped: ReadonlyArray<{ slug: string; versionId: string; cause: unknown }>,
+    public readonly skipped: ReadonlyArray<SkippedScanTarget>,
   ) {
     super(
-      `file-gc: refusing to purge ${workspaceId} because ${skipped.length} version(s) could not be inspected`,
+      `file-gc: refusing to purge ${workspaceId} because ${skipped.length} target(s) could not be inspected`,
     )
     this.name = 'IncompleteFileGcScanError'
   }
+}
+
+// Fork the live doc through a snapshot and checkout the given base64
+// frontiers, mirroring version-store.ts's load(). Returns null for an
+// empty/unset tip (fresh branch off nothing — no history to check out,
+// equivalent to the live doc referencing nothing extra).
+function checkoutFrontiersBase64(live: LoroDoc, frontiersBase64: string): LoroDoc | null {
+  if (frontiersBase64.length === 0) return null
+  const clone = LoroDoc.fromSnapshot(live.export({ mode: 'snapshot' }))
+  const frontiers = decodeFrontiers(new Uint8Array(Buffer.from(frontiersBase64, 'base64')))
+  clone.checkout(frontiers)
+  return clone
 }
 
 async function collectReferencedFileIds(
@@ -73,25 +96,51 @@ async function collectReferencedFileIds(
   versionStore?: VersionStore,
 ): Promise<Set<string>> {
   const referenced = new Set<string>()
-  const skipped: Array<{ slug: string; versionId: string; cause: unknown }> = []
+  const skipped: SkippedScanTarget[] = []
   const canvases = await listCanvases(workspaceId)
   for (const { slug } of canvases) {
     const live = await loadCanvas(workspaceId, slug)
     collectFromDoc(live, referenced)
+
+    const { branches } = await loadCanvasBranches(workspaceId, slug)
+    for (const branch of branches) {
+      // Every branch tip (including HEAD's, which is redundant with the
+      // live scan above but harmless) is a live reference set — a file
+      // is only dangling when NO branch's tip references it, not just
+      // the currently checked-out one.
+      try {
+        const doc = checkoutFrontiersBase64(live, branch.tipFrontiers)
+        if (doc) collectFromDoc(doc, referenced)
+      } catch (err) {
+        getLogger('file-gc').warning(
+          { workspaceId, slug, branch: branch.name, err },
+          'skipped branch',
+        )
+        skipped.push({ kind: 'branch', slug, branch: branch.name, cause: err })
+      }
+    }
+
     if (!versionStore) continue
     const versions = await versionStore.list(workspaceId, slug)
     for (const v of versions) {
       // load() forks the live doc internally and checks out the version's
       // frontiers. If a version cannot be inspected (missing frontier
-      // rows, corrupt data) we record it as skipped — the file referenced
-      // only by that version would otherwise look dangling and be deleted
-      // permanently. Fail-closed at the caller below.
+      // rows, corrupt data, or load() itself reporting the version does
+      // not exist even though list() just returned it) we record it as
+      // skipped — the file referenced only by that version would
+      // otherwise look dangling and be deleted permanently. Fail-closed
+      // at the caller below; a silent skip here is equivalent to
+      // "treat it as referencing nothing", which is the exact bug this
+      // guards against.
       try {
         const past = await versionStore.load(workspaceId, v.id, live)
-        if (past) collectFromDoc(past, referenced)
+        if (past === null) {
+          throw new Error('versionStore.load returned null for a version list() just reported')
+        }
+        collectFromDoc(past, referenced)
       } catch (err) {
         getLogger('file-gc').warning({ workspaceId, slug, versionId: v.id, err }, 'skipped version')
-        skipped.push({ slug, versionId: v.id, cause: err })
+        skipped.push({ kind: 'version', slug, versionId: v.id, cause: err })
       }
     }
   }

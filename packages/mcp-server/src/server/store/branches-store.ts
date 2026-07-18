@@ -3,6 +3,7 @@ import { validateBranchName, validateSlug, validateWorkspaceId } from '../valida
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getCanvasIdBySlug, upsertCanvasRow } from './db/upsert-workspace.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
 //   branches table         -> one row per branch keyed on (canvasId, name)
@@ -85,6 +86,13 @@ export async function loadCanvasBranches(
   return { branches, head }
 }
 
+// Every branch mutation (createBranch, deleteBranch, updateBranchTip,
+// setHead, renameBranch) funnels through this single write path, so
+// taking the per-workspace write lock here — rather than in each caller —
+// closes the GC-vs-branch-write race for all of them at once: file-gc's
+// collect-then-unlink pass (purgeDanglingFiles) also holds this lock, so a
+// branch tip can never be created/updated between GC's snapshot of
+// referenced fileIds and its unlink pass.
 export async function saveCanvasBranches(
   workspaceId: string,
   slug: string,
@@ -96,31 +104,33 @@ export async function saveCanvasBranches(
     validateBranchName(branch.name)
   }
   validateBranchName(state.head)
-  const db = await dbReady()
-  const canvasId = await upsertCanvasRow(db, workspaceId, slug)
-  await db.transaction().execute(async (trx) => {
-    await trx.deleteFrom('branches').where('canvasId', '=', canvasId).execute()
-    if (state.branches.length > 0) {
+  await withWorkspaceWriteLock(workspaceId, async () => {
+    const db = await dbReady()
+    const canvasId = await upsertCanvasRow(db, workspaceId, slug)
+    await db.transaction().execute(async (trx) => {
+      await trx.deleteFrom('branches').where('canvasId', '=', canvasId).execute()
+      if (state.branches.length > 0) {
+        await trx
+          .insertInto('branches')
+          .values(
+            state.branches.map((b) => ({
+              canvasId,
+              name: b.name,
+              tipFrontiers: b.tipFrontiers,
+              color: b.color ?? null,
+              sourceBranchName: b.baseBranch ?? null,
+              sourceVersionId: b.baseVersionId ?? null,
+              createdAt: parseIsoOrNow(b.createdAt),
+            })),
+          )
+          .execute()
+      }
       await trx
-        .insertInto('branches')
-        .values(
-          state.branches.map((b) => ({
-            canvasId,
-            name: b.name,
-            tipFrontiers: b.tipFrontiers,
-            color: b.color ?? null,
-            sourceBranchName: b.baseBranch ?? null,
-            sourceVersionId: b.baseVersionId ?? null,
-            createdAt: parseIsoOrNow(b.createdAt),
-          })),
-        )
+        .updateTable('canvases')
+        .set({ currentBranch: state.head, updatedAt: Date.now() })
+        .where('id', '=', canvasId)
         .execute()
-    }
-    await trx
-      .updateTable('canvases')
-      .set({ currentBranch: state.head, updatedAt: Date.now() })
-      .where('id', '=', canvasId)
-      .execute()
+    })
   })
 }
 
