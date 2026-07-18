@@ -20,6 +20,16 @@ function indentOf(line) {
   return match ? match[1].length : 0
 }
 
+// Blank lines and full-line comments carry no indentation meaning in YAML —
+// a comment can be dedented below its logical block's indent without ending
+// that block. Every scan loop below must skip both before treating a line's
+// indentation as a dedent signal, or a stray comment silently truncates the
+// job/step/env list being parsed.
+function isBlankOrComment(line) {
+  const trimmed = line.trim()
+  return trimmed === '' || trimmed.startsWith('#')
+}
+
 /**
  * Extract job id / job-level `if` / steps (name, run, if) from a GitHub Actions
  * workflow YAML string, restricted to the subset described above.
@@ -38,7 +48,7 @@ export function extractWorkflowJobs(yamlText) {
 
   while (i < lines.length) {
     const line = lines[i]
-    if (line.trim() === '') {
+    if (isBlankOrComment(line)) {
       i++
       continue
     }
@@ -54,7 +64,7 @@ export function extractWorkflowJobs(yamlText) {
       i++
       while (i < lines.length) {
         const bodyLine = lines[i]
-        if (bodyLine.trim() === '') {
+        if (isBlankOrComment(bodyLine)) {
           i++
           continue
         }
@@ -94,11 +104,7 @@ function parseSteps(lines, startIndex, stepIndent) {
   const stepDashPrefix = ' '.repeat(stepIndent) + '- '
   while (i < lines.length) {
     const line = lines[i]
-    if (line.trim() === '') {
-      i++
-      continue
-    }
-    if (line.trim().startsWith('#')) {
+    if (isBlankOrComment(line)) {
       i++
       continue
     }
@@ -123,7 +129,7 @@ function parseSteps(lines, startIndex, stepIndent) {
       i++
       while (i < lines.length) {
         const bodyLine = lines[i]
-        if (bodyLine.trim() === '') {
+        if (isBlankOrComment(bodyLine)) {
           i++
           continue
         }

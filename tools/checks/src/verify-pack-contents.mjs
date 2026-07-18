@@ -81,8 +81,11 @@ export function verifyPackContents(doc) {
     }
     paths.push(/** @type {{ path: string }} */ (fileEntry).path)
   }
-  if (typeof entry.size !== 'number' || !Number.isFinite(entry.size)) {
-    return { ok: false, reason: 'pack document entry [0].size must be a finite number' }
+  if (typeof entry.size !== 'number' || !Number.isFinite(entry.size) || entry.size < 0) {
+    return {
+      ok: false,
+      reason: 'pack document entry [0].size must be a finite, non-negative number',
+    }
   }
   const missing = REQUIRED_FILES.filter((p) => !paths.includes(p))
   const forbidden = paths.filter((p) => FORBIDDEN_PATTERNS.some((rx) => rx.test(p)))
@@ -95,25 +98,63 @@ export function verifyPackContents(doc) {
   }
 }
 
+// Scan forward from `startIndex` (the character index of the array's opening
+// `[`) tracking bracket depth and JSON string/escape state, and return the
+// index just past the matching closing `]`. String-aware because a file path
+// inside the array can itself contain `[` or `]` (e.g. a workspace glob
+// artifact), which a naive bracket count would miscount.
+function findMatchingArrayEnd(text, startIndex) {
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = startIndex; i < text.length; i++) {
+    const ch = text[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (ch === '\\') escaped = true
+      else if (ch === '"') inString = false
+      continue
+    }
+    if (ch === '"') inString = true
+    else if (ch === '[') depth++
+    else if (ch === ']') {
+      depth--
+      if (depth === 0) return i + 1
+    }
+  }
+  return -1
+}
+
 // `npm pack --dry-run --json` output can be preceded by lifecycle-script
 // stdout (e.g. this package's own `prepack` gate prints a status line before
-// npm prints its JSON array). npm always pretty-prints that array with the
-// top-level `[` alone on its own line, so the JSON payload is anchored on the
-// LAST such line (scanning from the end) rather than a global first-`[`/
-// last-`]` scan — a global scan mis-slices when prelude/diagnostic output
-// contains its own bracket characters (e.g. a `[warn]` tag). A line that is
-// itself a complete, self-closed `[...]` array is also accepted, to tolerate
-// compact (non-pretty-printed) JSON.
+// npm prints its JSON array) and followed by further diagnostic output after
+// the array (e.g. post-pack script logging). npm always pretty-prints the
+// array with the top-level `[` alone on its own line, so the payload's START
+// is anchored on the LAST such line (scanning from the end) rather than a
+// global first-`[`/last-`]` scan — a global scan mis-slices when
+// prelude/diagnostic output contains its own bracket characters (e.g. a
+// `[warn]` tag). The payload's END is then found by bracket-depth scanning
+// forward from that start, so trailing non-JSON output never reaches
+// JSON.parse. A line that is itself a complete, self-closed `[...]` array is
+// also accepted, to tolerate compact (non-pretty-printed) JSON.
 /**
  * @param {string} raw
  * @returns {string}
  */
 export function extractPackJsonText(raw) {
   const lines = raw.split('\n')
+  let offset = 0
+  const lineOffsets = lines.map((line) => {
+    const start = offset
+    offset += line.length + 1 // +1 for the '\n' split away by String#split
+    return start
+  })
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i].trim()
     if (line === '[') {
-      return lines.slice(i).join('\n')
+      const startIndex = lineOffsets[i] + lines[i].indexOf('[')
+      const endIndex = findMatchingArrayEnd(raw, startIndex)
+      if (endIndex !== -1) return raw.slice(startIndex, endIndex)
     }
     if (line.startsWith('[') && line.endsWith(']')) {
       return line
@@ -145,6 +186,7 @@ export function parseArgs(argv) {
  *   stderr?: { write: (chunk: string) => boolean },
  *   spawn?: (cmd: string, args: string[], opts: Record<string, unknown>) => { status: number | null, error?: Error, stdout?: string },
  *   readStdin?: () => string,
+ *   platform?: string,
  * }} MainOptions
  * @returns {number} process exit code
  */
@@ -156,6 +198,7 @@ export function main(options = {}) {
     stderr = process.stderr,
     spawn = spawnSync,
     readStdin = () => readFileSync(0, 'utf-8'),
+    platform = process.platform,
   } = options
 
   const parsed = parseArgs(argv)
@@ -173,7 +216,10 @@ export function main(options = {}) {
   if (parsed.stdin) {
     raw = readStdin()
   } else {
-    const result = spawn('npm', ['pack', '--dry-run', '--json'], { cwd, encoding: 'utf-8' })
+    // Windows has no bare `npm` executable on PATH — only `npm.cmd` — so
+    // spawning 'npm' directly (without shell: true) fails with ENOENT there.
+    const npmCommand = platform === 'win32' ? 'npm.cmd' : 'npm'
+    const result = spawn(npmCommand, ['pack', '--dry-run', '--json'], { cwd, encoding: 'utf-8' })
     if (result.error) {
       stderr.write(`[verify-pack-contents] npm pack could not start: ${result.error.message}\n`)
       return 1

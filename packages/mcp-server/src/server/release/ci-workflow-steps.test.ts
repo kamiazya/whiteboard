@@ -94,4 +94,22 @@ describe('extractWorkflowJobs', () => {
     const { extractWorkflowJobs } = await importExtractor()
     expect(extractWorkflowJobs('name: x\non: push\n')).toEqual([])
   })
+
+  it('does not drop later steps when a comment is dedented below the job body indent', async () => {
+    const { extractWorkflowJobs } = await importExtractor()
+    const fixture = [
+      'jobs:',
+      '  build:',
+      '  # comment dedented to the job-id indent, before steps:',
+      '    steps:',
+      '      - name: Checkout',
+      '        run: echo checkout',
+      '      - name: Install',
+      '        run: echo install',
+      '',
+    ].join('\n')
+    const jobs = extractWorkflowJobs(fixture)
+    const build = jobs.find((j) => j.id === 'build')!
+    expect(build.steps.map((s) => s.name)).toEqual(['Checkout', 'Install'])
+  })
 })

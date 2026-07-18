@@ -19,6 +19,16 @@ function indentOf(line) {
   return match ? match[1].length : 0
 }
 
+// Blank lines and full-line comments carry no indentation meaning in YAML —
+// a comment can be dedented below its logical block's indent without ending
+// that block. Every scan loop below must skip both before treating a line's
+// indentation as a dedent signal, or a stray comment silently truncates the
+// job/step/env scan.
+function isBlankOrComment(line) {
+  const trimmed = line.trim()
+  return trimmed === '' || trimmed.startsWith('#')
+}
+
 /**
  * @typedef {{ jobId: string }} JobLevelHit
  * @typedef {{ jobId: string, stepName: string }} StepLevelHit
@@ -33,7 +43,7 @@ function scanEnvBlockKeys(lines, startIndex, envIndent, key) {
   let found = false
   while (i < lines.length) {
     const line = lines[i]
-    if (line.trim() === '') {
+    if (isBlankOrComment(line)) {
       i++
       continue
     }
@@ -74,7 +84,7 @@ export function scanEnvKeyPlacements(yamlText, key) {
   let i = jobsLineIdx + 1
   while (i < lines.length) {
     const line = lines[i]
-    if (line.trim() === '') {
+    if (isBlankOrComment(line)) {
       i++
       continue
     }
@@ -89,7 +99,7 @@ export function scanEnvKeyPlacements(yamlText, key) {
     i++
     while (i < lines.length) {
       const bodyLine = lines[i]
-      if (bodyLine.trim() === '') {
+      if (isBlankOrComment(bodyLine)) {
         i++
         continue
       }
@@ -107,7 +117,7 @@ export function scanEnvKeyPlacements(yamlText, key) {
         i++
         while (i < lines.length) {
           const stepLine = lines[i]
-          if (stepLine.trim() === '') {
+          if (isBlankOrComment(stepLine)) {
             i++
             continue
           }
@@ -124,7 +134,7 @@ export function scanEnvKeyPlacements(yamlText, key) {
           i++
           while (i < lines.length) {
             const bLine = lines[i]
-            if (bLine.trim() === '') {
+            if (isBlankOrComment(bLine)) {
               i++
               continue
             }

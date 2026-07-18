@@ -53,11 +53,14 @@ describe('workflow hygiene: no inline interpreters', () => {
   })
 
   it('does not flag a fixture that only calls a versioned script', () => {
-    const fixture = 'jobs:\n  x:\n    steps:\n      - run: node tools/checks/src/verify-pack-contents.mjs\n'
+    const fixture =
+      'jobs:\n  x:\n    steps:\n      - run: node tools/checks/src/verify-pack-contents.mjs\n'
     expect(findInlineInterpreterUsages(fixture)).toEqual([])
   })
 
-  const workflowFiles = readdirSync(WORKFLOWS_DIR).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+  const workflowFiles = readdirSync(WORKFLOWS_DIR).filter(
+    (f) => f.endsWith('.yml') || f.endsWith('.yaml'),
+  )
   it('discovers at least one workflow file to scan', () => {
     expect(workflowFiles.length).toBeGreaterThan(0)
   })
@@ -75,7 +78,7 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
       'jobs:',
       '  example:',
       '    env:',
-      '      WHITEBOARD_DEV: \'1\'',
+      "      WHITEBOARD_DEV: '1'",
       '    steps:',
       '      - name: A step',
       '        run: echo hi',
@@ -94,13 +97,31 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
       '    steps:',
       '      - name: Allowed step',
       '        env:',
-      '          WHITEBOARD_DEV: \'1\'',
+      "          WHITEBOARD_DEV: '1'",
       '        run: echo hi',
       '',
     ].join('\n')
     const result = scanEnvKeyPlacements(fixture, 'WHITEBOARD_DEV')
     expect(result.jobLevel).toEqual([])
     expect(result.stepLevel).toEqual([{ jobId: 'example', stepName: 'Allowed step' }])
+  })
+
+  it('scanner fixture: does not drop later env keys when a comment is dedented inside the env block', async () => {
+    const { scanEnvKeyPlacements } = await importScanner()
+    const fixture = [
+      'jobs:',
+      '  example:',
+      '    env:',
+      '    # comment dedented to job-body indent, before some env keys',
+      '      FOO: bar',
+      "      WHITEBOARD_DEV: '1'",
+      '    steps:',
+      '      - name: A step',
+      '        run: echo hi',
+      '',
+    ].join('\n')
+    const result = scanEnvKeyPlacements(fixture, 'WHITEBOARD_DEV')
+    expect(result.jobLevel).toEqual([{ jobId: 'example' }])
   })
 
   it('scanner fixture: reports a non-allow-listed step by name too', async () => {
@@ -111,7 +132,7 @@ describe('workflow hygiene: WHITEBOARD_DEV is step-scoped, not job-scoped', () =
       '    steps:',
       '      - name: Unexpected step',
       '        env:',
-      '          WHITEBOARD_DEV: \'1\'',
+      "          WHITEBOARD_DEV: '1'",
       '        run: echo hi',
       '',
     ].join('\n')

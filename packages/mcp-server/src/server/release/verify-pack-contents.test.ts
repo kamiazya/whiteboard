@@ -176,6 +176,14 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.ok).toBe(false)
     expect(result.reason).toMatch(/size/)
   })
+
+  it('rejects a negative size', async () => {
+    const { verifyPackContents } = await importModule()
+    const entry = { ...VALID_ENTRY, size: -1 }
+    const result = verifyPackContents([entry]) as { ok: false; reason: string }
+    expect(result.ok).toBe(false)
+    expect(result.reason).toMatch(/size/)
+  })
 })
 
 describe('extractPackJsonText', () => {
@@ -201,6 +209,20 @@ describe('extractPackJsonText', () => {
   it('throws when no JSON array is present', async () => {
     const { extractPackJsonText } = await importModule()
     expect(() => extractPackJsonText('no json here')).toThrow()
+  })
+
+  it('extracts the JSON array when trailing output follows it (post-pack script logging)', async () => {
+    const { extractPackJsonText } = await importModule()
+    const raw = '[\n  {"size":1,"files":[]}\n]\npostpack: cleanup complete\n'
+    expect(JSON.parse(extractPackJsonText(raw))).toEqual([{ size: 1, files: [] }])
+  })
+
+  it('extracts the JSON array when a file path inside it contains bracket characters', async () => {
+    const { extractPackJsonText } = await importModule()
+    const raw = '[\n  {"size":1,"files":[{"path":"dist/[locale]/page.js"}]}\n]\ntrailing noise\n'
+    expect(JSON.parse(extractPackJsonText(raw))).toEqual([
+      { size: 1, files: [{ path: 'dist/[locale]/page.js' }] },
+    ])
   })
 })
 
@@ -239,6 +261,20 @@ describe('main() CLI', () => {
       args: ['pack', '--dry-run', '--json'],
       opts: expect.objectContaining({ cwd: '/pkg/root' }),
     })
+  })
+
+  it('spawns npm.cmd (not npm) on win32, where the bare npm binary is not on PATH', async () => {
+    const { main } = await importModule()
+    const stdout = makeSink()
+    const stderr = makeSink()
+    let spawnedCmd: string | null = null
+    const spawn = (cmd: string) => {
+      spawnedCmd = cmd
+      return { status: 0, stdout: JSON.stringify([VALID_ENTRY]) }
+    }
+    const exitCode = main({ platform: 'win32', stdout, stderr, spawn })
+    expect(exitCode).toBe(0)
+    expect(spawnedCmd).toBe('npm.cmd')
   })
 
   it('fails loudly when the npm spawn itself errors', async () => {
