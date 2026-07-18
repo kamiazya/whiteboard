@@ -87,6 +87,47 @@ describe('PUT /api/canvas/:workspaceId/:slug/file/:fileId', () => {
     // its freshly written file deleted between GC's stat() and unlink().
     expect(withWorkspaceWriteLockMock).toHaveBeenCalledWith('session1', expect.any(Function))
   })
+
+  it('does not write the file to disk until the lock callback runs, proving the write happens inside the lock', async () => {
+    // The assertion above only checks that withWorkspaceWriteLock() was
+    // CALLED with a function -- it would still pass if production invoked
+    // the lock with an empty callback and performed the actual
+    // mkdir/writeFile outside of it. Holding the lock callback open here and
+    // asserting the file is absent until it is released proves the write
+    // itself is gated by the lock, not merely wrapped by an unrelated call.
+    let releaseLock: (() => void) | undefined
+    const lockGate = new Promise<void>((resolve) => {
+      releaseLock = resolve
+    })
+    withWorkspaceWriteLockMock.mockImplementationOnce(async (_workspaceId, fn) => {
+      await lockGate
+      return fn()
+    })
+
+    const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+    const app = createFilesRouter()
+    const responsePromise = app.request('/api/canvas/session1/canvas-a/file/file-001', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+      body: imageData,
+    })
+
+    // Flush microtasks so the request reaches the (gated) lock call, without
+    // ever letting the gate open.
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const { readFile } = await import('node:fs/promises')
+    await expect(readFile(join(tempDir, 'session1', 'files', 'file-001.png'))).rejects.toThrow()
+
+    releaseLock?.()
+    const res = await responsePromise
+    expect(res.status).toBe(204)
+
+    const saved = await readFile(join(tempDir, 'session1', 'files', 'file-001.png'))
+    expect(saved[0]).toBe(0x89)
+  })
 })
 
 describe('GET /api/canvas/:workspaceId/:slug/file/:fileId', () => {
