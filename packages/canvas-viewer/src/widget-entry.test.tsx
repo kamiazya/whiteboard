@@ -74,6 +74,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
   afterEach(() => {
     // Restore window.parent so subsequent tests default back to top-level.
     Object.defineProperty(window, 'parent', { configurable: true, value: window })
+    // A test that fails mid-flight with fake timers active would otherwise
+    // leak them into the next case.
+    vi.useRealTimers()
   })
 
   it('mounts the initial scene from ui/notifications/tool-result when embedded in a host', async () => {
@@ -173,6 +176,54 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       expect.objectContaining({ scene }),
     )
     expect(fallbackHandle.dispose).toHaveBeenCalledTimes(1)
+    vi.useRealTimers()
+  })
+
+  it('keeps the current view when a tool-result carries a malformed scene', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = { elements: [{ id: 'a' }] }
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
+    const { mountCanvasViewer } = await import('./mount.js')
+    expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
+    const liveHandle = vi.mocked(mountCanvasViewer).mock.results[0]?.value
+
+    // remount disposes BEFORE mounting, so an unvalidated malformed payload
+    // would trade the working view for an empty container.
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { scene: { bogus: true } } })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: {} })
+
+    expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
+    expect(liveHandle.dispose).not.toHaveBeenCalled()
+  })
+
+  it('does not stack an embedded-scene fallback over a scene the host mounted before the timeout', async () => {
+    vi.useFakeTimers()
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(() => new Promise(() => {})) // never resolves
+
+    await importFreshWidgetEntry()
+    // Host delivers the tool-result while connect() is still pending, i.e.
+    // before the HOST_CONNECT_TIMEOUT_MS branch decides "not connected".
+    const scene = { elements: [{ id: 'c' }] }
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
+
+    await vi.advanceTimersByTimeAsync(2_100)
+
+    const { mountCanvasViewer } = await import('./mount.js')
+    // Exactly the host-scene mount — no bare fallback mount stacked on top.
+    expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
+    expect(mountCanvasViewer).toHaveBeenCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ scene }),
+    )
+    const hostHandle = vi.mocked(mountCanvasViewer).mock.results[0]?.value
+    expect(hostHandle.dispose).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
 })

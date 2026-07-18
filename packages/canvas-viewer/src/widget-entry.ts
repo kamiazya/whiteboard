@@ -5,6 +5,7 @@
 import { App } from '@modelcontextprotocol/ext-apps'
 import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
 import { mountCanvasViewer, type CanvasViewerHandle } from './mount.js'
+import { parseViewerScene } from './scene.js'
 import { buildFontFaceDescriptors, resolveFontFetchDataUri } from './widget/font-registration.js'
 
 declare global {
@@ -162,13 +163,27 @@ async function mountFromHost(
     // mountCanvasViewer.
     const structuredContent = (result as { structuredContent?: { scene?: unknown } })
       .structuredContent
-    remount(() => mountCanvasViewer(container, { scene: structuredContent?.scene }))
+    const scene = structuredContent?.scene
+    // Validate BEFORE remount: remount disposes the live viewer first, so a
+    // malformed tool-result would otherwise trade a working view for an
+    // empty container. On invalid payloads the current view stays up.
+    try {
+      parseViewerScene(scene)
+    } catch {
+      return
+    }
+    remount(() => mountCanvasViewer(container, { scene }))
   }
 
+  // connect() may reject after the timeout already won the race; a catch on
+  // the race result alone would leave that late rejection unhandled.
   const connected = await Promise.race([
-    app.connect().then(() => true),
+    app
+      .connect()
+      .then(() => true)
+      .catch(() => false),
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), HOST_CONNECT_TIMEOUT_MS)),
-  ]).catch(() => false)
+  ])
 
   return connected
 }
@@ -183,15 +198,21 @@ async function bootstrap(): Promise<void> {
   }
 
   let handle: CanvasViewerHandle | undefined
-  const connectedToHost = await mountFromHost(container, (mount) => {
-    // Order matters: dispose the live root and clear its DOM BEFORE the
-    // factory creates the next root — see mountFromHost's doc comment.
+  // Order matters: dispose the live root and clear its DOM BEFORE the
+  // factory creates the next root — see mountFromHost's doc comment.
+  const remount = (mount: () => CanvasViewerHandle): void => {
     handle?.dispose()
     container.replaceChildren()
     handle = mount()
-  })
-  if (!connectedToHost) {
-    handle = mountCanvasViewer(container)
+  }
+  const connectedToHost = await mountFromHost(container, remount)
+  if (!connectedToHost && handle === undefined) {
+    // The embedded-scene fallback goes through the same remount path: a
+    // slow host can deliver a tool-result mount in the gap between the
+    // timeout losing the race and this line, and a bare mountCanvasViewer
+    // here would then stack a second root on the container. The handle
+    // check keeps a just-arrived host scene instead of replacing it.
+    remount(() => mountCanvasViewer(container))
   }
 }
 
