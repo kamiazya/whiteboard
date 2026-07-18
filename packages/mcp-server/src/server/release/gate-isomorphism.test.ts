@@ -178,6 +178,16 @@ describe('gate isomorphism: aggregate coverage resolves to a PR-reachable job', 
         isJobPrReachable(job!),
         `gate "${gate.id}": job "${coverage.jobId}" has a non-pinned if: "${job!.if}"`,
       ).toBe(true)
+      // Guards the concrete regression this coverage kind is weakest against:
+      // an aggregate declaration only asserts the job exists and is
+      // PR-reachable, never that it still does anything. Deleting every
+      // substantive step from job "check" (leaving only checkout/setup)
+      // would otherwise still satisfy this check.
+      const substantiveSteps = job!.steps.filter((s) => s.run !== null)
+      expect(
+        substantiveSteps.length,
+        `gate "${gate.id}": job "${coverage.jobId}" has no steps with a run command left — an aggregate coverage claim requires the job to still do something`,
+      ).toBeGreaterThan(0)
     }
   })
 })
