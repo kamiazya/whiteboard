@@ -166,6 +166,12 @@ pnpm smoke:codex     # Codex subprocess smoke (uses API quota)
 pnpm intent:validate # TanStack Intent validate
 ```
 
+`packages/canvas-viewer`'s self-contained widget bundle (`dist/widget/canvas-viewer.html` — all JS/CSS/fonts inlined, zero external requests) is regenerated with:
+
+```bash
+pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
+```
+
 Default regression triple after a change:
 
 ```bash
