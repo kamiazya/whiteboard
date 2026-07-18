@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { isProductionPagesOrigin } from './lib/pages-origin-policy.js'
+import { classifyPagesOrigin } from './lib/pages-origin-policy.js'
 
 // Validates that a URL string is a bare origin: scheme + host + optional port, no path/query/hash/credentials.
 // Downstream CORS, OAuth, and Cloudflare config all require a strict origin, not an arbitrary URL.
@@ -42,13 +42,34 @@ export function resolveRuntimeConfig(raw: unknown): RuntimeConfig {
 
 export const EMPTY_RUNTIME_CONFIG: RuntimeConfig = {}
 
+// Thrown only for known-safe, hand-authored, user-facing copy — never built by
+// interpolating the rejected origin. resolveProviderStateFromRaw callers rely
+// on this type to distinguish trusted policy copy from Zod/unknown errors,
+// which must keep their generic non-reflective message instead.
+export class RuntimeConfigPolicyError extends Error {}
+
+const GENERIC_HOSTED_ORIGIN_REJECTION =
+  'This deployment origin is not supported. Use the production pages.dev origin for hosted deployments.'
+
 // Stricter variant for hosted (Cloudflare Pages) deployments.
 // Rejects non-production publicOrigin values so preview deploys and localhost
 // cannot accidentally masquerade as the production origin.
 export function resolveHostedRuntimeConfig(raw: unknown): RuntimeConfig {
   const config = runtimeConfigSchema.parse(raw)
-  if (config.publicOrigin !== undefined && !isProductionPagesOrigin(config.publicOrigin)) {
-    throw new Error('publicOrigin must be the production pages.dev origin for hosted deployments.')
+  if (config.publicOrigin === undefined) {
+    return config
   }
-  return config
+  switch (classifyPagesOrigin(config.publicOrigin)) {
+    case 'production':
+      return config
+    case 'custom-domain-deferred':
+      // Future support seam: once a canonical custom domain is confirmed
+      // (see pages-origin-policy.ts), this branch is where it would move to
+      // the 'production' path above instead of throwing.
+      throw new RuntimeConfigPolicyError(
+        'Custom domains and other Pages projects are not yet supported for hosted deployments. Deploy the hosted app on the production pages.dev origin.',
+      )
+    default:
+      throw new RuntimeConfigPolicyError(GENERIC_HOSTED_ORIGIN_REJECTION)
+  }
 }
