@@ -133,6 +133,22 @@ describe('parseViewerScene', () => {
     ).toThrow()
   })
 
+  it('parses a standard .excalidraw envelope with grid fields and no files, matching real Excalidraw exports', () => {
+    // Mirrors @excalidraw/excalidraw's cleanAppStateForExport, which types
+    // every appState field optional and omits `files` entirely when the
+    // document has no embedded images.
+    const scene = parseViewerScene({
+      type: 'excalidraw',
+      version: 2,
+      source: 'x',
+      elements: [{ id: 'a' }],
+      appState: { gridSize: 20, gridStep: 5, gridModeEnabled: true },
+    })
+
+    expect(scene.appState).toEqual({ gridSize: 20, gridStep: 5, gridModeEnabled: true })
+    expect(scene.files).toEqual({})
+  })
+
   it('parses a bare structuredContent payload with only elements', () => {
     const scene = parseViewerScene({ elements: [{ id: 'a' }] })
 

@@ -18,9 +18,15 @@ const EXCALIDRAW_FILE_SOURCE = '@kamiazya/whiteboard'
 // (large, version-coupled) element schema here.
 const looseElementSchema = z.record(z.string(), z.unknown())
 
+// Matches Excalidraw's own `cleanAppStateForExport` return shape (the
+// subset of AppState a real .excalidraw file persists): every field is
+// optional there too, so a standard on-disk document with grid settings
+// omitted (or gridStep/gridModeEnabled present) must still parse.
 const appStateShape = z.object({
-  gridSize: z.number().nullable(),
-  viewBackgroundColor: z.string(),
+  gridSize: z.number().nullable().optional(),
+  viewBackgroundColor: z.string().optional(),
+  gridStep: z.number().optional(),
+  gridModeEnabled: z.boolean().optional(),
 })
 
 // Parse-side authority for the on-disk / exported .excalidraw envelope.
@@ -33,7 +39,12 @@ export const excalidrawJsonDocSchema = z.object({
   // fails on array mutability alone, not on actual shape drift.
   elements: z.array(looseElementSchema).readonly(),
   appState: appStateShape,
-  files: z.record(z.string(), z.unknown()),
+  // Excalidraw's own ExportedDataState types this `BinaryFiles |
+  // undefined` — a document with no embedded images legitimately omits it.
+  // Embedded binary-file blobs are opaque pass-through data for the same
+  // reason as looseElementSchema above: this package never reads into a
+  // file's fields, only threads the whole blob back to Excalidraw.
+  files: z.record(z.string(), z.unknown()).optional(),
 })
 
 // structuredContent-shaped payload (e.g. an MCP tool result): no envelope
@@ -43,6 +54,7 @@ export const viewerSceneSchema = z
   .object({
     elements: z.array(looseElementSchema).readonly(),
     appState: appStateShape.partial().optional(),
+    // Opaque pass-through, same rationale as excalidrawJsonDocSchema.files.
     files: z.record(z.string(), z.unknown()).optional(),
   })
   .strict()
@@ -50,6 +62,7 @@ export const viewerSceneSchema = z
 const normalizedSceneSchema = z.object({
   elements: z.array(looseElementSchema).readonly(),
   appState: appStateShape.partial(),
+  // Opaque pass-through, same rationale as excalidrawJsonDocSchema.files.
   files: z.record(z.string(), z.unknown()),
 })
 
@@ -66,7 +79,7 @@ function hasTypeKey(input: unknown): input is Record<string, unknown> {
 export function parseViewerScene(input: unknown): ViewerScene {
   if (hasTypeKey(input)) {
     const doc = excalidrawJsonDocSchema.parse(input)
-    return { elements: doc.elements, appState: doc.appState, files: doc.files }
+    return { elements: doc.elements, appState: doc.appState, files: doc.files ?? {} }
   }
   const scene = viewerSceneSchema.parse(input)
   return { elements: scene.elements, appState: scene.appState ?? {}, files: scene.files ?? {} }
