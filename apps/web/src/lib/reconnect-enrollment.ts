@@ -41,4 +41,10 @@ export function enrollForReconnectOnce(
     .catch(() => {
       // Non-fatal by contract; see doc comment above.
     })
+    .finally(() => {
+      // Single-flight guards only the PENDING window. Once settled, a later
+      // pairing in the same SPA session (or a retry after a transient
+      // failure) must be able to enroll again.
+      inFlight = null
+    })
 }

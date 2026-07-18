@@ -60,4 +60,37 @@ describe('enrollForReconnectOnce', () => {
     await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it('re-enrolls after a settled success (a later pairing in the same SPA session)', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+    )
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)
+    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+
+    const fetchMock2 = vi.fn(async () =>
+      jsonResponse({ reconnectSecret: 'secret-2', expiresInDays: 30 }),
+    )
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock2)
+    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-2'))
+    expect(fetchMock2).toHaveBeenCalledTimes(1)
+  })
+
+  it('a settled failure does not permanently block a later enrollment attempt', async () => {
+    const failingFetch = vi.fn(async () => {
+      throw new Error('offline')
+    })
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', failingFetch)
+    await vi.waitFor(() => expect(failingFetch).toHaveBeenCalled())
+
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+    )
+    // The single-flight slot frees asynchronously once the failed attempt
+    // settles; keep re-requesting until an attempt goes through and persists.
+    await vi.waitFor(() => {
+      enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)
+      expect(load(ORIGIN)).toBe('secret-1')
+    })
+  })
 })
