@@ -14,6 +14,7 @@
  * doc comment for the extension recipe for the next one.
  */
 export { createWhiteboardCommands } from './create-commands.js'
+export { createSceneExportHandler } from './create-export-handler.js'
 export {
   CommandError,
   type CommandErrorCode,

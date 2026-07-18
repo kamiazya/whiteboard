@@ -20,7 +20,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { useWhiteboardCommands } from '../lib/commands/index.js'
+import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -262,18 +262,7 @@ export function BrowserLocalCanvasPage({
     canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
   })
 
-  // Preserves the existing onExport contract (format => Blob | null):
-  // png/svg still go straight through exportScene, while json now delegates
-  // scene serialization to the shared commands layer.
-  const handleExport = async (format: Parameters<typeof exportScene>[0]) => {
-    if (format !== 'json') return exportScene(format)
-    try {
-      const doc = await commands.exportJson()
-      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
-    } catch {
-      return null
-    }
-  }
+  const handleExport = createSceneExportHandler(commands, exportScene)
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a

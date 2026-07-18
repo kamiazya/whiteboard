@@ -14,7 +14,7 @@ import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { useWhiteboardCommands } from '../lib/commands/index.js'
+import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
@@ -157,18 +157,7 @@ export function DaemonCanvasPage({
         : null,
   })
 
-  // Preserves the existing onExport contract (format => Blob | null):
-  // png/svg still go straight through exportScene, while json now delegates
-  // scene serialization to the shared commands layer.
-  const handleExport = async (format: Parameters<typeof exportScene>[0]) => {
-    if (format !== 'json') return exportScene(format)
-    try {
-      const doc = await commands.exportJson()
-      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
-    } catch {
-      return null
-    }
-  }
+  const handleExport = createSceneExportHandler(commands, exportScene)
 
   const saveVersion = async (): Promise<void> => {
     if (!capabilities.versions || canvas === null || savingVersion) return
