@@ -16,6 +16,8 @@ catalog:
   # cross-process contract cores — one version everywhere
   zod: "^4.4.2"
   loro-crdt: "1.13.6"
+  # shared with apps/web + packages/canvas-viewer — one version everywhere
+  "@excalidraw/excalidraw": "^0.18.1"
   # shared build/test tooling
   typescript: "^6.0.3"
   vite: "^8.1.3"

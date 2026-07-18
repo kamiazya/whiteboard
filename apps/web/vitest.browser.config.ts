@@ -38,6 +38,11 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/index.ts',
       ),
+      // Resolve canvas-viewer from source so tests run before `pnpm build`.
+      '@kamiazya/whiteboard-canvas-viewer': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/index.ts',
+      ),
     },
   },
   // tailwindcss: layout browser tests import src/index.css to assert real

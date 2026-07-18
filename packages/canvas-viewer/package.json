@@ -1,0 +1,21 @@
+{
+  "name": "@kamiazya/whiteboard-canvas-viewer",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Read-only Excalidraw scene viewer, shared between apps/web and future embedded surfaces (MCP Apps widget, HTML export). Never published to npm.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@excalidraw/excalidraw": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

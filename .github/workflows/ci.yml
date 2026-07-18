@@ -75,6 +75,12 @@ jobs:
       - name: Test mcp-node (shard ${{ matrix.shard }}/2)
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 
+      # canvas-viewer is small enough to skip sharding; run it once (shard 1)
+      # so it isn't duplicated across the matrix.
+      - name: Test canvas-viewer-node
+        if: matrix.shard == 1
+        run: pnpm exec vitest run --project=canvas-viewer-node
+
   test-jsdom:
     runs-on: ubuntu-latest
     timeout-minutes: 15
