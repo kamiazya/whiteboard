@@ -5,10 +5,12 @@
     <title>Canvas Viewer</title>
     <style>
       /* Inline MCP Apps hosts auto-resize the iframe to the document's
-         scroll height. Any viewport-relative height (100vh) then feeds back
-         into the next measurement and the iframe grows without bound, so
-         the widget must declare a FIXED intrinsic height and clip its own
-         overflow to keep scrollHeight == content height. */
+         scroll height. Any viewport-relative height then feeds back into
+         the next measurement and the iframe grows without bound, so the
+         widget must declare a FIXED intrinsic height and clip its own
+         overflow to keep scrollHeight == content height. (Keep viewport
+         units out of comments too — shell-height.test.ts scans the raw
+         file.) */
       html,
       body {
         margin: 0;
