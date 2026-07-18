@@ -3,6 +3,7 @@ import {
   exportToBlob,
   exportToSvg,
   restoreElements,
+  serializeAsJSON,
 } from '@excalidraw/excalidraw'
 import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types'
 import type {
@@ -40,7 +41,7 @@ export type SyncStatus = 'idle' | 'connected' | 'error'
 
 // Raster/vector are the only formats the underlying @excalidraw/excalidraw
 // export utilities support; there is no PDF export anywhere in the library.
-export type SceneExportFormat = 'png' | 'svg'
+export type SceneExportFormat = 'png' | 'svg' | 'json'
 
 // Daemon-only callback seam. Every member is stored in a ref (see optionsRef
 // below) so passing a fresh inline object on every render never forces a
@@ -711,6 +712,14 @@ export function useCanvasSync(
     const files = api.getFiles()
     if (format === 'png') {
       return exportToBlob({ elements, appState, files, exportPadding: 10 })
+    }
+    if (format === 'json') {
+      // serializeAsJSON is the canonical producer of the .excalidraw file
+      // format ({type:'excalidraw', version:2, ...}), matching what the
+      // daemon's canvas_export_json emits and what Excalidraw's own
+      // save-to-file dialog writes.
+      const json = serializeAsJSON(elements, appState, files, 'local')
+      return new Blob([json], { type: 'application/json' })
     }
     const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
     const serialized = new XMLSerializer().serializeToString(svg)
