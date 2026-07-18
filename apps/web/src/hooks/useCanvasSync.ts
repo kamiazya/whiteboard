@@ -117,6 +117,14 @@ export function useCanvasSync(
     if (backend === null) {
       sessionRef.current = null
       setSyncStatus('idle')
+      // Bumps the connection generation even though no new session is
+      // created, mirroring the pre-extraction hook's unconditional bump on
+      // every effect run. Without this, a settling putFile() from the
+      // just-disposed session would still match its own myGeneration (no
+      // successor session ever advances the counter for a switch-to-null)
+      // and would wrongly fire onFileUploadSucceeded/onFileUploadFailed for
+      // a backend that is no longer attached.
+      generationsRef.current.nextConnectionGeneration()
       return
     }
 

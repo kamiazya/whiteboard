@@ -1271,6 +1271,63 @@ describe('useCanvasSync', () => {
       expect(backendB._ctrl.pushLocalUpdateCalls.length).toBe(0)
     })
 
+    // Root-cause regression: switching to null tears down the session with
+    // no successor ever created, so nothing else would ever bump the
+    // connection generation for this hook instance. Without the hook itself
+    // bumping it on the null transition, A's settling putFile would still
+    // match its own myGeneration and wrongly report success for a backend
+    // that is no longer attached.
+    it('suppresses the stale onFileUploadSucceeded callback when the backend switches to null before the upload settles', async () => {
+      const backendA = makeControllablePutFileBackend()
+      const api = makeApiStub()
+      const onFileUploadSucceeded = vi.fn()
+
+      const { result, rerender } = renderHook(
+        ({ backend }) => useCanvasSync(backend, { onFileUploadSucceeded }),
+        { initialProps: { backend: backendA as CanvasBackend | null } },
+      )
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await act(async () => {
+        backendA._ctrl.handlers!.onSnapshot(makeEmptyLoroSnapshot())
+        await vi.runAllTimersAsync()
+      })
+
+      const fakeEl = { type: 'image', id: 'img-null-switch', x: 0, y: 0, width: 10, height: 10 }
+      const fakeFile = {
+        id: 'file-null-switch',
+        mimeType: 'image/png',
+        dataURL: 'data:x',
+        created: 0,
+      }
+      act(() => {
+        result.current.onChange([fakeEl as never], {} as never, {
+          'file-null-switch': fakeFile as never,
+        })
+      })
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400)
+      })
+
+      // putFile is in flight against A. Switch to null before it settles.
+      act(() => {
+        rerender({ backend: null })
+      })
+
+      await act(async () => {
+        backendA._resolvePutFile()
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      expect(onFileUploadSucceeded).not.toHaveBeenCalled()
+    })
+
     // Root-cause regression: A's onSuccess callback fires after the
     // connection has already switched to B. It must record the upload only
     // against A's own (now-detached) uploaded-file set, never against B's

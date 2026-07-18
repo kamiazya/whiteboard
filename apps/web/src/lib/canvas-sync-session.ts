@@ -537,6 +537,15 @@ export function createCanvasSyncSession(
     // subscription for why it has no isStale() guard.
     onSceneChange.flush()
     disposed = true
+    // Bumps the shared apply generation unconditionally, mirroring the
+    // pre-extraction hook's unconditional per-connection ref reset. Without
+    // this, a getFile() fetch this session started but never resolved before
+    // teardown would still match currentApplyGeneration() if no successor
+    // session's own applyLoroToExcalidraw happens to run first (e.g. the
+    // backend switches to null, or a successor's snapshot is delayed) — and
+    // would then write this now-torn-down session's stale content into the
+    // (possibly different) live Excalidraw API.
+    deps.generations.nextApplyGeneration()
     backend.disconnect()
   }
 

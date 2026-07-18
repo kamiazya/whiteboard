@@ -11,7 +11,7 @@ import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@excalidraw/excalidraw', () => ({
@@ -29,6 +29,31 @@ import {
 
 function makeEmptySnapshot(): Uint8Array {
   return new LoroDoc().export({ mode: 'snapshot' })
+}
+
+function makeDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((r) => {
+    resolve = r
+  })
+  return { promise, resolve }
+}
+
+// Builds a snapshot containing a single image element referencing fileId, so
+// onSnapshot triggers a backend.getFile(fileId) fetch inside applyLoroToExcalidraw.
+function makeSnapshotWithImage(fileId: string): Uint8Array {
+  const doc = new LoroDoc()
+  const list = doc.getMovableList('elements')
+  const map = list.insertContainer(0, new LoroMap())
+  map.set('id', 'img-1')
+  map.set('type', 'image')
+  map.set('x', 0)
+  map.set('y', 0)
+  map.set('width', 10)
+  map.set('height', 10)
+  map.set('fileId', fileId)
+  doc.commit()
+  return doc.export({ mode: 'snapshot' })
 }
 
 type FakeBackendControl = {
@@ -277,6 +302,50 @@ describe('createCanvasSyncSession', () => {
 
     backend._ctrl.handlers!.onRestoreComplete()
     expect(onRestoreChange).toHaveBeenCalledWith(false, null)
+  })
+
+  // Root-cause regression: a delayed getFile() resolving after this session
+  // was torn down (backend switched to null, or a successor's own snapshot
+  // has not arrived yet) must never write stale content into the
+  // Excalidraw API. Prior to bumping the apply generation unconditionally in
+  // dispose(), this generation match only broke when *another* session's own
+  // applyLoroToExcalidraw call happened to run first — a torn-down session
+  // with no immediate successor slipped through.
+  it('a pending getFile fetch from a torn-down session with no successor never applies stale content', async () => {
+    const deferred = makeDeferred<Blob>()
+    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+      ...makeFakeBackend(),
+      getFile: async () => deferred.promise,
+    }
+    const api = {
+      addFiles: vi.fn(),
+      updateScene: vi.fn(),
+      getSceneElements: vi.fn(() => []),
+      getAppState: vi.fn(() => ({})),
+      getFiles: vi.fn(() => ({})),
+    }
+    const session = createCanvasSyncSession(
+      backend,
+      makeDeps({ getExcalidrawAPI: () => api as never }),
+    )
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshotWithImage('shared-file'))
+    // Let applyLoroToExcalidraw start and call backend.getFile — it awaits
+    // the still-pending `deferred.promise`.
+    await Promise.resolve()
+
+    // Torn down (e.g. backend switched to null) before the fetch resolves,
+    // with no successor session ever created.
+    session.dispose()
+
+    deferred.resolve(new Blob(['stale'], { type: 'text/plain' }))
+    // blobToBase64 goes through a real FileReader, which completes on a
+    // macrotask rather than a plain microtask — advancing fake timers (not
+    // just chained microtasks) is required to let it settle.
+    await vi.runAllTimersAsync()
+
+    expect(api.addFiles).not.toHaveBeenCalled()
+    expect(api.updateScene).not.toHaveBeenCalled()
   })
 
   it('onAuthError sets error status and invokes options.onAuthError via getOptions', () => {
