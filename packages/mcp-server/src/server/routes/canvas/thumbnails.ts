@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import type { VersionStore } from '../../store/version-store.js'
 import {
   validateSlug,
@@ -8,6 +9,10 @@ import {
 } from '../../validators.js'
 import { isValidPngSignature } from '../canvas-thumbnail.js'
 import { handleCorruptStoredData } from './shared.js'
+
+// Thumbnails are PNG blobs exported from the browser canvas. Match
+// files.ts's MAX_FILE_UPLOAD_BYTES rather than inventing a separate number.
+const THUMBNAIL_UPLOAD_LIMIT_BYTES = 16 * 1024 * 1024
 
 export interface ThumbnailsRouterOptions {
   versionStore: VersionStore
@@ -21,29 +26,43 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
   const { versionStore } = options
 
   // Body is PNG binary from the browser exportToBlob result. Validate the PNG signature minimally.
-  app.put('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {
-    const { workspaceId, slug, id } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-      validateVersionId(id)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
-    const bytes = new Uint8Array(await c.req.arrayBuffer())
-    if (!isValidPngSignature(bytes)) {
-      return c.json({ error: 'invalid_png' }, 400)
-    }
-    try {
-      await versionStore.saveThumbnail(workspaceId, id, bytes)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'save failed'
-      return c.json({ error: 'save_failed', message: msg }, 400)
-    }
-    return c.json({ ok: true })
-  })
+  app.put(
+    '/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail',
+    bodyLimit({
+      maxSize: THUMBNAIL_UPLOAD_LIMIT_BYTES,
+      onError: (c) =>
+        c.json(
+          {
+            error: 'payload_too_large',
+            message: `Upload exceeds ${THUMBNAIL_UPLOAD_LIMIT_BYTES} bytes limit.`,
+          },
+          413,
+        ),
+    }),
+    async (c) => {
+      const { workspaceId, slug, id } = c.req.param()
+      try {
+        validateWorkspaceId(workspaceId)
+        validateSlug(slug)
+        validateVersionId(id)
+      } catch (err) {
+        const body = validationErrorBody(err)
+        if (body) return c.json(body, 400)
+        throw err
+      }
+      const bytes = new Uint8Array(await c.req.arrayBuffer())
+      if (!isValidPngSignature(bytes)) {
+        return c.json({ error: 'invalid_png' }, 400)
+      }
+      try {
+        await versionStore.saveThumbnail(workspaceId, id, bytes)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'save failed'
+        return c.json({ error: 'save_failed', message: msg }, 400)
+      }
+      return c.json({ ok: true })
+    },
+  )
 
   // Return the PNG with cache headers, or 404 if it has not been saved.
   app.get('/api/workspaces/:workspaceId/canvases/:slug/versions/:id/thumbnail', async (c) => {

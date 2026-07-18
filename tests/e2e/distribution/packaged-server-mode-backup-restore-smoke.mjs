@@ -52,7 +52,7 @@ const HOST_SERVER_PORT = 4294
 const READINESS_TIMEOUT_MS = 60_000
 const WORKSPACE_ID = 'sess-smoke-br'
 const CANVAS_SLUG = 'canvas-smoke-br'
-const FILE_ID = 'filesmokebr001'   // must match validateFileId: [A-Za-z0-9_-]{1,64}
+const FILE_ID = 'filesmokebr001' // must match validateFileId: [A-Za-z0-9_-]{1,64}
 
 const BACKUP_RESTORE_ENTRY = resolve(
   REPO_ROOT,
@@ -62,14 +62,10 @@ const BACKUP_RESTORE_ENTRY = resolve(
 // Minimal valid PNG (1×1 white pixel) — satisfies the PNG signature check
 // (bytes 0-3 = 89 50 4E 47) that the thumbnail and file-upload routes enforce.
 const MINIMAL_PNG = Buffer.from([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-  0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-  0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-  0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,
-  0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
-  0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,
-  0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+  0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
+  0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41, 0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,
+  0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc, 0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,
   0x44, 0xae, 0x42, 0x60, 0x82,
 ])
 
@@ -100,20 +96,46 @@ function generateTestTlsCert(dir) {
   const keyFile = join(dir, 'server.key')
   const certFile = join(dir, 'server.crt')
   const cnfFile = join(dir, 'openssl.cnf')
-  writeFileSync(cnfFile, [
-    '[req]', 'distinguished_name = req_dn', 'x509_extensions = san_ext', 'prompt = no',
-    '[req_dn]', 'CN = docker-br-smoke-ca',
-    '[san_ext]', 'subjectAltName = IP:127.0.0.1,DNS:host.docker.internal', 'basicConstraints = critical,CA:true',
-  ].join('\n'))
-  const r = spawnSync('openssl', [
-    'req', '-x509', '-newkey', 'rsa:2048', '-keyout', keyFile, '-out', certFile,
-    '-days', '1', '-nodes', '-config', cnfFile,
-  ], { stdio: 'pipe', encoding: 'utf8' })
+  writeFileSync(
+    cnfFile,
+    [
+      '[req]',
+      'distinguished_name = req_dn',
+      'x509_extensions = san_ext',
+      'prompt = no',
+      '[req_dn]',
+      'CN = docker-br-smoke-ca',
+      '[san_ext]',
+      'subjectAltName = IP:127.0.0.1,DNS:host.docker.internal',
+      'basicConstraints = critical,CA:true',
+    ].join('\n'),
+  )
+  const r = spawnSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-keyout',
+      keyFile,
+      '-out',
+      certFile,
+      '-days',
+      '1',
+      '-nodes',
+      '-config',
+      cnfFile,
+    ],
+    { stdio: 'pipe', encoding: 'utf8' },
+  )
   if (r.status !== 0) throw new Error(`openssl cert gen failed: ${r.stderr}`)
   return { keyFile, certFile }
 }
 
-function base64url(data) { return Buffer.from(data).toString('base64url') }
+function base64url(data) {
+  return Buffer.from(data).toString('base64url')
+}
 
 function derToRawEs256(derSig) {
   let offset = 2
@@ -124,8 +146,10 @@ function derToRawEs256(derSig) {
   const sLen = derSig[offset + 1]
   let s = derSig.slice(offset + 2, offset + 2 + sLen)
   if (s[0] === 0x00) s = s.slice(1)
-  const rPad = Buffer.alloc(32); r.copy(rPad, 32 - r.length)
-  const sPad = Buffer.alloc(32); s.copy(sPad, 32 - s.length)
+  const rPad = Buffer.alloc(32)
+  r.copy(rPad, 32 - r.length)
+  const sPad = Buffer.alloc(32)
+  s.copy(sPad, 32 - s.length)
   return Buffer.concat([rPad, sPad])
 }
 
@@ -147,9 +171,13 @@ async function waitForReadyJson(containerName) {
       try {
         const obj = JSON.parse(line)
         if (obj.ok === true && typeof obj.pid === 'number') return obj
-      } catch { /* not JSON */ }
+      } catch {
+        /* not JSON */
+      }
     }
-    const inspect = docker(['inspect', '--format={{.State.Running}}', containerName], { timeout: 5_000 })
+    const inspect = docker(['inspect', '--format={{.State.Running}}', containerName], {
+      timeout: 5_000,
+    })
     if (inspect.stdout.trim() !== 'true') {
       // Container stopped — capture logs now before they disappear.
       const exitLogs = docker(['logs', containerName], { timeout: 5_000 })
@@ -159,7 +187,9 @@ async function waitForReadyJson(containerName) {
   return null
 }
 
-function stopContainer(name) { docker(['stop', '-t', '10', name], { timeout: 20_000 }) }
+function stopContainer(name) {
+  docker(['stop', '-t', '10', name], { timeout: 20_000 })
+}
 
 // Poll the HTTP ping endpoint until it responds or the deadline passes.
 // The container may emit the ready JSON before Docker's host-side port mapping
@@ -170,7 +200,9 @@ async function waitForHttpReady(baseUrl, timeoutMs = 15_000) {
     try {
       const r = await fetch(`${baseUrl}/api/runtime/ping`)
       if (r.ok) return true
-    } catch { /* port not yet reachable */ }
+    } catch {
+      /* port not yet reachable */
+    }
     await delay(500)
   }
   return false
@@ -180,8 +212,15 @@ function makeJwt(privateKey, scope) {
   const now = Math.floor(Date.now() / 1000)
   return signEs256Jwt(
     privateKey,
-    { alg: 'ES256', kid: 'br-smoke-key' },
-    { sub: 'br-smoke-user', scope, iss: SMOKE_ISSUER, aud: SMOKE_AUDIENCE, iat: now, exp: now + 3600 },
+    { alg: 'ES256', typ: 'at+jwt', kid: 'br-smoke-key' },
+    {
+      sub: 'br-smoke-user',
+      scope,
+      iss: SMOKE_ISSUER,
+      aud: SMOKE_AUDIENCE,
+      iat: now,
+      exp: now + 3600,
+    },
   )
 }
 
@@ -261,7 +300,8 @@ const jwksServer = await new Promise((resolve, reject) => {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify(jwks))
     } else {
-      res.writeHead(404); res.end()
+      res.writeHead(404)
+      res.end()
     }
   })
   srv.listen(0, '0.0.0.0', () => resolve(srv))
@@ -274,7 +314,8 @@ const jwksUri = `https://${jwksConnectHost}:${jwksPort}/.well-known/jwks.json`
 const SMOKE_PATH_LITERALS = [srcDataDir, backupDir, restoredDataDir, certsDir, jwksUri]
 
 // Broad scope JWT for seeding (covers all protected routes used in this smoke).
-const SEED_SCOPES = 'workspace:write workspace:read canvas:write canvas:read files:write files:read versions:write versions:read'
+const SEED_SCOPES =
+  'workspace:write workspace:read canvas:write canvas:read files:write files:read versions:write versions:read'
 
 let activeContainer = null
 
@@ -283,21 +324,34 @@ try {
 
   {
     const args = [
-      'run', '-d', '--name', 'wb-br-smoke-src',
+      'run',
+      '-d',
+      '--name',
+      'wb-br-smoke-src',
       ...networkRunArgs,
-      '-v', `${srcDataDir}:/data`,
-      '-v', `${tlsCertFile}:/extra-ca.crt:ro`,
-      '-e', 'NODE_EXTRA_CA_CERTS=/extra-ca.crt',
-      '-e', `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
-      '-e', 'WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt',
-      '-e', `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
-      '-e', `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
-      '-e', `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
-      '-e', `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
+      '-v',
+      `${srcDataDir}:/data`,
+      '-v',
+      `${tlsCertFile}:/extra-ca.crt:ro`,
+      '-e',
+      'NODE_EXTRA_CA_CERTS=/extra-ca.crt',
+      '-e',
+      `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
+      '-e',
+      'WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt',
+      '-e',
+      `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
+      '-e',
+      `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
+      '-e',
+      `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
+      '-e',
+      `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
       IMAGE_TAG,
     ]
     const r = docker(args, { timeout: 15_000 })
-    if (r.status !== 0) fail('scenario 2: container A start failed', { stderrBytes: r.stderr?.length ?? 0 })
+    if (r.status !== 0)
+      fail('scenario 2: container A start failed', { stderrBytes: r.stderr?.length ?? 0 })
     activeContainer = 'wb-br-smoke-src'
 
     const ready = await waitForReadyJson('wb-br-smoke-src')
@@ -308,7 +362,7 @@ try {
       })
     }
     assertNoLeak('scenario 2 ready JSON', JSON.stringify(ready))
-    if (!await waitForHttpReady(serverBaseUrl)) {
+    if (!(await waitForHttpReady(serverBaseUrl))) {
       fail('scenario 2: HTTP ping did not respond after port mapping delay')
     }
     console.log('[docker-br-smoke] scenario 2 PASS: container A started')
@@ -326,7 +380,11 @@ try {
       serverBaseUrl,
       `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
       jwt,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: CANVAS_SLUG }) },
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: CANVAS_SLUG }),
+      },
     )
     if (!createRes.ok) {
       const t = await createRes.text().catch(() => '')
@@ -334,7 +392,11 @@ try {
     }
 
     // Verify canvas list (workspace:read).
-    const listRes = await authedFetch(serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`, jwt)
+    const listRes = await authedFetch(
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+      jwt,
+    )
     if (!listRes.ok) fail(`scenario 3: canvas list failed with ${listRes.status}`)
     const list = await listRes.json()
     if (!(list?.canvases ?? []).some((c) => c.slug === CANVAS_SLUG)) {
@@ -343,7 +405,9 @@ try {
 
     // Capture Loro snapshot bytes (canvas:read).
     const snapshotRes = await authedFetch(
-      serverBaseUrl, `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/snapshot`, jwt,
+      serverBaseUrl,
+      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/snapshot`,
+      jwt,
     )
     if (!snapshotRes.ok) fail(`scenario 3: snapshot fetch failed with ${snapshotRes.status}`)
     seededSnapshotBytes = new Uint8Array(await snapshotRes.arrayBuffer())
@@ -351,36 +415,57 @@ try {
 
     // Upload file blob (files:write).
     const uploadRes = await authedFetch(
-      serverBaseUrl, `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`, jwt,
+      serverBaseUrl,
+      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`,
+      jwt,
       { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: MINIMAL_PNG },
     )
     if (uploadRes.status !== 204) fail(`scenario 3: file upload failed with ${uploadRes.status}`)
 
     // Save manual version (versions:write).
     const versionRes = await authedFetch(
-      serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions`, jwt,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label: 'smoke-seed-version' }) },
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions`,
+      jwt,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'smoke-seed-version' }),
+      },
     )
     if (!versionRes.ok) fail(`scenario 3: version save failed with ${versionRes.status}`)
     const versionBody = await versionRes.json()
     seededVersionId = versionBody?.version?.id
-    if (!seededVersionId) fail('scenario 3: version save returned no id', { bodyLength: JSON.stringify(versionBody).length })
+    if (!seededVersionId)
+      fail('scenario 3: version save returned no id', {
+        bodyLength: JSON.stringify(versionBody).length,
+      })
 
     // Save version thumbnail (versions:write).
     const thumbRes = await authedFetch(
-      serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions/${seededVersionId}/thumbnail`, jwt,
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions/${seededVersionId}/thumbnail`,
+      jwt,
       { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: MINIMAL_PNG },
     )
     if (!thumbRes.ok) fail(`scenario 3: thumbnail upload failed with ${thumbRes.status}`)
 
     // Save palette entry.
     const paletteRes = await authedFetch(
-      serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`, jwt,
-      { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entries: { '#smoke-red': '#FF0000' } }) },
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`,
+      jwt,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entries: { '#smoke-red': '#FF0000' } }),
+      },
     )
     if (!paletteRes.ok) fail(`scenario 3: palette save failed with ${paletteRes.status}`)
 
-    console.log(`[docker-br-smoke] scenario 3 PASS: seeded workspace=${WORKSPACE_ID}, canvas=${CANVAS_SLUG}, snapshot=${seededSnapshotBytes.byteLength} bytes, versionId=${seededVersionId}`)
+    console.log(
+      `[docker-br-smoke] scenario 3 PASS: seeded workspace=${WORKSPACE_ID}, canvas=${CANVAS_SLUG}, snapshot=${seededSnapshotBytes.byteLength} bytes, versionId=${seededVersionId}`,
+    )
   }
 
   // ── Scenario 4: stop server A ─────────────────────────────────────────────
@@ -397,10 +482,14 @@ try {
   // ── Scenario 5: backup + restore ─────────────────────────────────────────
 
   {
-    const { backupServerModeDataDir, restoreServerModeDataDir } = await import(`file://${BACKUP_RESTORE_ENTRY}`)
+    const { backupServerModeDataDir, restoreServerModeDataDir } = await import(
+      `file://${BACKUP_RESTORE_ENTRY}`
+    )
 
     await backupServerModeDataDir(srcDataDir, backupDir, { allowedRoots: [srcDataDir, backupDir] })
-    await restoreServerModeDataDir(backupDir, restoredDataDir, { allowedRoots: [backupDir, restoredDataDir] })
+    await restoreServerModeDataDir(backupDir, restoredDataDir, {
+      allowedRoots: [backupDir, restoredDataDir],
+    })
 
     // Stale server-mode.json must have been removed from restored dir.
     const recordPath = join(restoredDataDir, 'server-mode.json')
@@ -408,28 +497,43 @@ try {
       fail('scenario 5: server-mode.json was not neutralized in restored dir — stale identity risk')
     }
 
-    console.log('[docker-br-smoke] scenario 5 PASS: backup → restore ok, server-mode.json neutralized')
+    console.log(
+      '[docker-br-smoke] scenario 5 PASS: backup → restore ok, server-mode.json neutralized',
+    )
   }
 
   // ── Scenario 6: start server B on restored volume ────────────────────────
 
   {
     const args = [
-      'run', '-d', '--name', 'wb-br-smoke-restored',
+      'run',
+      '-d',
+      '--name',
+      'wb-br-smoke-restored',
       ...networkRunArgs,
-      '-v', `${restoredDataDir}:/data`,
-      '-v', `${tlsCertFile}:/extra-ca.crt:ro`,
-      '-e', 'NODE_EXTRA_CA_CERTS=/extra-ca.crt',
-      '-e', `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
-      '-e', 'WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt',
-      '-e', `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
-      '-e', `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
-      '-e', `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
-      '-e', `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
+      '-v',
+      `${restoredDataDir}:/data`,
+      '-v',
+      `${tlsCertFile}:/extra-ca.crt:ro`,
+      '-e',
+      'NODE_EXTRA_CA_CERTS=/extra-ca.crt',
+      '-e',
+      `WHITEBOARD_SERVER_EXTERNAL_URL=${SMOKE_AUDIENCE}`,
+      '-e',
+      'WHITEBOARD_SERVER_AUTH_STRATEGY=oauth-jwt',
+      '-e',
+      `WHITEBOARD_SERVER_JWT_ISSUER=${SMOKE_ISSUER}`,
+      '-e',
+      `WHITEBOARD_SERVER_JWT_AUDIENCE=${SMOKE_AUDIENCE}`,
+      '-e',
+      `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
+      '-e',
+      `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
       IMAGE_TAG,
     ]
     const r = docker(args, { timeout: 15_000 })
-    if (r.status !== 0) fail('scenario 6: container B start failed', { stderrBytes: r.stderr?.length ?? 0 })
+    if (r.status !== 0)
+      fail('scenario 6: container B start failed', { stderrBytes: r.stderr?.length ?? 0 })
     activeContainer = 'wb-br-smoke-restored'
 
     const ready = await waitForReadyJson('wb-br-smoke-restored')
@@ -440,7 +544,7 @@ try {
       })
     }
     assertNoLeak('scenario 6 ready JSON', JSON.stringify(ready))
-    if (!await waitForHttpReady(serverBaseUrl)) {
+    if (!(await waitForHttpReady(serverBaseUrl))) {
       fail('scenario 6: HTTP ping did not respond after port mapping delay')
     }
     console.log('[docker-br-smoke] scenario 6 PASS: server B started on restored volume')
@@ -452,23 +556,34 @@ try {
     const jwt = makeJwt(privateKey, SEED_SCOPES)
 
     // Canvas list (workspace:read).
-    const listRes = await authedFetch(serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`, jwt)
-    if (!listRes.ok) fail(`scenario 7: canvas list on restored server failed with ${listRes.status}`)
+    const listRes = await authedFetch(
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+      jwt,
+    )
+    if (!listRes.ok)
+      fail(`scenario 7: canvas list on restored server failed with ${listRes.status}`)
     const list = await listRes.json()
     if (!(list?.canvases ?? []).some((c) => c.slug === CANVAS_SLUG)) {
-      fail('scenario 7: seeded canvas missing from restored server', { canvasCount: (list?.canvases ?? []).length })
+      fail('scenario 7: seeded canvas missing from restored server', {
+        canvasCount: (list?.canvases ?? []).length,
+      })
     }
 
     // Snapshot byte-equality (canvas:read).
     const snapshotRes = await authedFetch(
-      serverBaseUrl, `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/snapshot`, jwt,
+      serverBaseUrl,
+      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/snapshot`,
+      jwt,
     )
-    if (!snapshotRes.ok) fail(`scenario 7: snapshot fetch on restored server failed with ${snapshotRes.status}`)
+    if (!snapshotRes.ok)
+      fail(`scenario 7: snapshot fetch on restored server failed with ${snapshotRes.status}`)
     const restoredSnapshot = new Uint8Array(await snapshotRes.arrayBuffer())
     if (restoredSnapshot.byteLength === 0) fail('scenario 7: restored snapshot is empty')
     if (restoredSnapshot.byteLength !== seededSnapshotBytes.byteLength) {
       fail('scenario 7: snapshot byte length mismatch', {
-        seeded: seededSnapshotBytes.byteLength, restored: restoredSnapshot.byteLength,
+        seeded: seededSnapshotBytes.byteLength,
+        restored: restoredSnapshot.byteLength,
       })
     }
     for (let i = 0; i < seededSnapshotBytes.byteLength; i++) {
@@ -479,46 +594,66 @@ try {
 
     // File blob (files:read).
     const fileRes = await authedFetch(
-      serverBaseUrl, `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`, jwt,
+      serverBaseUrl,
+      `/api/canvas/${encodeURIComponent(WORKSPACE_ID)}/${encodeURIComponent(CANVAS_SLUG)}/file/${FILE_ID}`,
+      jwt,
     )
     if (!fileRes.ok) fail(`scenario 7: file GET on restored server failed with ${fileRes.status}`)
     const restoredFileBytes = new Uint8Array(await fileRes.arrayBuffer())
     if (restoredFileBytes.byteLength !== MINIMAL_PNG.byteLength) {
       fail('scenario 7: restored file byte length mismatch', {
-        expected: MINIMAL_PNG.byteLength, got: restoredFileBytes.byteLength,
+        expected: MINIMAL_PNG.byteLength,
+        got: restoredFileBytes.byteLength,
       })
     }
 
     // Version list (versions:read).
     const versionsRes = await authedFetch(
-      serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions`, jwt,
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions`,
+      jwt,
     )
-    if (!versionsRes.ok) fail(`scenario 7: version list on restored server failed with ${versionsRes.status}`)
+    if (!versionsRes.ok)
+      fail(`scenario 7: version list on restored server failed with ${versionsRes.status}`)
     const versions = await versionsRes.json()
     const foundVersion = (versions?.versions ?? []).find((v) => v.id === seededVersionId)
     if (!foundVersion) {
-      fail('scenario 7: seeded version missing from restored server', { versionCount: (versions?.versions ?? []).length })
+      fail('scenario 7: seeded version missing from restored server', {
+        versionCount: (versions?.versions ?? []).length,
+      })
     }
     if (foundVersion.label !== 'smoke-seed-version') {
-      fail('scenario 7: restored version label mismatch', { labelLength: foundVersion.label?.length ?? 0 })
+      fail('scenario 7: restored version label mismatch', {
+        labelLength: foundVersion.label?.length ?? 0,
+      })
     }
 
     // Version thumbnail (versions:read).
     const thumbRes = await authedFetch(
-      serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions/${seededVersionId}/thumbnail`, jwt,
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases/${encodeURIComponent(CANVAS_SLUG)}/versions/${seededVersionId}/thumbnail`,
+      jwt,
     )
-    if (!thumbRes.ok) fail(`scenario 7: thumbnail GET on restored server failed with ${thumbRes.status}`)
+    if (!thumbRes.ok)
+      fail(`scenario 7: thumbnail GET on restored server failed with ${thumbRes.status}`)
     const restoredThumb = new Uint8Array(await thumbRes.arrayBuffer())
     if (restoredThumb.byteLength !== MINIMAL_PNG.byteLength) {
       fail('scenario 7: restored thumbnail byte length mismatch')
     }
 
     // Palette entry.
-    const paletteRes = await authedFetch(serverBaseUrl, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`, jwt)
-    if (!paletteRes.ok) fail(`scenario 7: palette GET on restored server failed with ${paletteRes.status}`)
+    const paletteRes = await authedFetch(
+      serverBaseUrl,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`,
+      jwt,
+    )
+    if (!paletteRes.ok)
+      fail(`scenario 7: palette GET on restored server failed with ${paletteRes.status}`)
     const palette = await paletteRes.json()
     if (palette?.palette?.['#smoke-red'] !== '#FF0000') {
-      fail('scenario 7: palette entry missing from restored server', { paletteKeyCount: Object.keys(palette?.palette ?? {}).length })
+      fail('scenario 7: palette entry missing from restored server', {
+        paletteKeyCount: Object.keys(palette?.palette ?? {}).length,
+      })
     }
 
     console.log('[docker-br-smoke] scenario 7 PASS: all seeded data verified on restored server')
@@ -530,7 +665,9 @@ try {
     const jwt = makeJwt(privateKey, SEED_SCOPES)
 
     // No auth → 401.
-    const noAuthRes = await fetch(`${serverBaseUrl}/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`)
+    const noAuthRes = await fetch(
+      `${serverBaseUrl}/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
+    )
     if (noAuthRes.status !== 401) fail(`scenario 8: no-auth expected 401, got ${noAuthRes.status}`)
     assertNoLeak('scenario 8 no-auth body', await noAuthRes.text(), SMOKE_PATH_LITERALS)
 
@@ -540,13 +677,19 @@ try {
       serverBaseUrl,
       `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
       wrongJwt,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: 'should-fail' }) },
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: 'should-fail' }),
+      },
     )
     if (wrongScopeRes.status !== 403) {
       fail(`scenario 8: wrong scope expected 403, got ${wrongScopeRes.status}`)
     }
 
-    console.log('[docker-br-smoke] scenario 8 PASS: 401/403 auth contracts enforced on restored server')
+    console.log(
+      '[docker-br-smoke] scenario 8 PASS: 401/403 auth contracts enforced on restored server',
+    )
   }
 
   // ── Scenario 9: docker logs non-leak scan ─────────────────────────────────
@@ -561,7 +704,6 @@ try {
   }
 
   console.log('[docker-br-smoke] All scenarios PASSED.')
-
 } finally {
   if (activeContainer) stopContainer(activeContainer)
   // Remove containers explicitly (no --rm used, so they persist after stop/crash).

@@ -177,4 +177,21 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       scopes: ['workspace:write'],
     })
   })
+
+  // Destructive maintenance routes must not fall through to the broad
+  // /api/workspaces workspace:write fallback — they need the narrower scope
+  // that actually matches what they mutate (attachments vs. canvas history).
+  it('purge-dangling files requires files:write, not the workspace:write fallback', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/files/purge-dangling')).toEqual({
+      kind: 'scoped',
+      scopes: ['files:write'],
+    })
+  })
+
+  it('optimize-all canvases requires versions:write, not the workspace:write fallback', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/canvases/optimize-all')).toEqual({
+      kind: 'scoped',
+      scopes: ['versions:write'],
+    })
+  })
 })

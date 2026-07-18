@@ -47,6 +47,12 @@ statusMessage = "Starting whiteboard MCP dev daemon"
 # stdio", so the hot-reload HTTP endpoint uses a dev-only server name.
 [mcp_servers.whiteboard]
 enabled = false
+# Codex >= 0.144 validates every mcp_servers entry's transport even when
+# disabled; a bare `enabled = false` table has neither `command` nor `url`
+# and fails config load with "invalid transport". Mirror the published
+# stdio command so the entry parses while staying disabled.
+command = "npx"
+args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 
 [mcp_servers.whiteboard_dev]
 url = "http://127.0.0.1:3099/mcp"

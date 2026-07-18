@@ -41,6 +41,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
+import type { SceneExportFormat } from '@/hooks/useCanvasSync'
 import type { DirtyEventDetail } from '@/hooks/useDirtyState'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import type { ThemeMode } from '@/hooks/useThemeMode'
@@ -202,11 +203,11 @@ interface Props {
   versionPanelExtra?: ReactNode
   // Renders the scene through the same export utility Excalidraw's own
   // (harder-to-discover) hamburger-menu export dialog uses. Omitted (the
-  // default) hides the "Export as PNG/SVG" menu items entirely rather than
-  // wiring a control to a capability the host page hasn't set up — there is
-  // deliberately no PDF option here because no export path (this app's or
-  // Excalidraw's own) produces one.
-  onExport?: (format: 'png' | 'svg') => Promise<Blob | null>
+  // default) hides the "Export as PNG/SVG/JSON" menu items entirely rather
+  // than wiring a control to a capability the host page hasn't set up —
+  // there is deliberately no PDF option here because no export path (this
+  // app's or Excalidraw's own) produces one.
+  onExport?: (format: SceneExportFormat) => Promise<Blob | null>
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -643,19 +644,30 @@ export default function WorkspaceTopBar({
   // filename; falling back to the raw slug covers the ungrouped case.
   const exportFilenameBase = (canvasFlat ?? canvasLeaf ?? slug).replace(/[\\/:*?"<>|]/g, '-')
 
-  const handleExport = async (format: 'png' | 'svg') => {
+  // JSON exports carry the standard .excalidraw extension (the file format
+  // Excalidraw and the daemon's canvas_export_json both use); png/svg map to
+  // their own extension. Keyed by SceneExportFormat so a new format must add
+  // its own entry rather than silently inheriting a default.
+  const EXPORT_CONFIG: Record<SceneExportFormat, { extension: string; label: string }> = {
+    png: { extension: 'png', label: 'PNG' },
+    svg: { extension: 'svg', label: 'SVG' },
+    json: { extension: 'excalidraw', label: 'Excalidraw JSON' },
+  }
+
+  const handleExport = async (format: SceneExportFormat) => {
     if (!onExport) return
     setExportError(null)
+    const { extension, label } = EXPORT_CONFIG[format]
     try {
       const blob = await onExport(format)
       if (!blob) {
-        setExportError(`Export as ${format.toUpperCase()} failed: no data to export.`)
+        setExportError(`Export as ${label} failed: no data to export.`)
         return
       }
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = `${exportFilenameBase}.${format}`
+      anchor.download = `${exportFilenameBase}.${extension}`
       // Firefox (and the HTML spec generally) will not start a download from
       // a synthetic click() on an <a> that isn't attached to the document —
       // it must be appended before clicking and can be removed right after.
@@ -668,7 +680,7 @@ export default function WorkspaceTopBar({
       setTimeout(() => URL.revokeObjectURL(url), 0)
     } catch (err) {
       log.error('canvas export failed:', err)
-      setExportError(`Export as ${format.toUpperCase()} failed.`)
+      setExportError(`Export as ${label} failed.`)
     }
   }
 
@@ -869,6 +881,10 @@ export default function WorkspaceTopBar({
                   <DropdownMenuItem onSelect={() => void handleExport('svg')} className="gap-2">
                     <Download className="size-3.5" />
                     Export as SVG
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={() => void handleExport('json')} className="gap-2">
+                    <Download className="size-3.5" />
+                    Export as JSON
                   </DropdownMenuItem>
                 </>
               )}
