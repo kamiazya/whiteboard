@@ -54,9 +54,17 @@ describe('CanvasViewer (real browser)', () => {
 
     await expect.poll(() => container.querySelector('canvas'), { timeout: 5000 }).toBeTruthy()
 
-    const menu = container.querySelector('.App-menu')
-    if (menu) {
-      expect(getComputedStyle(menu).display).toBe('none')
-    }
+    // .App-menu is desktop-only chrome: at this test's viewport size
+    // Excalidraw renders its `excalidraw--mobile` layout instead, which
+    // never mounts .App-menu at all (regardless of hideChrome). .App-bottom-bar
+    // is the chrome node that's actually present at both breakpoints, so it's
+    // the one that can prove the hideChrome CSS contract instead of passing
+    // vacuously when the desktop-only node is absent.
+    await expect
+      .poll(() => container.querySelector('.App-bottom-bar'), { timeout: 5000 })
+      .toBeTruthy()
+    const bottomBar = container.querySelector('.App-bottom-bar')
+    expect(bottomBar).toBeTruthy()
+    expect(getComputedStyle(bottomBar as Element).display).toBe('none')
   })
 })
