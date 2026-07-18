@@ -27,7 +27,16 @@ Options:
   -h, --help   Show this help and exit.
 `
 
-const REQUIRED_FILES = ['README.md', 'LICENSE', 'package.json', 'dist/server/mcp/index.js']
+const REQUIRED_FILES = [
+  'README.md',
+  'LICENSE',
+  'package.json',
+  'dist/server/mcp/index.js',
+  // The MCP Apps ui://whiteboard/canvas-view resource (mcp-apps.ts) reads
+  // this file at runtime; a tarball missing it would 500 on resources/read
+  // with no build-time signal otherwise.
+  'dist/widget/canvas-viewer.html',
+]
 
 // Deliberately does NOT include \.map$ — the packaged tarball legitimately
 // ships hundreds of source maps (dist/**/*.js.map); a promise to exclude

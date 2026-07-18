@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
+import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { getTracer } from '../observability/tracing.js'
 import { MUTATING, TOOL_PROFILES } from './tool-profiles.js'
 
@@ -53,6 +54,12 @@ export function registerToolWithAnnotations<
     description?: string
     inputSchema?: I
     outputSchema?: O
+    // MCP Apps (SEP-1865) tool-linkage metadata, e.g.
+    // `{ ui: { resourceUri: 'ui://whiteboard/canvas-view' } }` — see
+    // mcp-apps.ts for the resource this links against. A `ui.resourceUri`
+    // here is additionally mirrored into the deprecated
+    // `["ui/resourceUri"]` key below before reaching server.registerTool.
+    _meta?: Record<string, unknown>
   },
   handler: (
     args: { [K in keyof I]: z.infer<I[K]> },
@@ -67,6 +74,19 @@ export function registerToolWithAnnotations<
   const annotations = profile
     ? { ...profile.profile, title: profile.title }
     : { ...MUTATING, title: name }
+  // Mirror the modern `_meta.ui.resourceUri` MCP Apps (SEP-1865) linkage
+  // into the deprecated `_meta["ui/resourceUri"]` key too, matching what
+  // the ext-apps package's own registerAppTool does — a host built before
+  // ui.resourceUri was standardized only reads the legacy key.
+  const uiMeta = config._meta?.ui
+  const resourceUri =
+    uiMeta !== null && typeof uiMeta === 'object' && 'resourceUri' in uiMeta
+      ? (uiMeta as { resourceUri?: unknown }).resourceUri
+      : undefined
+  const meta =
+    typeof resourceUri === 'string'
+      ? { ...config._meta, [RESOURCE_URI_META_KEY]: resourceUri }
+      : config._meta
   // Wrap the handler so thrown errors become isError responses, and so
   // every tool call is observable as a single MCP-semconv span.
   const tracedHandler = async (
@@ -124,5 +144,5 @@ export function registerToolWithAnnotations<
   }
   return (
     server.registerTool as unknown as (n: string, c: object, h: typeof outerHandler) => unknown
-  )(name, { ...config, annotations }, outerHandler)
+  )(name, { ...config, _meta: meta, annotations }, outerHandler)
 }

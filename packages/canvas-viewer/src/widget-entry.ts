@@ -2,8 +2,10 @@
 // (vite.widget.config.ts -> dist/widget/canvas-viewer.html). Never exported
 // from the package's public surface — this file is a build INPUT, loaded
 // only by the widget's own <script type="module"> tag.
+import { App } from '@modelcontextprotocol/ext-apps'
 import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
-import { mountCanvasViewer } from './mount.js'
+import { mountCanvasViewer, type CanvasViewerHandle } from './mount.js'
+import { parseViewerScene } from './scene.js'
 import { buildFontFaceDescriptors, resolveFontFetchDataUri } from './widget/font-registration.js'
 
 declare global {
@@ -61,11 +63,27 @@ function registerFonts(): void {
   }
 
   // EXCALIDRAW_ASSET_PATH must be a string; Excalidraw resolves any font URL
-  // it still needs (one this build didn't anticipate) against it. Since
-  // this document is the only thing that prefix could ever point at, and
-  // the fetch shim below intercepts requests before they reach the
-  // network, the exact value is inert.
-  window.EXCALIDRAW_ASSET_PATH = new URL('.', window.location.href).toString()
+  // it still needs (one this build didn't anticipate) against it. The exact
+  // value is inert (the fetch shim intercepts before the network), but
+  // constructing it must not throw: MCP Apps hosts load this widget via a
+  // sandboxed srcdoc iframe where location.href is the non-URL
+  // "about:srcdoc" and `new URL('.', location.href)` throws, killing the
+  // whole bootstrap. document.baseURI (inherited from the embedding
+  // document in srcdoc) usually works; a fixed inert prefix is the final
+  // fallback.
+  window.EXCALIDRAW_ASSET_PATH = resolveInertAssetPrefix()
+}
+
+function resolveInertAssetPrefix(): string {
+  try {
+    return new URL('.', window.location.href).toString()
+  } catch {
+    try {
+      return new URL('.', document.baseURI).toString()
+    } catch {
+      return 'https://whiteboard-widget.invalid/'
+    }
+  }
 }
 
 // Scoped fallback for the case Excalidraw's lazy font loader still issues a
@@ -100,7 +118,77 @@ function installFontFetchShim(): void {
   }
 }
 
-function bootstrap(): void {
+// MCP Apps (SEP-1865) bridge bootstrap. The host sends the canvas_view tool
+// result via `ui/notifications/tool-result`; `structuredContent` there is
+// the same `{canvasId, scene}` shape returned by canvas_view's Zod
+// outputSchema. This widget never receives daemon credentials — only the
+// scene snapshot — so it cannot call anything back into the daemon
+// directly (the only outbound path, when a host supports it, is
+// re-invoking canvas_view through the host's own MCP session, which this
+// Phase-A bootstrap does not yet do; there is no Refresh action here).
+//
+// When no ext-apps host is embedding this document (e.g. the widget opened
+// directly in a browser, or the widget-smoke harness), `app.connect()`
+// never resolves because no PostMessageTransport peer answers on the other
+// end — `mountFromHost` races that against `hasHostContext` timeout below
+// so bootstrap always falls back to mountCanvasViewer's own embedded-scene
+// slot instead of hanging forever.
+const HOST_CONNECT_TIMEOUT_MS = 2_000
+
+// `remount` is the single place a mount produced by this bridge happens.
+// `app.connect()` racing HOST_CONNECT_TIMEOUT_MS means a tool-result can
+// legitimately arrive AFTER the caller already decided `connectedToHost`
+// was false and mounted its own embedded-scene fallback (a connect() that
+// resolves just past the timeout, or a host that answers the handshake
+// slowly), and a host may deliver tool-results more than once. Routing
+// every mount through the same callback — which disposes whichever handle
+// is currently live and clears the container BEFORE the factory creates
+// the next root — is what keeps two React roots from ever competing for
+// the same container (createRoot on a container whose children still
+// belong to an undisposed root crashes React with a removeChild
+// NotFoundError).
+async function mountFromHost(
+  container: HTMLElement,
+  remount: (mount: () => CanvasViewerHandle) => void,
+): Promise<boolean> {
+  // No parent frame — this document cannot be an embedded MCP Apps view.
+  if (window.parent === window) return false
+
+  const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
+
+  app.ontoolresult = (result) => {
+    // canvas_view's outputSchema wraps the scene as {canvasId, scene}; only
+    // the `scene` field matches parseViewerScene's strict {elements,
+    // appState?, files?} contract, so the wrapper itself must never reach
+    // mountCanvasViewer.
+    const structuredContent = (result as { structuredContent?: { scene?: unknown } })
+      .structuredContent
+    const scene = structuredContent?.scene
+    // Validate BEFORE remount: remount disposes the live viewer first, so a
+    // malformed tool-result would otherwise trade a working view for an
+    // empty container. On invalid payloads the current view stays up.
+    try {
+      parseViewerScene(scene)
+    } catch {
+      return
+    }
+    remount(() => mountCanvasViewer(container, { scene }))
+  }
+
+  // connect() may reject after the timeout already won the race; a catch on
+  // the race result alone would leave that late rejection unhandled.
+  const connected = await Promise.race([
+    app
+      .connect()
+      .then(() => true)
+      .catch(() => false),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), HOST_CONNECT_TIMEOUT_MS)),
+  ])
+
+  return connected
+}
+
+async function bootstrap(): Promise<void> {
   registerFonts()
   installFontFetchShim()
 
@@ -108,7 +196,24 @@ function bootstrap(): void {
   if (!container) {
     throw new Error('widget-entry: expected a #root element in the widget HTML shell')
   }
-  mountCanvasViewer(container)
+
+  let handle: CanvasViewerHandle | undefined
+  // Order matters: dispose the live root and clear its DOM BEFORE the
+  // factory creates the next root — see mountFromHost's doc comment.
+  const remount = (mount: () => CanvasViewerHandle): void => {
+    handle?.dispose()
+    container.replaceChildren()
+    handle = mount()
+  }
+  const connectedToHost = await mountFromHost(container, remount)
+  if (!connectedToHost && handle === undefined) {
+    // The embedded-scene fallback goes through the same remount path: a
+    // slow host can deliver a tool-result mount in the gap between the
+    // timeout losing the race and this line, and a bare mountCanvasViewer
+    // here would then stack a second root on the container. The handle
+    // check keeps a just-arrived host scene instead of replacing it.
+    remount(() => mountCanvasViewer(container))
+  }
 }
 
-bootstrap()
+void bootstrap()

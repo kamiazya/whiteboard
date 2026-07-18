@@ -36,6 +36,7 @@ export const ALL_REGISTERED_TOOLS = [
   'canvas_inspect',
   'canvas_list',
   'canvas_open',
+  'canvas_view',
   'create_embed',
   'create_frame',
   'create_pairing_link',
@@ -83,6 +84,7 @@ export const COVERED_TOOLS = [
   'create_frame',
   'create_pairing_link',
   'canvas_inspect',
+  'canvas_view',
   'version_save',
   'version_restore',
   'version_list',
@@ -95,6 +97,12 @@ export const COVERED_TOOLS = [
 ] as const
 
 export const ERROR_PATH_ONLY_TOOLS = ['viewport_set'] as const
+
+// MCP Apps (SEP-1865) UI-linked tools: their registered definition carries
+// `_meta.ui.resourceUri` pointing at CANVAS_VIEW_RESOURCE_URI (mcp-apps.ts).
+// canvas_open and export_canvas are deliberately excluded — see the
+// rationale comment at the canvas_view registration in tool-registration.ts.
+export const UI_LINKED_TOOLS = ['canvas_view'] as const
 
 export const UNIT_ONLY_TOOLS = [
   'align_elements',

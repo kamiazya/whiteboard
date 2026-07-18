@@ -23,6 +23,12 @@ import {
   canvasInspectTool,
 } from './tools/canvas-inspect.js'
 import {
+  canvasViewInputShape,
+  canvasViewOutputSchema,
+  canvasViewTool,
+} from './tools/canvas-view.js'
+import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
+import {
   canvasCreateInputShape,
   canvasCreateOutputSchema,
   canvasListInputShape,
@@ -192,6 +198,8 @@ function defineTool<
   description?: string
   inputSchema?: I
   outputSchema?: O
+  // MCP Apps (SEP-1865) tool-linkage metadata — see registerToolWithAnnotations.
+  _meta?: Record<string, unknown>
   handler: (
     args: { [K in keyof I]: z.infer<I[K]> },
     extra: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
@@ -205,6 +213,7 @@ function defineTool<
         description: entry.description,
         inputSchema: entry.inputSchema,
         outputSchema: entry.outputSchema,
+        _meta: entry._meta,
       },
       entry.handler,
     )
@@ -245,6 +254,7 @@ export function registerAllTools(
   const userLibMetadataSet = userLibraryMetadataSetTool()
   const userLibMetadataDelete = userLibraryMetadataDeleteTool()
   const inspectTool = canvasInspectTool()
+  const viewTool = canvasViewTool()
   const listTemplates = listTemplatesTool()
   const insertTemplate = insertTemplateTool()
   const updateTool = updateElementTool()
@@ -636,6 +646,24 @@ export function registerAllTools(
       outputSchema: canvasInspectOutputSchema,
       handler: async ({ canvasId }) => {
         const result = await withDaemon((client) => inspectTool.execute({ canvasId }, client))
+        return structuredJsonResult(result)
+      },
+    }),
+
+    defineTool({
+      name: viewTool.name,
+      description: viewTool.description,
+      inputSchema: canvasViewInputShape,
+      outputSchema: canvasViewOutputSchema,
+      // MCP Apps (SEP-1865) linkage: renders inline via the ui:// resource
+      // registered in mcp-apps.ts. canvas_open/export_canvas are
+      // intentionally NOT linked (canvas_open would leak the daemon
+      // baseUrl through the bridge; export_canvas writes files on
+      // refresh) — canvas_view exists specifically to be the safe,
+      // read-only, side-effect-free UI-linked tool.
+      _meta: { ui: { resourceUri: CANVAS_VIEW_RESOURCE_URI } },
+      handler: async ({ canvasId }) => {
+        const result = await withDaemon((client) => viewTool.execute({ canvasId }, client))
         return structuredJsonResult(result)
       },
     }),

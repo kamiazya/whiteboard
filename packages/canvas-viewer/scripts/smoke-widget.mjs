@@ -243,9 +243,80 @@ async function main() {
       fail(`expected zero network requests after the JP render, saw: ${networkRequests.join(', ')}`)
     }
 
+    // srcdoc hosting: MCP Apps hosts embed this widget via a sandboxed
+    // srcdoc iframe (no allow-same-origin), where location.href is the
+    // non-URL "about:srcdoc". A widget that assumes a real document URL
+    // (e.g. `new URL('.', location.href)`) dies only under THIS hosting
+    // mode — file:// and http(s) loads cannot catch it.
+    const srcdocPage = await browser.newPage()
+    const srcdocPageErrors = []
+    srcdocPage.on('pageerror', (err) => {
+      srcdocPageErrors.push(String(err))
+    })
+    // Diagnostics only, never a fail condition on their own: Excalidraw's
+    // own font manager issues CSS-level loads for font subsets this bundle
+    // does not embed (they resolve against the inert asset prefix and fail
+    // by design — the widget degrades to fallback glyphs). A real bootstrap
+    // crash surfaces as a pageerror or as no canvas appearing.
+    const srcdocConsoleErrors = []
+    srcdocPage.on('console', (msg) => {
+      if (msg.type() === 'error') srcdocConsoleErrors.push(msg.text())
+    })
+    await srcdocPage.route('http://**', (route) => {
+      networkRequests.push(route.request().url())
+      return route.abort()
+    })
+    await srcdocPage.route('https://**', (route) => {
+      networkRequests.push(route.request().url())
+      return route.abort()
+    })
+    await srcdocPage.setContent('<!doctype html><body></body>')
+    await srcdocPage.evaluate((widgetHtml) => {
+      const iframe = document.createElement('iframe')
+      iframe.setAttribute('sandbox', 'allow-scripts')
+      iframe.srcdoc = widgetHtml
+      document.body.appendChild(iframe)
+    }, injectedHtml)
+    // CI runners parse+execute the ~8.5 MB inline bundle noticeably slower
+    // than the file:// pages above; give the sandboxed frame extra headroom.
+    const srcdocDeadline = Date.now() + 30_000
+    let srcdocCanvasCount = 0
+    while (Date.now() < srcdocDeadline) {
+      // Any non-main frame is the widget frame — matching on
+      // url() === 'about:srcdoc' is Chrome-build-dependent (chrome-stable
+      // under CDP can report a sandboxed srcdoc frame's URL differently
+      // than bundled Chromium).
+      for (const frame of srcdocPage.frames()) {
+        if (frame === srcdocPage.mainFrame()) continue
+        srcdocCanvasCount = await frame
+          .evaluate(() => document.querySelectorAll('canvas').length)
+          .catch(() => 0)
+        if (srcdocCanvasCount > 0) break
+      }
+      if (srcdocCanvasCount > 0) break
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+    if (srcdocCanvasCount === 0) {
+      const frameUrls = srcdocPage
+        .frames()
+        .map((f) => f.url() || '(empty)')
+        .join(', ')
+      const diagnostics = [
+        `frames: ${frameUrls}`,
+        srcdocPageErrors.length ? `page errors: ${srcdocPageErrors.join(' | ')}` : '',
+        srcdocConsoleErrors.length ? `console errors: ${srcdocConsoleErrors.join(' | ')}` : '',
+      ]
+        .filter(Boolean)
+        .join('; ')
+      fail(`widget did not render a canvas under sandboxed srcdoc hosting (${diagnostics})`)
+    }
+    if (srcdocPageErrors.length > 0) {
+      fail(`uncaught page error(s) under srcdoc hosting: ${srcdocPageErrors.join(' | ')}`)
+    }
+
     if (process.exitCode !== 1) {
       console.log(
-        '[widget-smoke] PASS: zero network requests, canvas rendered, fonts loaded, JP fallback painted',
+        '[widget-smoke] PASS: zero network requests, canvas rendered, fonts loaded, JP fallback painted, srcdoc hosting OK',
       )
     }
   } finally {

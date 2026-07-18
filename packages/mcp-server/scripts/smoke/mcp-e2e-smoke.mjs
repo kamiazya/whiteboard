@@ -23,7 +23,7 @@
 // execution, use scripts/smoke/mcp-claude-cli-smoke.mjs.
 
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -82,15 +82,22 @@ child.stderr.on('data', (c) => {
   stderrBuf += c.toString()
 })
 
-// Response parser for newline-delimited JSON.
+// Response parser for newline-delimited JSON. Buffers are accumulated and
+// split as Buffers (not strings) before the final utf-8 decode: a large
+// message (e.g. the ~8MB canvas-viewer widget HTML in a resources/read
+// response) arrives split across multiple 'data' events, and decoding each
+// chunk to a string independently corrupts any multi-byte UTF-8 character
+// that straddles a chunk boundary (each half decodes to a replacement
+// character on its own). Decoding only once a full line's bytes are known
+// to be present avoids that class of corruption.
 const pending = new Map()
-let stdoutBuf = ''
+let stdoutBuf = Buffer.alloc(0)
 child.stdout.on('data', (chunk) => {
-  stdoutBuf += chunk.toString()
+  stdoutBuf = Buffer.concat([stdoutBuf, chunk])
   let idx
-  while ((idx = stdoutBuf.indexOf('\n')) !== -1) {
-    const line = stdoutBuf.slice(0, idx)
-    stdoutBuf = stdoutBuf.slice(idx + 1)
+  while ((idx = stdoutBuf.indexOf(0x0a)) !== -1) {
+    const line = stdoutBuf.subarray(0, idx).toString('utf-8')
+    stdoutBuf = stdoutBuf.subarray(idx + 1)
     if (!line.trim()) continue
     let msg
     try {
@@ -165,18 +172,65 @@ async function main() {
 
   // Wait briefly for the Hono server to finish starting.
   // If initialize succeeds, the MCP server is up.
-  await rpc('initialize', {
+  const initResult = await rpc('initialize', {
     protocolVersion: '2024-11-05',
     capabilities: {},
     clientInfo: { name: 'e2e-smoke', version: '0.0.0' },
   })
   notify('notifications/initialized', {})
 
+  // MCP Apps (SEP-1865) extension declaration: io.modelcontextprotocol/ui
+  // must appear in the initialize result's server capabilities.extensions.
+  const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui'
+  if (!initResult?.capabilities?.extensions?.[UI_EXTENSION_ID]) {
+    throw new Error(
+      `initialize result missing extensions.${UI_EXTENSION_ID}: ${JSON.stringify(initResult?.capabilities)}`,
+    )
+  }
+  console.log(`[e2e] initialize → capabilities.extensions.${UI_EXTENSION_ID} present OK`)
+
   const tools = await rpc('tools/list', {})
   const names = tools.tools.map((t) => t.name)
   if (!names.includes('version_save') || !names.includes('version_restore')) {
     throw new Error(`version tools missing from tools/list: ${names.join(', ')}`)
   }
+
+  // MCP Apps UI linkage: exactly canvas_view carries `_meta.ui.resourceUri`;
+  // canvas_open/export_canvas must NOT (see tool-registration.ts).
+  const UI_RESOURCE_URI = 'ui://whiteboard/canvas-view'
+  const uiLinkedNames = tools.tools
+    .filter((t) => t._meta?.ui?.resourceUri === UI_RESOURCE_URI)
+    .map((t) => t.name)
+  if (uiLinkedNames.length !== 1 || uiLinkedNames[0] !== 'canvas_view') {
+    throw new Error(`expected exactly canvas_view UI-linked, got: ${JSON.stringify(uiLinkedNames)}`)
+  }
+  console.log('[e2e] tools/list → canvas_view is the sole UI-linked tool OK')
+
+  const resourceList = await rpc('resources/list', {})
+  const uiResourceEntry = resourceList.resources.find((r) => r.uri === UI_RESOURCE_URI)
+  if (!uiResourceEntry || uiResourceEntry.mimeType !== 'text/html;profile=mcp-app') {
+    throw new Error(`ui:// resource missing/wrong mimeType: ${JSON.stringify(uiResourceEntry)}`)
+  }
+
+  const resourceRead = await rpc('resources/read', { uri: UI_RESOURCE_URI })
+  const widgetHtmlPath = resolve(
+    root,
+    '..',
+    'canvas-viewer',
+    'dist',
+    'widget',
+    'canvas-viewer.html',
+  )
+  const expectedWidgetHtml = readFileSync(widgetHtmlPath, 'utf-8')
+  const actualWidgetHtml = resourceRead.contents?.[0]?.text
+  if (actualWidgetHtml !== expectedWidgetHtml) {
+    throw new Error(
+      'resources/read ui://whiteboard/canvas-view did not match the shipped widget bundle byte-for-byte',
+    )
+  }
+  console.log(
+    '[e2e] resources/read ui://whiteboard/canvas-view → byte-identical to shipped widget OK',
+  )
 
   const created = await callTool('canvas_create', { slug: 'e2e-src' })
   if (!created.id || !created.url) throw new Error('canvas_create returned unexpected shape')
@@ -394,6 +448,18 @@ async function main() {
     )
   }
   console.log(`[e2e] canvas_inspect → frame name "${inspectedFrame.name}" OK`)
+
+  // canvas_view (MCP Apps UI-linked tool): structuredContent.scene must be a
+  // renderable {elements} shape — parsed inline here rather than importing
+  // the canvas-viewer package's parseViewerScene from a shell script.
+  const viewed = await callTool('canvas_view', { canvasId: created.id })
+  if (viewed.canvasId !== created.id || !Array.isArray(viewed.scene?.elements)) {
+    throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
+  }
+  if (viewed.scene.elements.length < 1) {
+    throw new Error(`canvas_view returned an empty scene: ${JSON.stringify(viewed)}`)
+  }
+  console.log(`[e2e] canvas_view → scene with ${viewed.scene.elements.length} element(s) OK`)
 
   // version_save labels the current state and returns a versionId. The
   // restore-as-new-canvas flow (formerly the checkpoint pair) is now

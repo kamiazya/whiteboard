@@ -36,9 +36,10 @@ describe('assertTarballFileList', () => {
     'package/package.json',
     'package/dist/server/mcp/index.js',
     'package/dist/web-app/index.html',
+    'package/dist/widget/canvas-viewer.html',
   ]
 
-  it('passes when dist/web-app/index.html is present and no dist/app/ entries exist', () => {
+  it('passes when dist/web-app/index.html and dist/widget/canvas-viewer.html are present and no dist/app/ entries exist', () => {
     expect(() => assertTarballFileList(validEntries)).not.toThrow()
   })
 
@@ -54,6 +55,14 @@ describe('assertTarballFileList', () => {
     const entries = validEntries.filter((e) => e !== 'package/dist/web-app/index.html')
 
     expect(() => assertTarballFileList(entries)).toThrow(/missing dist\/web-app\/index\.html/)
+  })
+
+  it('throws when dist/widget/canvas-viewer.html is missing', () => {
+    const entries = validEntries.filter((e) => e !== 'package/dist/widget/canvas-viewer.html')
+
+    expect(() => assertTarballFileList(entries)).toThrow(
+      /missing dist\/widget\/canvas-viewer\.html/,
+    )
   })
 })
 

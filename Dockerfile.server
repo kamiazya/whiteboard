@@ -31,11 +31,17 @@ RUN corepack enable && corepack prepare pnpm@11.12.0 --activate
 WORKDIR /workspace
 
 # Install dependencies before copying source (cache-friendly layer order).
+# canvas-viewer is included because mcp-server's build copies its built
+# widget bundle (ui://whiteboard/canvas-view) into dist.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/mcp-server/package.json packages/mcp-server/
+COPY packages/canvas-viewer/package.json packages/canvas-viewer/
 RUN pnpm install --frozen-lockfile
 
-# Compile TypeScript.
+# Build the self-contained canvas widget, then compile TypeScript (whose
+# build step copies the widget bundle into mcp-server/dist).
+COPY packages/canvas-viewer/ packages/canvas-viewer/
+RUN pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 COPY packages/mcp-server/ packages/mcp-server/
 RUN pnpm --filter @kamiazya/whiteboard-mcp build
 

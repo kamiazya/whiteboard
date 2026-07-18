@@ -222,6 +222,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # canvas_view serves the built widget from mcp-server/dist/widget even
+      # when the server itself runs from source (WHITEBOARD_DEV=1), so the
+      # smokes that exercise ui://whiteboard/canvas-view need the widget
+      # built and copied before any full `pnpm build` happens in this job.
+      - name: Build canvas-viewer widget for smokes
+        run: |
+          pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
+          node packages/mcp-server/scripts/copy-widget-into-dist.mjs
+
       # mcp-smoke spawns the MCP stdio server which in turn calls ensureDaemon.
       # Without WHITEBOARD_DEV=1, ensureDaemon tries dist/server/index.js which
       # does not exist before build. WHITEBOARD_DEV=1 makes it use tsx against

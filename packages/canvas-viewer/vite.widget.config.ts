@@ -43,7 +43,11 @@ function resolveExcalidrawFontsDir(): string {
 // virtual module as base64 data URIs, resolved fresh on every build so the
 // output always matches the currently installed @excalidraw/excalidraw
 // version's font files.
-function widgetFontsPlugin(): Plugin {
+// Exported so vitest.jsdom.config.ts can register the same virtual module
+// for widget-entry.ts's unit tests — that file imports `virtual:widget-fonts`
+// unconditionally, so any test harness that loads it as source needs this
+// plugin too, not just the production widget build.
+export function widgetFontsPlugin(): Plugin {
   return {
     name: 'whiteboard-widget-fonts',
     resolveId(id) {

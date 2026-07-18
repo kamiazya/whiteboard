@@ -51,6 +51,14 @@ export function assertTarballFileList(entries: readonly string[]): void {
   if (!entries.includes('package/dist/web-app/index.html')) {
     throw new Error('[tarball-smoke] packed tarball is missing dist/web-app/index.html')
   }
+  // The MCP Apps ui://whiteboard/canvas-view resource (mcp-apps.ts) reads
+  // this file at runtime; a tarball missing it would 500 on resources/read
+  // with no build-time signal otherwise (verify-widget-dist.mjs's prepack
+  // gate only catches a LOCAL build that never ran, not a tarball built
+  // correctly but assembled from the wrong `files` list).
+  if (!entries.includes('package/dist/widget/canvas-viewer.html')) {
+    throw new Error('[tarball-smoke] packed tarball is missing dist/widget/canvas-viewer.html')
+  }
 }
 
 // The installed tarball ships only `dist/`, never `src/`. If the ambient

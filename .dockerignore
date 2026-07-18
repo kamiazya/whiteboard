@@ -23,6 +23,8 @@ packages/mcp-server/node_modules/
 packages/mcp-server/dist/
 packages/mcp-server/coverage/
 packages/mcp-server/tmp/
+packages/canvas-viewer/node_modules/
+packages/canvas-viewer/dist/
 
 # Test suites and distribution smokes (not needed to build the image).
 tests/
