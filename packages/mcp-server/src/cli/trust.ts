@@ -1,8 +1,8 @@
 // `whiteboard trust list|revoke <origin>|revoke --all` — the one operator-
 // facing revocation mechanism for the silent-reconnect trust store (see
-// server/security/web-origin-trust-store.ts). Not yet wired into
-// dispatcher.ts's command routing; callable directly today via
-// `runTrustCommand`, which is what this module's tests exercise.
+// server/security/web-origin-trust-store.ts). Routed from dispatcher.ts's
+// `trust` command; the dispatcher owns stdout/stderr placement and the
+// --data-dir flag, this module owns the subcommand behavior.
 
 import type { WebOriginTrustStore } from '../server/security/web-origin-trust-store.js'
 

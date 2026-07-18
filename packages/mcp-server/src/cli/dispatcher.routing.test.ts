@@ -74,6 +74,14 @@ vi.mock('./server-support-bundle.js', () => ({
   runServerSupportBundle: vi.fn(async () => ({ stdout: '{"ok":true}\n', stderr: '', exitCode: 0 })),
 }))
 
+vi.mock('./trust.js', () => ({
+  runTrustCommand: vi.fn(async () => ({ exitCode: 0, output: 'no trusted origins' })),
+}))
+
+vi.mock('../server/security/web-origin-trust-store.js', () => ({
+  createWebOriginTrustStore: vi.fn(() => ({})),
+}))
+
 // Import modules after mocks are installed.
 const mcpModule = await import('../server/mcp/index.js')
 const daemonStatusModule = await import('./daemon-status.js')
@@ -89,6 +97,8 @@ const serverRunModule = await import('./server-run.js')
 const serverBackupModule = await import('./server-backup.js')
 const serverRestoreModule = await import('./server-restore.js')
 const serverSupportBundleModule = await import('./server-support-bundle.js')
+const trustModule = await import('./trust.js')
+const trustStoreModule = await import('../server/security/web-origin-trust-store.js')
 const { main, USAGE } = await import('./dispatcher.js')
 
 function captureStdio<T>(
@@ -489,5 +499,48 @@ describe('dispatcher routing: --version flag', () => {
     // Pin the short alias too — without this, dropping `-v` from USAGE would
     // silently pass even though the runtime alias keeps working.
     expect(USAGE).toMatch(/-v\b/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// trust subcommands
+// ---------------------------------------------------------------------------
+describe('dispatcher routing: whiteboard trust', () => {
+  it('routes `trust list` to runTrustCommand and prints its output as text', async () => {
+    vi.mocked(trustModule.runTrustCommand).mockClear()
+    const { result: exitCode, stdout } = await captureStdio(() => main(['trust', 'list']))
+    expect(exitCode).toBe(0)
+    expect(vi.mocked(trustModule.runTrustCommand)).toHaveBeenCalledOnce()
+    expect(stdout).toBe('no trusted origins\n')
+  })
+
+  it('passes --data-dir through to the trust store factory and strips it from args', async () => {
+    vi.mocked(trustModule.runTrustCommand).mockClear()
+    vi.mocked(trustStoreModule.createWebOriginTrustStore).mockClear()
+    await captureStdio(() =>
+      main(['trust', 'revoke', 'http://localhost:5173', '--data-dir=/tmp/dd']),
+    )
+    expect(vi.mocked(trustStoreModule.createWebOriginTrustStore)).toHaveBeenCalledWith({
+      dataDir: '/tmp/dd',
+    })
+    expect(vi.mocked(trustModule.runTrustCommand)).toHaveBeenCalledWith(
+      ['revoke', 'http://localhost:5173'],
+      expect.anything(),
+    )
+  })
+
+  it('a usage error exits 1 with the message on stderr, stdout empty', async () => {
+    vi.mocked(trustModule.runTrustCommand).mockResolvedValueOnce({
+      exitCode: 1,
+      output: 'usage: whiteboard trust list | revoke <origin> | revoke --all',
+    })
+    const { result: exitCode, stdout, stderr } = await captureStdio(() => main(['trust', 'bogus']))
+    expect(exitCode).toBe(1)
+    expect(stdout).toBe('')
+    expect(stderr).toContain('usage: whiteboard trust')
+  })
+
+  it('USAGE includes `whiteboard trust list`', () => {
+    expect(USAGE).toMatch(/whiteboard trust list/)
   })
 })
