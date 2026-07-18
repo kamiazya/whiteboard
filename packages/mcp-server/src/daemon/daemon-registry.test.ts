@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   deleteDaemonRecord,
   getDaemonRecordPath,
@@ -44,6 +44,33 @@ describe('daemon-registry', () => {
 
   it('returns null for malformed daemon.json content', async () => {
     await writeFile(getDaemonRecordPath(dataDir), '{"pid":"oops"}')
+    await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
+  })
+
+  it('returns null for a daemon.json with an empty-string token (fail-closed)', async () => {
+    await writeFile(
+      getDaemonRecordPath(dataDir),
+      JSON.stringify({
+        pid: 123,
+        port: 3099,
+        token: '',
+        version: '0.1.0',
+        startedAt: '2026-04-23T00:00:00.000Z',
+      }),
+    )
+    await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
+  })
+
+  it('returns null for a daemon.json with a missing token', async () => {
+    await writeFile(
+      getDaemonRecordPath(dataDir),
+      JSON.stringify({
+        pid: 123,
+        port: 3099,
+        version: '0.1.0',
+        startedAt: '2026-04-23T00:00:00.000Z',
+      }),
+    )
     await expect(loadDaemonRecord(dataDir)).resolves.toBeNull()
   })
 

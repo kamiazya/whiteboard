@@ -1,4 +1,10 @@
 import { readFile } from 'node:fs/promises'
+import {
+  type DaemonRecord,
+  type DaemonRecordBase,
+  daemonRecordBaseSchema,
+  daemonRecordSchema,
+} from './daemon-record-schema.js'
 import { getDaemonRecordPath, isPidAlive } from './daemon-registry.js'
 
 export { isPidAlive }
@@ -6,8 +12,8 @@ export { isPidAlive }
 export type DaemonRecordParseResult =
   | { kind: 'missing' }
   | { kind: 'malformed'; message: string }
-  | { kind: 'token-missing'; record: { pid: number; port: number; version: string; startedAt: string } }
-  | { kind: 'valid'; record: { pid: number; port: number; token: string; version: string; startedAt: string } }
+  | { kind: 'token-missing'; record: DaemonRecordBase }
+  | { kind: 'valid'; record: DaemonRecord }
 
 export async function parseDaemonRecord(dataDir: string): Promise<DaemonRecordParseResult> {
   const recordPath = getDaemonRecordPath(dataDir)
@@ -28,30 +34,27 @@ export async function parseDaemonRecord(dataDir: string): Promise<DaemonRecordPa
     return { kind: 'malformed', message: 'Daemon record is not valid JSON.' }
   }
 
-  if (typeof parsed !== 'object' || parsed === null) {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return { kind: 'malformed', message: 'Daemon record is not an object.' }
   }
 
-  const obj = parsed as Record<string, unknown>
-  if (
-    typeof obj.pid !== 'number' ||
-    typeof obj.port !== 'number' ||
-    typeof obj.version !== 'string' ||
-    typeof obj.startedAt !== 'string'
-  ) {
-    return { kind: 'malformed', message: 'Daemon record is missing required fields.' }
+  const fullResult = daemonRecordSchema.safeParse(parsed)
+  if (fullResult.success) {
+    return { kind: 'valid', record: fullResult.data }
   }
 
-  const base = {
-    pid: obj.pid,
-    port: obj.port,
-    version: obj.version,
-    startedAt: obj.startedAt,
+  // The full schema also fails for missing/empty token, so re-check against
+  // the token-less base schema to distinguish "token missing" (a record we
+  // can still report on) from genuinely malformed data. The base schema
+  // strips `token` entirely, so a present-but-wrong-typed token (e.g. a
+  // number) would slip through as token-missing — guard that explicitly so it
+  // is reported as malformed instead.
+  const token = (parsed as Record<string, unknown>).token
+  const tokenIsAbsentOrEmpty = token === undefined || token === ''
+  const baseResult = daemonRecordBaseSchema.safeParse(parsed)
+  if (baseResult.success && tokenIsAbsentOrEmpty) {
+    return { kind: 'token-missing', record: baseResult.data }
   }
 
-  if (typeof obj.token !== 'string' || obj.token === '') {
-    return { kind: 'token-missing', record: base }
-  }
-
-  return { kind: 'valid', record: { ...base, token: obj.token } }
+  return { kind: 'malformed', message: 'Daemon record is missing required fields.' }
 }
