@@ -56,6 +56,13 @@ type ClosableHttpServer = ReturnType<typeof serve> & {
   closeAllConnections?: () => void
 }
 
+// Bounds how long close() waits for an in-flight file-gc pass (see
+// file-gc-sweeper.ts's FileGcSweeperStopOptions) before proceeding with the
+// rest of shutdown. A full pass can be expensive; without this cap an
+// idle-timeout-triggered close() could make the daemon appear to hang
+// instead of shutting down promptly.
+const FILE_GC_STOP_TIMEOUT_MS = 5_000
+
 export async function startHttpServer(options: StartHttpServerOptions): Promise<RunningServer> {
   const host = normalizeBindHost(options.host ?? '127.0.0.1')
   const instanceId = randomUUID()
@@ -63,7 +70,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const startedAt = new Date(startedAtMs).toISOString()
   let server: ReturnType<typeof serve>
   let wss: WebSocketServer
-  let closing = false
+  let closePromise: Promise<void> | null = null
   const sockets = new Set<Socket>()
 
   // Constructed once per daemon start, independent of the WS ticket store
@@ -112,11 +119,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     }
   }
 
-  const close = async () => {
-    if (closing) return
-    closing = true
+  const performClose = async (): Promise<void> => {
     idleTimer.stop()
-    await fileGcSweeper.stop()
+    await fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
     setRuntimeTouchFn(() => {})
 
     await new Promise<void>((resolve, reject) => {
@@ -143,6 +148,15 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     await new Promise<void>((resolve) => wss.close(() => resolve()))
 
     await options.onClose?.()
+  }
+
+  // Memoized so concurrent/repeated close() calls (idle timeout racing an
+  // explicit shutdown route, or a caller invoking close() twice) all await
+  // the SAME shutdown instead of a second call resolving immediately while
+  // the listener and WebSockets are still tearing down.
+  const close = (): Promise<void> => {
+    if (!closePromise) closePromise = performClose()
+    return closePromise
   }
 
   // Shared with the raw `upgrade` handler below (ADR-0005): a ticket minted

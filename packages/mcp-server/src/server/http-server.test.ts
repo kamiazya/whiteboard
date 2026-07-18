@@ -388,4 +388,55 @@ describe('startHttpServer file-gc sweeper wiring', () => {
     await running.close()
     expect(stopCalls).toBe(1)
   })
+
+  // Regression for a close() that is invoked twice CONCURRENTLY (idle timeout
+  // racing an explicit shutdown route, for example) rather than only after
+  // the first call has fully resolved -- a naive `if (closing) return` guard
+  // lets the second call resolve immediately while the listener and
+  // WebSockets are still tearing down, which is materially worse now that
+  // shutdown can also be waiting on an in-flight GC pass.
+  it('two concurrent close() calls share one shutdown promise instead of the second resolving early', async () => {
+    const port = await findAvailablePort(4500)
+    let stopCalls = 0
+    let resolveStop: (() => void) | undefined
+    const stopGate = new Promise<void>((resolve) => {
+      resolveStop = resolve
+    })
+    const fileGcSweeperFactory = () => ({
+      start: () => {},
+      tick: async () => {},
+      stop: async () => {
+        stopCalls += 1
+        await stopGate
+      },
+    })
+
+    running = await startHttpServer({ port, host: '127.0.0.1', fileGcSweeperFactory })
+    const res = await fetch(`http://127.0.0.1:${port}/token`, { method: 'POST' })
+    expect(res.status).toBe(404)
+
+    let firstResolved = false
+    let secondResolved = false
+    const first = running.close().then(() => {
+      firstResolved = true
+    })
+    const second = running.close().then(() => {
+      secondResolved = true
+    })
+
+    // Give queued microtasks a chance to run -- neither call may resolve
+    // while the shared shutdown is gated on stopGate.
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(firstResolved).toBe(false)
+    expect(secondResolved).toBe(false)
+    expect(stopCalls).toBe(1)
+
+    resolveStop?.()
+    await Promise.all([first, second])
+    expect(firstResolved).toBe(true)
+    expect(secondResolved).toBe(true)
+    expect(stopCalls).toBe(1)
+  })
 })
