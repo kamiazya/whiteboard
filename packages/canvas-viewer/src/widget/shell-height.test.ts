@@ -12,10 +12,17 @@ const shellPath = fileURLToPath(new URL('../../canvas-viewer.widget.html', impor
 
 describe('widget shell sizing (host auto-resize safety)', () => {
   // Comments may legitimately mention viewport units when explaining this
-  // very rule — only effective markup/CSS is checked.
-  const html = readFileSync(shellPath, 'utf8')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+  // very rule — only effective markup/CSS is checked. Stripping runs to a
+  // fixpoint so nested/overlapping comment fragments cannot survive one pass.
+  const stripComments = (input: string): string => {
+    let out = input
+    for (;;) {
+      const next = out.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '')
+      if (next === out) return next
+      out = next
+    }
+  }
+  const html = stripComments(readFileSync(shellPath, 'utf8'))
 
   it('never uses viewport-relative units for the root size', () => {
     expect(html).not.toMatch(/\b\d+(?:vh|vw|dvh|svh|lvh)\b/)
