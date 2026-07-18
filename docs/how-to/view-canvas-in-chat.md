@@ -11,7 +11,7 @@ no need to switch to a browser tab to see what the agent drew.
 - The same self-contained Excalidraw viewer bundle used for
   [self-contained HTML export](../explanation/) — no daemon credentials, tokens, or
   base URLs are ever passed into the widget. The widget only ever receives a scene
-  snapshot (elements), nothing else.
+  snapshot — the canvas elements plus any embedded image binaries — nothing else.
 - Zero external network access: the widget bundle is fully self-contained (fonts and
   all Excalidraw assets are inlined), so the client's CSP for the view can stay at its
   strictest default.

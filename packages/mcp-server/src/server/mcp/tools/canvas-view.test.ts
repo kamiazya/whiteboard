@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { parseViewerScene } from '@kamiazya/whiteboard-canvas-viewer/scene'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DaemonClient } from '../daemon-client.js'
@@ -52,6 +53,11 @@ describe('canvas_view tool', () => {
     ])
     const result = await canvasViewTool().execute({ canvasId: 'ws1/slug1' }, client)
     expect(canvasViewOutputSchema.parse(result)).toEqual(result)
+    // Consumer-side contract: the widget feeds result.scene straight into
+    // the viewer package's parseViewerScene, so producer-schema validity
+    // alone is not enough — the same value must survive the strict viewer
+    // parser or the widget would reject what this tool ships.
+    expect(() => parseViewerScene(result.scene)).not.toThrow()
     expect(result.scene.elements).toHaveLength(1)
     expect(result.scene.elements[0]).toMatchObject({ id: 'a', type: 'rectangle' })
   })
