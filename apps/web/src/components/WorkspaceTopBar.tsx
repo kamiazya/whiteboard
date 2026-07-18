@@ -52,14 +52,14 @@ import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
 import { ThemeToggleButton } from './ThemeToggleButton'
 import VersionTimeline from './VersionTimeline'
-
-interface CanvasInfo {
-  slug: string
-  updatedAt: string
-  // Local-mode display name, supplied by the caller instead of the daemon's
-  // /names endpoint (browser-local has no daemon to ask).
-  name?: string
-}
+import {
+  derivePinnedCanvases,
+  filterCanvasesBySearch,
+  groupCanvases,
+  sortCanvasesByRecency,
+} from './workspace-top-bar/canvas-list'
+import { sanitizeExportFilenameBase } from './workspace-top-bar/export-filename'
+import type { CanvasInfo } from './workspace-top-bar/types'
 
 // Mirrors ThemeToggleButton's cycle order (system → light → dark → system).
 // Duplicated here — rather than exported from ThemeToggleButton — because the
@@ -475,47 +475,26 @@ export default function WorkspaceTopBar({
   )
 
   // ---- canvas switcher data ----
-  const sortedCanvases = useMemo(
-    () => [...canvases].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)),
-    [canvases],
+  const sortedCanvases = useMemo(() => sortCanvasesByRecency(canvases), [canvases])
+  const filteredCanvases = useMemo(
+    () => filterCanvasesBySearch(sortedCanvases, canvasSearch, effectiveNames.canvases),
+    [sortedCanvases, canvasSearch, effectiveNames.canvases],
   )
-  const filteredCanvases = useMemo(() => {
-    const q = canvasSearch.trim().toLowerCase()
-    if (!q) return sortedCanvases
-    return sortedCanvases.filter((c) => {
-      const n = effectiveNames.canvases[c.slug]
-      return c.slug.toLowerCase().includes(q) || (n?.toLowerCase().includes(q) ?? false)
-    })
-  }, [sortedCanvases, canvasSearch, effectiveNames.canvases])
 
   // Split canvases into pinned and regular sections.
   // Preserve the user-defined order in names.pinned instead of resorting those items by recency.
   const pinnedSet = useMemo(() => new Set(effectiveNames.pinned), [effectiveNames.pinned])
-  const pinnedCanvases = useMemo(() => {
-    const bySlug = new Map(filteredCanvases.map((c) => [c.slug, c]))
-    return effectiveNames.pinned.map((s) => bySlug.get(s)).filter((c): c is CanvasInfo => !!c)
-  }, [filteredCanvases, effectiveNames.pinned])
+  const pinnedCanvases = useMemo(
+    () => derivePinnedCanvases(filteredCanvases, effectiveNames.pinned),
+    [filteredCanvases, effectiveNames.pinned],
+  )
 
   // Group by slug prefix (the first segment). Canvases without "/" stay in the ungrouped bucket.
   // Preserve recency order within each group and exclude anything already shown in the pinned section.
-  const groupedCanvases = useMemo(() => {
-    const groups = new Map<string, CanvasInfo[]>()
-    const UNGROUPED = ''
-    for (const c of filteredCanvases) {
-      if (pinnedSet.has(c.slug)) continue
-      const ix = c.slug.indexOf('/')
-      const key = ix === -1 ? UNGROUPED : c.slug.slice(0, ix)
-      const arr = groups.get(key)
-      if (arr) arr.push(c)
-      else groups.set(key, [c])
-    }
-    // Sort group headers alphabetically, but keep the ungrouped bucket last.
-    return [...groups.entries()].sort(([a], [b]) => {
-      if (a === UNGROUPED) return 1
-      if (b === UNGROUPED) return -1
-      return a.localeCompare(b)
-    })
-  }, [filteredCanvases, pinnedSet])
+  const groupedCanvases = useMemo(
+    () => groupCanvases(filteredCanvases, pinnedSet),
+    [filteredCanvases, pinnedSet],
+  )
 
   const canvasCustomName = effectiveNames.canvases[slug]
   // Prefer the custom name when present; otherwise split the slug into prefix and leaf.
@@ -642,7 +621,7 @@ export default function WorkspaceTopBar({
 
   // A trailing slash-segment (the canvas leaf) makes the safest download
   // filename; falling back to the raw slug covers the ungrouped case.
-  const exportFilenameBase = (canvasFlat ?? canvasLeaf ?? slug).replace(/[\\/:*?"<>|]/g, '-')
+  const exportFilenameBase = sanitizeExportFilenameBase(canvasFlat ?? canvasLeaf ?? slug)
 
   // JSON exports carry the standard .excalidraw extension (the file format
   // Excalidraw and the daemon's canvas_export_json both use); png/svg map to
