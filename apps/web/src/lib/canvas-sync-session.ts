@@ -202,14 +202,13 @@ export function createCanvasSyncSession(
     const validated = validateLoroRawElements(chosenRaw)
     const elements = resolveParentedElements(validated) as unknown as ExcalidrawElement[]
 
-    const missingIds = elements
-      .filter(
-        (el): el is ExcalidrawElement & { fileId: string } =>
-          el.type === 'image' &&
-          !!(el as { fileId?: string }).fileId &&
-          !filesCache[(el as { fileId?: string }).fileId!],
-      )
-      .map((el) => (el as { fileId: string }).fileId)
+    const missingIds: string[] = []
+    for (const el of elements) {
+      const fileId = (el as { fileId?: string }).fileId
+      if (el.type === 'image' && fileId && !filesCache[fileId]) {
+        missingIds.push(fileId)
+      }
+    }
 
     await Promise.allSettled(
       missingIds.map(async (fileId) => {
