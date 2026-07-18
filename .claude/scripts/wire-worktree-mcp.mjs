@@ -105,8 +105,20 @@ export function createConfigIO(configPath, { writeFileSyncFn = writeFileSync } =
       }
     }
     const configExists = existsSync(configPath)
-    const previousMode = configExists ? statSync(configPath).mode : DEFAULT_CONFIG_MODE
-    const tmpPath = `${configPath}.tmp-${process.pid}`
+    // Mask out file-type bits — st_mode carries S_IFREG etc. on top of the
+    // permission bits, and chmod must only ever receive the latter.
+    const previousMode = configExists ? statSync(configPath).mode & 0o777 : DEFAULT_CONFIG_MODE
+    // renameSync replaces whatever inode currently sits at its destination.
+    // If configPath is itself a symlink (e.g. a dotfiles-managed
+    // ~/.claude.json), renaming onto the link path would sever the link and
+    // leave a plain file in its place; renaming onto the link's resolved
+    // target instead preserves the symlink and updates the real file it
+    // points at. The temp file must live next to that resolved target — a
+    // dotfiles target can sit on a different filesystem, and rename() cannot
+    // cross devices (EXDEV).
+    const writeTargetPath =
+      configExists && lstatSync(configPath).isSymbolicLink() ? realpathSync(configPath) : configPath
+    const tmpPath = `${writeTargetPath}.tmp-${process.pid}`
     // Pass `mode` to writeFileSync itself (rather than creating with the
     // process umask and narrowing after via chmodSync) so the file never
     // exists on disk in a wider-than-intended state: fs open() honors an
@@ -115,13 +127,6 @@ export function createConfigIO(configPath, { writeFileSyncFn = writeFileSync } =
     // leave on a config file that can carry MCP bearer tokens.
     writeFileSyncFn(tmpPath, JSON.stringify(config, null, 2), { mode: DEFAULT_CONFIG_MODE })
     chmodSync(tmpPath, previousMode)
-    // renameSync replaces whatever inode currently sits at its destination.
-    // If configPath is itself a symlink (e.g. a dotfiles-managed
-    // ~/.claude.json), renaming onto the link path would sever the link and
-    // leave a plain file in its place; renaming onto the link's resolved
-    // target instead preserves the symlink and updates the real file it
-    // points at.
-    const writeTargetPath = configExists && lstatSync(configPath).isSymbolicLink() ? realpathSync(configPath) : configPath
     renameSync(tmpPath, writeTargetPath)
   }
 
@@ -148,20 +153,20 @@ function readExistingEntry(config, repoRootAbsPath, name) {
 // points at the one shared `.git` directory, so its parent is the answer
 // regardless of cwd. Only called for --sweep; plain wiring never needs it.
 function defaultMainCheckoutRoot(cwd) {
-  const commonDir = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+  // No --path-format=absolute (git >= 2.31 only): the returned path may be
+  // relative to cwd, so resolve it here instead.
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], {
     cwd,
     encoding: 'utf8',
   }).trim()
-  return resolveMainCheckoutRoot({ gitCommonDir: commonDir })
+  return resolveMainCheckoutRoot({ gitCommonDir: resolve(cwd, commonDir) })
 }
 
 function defaultLiveWorktreePaths(mainCheckoutRoot) {
   const raw = execFileSync('git', ['worktree', 'list', '--porcelain'], { cwd: mainCheckoutRoot, encoding: 'utf8' })
-  return raw
-    .split('\n\n')
-    .map((block) => block.match(/^worktree (.+)$/m)?.[1])
-    .filter((path) => path !== undefined)
-    .map((path) => resolve(path))
+  // Line-ending-agnostic: matching per line (with a trim for a stray \r)
+  // survives CRLF output, unlike splitting the stream on '\n\n'.
+  return Array.from(raw.matchAll(/^worktree (.+)$/gm), (m) => resolve(m[1].trim()))
 }
 
 function wireWorktree({ worktreeRoot, env, spawn, readConfig, log, isMainCheckoutOverride, claudeCliAvailableOverride }) {
