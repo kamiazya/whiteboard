@@ -81,6 +81,21 @@ export class IncompleteFileGcScanError extends Error {
   }
 }
 
+export function isIncompleteFileGcScanError(error: unknown): error is IncompleteFileGcScanError {
+  return error instanceof IncompleteFileGcScanError
+}
+
+// Structured response body for the purge-dangling route. Kept next to the
+// error class so every caller maps the same fail-closed condition to the
+// same wire shape instead of letting it fall through to Hono's generic
+// unstructured 500.
+export function incompleteFileGcScanErrorBody(
+  error: unknown,
+): { error: 'incomplete_file_gc_scan'; message: string } | null {
+  if (!isIncompleteFileGcScanError(error)) return null
+  return { error: 'incomplete_file_gc_scan', message: error.message }
+}
+
 // Fork the live doc through a snapshot and checkout the given base64
 // frontiers, mirroring version-store.ts's load(). Returns null for an
 // empty/unset tip (fresh branch off nothing — no history to check out,

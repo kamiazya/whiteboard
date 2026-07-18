@@ -8,7 +8,7 @@ import {
   corruptStoredDataBody,
   isMissingFileError,
 } from '../store/corrupt-stored-data.js'
-import { purgeDanglingFiles } from '../store/file-gc.js'
+import { incompleteFileGcScanErrorBody, purgeDanglingFiles } from '../store/file-gc.js'
 import type { VersionStore } from '../store/version-store.js'
 import {
   validateFileId,
@@ -172,6 +172,11 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
       })
       return c.json(result)
     } catch (err) {
+      // 503: fail-closed refusal (some branch/version could not be scanned),
+      // distinct from the 500 corrupt-stored-data path — the caller should
+      // retry rather than treat this as a broken store.
+      const incompleteScanBody = incompleteFileGcScanErrorBody(err)
+      if (incompleteScanBody) return c.json(incompleteScanBody, 503)
       const body = corruptStoredDataBody(err)
       if (body) return c.json(body, 500)
       throw err
