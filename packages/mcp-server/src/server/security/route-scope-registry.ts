@@ -21,6 +21,13 @@ import type { AuthScope } from './auth-strategy.js'
 export type RouteScopeDecision =
   | { kind: 'scoped'; scopes: readonly AuthScope[] }
   | { kind: 'public' }
+  // Never satisfiable by an OAuth access token, regardless of its granted
+  // scopes — only the literal shared daemon token authorizes this route.
+  // Reserved for routes whose whole purpose is to hand out daemon-level
+  // authority (see reconnect.ts): a scope-limited hosted-origin grant that
+  // could reach this route would let itself mint a path back to the full,
+  // unscoped daemon token, escaping the very scopes it was approved for.
+  | { kind: 'daemon-token-only' }
 
 function isWriteMethod(method: string): boolean {
   const normalized = method.toUpperCase()
@@ -94,6 +101,18 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['versions:write'] }
   }
 
+  // Destructive maintenance routes mounted under /api/workspaces need their
+  // own narrower scope — without this rule they'd fall through to the
+  // workspace:write fallback below, which is broader than what they
+  // actually mutate (attachment blobs / canvas version history) and would
+  // let any workspace:write grant trigger them.
+  if (/^\/api\/workspaces\/[^/]+\/files\/purge-dangling$/.test(path) && method === 'POST') {
+    return { kind: 'scoped', scopes: ['files:write'] }
+  }
+  if (/^\/api\/workspaces\/[^/]+\/canvases\/optimize-all$/.test(path) && method === 'POST') {
+    return { kind: 'scoped', scopes: ['versions:write'] }
+  }
+
   // Workspace routes (including palette and library sub-resources, which are
   // workspace-scoped state): default write -> workspace:write, read -> workspace:read.
   if (path.startsWith('/api/workspaces')) {
@@ -126,6 +145,27 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // requirement, so this is a "can you ask at all" gate, not an escalation.
   if (path === '/api/ws-ticket') {
     return { kind: 'scoped', scopes: ['canvas:read'] }
+  }
+
+  // Silent-reconnect enrollment (see reconnect.ts): mints a reconnect secret
+  // for the caller's own admitted Origin, which /api/reconnect-session later
+  // exchanges for the full daemon token. `daemon-token-only`, not
+  // `runtime:admin` — an OAuth grant scoped to `runtime:admin` (issued for
+  // touch/shutdown/logs-prune/debug) must not be able to reach this route,
+  // or it could use it as a one-way escalation to the unrestricted daemon
+  // token the grant was never approved for.
+  if (path === '/api/reconnect-credential') {
+    return { kind: 'daemon-token-only' }
+  }
+  // The ONLY deliberately public /api/* route besides the liveness probe.
+  // Its purpose is to hand back a daemon token to a caller that no longer
+  // has one, so it cannot itself require that token. Its internal gates
+  // (reconnect.ts) are Origin admission + secret possession + non-expired
+  // trust record — see web-origin-trust-store.ts for why that combination
+  // does not weaken the daemon-token boundary the way an Origin-only check
+  // would.
+  if (path === '/api/reconnect-session') {
+    return { kind: 'public' }
   }
 
   // No rule matched: an undeclared /api/* route. Callers must fail closed.

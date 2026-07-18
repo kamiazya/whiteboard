@@ -3,11 +3,15 @@
  *
  * Real browser context required for IndexedDB + loro-crdt WASM.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type {
+  BinaryFileDataLike,
+  CanvasBackendHandlers,
+} from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
-import { BrowserLocalBackend } from './browser-local-backend.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DB_VERSION } from './browser-idb.js'
-import type { CanvasBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
+import { BrowserLocalBackend } from './browser-local-backend.js'
 
 // Generous timeout: async IDB reads under CI load can take well over the
 // 200ms fixed sleeps this file used to rely on. Waiting on the concrete
@@ -166,14 +170,123 @@ describe('BrowserLocalBackend', () => {
     expect(handlers.onSnapshot).not.toHaveBeenCalled()
   })
 
-  it('getFile returns null (deferred OPFS — not implemented in 3-C)', async () => {
+  it('getFile returns null for an unknown fileId', async () => {
     const backend = new BrowserLocalBackend('canvas-1')
     const result = await backend.getFile('any-file-id')
     expect(result).toBeNull()
   })
 
-  it('putFile resolves without calling onFileSuccess (deferred OPFS)', async () => {
+  it('putFile stores two entries, calls onFileSuccess exactly once per fileId, and getFile on a NEW instance returns each Blob', async () => {
     const backend = new BrowserLocalBackend('canvas-1')
+    const onFileSuccess = vi.fn()
+    const entries: [string, BinaryFileDataLike][] = [
+      [
+        'file-1',
+        {
+          mimeType: 'image/png',
+          id: 'file-1',
+          dataURL: 'data:image/png;base64,QQ==',
+          created: Date.now(),
+        },
+      ],
+      [
+        'file-2',
+        {
+          mimeType: 'image/jpeg',
+          id: 'file-2',
+          dataURL: 'data:image/jpeg;base64,QkI=',
+          created: Date.now(),
+        },
+      ],
+    ]
+
+    await backend.putFile(entries, onFileSuccess)
+
+    expect(onFileSuccess).toHaveBeenCalledTimes(2)
+    expect(onFileSuccess).toHaveBeenCalledWith('file-1')
+    expect(onFileSuccess).toHaveBeenCalledWith('file-2')
+
+    // Simulated reload: fresh instance, same canvasId.
+    const reloaded = new BrowserLocalBackend('canvas-1')
+    const blob1 = await reloaded.getFile('file-1')
+    const blob2 = await reloaded.getFile('file-2')
+    expect(blob1).not.toBeNull()
+    expect(blob1?.type).toBe('image/png')
+    expect(blob2).not.toBeNull()
+    expect(blob2?.type).toBe('image/jpeg')
+  })
+
+  it('putFile keys by the tuple fileId, never BinaryFileDataLike.id', async () => {
+    const backend = new BrowserLocalBackend('canvas-1')
+    const onFileSuccess = vi.fn()
+    const tupleKey = 'tuple-key'
+    const disagreeingDataId = 'data-id-disagrees'
+
+    await backend.putFile(
+      [
+        [
+          tupleKey,
+          {
+            mimeType: 'image/png',
+            id: disagreeingDataId,
+            dataURL: 'data:image/png;base64,QQ==',
+            created: Date.now(),
+          },
+        ],
+      ],
+      onFileSuccess,
+    )
+
+    expect(onFileSuccess).toHaveBeenCalledWith(tupleKey)
+    expect(onFileSuccess).not.toHaveBeenCalledWith(disagreeingDataId)
+    expect(await backend.getFile(tupleKey)).not.toBeNull()
+    expect(await backend.getFile(disagreeingDataId)).toBeNull()
+  })
+
+  it('putFile with an empty newEntries array resolves immediately with no IDB writes and zero onFileSuccess calls', async () => {
+    const backend = new BrowserLocalBackend('canvas-1')
+    const onFileSuccess = vi.fn()
+    await expect(backend.putFile([], onFileSuccess)).resolves.toBeUndefined()
+    expect(onFileSuccess).not.toHaveBeenCalled()
+  })
+
+  it('getFile returns null for a corrupt stored record and NEVER calls onError (repeated calls produce zero onError invocations)', async () => {
+    await forceCorruptFileRecord('canvas-1', 'corrupt-file')
+    const handlers = makeHandlers()
+    const backend = new BrowserLocalBackend('canvas-1')
+    backend.connect(handlers)
+    await vi.waitFor(
+      () => {
+        expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
+
+    expect(await backend.getFile('corrupt-file')).toBeNull()
+    expect(await backend.getFile('corrupt-file')).toBeNull()
+    expect(handlers.onError).not.toHaveBeenCalled()
+    backend.disconnect()
+  })
+
+  it('putFile rejects and calls onError("storage-failure") without calling onFileSuccess when the underlying store put fails', async () => {
+    const handlers = makeHandlers()
+    const faultyStore = {
+      put: vi.fn().mockRejectedValue(new Error('simulated IDB failure')),
+      get: vi.fn().mockResolvedValue(null),
+    }
+    const backend = new BrowserLocalBackend(
+      'canvas-1',
+      undefined,
+      faultyStore as unknown as import('./canvas-file-store.js').CanvasFileStore,
+    )
+    backend.connect(handlers)
+    await vi.waitFor(
+      () => {
+        expect(handlers.onSnapshot).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
+
     const onFileSuccess = vi.fn()
     await expect(
       backend.putFile(
@@ -183,15 +296,18 @@ describe('BrowserLocalBackend', () => {
             {
               mimeType: 'image/png',
               id: 'file-1',
-              dataURL: 'data:image/png;base64,abc',
+              dataURL: 'data:image/png;base64,QQ==',
               created: Date.now(),
             },
           ],
         ],
         onFileSuccess,
       ),
-    ).resolves.toBeUndefined()
+    ).rejects.toThrow()
+
     expect(onFileSuccess).not.toHaveBeenCalled()
+    expect(handlers.onError).toHaveBeenCalledWith('storage-failure')
+    backend.disconnect()
   })
 
   it('sendClientReady and sendExportResponse are no-ops (no WebSocket)', () => {
@@ -398,6 +514,34 @@ async function forceRecordWithBadDelta(canvasId: string, snapshot: Uint8Array): 
         },
         canvasId,
       )
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function forceCorruptFileRecord(_canvasId: string, fileId: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', DB_VERSION)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('canvasFiles')) db.createObjectStore('canvasFiles')
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction('canvasFiles', 'readwrite')
+      // Missing required fields — fails canvasFileRecordSchema.safeParse.
+      tx.objectStore('canvasFiles').put({ v: 1, garbage: true }, fileId)
       tx.oncomplete = () => {
         db.close()
         resolve()

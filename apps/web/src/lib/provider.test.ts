@@ -196,6 +196,37 @@ describe('resolveHostedProviderStateFromRaw', () => {
     expect(state.kind).toBe('browser-local')
   })
 
+  it('custom domain publicOrigin surfaces the specific unsupported-custom-domain copy (no browserOrigin)', () => {
+    const state = resolveHostedProviderStateFromRaw({
+      publicOrigin: 'https://custom.example.com',
+    })
+    expect(state.kind).toBe('invalid-config')
+    if (state.kind === 'invalid-config') {
+      expect(state.message).toMatch(/custom domain/i)
+      expect(state.message).not.toBe('Runtime configuration is invalid.')
+    }
+  })
+
+  it('custom domain publicOrigin surfaces the specific copy on the preview-browserOrigin branch too', () => {
+    const state = resolveHostedProviderStateFromRaw(
+      { publicOrigin: 'https://custom.example.com' },
+      'https://abc123.kamiazya-whiteboard.pages.dev',
+    )
+    expect(state.kind).toBe('invalid-config')
+    if (state.kind === 'invalid-config') {
+      expect(state.message).toMatch(/custom domain/i)
+      expect(state.message).not.toBe('Runtime configuration is invalid.')
+    }
+  })
+
+  it('Zod-invalid publicOrigin still yields the generic invalid-config message (no policy-error reflection)', () => {
+    const state = resolveHostedProviderStateFromRaw({ publicOrigin: 'not-a-url' })
+    expect(state.kind).toBe('invalid-config')
+    if (state.kind === 'invalid-config') {
+      expect(state.message).toBe('Runtime configuration is invalid.')
+    }
+  })
+
   it('daemon refusal on a preview browserOrigin does not expose the origin value', () => {
     const state = resolveHostedProviderStateFromRaw(
       { daemonBaseUrl: 'http://127.0.0.1:3099' },

@@ -47,6 +47,26 @@ export function readDaemonTokenOnce(): string | null {
   return cachedToken
 }
 
+// Installs a token obtained OUTSIDE the fragment global (the silent-reconnect
+// flow's /api/reconnect-session redemption) into the same module-singleton
+// cache that readDaemonTokenOnce() serves, so both createDaemonFetch (HTTP)
+// and DaemonBackend.openSocket (WebSocket, which reads this store directly
+// rather than taking a token prop) authenticate with one shared token.
+//
+// A no-op only when a REAL fragment token has already been consumed (guarded
+// on `cachedToken`, not `hasRead`): the fragment path — an explicit #wb=
+// pairing link — takes precedence over a reconnect redemption that resolves
+// later in the same page load. A fragment-free load still sets `hasRead` on
+// its first (null) readDaemonTokenOnce() call, and that must NOT block a
+// later seed — otherwise a silent-reconnect redemption can never install its
+// token into this store, and DaemonBackend.openSocket (which reads this
+// store directly rather than taking a token prop) authenticates with null.
+export function seedDaemonToken(token: string): void {
+  if (cachedToken !== null) return
+  cachedToken = token
+  hasRead = true
+}
+
 // Test-only: restores first-read semantics so each test seeds and reads its
 // own token value independently of module-singleton state from earlier tests.
 export function resetTokenStoreForTests(): void {

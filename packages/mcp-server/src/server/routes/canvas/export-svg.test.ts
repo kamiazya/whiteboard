@@ -193,6 +193,19 @@ describe('POST /api/canvas/:workspaceId/:slug/export-svg', () => {
     await expect(readFile(outputPath, 'utf-8')).resolves.toBe('<svg><rect/></svg>')
   })
 
+  it('rejects an oversized request body with 413 payload_too_large', async () => {
+    const app = makeApp()
+    const oversized = 'x'.repeat(1024 * 1024 + 1)
+    const res = await app.request('/api/canvas/s1/canvas-a/export-svg', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: oversized,
+    })
+    expect(res.status).toBe(413)
+    const body: unknown = await res.json()
+    expect(body).toMatchObject({ error: 'payload_too_large' })
+  })
+
   it('returns 500 headless_export_failed when rendering throws', async () => {
     mockExportCanvasHeadlessSvg.mockRejectedValue(new Error('boom'))
     const app = makeApp()

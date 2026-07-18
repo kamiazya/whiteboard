@@ -4,11 +4,15 @@
 // createOAuthJwtValidator + createOAuthResourceServerAuthStrategy
 // produce the correct AuthDecision for each JWT failure mode.
 
-import { SignJWT, generateKeyPair } from 'jose'
-import { describe, expect, it } from 'vitest'
+import { SignJWT, exportJWK, generateKeyPair } from 'jose'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
+import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
+import { runServerRun } from './server-run.js'
+import type { ServerRunArgs } from './server-run-args.js'
 import type { AuthAuthorizeInput } from '../server/security/auth-strategy.js'
+import type { StartServerFn } from './server-run.js'
 
 const ISSUER = 'https://auth.test.example'
 const AUDIENCE = 'https://whiteboard.test.example'
@@ -32,7 +36,7 @@ async function signJwt(
   overrides: { issuer?: string; audience?: string; expiresIn?: string } = {},
 ) {
   return new SignJWT({ sub: 'test-user', scope: 'canvas:read', ...claims })
-    .setProtectedHeader({ alg: 'ES256' })
+    .setProtectedHeader({ alg: 'ES256', typ: 'at+jwt' })
     .setIssuer(overrides.issuer ?? ISSUER)
     .setAudience(overrides.audience ?? AUDIENCE)
     .setIssuedAt()
@@ -140,7 +144,9 @@ describe('server-mode OAuth JWT auth wiring', () => {
     const validator = createOAuthJwtValidator({
       issuer: ISSUER,
       audience: AUDIENCE,
-      keyResolver: async () => { throw new Error('network error') },
+      keyResolver: async () => {
+        throw new Error('network error')
+      },
     })
     const strategy = createOAuthResourceServerAuthStrategy({ validator })
     const { privateKey } = await generateKeyPair('ES256')
@@ -160,5 +166,116 @@ describe('server-mode OAuth JWT auth wiring', () => {
     expect(asText).not.toContain('secret-auth.example')
     expect(asText).not.toContain(ISSUER)
     expect(asText).not.toContain(AUDIENCE)
+  })
+})
+
+// Confirms that RunServerRunOptions.flags.jwtAllowUntypedAccessTokens (via env
+// parsing) actually reaches createOAuthJwtValidator through runServerRun's
+// wiring, not just that the two halves are separately unit-tested — a typo'd
+// or dropped property name here would pass both of those suites unnoticed.
+describe('runServerRun — jwtAllowUntypedAccessTokens wiring', () => {
+  const JWKS_URI = 'https://auth.example.com/.well-known/jwks.json'
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function baseEnv(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
+    return {
+      WHITEBOARD_SERVER_EXTERNAL_URL: 'https://whiteboard.example.com',
+      WHITEBOARD_SERVER_AUTH_STRATEGY: 'oauth-jwt',
+      WHITEBOARD_SERVER_JWT_ISSUER: ISSUER,
+      WHITEBOARD_SERVER_JWT_AUDIENCE: AUDIENCE,
+      WHITEBOARD_SERVER_JWKS_URI: JWKS_URI,
+      ...overrides,
+    }
+  }
+
+  function runArgs(): ServerRunArgs & { kind: 'ok' } {
+    return {
+      kind: 'ok',
+      json: true,
+      dryRun: false,
+      trustedProxy: undefined,
+      externalUrl: undefined,
+      allowedOrigins: undefined,
+      authStrategy: undefined,
+      jwtIssuer: undefined,
+      jwtAudience: undefined,
+      jwksUri: undefined,
+      jwtClockSkew: undefined,
+      jwtScopeClaim: undefined,
+      host: undefined,
+      port: undefined,
+      dataDir: undefined,
+    }
+  }
+
+  async function bootAndCaptureAuthStrategy(env: NodeJS.ProcessEnv): Promise<AsyncAuthStrategy> {
+    let capturedAuthStrategy: AsyncAuthStrategy | undefined
+    const startServer: StartServerFn = async (opts) => {
+      capturedAuthStrategy = opts.authStrategy
+      return {
+        port: opts.port,
+        host: opts.host,
+        startedAt: new Date().toISOString(),
+        resolvedDataDir: '/tmp/mock-server-run-auth',
+        instanceId: 'mock-instance-id',
+        close: async () => {},
+      }
+    }
+    const outcome = await runServerRun({ flags: runArgs(), env, startServer })
+    expect(outcome.kind).toBe('running')
+    if (!capturedAuthStrategy) throw new Error('authStrategy was not captured')
+    return capturedAuthStrategy
+  }
+
+  async function stubJwksFetch(publicKey: CryptoKey) {
+    const jwk = await exportJWK(publicKey)
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ keys: [{ ...jwk, alg: 'ES256', use: 'sig' }] }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
+      ),
+    )
+  }
+
+  async function signUntypedAccessToken(privateKey: CryptoKey) {
+    // No `typ` header and no `token_use` claim — this is the "untyped
+    // access token" shape that createOAuthJwtValidator rejects by default
+    // and accepts only when allowUntypedAccessTokens is true.
+    return new SignJWT({ sub: 'test-user', scope: 'canvas:read' })
+      .setProtectedHeader({ alg: 'ES256' })
+      .setIssuer(ISSUER)
+      .setAudience(AUDIENCE)
+      .setIssuedAt()
+      .setExpirationTime('1h')
+      .sign(privateKey)
+  }
+
+  it('WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS=true reaches the validator and accepts an untyped access token', async () => {
+    const { privateKey, publicKey } = await generateKeyPair('ES256')
+    await stubJwksFetch(publicKey)
+    const authStrategy = await bootAndCaptureAuthStrategy(
+      baseEnv({ WHITEBOARD_SERVER_JWT_ALLOW_UNTYPED_ACCESS_TOKENS: 'true' }),
+    )
+    const jwt = await signUntypedAccessToken(privateKey)
+    const decision = await authStrategy.authorize(authInput(jwt, ['canvas:read']))
+    expect(decision.ok).toBe(true)
+  })
+
+  it('defaults to rejecting an untyped access token when the env var is unset', async () => {
+    const { privateKey, publicKey } = await generateKeyPair('ES256')
+    await stubJwksFetch(publicKey)
+    const authStrategy = await bootAndCaptureAuthStrategy(baseEnv())
+    const jwt = await signUntypedAccessToken(privateKey)
+    const decision = await authStrategy.authorize(authInput(jwt, ['canvas:read']))
+    expect(decision.ok).toBe(false)
+    if (decision.ok) return
+    expect(decision.status).toBe(401)
   })
 })

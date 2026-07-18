@@ -212,7 +212,7 @@ function makeJwt(priv, scope) {
   const now = Math.floor(Date.now() / 1000)
   return signEs256Jwt(
     priv,
-    { alg: 'ES256', kid: 'cli-smoke-key' },
+    { alg: 'ES256', typ: 'at+jwt', kid: 'cli-smoke-key' },
     {
       sub: 'cli-smoke-user',
       scope,

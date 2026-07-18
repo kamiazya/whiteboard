@@ -330,6 +330,20 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     expect(mockSendExportRequest).not.toHaveBeenCalled()
   })
 
+  it('rejects an oversized request body with 413 payload_too_large', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    const oversized = 'x'.repeat(1024 * 1024 + 1)
+    const res = await app.request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: oversized,
+    })
+    expect(res.status).toBe(413)
+    const body: unknown = await res.json()
+    expect(body).toMatchObject({ error: 'payload_too_large' })
+  })
+
   it('passes frameId through to sendExportRequest options', async () => {
     mockGetClientCount.mockReturnValue(1)
     mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {

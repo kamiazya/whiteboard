@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { deriveCapabilityTier } from '../../lib/capability-tier.js'
 import {
-  DEFAULT_DAEMON_BASE_URL,
   type DaemonProbeResult,
-  probeDaemon,
+  DEFAULT_DAEMON_BASE_URL,
   type ProbeDaemonOptions,
+  probeDaemon,
 } from '../../lib/daemon-probe.js'
+import { clear as clearReconnectSecret } from '../../lib/reconnect-credential-store.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 
@@ -127,11 +128,13 @@ export function DaemonDetectedBanner({
     setDismissedAt(now)
   }
 
-  // Clears the persisted reconnect target only (never touches dismissal
-  // state, which governs an unrelated concern) so a future load stops
-  // offering to reconnect here. Also dismisses this session's banner
-  // instance immediately — "forget" implies "stop asking", not just "forget
-  // for next time".
+  // Clears the persisted reconnect target (never touches dismissal state,
+  // which governs an unrelated concern) so a future load stops offering to
+  // reconnect here — including the silent-reconnect secret alongside it, so
+  // "forget" revokes BOTH the one-click banner target and the possession
+  // credential that would otherwise silently redeem a daemon token on the
+  // next load. Also dismisses this session's banner instance immediately —
+  // "forget" implies "stop asking", not just "forget for next time".
   function handleForget() {
     settingsStore.update((current) => ({
       ...current,
@@ -142,6 +145,7 @@ export function DaemonDetectedBanner({
         lastConnectedSlug: undefined,
       },
     }))
+    clearReconnectSecret()
     setStoredTarget({
       localDaemonBaseUrl: undefined,
       lastConnectedWorkspaceId: undefined,

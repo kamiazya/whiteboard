@@ -258,6 +258,7 @@ describe('createOAuthResourceServerAuthStrategy — validator failure mapping', 
     [{ ok: false, reason: 'expired' }, 401],
     [{ ok: false, reason: 'revoked' }, 401],
     [{ ok: false, reason: 'validator_unavailable' }, 401],
+    [{ ok: false, reason: 'not_access_token' }, 401],
   ])('maps validator failure %j → status %j', async (result, expectedStatus) => {
     const { validator } = makeFakeValidator(result)
     const strategy = createOAuthResourceServerAuthStrategy({ validator })

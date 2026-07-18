@@ -132,6 +132,16 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
+  it('POST /api/reconnect-credential requires daemon-token-only, never an OAuth grant scope', () => {
+    expect(resolveApiRouteScope('POST', '/api/reconnect-credential')).toEqual({
+      kind: 'daemon-token-only',
+    })
+  })
+
+  it('POST /api/reconnect-session is public (see reconnect.ts for its own gates)', () => {
+    expect(resolveApiRouteScope('POST', '/api/reconnect-session')).toEqual({ kind: 'public' })
+  })
+
   it('an undeclared path resolves to null (fail-closed signal, not a default scope)', () => {
     expect(resolveApiRouteScope('GET', '/api/some-route-nobody-declared-yet')).toBeNull()
   })
@@ -175,6 +185,23 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     expect(resolveApiRouteScope('PUT', '/api/user-libraries')).toEqual({
       kind: 'scoped',
       scopes: ['workspace:write'],
+    })
+  })
+
+  // Destructive maintenance routes must not fall through to the broad
+  // /api/workspaces workspace:write fallback — they need the narrower scope
+  // that actually matches what they mutate (attachments vs. canvas history).
+  it('purge-dangling files requires files:write, not the workspace:write fallback', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/files/purge-dangling')).toEqual({
+      kind: 'scoped',
+      scopes: ['files:write'],
+    })
+  })
+
+  it('optimize-all canvases requires versions:write, not the workspace:write fallback', () => {
+    expect(resolveApiRouteScope('POST', '/api/workspaces/w1/canvases/optimize-all')).toEqual({
+      kind: 'scoped',
+      scopes: ['versions:write'],
     })
   })
 })

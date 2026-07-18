@@ -33,6 +33,58 @@ export interface PaletteResolution {
   warningKey?: string
 }
 
+export function isExplicitHexColor(input: string): boolean {
+  return HEX_COLOR_RE.test(input)
+}
+
+// WCAG 2.x relative luminance (https://www.w3.org/TR/WCAG21/#dfn-relative-luminance).
+// Returns null for anything that isn't a 3/6-digit hex color — CSS named
+// colors pass through this module unresolved, and the contrast guard simply
+// skips them rather than guessing.
+export function relativeLuminance(hex: string): number | null {
+  // Accepts 3/4/6/8-digit hex. An alpha channel (4th/8th) is dropped: the
+  // effective luminance of a translucent fill depends on the canvas behind
+  // it, which is unknown here, so the guard treats the color as opaque.
+  const m = /^#(?:([0-9a-f]{3,4})|([0-9a-f]{6})|([0-9a-f]{8}))$/i.exec(hex)
+  if (!m) return null
+  let digits: string
+  if (m[1]) {
+    digits = [...m[1].slice(0, 3)].map((c) => c + c).join('')
+  } else {
+    digits = (m[2] ?? m[3]!).slice(0, 6)
+  }
+  const channel = (i: number) => {
+    const v = Number.parseInt(digits.slice(i * 2, i * 2 + 2), 16) / 255
+    return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2)
+}
+
+// WCAG contrast ratio, 1 (identical) .. 21 (black on white). Null when either
+// side isn't parseable hex.
+export function contrastRatio(hexA: string, hexB: string): number | null {
+  const la = relativeLuminance(hexA)
+  const lb = relativeLuminance(hexB)
+  if (la === null || lb === null) return null
+  const [dark, light] = la < lb ? [la, lb] : [lb, la]
+  return (light + 0.05) / (dark + 0.05)
+}
+
+// Inks used when the guard replaces an unreadable one. The dark ink matches
+// DEFAULT_COLORS.text in annotate.ts; the light one is plain white — both
+// clear WCAG large-text contrast (3:1) against any fill the other doesn't.
+export const READABLE_DARK_INK = '#1e1e2e'
+export const READABLE_LIGHT_INK = '#ffffff'
+
+export function readableInkForFill(fillHex: string): string | null {
+  const lum = relativeLuminance(fillHex)
+  if (lum === null) return null
+  const darkContrast = contrastRatio(READABLE_DARK_INK, fillHex)
+  const lightContrast = contrastRatio(READABLE_LIGHT_INK, fillHex)
+  if (darkContrast === null || lightContrast === null) return null
+  return darkContrast >= lightContrast ? READABLE_DARK_INK : READABLE_LIGHT_INK
+}
+
 export function resolvePaletteColor(
   input: string,
   sessionPalette: Record<string, string>,

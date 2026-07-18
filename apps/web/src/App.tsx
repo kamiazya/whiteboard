@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { BetaBanner } from './components/BetaBanner.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
+import { useSilentReconnect } from './hooks/useSilentReconnect.js'
 import {
   type DaemonRoute,
   daemonRoutePath,
@@ -16,7 +17,21 @@ import {
   type ProviderState,
   resolveHostedProviderStateFromRaw,
 } from './lib/provider.js'
+import { enrollForReconnectOnce } from './lib/reconnect-enrollment.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
+
+// A stored localDaemonBaseUrl can carry a trailing slash or non-default port
+// casing; canonicalizing to a bare origin here matches what
+// reconnect-credential-store.ts enforces on write, so a load() lookup for the
+// same target always hits.
+function canonicalizeDaemonOrigin(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  try {
+    return new URL(raw).origin
+  } catch {
+    return undefined
+  }
+}
 
 // Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
 // of the entry chunk — sessions arriving via a #wb= pairing fragment AND
@@ -128,6 +143,24 @@ export function App({ providerState }: AppProps) {
   const location = useLocation()
   const navigate = useNavigate()
 
+  // Read once at mount: the reconnect target this tab would silently
+  // reconnect to, if any. Read from the SAME settings store the pairing
+  // effect below writes to, canonicalized to a bare origin so it matches
+  // reconnect-credential-store.ts's stored key.
+  const [reconnectOrigin] = useState(() =>
+    canonicalizeDaemonOrigin(userSettingsStore.load().storage.localDaemonBaseUrl),
+  )
+
+  // Eligible only on a fragment-free load (a #wb= pairing always wins) with a
+  // known reconnect target. useSilentReconnect itself also requires a stored
+  // secret for that target, so this can be true with the hook still landing
+  // on 'idle' (no secret) rather than 'connecting'.
+  const silentReconnectEnabled = daemonConnection.status === 'none' && reconnectOrigin !== undefined
+  const silentReconnect = useSilentReconnect({
+    enabled: silentReconnectEnabled,
+    origin: reconnectOrigin ?? '',
+  })
+
   // A #wb= fragment carrying both workspaceId+slug skips straight to the
   // canvas (the existing deep-link contract); a workspace-only fragment is
   // still a valid target (see daemon-connection-payload.ts's refine) and
@@ -237,9 +270,104 @@ export function App({ providerState }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonConnection.status])
 
+  // Enrolls this origin for silent reconnect right after a successful
+  // pairing, for BOTH authMode 'bootstrap' and 'none' — a tokenless daemon's
+  // auth middleware treats an absent Authorization header as authenticated,
+  // so enrollment works the same way any other unauthenticated /api/* call
+  // does for it. Failure is non-fatal (enrollForReconnectOnce never throws):
+  // no secret gets persisted, so a later load simply has no silent-reconnect
+  // option and falls back to the existing one-click banner.
+  useEffect(() => {
+    if (daemonConnection.status !== 'paired') return
+    const { baseUrl, authMode, bootstrapToken } = daemonConnection.payload
+    const origin = canonicalizeDaemonOrigin(baseUrl)
+    if (origin === undefined) return
+    enrollForReconnectOnce(origin, authMode === 'bootstrap' ? (bootstrapToken ?? null) : null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [daemonConnection.status])
+
+  // Once silent reconnect redeems a token, seed the daemon view: a URL that
+  // already encodes a daemon route (e.g. a bookmarked /canvas/:id/:slug)
+  // wins over the last-connected settings — this only fills in the default
+  // 'index' view the lazy initializer above fell back to when no route was
+  // present.
+  useEffect(() => {
+    if (silentReconnect.status !== 'connected') return
+    // A bare '/' parses to {kind:'index'} too (see parseDaemonRoute), which
+    // is indistinguishable from "no route encoded" — only a URL that names
+    // an actual workspace/canvas should win over the last-connected
+    // settings below.
+    const urlView = parseDaemonRoute(location.pathname)
+    const urlEncodesSpecificView =
+      urlView !== null && (urlView.kind === 'canvas' || urlView.workspaceId !== undefined)
+    if (urlEncodesSpecificView) return
+    const { lastConnectedWorkspaceId, lastConnectedSlug } = userSettingsStore.load().storage
+    if (lastConnectedWorkspaceId && lastConnectedSlug) {
+      setDaemonView({
+        kind: 'canvas',
+        workspaceId: lastConnectedWorkspaceId,
+        slug: lastConnectedSlug,
+      })
+    } else if (lastConnectedWorkspaceId) {
+      setDaemonView({ kind: 'index', workspaceId: lastConnectedWorkspaceId })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [silentReconnect.status])
+
   // The 'Continue in browser-local' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
   if (!forcedBrowserLocal) {
+    // Visible in-flight state: the reconnect attempt is bounded (see
+    // reconnect-client.ts's AbortSignal.timeout), so this can never hang
+    // forever — a timeout/abort resolves to 'failed' and falls through to
+    // the banner below like any other network failure.
+    if (silentReconnect.status === 'connecting') {
+      return (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex h-dvh items-center justify-center text-sm text-muted-foreground"
+        >
+          Reconnecting to local daemon…
+        </div>
+      )
+    }
+
+    if (silentReconnect.status === 'connected' && reconnectOrigin !== undefined) {
+      const { token } = silentReconnect
+      return (
+        <ErrorBoundary>
+          <Suspense
+            fallback={<LazyPageFallback heightClass="h-dvh" message="Connecting to daemon…" />}
+          >
+            {daemonView.kind === 'index' ? (
+              <DaemonIndexPage
+                daemonBaseUrl={reconnectOrigin}
+                token={token}
+                initialWorkspaceId={daemonView.workspaceId}
+                onOpenCanvas={(workspaceId, slug) =>
+                  setDaemonView({ kind: 'canvas', workspaceId, slug })
+                }
+              />
+            ) : (
+              <DaemonCanvasPage
+                key={`${daemonView.workspaceId}:${daemonView.slug}`}
+                daemonBaseUrl={reconnectOrigin}
+                workspaceId={daemonView.workspaceId}
+                slug={daemonView.slug}
+                token={token}
+                onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+                browserLocalStore={browserLocalStore}
+                onNavigateBack={() =>
+                  setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                }
+              />
+            )}
+          </Suspense>
+        </ErrorBoundary>
+      )
+    }
+
     if (daemonConnection.status === 'paired') {
       const { payload } = daemonConnection
       const pairedToken = payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined
