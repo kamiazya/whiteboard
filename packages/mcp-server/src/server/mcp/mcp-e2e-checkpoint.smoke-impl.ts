@@ -432,10 +432,20 @@ export async function runE2eCheckpointSmoke({
     // bypassing the registered export_svg tool's own registerToolWithAnnotations
     // binding and structuredContent validation entirely. Call export_svg directly
     // too so a drift confined to that standalone registration wrapper (as opposed
-    // to the shared execute() body) is still caught here.
-    const svgDirect = await callTool('export_svg', { canvasId: created.id })
-    if (!(svgDirect.filePath as string).endsWith('.svg')) {
-      throw new Error(`export_svg returned unexpected shape: ${JSON.stringify(svgDirect)}`)
+    // to the shared execute() body) is still caught here. Pass outputPath and
+    // theme (not just canvasId) so the wrapper's destructure-and-forward of
+    // every optional field (packages/mcp-server/src/server/mcp/tool-registration.ts)
+    // is actually exercised, not just its zero-argument path.
+    const svgOutputPath = join(tmpDataDir, workspaceId, 'exports', 'e2e-direct.svg')
+    const svgDirect = await callTool('export_svg', {
+      canvasId: created.id,
+      outputPath: svgOutputPath,
+      theme: 'dark',
+    })
+    if (svgDirect.filePath !== svgOutputPath) {
+      throw new Error(
+        `export_svg ignored outputPath: expected ${svgOutputPath}, got ${JSON.stringify(svgDirect)}`,
+      )
     }
     const svgDirectMarkup =
       typeof svgDirect.svgMarkup === 'string'
@@ -444,7 +454,7 @@ export async function runE2eCheckpointSmoke({
     if (!svgDirectMarkup.trim().startsWith('<svg')) {
       throw new Error('export_svg did not produce real SVG markup')
     }
-    console.log('[e2e] export_svg (direct) OK (real <svg> markup on disk)')
+    console.log('[e2e] export_svg (direct, outputPath+theme forwarded) OK')
 
     // export_canvas unifies png/svg/json behind one tool — exercise all three
     // formats so structuredContent validation against each format's branch of
