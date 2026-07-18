@@ -20,6 +20,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { chmod, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { platform } from 'node:os'
 import { join } from 'node:path'
+import { pid } from 'node:process'
 import { z } from 'zod'
 import { DATA_DIR } from '../../shared/data-dir-secure.js'
 
@@ -29,7 +30,12 @@ const WEB_ORIGIN_TRUST_FILENAME = 'trusted-web-origins.json'
 // dev origin (e.g. http://localhost:5173, which a *different* project's dev
 // server could later reuse) stays silently reconnectable. Revocation (the
 // `trust revoke` CLI) covers the remainder of that window.
-const TRUST_TTL_MS = 30 * 24 * 60 * 60 * 1000
+//
+// Exported so callers reporting this TTL to a client (reconnect.ts's
+// `expiresInDays`) derive it from the single value actually enforced here,
+// instead of maintaining a second hardcoded constant that can silently
+// desync from the real enforcement.
+export const TRUST_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 const trustRecordSchema = z.object({
   origin: z.string(),
@@ -92,7 +98,14 @@ async function loadFile(path: string): Promise<TrustedWebOriginsFile> {
 
 async function saveFile(path: string, dataDir: string, file: TrustedWebOriginsFile): Promise<void> {
   await mkdir(dataDir, { recursive: true })
-  const temp = `${path}.tmp`
+  // Multiple OS processes write this exact file concurrently (this daemon on
+  // trustOrigin()/rotate(), the separate `whiteboard trust revoke` CLI on its
+  // own process) while sharing the same on-disk path. A literal `${path}.tmp`
+  // with no per-process suffix lets two writers interleave writes to, or
+  // race the rename of, the same temp file — a PID + random suffix keeps
+  // each writer's temp file unique so only the atomic rename can interleave,
+  // never the write.
+  const temp = `${path}.${pid}.${randomBytes(6).toString('hex')}.tmp`
   await writeFile(temp, JSON.stringify(file, null, 2), { mode: 0o600 })
   await rename(temp, path)
   if (platform() !== 'win32') {
@@ -117,6 +130,14 @@ export interface WebOriginTrustStore {
   // Rotates the secret for an already-trusted origin, invalidating the old
   // one immediately. Throws if the origin has no existing trust record.
   rotate(origin: string): Promise<{ secret: string }>
+  // Verifies `secret` and rotates it in the same write-queue turn, so a
+  // concurrent verify+rotate pair from a second reconnect request can never
+  // observe the record between this call's verify and its rotate (the
+  // TOCTOU gap `verify()` then `rotate()` as two separate calls would have).
+  // Returns null — never throws — for every rejection reason (unknown
+  // origin, wrong/expired secret) so callers can map it to a single
+  // unauthorized response the same way `verify()` already does.
+  verifyAndRotate(origin: string, secret: string): Promise<{ secret: string } | null>
   revoke(origin: string): Promise<void>
   revokeAll(): Promise<void>
   list(): Promise<readonly WebOriginTrustRecord[]>
@@ -208,6 +229,12 @@ export function createWebOriginTrustStore(
     })
   }
 
+  function isRecordValid(record: WebOriginTrustRecord, secret: string): boolean {
+    if (!safeHashEqual(record.secretHash, hashReconnectSecret(secret))) return false
+    const ageMs = now() - Date.parse(record.lastUsedAt)
+    return ageMs <= TRUST_TTL_MS
+  }
+
   async function verify(origin: string, secret: string): Promise<boolean> {
     // Read-only path: still goes through readCurrent (not the write queue)
     // so a concurrent write is not blocked by a verify, but readCurrent's
@@ -215,10 +242,28 @@ export function createWebOriginTrustStore(
     const current = await readCurrent()
     const record = current.origins.find((o) => o.origin === origin)
     if (!record) return false
-    if (!safeHashEqual(record.secretHash, hashReconnectSecret(secret))) return false
-    const ageMs = now() - Date.parse(record.lastUsedAt)
-    if (ageMs > TRUST_TTL_MS) return false
-    return true
+    return isRecordValid(record, secret)
+  }
+
+  async function verifyAndRotate(
+    origin: string,
+    secret: string,
+  ): Promise<{ secret: string } | null> {
+    return enqueue(async () => {
+      const current = await readCurrent()
+      const existing = current.origins.find((o) => o.origin === origin)
+      if (!existing || !isRecordValid(existing, secret)) return null
+      const newSecret = mintSecret()
+      const nowIso = new Date(now()).toISOString()
+      const record: WebOriginTrustRecord = {
+        ...existing,
+        secretHash: hashReconnectSecret(newSecret),
+        lastUsedAt: nowIso,
+      }
+      const nextOrigins = current.origins.map((o) => (o.origin === origin ? record : o))
+      await persist(nextOrigins)
+      return { secret: newSecret }
+    })
   }
 
   async function revoke(origin: string): Promise<void> {
@@ -240,5 +285,5 @@ export function createWebOriginTrustStore(
     return current.origins
   }
 
-  return { trustOrigin, verify, rotate, revoke, revokeAll, list }
+  return { trustOrigin, verify, rotate, verifyAndRotate, revoke, revokeAll, list }
 }

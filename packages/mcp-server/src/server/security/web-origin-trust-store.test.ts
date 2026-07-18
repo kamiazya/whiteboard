@@ -54,6 +54,54 @@ describe('web-origin-trust-store', () => {
     expect(await store.verify('http://localhost:5173', newSecret)).toBe(true)
   })
 
+  it('rotate() throws for an origin with no existing trust record', async () => {
+    const store = createWebOriginTrustStore({ dataDir })
+    await expect(store.rotate('http://never-trusted.example.com')).rejects.toThrow(
+      /cannot rotate untrusted origin/,
+    )
+  })
+
+  describe('verifyAndRotate', () => {
+    it('verifies and rotates atomically, returning the new secret', async () => {
+      const store = createWebOriginTrustStore({ dataDir })
+      const { secret: oldSecret } = await store.trustOrigin('http://localhost:5173')
+
+      const result = await store.verifyAndRotate('http://localhost:5173', oldSecret)
+
+      expect(result).not.toBeNull()
+      expect(await store.verify('http://localhost:5173', oldSecret)).toBe(false)
+      expect(await store.verify('http://localhost:5173', result?.secret ?? '')).toBe(true)
+    })
+
+    it('returns null instead of throwing for an unknown origin', async () => {
+      const store = createWebOriginTrustStore({ dataDir })
+      const result = await store.verifyAndRotate('http://never-trusted.example.com', 'anything')
+      expect(result).toBeNull()
+    })
+
+    it('returns null for a wrong secret without rotating the real one', async () => {
+      const store = createWebOriginTrustStore({ dataDir })
+      const { secret } = await store.trustOrigin('http://localhost:5173')
+
+      expect(await store.verifyAndRotate('http://localhost:5173', 'wrong-secret')).toBeNull()
+      // The real secret is still live — a failed attempt did not rotate it.
+      expect(await store.verify('http://localhost:5173', secret)).toBe(true)
+    })
+
+    it('only one of two concurrent verifyAndRotate calls with the same secret succeeds', async () => {
+      const store = createWebOriginTrustStore({ dataDir })
+      const { secret } = await store.trustOrigin('http://localhost:5173')
+
+      const [first, second] = await Promise.all([
+        store.verifyAndRotate('http://localhost:5173', secret),
+        store.verifyAndRotate('http://localhost:5173', secret),
+      ])
+
+      const successes = [first, second].filter((r) => r !== null)
+      expect(successes).toHaveLength(1)
+    })
+  })
+
   it('persists trust records to disk with owner-only permissions', async () => {
     const store = createWebOriginTrustStore({ dataDir })
     const { secret } = await store.trustOrigin('http://localhost:5173')

@@ -21,7 +21,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 import { isLoopbackHostname, normalizeOriginHostname } from '../security/cors-loopback.js'
 import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
-import type { WebOriginTrustStore } from '../security/web-origin-trust-store.js'
+import { TRUST_TTL_MS, type WebOriginTrustStore } from '../security/web-origin-trust-store.js'
 import { parseBearerAuthorizationHeader } from './auth.js'
 
 export const reconnectCredentialResponseSchema = z.object({
@@ -31,13 +31,21 @@ export const reconnectCredentialResponseSchema = z.object({
 export type ReconnectCredentialResponse = z.infer<typeof reconnectCredentialResponseSchema>
 
 export const reconnectSessionResponseSchema = z.object({
-  token: z.string().min(1),
+  // Not `.min(1)`: tokenless local-daemon dev mode mounts this router with
+  // `daemonToken: ''` (app.ts) and deliberately hands that empty token back
+  // rather than refusing the whole reconnect surface — the same "auth is a
+  // no-op when no token is configured" behavior every other /api/* route
+  // already has.
+  token: z.string(),
   reconnectSecret: z.string().min(1),
   expiresInDays: z.number().positive(),
 })
 export type ReconnectSessionResponse = z.infer<typeof reconnectSessionResponseSchema>
 
-const TRUST_TTL_DAYS = 30
+// Derived from the store's actually-enforced TTL rather than a second
+// hardcoded constant, so the value reported to clients can never drift from
+// the value the trust store enforces.
+const TRUST_TTL_DAYS = TRUST_TTL_MS / (24 * 60 * 60 * 1000)
 
 export interface ReconnectRouterOptions {
   trustStore: WebOriginTrustStore
@@ -106,11 +114,17 @@ export function createReconnectRouter(options: ReconnectRouterOptions) {
     if (presentedSecret === null) {
       return c.json({ error: 'unauthorized' }, 403)
     }
-    const verified = await options.trustStore.verify(canonicalOrigin, presentedSecret)
-    if (!verified) {
+    // Verify and rotate in a single store call so a concurrent revoke, or a
+    // second reconnect request racing this one with the same secret, cannot
+    // land in the gap between a separate verify() and rotate() — that gap
+    // both risked an unhandled rotate() throw (TOCTOU: revoke lands between
+    // the two calls) and let two racing requests both pass verify() before
+    // either rotated (double-use of the same secret).
+    const rotated = await options.trustStore.verifyAndRotate(canonicalOrigin, presentedSecret)
+    if (rotated === null) {
       return c.json({ error: 'unauthorized' }, 403)
     }
-    const { secret: rotatedSecret } = await options.trustStore.rotate(canonicalOrigin)
+    const { secret: rotatedSecret } = rotated
     return c.json(
       reconnectSessionResponseSchema.parse({
         token: options.daemonToken,
