@@ -80,6 +80,18 @@ describe('token-store', () => {
     expect(readDaemonTokenOnce()).toBe('fragment-token')
   })
 
+  it('seedDaemonToken installs a token after an earlier fragment-free read already consumed the one-shot slot', () => {
+    // Reproduces App.tsx's real mount order: readDaemonTokenOnce() always
+    // runs once on mount (lazy useState initializer), even when there is no
+    // #wb= fragment. A silent-reconnect redemption that resolves afterward
+    // must still be able to seed its token — otherwise DaemonBackend.
+    // openSocket's direct read of this store silently gets null forever.
+    setWindow({})
+    expect(readDaemonTokenOnce()).toBeNull()
+    seedDaemonToken('reconnect-token')
+    expect(readDaemonTokenOnce()).toBe('reconnect-token')
+  })
+
   it('resetTokenStoreForTests restores first-read semantics between tests', () => {
     setWindow({ __WHITEBOARD_DAEMON_TOKEN__: 'first' })
     expect(readDaemonTokenOnce()).toBe('first')

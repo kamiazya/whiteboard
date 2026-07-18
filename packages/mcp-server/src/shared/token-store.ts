@@ -53,12 +53,16 @@ export function readDaemonTokenOnce(): string | null {
 // and DaemonBackend.openSocket (WebSocket, which reads this store directly
 // rather than taking a token prop) authenticate with one shared token.
 //
-// A no-op when a fragment token has already been consumed: that consumption
-// already set `hasRead`, and the fragment path — an explicit #wb= pairing
-// link — takes precedence over a reconnect redemption that happens to
-// resolve later in the same page load.
+// A no-op only when a REAL fragment token has already been consumed (guarded
+// on `cachedToken`, not `hasRead`): the fragment path — an explicit #wb=
+// pairing link — takes precedence over a reconnect redemption that resolves
+// later in the same page load. A fragment-free load still sets `hasRead` on
+// its first (null) readDaemonTokenOnce() call, and that must NOT block a
+// later seed — otherwise a silent-reconnect redemption can never install its
+// token into this store, and DaemonBackend.openSocket (which reads this
+// store directly rather than taking a token prop) authenticates with null.
 export function seedDaemonToken(token: string): void {
-  if (hasRead) return
+  if (cachedToken !== null) return
   cachedToken = token
   hasRead = true
 }
