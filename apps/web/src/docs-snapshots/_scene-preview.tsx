@@ -1,10 +1,9 @@
 // Helper component shared by the *.docs-snapshot.test.tsx files that
-// render an Excalidraw scene to a PNG. Wraps Excalidraw in a fixed-size,
-// view-only container so screenshots are deterministic regardless of the
-// browser's actual viewport.
+// render an Excalidraw scene to a PNG. Wraps the shared read-only
+// <CanvasViewer> in a fixed-size container so screenshots are deterministic
+// regardless of the browser's actual viewport.
 
-import { Excalidraw } from '@excalidraw/excalidraw'
-import '@excalidraw/excalidraw/index.css'
+import { CanvasViewer, type ViewerScene } from '@kamiazya/whiteboard-canvas-viewer'
 
 export interface ScenePreviewProps {
   width: number
@@ -12,9 +11,8 @@ export interface ScenePreviewProps {
   elements: ReadonlyArray<unknown>
   appState?: Record<string, unknown>
   files?: Record<string, unknown>
-  // When true, hides the floating toolbar / library / footer chrome so the
-  // capture is a clean canvas. Default true (most doc images are content
-  // shots, not UI shots).
+  // CanvasViewer is always read-only; kept for call-site back-compat, but
+  // no doc image has ever needed an editable preview.
   viewOnly?: boolean
   // When true, also hides Excalidraw's own persistent UI (top-left menu,
   // bottom-left zoom controls). Useful for diagram-only doc images;
@@ -34,18 +32,16 @@ export function ScenePreview({
   hideChrome = false,
   testId = 'scene-preview',
 }: ScenePreviewProps) {
-  const chromeStyle = hideChrome
-    ? `
-      [data-testid="${testId}"] .App-menu,
-      [data-testid="${testId}"] .App-bottom-bar,
-      [data-testid="${testId}"] .layer-ui__wrapper__footer,
-      [data-testid="${testId}"] .Island.App-menu_top__left,
-      [data-testid="${testId}"] .Island.App-menu_bottom,
-      [data-testid="${testId}"] .Stack.zen-mode-transition,
-      [data-testid="${testId}"] .help-icon,
-      [data-testid="${testId}"] .scroll-back-to-content { display: none !important; }
-    `
-    : null
+  if (!viewOnly) {
+    throw new Error('ScenePreview no longer supports viewOnly={false}; CanvasViewer is read-only')
+  }
+
+  const scene: ViewerScene = {
+    elements: elements as ViewerScene['elements'],
+    appState: { viewBackgroundColor: '#ffffff', ...(appState ?? {}) },
+    files: (files ?? {}) as ViewerScene['files'],
+  }
+
   return (
     <div
       data-testid={testId}
@@ -56,37 +52,7 @@ export function ScenePreview({
         overflow: 'hidden',
       }}
     >
-      {chromeStyle && <style>{chromeStyle}</style>}
-      <Excalidraw
-        viewModeEnabled={viewOnly}
-        zenModeEnabled={viewOnly}
-        UIOptions={
-          viewOnly
-            ? {
-                canvasActions: {
-                  changeViewBackgroundColor: false,
-                  clearCanvas: false,
-                  export: false,
-                  loadScene: false,
-                  saveAsImage: false,
-                  saveToActiveFile: false,
-                  toggleTheme: false,
-                },
-              }
-            : undefined
-        }
-        initialData={{
-          // Excalidraw expects mutable arrays internally; cast away the
-          // readonly so the prop type aligns without copying.
-          elements: elements as never,
-          appState: {
-            viewBackgroundColor: '#ffffff',
-            ...(appState ?? {}),
-          } as never,
-          files: (files ?? {}) as never,
-          scrollToContent: true,
-        }}
-      />
+      <CanvasViewer scene={scene} hideChrome={hideChrome} />
     </div>
   )
 }
