@@ -12,30 +12,18 @@ import { fc, fcTest } from '@/test-utils/fast-check.js'
 import { exportPublicJwk } from './reconnect-crypto.js'
 import { getOrCreateKeypair, loadKeypair } from './reconnect-keypair-store.js'
 
-// Rejecting (not resolving) on deleteDatabase failure matters: a resolved
-// error would leave a stale keypair in place, so a later getOrCreateKeypair
-// call could just load it instead of racing to create one, making the
-// convergence assertions below pass vacuously without exercising the race.
-async function clearDb(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error ?? new Error('deleteDatabase failed'))
-    // An open connection from a prior run would otherwise block the delete
-    // and hang the test until timeout; surface it as a failure instead.
-    req.onblocked = () => reject(new Error('deleteDatabase blocked by an open connection'))
-  })
-}
+// Each property iteration uses a unique origin so prior iterations' open
+// IndexedDB connections (which linger until GC) never block deleteDatabase.
+let iterationCounter = 0
 
 describe('reconnect keypair store: concurrent getOrCreateKeypair convergence (property)', () => {
   fcTest.prop([fc.integer({ min: 2, max: 6 })], { numRuns: 15 })(
     'N concurrent getOrCreateKeypair calls for one origin all resolve to the same stored keyId',
     async (concurrentCallCount) => {
-      // fc reruns this body per generated case; each origin/DB must start
-      // empty or an earlier run's stored key would make this run vacuously
-      // pass no matter how the concurrency behaves.
-      await clearDb()
-      const origin = `http://localhost:${3000 + concurrentCallCount}`
+      // Each iteration gets a unique origin so it starts with no stored key
+      // — avoids deleteDatabase which blocks on lingering connections from
+      // prior iterations (IndexedDB connections are GC'd, not explicitly closed).
+      const origin = `http://localhost:${10000 + iterationCounter++}`
 
       const results = await Promise.all(
         Array.from({ length: concurrentCallCount }, () => getOrCreateKeypair(origin)),
@@ -52,8 +40,6 @@ describe('reconnect keypair store: concurrent getOrCreateKeypair convergence (pr
 
       const reloaded = await loadKeypair(origin)
       expect(reloaded?.keyId).toBe(results[0]?.keyId)
-
-      await clearDb()
     },
   )
 })
