@@ -50,6 +50,10 @@
       "types": "./src/shared/api-contracts/index.ts",
       "import": "./dist/shared/api-contracts/index.js"
     },
+    "./api-contracts-internal": {
+      "types": "./src/shared/api-contracts/runtime.ts",
+      "import": "./dist/shared/api-contracts/runtime.js"
+    },
     "./package.json": "./package.json"
   },
   "bin": {

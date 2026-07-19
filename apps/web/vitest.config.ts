@@ -29,6 +29,14 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/index.ts',
       ),
+      // Declared test/internal-only subpath (not in mcp-server's published
+      // npm exports) used by daemon-probe.schema-drift.test.ts to import the
+      // server's runtime schema through a contract surface instead of a
+      // relative deep import into another package's src/.
+      '@kamiazya/whiteboard-mcp/api-contracts-internal': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/api-contracts/runtime.ts',
+      ),
       // Subpath alias must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(
