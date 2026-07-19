@@ -5,6 +5,14 @@ import {
   type ExportJsonResult,
   exportJsonInputSchema,
   exportJsonResultSchema,
+  type GetAppContextInput,
+  type GetAppContextResult,
+  getAppContextInputSchema,
+  getAppContextResultSchema,
+  type GetSceneSummaryInput,
+  type GetSceneSummaryResult,
+  getSceneSummaryInputSchema,
+  getSceneSummaryResultSchema,
   type WhiteboardCommandDeps,
   type WhiteboardCommands,
 } from './types.js'
@@ -90,5 +98,71 @@ export function createWhiteboardCommands(depsRef: {
     }
   }
 
-  return { exportJson }
+  async function getSceneSummary(input: GetSceneSummaryInput = {}): Promise<GetSceneSummaryResult> {
+    const parsedInput = getSceneSummaryInputSchema.safeParse(input)
+    if (!parsedInput.success) {
+      throw new CommandError(
+        'invalid-input',
+        'getSceneSummary received an invalid input payload.',
+        { cause: parsedInput.error },
+      )
+    }
+
+    const deps = depsRef.current
+    if (!deps.canvas) {
+      throw new CommandError('no-canvas', 'No canvas is selected to summarize.')
+    }
+    const api = deps.getExcalidrawApi()
+    if (!api) {
+      throw new CommandError('no-api', 'No Excalidraw canvas is mounted to summarize.')
+    }
+
+    const elements = api.getSceneElements()
+    const appState = api.getAppState()
+    // Deleted elements are tombstones, not live content — excluded from
+    // every count so a tool-facing summary never reports elements the user
+    // believes they removed.
+    const liveElements = elements.filter((element) => !element.isDeleted)
+    const typeCounts: Record<string, number> = {}
+    for (const element of liveElements) {
+      typeCounts[element.type] = (typeCounts[element.type] ?? 0) + 1
+    }
+
+    return getSceneSummaryResultSchema.parse({
+      elementCount: liveElements.length,
+      selectedCount: Object.keys(appState.selectedElementIds).length,
+      typeCounts,
+      viewport: {
+        scrollX: appState.scrollX,
+        scrollY: appState.scrollY,
+        zoom: appState.zoom.value,
+      },
+    })
+  }
+
+  async function getAppContext(input: GetAppContextInput = {}): Promise<GetAppContextResult> {
+    const parsedInput = getAppContextInputSchema.safeParse(input)
+    if (!parsedInput.success) {
+      throw new CommandError('invalid-input', 'getAppContext received an invalid input payload.', {
+        cause: parsedInput.error,
+      })
+    }
+
+    const deps = depsRef.current
+    // Field-by-field, never a spread of `deps.provider` — this is the
+    // boundary that keeps daemonBaseUrl (and any future connection-ish
+    // field ProviderState grows) out of a WebMCP tool result.
+    const provider: GetAppContextResult['provider'] = {
+      mode: deps.provider.kind === 'local-daemon' ? 'daemon' : 'browser-local',
+    }
+    const canvas: GetAppContextResult['canvas'] = deps.canvas
+      ? deps.canvas.workspaceId !== undefined
+        ? { kind: 'daemon', workspaceId: deps.canvas.workspaceId, slug: deps.canvas.canvasId }
+        : { kind: 'browser-local', canvasId: deps.canvas.canvasId }
+      : null
+
+    return getAppContextResultSchema.parse({ provider, canvas })
+  }
+
+  return { exportJson, getSceneSummary, getAppContext }
 }

@@ -1,0 +1,109 @@
+import { act, cleanup, render as rtlRender } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
+import { MemoryStore } from '../lib/browser-local-store.js'
+import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
+import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
+
+function render(ui: ReactElement) {
+  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+}
+
+// Excalidraw requires a real browser (roughjs native bindings). Mock it in jsdom.
+vi.mock('@excalidraw/excalidraw', () => ({
+  Excalidraw: ({ excalidrawAPI }: { excalidrawAPI?: (api: unknown) => void }) => {
+    if (excalidrawAPI) {
+      excalidrawAPI({
+        updateScene: vi.fn(),
+        addFiles: vi.fn(),
+        getSceneElements: () => [],
+        getAppState: () => ({
+          scrollX: 0,
+          scrollY: 0,
+          zoom: { value: 1 },
+          selectedElementIds: {},
+        }),
+        getFiles: () => ({}),
+      })
+    }
+    return <div data-testid="excalidraw-mock" />
+  },
+  restoreElements: (els: unknown[]) => els,
+  CaptureUpdateAction: { NEVER: 'NEVER' },
+  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
+}))
+
+vi.mock('../lib/browser-local-backend.js', () => ({
+  BrowserLocalBackend: class {
+    connect(handlers: { onConnected: () => void; onSnapshot: (b: Uint8Array) => void }) {
+      handlers.onConnected()
+      const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
+      handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
+    }
+    disconnect() {}
+    pushLocalUpdate() {
+      return Promise.resolve()
+    }
+    getFile() {
+      return Promise.resolve(null)
+    }
+    putFile() {
+      return Promise.resolve()
+    }
+    sendClientReady() {}
+    sendExportResponse() {}
+  },
+}))
+
+const snap: CanvasSnapshot = {
+  id: 'c1',
+  name: 'untitled',
+  updatedAt: '2026-05-24T00:00:00.000Z',
+}
+
+function createFakeModelContext(): ModelContext & { liveNames(): string[] } {
+  const live = new Map<string, AbortSignal>()
+  return {
+    liveNames: () => [...live.keys()],
+    registerTool: async (descriptor: WebMcpToolDescriptor, options: { signal: AbortSignal }) => {
+      await Promise.resolve()
+      if (options.signal.aborted) return
+      live.set(descriptor.name, options.signal)
+      options.signal.addEventListener('abort', () => live.delete(descriptor.name))
+    },
+  }
+}
+
+describe('BrowserLocalCanvasPage WebMCP wiring', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => {
+    cleanup()
+    vi.useRealTimers()
+    // biome-ignore lint/performance/noDelete: test cleanup of a global test double
+    delete (document as { modelContext?: unknown }).modelContext
+  })
+
+  it('registers both read-only tools, keyed on the loaded canvas id, when document.modelContext is present', async () => {
+    const fake = createFakeModelContext()
+    document.modelContext = fake
+
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(fake.liveNames().sort()).toEqual([
+      'whiteboard_get_app_context',
+      'whiteboard_get_scene_summary',
+    ])
+  })
+})

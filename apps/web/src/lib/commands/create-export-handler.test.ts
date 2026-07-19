@@ -7,6 +7,12 @@ function fakeCommands(overrides: Partial<WhiteboardCommands> = {}): WhiteboardCo
     exportJson: vi.fn(async () => {
       throw new Error('should not be called in this test')
     }),
+    getSceneSummary: vi.fn(async () => {
+      throw new Error('should not be called in this test')
+    }),
+    getAppContext: vi.fn(async () => {
+      throw new Error('should not be called in this test')
+    }),
     ...overrides,
   }
 }

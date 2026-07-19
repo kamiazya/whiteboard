@@ -17,6 +17,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
 
 const log = getAppLogger('daemon-canvas-page')
@@ -158,6 +159,11 @@ export function DaemonCanvasPage({
   })
 
   const handleExport = createSceneExportHandler(commands, exportScene)
+
+  // Identity key = workspaceId+slug, matching this page's own canvas
+  // identity granularity (see useCanvasSync's `identity` above) — a switch
+  // to a different daemon canvas re-registers the WebMCP tools against it.
+  useBrowserToolRegistry(commands, canvas !== null ? `${canvas.workspaceId}/${canvas.slug}` : null)
 
   const saveVersion = async (): Promise<void> => {
     if (!capabilities.versions || canvas === null || savingVersion) return

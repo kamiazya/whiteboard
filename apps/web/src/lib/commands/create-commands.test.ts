@@ -167,3 +167,125 @@ describe('createWhiteboardCommands.exportJson', () => {
     expect(serialized).not.toContain('handle')
   })
 })
+
+describe('createWhiteboardCommands.getSceneSummary', () => {
+  it('returns counts and viewport without full scene content, excluding deleted elements', async () => {
+    const api = {
+      getSceneElements: () => [
+        el({ id: 'a', type: 'rectangle' }),
+        el({ id: 'b', type: 'rectangle' }),
+        el({ id: 'c', type: 'ellipse' }),
+        el({ id: 'd', type: 'rectangle', isDeleted: true }),
+      ],
+      getAppState: () => ({
+        scrollX: 10,
+        scrollY: -5,
+        zoom: { value: 1.5 },
+        selectedElementIds: { a: true },
+      }),
+      getFiles: () => ({}),
+    }
+    const depsRef = refOf(baseDeps({ getExcalidrawApi: () => api as never }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    const result = await commands.getSceneSummary()
+
+    expect(result).toEqual({
+      elementCount: 3,
+      selectedCount: 1,
+      typeCounts: { rectangle: 2, ellipse: 1 },
+      viewport: { scrollX: 10, scrollY: -5, zoom: 1.5 },
+    })
+  })
+
+  it('throws no-api / no-canvas CommandErrors like every other command', async () => {
+    const depsRef = refOf(baseDeps({ getExcalidrawApi: () => null }))
+    const commands = createWhiteboardCommands(depsRef)
+    await expect(commands.getSceneSummary()).rejects.toMatchObject({ code: 'no-api' })
+
+    const api = {
+      getSceneElements: () => [],
+      getAppState: () => ({
+        scrollX: 0,
+        scrollY: 0,
+        zoom: { value: 1 },
+        selectedElementIds: {},
+      }),
+      getFiles: () => ({}),
+    }
+    const depsRef2 = refOf(baseDeps({ getExcalidrawApi: () => api as never, canvas: null }))
+    const commands2 = createWhiteboardCommands(depsRef2)
+    await expect(commands2.getSceneSummary()).rejects.toMatchObject({ code: 'no-canvas' })
+  })
+})
+
+describe('createWhiteboardCommands.getAppContext', () => {
+  it('projects a browser-local provider and canvas without leaking capabilities', async () => {
+    const depsRef = refOf(baseDeps())
+    const commands = createWhiteboardCommands(depsRef)
+
+    const result = await commands.getAppContext()
+
+    expect(result).toEqual({
+      provider: { mode: 'browser-local' },
+      canvas: { kind: 'browser-local', canvasId: 'c1' },
+    })
+  })
+
+  it('projects a daemon provider field-by-field, excluding daemonBaseUrl even though ProviderState carries one', async () => {
+    const depsRef = refOf(
+      baseDeps({
+        provider: {
+          kind: 'local-daemon',
+          daemonBaseUrl: 'http://127.0.0.1:9999',
+          capabilities: BROWSER_LOCAL_CAPABILITIES,
+        },
+        canvas: { workspaceId: 'ws1', canvasId: 'my-canvas', name: 'my-canvas' },
+      }),
+    )
+    const commands = createWhiteboardCommands(depsRef)
+
+    const result = await commands.getAppContext()
+
+    expect(result).toEqual({
+      provider: { mode: 'daemon' },
+      canvas: { kind: 'daemon', workspaceId: 'ws1', slug: 'my-canvas' },
+    })
+    const serialized = JSON.stringify(result).toLowerCase()
+    expect(serialized).not.toContain('daemonbaseurl')
+    expect(serialized).not.toContain('9999')
+  })
+
+  it('returns canvas: null when no canvas is selected, without throwing', async () => {
+    const depsRef = refOf(baseDeps({ canvas: null }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    const result = await commands.getAppContext()
+
+    expect(result.canvas).toBeNull()
+  })
+
+  it('excludes secret-bearing fields even given a poisoned ProviderState (simulated future drift)', async () => {
+    // Real ProviderState carries no token field today; this cast simulates
+    // a future field added to ProviderState leaking through if the
+    // projection were ever changed to a spread instead of field-by-field.
+    const poisoned = {
+      kind: 'local-daemon',
+      daemonBaseUrl: 'http://127.0.0.1:9999',
+      capabilities: BROWSER_LOCAL_CAPABILITIES,
+      token: 'shh',
+      authorization: 'Bearer shh',
+      secret: 'shh',
+    } as unknown as import('../provider.js').ProviderState
+    const depsRef = refOf(baseDeps({ provider: poisoned }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    const result = await commands.getAppContext()
+    const serialized = JSON.stringify(result).toLowerCase()
+
+    expect(serialized).not.toContain('token')
+    expect(serialized).not.toContain('authorization')
+    expect(serialized).not.toContain('secret')
+    expect(serialized).not.toContain('9999')
+  })
+})
