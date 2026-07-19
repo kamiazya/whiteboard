@@ -42,20 +42,35 @@ export const DESIGN_SCHEMA = {
 // same non-blank-entry invariant as an agent-generated design.
 const propertiesItemPattern = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
 
+// Kept in lockstep with DESIGN_SCHEMA's `additionalProperties: false` at both the top level and
+// inside `testScenarios` — isValidDesignShape below must reject any key outside these lists or a
+// caller-provided designDoc could carry fields the schema-constrained agent() path can never
+// produce.
+const ALLOWED_TOP_LEVEL_KEYS = ['completionCriteria', 'scope', 'contractChanges', 'testScenarios', 'risks', 'properties']
+const ALLOWED_TEST_SCENARIO_KEYS = ['unit', 'browser', 'e2e']
+
+function isStringArray(v) {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string')
+}
+
 // Guards a caller-provided `designDoc` against the same shape DESIGN_SCHEMA enforces on a
 // generated design, so a malformed/incomplete args.designDoc can't skip PlanReview's invariant
-// check by never passing through the schema-constrained agent() call in the first place.
+// check by never passing through the schema-constrained agent() call in the first place. Checks
+// every field DESIGN_SCHEMA constrains (types, additionalProperties:false at both levels), not
+// just the four required ones, otherwise a caller-supplied document can carry schema-violating
+// values (wrong-typed optional fields, unknown keys) straight into PlanReview and implementation.
 export function isValidDesignShape(d) {
   if (!d || typeof d !== 'object') return false
+  if (!Object.keys(d).every((k) => ALLOWED_TOP_LEVEL_KEYS.includes(k))) return false
   if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
   if (typeof d.scope !== 'string') return false
-  if (
-    !d.testScenarios ||
-    !Array.isArray(d.testScenarios.unit) ||
-    !d.testScenarios.unit.every((u) => typeof u === 'string')
-  ) {
-    return false
-  }
+  if (d.contractChanges !== undefined && typeof d.contractChanges !== 'string') return false
+  if (!d.testScenarios || typeof d.testScenarios !== 'object') return false
+  if (!Object.keys(d.testScenarios).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k))) return false
+  if (!isStringArray(d.testScenarios.unit)) return false
+  if (d.testScenarios.browser !== undefined && !isStringArray(d.testScenarios.browser)) return false
+  if (d.testScenarios.e2e !== undefined && !isStringArray(d.testScenarios.e2e)) return false
+  if (d.risks !== undefined && !isStringArray(d.risks)) return false
   if (!Array.isArray(d.properties) || d.properties.length < 1) return false
   if (!d.properties.every((p) => typeof p === 'string' && propertiesItemPattern.test(p))) return false
   return true
@@ -69,4 +84,13 @@ export function isValidDesignShape(d) {
 export function shouldGenerateDesign({ hasDesign, skipDesign, discardedInvalidProvidedDesign }) {
   if (hasDesign) return false
   return !skipDesign || !!discardedInvalidProvidedDesign
+}
+
+// Gates dev-loop's Implement phase on the PlanReview gate's final verdict. Without this, a design
+// that keeps failing PlanReview past the revision cap (e.g. a state/store design carrying only the
+// `none:` properties sentinel) still proceeds into Implement labeled "Approved design," making the
+// gate advisory instead of blocking. `hasDesign` is false when design/PlanReview was skipped
+// entirely (skipDesign with a pre-approved designDoc) — that case must not block.
+export function shouldBlockOnFailedPlanReview({ hasDesign, pass }) {
+  return !!hasDesign && !pass
 }

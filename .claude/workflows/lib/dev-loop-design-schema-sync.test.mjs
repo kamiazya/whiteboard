@@ -13,6 +13,7 @@ import path from 'node:path'
 import {
   DESIGN_SCHEMA,
   isValidDesignShape as sharedIsValidDesignShape,
+  shouldBlockOnFailedPlanReview as sharedShouldBlockOnFailedPlanReview,
   shouldGenerateDesign as sharedShouldGenerateDesign,
 } from './design-schema.mjs'
 
@@ -44,6 +45,16 @@ function extractShouldGenerateDesign() {
   assert.ok(match, 'could not locate `function shouldGenerateDesign({...}) {...}` in dev-loop.workflow.mjs')
   // eslint-disable-next-line no-new-func -- evaluating a plain function declaration extracted from our own source, not untrusted input
   return new Function(`${match[0]}\nreturn shouldGenerateDesign`)()
+}
+
+function extractShouldBlockOnFailedPlanReview() {
+  const match = source.match(/\nfunction shouldBlockOnFailedPlanReview\(\{[\s\S]*?\n\}\n/)
+  assert.ok(
+    match,
+    'could not locate `function shouldBlockOnFailedPlanReview({...}) {...}` in dev-loop.workflow.mjs',
+  )
+  // eslint-disable-next-line no-new-func -- evaluating a plain function declaration extracted from our own source, not untrusted input
+  return new Function(`${match[0]}\nreturn shouldBlockOnFailedPlanReview`)()
 }
 
 test('inline DESIGN_SCHEMA in dev-loop.workflow.mjs matches the exported design-schema.mjs module', () => {
@@ -145,6 +156,47 @@ test('the duplicated inline isValidDesignShape agrees with the single-sourced de
   for (const design of cases) {
     assert.equal(isValidDesignShape(design), sharedIsValidDesignShape(design), `mismatch for ${JSON.stringify(design)}`)
   }
+})
+
+test('isValidDesignShape rejects values forbidden by DESIGN_SCHEMA even when the required fields are present', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const base = {
+    completionCriteria: ['does the thing'],
+    scope: 'small',
+    testScenarios: { unit: ['covers the thing'] },
+    properties: ['none: pure UI wiring, no state/parser/store surface'],
+  }
+  const cases = [
+    { ...base, contractChanges: 42 },
+    { ...base, testScenarios: { ...base.testScenarios, browser: 42 } },
+    { ...base, unknownTopLevel: 'nope' },
+    { ...base, testScenarios: { ...base.testScenarios, unknownNested: 'nope' } },
+  ]
+  for (const design of cases) {
+    assert.equal(isValidDesignShape(design), false, `expected inline validator to reject ${JSON.stringify(design)}`)
+    assert.equal(sharedIsValidDesignShape(design), false, `expected shared validator to reject ${JSON.stringify(design)}`)
+  }
+})
+
+test('shouldBlockOnFailedPlanReview blocks implementation when a design was reviewed and the gate never passed', () => {
+  const shouldBlockOnFailedPlanReview = extractShouldBlockOnFailedPlanReview()
+  const input = { hasDesign: true, pass: false }
+  assert.equal(shouldBlockOnFailedPlanReview(input), true)
+  assert.equal(sharedShouldBlockOnFailedPlanReview(input), true)
+})
+
+test('shouldBlockOnFailedPlanReview does not block when the plan-review gate passed', () => {
+  const shouldBlockOnFailedPlanReview = extractShouldBlockOnFailedPlanReview()
+  const input = { hasDesign: true, pass: true }
+  assert.equal(shouldBlockOnFailedPlanReview(input), false)
+  assert.equal(sharedShouldBlockOnFailedPlanReview(input), false)
+})
+
+test('shouldBlockOnFailedPlanReview does not block when design/PlanReview was skipped entirely', () => {
+  const shouldBlockOnFailedPlanReview = extractShouldBlockOnFailedPlanReview()
+  const input = { hasDesign: false, pass: false }
+  assert.equal(shouldBlockOnFailedPlanReview(input), false)
+  assert.equal(sharedShouldBlockOnFailedPlanReview(input), false)
 })
 
 test('shouldGenerateDesign regenerates when skipDesign is set but the provided designDoc was just discarded as invalid', () => {

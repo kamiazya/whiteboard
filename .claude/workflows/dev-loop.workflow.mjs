@@ -145,20 +145,31 @@ const FIX_SCHEMA = {
 // for why this is duplicated instead of imported).
 const propertiesItemPattern = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
 
+// Kept in lockstep with DESIGN_SCHEMA's `additionalProperties: false` at both the top level and
+// inside `testScenarios` — isValidDesignShape below must reject any key outside these lists.
+const ALLOWED_TOP_LEVEL_KEYS = ['completionCriteria', 'scope', 'contractChanges', 'testScenarios', 'risks', 'properties']
+const ALLOWED_TEST_SCENARIO_KEYS = ['unit', 'browser', 'e2e']
+
+function isStringArray(v) {
+  return Array.isArray(v) && v.every((x) => typeof x === 'string')
+}
+
 // Guards a caller-provided `designDoc` against the same shape DESIGN_SCHEMA enforces on a
 // generated design, so a malformed/incomplete args.designDoc can't skip PlanReview's invariant
-// check by never passing through the schema-constrained agent() call in the first place.
+// check by never passing through the schema-constrained agent() call in the first place. Checks
+// every field DESIGN_SCHEMA constrains, not just the four required ones.
 function isValidDesignShape(d) {
   if (!d || typeof d !== 'object') return false
+  if (!Object.keys(d).every((k) => ALLOWED_TOP_LEVEL_KEYS.includes(k))) return false
   if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
   if (typeof d.scope !== 'string') return false
-  if (
-    !d.testScenarios ||
-    !Array.isArray(d.testScenarios.unit) ||
-    !d.testScenarios.unit.every((u) => typeof u === 'string')
-  ) {
-    return false
-  }
+  if (d.contractChanges !== undefined && typeof d.contractChanges !== 'string') return false
+  if (!d.testScenarios || typeof d.testScenarios !== 'object') return false
+  if (!Object.keys(d.testScenarios).every((k) => ALLOWED_TEST_SCENARIO_KEYS.includes(k))) return false
+  if (!isStringArray(d.testScenarios.unit)) return false
+  if (d.testScenarios.browser !== undefined && !isStringArray(d.testScenarios.browser)) return false
+  if (d.testScenarios.e2e !== undefined && !isStringArray(d.testScenarios.e2e)) return false
+  if (d.risks !== undefined && !isStringArray(d.risks)) return false
   if (!Array.isArray(d.properties) || d.properties.length < 1) return false
   if (!d.properties.every((p) => typeof p === 'string' && propertiesItemPattern.test(p))) return false
   return true
@@ -171,6 +182,13 @@ function isValidDesignShape(d) {
 function shouldGenerateDesign({ hasDesign, skipDesign, discardedInvalidProvidedDesign }) {
   if (hasDesign) return false
   return !skipDesign || !!discardedInvalidProvidedDesign
+}
+
+// Gates the Implement phase on the PlanReview gate's final verdict. Mirrors
+// .claude/workflows/lib/design-schema.mjs's shouldBlockOnFailedPlanReview (see the sync test for
+// why this is duplicated instead of imported).
+function shouldBlockOnFailedPlanReview({ hasDesign, pass }) {
+  return !!hasDesign && !pass
 }
 
 // --- Phase 1: design ---
@@ -225,6 +243,20 @@ if (design) {
       { label: `design-revise:${planRev}`, phase: 'Design', schema: DESIGN_SCHEMA },
     )
     planVerdict = await runGate()
+  }
+}
+
+if (shouldBlockOnFailedPlanReview({ hasDesign: !!design, pass: planVerdict.pass })) {
+  return {
+    taskTitle: TASK,
+    design,
+    planVerdict,
+    codexPlanVerdict,
+    implReport: null,
+    review: null,
+    openFollowups: [],
+    needsHumanGate: true,
+    note: `PlanReview did not pass after ${MAX_PLAN_REV} revision(s); returning to the integrator instead of implementing a rejected design. mustFix: ${(planVerdict.mustFix || []).join('; ')}`,
   }
 }
 
