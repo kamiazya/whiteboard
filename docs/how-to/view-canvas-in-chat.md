@@ -26,12 +26,26 @@ clients that do not advertise `serverTools`, or when the widget cannot confirm a
 connection at all, the button never appears; call `canvas_view` again to see a fresh
 snapshot instead.
 
+## Adding a sticky note from the widget
+
+On the same clients that show Refresh (host connected and `serverTools`
+advertised), the widget also shows a small text field with an **Add** button
+in the top-left corner. Typing a note and submitting it calls the `annotate`
+tool through the host to add a `box_with_label` sticky note to the canvas,
+placed automatically so it does not overlap existing elements, then
+refreshes the view so the new note appears. This is **append-only** — there
+is no in-widget way to edit or remove an existing note or any other element;
+use the full editor or the `annotate` / other canvas tools directly for that.
+The field is disabled while a note is being added and re-enabled once the
+follow-up refresh completes.
+
 ## What you do not get (yet)
 
 This is **Phase A** of MCP Apps support:
 
-- The view is otherwise **read-only** — Refresh reloads the current scene, but there
-  is no in-widget editing or annotation.
+- Beyond adding a new sticky note as described above, the view is
+  **read-only** — Refresh reloads the current scene, but there is no
+  in-widget editing, moving, or deleting of existing elements.
 - Only `canvas_view` renders inline. `canvas_open` (opens the full editor in a real
   browser tab) and `export_canvas` (writes a file) are intentionally **not**
   UI-linked — `canvas_open` would need to pass the daemon's base URL into the widget,

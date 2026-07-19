@@ -130,6 +130,18 @@ describe('MCP Apps UI-linked tools coverage', () => {
     assertVisibilityAllowsApp(viewEntry ?? '')
   })
 
+  it('annotate has no `_meta.ui` and leaves `visibility` unset or app-inclusive, so the canvas-viewer widget can call it back for the sticky-note affordance', () => {
+    // annotate is deliberately NOT UI-linked (no _meta.ui — rendering stays
+    // exclusive to canvas_view), but the widget's sticky-note affordance
+    // still needs to CALL it via app.callServerTool, which requires the
+    // same app-inclusive visibility default as canvas_view's Refresh.
+    const entries = splitDefineToolEntries(registrationSrc)
+    const annotateEntry = entries.find((e) => toolNameOf(e) === 'annotateToolDef')
+    expect(annotateEntry).toBeDefined()
+    expect(annotateEntry).not.toMatch(/_meta:\s*\{\s*ui:/)
+    assertVisibilityAllowsApp(annotateEntry ?? '')
+  })
+
   it('flags a non-literal `visibility` reference instead of passing vacuously', () => {
     // Guards the guard: a future edit to `visibility: MODEL_ONLY_VISIBILITY`
     // (a non-literal reference) must fail this check, not silently pass it

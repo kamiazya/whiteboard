@@ -308,6 +308,27 @@ async function main() {
   }
   console.log(`[e2e] annotate → rect`)
 
+  // Exercises the exact argument shape the canvas-viewer widget's
+  // sticky-note affordance sends (widget-entry.ts): box_with_label with
+  // width but no height/color. canvas-viewer cannot z.infer this from
+  // mcp-server (no cross-package dependency), so this call is the runtime
+  // guard against that literal drifting from annotate's real input contract.
+  const sticky = await callTool('annotate', {
+    canvasId: created.id,
+    type: 'box_with_label',
+    target: { x: 200, y: 20 },
+    coords: 'absolute',
+    text: 'smoke sticky note',
+    width: 260,
+    backgroundColor: '#ffec99',
+  })
+  if (!sticky.elementId && !sticky.elementIds) {
+    throw new Error(
+      `annotate (sticky-note shape) returned unexpected shape: ${JSON.stringify(sticky)}`,
+    )
+  }
+  console.log('[e2e] annotate → sticky-note shape (box_with_label, width, no height/color)')
+
   // Exercise annotate_batch with an arrow that uses text as a label alias.
   // The SDK validates structuredContent against outputSchema at runtime, so
   // any drift between the Zod schema and the actual payload surfaces here.

@@ -2,13 +2,16 @@
 // (vite.widget.config.ts -> dist/widget/canvas-viewer.html). Never exported
 // from the package's public surface — this file is a build INPUT, loaded
 // only by the widget's own <script type="module"> tag.
+
+import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
-import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
-import { mountCanvasViewer, type CanvasViewerHandle } from './mount.js'
-import { parseViewerScene } from './scene.js'
+import { type CanvasViewerHandle, mountCanvasViewer } from './mount.js'
+import { parseViewerScene, type ViewerScene } from './scene.js'
 import { buildFontFaceDescriptors, resolveFontFetchDataUri } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
+import { createStickyNoteControl } from './widget/sticky-note-control.js'
+import { computeStickyPlacement } from './widget/sticky-placement.js'
 
 declare global {
   interface Window {
@@ -141,6 +144,18 @@ function installFontFetchShim(): void {
 // slot instead of hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000
 
+// annotate's execute() (mcp-server tools/annotate.ts) throws for
+// type:'box_with_label' when spec.width is undefined — a fixed width keeps
+// this append-only affordance from depending on any DOM measurement the
+// widget has no reliable way to take inside a sandboxed iframe. `height` is
+// deliberately omitted: autoFit defaults to true, so annotate auto-grows the
+// box instead of requiring an explicit height.
+const STICKY_WIDTH = 260
+// Fixed sticky-note fill; `color` (text ink) is deliberately left unset so
+// annotate's own readable-ink contrast logic picks a legible ink against
+// this fill instead of the widget hardcoding one.
+const STICKY_BACKGROUND_COLOR = '#ffec99'
+
 // Both `ui/notifications/tool-result` and the CallToolResult that
 // `app.callServerTool` resolves with wrap canvas_view's payload the same
 // way: `{structuredContent: {canvasId, scene}}`. Sharing one extraction +
@@ -173,15 +188,33 @@ function extractCanvasIdAndScene(payload: unknown): { canvasId?: string; scene?:
 // accepted the scene, which is what lets the canvasId commit rule ("never
 // remember an ID from an unvalidated result") hold for both the initial
 // tool-result and every subsequent refresh response.
+// Also whether a result is an application-level failure rather than a
+// transport-level rejection: the ext-apps host resolves (never rejects) a
+// server-side tool handler exception as `{isError: true}` — treating that as
+// success would remount on annotate's own error payload or skip the
+// required post-annotation refresh.
+function isErrorResult(payload: unknown): boolean {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    (payload as { isError?: unknown }).isError === true
+  )
+}
+
 function applyToolResult(
   payload: unknown,
   container: HTMLElement,
   remount: (mount: () => CanvasViewerHandle) => void,
-  onValidResult: (canvasId: string | undefined) => void,
+  onValidResult: (canvasId: string | undefined, scene: ViewerScene) => void,
 ): void {
+  if (isErrorResult(payload)) {
+    console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
+    return
+  }
   const { canvasId, scene } = extractCanvasIdAndScene(payload)
+  let parsedScene: ViewerScene
   try {
-    parseViewerScene(scene)
+    parsedScene = parseViewerScene(scene)
   } catch (err) {
     // Surfaced for host-integration debugging: the widget deliberately
     // keeps the current view on malformed payloads, which would otherwise
@@ -190,7 +223,7 @@ function applyToolResult(
     return
   }
   remount(() => mountCanvasViewer(container, { scene }))
-  onValidResult(canvasId)
+  onValidResult(canvasId, parsedScene)
 }
 
 // `remount` is the single place a mount produced by this bridge happens.
@@ -215,19 +248,27 @@ async function mountFromHost(
   const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
 
   // Committed only once a tool-result has actually passed parseViewerScene —
-  // an unvalidated canvasId must never enable Refresh (it would call
-  // canvas_view with an ID nobody confirmed is real).
+  // an unvalidated canvasId must never enable Refresh or the sticky-note
+  // affordance (either would call back into the daemon with an ID nobody
+  // confirmed is real).
   let committedCanvasId: string | undefined
+  // Retained so the sticky-note affordance can place a new note relative to
+  // the last scene this widget actually rendered, without ever reaching
+  // into Excalidraw's own viewport internals (mount.ts stays read-only).
+  let lastValidScene: ViewerScene | undefined
   let refreshControl: ReturnType<typeof createRefreshControl> | undefined
+  let stickyControl: ReturnType<typeof createStickyNoteControl> | undefined
 
-  const rememberCanvasId = (canvasId: string | undefined): void => {
+  const commitResult = (canvasId: string | undefined, scene: ViewerScene): void => {
+    lastValidScene = scene
     if (canvasId === undefined) return
     committedCanvasId = canvasId
     refreshControl?.show()
+    stickyControl?.show()
   }
 
   app.ontoolresult = (result) => {
-    applyToolResult(result, container, remount, rememberCanvasId)
+    applyToolResult(result, container, remount, commitResult)
   }
 
   // connect() may reject after the timeout already won the race; a catch on
@@ -256,29 +297,109 @@ async function mountFromHost(
   // this document's lifetime.
   if (connected && canUseServerTools) {
     let refreshInFlight = false
-    refreshControl = createRefreshControl(() => {
-      if (refreshInFlight || committedCanvasId === undefined) return
+    // Set whenever a refresh is REQUIRED while one is already in flight (a
+    // manual Refresh click racing a just-succeeded annotate, or vice versa)
+    // — the in-flight run loops once more instead of the caller's request
+    // being silently dropped. A single boolean (rather than a queue) is
+    // enough because every refresh call targets the same committedCanvasId
+    // and asks for the same thing: "the latest scene".
+    let pendingRefresh = false
+
+    const runRefreshOnce = async (): Promise<void> => {
+      if (committedCanvasId === undefined) return
+      try {
+        const result = await app.callServerTool({
+          name: 'canvas_view',
+          arguments: { canvasId: committedCanvasId },
+        })
+        applyToolResult(result, container, remount, commitResult)
+      } catch (err) {
+        // Network/host failure: the current view stays mounted (no remount
+        // was attempted) — nothing to recover here besides resetting the
+        // in-flight guard below. Logged so a failing host transport doesn't
+        // present as a dead button.
+        console.error('[whiteboard-widget] refresh via host callServerTool failed:', err)
+      }
+    }
+
+    const performRefresh = async (): Promise<void> => {
+      if (committedCanvasId === undefined) return
+      if (refreshInFlight) {
+        pendingRefresh = true
+        return
+      }
       refreshInFlight = true
       refreshControl?.setBusy(true)
-      void app
-        .callServerTool({ name: 'canvas_view', arguments: { canvasId: committedCanvasId } })
-        .then((result) => {
-          applyToolResult(result, container, remount, rememberCanvasId)
+      try {
+        do {
+          pendingRefresh = false
+          await runRefreshOnce()
+        } while (pendingRefresh)
+      } finally {
+        refreshInFlight = false
+        refreshControl?.setBusy(false)
+      }
+    }
+
+    let annotateInFlight = false
+    const performAnnotate = async (text: string): Promise<void> => {
+      if (annotateInFlight || committedCanvasId === undefined) return
+      annotateInFlight = true
+      stickyControl?.setBusy(true)
+      const target = computeStickyPlacement(lastValidScene?.elements ?? [])
+      try {
+        const result = await app.callServerTool({
+          name: 'annotate',
+          arguments: {
+            canvasId: committedCanvasId,
+            type: 'box_with_label',
+            target,
+            text,
+            width: STICKY_WIDTH,
+            backgroundColor: STICKY_BACKGROUND_COLOR,
+          },
         })
-        .catch((err) => {
-          // Network/host failure: the current view stays mounted (no
-          // remount was attempted) — nothing to recover here besides
-          // resetting the in-flight guard below. Logged so a failing
-          // host transport doesn't present as a dead button.
-          console.error('[whiteboard-widget] refresh via host callServerTool failed:', err)
-        })
-        .finally(() => {
-          refreshInFlight = false
-          refreshControl?.setBusy(false)
-        })
+        if (isErrorResult(result)) {
+          console.error(
+            '[whiteboard-widget] annotate via host callServerTool returned an error result:',
+            result,
+          )
+          return
+        }
+        // Required, not optional: append-only means the new note is only
+        // visible once canvas_view re-fetches. Routed through the same
+        // coalescing performRefresh a concurrent manual Refresh uses, so
+        // neither call can silently skip the other's refresh. Awaited
+        // (rather than fire-and-forget) so the sticky control — and the
+        // placement math a rapid next submission would read from
+        // lastValidScene — only re-enable once this refresh has actually
+        // updated lastValidScene; otherwise a second quick submission could
+        // compute its target from the stale pre-annotation scene and land on
+        // the same coordinates as the first note.
+        await performRefresh()
+        // Only after full success — a failed annotate keeps the text so the
+        // user can retry without retyping.
+        stickyControl?.clear()
+      } catch (err) {
+        console.error('[whiteboard-widget] annotate via host callServerTool failed:', err)
+      } finally {
+        annotateInFlight = false
+        stickyControl?.setBusy(false)
+      }
+    }
+
+    refreshControl = createRefreshControl(() => {
+      void performRefresh()
     })
+    stickyControl = createStickyNoteControl((text) => {
+      void performAnnotate(text)
+    })
+
+    // A tool-result can commit an ID during connect() above, before either
+    // control existed to be shown — reveal both if that already happened.
     if (committedCanvasId !== undefined) {
       refreshControl.show()
+      stickyControl.show()
     }
   }
 
