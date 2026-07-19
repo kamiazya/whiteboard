@@ -723,6 +723,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
         expect.any(HTMLElement),
         expect.objectContaining({ scene: refreshedScene }),
       )
+      // Submitted text is cleared only on full success — the user can add a
+      // second note without deleting the first one's text.
+      expect(queryStickyInput()?.value).toBe('')
     })
 
     it('keeps the current view and never refreshes when the annotate call rejects', async () => {
@@ -741,6 +744,8 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       expect(callServerToolMock).toHaveBeenCalledTimes(1)
       expect(mountCanvasViewer).not.toHaveBeenCalled()
       expect(queryStickyInput()?.disabled).toBe(false)
+      // Failure keeps the typed text so the user can retry without retyping.
+      expect(queryStickyInput()?.value).toBe('note text')
     })
 
     it('treats a resolved {isError:true} annotate result as failure — no follow-up refresh', async () => {

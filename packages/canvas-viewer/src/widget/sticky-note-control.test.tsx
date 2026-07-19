@@ -104,4 +104,12 @@ describe('createStickyNoteControl', () => {
     root.replaceChildren(document.createElement('span'))
     expect(queryControl()).not.toBeNull()
   })
+
+  it('clear() empties the input value', () => {
+    const control = createStickyNoteControl(() => {})
+    const input = queryInput() as HTMLInputElement
+    input.value = 'some text'
+    control.clear()
+    expect(input.value).toBe('')
+  })
 })

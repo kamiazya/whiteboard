@@ -377,6 +377,9 @@ async function mountFromHost(
         // compute its target from the stale pre-annotation scene and land on
         // the same coordinates as the first note.
         await performRefresh()
+        // Only after full success — a failed annotate keeps the text so the
+        // user can retry without retyping.
+        stickyControl?.clear()
       } catch (err) {
         console.error('[whiteboard-widget] annotate via host callServerTool failed:', err)
       } finally {

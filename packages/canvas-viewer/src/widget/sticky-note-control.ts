@@ -7,6 +7,7 @@ export interface StickyNoteControl {
   readonly element: HTMLFormElement
   show(): void
   setBusy(busy: boolean): void
+  clear(): void
 }
 
 // Stable hooks for tests and the widget smoke script — deliberately not an
@@ -100,6 +101,9 @@ export function createStickyNoteControl(onSubmit: (text: string) => void): Stick
       submit.style.opacity = busy ? '0.5' : ''
       submit.style.cursor = busy ? 'wait' : 'pointer'
       submit.textContent = busy ? 'Adding…' : 'Add'
+    },
+    clear(): void {
+      input.value = ''
     },
   }
 }
