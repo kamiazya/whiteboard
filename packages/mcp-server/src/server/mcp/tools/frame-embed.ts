@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
+import { assertCanvasExists } from './canvas-existence.js'
 import { parseCanvasId } from './canvas-id.js'
 import { boundsSchema } from './shared-schemas.js'
 
@@ -189,6 +190,7 @@ export function createFrameTool() {
     },
     execute: async (args: CreateFrameArgs, client: DaemonClient): Promise<CreateFrameResult> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      await assertCanvasExists(client, workspaceId, slug)
       const memberIds = (args.memberIds ?? []).slice(0, MAX_MEMBER_IDS)
       const padding = args.padding ?? 24
 
@@ -297,6 +299,7 @@ export function createEmbedTool() {
         throw new Error(`Invalid url "${args.url}": must start with http:// or https://`)
       }
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      await assertCanvasExists(client, workspaceId, slug)
       const doc = await apiGetSnapshot(client, workspaceId, slug)
       const prevVV = doc.version()
 
