@@ -383,6 +383,7 @@ export function updateFrameMembersTool() {
       client: DaemonClient,
     ): Promise<UpdateFrameMembersResult> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      await assertCanvasExists(client, workspaceId, slug)
       const padding = args.padding ?? 24
       const add = args.add ?? []
       const remove = args.remove ?? []

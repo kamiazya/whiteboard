@@ -208,6 +208,14 @@ describe('update_frame_members', () => {
   })
   afterEach(() => restore())
 
+  it('rejects a canvasId that does not exist instead of silently registering it', async () => {
+    state.exists = false
+    const tool = updateFrameMembersTool()
+    await expect(
+      tool.execute({ canvasId: 'sess/ghost', frameId: 'F', add: ['a'] }, client),
+    ).rejects.toThrow(/does not exist/)
+  })
+
   it('case 5', async () => {
     seedFrame('F', 0, 0, 100, 100)
     seedEl('a', 200, 100, 50, 50)
