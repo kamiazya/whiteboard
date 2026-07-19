@@ -139,26 +139,49 @@ const FIX_SCHEMA = {
   required: ['fixed', 'committed'],
 }
 
+// Reuses the schema's own item pattern (rather than a second hand-picked regex) so a caller-
+// provided designDoc is held to the exact same non-blank-entry invariant as an agent-generated
+// design. Mirrors .claude/workflows/lib/design-schema.mjs's isValidDesignShape (see the sync test
+// for why this is duplicated instead of imported).
+const propertiesItemPattern = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
+
 // Guards a caller-provided `designDoc` against the same shape DESIGN_SCHEMA enforces on a
 // generated design, so a malformed/incomplete args.designDoc can't skip PlanReview's invariant
 // check by never passing through the schema-constrained agent() call in the first place.
 function isValidDesignShape(d) {
   if (!d || typeof d !== 'object') return false
-  if (!Array.isArray(d.completionCriteria)) return false
+  if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
   if (typeof d.scope !== 'string') return false
-  if (!d.testScenarios || !Array.isArray(d.testScenarios.unit)) return false
+  if (
+    !d.testScenarios ||
+    !Array.isArray(d.testScenarios.unit) ||
+    !d.testScenarios.unit.every((u) => typeof u === 'string')
+  ) {
+    return false
+  }
   if (!Array.isArray(d.properties) || d.properties.length < 1) return false
-  if (!d.properties.every((p) => typeof p === 'string')) return false
+  if (!d.properties.every((p) => typeof p === 'string' && propertiesItemPattern.test(p))) return false
   return true
+}
+
+// Gates the design-generation phase. `skipDesign` means "skip generation because a valid design
+// was already provided" — NOT "skip generation even after we just discarded that provided design
+// as invalid". Mirrors .claude/workflows/lib/design-schema.mjs's shouldGenerateDesign (see the
+// sync test for why this is duplicated instead of imported).
+function shouldGenerateDesign({ hasDesign, skipDesign, discardedInvalidProvidedDesign }) {
+  if (hasDesign) return false
+  return !skipDesign || !!discardedInvalidProvidedDesign
 }
 
 // --- Phase 1: design ---
 let design = PROVIDED_DESIGN
+let discardedInvalidProvidedDesign = false
 if (design && !isValidDesignShape(design)) {
   log('provided designDoc does not match DESIGN_SCHEMA (missing/invalid completionCriteria, scope, testScenarios.unit, or properties) — discarding it and generating a fresh design instead.')
   design = null
+  discardedInvalidProvidedDesign = true
 }
-if (!SKIP_DESIGN && !design) {
+if (shouldGenerateDesign({ hasDesign: !!design, skipDesign: SKIP_DESIGN, discardedInvalidProvidedDesign })) {
   phase('Design')
   design = await agent(
     `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), risks, and \`properties\` — the invariants, round-trips, or metamorphic relations this change must preserve (e.g. parser/serializer round-trip, state-machine invariant, CRDT idempotence/convergence, concurrent-store convergence). \`properties\` must never be empty: for a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry \`"none: <reason>"\` instead. Do NOT write code yet.`,

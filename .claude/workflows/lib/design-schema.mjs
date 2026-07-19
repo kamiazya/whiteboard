@@ -36,3 +36,37 @@ export const DESIGN_SCHEMA = {
   },
   required: ['completionCriteria', 'scope', 'testScenarios', 'properties'],
 }
+
+// Reuses the schema's own item pattern (rather than a second hand-picked regex) so a caller-
+// provided designDoc that bypasses the schema-constrained `agent()` call is held to the exact
+// same non-blank-entry invariant as an agent-generated design.
+const propertiesItemPattern = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
+
+// Guards a caller-provided `designDoc` against the same shape DESIGN_SCHEMA enforces on a
+// generated design, so a malformed/incomplete args.designDoc can't skip PlanReview's invariant
+// check by never passing through the schema-constrained agent() call in the first place.
+export function isValidDesignShape(d) {
+  if (!d || typeof d !== 'object') return false
+  if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
+  if (typeof d.scope !== 'string') return false
+  if (
+    !d.testScenarios ||
+    !Array.isArray(d.testScenarios.unit) ||
+    !d.testScenarios.unit.every((u) => typeof u === 'string')
+  ) {
+    return false
+  }
+  if (!Array.isArray(d.properties) || d.properties.length < 1) return false
+  if (!d.properties.every((p) => typeof p === 'string' && propertiesItemPattern.test(p))) return false
+  return true
+}
+
+// Gates dev-loop's design-generation phase. `skipDesign` means "skip generation because a valid
+// design was already provided" — NOT "skip generation even after we just discarded that provided
+// design as invalid". Without `discardedInvalidProvidedDesign` in the OR, an invalid designDoc
+// passed alongside skipDesign:true would leave `design` null forever, silently skipping both
+// design and PlanReview instead of falling back to a freshly generated design.
+export function shouldGenerateDesign({ hasDesign, skipDesign, discardedInvalidProvidedDesign }) {
+  if (hasDesign) return false
+  return !skipDesign || !!discardedInvalidProvidedDesign
+}

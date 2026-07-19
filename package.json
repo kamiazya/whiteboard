@@ -61,7 +61,7 @@
     "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server apps/web/src",
     "knip": "knip",
     "secretlint": "secretlint --secretlintignore .secretlintignore \"**/*\"",
-    "test:scripts": "node --test .claude/scripts/*.test.mjs",
+    "test:scripts": "node --test .claude/scripts/*.test.mjs .claude/workflows/lib/*.test.mjs",
     "prepare": "lefthook install || true"
   },
   "devDependencies": {
