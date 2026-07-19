@@ -3,6 +3,7 @@
 // from the package's public surface — this file is a build INPUT, loaded
 // only by the widget's own <script type="module"> tag.
 import { App } from '@modelcontextprotocol/ext-apps'
+import { z } from 'zod'
 import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
 import { mountCanvasViewer, type CanvasViewerHandle } from './mount.js'
 import { parseViewerScene } from './scene.js'
@@ -146,14 +147,24 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 // validation path for the initial mount and every refresh keeps the
 // malformed-payload defense (parseViewerScene before remount) and the
 // canvasId commit rule (never commit from a result that failed validation)
-// in exactly one place.
+// in exactly one place. The envelope crosses the host↔widget process
+// boundary, so it gets a Zod schema instead of a cast; `scene` stays
+// deliberately unknown here — parseViewerScene is its real validator.
+const toolResultEnvelopeSchema = z.object({
+  structuredContent: z
+    .object({
+      canvasId: z.string().optional(),
+      scene: z.unknown().optional(),
+    })
+    .catchall(z.unknown())
+    .optional(),
+})
+
 function extractCanvasIdAndScene(payload: unknown): { canvasId?: string; scene?: unknown } {
-  const structuredContent = (
-    payload as { structuredContent?: { canvasId?: unknown; scene?: unknown } }
-  )?.structuredContent
-  const canvasId =
-    typeof structuredContent?.canvasId === 'string' ? structuredContent.canvasId : undefined
-  return { canvasId, scene: structuredContent?.scene }
+  const parsed = toolResultEnvelopeSchema.safeParse(payload)
+  if (!parsed.success) return {}
+  const structuredContent = parsed.data.structuredContent
+  return { canvasId: structuredContent?.canvasId, scene: structuredContent?.scene }
 }
 
 // Validates BEFORE remount: remount disposes the live viewer first, so a
@@ -171,7 +182,11 @@ function applyToolResult(
   const { canvasId, scene } = extractCanvasIdAndScene(payload)
   try {
     parseViewerScene(scene)
-  } catch {
+  } catch (err) {
+    // Surfaced for host-integration debugging: the widget deliberately
+    // keeps the current view on malformed payloads, which would otherwise
+    // make a host sending the wrong shape look like a silent no-op.
+    console.error('[whiteboard-widget] ignoring tool-result with invalid scene:', err)
     return
   }
   remount(() => mountCanvasViewer(container, { scene }))
@@ -250,10 +265,12 @@ async function mountFromHost(
         .then((result) => {
           applyToolResult(result, container, remount, rememberCanvasId)
         })
-        .catch(() => {
+        .catch((err) => {
           // Network/host failure: the current view stays mounted (no
           // remount was attempted) — nothing to recover here besides
-          // resetting the in-flight guard below.
+          // resetting the in-flight guard below. Logged so a failing
+          // host transport doesn't present as a dead button.
+          console.error('[whiteboard-widget] refresh via host callServerTool failed:', err)
         })
         .finally(() => {
           refreshInFlight = false

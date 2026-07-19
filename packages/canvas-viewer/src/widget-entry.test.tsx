@@ -215,6 +215,13 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // would trade the working view for an empty container.
     fakeAppInstances[0].ontoolresult?.({ structuredContent: { scene: { bogus: true } } })
     fakeAppInstances[0].ontoolresult?.({ structuredContent: {} })
+    // Malformed ENVELOPES (not just malformed scenes): the Zod envelope
+    // parse must degrade to "no scene" for shapes the cast-based extractor
+    // would have crashed on or mis-read — never throw, never remount.
+    fakeAppInstances[0].ontoolresult?.(null)
+    fakeAppInstances[0].ontoolresult?.('not an object')
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: 42 })
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 123, scene } })
 
     expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
     expect(liveHandle.dispose).not.toHaveBeenCalled()
