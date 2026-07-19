@@ -1,38 +1,55 @@
 // Silent-reconnect surface: lets a previously-paired web origin get a fresh
 // daemon Bearer token back after a page reload without a confirmation
-// dialog, by proving POSSESSION of a rotating, origin-bound secret rather
-// than by presenting the Origin header alone (see web-origin-trust-store.ts
-// for why Origin alone would weaken the existing cross-user boundary).
+// dialog, by proving POSSESSION of an enrolled ECDSA P-256 keypair (WebCrypto
+// challenge-response) rather than by presenting the Origin header alone (see
+// web-origin-trust-store.ts for why Origin alone would weaken the existing
+// cross-user boundary). A legacy Bearer-secret path is accepted for a grace
+// period while older enrolled clients migrate to the keypair flow — see
+// verifyLegacySecret's docs.
 //
-// Two routes:
+// Three routes:
 //   POST /api/reconnect-credential — enrollment. Runs behind the app-level
 //     daemon-token auth middleware (app.ts), so only a caller who already
-//     holds the daemon token (e.g. right after a #wb= pairing) can mint a
-//     reconnect secret for its own Origin.
-//   POST /api/reconnect-session — the reconnect itself. Deliberately the
-//     ONLY unauthenticated-by-daemon-token entry under /api/* (declared
-//     `public` in route-scope-registry.ts) because its whole purpose is to
-//     hand back a daemon token to a caller who no longer has one. Its own
-//     gates (Origin admission + secret possession + non-expired trust
-//     record) are what stand in for the app-level auth this route is
-//     carved out of.
+//     holds the daemon token (e.g. right after a #wb= pairing) can enroll a
+//     public key for its own Origin.
+//   POST /api/reconnect-challenge — mints a one-time nonce challenge.
+//     Deliberately public: the caller has no daemon token by definition, and
+//     the mint must not depend on whether the origin has an enrolled
+//     credential (declared, this route's own scope entry in
+//     route-scope-registry.ts) — refusing unenrolled origins would make this
+//     route an enrollment oracle.
+//   POST /api/reconnect-session — redeems a signed challenge (or, during the
+//     grace period, a legacy secret) for a daemon token. Deliberately the
+//     ONLY unauthenticated-by-daemon-token entry under /api/* besides the
+//     challenge mint above (declared `public` in route-scope-registry.ts)
+//     because its whole purpose is to hand back a daemon token to a caller
+//     who no longer has one. Its own gates (Origin admission + challenge
+//     signature or legacy secret possession + non-expired trust record) are
+//     what stand in for the app-level auth this route is carved out of.
 
 import { Hono } from 'hono'
 import {
+  ecP256PublicJwkSchema,
+  type ReconnectChallengeResponse,
   type ReconnectCredentialResponse,
-  reconnectCredentialResponseSchema,
   type ReconnectSessionResponse,
+  reconnectChallengeResponseSchema,
+  reconnectCredentialResponseSchema,
+  reconnectSessionRequestSchema,
   reconnectSessionResponseSchema,
 } from '../../shared/api-contracts/reconnect.js'
 import { isLoopbackHostname, normalizeOriginHostname } from '../security/cors-loopback.js'
+import type { ReconnectChallengeStore } from '../security/reconnect-challenge-store.js'
 import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
 import { TRUST_TTL_MS, type WebOriginTrustStore } from '../security/web-origin-trust-store.js'
 import { parseBearerAuthorizationHeader } from './auth.js'
 
 export {
+  type ReconnectChallengeResponse,
   type ReconnectCredentialResponse,
-  reconnectCredentialResponseSchema,
   type ReconnectSessionResponse,
+  reconnectChallengeResponseSchema,
+  reconnectCredentialResponseSchema,
   reconnectSessionResponseSchema,
 }
 
@@ -43,6 +60,7 @@ const TRUST_TTL_DAYS = TRUST_TTL_MS / (24 * 60 * 60 * 1000)
 
 export interface ReconnectRouterOptions {
   trustStore: WebOriginTrustStore
+  challengeStore: ReconnectChallengeStore
   // Exact-match hosted origins currently admitted, mirroring
   // LocalDaemonAppOptions.allowedWebOrigins. Loopback origins are always
   // admitted in addition to this list (same carve-out as the /api/* CORS
@@ -72,7 +90,7 @@ function isAdmittedOrigin(origin: string, allowedWebOrigins: readonly string[]):
 }
 
 // Returns the canonicalized Origin iff it is admitted (loopback or explicitly
-// allowlisted), otherwise null — both reconnect routes gate on this first.
+// allowlisted), otherwise null — every reconnect route gates on this first.
 function admittedOrigin(
   originHeader: string | undefined,
   allowedWebOrigins: readonly string[],
@@ -90,12 +108,37 @@ export function createReconnectRouter(options: ReconnectRouterOptions) {
     if (canonicalOrigin === null) {
       return c.json({ error: 'forbidden_origin' }, 403)
     }
-    const { secret } = await options.trustStore.trustOrigin(canonicalOrigin)
+    const rawBody = await c.req.json().catch(() => null)
+    const parsedBody = ecP256PublicJwkSchema.safeParse(
+      (rawBody as { publicKeyJwk?: unknown } | null)?.publicKeyJwk,
+    )
+    if (!parsedBody.success) {
+      return c.json({ error: 'invalid_public_key' }, 400)
+    }
+    await options.trustStore.enrollPublicKey(canonicalOrigin, parsedBody.data)
     return c.json(
       reconnectCredentialResponseSchema.parse({
-        reconnectSecret: secret,
+        credentialKind: 'publicKey',
         expiresInDays: TRUST_TTL_DAYS,
       } satisfies ReconnectCredentialResponse),
+    )
+  })
+
+  app.post('/api/reconnect-challenge', (c) => {
+    const canonicalOrigin = admittedOrigin(c.req.header('origin'), options.allowedWebOrigins)
+    if (canonicalOrigin === null) {
+      return c.json({ error: 'forbidden_origin' }, 403)
+    }
+    const minted = options.challengeStore.mintChallenge(canonicalOrigin)
+    if (minted === null) {
+      return c.json({ error: 'too_many_pending_challenges' }, 429)
+    }
+    return c.json(
+      reconnectChallengeResponseSchema.parse({
+        challengeId: minted.challengeId,
+        nonce: minted.nonce,
+        expiresInSeconds: minted.expiresIn,
+      } satisfies ReconnectChallengeResponse),
     )
   })
 
@@ -104,26 +147,45 @@ export function createReconnectRouter(options: ReconnectRouterOptions) {
     if (canonicalOrigin === null) {
       return c.json({ error: 'forbidden_origin' }, 403)
     }
-    const presentedSecret = parseBearerAuthorizationHeader(c.req.header('authorization'))
-    if (presentedSecret === null) {
+
+    // Legacy grace path: a caller presenting a Bearer secret is verified
+    // against the record's secretHash, no rotation. Checked before the
+    // signed-challenge body so an old client (which never sends a JSON
+    // body) is not forced through JSON parsing first.
+    const legacySecret = parseBearerAuthorizationHeader(c.req.header('authorization'))
+    if (legacySecret !== null) {
+      const verified = await options.trustStore.verifyLegacySecret(canonicalOrigin, legacySecret)
+      if (!verified) {
+        return c.json({ error: 'unauthorized' }, 403)
+      }
+      return c.json(
+        reconnectSessionResponseSchema.parse({
+          token: options.daemonToken,
+        } satisfies ReconnectSessionResponse),
+      )
+    }
+
+    const rawBody = await c.req.json().catch(() => null)
+    const parsedBody = reconnectSessionRequestSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
+      return c.json({ error: 'invalid_request' }, 400)
+    }
+    const { challengeId, signature } = parsedBody.data
+    const nonce = options.challengeStore.redeemChallenge(challengeId, canonicalOrigin)
+    if (nonce === null) {
       return c.json({ error: 'unauthorized' }, 403)
     }
-    // Verify and rotate in a single store call so a concurrent revoke, or a
-    // second reconnect request racing this one with the same secret, cannot
-    // land in the gap between a separate verify() and rotate() — that gap
-    // both risked an unhandled rotate() throw (TOCTOU: revoke lands between
-    // the two calls) and let two racing requests both pass verify() before
-    // either rotated (double-use of the same secret).
-    const rotated = await options.trustStore.verifyAndRotate(canonicalOrigin, presentedSecret)
-    if (rotated === null) {
+    const verified = await options.trustStore.verifySignedChallenge(
+      canonicalOrigin,
+      nonce,
+      signature,
+    )
+    if (!verified) {
       return c.json({ error: 'unauthorized' }, 403)
     }
-    const { secret: rotatedSecret } = rotated
     return c.json(
       reconnectSessionResponseSchema.parse({
         token: options.daemonToken,
-        reconnectSecret: rotatedSecret,
-        expiresInDays: TRUST_TTL_DAYS,
       } satisfies ReconnectSessionResponse),
     )
   })

@@ -9,6 +9,17 @@
 // must mint regardless of enrollment, to avoid an enrollment oracle). Lazy
 // expiry alone would let an attacker grow the map without bound within the
 // TTL window, so a hard cap on unexpired entries is enforced at mint time.
+//
+// Threat model: this daemon binds to loopback by default, so flooding this
+// endpoint requires local code-execution access — at which point an
+// attacker already has far cheaper ways to disrupt the daemon than this
+// specific 429. A single process-wide cap (reject-at-cap, no per-IP rate
+// limiting) is accepted as sufficient for that threat model rather than
+// adding IP-scoped throttling this codebase has no other precedent for.
+// This assumption does NOT hold once a daemon is reachable from a hosted
+// origin over the network (server-mode exposure) — see
+// tmp/issues/server-mode-passkey-authn.md for the redesign that surface
+// requires before this cap is a sufficient mitigation there too.
 
 import { randomBytes } from 'node:crypto'
 

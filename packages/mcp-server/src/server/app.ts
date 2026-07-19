@@ -50,6 +50,10 @@ import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
+import {
+  createReconnectChallengeStore,
+  type ReconnectChallengeStore,
+} from './security/reconnect-challenge-store.js'
 import { resolveApiRouteScope } from './security/route-scope-registry.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
@@ -242,6 +246,12 @@ export interface LocalDaemonAppOptions {
    *  the real data dir when omitted; tests inject one rooted at a scratch
    *  dir the same way wsTicketStore is injected above. */
   webOriginTrustStore?: WebOriginTrustStore
+  /** Backing store for POST /api/reconnect-challenge's one-time nonce mint.
+   *  Defaults to a private in-memory store when omitted; tests inject a
+   *  shared instance the same way webOriginTrustStore is injected above so
+   *  a test can drive challenge mint and redemption through the same
+   *  store the route actually uses. */
+  reconnectChallengeStore?: ReconnectChallengeStore
 }
 
 export interface ServerModeAppOptions {
@@ -697,6 +707,7 @@ export function createApp(options: AppOptions) {
       '/',
       createReconnectRouter({
         trustStore: options.webOriginTrustStore ?? createWebOriginTrustStore(),
+        challengeStore: options.reconnectChallengeStore ?? createReconnectChallengeStore(),
         allowedWebOrigins: options.allowedWebOrigins ?? [],
         daemonToken: token ?? '',
       }),
