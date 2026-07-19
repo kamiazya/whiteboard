@@ -22,7 +22,7 @@
     "test:watch": "vitest --project mcp-node",
     "check:pr-title": "pnpm --filter @kamiazya/whiteboard-mcp check:pr-title",
     "typecheck": "pnpm -r typecheck",
-    "dev": "concurrently -n web,mcp -c blue,green \"pnpm --filter @kamiazya/whiteboard-web dev\" \"pnpm --filter @kamiazya/whiteboard-mcp dev\"",
+    "dev": "concurrently -k -n web,mcp -c blue,green \"pnpm --filter @kamiazya/whiteboard-web dev\" \"pnpm --filter @kamiazya/whiteboard-mcp dev\"",
     "mcp": "pnpm --filter @kamiazya/whiteboard-mcp mcp",
     "mcp:http": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http",
     "mcp:http:dev": "pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev",
