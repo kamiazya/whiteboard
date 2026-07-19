@@ -41,7 +41,11 @@ import {
 import { isLoopbackHostname, normalizeOriginHostname } from '../security/cors-loopback.js'
 import type { ReconnectChallengeStore } from '../security/reconnect-challenge-store.js'
 import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
-import { TRUST_TTL_MS, type WebOriginTrustStore } from '../security/web-origin-trust-store.js'
+import {
+  isImportableP256PublicKey,
+  TRUST_TTL_MS,
+  type WebOriginTrustStore,
+} from '../security/web-origin-trust-store.js'
 import { parseBearerAuthorizationHeader } from './auth.js'
 
 export {
@@ -119,6 +123,14 @@ export function createReconnectRouter(options: ReconnectRouterOptions) {
       (rawBody as { publicKeyJwk?: unknown } | null)?.publicKeyJwk,
     )
     if (!parsedBody.success) {
+      return c.json({ error: 'invalid_public_key' }, 400)
+    }
+    // Field names and coordinate lengths pass the schema even for an
+    // (x, y) pair that is not actually on the P-256 curve — only importing
+    // the key can catch that, and doing it here rejects it before it is
+    // ever persisted rather than at the first (inevitably failing) signature
+    // verification.
+    if (!(await isImportableP256PublicKey(parsedBody.data))) {
       return c.json({ error: 'invalid_public_key' }, 400)
     }
     await options.trustStore.enrollPublicKey(canonicalOrigin, parsedBody.data)

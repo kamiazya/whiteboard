@@ -148,6 +148,36 @@ describe('reconnect routes', () => {
       expect(res.status).toBe(400)
     })
 
+    it('rejects a JWK with correctly-sized coordinates that are not a valid P-256 curve point', async () => {
+      const trustStore = createWebOriginTrustStore({ dataDir })
+      const app = createReconnectRouter({
+        trustStore,
+        challengeStore: createReconnectChallengeStore(),
+        allowedWebOrigins: ['http://localhost:5173'],
+        daemonToken: 'daemon-token-value',
+      })
+
+      // Correct field names and 32-byte coordinate lengths, but the (x, y)
+      // pair does not sit on the P-256 curve — the schema's length check
+      // alone cannot catch this; only an actual import attempt can.
+      const notOnCurve: EcP256PublicJwk = {
+        kty: 'EC',
+        crv: 'P-256',
+        x: Buffer.alloc(32, 1).toString('base64url'),
+        y: Buffer.alloc(32, 2).toString('base64url'),
+      }
+
+      const res = await app.request('/api/reconnect-credential', {
+        method: 'POST',
+        headers: { origin: 'http://localhost:5173', 'content-type': 'application/json' },
+        body: JSON.stringify({ publicKeyJwk: notOnCurve }),
+      })
+
+      expect(res.status).toBe(400)
+      const records = await trustStore.list()
+      expect(records).toHaveLength(0)
+    })
+
     it('403s an origin that is not on the allowlist', async () => {
       const trustStore = createWebOriginTrustStore({ dataDir })
       const app = createReconnectRouter({
