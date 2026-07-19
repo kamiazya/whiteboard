@@ -11,7 +11,7 @@ export interface RefreshControl {
 // Stable hook for tests and the widget smoke script — deliberately not an
 // `id` (a host document could already use that name) or a class (styling
 // hook, not an identity hook).
-export const REFRESH_CONTROL_TEST_ID = 'widget-refresh'
+const REFRESH_CONTROL_TEST_ID = 'widget-refresh'
 
 export function createRefreshControl(onRefresh: () => void): RefreshControl {
   const button = document.createElement('button')
