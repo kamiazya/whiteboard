@@ -53,15 +53,10 @@ const elementArb: fc.Arbitrary<ElementShape> = fc.record({
 // Dedupe by id: each list represents "current state", so ids must be unique
 // the way a real elements LoroMovableList would be (one live entry per id).
 function uniqueByIdArb(): fc.Arbitrary<ElementShape[]> {
-  return fc.array(elementArb, { minLength: 0, maxLength: 6 }).map((els) => {
-    const seen = new Set<string>()
-    const out: ElementShape[] = []
-    for (const el of els) {
-      if (seen.has(el.id)) continue
-      seen.add(el.id)
-      out.push(el)
-    }
-    return out
+  return fc.uniqueArray(elementArb, {
+    minLength: 0,
+    maxLength: 6,
+    selector: (el) => el.id,
   })
 }
 
@@ -78,14 +73,14 @@ function docOf(elements: ElementShape[]): LoroDoc {
   return doc
 }
 
-type El = Record<string, unknown>
+type El = Record<string, unknown> & { id: string }
 
 function snapshot(doc: LoroDoc): El[] {
   return doc.getMovableList('elements').toJSON() as El[]
 }
 
-function byId(elements: El[]): Map<string, El> {
-  return new Map(elements.map((el) => [el.id as string, el]))
+function byId<T extends { id: string }>(elements: readonly T[]): Map<string, T> {
+  return new Map(elements.map((el) => [el.id, el]))
 }
 
 // Fork `doc` into an independent in-memory replica carrying the same history,
@@ -131,8 +126,8 @@ describe('reconcileElementsOnDoc property tests', () => {
       current.commit()
 
       const resultById = byId(snapshot(current))
-      const pastById = byId(pastEls as unknown as El[])
-      const currentById = byId(currentEls as unknown as El[])
+      const pastById = byId(pastEls)
+      const currentById = byId(currentEls)
 
       // Every live (non-tombstone) past element must be present with matching fields.
       for (const [id, pastEl] of pastById) {
