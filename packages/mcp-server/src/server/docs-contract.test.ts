@@ -73,21 +73,38 @@ describe('docs/ contract', () => {
     }
   })
 
-  it('documents both real-browser vitest projects for `pnpm test:browser`', () => {
-    // The root vitest.config.ts wires two browser projects
-    // (canvas-viewer-browser + web-browser). A doc that describes only one
-    // misleads contributors about which package's browser regressions
-    // `pnpm test:browser` actually covers.
+  it('documents every real-browser vitest project for `pnpm test:browser`', () => {
+    // Derive the actual set of browser-mode project names (config `test.name`
+    // where `browser.enabled` is true) from the config files vitest.config.ts
+    // wires up, rather than counting how many times a filename string occurs.
+    // Counting filenames would stay green even if a project's own name
+    // diverged from what testing.md documents, or if a differently-named
+    // config elsewhere in the tree happened to share the same filename.
     const rootVitestConfig = readFileSync(join(REPO_ROOT, 'vitest.config.ts'), 'utf8')
-    const browserProjectCount = [...rootVitestConfig.matchAll(/vitest\.browser\.config\.ts/g)]
-      .length
-    expect(browserProjectCount).toBe(2)
+    const projectConfigPaths = [...rootVitestConfig.matchAll(/'((?:packages|apps)\/[^']+)'/g)].map(
+      (match) => match[1],
+    )
+    expect(projectConfigPaths.length).toBeGreaterThan(0)
+
+    const browserProjectNames = projectConfigPaths.flatMap((relativePath) => {
+      const configContent = readFileSync(join(REPO_ROOT, relativePath), 'utf8')
+      if (!/browser:\s*\{\s*\n?\s*enabled:\s*true/.test(configContent)) return []
+      const nameMatch = configContent.match(/name:\s*'([^']+)'/)
+      expect(nameMatch, `${relativePath} enables browser mode but declares no test.name`).not.toBe(
+        null,
+      )
+      return nameMatch ? [nameMatch[1]] : []
+    })
+    // Pin the known set so this test also fails (rather than silently
+    // shrinking its coverage) if a browser project is ever removed.
+    expect(browserProjectNames.sort()).toEqual(['canvas-viewer-browser', 'web-browser'])
 
     const testingDocPath = join(DOCS_ROOT, 'contributing/testing.md')
     const content = readFileSync(testingDocPath, 'utf8')
     expect(content).not.toContain('There is one real-browser Vitest project')
-    expect(content).toContain('canvas-viewer-browser')
-    expect(content).toContain('web-browser')
+    for (const projectName of browserProjectNames) {
+      expect(content).toContain(projectName)
+    }
   })
 
   it('describes `pnpm test --project mcp-node` as a narrow, not a broad non-browser, pass', () => {
