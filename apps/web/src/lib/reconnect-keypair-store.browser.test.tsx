@@ -61,12 +61,27 @@ describe('reconnect keypair persistence (real IndexedDB + WebCrypto)', () => {
 
   it('markKeypairConfirmed flips status without changing the key material', async () => {
     const created = await getOrCreateKeypair(ORIGIN_A)
-    await markKeypairConfirmed(ORIGIN_A)
+    await markKeypairConfirmed(ORIGIN_A, created.keyId)
     const reloaded = await loadKeypair(ORIGIN_A)
     expect(reloaded?.status).toBe('confirmed')
     const originalJwk = await exportPublicJwk(created.publicKey)
     const reloadedJwk = await exportPublicJwk(reloaded!.publicKey)
     expect(reloadedJwk).toEqual(originalJwk)
+  })
+
+  it('markKeypairConfirmed does not confirm a replacement key when keyId no longer matches (cross-tab race)', async () => {
+    // A late confirmation for key A racing another tab that already cleared
+    // A and enrolled replacement key B must not mark B 'confirmed' — B was
+    // never actually proven via challenge-response.
+    const original = await getOrCreateKeypair(ORIGIN_A)
+    await clearKeypair(ORIGIN_A, original.keyId)
+    const replacement = await getOrCreateKeypair(ORIGIN_A)
+
+    await markKeypairConfirmed(ORIGIN_A, original.keyId)
+
+    const stillStored = await loadKeypair(ORIGIN_A)
+    expect(stillStored?.keyId).toBe(replacement.keyId)
+    expect(stillStored?.status).toBe('pending')
   })
 
   it('clearKeypair removes the record when the keyId matches', async () => {

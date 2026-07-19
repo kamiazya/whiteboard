@@ -27,7 +27,7 @@ import {
 // test-layer-selection).
 export interface UseSilentReconnectDeps {
   loadKeypair: (origin: string) => Promise<ReconnectKeypairRecord | null>
-  markKeypairConfirmed: (origin: string) => Promise<void>
+  markKeypairConfirmed: (origin: string, keyId: string) => Promise<void>
   clearKeypair: (origin: string, keyId: string) => Promise<void>
   signReconnectNonce: (privateKey: CryptoKey, nonce: string) => Promise<string>
 }
@@ -231,7 +231,7 @@ export function useSilentReconnect({
         // the keypair record and retire the legacy secret only now, never
         // right after enrollment's POST /api/reconnect-credential succeeded.
         if (keypair.status === 'pending') {
-          await deps.markKeypairConfirmed(origin).catch(() => {})
+          await deps.markKeypairConfirmed(origin, keypair.keyId).catch(() => {})
           // Conditional on origin, not unconditional: a completion that
           // lands late can otherwise race a DIFFERENT origin's legacy
           // secret that a concurrent tab saved after this attempt started,

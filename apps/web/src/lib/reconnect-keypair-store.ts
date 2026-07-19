@@ -148,7 +148,17 @@ export async function getOrCreateKeypair(origin: string): Promise<ReconnectKeypa
   }
 }
 
-function putStatus(origin: string, status: ReconnectKeypairRecord['status']): Promise<void> {
+/**
+ * Get-then-put inside a single readwrite transaction, only writing `status`
+ * when the stored record still matches `keyId` — guards the same cross-tab
+ * race `clearKeypair` guards against: a late status update for a key another
+ * tab has already superseded must not touch the replacement it enrolled.
+ */
+function putStatusIfMatches(
+  origin: string,
+  keyId: string,
+  status: ReconnectKeypairRecord['status'],
+): Promise<void> {
   return (async () => {
     const db = await openWhiteboardDb()
     return new Promise<void>((resolve, reject) => {
@@ -164,8 +174,8 @@ function putStatus(origin: string, status: ReconnectKeypairRecord['status']): Pr
       const getReq = store.get(origin)
       getReq.onsuccess = () => {
         const existing = getReq.result as ReconnectKeypairRecord | undefined
-        if (existing === undefined) {
-          // Already cleared (e.g. a concurrent rejection) — nothing to update.
+        if (existing === undefined || existing.keyId !== keyId) {
+          // Already cleared, or superseded by a different key — nothing to update.
           return
         }
         store.put({ ...existing, status })
@@ -186,9 +196,13 @@ function putStatus(origin: string, status: ReconnectKeypairRecord['status']): Pr
   })()
 }
 
-/** Marks `origin`'s keypair 'confirmed' after a successful challenge-response login. */
-export function markKeypairConfirmed(origin: string): Promise<void> {
-  return putStatus(origin, 'confirmed')
+/**
+ * Marks `origin`'s keypair 'confirmed' after a successful challenge-response
+ * login, but ONLY if it still matches `keyId` — the exact key the caller
+ * proved usable, not merely whatever now occupies the origin slot.
+ */
+export function markKeypairConfirmed(origin: string, keyId: string): Promise<void> {
+  return putStatusIfMatches(origin, keyId, 'confirmed')
 }
 
 /**

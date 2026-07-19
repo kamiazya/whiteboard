@@ -252,7 +252,7 @@ describe('useSilentReconnect', () => {
       await waitFor(() => expect(result.current.status).toBe('connected'))
       expect(result.current).toEqual({ status: 'connected', token: 'daemon-token' })
       expect(deps.signReconnectNonce).toHaveBeenCalledWith(FAKE_PRIVATE_KEY, 'nonce-1')
-      expect(deps.markKeypairConfirmed).toHaveBeenCalledWith(ORIGIN)
+      expect(deps.markKeypairConfirmed).toHaveBeenCalledWith(ORIGIN, FAKE_KEY_ID)
       expect(load(ORIGIN)).toBeNull()
       expect(readDaemonTokenOnce()).toBe('daemon-token')
     })
