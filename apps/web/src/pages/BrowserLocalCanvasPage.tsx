@@ -266,8 +266,14 @@ export function BrowserLocalCanvasPage({
   const handleExport = createSceneExportHandler(commands, exportScene)
 
   // Identity key = canvasId — a switch to a different browser-local canvas
-  // re-registers the WebMCP tools against it.
-  useBrowserToolRegistry(commands, canvasId)
+  // re-registers the WebMCP tools against it. Honors the persisted
+  // capabilities.webMcpEnabled setting (see user-settings-store.ts);
+  // unset (the default) is treated as enabled.
+  useBrowserToolRegistry(
+    commands,
+    canvasId,
+    settingsStore.load().capabilities.webMcpEnabled !== false,
+  )
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
