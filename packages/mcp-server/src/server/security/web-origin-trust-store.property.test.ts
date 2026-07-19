@@ -210,6 +210,10 @@ class VerifySignedCommand implements TrustCommand {
 
     if (expectedOk && record) {
       record.lastUsedAt = now // sliding TTL touch on success
+      // Success also persists an updated record (lastUsedAt bump) — a
+      // regression that dropped the credential while writing that update
+      // must be caught here too, not only after trust/enrollment.
+      await assertEveryRecordHasACredential(real)
     }
   }
 
@@ -249,6 +253,10 @@ class VerifyLegacyCommand implements TrustCommand {
 
     if (expectedOk && record) {
       record.lastUsedAt = now
+      // Same rationale as VerifySignedCommand — a successful legacy verify
+      // also persists an updated record, so re-check the credential invariant
+      // here rather than only after trust/enrollment commands.
+      await assertEveryRecordHasACredential(real)
     }
   }
 
@@ -265,8 +273,31 @@ class RevokeCommand implements TrustCommand {
   }
 
   async run(model: TrustModel, real: RealEnv): Promise<void> {
+    // Capture the credential that is about to be revoked so it can be
+    // presented again immediately after — revoke() deletes the underlying
+    // record, so without this a later VerifyLegacyCommand always submits a
+    // fabricated wrong secret and never actually exercises revocation
+    // against the credential that was live at revoke time.
+    const existing = model.records.get(this.origin)
+
     await real.store.revoke(this.origin)
     model.records.delete(this.origin)
+
+    if (existing?.credential === 'legacy') {
+      const result = await real.store.verifyLegacySecret(this.origin, existing.secret)
+      expect(
+        result,
+        `verifyLegacySecret(${this.origin}) with the just-revoked secret must fail`,
+      ).toBe(false)
+    } else if (existing?.credential === 'key') {
+      const nonce = NONCE_POOL[0]!
+      const signature = KEYS[existing.keyIndex]!.signatures[0]!
+      const result = await real.store.verifySignedChallenge(this.origin, nonce, signature)
+      expect(
+        result,
+        `verifySignedChallenge(${this.origin}) with the just-revoked key must fail`,
+      ).toBe(false)
+    }
   }
 
   toString(): string {

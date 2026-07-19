@@ -141,6 +141,12 @@ class RedeemCommand implements ChallengeCommand {
       const followUp = real.store.redeemChallenge(id, entry.origin)
       expect(followUp, 'a wrong-origin attempt must not consume the challenge').toBe(entry.nonce)
       model.pending.delete(id)
+
+      // The property test itself (not just the pre-existing example test)
+      // must enforce single-use: replay the exact same challengeId+origin
+      // immediately after the successful follow-up redemption.
+      const replay = real.store.redeemChallenge(id, entry.origin)
+      expect(replay, 'redeeming an already-redeemed challenge must return null').toBeNull()
       return
     }
 
@@ -150,6 +156,10 @@ class RedeemCommand implements ChallengeCommand {
       'redeeming a fresh challenge with the correct origin must return its nonce',
     ).toBe(entry.nonce)
     model.pending.delete(id)
+
+    // Same single-use enforcement for the plain "existing-correct" path.
+    const replay = real.store.redeemChallenge(id, entry.origin)
+    expect(replay, 'redeeming an already-redeemed challenge must return null').toBeNull()
   }
 
   toString(): string {
