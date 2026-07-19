@@ -3,6 +3,9 @@ import * as fc from 'fast-check'
 
 export { fc, fcTest }
 
-export function withDefaults(override?: fc.Parameters<never>): fc.Parameters<never> {
+// T defaults to `never` (not `unknown`): fc.Parameters<never> is assignable to
+// every fc.Parameters<[...]> at zero-config call sites, while callers passing
+// type-bearing options like `examples` name T explicitly.
+export function withDefaults<T = never>(override?: fc.Parameters<T>): fc.Parameters<T> {
   return { numRuns: 200, ...override }
 }

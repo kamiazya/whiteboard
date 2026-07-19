@@ -159,7 +159,7 @@ function isStringArray(v) {
 // check by never passing through the schema-constrained agent() call in the first place. Checks
 // every field DESIGN_SCHEMA constrains, not just the four required ones.
 function isValidDesignShape(d) {
-  if (!d || typeof d !== 'object') return false
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return false
   if (!Object.keys(d).every((k) => ALLOWED_TOP_LEVEL_KEYS.includes(k))) return false
   if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
   if (typeof d.scope !== 'string') return false

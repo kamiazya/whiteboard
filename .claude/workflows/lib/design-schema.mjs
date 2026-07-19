@@ -60,7 +60,7 @@ function isStringArray(v) {
 // just the four required ones, otherwise a caller-supplied document can carry schema-violating
 // values (wrong-typed optional fields, unknown keys) straight into PlanReview and implementation.
 export function isValidDesignShape(d) {
-  if (!d || typeof d !== 'object') return false
+  if (!d || typeof d !== 'object' || Array.isArray(d)) return false
   if (!Object.keys(d).every((k) => ALLOWED_TOP_LEVEL_KEYS.includes(k))) return false
   if (!Array.isArray(d.completionCriteria) || !d.completionCriteria.every((c) => typeof c === 'string')) return false
   if (typeof d.scope !== 'string') return false
