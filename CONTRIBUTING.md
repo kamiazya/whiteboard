@@ -8,8 +8,8 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
 pnpm install
-pnpm exec playwright install --with-deps chromium   # required for the browser test projects (mcp-browser / web-browser)
-pnpm test         # all tests (mcp-node + mcp-jsdom + mcp-browser + mcp-smoke + apps/web + web-browser)
+pnpm exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser)
+pnpm test         # full suite: mcp-node, mcp-smoke, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```
@@ -24,14 +24,14 @@ See [README.md](README.md) for the full setup including Claude Code / Codex auto
 
 ## Workflow
 
-This project follows a **test → patch → manual verify → regression test** loop. See [AGENTS.md](AGENTS.md) for the full development loop, including which test layer (mcp-node / mcp-jsdom / mcp-browser / E2E) to choose for which kind of change.
+This project follows a **test → patch → manual verify → regression test** loop. See [AGENTS.md](AGENTS.md) for the full development loop, including which test layer (mcp-node / canvas-viewer-node / canvas-viewer-jsdom / canvas-viewer-browser / apps/web jsdom / web-browser / E2E) to choose for which kind of change.
 
 Short version:
 
 1. Write the smallest failing test at the nearest layer.
 2. Make the smallest patch that turns it green.
 3. Manually verify the real behavior (browser open, MCP smoke, etc.).
-4. Lock the verified flow into `mcp-browser` or E2E coverage.
+4. Lock the verified flow into `canvas-viewer-browser` / `web-browser` or E2E coverage.
 
 ## Commits
 
