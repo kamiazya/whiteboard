@@ -43,6 +43,8 @@ interface RealEnv {
   clock: { value: number }
 }
 
+type ChallengeCommand = fc.Command<ChallengeModel, RealEnv>
+
 const ORIGIN_POOL = [
   'https://a.example.test',
   'https://b.example.test',
@@ -55,7 +57,7 @@ function pruneModel(model: ChallengeModel, cutoff: number): void {
   }
 }
 
-class MintCommand implements fc.Command<ChallengeModel, RealEnv> {
+class MintCommand implements ChallengeCommand {
   constructor(private readonly origin: string) {}
 
   check(): boolean {
@@ -93,7 +95,7 @@ class MintCommand implements fc.Command<ChallengeModel, RealEnv> {
 
 type RedeemMode = 'existing-correct' | 'existing-wrong-origin' | 'unknown-id'
 
-class RedeemCommand implements fc.Command<ChallengeModel, RealEnv> {
+class RedeemCommand implements ChallengeCommand {
   constructor(
     private readonly mode: RedeemMode,
     private readonly indexHint: number,
@@ -155,7 +157,7 @@ class RedeemCommand implements fc.Command<ChallengeModel, RealEnv> {
   }
 }
 
-class AdvanceTimeCommand implements fc.Command<ChallengeModel, RealEnv> {
+class AdvanceTimeCommand implements ChallengeCommand {
   constructor(private readonly deltaMs: number) {}
 
   check(): boolean {
@@ -173,35 +175,26 @@ class AdvanceTimeCommand implements fc.Command<ChallengeModel, RealEnv> {
 
 const mintArb = fc
   .constantFrom(...ORIGIN_POOL)
-  .map((origin) => new MintCommand(origin) as fc.Command<ChallengeModel, RealEnv>)
+  .map((origin) => new MintCommand(origin) as ChallengeCommand)
 
 const redeemExistingCorrectArb = fc
   .nat()
-  .map(
-    (idx) =>
-      new RedeemCommand('existing-correct', idx, '', '') as fc.Command<ChallengeModel, RealEnv>,
-  )
+  .map((idx) => new RedeemCommand('existing-correct', idx, '', '') as ChallengeCommand)
 
 const redeemExistingWrongOriginArb = fc
   .tuple(fc.nat(), fc.constantFrom(...ORIGIN_POOL))
   .map(
     ([idx, wrongOrigin]) =>
-      new RedeemCommand('existing-wrong-origin', idx, '', wrongOrigin) as fc.Command<
-        ChallengeModel,
-        RealEnv
-      >,
+      new RedeemCommand('existing-wrong-origin', idx, '', wrongOrigin) as ChallengeCommand,
   )
 
 const redeemUnknownArb = fc
   .tuple(fc.uuid(), fc.constantFrom(...ORIGIN_POOL))
-  .map(
-    ([id, origin]) =>
-      new RedeemCommand('unknown-id', 0, id, origin) as fc.Command<ChallengeModel, RealEnv>,
-  )
+  .map(([id, origin]) => new RedeemCommand('unknown-id', 0, id, origin) as ChallengeCommand)
 
 const advanceTimeArb = fc
   .integer({ min: 0, max: CHALLENGE_TTL_MS * 2 })
-  .map((delta) => new AdvanceTimeCommand(delta) as fc.Command<ChallengeModel, RealEnv>)
+  .map((delta) => new AdvanceTimeCommand(delta) as ChallengeCommand)
 
 const commandsArb = fc.commands(
   [

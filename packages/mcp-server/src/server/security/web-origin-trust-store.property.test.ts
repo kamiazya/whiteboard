@@ -98,6 +98,8 @@ interface RealEnv {
   clock: { value: number }
 }
 
+type TrustCommand = fc.AsyncCommand<TrustModel, RealEnv>
+
 function isFresh(record: ModelRecord, now: number): boolean {
   return now - record.lastUsedAt <= TRUST_TTL_MS
 }
@@ -115,7 +117,7 @@ async function assertEveryRecordHasACredential(real: RealEnv): Promise<void> {
   }
 }
 
-class TrustLegacyCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
+class TrustLegacyCommand implements TrustCommand {
   constructor(private readonly origin: string) {}
 
   check(): boolean {
@@ -141,7 +143,7 @@ class TrustLegacyCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
   }
 }
 
-class EnrollKeyCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
+class EnrollKeyCommand implements TrustCommand {
   constructor(
     private readonly origin: string,
     private readonly keyIndex: number,
@@ -177,7 +179,7 @@ class EnrollKeyCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
   }
 }
 
-class VerifySignedCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
+class VerifySignedCommand implements TrustCommand {
   constructor(
     private readonly origin: string,
     private readonly keyIndex: number,
@@ -216,7 +218,7 @@ class VerifySignedCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
   }
 }
 
-class VerifyLegacyCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
+class VerifyLegacyCommand implements TrustCommand {
   constructor(
     private readonly origin: string,
     private readonly presentCorrect: boolean,
@@ -255,7 +257,7 @@ class VerifyLegacyCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
   }
 }
 
-class RevokeCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
+class RevokeCommand implements TrustCommand {
   constructor(private readonly origin: string) {}
 
   check(): boolean {
@@ -272,7 +274,7 @@ class RevokeCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
   }
 }
 
-class AdvanceTimeCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
+class AdvanceTimeCommand implements TrustCommand {
   constructor(private readonly deltaMs: number) {}
 
   check(): boolean {
@@ -298,14 +300,11 @@ const MAX_TIME_DELTA_MS = 25 * 24 * 60 * 60 * 1000
 
 const trustLegacyArb = fc
   .constantFrom(...ORIGIN_POOL)
-  .map((origin) => new TrustLegacyCommand(origin) as fc.AsyncCommand<TrustModel, RealEnv>)
+  .map((origin) => new TrustLegacyCommand(origin) as TrustCommand)
 
 const enrollKeyArb = fc
   .tuple(fc.constantFrom(...ORIGIN_POOL), fc.integer({ min: 0, max: 1 }))
-  .map(
-    ([origin, keyIndex]) =>
-      new EnrollKeyCommand(origin, keyIndex) as fc.AsyncCommand<TrustModel, RealEnv>,
-  )
+  .map(([origin, keyIndex]) => new EnrollKeyCommand(origin, keyIndex) as TrustCommand)
 
 const verifySignedArb = fc
   .tuple(
@@ -315,23 +314,23 @@ const verifySignedArb = fc
   )
   .map(
     ([origin, keyIndex, nonceIndex]) =>
-      new VerifySignedCommand(origin, keyIndex, nonceIndex) as fc.AsyncCommand<TrustModel, RealEnv>,
+      new VerifySignedCommand(origin, keyIndex, nonceIndex) as TrustCommand,
   )
 
 const verifyLegacyArb = fc
   .tuple(fc.constantFrom(...ORIGIN_POOL), fc.boolean(), fc.string({ minLength: 1, maxLength: 8 }))
   .map(
     ([origin, presentCorrect, seed]) =>
-      new VerifyLegacyCommand(origin, presentCorrect, seed) as fc.AsyncCommand<TrustModel, RealEnv>,
+      new VerifyLegacyCommand(origin, presentCorrect, seed) as TrustCommand,
   )
 
 const revokeArb = fc
   .constantFrom(...ORIGIN_POOL)
-  .map((origin) => new RevokeCommand(origin) as fc.AsyncCommand<TrustModel, RealEnv>)
+  .map((origin) => new RevokeCommand(origin) as TrustCommand)
 
 const advanceTimeArb = fc
   .integer({ min: 0, max: MAX_TIME_DELTA_MS })
-  .map((delta) => new AdvanceTimeCommand(delta) as fc.AsyncCommand<TrustModel, RealEnv>)
+  .map((delta) => new AdvanceTimeCommand(delta) as TrustCommand)
 
 // verifyLegacyArb and advanceTimeArb are listed multiple times to bias
 // fc.commands' generation toward long "advance a bit, verify legacy" runs —
@@ -356,7 +355,7 @@ const commandsArb = fc.commands(
 // on its own. Atomicity removes that confound: every step keeps the gap
 // bounded, so only cumulative elapsed time (which the absolute TTL, not the
 // sliding TTL, is measured from) can eventually make verify fail.
-class AdvanceThenVerifyLegacyCommand implements fc.AsyncCommand<TrustModel, RealEnv> {
+class AdvanceThenVerifyLegacyCommand implements TrustCommand {
   constructor(
     private readonly origin: string,
     private readonly deltaMs: number,
@@ -411,7 +410,7 @@ const legacyTtlBoundaryCommandsArb = fc.commands(
           new AdvanceThenVerifyLegacyCommand(
             LEGACY_TTL_BOUNDARY_ORIGIN,
             days * 24 * 60 * 60 * 1000,
-          ) as fc.AsyncCommand<TrustModel, RealEnv>,
+          ) as TrustCommand,
       ),
   ],
   { maxCommands: 20 },
