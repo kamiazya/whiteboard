@@ -208,20 +208,20 @@ export function createWhiteboardCommands(depsRef: {
     // typecheck here instead of silently falling through to the wrong mode.
     const provider: GetAppContextResult['provider'] = { mode: projectProviderMode(deps.provider) }
     const canvas = projectCanvasContext(deps.canvas)
-
-    // Only the schema parse is guarded here — projectProviderMode above
-    // already throws its own typed CommandError for an invalid-config
-    // provider, and letting that propagate unwrapped (rather than being
-    // re-caught and re-labeled by this catch) preserves its specific code.
-    const parsed = getAppContextResultSchema.safeParse({ provider, canvas })
-    if (!parsed.success) {
+    // canvas.kind (from projectCanvasContext, keyed on identity.workspaceId)
+    // and provider.mode (from projectProviderMode, keyed on ProviderState.kind)
+    // are derived from two independent inputs — assert they agree rather
+    // than let a future call site construct a result where they silently
+    // disagree. Not part of getAppContextResultSchema itself: see that
+    // schema's module comment for why.
+    if (canvas !== null && canvas.kind !== provider.mode) {
       throw new CommandError(
         'invalid-provider-state',
-        'Cannot report app context: the derived provider/canvas result is internally inconsistent.',
-        { cause: parsed.error },
+        'Cannot report app context: the derived canvas kind does not match the provider mode.',
       )
     }
-    return parsed.data
+
+    return getAppContextResultSchema.parse({ provider, canvas })
   }
 
   return { exportJson, getSceneSummary, getAppContext }

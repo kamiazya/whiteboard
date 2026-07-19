@@ -103,6 +103,16 @@ export type GetAppContextInput = z.infer<typeof getAppContextInputSchema>
 // added to ProviderState — out of a WebMCP tool result. "local-daemon" is
 // renamed to "daemon" here because this is a tool-facing vocabulary, not a
 // re-export of the internal ProviderState.kind literal.
+//
+// Deliberately structural-only: this schema mirrors the static
+// get-app-context.schema.json literal field-for-field (see
+// tool-definitions.test.ts's fuzzed agreement check), and plain JSON Schema
+// cannot express "canvas.kind must equal provider.mode". That invariant is
+// enforced separately in create-commands.ts's getAppContext, immediately
+// after projecting the result and before this schema parses it — do not
+// re-add it here as a `.refine`, or the JSON-Schema/Zod agreement property
+// test will start failing on canvas/provider combinations the literal
+// cannot reject.
 export const getAppContextResultSchema = z
   .object({
     provider: z
@@ -129,16 +139,6 @@ export const getAppContextResultSchema = z
       .nullable(),
   })
   .strict()
-  // A daemon-mode provider only ever opens a daemon canvas, and a
-  // browser-local-mode provider only ever opens a browser-local canvas —
-  // create-commands.ts derives `canvas.kind` independently of
-  // `provider.mode` (from the presence of `workspaceId` on the identity),
-  // so this cross-field check is the contract that keeps a future call
-  // site from constructing a result where the two disagree.
-  .refine((result) => result.canvas === null || result.canvas.kind === result.provider.mode, {
-    message: 'canvas.kind must match provider.mode when canvas is present',
-    path: ['canvas', 'kind'],
-  })
 export type GetAppContextResult = z.infer<typeof getAppContextResultSchema>
 
 export interface WhiteboardCommands {

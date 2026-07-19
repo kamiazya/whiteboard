@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { getAppContextResultSchema, getSceneSummaryResultSchema } from '../commands/types.js'
 import { webMcpTools } from './tool-definitions.js'
 
@@ -181,6 +182,107 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
     expect(getSceneSummaryResultSchema.safeParse(nonFiniteViewport).success).toBe(false)
     expect(matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), nonFiniteViewport)).toBe(false)
   })
+})
+
+// Fuzzed cross-check, in addition to the fixed fixtures above: hand-picked
+// fixtures only prove the two schemas agree on the exact cases someone
+// thought to write down. A regression like dropping a `required` entry from
+// the JSON Schema literal, or adding a stricter Zod constraint (e.g.
+// `.positive()` on zoom) without mirroring it in the literal, would still
+// pass every fixture above. Generating many field-value combinations —
+// valid, negative, non-integer, non-finite, and wrong-typed — and requiring
+// both validators to agree on every one closes that gap without adding a
+// zod-to-json-schema dependency.
+const validNonNegativeInt = fc.integer({ min: 0, max: 1_000 })
+const negativeInt = fc.integer({ min: -1_000, max: -1 })
+const fractionalNumber = fc
+  .tuple(fc.integer({ min: -1_000, max: 1_000 }), fc.integer({ min: 1, max: 1_000 }))
+  .map(([a, b]) => a / b)
+const nonFiniteNumber = fc.constantFrom(
+  Number.NaN,
+  Number.POSITIVE_INFINITY,
+  Number.NEGATIVE_INFINITY,
+)
+const wrongTypeValue = fc.oneof(fc.string(), fc.boolean(), fc.constant(null))
+
+// A value that should satisfy an `integer, minimum: 0` field about half the
+// time, and violate it (negative / non-integer / non-finite / wrong type)
+// the rest — every generated value is checked against both validators.
+const countLikeArb = fc.oneof(
+  validNonNegativeInt,
+  negativeInt,
+  fractionalNumber,
+  nonFiniteNumber,
+  wrongTypeValue,
+)
+
+// A value that should satisfy a bare `number` (viewport) field about half
+// the time, and violate its implicit `.finite()` requirement otherwise.
+const finiteNumberLikeArb = fc.oneof(
+  fractionalNumber,
+  validNonNegativeInt,
+  nonFiniteNumber,
+  wrongTypeValue,
+)
+
+describe('WebMCP result JSON-Schema literals agree with the Zod schemas (fuzzed)', () => {
+  const sceneSummaryPayloadArb = fc.record(
+    {
+      elementCount: countLikeArb,
+      selectedCount: countLikeArb,
+      typeCounts: fc.dictionary(fc.string({ minLength: 1, maxLength: 8 }), countLikeArb, {
+        maxKeys: 3,
+      }),
+      viewport: fc.record(
+        {
+          scrollX: finiteNumberLikeArb,
+          scrollY: finiteNumberLikeArb,
+          zoom: finiteNumberLikeArb,
+        },
+        { requiredKeys: [] },
+      ),
+    },
+    { requiredKeys: [] },
+  )
+
+  fcTest.prop([sceneSummaryPayloadArb], withDefaults())(
+    'get-scene-summary: the JSON Schema literal and the Zod schema always agree on validity',
+    (payload) => {
+      const zodAccepts = getSceneSummaryResultSchema.safeParse(payload).success
+      const jsonSchemaAccepts = matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), payload)
+      expect(jsonSchemaAccepts).toBe(zodAccepts)
+    },
+  )
+
+  const daemonCanvasArb = fc.record(
+    {
+      kind: fc.constantFrom('daemon', 'browser-local', 'other'),
+      workspaceId: fc.oneof(fc.string(), fc.constant(undefined)),
+      slug: fc.oneof(fc.string(), fc.constant(undefined)),
+      canvasId: fc.oneof(fc.string(), fc.constant(undefined)),
+    },
+    { requiredKeys: [] },
+  )
+
+  const appContextPayloadArb = fc.record(
+    {
+      provider: fc.record(
+        { mode: fc.constantFrom('daemon', 'browser-local', 'other') },
+        { requiredKeys: [] },
+      ),
+      canvas: fc.oneof(fc.constant(null), daemonCanvasArb),
+    },
+    { requiredKeys: [] },
+  )
+
+  fcTest.prop([appContextPayloadArb], withDefaults())(
+    'get-app-context: the JSON Schema literal and the Zod schema always agree on validity',
+    (payload) => {
+      const zodAccepts = getAppContextResultSchema.safeParse(payload).success
+      const jsonSchemaAccepts = matchesJsonSchema(whiteboardGetAppContextJsonSchema(), payload)
+      expect(jsonSchemaAccepts).toBe(zodAccepts)
+    },
+  )
 })
 
 function whiteboardGetSceneSummaryJsonSchema(): Record<string, unknown> {
