@@ -45,6 +45,7 @@ export type CommandErrorCode =
   | 'no-canvas'
   | 'invalid-input'
   | 'export-failed'
+  | 'summary-failed'
   | 'invalid-provider-state'
 
 // Every command failure surfaces as this typed error rather than a raw

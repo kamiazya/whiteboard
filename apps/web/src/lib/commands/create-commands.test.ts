@@ -217,6 +217,40 @@ describe('createWhiteboardCommands.getSceneSummary', () => {
     const commands2 = createWhiteboardCommands(depsRef2)
     await expect(commands2.getSceneSummary()).rejects.toMatchObject({ code: 'no-canvas' })
   })
+
+  it('wraps a scene-read failure in a summary-failed CommandError rather than letting it escape raw', async () => {
+    const api = {
+      getSceneElements: () => {
+        throw new Error('boom')
+      },
+      getAppState: () => ({
+        scrollX: 0,
+        scrollY: 0,
+        zoom: { value: 1 },
+        selectedElementIds: {},
+      }),
+      getFiles: () => ({}),
+    }
+    const depsRef = refOf(baseDeps({ getExcalidrawApi: () => api as never }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    await expect(commands.getSceneSummary()).rejects.toMatchObject({ code: 'summary-failed' })
+    await expect(commands.getSceneSummary()).rejects.toBeInstanceOf(CommandError)
+  })
+
+  it('wraps an output-schema validation failure (malformed app state) in a summary-failed CommandError', async () => {
+    const api = {
+      getSceneElements: () => [],
+      // selectedElementIds missing entirely — Object.keys(undefined) throws.
+      getAppState: () => ({ scrollX: 0, scrollY: 0, zoom: { value: 1 } }),
+      getFiles: () => ({}),
+    }
+    const depsRef = refOf(baseDeps({ getExcalidrawApi: () => api as never }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    await expect(commands.getSceneSummary()).rejects.toMatchObject({ code: 'summary-failed' })
+    await expect(commands.getSceneSummary()).rejects.toBeInstanceOf(CommandError)
+  })
 })
 
 describe('createWhiteboardCommands.getAppContext', () => {
