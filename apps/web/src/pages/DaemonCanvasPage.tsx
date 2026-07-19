@@ -4,14 +4,16 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
+import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
+import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
@@ -94,6 +96,8 @@ export function DaemonCanvasPage({
   // current capabilities.webMcpEnabled value is needed.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
+  const { theme, resolvedTheme, setTheme } = useThemeMode()
+
   // The selected (workspaceId, slug) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
   // instead of repeating `workspaceId !== null && slug !== null`.
@@ -167,21 +171,20 @@ export function DaemonCanvasPage({
   const handleExport = createSceneExportHandler(commands, exportScene)
 
   // Identity key = workspaceId+slug, matching this page's own canvas
-  // identity granularity (see useCanvasSync's `identity` above) — a switch
-  // to a different daemon canvas re-registers the WebMCP tools against it.
-  // Honors the persisted capabilities.webMcpEnabled setting (see
-  // user-settings-store.ts); unset (the default) is treated as enabled.
-  // Read once at mount rather than on every (per-pointer-move) render — the
-  // setting only changes via an explicit user action + reload.
-  const webMcpEnabled = useMemo(
+  // Reactive: toggling in the SettingsPanel updates this state, which causes
+  // useBrowserToolRegistry to re-run (ON→OFF triggers abort via the hook's
+  // internal AbortController; OFF→ON re-registers without a page reload).
+  const [webMcpEnabled, setWebMcpEnabled] = useState(
     () => settingsStore.load().capabilities.webMcpEnabled !== false,
-    [settingsStore],
   )
   useBrowserToolRegistry(
     commands,
     canvas !== null ? `${canvas.workspaceId}/${canvas.slug}` : null,
     webMcpEnabled,
   )
+
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
 
   const saveVersion = async (): Promise<void> => {
     if (!capabilities.versions || canvas === null || savingVersion) return
@@ -338,6 +341,7 @@ export function DaemonCanvasPage({
             versionPanelExtra={versionPanelExtra}
             onNavigateBack={onNavigateBack}
             onExport={handleExport}
+            onOpenSettings={handleOpenSettings}
           />
         )}
         {capabilities.branches && canvas && (
@@ -458,6 +462,7 @@ export function DaemonCanvasPage({
                 setExcalidrawAPI(api)
               }}
               onChange={onChange}
+              theme={resolvedTheme}
             />
           </div>
         )}
@@ -468,6 +473,14 @@ export function DaemonCanvasPage({
             onRestored={clearLocalUndo}
           />
         )}
+        <SettingsPanel
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          theme={theme}
+          onThemeChange={setTheme}
+          webMcpEnabled={webMcpEnabled}
+          onWebMcpChange={setWebMcpEnabled}
+        />
       </main>
     </DaemonApiContext.Provider>
   )
