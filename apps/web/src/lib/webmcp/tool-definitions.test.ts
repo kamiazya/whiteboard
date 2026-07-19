@@ -5,37 +5,39 @@ import { webMcpTools } from './tool-definitions.js'
 
 describe('webMcpTools manifest', () => {
   // Blocking metaguard: any change to a tool's name, description, or input
-  // schema shape must show up as a reviewable diff in this snapshot, the
-  // same discipline mcp-server applies to its ALL_REGISTERED_TOOLS list.
-  it('matches the pinned name/description/inputSchema snapshot', () => {
+  // schema shape must show up as a reviewable diff in this pinned literal,
+  // the same discipline mcp-server applies to its ALL_REGISTERED_TOOLS list.
+  // A plain toEqual (not toMatchInlineSnapshot) so the test runs identically
+  // under every vitest project, including ones without snapshot support.
+  it('matches the pinned name/description/inputSchema manifest', () => {
     const manifest = webMcpTools.map((tool) => ({
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema,
     }))
 
-    expect(manifest).toMatchInlineSnapshot(`
-      [
-        {
-          "description": "Read-only: reports which provider mode this whiteboard is running in and which canvas is currently open. Never includes secrets, tokens, or connection details.",
-          "inputSchema": {
-            "additionalProperties": false,
-            "properties": {},
-            "type": "object",
-          },
-          "name": "whiteboard_get_app_context",
+    expect(manifest).toEqual([
+      {
+        name: 'whiteboard_get_app_context',
+        description:
+          'Read-only: reports which provider mode this whiteboard is running in and which canvas is currently open. Never includes secrets, tokens, or connection details.',
+        inputSchema: {
+          additionalProperties: false,
+          properties: {},
+          type: 'object',
         },
-        {
-          "description": "Read-only: reports element counts, selection count, and viewport position for the current canvas. Never returns full scene content (element geometry, text, or files).",
-          "inputSchema": {
-            "additionalProperties": false,
-            "properties": {},
-            "type": "object",
-          },
-          "name": "whiteboard_get_scene_summary",
+      },
+      {
+        name: 'whiteboard_get_scene_summary',
+        description:
+          'Read-only: reports element counts, selection count, and viewport position for the current canvas. Never returns full scene content (element geometry, text, or files).',
+        inputSchema: {
+          additionalProperties: false,
+          properties: {},
+          type: 'object',
         },
-      ]
-    `)
+      },
+    ])
   })
 
   it('every tool name uses the whiteboard_ prefix', () => {
