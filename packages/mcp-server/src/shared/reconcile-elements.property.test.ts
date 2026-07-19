@@ -31,6 +31,10 @@ interface ElementShape {
   height: number
   version: number
   isDeleted: boolean
+  // Optional so the generator sometimes produces a shared id whose past and
+  // current sides have different key sets, exercising both the field-add and
+  // the current-only-field-deletion path in reconcile-elements.ts.
+  note?: string
 }
 
 // Small, self-contained arbitrary: only reconcile-elements' field-merge and
@@ -39,16 +43,20 @@ interface ElementShape {
 // on shared ids often, exercising all three reconcile branches.
 const idArb = fc.constantFrom('a', 'b', 'c', 'd', 'e')
 
-const elementArb: fc.Arbitrary<ElementShape> = fc.record({
-  id: idArb,
-  type: fc.constantFrom('rectangle', 'ellipse', 'text', 'arrow'),
-  x: fc.integer({ min: -1000, max: 1000 }),
-  y: fc.integer({ min: -1000, max: 1000 }),
-  width: fc.integer({ min: 0, max: 1000 }),
-  height: fc.integer({ min: 0, max: 1000 }),
-  version: fc.integer({ min: 0, max: 100 }),
-  isDeleted: fc.boolean(),
-})
+const elementArb: fc.Arbitrary<ElementShape> = fc.record(
+  {
+    id: idArb,
+    type: fc.constantFrom('rectangle', 'ellipse', 'text', 'arrow'),
+    x: fc.integer({ min: -1000, max: 1000 }),
+    y: fc.integer({ min: -1000, max: 1000 }),
+    width: fc.integer({ min: 0, max: 1000 }),
+    height: fc.integer({ min: 0, max: 1000 }),
+    version: fc.integer({ min: 0, max: 100 }),
+    isDeleted: fc.boolean(),
+    note: fc.string({ maxLength: 5 }),
+  },
+  { requiredKeys: ['id', 'type', 'x', 'y', 'width', 'height', 'version', 'isDeleted'] },
+)
 
 // Dedupe by id: each list represents "current state", so ids must be unique
 // the way a real elements LoroMovableList would be (one live entry per id).
@@ -96,6 +104,25 @@ function syncDocs(a: LoroDoc, b: LoroDoc): void {
   b.import(a.export({ mode: 'update', from: b.oplogVersion() }))
 }
 
+// Apply a distinct branch-local edit, addition, and tombstone so branchA and
+// branchB actually diverge from their common ancestor before reconcile runs.
+function divergeBranch(doc: LoroDoc, opts: { fieldSuffix: string; addedId: string }): void {
+  const list = doc.getMovableList('elements')
+  for (let i = 0; i < list.length; i++) {
+    const m = list.get(i) as LoroMap
+    const type = m.get('type')
+    if (typeof type === 'string') m.set('type', `${type}${opts.fieldSuffix}`)
+  }
+  if (list.length > 0) {
+    const last = list.get(list.length - 1) as LoroMap
+    last.set('isDeleted', true)
+  }
+  const added = list.insertContainer(list.length, new LoroMap())
+  added.set('id', opts.addedId)
+  added.set('type', 'rectangle')
+  doc.commit()
+}
+
 describe('reconcileElementsOnDoc property tests', () => {
   fcTest.prop([uniqueByIdArb(), uniqueByIdArb()], withDefaults())(
     '(a) idempotence: reconciling twice against the same past matches reconciling once',
@@ -129,13 +156,15 @@ describe('reconcileElementsOnDoc property tests', () => {
       const pastById = byId(pastEls)
       const currentById = byId(currentEls)
 
-      // Every live (non-tombstone) past element must be present with matching fields.
+      // Every live (non-tombstone) past element must be present and match
+      // past field-by-field in both directions: every past field must be
+      // present with the past value, AND no current-only field may survive
+      // (a field present on the current side but absent from past must have
+      // been deleted, not merely left unchecked).
       for (const [id, pastEl] of pastById) {
         const liveEl = resultById.get(id)
         expect(liveEl, `expected id ${id} to be present after reconcile`).toBeDefined()
-        for (const [k, v] of Object.entries(pastEl)) {
-          expect(liveEl?.[k], `field ${k} on id ${id}`).toEqual(v)
-        }
+        expect(liveEl, `id ${id} must match past exactly`).toEqual(pastEl)
       }
 
       // Every current-only id (not in past, and not already a current-side
@@ -159,6 +188,14 @@ describe('reconcileElementsOnDoc property tests', () => {
       const ancestor = docOf(commonEls)
       const branchA = forkDoc(ancestor)
       const branchB = forkDoc(ancestor)
+
+      // Give each branch independent local edits before reconciling, so the
+      // two replicas actually diverge (distinct field changes, an addition,
+      // and a tombstone) instead of staying identical snapshots all the way
+      // through. A no-op reconcile would not satisfy convergence once the
+      // branches disagree going in.
+      divergeBranch(branchA, { fieldSuffix: '-A', addedId: '__branchA_only__' })
+      divergeBranch(branchB, { fieldSuffix: '-B', addedId: '__branchB_only__' })
 
       reconcileElementsOnDoc(branchA, past)
       branchA.commit()
