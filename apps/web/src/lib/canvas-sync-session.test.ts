@@ -391,6 +391,46 @@ describe('createCanvasSyncSession', () => {
     expect(callOrder).toEqual(['push-called', 'disconnect'])
   })
 
+  it('dispose() falls through to disconnect via the drain timeout when the commit chain is stuck behind a hung putFile', async () => {
+    // Regression for DISPOSE_DRAIN_TIMEOUT_MS itself: a putFile that never
+    // settles blocks the commit chain for up to PUT_FILE_TIMEOUT_MS (15s),
+    // far longer than the 2s drain bound. dispose() must still disconnect
+    // once the drain timeout elapses, without waiting for the stuck chain.
+    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+      ...makeFakeBackend(),
+      putFile: () => new Promise(() => {}), // never resolves — simulates a hung upload
+    }
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+
+    session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {
+      'file-1': { id: 'file-1', dataURL: 'data:,' } as never,
+    })
+    session.dispose()
+
+    // Only the drain timeout (2s) elapses here, well short of the putFile
+    // race's own 15s deadline, so the chain is still stuck on putFile.
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
+    expect(backend._ctrl.disconnectCalled).toBe(true)
+  })
+
+  it('dispose() disconnects synchronously when nothing is pending (fast path, no drain)', () => {
+    // Regression for the pendingCommitCount === 0 branch: with no onChange
+    // ever fired, dispose() must call backend.disconnect() synchronously —
+    // not behind any await — preserving the "callers do not await dispose()"
+    // contract for the common no-edit teardown path.
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+
+    session.dispose()
+
+    expect(backend._ctrl.disconnectCalled).toBe(true)
+  })
+
   it('onAuthError sets error status and invokes options.onAuthError via getOptions', () => {
     const backend = makeFakeBackend()
     const onStatusChange = vi.fn()
