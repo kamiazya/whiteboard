@@ -136,7 +136,8 @@ describe('web-origin-trust-store', () => {
   })
 
   it('expires a legacy secret past its absolute TTL from trustedAt even with a fresh lastUsedAt', async () => {
-    let now = Date.parse('2026-01-01T00:00:00.000Z')
+    const start = Date.parse('2026-01-01T00:00:00.000Z')
+    let now = start
     const store = createWebOriginTrustStore({ dataDir, now: () => now })
     const { secret } = await store.trustOrigin('http://localhost:5173')
 
@@ -145,11 +146,11 @@ describe('web-origin-trust-store', () => {
     // the credential once enough real time has passed — a legacy secret
     // that never rotates must not be silently reconnectable forever.
     for (let elapsedDays = 20; elapsedDays <= 80; elapsedDays += 20) {
-      now = Date.parse('2026-01-01T00:00:00.000Z') + elapsedDays * 24 * 60 * 60 * 1000
+      now = start + elapsedDays * 24 * 60 * 60 * 1000
       expect(await store.verifyLegacySecret('http://localhost:5173', secret)).toBe(true)
     }
 
-    now = Date.parse('2026-01-01T00:00:00.000Z') + 91 * 24 * 60 * 60 * 1000
+    now = start + 91 * 24 * 60 * 60 * 1000
     expect(await store.verifyLegacySecret('http://localhost:5173', secret)).toBe(false)
   })
 
