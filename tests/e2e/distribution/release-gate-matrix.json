@@ -60,6 +60,21 @@
       }
     },
     {
+      "id": "test:distribution",
+      "command": "pnpm --filter @kamiazya/whiteboard-mcp test:distribution:only",
+      "category": "distribution",
+      "requiredFor": ["ci", "local-release", "docker-release", "publish"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "slow",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "verify",
+        "stepName": "Distribution vitest suite"
+      }
+    },
+    {
       "id": "check:release-artifacts",
       "command": "pnpm --filter @kamiazya/whiteboard-mcp check:release-artifacts",
       "category": "release-artifacts",

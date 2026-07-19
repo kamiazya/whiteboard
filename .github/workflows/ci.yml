@@ -254,6 +254,13 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Runs the packed-tarball / packaged-entry / codex-config distribution
+      # vitest suite (vitest.distribution.config.ts) against this dist — the
+      # exact npm-install code path that broke a real publish (v0.0.9+) and
+      # otherwise only ran via a manual `pnpm test:distribution`.
+      - name: Distribution vitest suite
+        run: pnpm --filter @kamiazya/whiteboard-mcp test:distribution:only
+
       # dry-run-npm reuses this dist instead of rebuilding from scratch.
       - name: Upload mcp-server dist
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
