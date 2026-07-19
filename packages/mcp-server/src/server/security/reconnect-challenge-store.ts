@@ -38,7 +38,7 @@ interface ChallengeRecord {
   expiresAt: number
 }
 
-export interface MintedReconnectChallenge {
+interface MintedReconnectChallenge {
   challengeId: string
   nonce: string
   expiresIn: number

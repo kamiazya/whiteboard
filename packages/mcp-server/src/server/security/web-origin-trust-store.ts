@@ -51,7 +51,7 @@ export const TRUST_TTL_MS = 30 * 24 * 60 * 60 * 1000
 // silently reconnectable forever. Deliberately NOT applied to
 // verifySignedChallenge — an enrolled public-key credential is the intended
 // long-term path and is governed by the sliding TTL alone.
-export const LEGACY_SECRET_ABSOLUTE_TTL_MS = 90 * 24 * 60 * 60 * 1000
+const LEGACY_SECRET_ABSOLUTE_TTL_MS = 90 * 24 * 60 * 60 * 1000
 
 const trustRecordSchemaV2Base = z.object({
   origin: z.string(),
