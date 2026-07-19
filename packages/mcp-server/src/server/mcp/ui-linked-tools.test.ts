@@ -40,21 +40,42 @@ function toolNameOf(entry: string): string | null {
 // so it must fail loudly rather than let the array-literal regex silently
 // find no match and pass vacuously.
 function assertVisibilityAllowsApp(entry: string): void {
+  // Presence is decided FIRST so that any expression form this guard does
+  // not understand (call expression, ternary, spread, member access, …)
+  // fails loudly instead of falling through to the "omitted" default —
+  // only a literally absent field may claim the ["model","app"] default.
+  if (!/\bvisibility\s*:/.test(entry)) {
+    return
+  }
   const arrayMatch = entry.match(/visibility:\s*\[([^\]]*)\]/)
   if (arrayMatch) {
     expect(arrayMatch[1]).toMatch(/["']app["']/)
     return
   }
-  const identifierMatch = entry.match(/visibility:\s*([A-Za-z_$][\w$]*)/)
-  if (identifierMatch) {
-    throw new Error(
-      `visibility uses a non-literal reference (${identifierMatch[1]}) this guard cannot verify textually; ` +
-        'inline the array literal, or extend this check, so "app" inclusion stays provable',
-    )
-  }
-  // visibility omitted entirely defaults to ["model", "app"] (see comment
-  // on the caller) — nothing further to assert.
+  throw new Error(
+    'visibility uses an expression this guard cannot verify textually; ' +
+      'inline the array literal, or extend this check, so "app" inclusion stays provable',
+  )
 }
+
+describe('assertVisibilityAllowsApp guard', () => {
+  it('accepts an omitted field and an app-inclusive array literal', () => {
+    expect(() => assertVisibilityAllowsApp('name: viewTool.name, _meta: { ui: {} }')).not.toThrow()
+    expect(() => assertVisibilityAllowsApp("visibility: ['model', 'app'],")).not.toThrow()
+  })
+
+  it('fails loudly on every non-literal visibility expression, not just bare identifiers', () => {
+    expect(() => assertVisibilityAllowsApp('visibility: SHARED_VISIBILITY,')).toThrow(
+      /cannot verify textually/,
+    )
+    expect(() => assertVisibilityAllowsApp('visibility: getVisibility(),')).toThrow(
+      /cannot verify textually/,
+    )
+    expect(() => assertVisibilityAllowsApp("visibility: (dev ? ['app'] : ['model']),")).toThrow(
+      /cannot verify textually/,
+    )
+  })
+})
 
 describe('MCP Apps UI-linked tools coverage', () => {
   it('UI_LINKED_TOOLS is a subset of ALL_REGISTERED_TOOLS', () => {
