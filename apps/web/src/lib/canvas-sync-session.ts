@@ -30,6 +30,12 @@ const log = getAppLogger('canvas-sync')
 // indefinitely; upload failure is non-fatal, so falling through is safe.
 const PUT_FILE_TIMEOUT_MS = 15_000
 
+// Upper bound on dispose()'s drain phase (see `dispose()` below). Bounds the
+// wait for the flush-triggered commit's pushLocalUpdate invocation so a
+// stuck commitChain (e.g. a hung putFile upstream of it) cannot leave a
+// disconnect() call pending forever.
+const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
+
 // Small debounce helper with no external dependency.
 function debounce<T extends (...args: Parameters<T>) => void>(
   fn: T,
@@ -117,13 +123,15 @@ export interface SessionDeps {
 
 export interface CanvasSyncSession {
   connect(): void
-  // Flushes any pending debounced edit into this session's own doc BEFORE
-  // disconnecting, so the last edit made against this backend is persisted.
-  // Does NOT itself invalidate in-flight upload/getFile signal delivery —
-  // only a *new* session's construction (which bumps connectionGeneration)
-  // does. A plain dispose (unmount, no successor) leaves a settling
-  // putFile/getFile free to still invoke its (latest-options) callback,
-  // matching pre-extraction behavior.
+  // Flushes any pending debounced edit into this session's own doc, then
+  // defers closing the transport behind a short drain phase so the
+  // flush-triggered commit's pushLocalUpdate call has actually fired before
+  // backend.disconnect() runs (bounded — never waits indefinitely). Does NOT
+  // itself invalidate in-flight upload/getFile signal delivery — only a
+  // *new* session's construction (which bumps connectionGeneration) does. A
+  // plain dispose (unmount, no successor) leaves a settling putFile/getFile
+  // free to still invoke its (latest-options) callback, matching
+  // pre-extraction behavior.
   dispose(): void
   onChange(elements: readonly ExcalidrawElement[], files: BinaryFiles): void
   // Reapplies the current doc to Excalidraw, re-sends clientReady, and
@@ -164,6 +172,12 @@ export function createCanvasSyncSession(
   // the earlier firing's commit finally runs, it writes its own now-stale
   // `elements` snapshot on top, silently reverting the later firing's edits.
   let commitChain: Promise<void> = Promise.resolve()
+  // Counts onSceneChange firings that have been chained onto commitChain but
+  // have not yet settled. Lets dispose() tell "nothing was pending, safe to
+  // disconnect immediately" apart from "a flush-triggered (or still-running)
+  // firing exists" without needing to inspect a Promise's settled state
+  // synchronously (not otherwise observable in plain JS).
+  let pendingCommitCount = 0
 
   function isStale(): boolean {
     return disposed || deps.generations.currentConnectionGeneration() !== myGeneration
@@ -365,7 +379,10 @@ export function createCanvasSyncSession(
     // and the upload path in its own try/catch — so the chain itself never
     // rejects either, or a later firing awaiting it would skip its own
     // commit entirely.
-    commitChain = previousChain.then(runThisFiring)
+    pendingCommitCount++
+    commitChain = previousChain.then(runThisFiring).finally(() => {
+      pendingCommitCount--
+    })
   }, 300)
 
   function connect(): void {
@@ -397,8 +414,11 @@ export function createCanvasSyncSession(
           // microtask AFTER teardown flips `disposed` — which is exactly
           // what happens when onSceneChange.flush() runs during dispose()
           // (doc.commit() fires synchronously, but this subscriber fires on
-          // a later microtask, by which point `disposed` is already true) —
-          // silently losing the last edit made before a canvas switch or
+          // a later microtask, by which point `disposed` is already true).
+          // dispose()'s drain phase is what keeps backend.disconnect() from
+          // running before this callback has had a chance to fire — without
+          // it, the transport could already be closed by the time this push
+          // happens, silently losing the last edit before a canvas switch or
           // unmount.
           void Promise.resolve(backend.pushLocalUpdate(update)).catch(() => {
             if (isStale()) return
@@ -528,6 +548,37 @@ export function createCanvasSyncSession(
     })
   }
 
+  // Waits for the flush-triggered commit (and any commit still queued on
+  // commitChain) to have actually invoked backend.pushLocalUpdate, then
+  // resolves so dispose() can safely close the transport. Does NOT wait for
+  // that pushLocalUpdate call's own promise to settle — only for the call to
+  // have happened, since a real transport call already puts bytes on a
+  // still-open connection regardless of how long its ack takes, and waiting
+  // for an ack could block teardown indefinitely. Bounded by
+  // DISPOSE_DRAIN_TIMEOUT_MS so a stuck commitChain (e.g. a hung putFile)
+  // cannot leave disconnect() pending forever.
+  async function drainBeforePushHasFired(): Promise<void> {
+    const chainAtDispose = commitChain
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        // Awaiting the commit chain lets any still-queued firing's
+        // doc.commit() run; one more microtask turn after that gives Loro's
+        // subscribeLocalUpdates callback (scheduled internally on commit,
+        // not synchronously) room to fire and call backend.pushLocalUpdate.
+        chainAtDispose.then(() => Promise.resolve()),
+        new Promise<void>((resolve) => {
+          timeoutId = setTimeout(resolve, DISPOSE_DRAIN_TIMEOUT_MS)
+        }),
+      ])
+    } finally {
+      // On the fast path (commit chain wins) the timer would otherwise stay
+      // armed for the full DISPOSE_DRAIN_TIMEOUT_MS, delaying real-timer test
+      // teardown and holding an event-loop handle needlessly.
+      if (timeoutId !== undefined) clearTimeout(timeoutId)
+    }
+  }
+
   function dispose(): void {
     // Flush any pending debounced scene edit into this session's doc BEFORE
     // disconnecting, so the last edit made against this backend is persisted
@@ -546,7 +597,21 @@ export function createCanvasSyncSession(
     // would then write this now-torn-down session's stale content into the
     // (possibly different) live Excalidraw API.
     deps.generations.nextApplyGeneration()
-    backend.disconnect()
+    // dispose() itself stays synchronous (callers do not await it). When the
+    // flush above (or an already-in-flight firing) leaves a commit pending,
+    // the transport close is deferred behind a short drain phase: without
+    // it, that commit's pushLocalUpdate call — fired from Loro's
+    // subscribeLocalUpdates on a later microtask, not synchronously with
+    // doc.commit() — can still be pending when backend.disconnect() runs,
+    // dropping the last edit made just before a canvas switch or unmount.
+    // When nothing was pending (no edit was ever made against this session),
+    // there is nothing to drain, so disconnect happens immediately —
+    // matching every caller that assumes a synchronous teardown.
+    if (pendingCommitCount > 0) {
+      void drainBeforePushHasFired().then(() => backend.disconnect())
+    } else {
+      backend.disconnect()
+    }
   }
 
   function onChange(elements: readonly ExcalidrawElement[], files: BinaryFiles): void {

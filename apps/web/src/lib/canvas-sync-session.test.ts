@@ -39,6 +39,16 @@ function makeDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void }
   return { promise, resolve }
 }
 
+// Drains several microtask turns with real awaits. dispose()'s drain phase
+// schedules the flush-triggered push and the deferred disconnect across a few
+// microtask turns; fake timers do not control microtasks, so a generous number
+// of turns is the reliable way to let that chain settle.
+async function flushMicrotasks(turns = 30): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    await Promise.resolve()
+  }
+}
+
 // Builds a snapshot containing a single image element referencing fileId, so
 // onSnapshot triggers a backend.getFile(fileId) fetch inside applyLoroToExcalidraw.
 function makeSnapshotWithImage(fileId: string): Uint8Array {
@@ -125,7 +135,7 @@ describe('createCanvasSyncSession', () => {
     expect(sendReadySpy).toHaveBeenCalledTimes(1)
   })
 
-  it('dispose() flushes a pending debounced edit into this session before disconnecting', () => {
+  it('dispose() flushes a pending debounced edit into this session before disconnecting', async () => {
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())
     session.connect()
@@ -139,12 +149,12 @@ describe('createCanvasSyncSession', () => {
     session.dispose()
 
     // flush() runs the commit synchronously; the resulting
-    // subscribeLocalUpdates push fires on a microtask, which fake timers do
-    // not control — flushing microtasks with a real await is required.
-    return Promise.resolve().then(() => {
-      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
-      expect(backend._ctrl.disconnectCalled).toBe(true)
-    })
+    // subscribeLocalUpdates push fires on a microtask, and dispose()'s drain
+    // phase defers backend.disconnect() a few more microtask turns behind
+    // that push — draining several turns covers both.
+    await flushMicrotasks()
+    expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
+    expect(backend._ctrl.disconnectCalled).toBe(true)
   })
 
   it('mutation check: an isStale() guard on the subscribeLocalUpdates callback would drop the post-dispose flush push', async () => {
@@ -346,6 +356,79 @@ describe('createCanvasSyncSession', () => {
 
     expect(api.addFiles).not.toHaveBeenCalled()
     expect(api.updateScene).not.toHaveBeenCalled()
+  })
+
+  it('dispose() invokes backend.pushLocalUpdate for the flush-triggered commit before calling backend.disconnect()', async () => {
+    // Regression for the drain phase: disconnect() must never be called
+    // before the flush-triggered commit's subscribeLocalUpdates callback has
+    // invoked pushLocalUpdate, or the last edit made just before teardown
+    // never reaches the transport. Tracking call ORDER (not settle order) is
+    // the right assertion — a real transport's pushLocalUpdate may take an
+    // arbitrarily long time to settle (network ack), but the *call* itself
+    // is what puts bytes on a still-open connection.
+    const callOrder: string[] = []
+    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+      ...makeFakeBackend(),
+      pushLocalUpdate(_bytes) {
+        callOrder.push('push-called')
+        return new Promise(() => {}) // never settles — disconnect must not wait for this
+      },
+      disconnect() {
+        callOrder.push('disconnect')
+      },
+    }
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+
+    session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {})
+    session.dispose()
+
+    // Drain microtask turns without advancing fake timers (real transport
+    // call scheduling is not timer-driven).
+    await flushMicrotasks()
+
+    expect(callOrder).toEqual(['push-called', 'disconnect'])
+  })
+
+  it('dispose() falls through to disconnect via the drain timeout when the commit chain is stuck behind a hung putFile', async () => {
+    // Regression for DISPOSE_DRAIN_TIMEOUT_MS itself: a putFile that never
+    // settles blocks the commit chain for up to PUT_FILE_TIMEOUT_MS (15s),
+    // far longer than the 2s drain bound. dispose() must still disconnect
+    // once the drain timeout elapses, without waiting for the stuck chain.
+    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+      ...makeFakeBackend(),
+      putFile: () => new Promise(() => {}), // never resolves — simulates a hung upload
+    }
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+
+    session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {
+      'file-1': { id: 'file-1', dataURL: 'data:,' } as never,
+    })
+    session.dispose()
+
+    // Only the drain timeout (2s) elapses here, well short of the putFile
+    // race's own 15s deadline, so the chain is still stuck on putFile.
+    await vi.advanceTimersByTimeAsync(2_000)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
+    expect(backend._ctrl.disconnectCalled).toBe(true)
+  })
+
+  it('dispose() disconnects synchronously when nothing is pending (fast path, no drain)', () => {
+    // Regression for the pendingCommitCount === 0 branch: with no onChange
+    // ever fired, dispose() must call backend.disconnect() synchronously —
+    // not behind any await — preserving the "callers do not await dispose()"
+    // contract for the common no-edit teardown path.
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+
+    session.dispose()
+
+    expect(backend._ctrl.disconnectCalled).toBe(true)
   })
 
   it('onAuthError sets error status and invokes options.onAuthError via getOptions', () => {
