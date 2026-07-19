@@ -39,6 +39,16 @@ function makeDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void }
   return { promise, resolve }
 }
 
+// Drains several microtask turns with real awaits. dispose()'s drain phase
+// schedules the flush-triggered push and the deferred disconnect across a few
+// microtask turns; fake timers do not control microtasks, so a generous number
+// of turns is the reliable way to let that chain settle.
+async function flushMicrotasks(turns = 30): Promise<void> {
+  for (let i = 0; i < turns; i++) {
+    await Promise.resolve()
+  }
+}
+
 // Builds a snapshot containing a single image element referencing fileId, so
 // onSnapshot triggers a backend.getFile(fileId) fetch inside applyLoroToExcalidraw.
 function makeSnapshotWithImage(fileId: string): Uint8Array {
@@ -141,11 +151,8 @@ describe('createCanvasSyncSession', () => {
     // flush() runs the commit synchronously; the resulting
     // subscribeLocalUpdates push fires on a microtask, and dispose()'s drain
     // phase defers backend.disconnect() a few more microtask turns behind
-    // that push — draining several turns with real awaits (fake timers do
-    // not control microtasks) covers both.
-    for (let i = 0; i < 30; i++) {
-      await Promise.resolve()
-    }
+    // that push — draining several turns covers both.
+    await flushMicrotasks()
     expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
     expect(backend._ctrl.disconnectCalled).toBe(true)
   })
@@ -377,11 +384,9 @@ describe('createCanvasSyncSession', () => {
     session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {})
     session.dispose()
 
-    // Drain a generous number of microtask turns without advancing fake
-    // timers (real transport call scheduling is not timer-driven).
-    for (let i = 0; i < 20; i++) {
-      await Promise.resolve()
-    }
+    // Drain microtask turns without advancing fake timers (real transport
+    // call scheduling is not timer-driven).
+    await flushMicrotasks()
 
     expect(callOrder).toEqual(['push-called', 'disconnect'])
   })
