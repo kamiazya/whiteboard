@@ -36,6 +36,22 @@ describe('createStickyNoteControl', () => {
     expect(control?.style.display).toBe('none')
   })
 
+  it('bounds the form width so a narrow frame cannot clip the input off-screen', () => {
+    createStickyNoteControl(() => {})
+    const control = queryControl() as HTMLFormElement
+    const input = queryInput() as HTMLInputElement
+
+    // Pinning only `right` (with no `left`/`max-width`) lets a shrink-to-fit
+    // form grow past the left viewport edge in a narrow frame; pinning both
+    // edges and bounding the form's max-width is what keeps it on-screen.
+    expect(control.style.left).not.toBe('')
+    expect(control.style.maxWidth).not.toBe('')
+    // The input must be able to shrink with the form instead of holding the
+    // form open at its own intrinsic width.
+    expect(input.style.flex).not.toBe('')
+    expect(input.style.minWidth).toBe('0px')
+  })
+
   it('show() reveals the control', () => {
     const control = createStickyNoteControl(() => {})
     control.show()

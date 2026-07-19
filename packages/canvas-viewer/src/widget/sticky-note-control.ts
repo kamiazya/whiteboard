@@ -22,10 +22,19 @@ export function createStickyNoteControl(onSubmit: (text: string) => void): Stick
   // Deliberately minimal inline styling: this widget has no CSS build step
   // of its own (single-file bundle) and must stay legible over an arbitrary
   // host-rendered scene without competing with Excalidraw's own UI chrome.
+  // `left` (not just `right`) pins the other edge, and `max-width` bounds the
+  // form to whatever room remains between the two — without both, a form
+  // with no explicit width shrinks-to-fit its content and, in a narrow
+  // inline/mobile MCP App frame, that content can be wider than the space
+  // between `right:96px` and the left viewport edge, pushing the form (and
+  // its input) off-screen to the left.
   form.style.cssText = [
     'position:fixed',
     'top:8px',
+    'left:8px',
     'right:96px',
+    'max-width:calc(100% - 104px)',
+    'box-sizing:border-box',
     'z-index:2147483647',
     'display:none',
     'gap:4px',
@@ -40,7 +49,13 @@ export function createStickyNoteControl(onSubmit: (text: string) => void): Stick
   input.placeholder = 'Add sticky note…'
   input.setAttribute('data-testid', STICKY_NOTE_INPUT_TEST_ID)
   input.setAttribute('aria-label', 'Sticky note text')
+  // `flex:1 1 auto` plus `min-width:0` (the flexbox default is `min-width:auto`,
+  // which floors the input at its intrinsic content width and defeats
+  // shrinking) lets the input shrink to whatever room the form's `max-width`
+  // above leaves, instead of forcing the form wider than that bound.
   input.style.cssText = [
+    'flex:1 1 auto',
+    'min-width:0',
     'font:12px system-ui,sans-serif',
     'padding:4px 6px',
     'border-radius:4px',
@@ -53,6 +68,7 @@ export function createStickyNoteControl(onSubmit: (text: string) => void): Stick
   submit.setAttribute('data-testid', STICKY_NOTE_SUBMIT_TEST_ID)
   submit.setAttribute('aria-label', 'Add sticky note to canvas')
   submit.style.cssText = [
+    'flex:0 0 auto',
     'padding:4px 10px',
     'font:12px system-ui,sans-serif',
     'border-radius:6px',
