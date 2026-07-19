@@ -12,11 +12,15 @@ import { fc, fcTest } from '@/test-utils/fast-check.js'
 import { exportPublicJwk } from './reconnect-crypto.js'
 import { getOrCreateKeypair, loadKeypair } from './reconnect-keypair-store.js'
 
+// Rejecting (not resolving) on deleteDatabase failure matters: a resolved
+// error would leave a stale keypair in place, so a later getOrCreateKeypair
+// call could just load it instead of racing to create one, making the
+// convergence assertions below pass vacuously without exercising the race.
 async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
+    req.onerror = () => reject(req.error ?? new Error('deleteDatabase failed'))
   })
 }
 
