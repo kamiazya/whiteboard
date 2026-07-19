@@ -19,13 +19,17 @@ export const DB_NAME = 'whiteboard'
  * Blobs, see canvas-file-store.ts). Existing 'meta'/'canvases'/'loroCanvases'
  * data is untouched.
  *
+ * v4 -> v5: additive — adds the 'reconnectKeypairs' object store (WebCrypto
+ * ECDSA P-256 keypairs for silent-reconnect, see reconnect-keypair-store.ts),
+ * keyed by origin. Existing stores are untouched.
+ *
  * Known limitation (accepted, not handled): if another tab holds a
  * connection open at the previous version, this open blocks
  * (onblocked/onversionchange) until that tab closes or upgrades — the same
  * behavior every prior DB_VERSION bump in this file has had. No new handling
  * is added for it here.
  */
-export const DB_VERSION = 4
+export const DB_VERSION = 5
 
 function stripLegacySceneField(tx: IDBTransaction): void {
   const store = tx.objectStore('canvases')
@@ -53,6 +57,9 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
       if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
       if (!db.objectStoreNames.contains('canvasFiles')) db.createObjectStore('canvasFiles')
+      if (!db.objectStoreNames.contains('reconnectKeypairs')) {
+        db.createObjectStore('reconnectKeypairs', { keyPath: 'origin' })
+      }
 
       // oldVersion === 0 is a fresh install (empty 'canvases' store), so the
       // scene-strip is a pure no-op there — only run it for a real v1/v2 upgrade.

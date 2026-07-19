@@ -1,8 +1,41 @@
+import type { EcP256PublicJwk } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { enrollForReconnectOnce, resetReconnectEnrollmentForTests } from './reconnect-enrollment.js'
 import { clear as clearSecretStore, load } from './reconnect-credential-store.js'
+import {
+  enrollForReconnectOnce,
+  type ReconnectEnrollmentDeps,
+  resetReconnectEnrollmentForTests,
+} from './reconnect-enrollment.js'
+import type { ReconnectKeypairRecord } from './reconnect-keypair-store.js'
 
 const ORIGIN = 'http://localhost:3099'
+
+const PUBLIC_JWK: EcP256PublicJwk = {
+  kty: 'EC',
+  crv: 'P-256',
+  x: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+  y: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+}
+
+// A CryptoKey instance is not constructible in a jsdom test — IndexedDB
+// persistence and WebCrypto signing/export both belong in web-browser tests
+// (see reconnect-keypair-store.browser.test.tsx). Here, only the enrollment
+// orchestration/fallback branching is under test, so a fake key identity is
+// enough: `deps.exportPublicJwk` never actually inspects it.
+const FAKE_PUBLIC_KEY = {} as CryptoKey
+const FAKE_PRIVATE_KEY = {} as CryptoKey
+
+function fakeKeypair(status: ReconnectKeypairRecord['status'] = 'pending'): ReconnectKeypairRecord {
+  return { v: 1, origin: ORIGIN, status, publicKey: FAKE_PUBLIC_KEY, privateKey: FAKE_PRIVATE_KEY }
+}
+
+function makeDeps(overrides: Partial<ReconnectEnrollmentDeps> = {}): ReconnectEnrollmentDeps {
+  return {
+    getOrCreateKeypair: vi.fn(async () => fakeKeypair()),
+    exportPublicJwk: vi.fn(async () => PUBLIC_JWK),
+    ...overrides,
+  }
+}
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -17,80 +50,104 @@ afterEach(() => {
 })
 
 describe('enrollForReconnectOnce', () => {
-  it('persists the returned secret on success', async () => {
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+  it('generates/loads a keypair, exports its public JWK, and POSTs it', async () => {
+    const deps = makeDeps()
+    const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
     )
-    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)
-    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(deps.getOrCreateKeypair).toHaveBeenCalledWith(ORIGIN)
+    expect(deps.exportPublicJwk).toHaveBeenCalledWith(FAKE_PUBLIC_KEY)
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init?.body as string)).toEqual({ publicKeyJwk: PUBLIC_JWK })
   })
 
   it('enrolls a tokenless daemon (authMode "none") by omitting the Authorization header', async () => {
+    const deps = makeDeps()
     const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
-      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
     )
-    enrollForReconnectOnce(ORIGIN, null, fetchMock)
-    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+    enrollForReconnectOnce(ORIGIN, null, fetchMock, deps)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
     const [, init] = fetchMock.mock.calls[0]
     expect(init?.headers).not.toHaveProperty('Authorization')
   })
 
-  it('is non-fatal on rejection: does not persist a secret and does not throw', async () => {
+  it('on a legacy daemon response, persists the returned secret (crash-safe fallback)', async () => {
+    const deps = makeDeps()
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+    )
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+  })
+
+  it('on a new-daemon success, does NOT persist a legacy secret (confirmation happens on first login)', async () => {
+    const deps = makeDeps()
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
+    )
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    expect(load(ORIGIN)).toBeNull()
+  })
+
+  it('is non-fatal on rejection: does not throw', async () => {
+    const deps = makeDeps()
     const fetchMock = vi.fn(async () => jsonResponse({ error: 'forbidden_origin' }, 403))
-    expect(() => enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)).not.toThrow()
+    expect(() => enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)).not.toThrow()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(load(ORIGIN)).toBeNull()
   })
 
   it('is non-fatal on a network failure', async () => {
+    const deps = makeDeps()
     const fetchMock = vi.fn(async () => {
       throw new Error('offline')
     })
-    expect(() => enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)).not.toThrow()
+    expect(() => enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)).not.toThrow()
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(load(ORIGIN)).toBeNull()
   })
 
+  it('is non-fatal when keypair generation itself fails (e.g. no WebCrypto)', async () => {
+    const deps = makeDeps({
+      getOrCreateKeypair: vi.fn(async () => {
+        throw new Error('WebCrypto unavailable')
+      }),
+    })
+    const fetchMock = vi.fn()
+    expect(() => enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)).not.toThrow()
+    await vi.waitFor(() => expect(deps.getOrCreateKeypair).toHaveBeenCalled())
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
   it('single-flight: two calls before the first resolves make exactly one fetch', async () => {
+    const deps = makeDeps()
     const fetchMock = vi.fn(async () =>
-      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
     )
-    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)
-    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)
-    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
-  it('re-enrolls after a settled success (a later pairing in the same SPA session)', async () => {
+  it('re-enrolls after a settled attempt (a later pairing in the same SPA session)', async () => {
+    const deps = makeDeps()
     const fetchMock = vi.fn(async () =>
-      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
     )
-    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)
-    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
 
     const fetchMock2 = vi.fn(async () =>
-      jsonResponse({ reconnectSecret: 'secret-2', expiresInDays: 30 }),
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
     )
-    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock2)
-    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-2'))
-    expect(fetchMock2).toHaveBeenCalledTimes(1)
-  })
-
-  it('a settled failure does not permanently block a later enrollment attempt', async () => {
-    const failingFetch = vi.fn(async () => {
-      throw new Error('offline')
-    })
-    enrollForReconnectOnce(ORIGIN, 'daemon-token', failingFetch)
-    await vi.waitFor(() => expect(failingFetch).toHaveBeenCalled())
-
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
-    )
-    // The single-flight slot frees asynchronously once the failed attempt
-    // settles; keep re-requesting until an attempt goes through and persists.
     await vi.waitFor(() => {
-      enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock)
-      expect(load(ORIGIN)).toBe('secret-1')
+      enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock2, deps)
+      expect(fetchMock2).toHaveBeenCalledTimes(1)
     })
   })
 })

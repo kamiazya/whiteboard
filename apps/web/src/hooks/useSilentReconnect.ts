@@ -3,9 +3,40 @@ import { useEffect, useRef, useState } from 'react'
 import {
   type FetchLike,
   type RedeemResult,
-  redeemReconnectSession,
+  redeemReconnectSessionWithChallenge,
+  redeemReconnectSessionWithLegacySecret,
+  requestReconnectChallenge,
 } from '../lib/reconnect-client.js'
-import { clearIfMatches, load, save } from '../lib/reconnect-credential-store.js'
+import {
+  clearIfMatches,
+  clear as clearLegacySecret,
+  load as loadLegacySecret,
+} from '../lib/reconnect-credential-store.js'
+import { signReconnectNonce } from '../lib/reconnect-crypto.js'
+import {
+  clearKeypair,
+  loadKeypair,
+  markKeypairConfirmed,
+  type ReconnectKeypairRecord,
+} from '../lib/reconnect-keypair-store.js'
+
+// Injectable seams so unit tests can exercise the branching logic (keypair
+// vs legacy, rejected vs network-error, etc.) with fakes instead of a real
+// IndexedDB keypair store or WebCrypto signature (jsdom has neither — see
+// test-layer-selection).
+export interface UseSilentReconnectDeps {
+  loadKeypair: (origin: string) => Promise<ReconnectKeypairRecord | null>
+  markKeypairConfirmed: (origin: string) => Promise<void>
+  clearKeypair: (origin: string) => Promise<void>
+  signReconnectNonce: (privateKey: CryptoKey, nonce: string) => Promise<string>
+}
+
+const defaultDeps: UseSilentReconnectDeps = {
+  loadKeypair,
+  markKeypairConfirmed,
+  clearKeypair,
+  signReconnectNonce,
+}
 
 export interface UseSilentReconnectOptions {
   // False when a #wb= pairing fragment was present, or when there is no
@@ -16,6 +47,12 @@ export interface UseSilentReconnectOptions {
   enabled: boolean
   origin: string
   fetchImpl?: FetchLike
+  // Like `fetchImpl`, must be a STABLE reference across re-renders (a module-
+  // level constant, or memoized) — it is an effect dependency, so a new
+  // object identity on every render (e.g. inlining `{...}` at the call site)
+  // re-fires the effect on every state update this hook makes, an infinite
+  // render loop.
+  deps?: UseSilentReconnectDeps
 }
 
 export type SilentReconnectState =
@@ -24,31 +61,29 @@ export type SilentReconnectState =
   | { status: 'connected'; token: string }
   | { status: 'failed'; reason: 'rejected' | 'network' }
 
-// Keyed by (canonical-ish origin, presented secret) rather than a single
-// unkeyed module promise: a plain unkeyed promise would incorrectly serve a
-// stale in-flight result to a caller whose (origin, secret) pair changed
-// (e.g. a settings change mid-flight), while StrictMode's double-mount for
-// the SAME (origin, secret) must still dedupe to exactly one network call.
-const inFlightRedeem = new Map<string, Promise<RedeemResult>>()
+// Keyed by origin (keypair path) / (origin, secret) (legacy path) rather than
+// a single unkeyed module promise: StrictMode's double-mount for the SAME
+// target must dedupe to exactly one network round trip, while a target that
+// actually changed mid-flight must not share the stale in-flight promise.
+const inFlightKeypairAttempt = new Map<string, Promise<RedeemResult>>()
+const inFlightLegacyAttempt = new Map<string, Promise<RedeemResult>>()
 
-function redeemSingleFlight(
-  origin: string,
-  secret: string,
-  fetchImpl: FetchLike,
+function singleFlight(
+  map: Map<string, Promise<RedeemResult>>,
+  key: string,
+  run: () => Promise<RedeemResult>,
 ): Promise<RedeemResult> {
-  const key = `${origin}::${secret}`
-  const existing = inFlightRedeem.get(key)
+  const existing = map.get(key)
   if (existing) return existing
-  const promise = redeemReconnectSession(origin, secret, fetchImpl).finally(() => {
-    inFlightRedeem.delete(key)
-  })
-  inFlightRedeem.set(key, promise)
+  const promise = run().finally(() => map.delete(key))
+  map.set(key, promise)
   return promise
 }
 
 // Test-only: clears in-flight dedupe state between tests.
 export function resetSilentReconnectForTests(): void {
-  inFlightRedeem.clear()
+  inFlightKeypairAttempt.clear()
+  inFlightLegacyAttempt.clear()
 }
 
 // Stable module-level reference for the default fetchImpl. A default
@@ -60,21 +95,42 @@ function defaultFetchImpl(input: string | URL, init?: RequestInit): Promise<Resp
   return globalThis.fetch(input, init)
 }
 
+async function attemptKeypairChallenge(
+  origin: string,
+  privateKey: CryptoKey,
+  fetchImpl: FetchLike,
+  deps: UseSilentReconnectDeps,
+): Promise<RedeemResult> {
+  const challenge = await requestReconnectChallenge(origin, fetchImpl)
+  if (challenge.status !== 'ok') {
+    return { status: challenge.status }
+  }
+  const signature = await deps.signReconnectNonce(privateKey, challenge.nonce)
+  return redeemReconnectSessionWithChallenge(origin, challenge.challengeId, signature, fetchImpl)
+}
+
 /**
- * Silently redeems a stored reconnect secret for a daemon token on page
- * load, without a confirmation dialog. See reconnect-client.ts /
- * reconnect-credential-store.ts for the wire contract and persistence rules.
+ * Silently redeems an enrolled WebCrypto keypair (preferred) — proving
+ * possession via a signed challenge-response, no user gesture required — or
+ * a legacy Bearer secret (grace-period fallback for an origin that never
+ * enrolled a keypair, or whose keypair the daemon just rejected) for a
+ * daemon token on page load, without a confirmation dialog. See
+ * reconnect-client.ts / reconnect-keypair-store.ts / reconnect-credential-
+ * store.ts for the wire contract and persistence rules.
  *
  * A completion that arrives after this hook's (enabled, origin) inputs have
- * changed, or after unmount, still persists a rotated secret (never lose a
- * server-side rotation) but is discarded for UI purposes via a generation
- * guard — StrictMode and rapid target changes cannot leave stale state
- * showing.
+ * changed, or after unmount, still performs its persistence side effects
+ * (confirming/clearing the keypair record, clearing a rejected legacy
+ * secret) — those live on the shared single-flight promise, not gated by
+ * this hook instance's lifecycle — but is discarded for UI purposes via a
+ * generation guard, so StrictMode and rapid target changes cannot leave
+ * stale state showing.
  */
 export function useSilentReconnect({
   enabled,
   origin,
   fetchImpl = defaultFetchImpl,
+  deps = defaultDeps,
 }: UseSilentReconnectOptions): SilentReconnectState {
   const [state, setState] = useState<SilentReconnectState>({ status: 'idle' })
   const generationRef = useRef(0)
@@ -95,27 +151,70 @@ export function useSilentReconnect({
       return invalidate
     }
 
-    const initialSecret = load(origin)
-    if (initialSecret === null) {
-      setState({ status: 'idle' })
-      return invalidate
+    // `noCredentialFallbackReason` distinguishes "nothing was ever attempted"
+    // (idle — the ordinary no-credential case) from "the keypair attempt
+    // above was already rejected and there is simply no legacy secret to
+    // fall back to" (failed(rejected) — an attempt genuinely failed, so the
+    // caller should show the reconnect-failed banner rather than silently
+    // idling).
+    async function tryLegacy(noCredentialFallbackReason?: 'rejected'): Promise<void> {
+      const secret = loadLegacySecret(origin)
+      if (secret === null) {
+        if (isCurrent()) {
+          setState(
+            noCredentialFallbackReason
+              ? { status: 'failed', reason: noCredentialFallbackReason }
+              : { status: 'idle' },
+          )
+        }
+        return
+      }
+      if (isCurrent()) setState({ status: 'connecting' })
+      const result = await singleFlight(inFlightLegacyAttempt, `${origin}::${secret}`, () =>
+        redeemReconnectSessionWithLegacySecret(origin, secret, fetchImpl),
+      )
+      if (result.status === 'ok') {
+        if (isCurrent()) {
+          seedDaemonToken(result.token)
+          setState({ status: 'connected', token: result.token })
+        }
+        return
+      }
+      if (result.status === 'rejected') {
+        // A concurrent tab may have already rotated or revoked this secret;
+        // only clear it if the store still holds exactly the value we just
+        // presented.
+        clearIfMatches(origin, secret)
+      }
+      if (isCurrent()) {
+        setState({
+          status: 'failed',
+          reason: result.status === 'rejected' ? 'rejected' : 'network',
+        })
+      }
     }
 
-    setState({ status: 'connecting' })
+    async function run(): Promise<void> {
+      const keypair = await deps.loadKeypair(origin).catch(() => null)
 
-    async function attempt(secret: string, isRetry: boolean): Promise<void> {
-      const result = await redeemSingleFlight(origin, secret, fetchImpl)
+      if (!keypair) {
+        await tryLegacy()
+        return
+      }
+
+      if (isCurrent()) setState({ status: 'connecting' })
+      const result = await singleFlight(inFlightKeypairAttempt, origin, () =>
+        attemptKeypairChallenge(origin, keypair.privateKey, fetchImpl, deps),
+      )
 
       if (result.status === 'ok') {
-        // Persist the rotated secret BEFORE exposing the connected state (and
-        // before seeding the token) so a failed persist still leaves the
-        // in-memory token usable for this session — the next load simply
-        // 403s on the stale secret and falls back to the banner.
-        // The persist is deliberately NOT generation-gated (a server-side
-        // rotation must never be lost), but seeding the shared token store
-        // is: a stale completion for a superseded (enabled, origin) must not
-        // install its token as this page's daemon auth.
-        save(origin, result.secret)
+        // First proof the private key actually works end-to-end — promote
+        // the keypair record and retire the legacy secret only now, never
+        // right after enrollment's POST /api/reconnect-credential succeeded.
+        if (keypair.status === 'pending') {
+          await deps.markKeypairConfirmed(origin).catch(() => {})
+          clearLegacySecret()
+        }
         if (isCurrent()) {
           seedDaemonToken(result.token)
           setState({ status: 'connected', token: result.token })
@@ -124,32 +223,25 @@ export function useSilentReconnect({
       }
 
       if (result.status === 'rejected') {
-        // A concurrent tab may have already redeemed and rotated this
-        // secret; if the store now holds a DIFFERENT value than the one we
-        // just presented, retry exactly once with the winner's secret
-        // instead of unconditionally clearing a still-valid credential.
-        const current = load(origin)
-        if (!isRetry && current !== null && current !== secret) {
-          await attempt(current, true)
-          return
-        }
-        clearIfMatches(origin, secret)
-        if (isCurrent()) {
-          setState({ status: 'failed', reason: 'rejected' })
-        }
+        // The daemon no longer honors this keypair (revoked / expired /
+        // origin delisted) — drop it and fall back to a legacy secret, if
+        // one is still around, rather than getting stuck retrying a key
+        // that will never be accepted again.
+        await deps.clearKeypair(origin).catch(() => {})
+        await tryLegacy('rejected')
         return
       }
 
-      // network-error / invalid-response: keep the stored secret, this load
-      // just falls back to the one-click banner.
+      // network-error / invalid-response: keep the stored keypair, this
+      // load just falls back to the one-click banner.
       if (isCurrent()) {
         setState({ status: 'failed', reason: 'network' })
       }
     }
 
-    void attempt(initialSecret, false)
+    void run()
     return invalidate
-  }, [enabled, origin, fetchImpl])
+  }, [enabled, origin, fetchImpl, deps])
 
   return state
 }
