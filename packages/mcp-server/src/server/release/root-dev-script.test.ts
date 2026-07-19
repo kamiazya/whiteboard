@@ -1,9 +1,6 @@
-// The root README/docs (docs/contributing/development.md) document `pnpm dev`
-// as starting Vite and the MCP server together. Before this test existed, the
-// root `dev` script only launched the MCP server (`pnpm --filter
-// @kamiazya/whiteboard-mcp dev`), so a first-time contributor following the
-// docs never saw the web UI come up. This test pins the documented behavior
-// to the actual script contents so the two cannot drift again.
+// docs/contributing/development.md documents `pnpm dev` as starting the web
+// app (Vite) and the MCP server together. Pin that documented behavior to the
+// actual script so the two cannot drift.
 
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
