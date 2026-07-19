@@ -103,6 +103,12 @@ function admittedOrigin(
 export function createReconnectRouter(options: ReconnectRouterOptions) {
   const app = new Hono()
 
+  // Both success paths of /api/reconnect-session (legacy secret and signed
+  // challenge) hand back this same daemon-token response.
+  const sessionResponse = reconnectSessionResponseSchema.parse({
+    token: options.daemonToken,
+  } satisfies ReconnectSessionResponse)
+
   app.post('/api/reconnect-credential', async (c) => {
     const canonicalOrigin = admittedOrigin(c.req.header('origin'), options.allowedWebOrigins)
     if (canonicalOrigin === null) {
@@ -158,11 +164,7 @@ export function createReconnectRouter(options: ReconnectRouterOptions) {
       if (!verified) {
         return c.json({ error: 'unauthorized' }, 403)
       }
-      return c.json(
-        reconnectSessionResponseSchema.parse({
-          token: options.daemonToken,
-        } satisfies ReconnectSessionResponse),
-      )
+      return c.json(sessionResponse)
     }
 
     const rawBody = await c.req.json().catch(() => null)
@@ -183,11 +185,7 @@ export function createReconnectRouter(options: ReconnectRouterOptions) {
     if (!verified) {
       return c.json({ error: 'unauthorized' }, 403)
     }
-    return c.json(
-      reconnectSessionResponseSchema.parse({
-        token: options.daemonToken,
-      } satisfies ReconnectSessionResponse),
-    )
+    return c.json(sessionResponse)
   })
 
   return app

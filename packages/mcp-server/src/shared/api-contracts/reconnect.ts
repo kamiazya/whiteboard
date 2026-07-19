@@ -23,7 +23,9 @@ function base64UrlByteLength(value: string): number | null {
   const remainder = value.length % 4
   if (remainder === 1) return null
   const fullGroups = Math.floor(value.length / 4)
-  const remainderBytes = remainder === 0 ? 0 : remainder === 2 ? 1 : 2
+  // A remainder of 2 chars encodes 1 extra byte, 3 chars encodes 2 (remainder
+  // 1 already rejected above); `remainder - 1` covers both, 0 for no remainder.
+  const remainderBytes = remainder === 0 ? 0 : remainder - 1
   return fullGroups * 3 + remainderBytes
 }
 
