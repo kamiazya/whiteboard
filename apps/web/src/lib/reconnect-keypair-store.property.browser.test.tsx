@@ -3,9 +3,9 @@
  * same origin at the same time, they converge on exactly one persisted
  * keypair — every resolved keyId is identical, and loadKeypair afterward
  * returns that same keyId. Real IndexedDB + real WebCrypto (jsdom has
- * neither), so this lives in web-browser like its sibling
- * reconnect-keypair-store.browser.test.tsx (which keeps the fixed N=2 case;
- * this file explores N in [2,6] instead of replacing it).
+ * neither), so this lives in web-browser. The fixed N=2 case is covered by
+ * reconnect-keypair-store.browser.test.tsx; this file generalizes to N in
+ * [2,6].
  */
 import { describe, expect } from 'vitest'
 import { fc, fcTest } from '@/test-utils/fast-check.js'
@@ -21,6 +21,9 @@ async function clearDb(): Promise<void> {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error ?? new Error('deleteDatabase failed'))
+    // An open connection from a prior run would otherwise block the delete
+    // and hang the test until timeout; surface it as a failure instead.
+    req.onblocked = () => reject(new Error('deleteDatabase blocked by an open connection'))
   })
 }
 

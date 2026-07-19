@@ -186,6 +186,13 @@ class EnrollKeyCommand implements TrustCommand {
       // rewrites trustedAt/lastUsedAt while keeping the same key would
       // otherwise still pass this property.
       const after = await findRecord(real, this.origin)
+      // Guard against a vacuous pass: if the record vanished, before/after
+      // are both undefined and the toBe checks below would trivially hold.
+      expect(before, `enrollKey(${this.origin}) precondition: record exists`).toBeDefined()
+      expect(
+        after,
+        `enrollKey(${this.origin}) record must survive the no-op re-enroll`,
+      ).toBeDefined()
       expect(after?.trustedAt, `enrollKey(${this.origin}) no-op must not bump trustedAt`).toBe(
         before?.trustedAt,
       )

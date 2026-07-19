@@ -167,7 +167,9 @@ describe('scene parse/serialize properties', () => {
         // documented contract always fills both in, so validating against
         // the optional-field schema would let a regression that silently
         // dropped appState or files still pass this property.
-        expect(normalizedSceneSchema.safeParse(result).success).toBe(true)
+        // .parse (not safeParse().success) so a failure surfaces the Zod
+        // issue detail instead of a bare "expected false to be true".
+        normalizedSceneSchema.parse(result)
       }),
       { numRuns: 200 },
     )
