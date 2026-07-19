@@ -74,6 +74,34 @@ describe('annotate_batch', () => {
     const res = await tool.execute({ canvasId: 'sid/slug', annotations: [] }, client)
     expect(res.elementIds).toEqual([])
   })
+
+  it('rejects an unknown canvasId before touching palette/snapshot/update endpoints', async () => {
+    const { annotateBatchTool } = await import('./annotate-batch.js')
+    const tool = annotateBatchTool()
+    let touchedWriteEndpoint = false
+    const fakeClient = {
+      port: 3099,
+      baseUrl: 'http://localhost:3099',
+      request: async (path: string) => {
+        if (path.endsWith('/exists')) {
+          return new Response(JSON.stringify({ exists: false }), { status: 200 })
+        }
+        touchedWriteEndpoint = true
+        throw new Error(`Unexpected request: ${path}`)
+      },
+      touch: async () => undefined,
+    }
+    await expect(
+      tool.execute(
+        {
+          canvasId: 'unknown-ws/sticky-demo',
+          annotations: [{ type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute' }],
+        },
+        fakeClient,
+      ),
+    ).rejects.toThrow(/canvas_create/)
+    expect(touchedWriteEndpoint).toBe(false)
+  })
   describe('warnings (box_with_label overflow)', () => {
     it('case 317', async () => {
       const { annotateBatchTool } = await import('./annotate-batch.js')
