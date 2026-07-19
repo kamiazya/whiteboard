@@ -377,6 +377,10 @@ describe('useSilentReconnect', () => {
       expect(deps.clearKeypair).toHaveBeenCalledWith(ORIGIN, FAKE_KEY_ID)
       // Legacy secret survives — it was the successful fallback credential.
       expect(load(ORIGIN)).toBe('legacy-secret')
+      // The legacy fallback that just proved possession of the secret has no
+      // keypair yet (the old one was just cleared as rejected), so it must
+      // enroll a new one rather than waiting out the legacy secret's TTL.
+      expect(enrollForReconnectOnce).toHaveBeenCalledWith(ORIGIN, 'daemon-token', fetchMock)
     })
 
     it('a rejected keypair with no legacy secret reports failed(rejected)', async () => {
