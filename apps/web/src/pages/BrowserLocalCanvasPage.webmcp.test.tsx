@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
+import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 
@@ -81,6 +82,7 @@ describe('BrowserLocalCanvasPage WebMCP wiring', () => {
   afterEach(() => {
     cleanup()
     vi.useRealTimers()
+    localStorage.clear()
     // biome-ignore lint/performance/noDelete: test cleanup of a global test double
     delete (document as { modelContext?: unknown }).modelContext
   })
@@ -105,5 +107,31 @@ describe('BrowserLocalCanvasPage WebMCP wiring', () => {
       'whiteboard_get_app_context',
       'whiteboard_get_scene_summary',
     ])
+  })
+
+  it('registers no tools when capabilities.webMcpEnabled is persisted as false', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...defaultUserSettings(),
+        capabilities: { webMcpEnabled: false },
+      }),
+    )
+    const fake = createFakeModelContext()
+    document.modelContext = fake
+
+    const store = new MemoryStore()
+    await store.setDefaultCanvasId('c1')
+    await store.save(snap)
+
+    await act(async () => {
+      render(<BrowserLocalCanvasPage store={store} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(fake.liveNames()).toEqual([])
   })
 })

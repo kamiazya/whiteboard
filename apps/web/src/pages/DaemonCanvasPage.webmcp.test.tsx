@@ -5,6 +5,7 @@ import type {
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
@@ -93,6 +94,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    localStorage.clear()
     // biome-ignore lint/performance/noDelete: test cleanup of a global test double
     delete (document as { modelContext?: unknown }).modelContext
   })
@@ -132,6 +134,34 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
         { container: document.body },
       )
     })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(fake.liveNames()).toEqual([])
+  })
+
+  it('registers no tools when capabilities.webMcpEnabled is persisted as false', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        ...defaultUserSettings(),
+        capabilities: { webMcpEnabled: false },
+      }),
+    )
+    const fake = createFakeModelContext()
+    document.modelContext = fake
+
+    await act(async () => {
+      render(
+        <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() =>
+      expect(document.querySelector('[data-testid="excalidraw-container"]')).toBeTruthy(),
+    )
     await act(async () => {
       await Promise.resolve()
       await Promise.resolve()
