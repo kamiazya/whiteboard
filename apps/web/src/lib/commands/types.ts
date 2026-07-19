@@ -40,7 +40,13 @@ export interface WhiteboardCommandDeps {
   canvas: WhiteboardCommandCanvasIdentity | null
 }
 
-export type CommandErrorCode = 'no-api' | 'no-canvas' | 'invalid-input' | 'export-failed'
+export type CommandErrorCode =
+  | 'no-api'
+  | 'no-canvas'
+  | 'invalid-input'
+  | 'export-failed'
+  | 'summary-failed'
+  | 'invalid-provider-state'
 
 // Every command failure surfaces as this typed error rather than a raw
 // TypeError from an undefined access (e.g. a null Excalidraw API), so every
@@ -60,6 +66,83 @@ export class CommandError extends Error {
   }
 }
 
+// getSceneSummary takes no options today; parsed anyway so it matches the
+// same "schema.parse(input) at the boundary" shape as every other command.
+export const getSceneSummaryInputSchema = z.object({}).strict()
+export type GetSceneSummaryInput = z.infer<typeof getSceneSummaryInputSchema>
+
+// Deliberately NOT the full scene: this is the exfiltration-surface boundary
+// for a WebMCP tool result — counts and viewport only, never element
+// geometry, text content, or file/image data. isDeleted elements are
+// excluded from both elementCount and typeCounts so a tombstoned element a
+// user thinks is gone never shows up in a tool-facing summary.
+export const getSceneSummaryResultSchema = z
+  .object({
+    elementCount: z.number().int().nonnegative(),
+    selectedCount: z.number().int().nonnegative(),
+    typeCounts: z.record(z.string(), z.number().int().nonnegative()),
+    viewport: z
+      .object({
+        scrollX: z.number().finite(),
+        scrollY: z.number().finite(),
+        zoom: z.number().finite(),
+      })
+      .strict(),
+  })
+  .strict()
+export type GetSceneSummaryResult = z.infer<typeof getSceneSummaryResultSchema>
+
+// getAppContext takes no options today; parsed anyway for the same reason
+// as the other command input schemas.
+export const getAppContextInputSchema = z.object({}).strict()
+export type GetAppContextInput = z.infer<typeof getAppContextInputSchema>
+
+// The provider projection is built field-by-field in create-commands.ts
+// (never a spread of the real ProviderState) so this schema is the
+// contract that keeps daemonBaseUrl — and any future connection-ish field
+// added to ProviderState — out of a WebMCP tool result. "local-daemon" is
+// renamed to "daemon" here because this is a tool-facing vocabulary, not a
+// re-export of the internal ProviderState.kind literal.
+//
+// Deliberately structural-only: this schema mirrors the static
+// get-app-context.schema.json literal field-for-field (see
+// tool-definitions.test.ts's fuzzed agreement check), and plain JSON Schema
+// cannot express "canvas.kind must equal provider.mode". That invariant is
+// enforced separately in create-commands.ts's getAppContext, immediately
+// after projecting the result and before this schema parses it — do not
+// re-add it here as a `.refine`, or the JSON-Schema/Zod agreement property
+// test will start failing on canvas/provider combinations the literal
+// cannot reject.
+export const getAppContextResultSchema = z
+  .object({
+    provider: z
+      .object({
+        mode: z.enum(['daemon', 'browser-local']),
+      })
+      .strict(),
+    canvas: z
+      .union([
+        z
+          .object({
+            kind: z.literal('daemon'),
+            workspaceId: z.string(),
+            slug: z.string(),
+          })
+          .strict(),
+        z
+          .object({
+            kind: z.literal('browser-local'),
+            canvasId: z.string(),
+          })
+          .strict(),
+      ])
+      .nullable(),
+  })
+  .strict()
+export type GetAppContextResult = z.infer<typeof getAppContextResultSchema>
+
 export interface WhiteboardCommands {
   exportJson(input?: ExportJsonInput): Promise<ExportJsonResult>
+  getSceneSummary(input?: GetSceneSummaryInput): Promise<GetSceneSummaryResult>
+  getAppContext(input?: GetAppContextInput): Promise<GetAppContextResult>
 }
