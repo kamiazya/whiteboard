@@ -24,6 +24,7 @@ import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
+import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-local-page-state.js'
 import {
@@ -263,6 +264,17 @@ export function BrowserLocalCanvasPage({
   })
 
   const handleExport = createSceneExportHandler(commands, exportScene)
+
+  // Identity key = canvasId — a switch to a different browser-local canvas
+  // re-registers the WebMCP tools against it. Honors the persisted
+  // capabilities.webMcpEnabled setting (see user-settings-store.ts);
+  // unset (the default) is treated as enabled. Read once at mount rather
+  // than on every (per-pointer-move) render.
+  const webMcpEnabled = useMemo(
+    () => settingsStore.load().capabilities.webMcpEnabled !== false,
+    [settingsStore],
+  )
+  useBrowserToolRegistry(commands, canvasId, webMcpEnabled)
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a

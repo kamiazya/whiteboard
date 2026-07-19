@@ -1,13 +1,78 @@
 import { serializeSceneAsExcalidrawJson } from '@kamiazya/whiteboard-canvas-viewer/scene'
+import type { z } from 'zod'
 import {
   CommandError,
   type ExportJsonInput,
   type ExportJsonResult,
   exportJsonInputSchema,
   exportJsonResultSchema,
+  type GetAppContextInput,
+  type GetAppContextResult,
+  getAppContextInputSchema,
+  getAppContextResultSchema,
+  type GetSceneSummaryInput,
+  type GetSceneSummaryResult,
+  getSceneSummaryInputSchema,
+  getSceneSummaryResultSchema,
   type WhiteboardCommandDeps,
   type WhiteboardCommands,
 } from './types.js'
+
+// Every command validates its input the same way: parse against its Zod
+// schema and turn any failure into a typed `invalid-input` CommandError so
+// consumers branch on `.code` instead of a raw ZodError. `commandName` only
+// shapes the human-readable message.
+function assertValidInput(schema: z.ZodTypeAny, input: unknown, commandName: string): void {
+  const parsed = schema.safeParse(input)
+  if (!parsed.success) {
+    throw new CommandError('invalid-input', `${commandName} received an invalid input payload.`, {
+      cause: parsed.error,
+    })
+  }
+}
+
+// Projects the open-canvas identity into the tool-facing shape field-by-field
+// (never a spread) so a daemon canvas exposes only workspaceId/slug and a
+// browser-local canvas only canvasId — no other ProviderState/canvas field
+// can leak through.
+function projectCanvasContext(
+  canvas: WhiteboardCommandDeps['canvas'],
+): GetAppContextResult['canvas'] {
+  if (!canvas) return null
+  if (canvas.workspaceId !== undefined) {
+    return { kind: 'daemon', workspaceId: canvas.workspaceId, slug: canvas.canvasId }
+  }
+  return { kind: 'browser-local', canvasId: canvas.canvasId }
+}
+
+// Exhaustive over every ProviderState.kind rather than a two-way ternary: an
+// `invalid-config` provider (a failed/rejected runtime config) has no
+// meaningful "browser-local" or "daemon" mode to report, so getAppContext
+// must fail loudly instead of guessing. The `default` branch's `never`
+// assignment makes a future ProviderState variant a compile error here.
+function projectProviderMode(
+  provider: WhiteboardCommandDeps['provider'],
+): 'daemon' | 'browser-local' {
+  switch (provider.kind) {
+    case 'local-daemon':
+      return 'daemon'
+    case 'browser-local':
+      return 'browser-local'
+    case 'invalid-config': {
+      throw new CommandError(
+        'invalid-provider-state',
+        'Cannot report app context: the runtime provider configuration is invalid.',
+      )
+    }
+    default: {
+      const exhaustive: never = provider
+      throw new CommandError(
+        'invalid-provider-state',
+        `Cannot report app context: unrecognized provider state "${String((exhaustive as { kind?: unknown }).kind)}".`,
+      )
+    }
+  }
+}
 
 /**
  * createWhiteboardCommands — the framework-free factory behind
@@ -52,12 +117,7 @@ export function createWhiteboardCommands(depsRef: {
   current: WhiteboardCommandDeps
 }): WhiteboardCommands {
   async function exportJson(input: ExportJsonInput = {}): Promise<ExportJsonResult> {
-    const parsedInput = exportJsonInputSchema.safeParse(input)
-    if (!parsedInput.success) {
-      throw new CommandError('invalid-input', 'exportJson received an invalid input payload.', {
-        cause: parsedInput.error,
-      })
-    }
+    assertValidInput(exportJsonInputSchema, input, 'exportJson')
 
     // Captured before any await so a concurrent depsRef swap (unmount,
     // canvas switch, provider change) can never mutate the identity this
@@ -90,5 +150,81 @@ export function createWhiteboardCommands(depsRef: {
     }
   }
 
-  return { exportJson }
+  async function getSceneSummary(input: GetSceneSummaryInput = {}): Promise<GetSceneSummaryResult> {
+    assertValidInput(getSceneSummaryInputSchema, input, 'getSceneSummary')
+
+    const deps = depsRef.current
+    if (!deps.canvas) {
+      throw new CommandError('no-canvas', 'No canvas is selected to summarize.')
+    }
+    const api = deps.getExcalidrawApi()
+    if (!api) {
+      throw new CommandError('no-api', 'No Excalidraw canvas is mounted to summarize.')
+    }
+
+    try {
+      const elements = api.getSceneElements()
+      const appState = api.getAppState()
+      // Deleted elements are tombstones, not live content — excluded from
+      // every count so a tool-facing summary never reports elements the user
+      // believes they removed.
+      const liveElements = elements.filter((element) => !element.isDeleted)
+      const typeCounts: Record<string, number> = {}
+      for (const element of liveElements) {
+        typeCounts[element.type] = (typeCounts[element.type] ?? 0) + 1
+      }
+
+      return getSceneSummaryResultSchema.parse({
+        elementCount: liveElements.length,
+        // selectedElementIds can be absent in mock/degraded appState — a
+        // missing selection means zero selected, not a crash.
+        selectedCount: Object.keys(appState.selectedElementIds ?? {}).length,
+        typeCounts,
+        viewport: {
+          scrollX: appState.scrollX,
+          scrollY: appState.scrollY,
+          zoom: appState.zoom.value,
+        },
+      })
+    } catch (err) {
+      // Same contract as exportJson: every documented failure mode of this
+      // command — an imperative-API throw, malformed app state during
+      // teardown, or an output-schema ZodError — surfaces as this typed
+      // error so consumers (WebMCP adapter, debug panel) can branch on
+      // `.code` instead of a raw thrown error/ZodError.
+      throw new CommandError('summary-failed', 'Failed to read or summarize the live scene.', {
+        cause: err,
+      })
+    }
+  }
+
+  async function getAppContext(input: GetAppContextInput = {}): Promise<GetAppContextResult> {
+    assertValidInput(getAppContextInputSchema, input, 'getAppContext')
+
+    const deps = depsRef.current
+    // Field-by-field, never a spread of `deps.provider` — this is the
+    // boundary that keeps daemonBaseUrl (and any future connection-ish
+    // field ProviderState grows) out of a WebMCP tool result. The switch is
+    // exhaustive over every ProviderState.kind (checked by the `never`
+    // assignment in default) so a future ProviderState variant fails
+    // typecheck here instead of silently falling through to the wrong mode.
+    const provider: GetAppContextResult['provider'] = { mode: projectProviderMode(deps.provider) }
+    const canvas = projectCanvasContext(deps.canvas)
+    // canvas.kind (from projectCanvasContext, keyed on identity.workspaceId)
+    // and provider.mode (from projectProviderMode, keyed on ProviderState.kind)
+    // are derived from two independent inputs — assert they agree rather
+    // than let a future call site construct a result where they silently
+    // disagree. Not part of getAppContextResultSchema itself: see that
+    // schema's module comment for why.
+    if (canvas !== null && canvas.kind !== provider.mode) {
+      throw new CommandError(
+        'invalid-provider-state',
+        'Cannot report app context: the derived canvas kind does not match the provider mode.',
+      )
+    }
+
+    return getAppContextResultSchema.parse({ provider, canvas })
+  }
+
+  return { exportJson, getSceneSummary, getAppContext }
 }

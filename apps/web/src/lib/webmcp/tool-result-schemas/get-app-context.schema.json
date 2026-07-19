@@ -1,0 +1,39 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider", "canvas"],
+  "properties": {
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["daemon", "browser-local"] }
+      }
+    },
+    "canvas": {
+      "anyOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "workspaceId", "slug"],
+          "properties": {
+            "kind": { "type": "string", "const": "daemon" },
+            "workspaceId": { "type": "string" },
+            "slug": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "canvasId"],
+          "properties": {
+            "kind": { "type": "string", "const": "browser-local" },
+            "canvasId": { "type": "string" }
+          }
+        },
+        { "type": "null" }
+      ]
+    }
+  }
+}

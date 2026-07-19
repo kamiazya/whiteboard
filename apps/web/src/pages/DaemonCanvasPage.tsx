@@ -17,6 +17,8 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
 
 const log = getAppLogger('daemon-canvas-page')
@@ -86,6 +88,11 @@ export function DaemonCanvasPage({
   )
 
   const controller = useDaemonCanvasController({ daemonBaseUrl, workspaceId, slug, daemonFetch })
+
+  // Stable across the page's lifetime, mirroring BrowserLocalCanvasPage's
+  // own settingsStore — read fresh (not cached in state) wherever the
+  // current capabilities.webMcpEnabled value is needed.
+  const [settingsStore] = useState(() => createUserSettingsStore())
 
   // The selected (workspaceId, slug) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
@@ -158,6 +165,23 @@ export function DaemonCanvasPage({
   })
 
   const handleExport = createSceneExportHandler(commands, exportScene)
+
+  // Identity key = workspaceId+slug, matching this page's own canvas
+  // identity granularity (see useCanvasSync's `identity` above) — a switch
+  // to a different daemon canvas re-registers the WebMCP tools against it.
+  // Honors the persisted capabilities.webMcpEnabled setting (see
+  // user-settings-store.ts); unset (the default) is treated as enabled.
+  // Read once at mount rather than on every (per-pointer-move) render — the
+  // setting only changes via an explicit user action + reload.
+  const webMcpEnabled = useMemo(
+    () => settingsStore.load().capabilities.webMcpEnabled !== false,
+    [settingsStore],
+  )
+  useBrowserToolRegistry(
+    commands,
+    canvas !== null ? `${canvas.workspaceId}/${canvas.slug}` : null,
+    webMcpEnabled,
+  )
 
   const saveVersion = async (): Promise<void> => {
     if (!capabilities.versions || canvas === null || savingVersion) return
