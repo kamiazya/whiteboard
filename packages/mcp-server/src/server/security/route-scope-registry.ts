@@ -154,13 +154,24 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   if (path === '/api/reconnect-credential') {
     return { kind: 'daemon-token-only' }
   }
-  // The ONLY deliberately public /api/* route besides the liveness probe.
-  // Its purpose is to hand back a daemon token to a caller that no longer
-  // has one, so it cannot itself require that token. Its internal gates
-  // (reconnect.ts) are Origin admission + secret possession + non-expired
-  // trust record — see web-origin-trust-store.ts for why that combination
-  // does not weaken the daemon-token boundary the way an Origin-only check
-  // would.
+  // Public like /api/reconnect-session below: minting a challenge nonce must
+  // not itself require a daemon token (the caller no longer has one), and it
+  // must mint regardless of whether the origin actually has an enrolled
+  // credential — refusing based on enrollment status would make this route
+  // an enrollment oracle. Origin admission is still enforced inside the
+  // route; the challenge itself proves nothing without a subsequent valid
+  // signature at /api/reconnect-session.
+  if (path === '/api/reconnect-challenge') {
+    return { kind: 'public' }
+  }
+  // The ONLY other deliberately public /api/* route besides the liveness
+  // probe and the challenge mint above. Its purpose is to hand back a daemon
+  // token to a caller that no longer has one, so it cannot itself require
+  // that token. Its internal gates (reconnect.ts) are Origin admission +
+  // credential possession (a valid challenge signature, or a legacy secret
+  // during the grace period) + non-expired trust record — see
+  // web-origin-trust-store.ts for why that combination does not weaken the
+  // daemon-token boundary the way an Origin-only check would.
   if (path === '/api/reconnect-session') {
     return { kind: 'public' }
   }

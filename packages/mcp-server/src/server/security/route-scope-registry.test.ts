@@ -138,6 +138,10 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
+  it('POST /api/reconnect-challenge is public (mints regardless of enrollment, no enrollment oracle)', () => {
+    expect(resolveApiRouteScope('POST', '/api/reconnect-challenge')).toEqual({ kind: 'public' })
+  })
+
   it('POST /api/reconnect-session is public (see reconnect.ts for its own gates)', () => {
     expect(resolveApiRouteScope('POST', '/api/reconnect-session')).toEqual({ kind: 'public' })
   })

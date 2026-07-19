@@ -12,13 +12,72 @@ import {
   resolveHostedProviderStateFromRaw,
   type WhiteboardCapabilities,
 } from './lib/provider.js'
-import { resetReconnectEnrollmentForTests } from './lib/reconnect-enrollment.js'
 import {
   clear as clearReconnectSecretStore,
   load as loadReconnectSecret,
   save as saveReconnectSecret,
 } from './lib/reconnect-credential-store.js'
+import { resetReconnectEnrollmentForTests } from './lib/reconnect-enrollment.js'
 import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
+
+// jsdom has neither IndexedDB nor a usable WebCrypto keypair store (see
+// test-layer-selection: that persistence/signing round trip belongs in
+// reconnect-keypair-store.browser.test.tsx). App.tsx wires the real modules
+// with no test-only injection seam, so this file-level mock stands in for
+// them — a fake in-memory map keeps the App-level pairing/reconnect
+// integration tests meaningful without a real browser.
+const FAKE_PUBLIC_KEY = {} as CryptoKey
+const FAKE_PRIVATE_KEY = {} as CryptoKey
+const fakeKeypairs = new Map<string, 'pending' | 'confirmed'>()
+
+const FAKE_KEY_ID = 'key-id-1'
+
+vi.mock('./lib/reconnect-keypair-store.js', () => ({
+  getOrCreateKeypair: vi.fn(async (origin: string) => {
+    const status = fakeKeypairs.get(origin) ?? 'pending'
+    fakeKeypairs.set(origin, status)
+    return {
+      v: 1,
+      origin,
+      keyId: FAKE_KEY_ID,
+      status,
+      publicKey: FAKE_PUBLIC_KEY,
+      privateKey: FAKE_PRIVATE_KEY,
+    }
+  }),
+  loadKeypair: vi.fn(async (origin: string) => {
+    const status = fakeKeypairs.get(origin)
+    if (!status) return null
+    return {
+      v: 1,
+      origin,
+      keyId: FAKE_KEY_ID,
+      status,
+      publicKey: FAKE_PUBLIC_KEY,
+      privateKey: FAKE_PRIVATE_KEY,
+    }
+  }),
+  markKeypairConfirmed: vi.fn(async (origin: string) => {
+    if (fakeKeypairs.has(origin)) fakeKeypairs.set(origin, 'confirmed')
+  }),
+  clearKeypair: vi.fn(async (origin: string, _keyId: string) => {
+    fakeKeypairs.delete(origin)
+  }),
+}))
+
+vi.mock('./lib/reconnect-crypto.js', () => ({
+  generateReconnectKeypair: vi.fn(async () => ({
+    publicKey: FAKE_PUBLIC_KEY,
+    privateKey: FAKE_PRIVATE_KEY,
+  })),
+  exportPublicJwk: vi.fn(async () => ({
+    kty: 'EC',
+    crv: 'P-256',
+    x: 'x'.repeat(43),
+    y: 'y'.repeat(43),
+  })),
+  signReconnectNonce: vi.fn(async () => 'fake-signature'),
+}))
 
 afterEach(cleanup)
 
@@ -817,6 +876,7 @@ describe('App silent daemon reconnect', () => {
     resetSilentReconnectForTests()
     resetReconnectEnrollmentForTests()
     resetTokenStoreForTests()
+    fakeKeypairs.clear()
     mockDaemonConnectionResult = { status: 'none' }
     receivedDaemonIndexPageProps = undefined
     receivedDaemonPageProps = undefined
@@ -827,12 +887,51 @@ describe('App silent daemon reconnect', () => {
     resetSilentReconnectForTests()
     resetReconnectEnrollmentForTests()
     resetTokenStoreForTests()
+    fakeKeypairs.clear()
     mockDaemonConnectionResult = { status: 'none' }
     vi.unstubAllGlobals()
   })
 
   it('enrolls this origin for silent reconnect right after a successful pairing', async () => {
     const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'w1',
+        slug: 'main',
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok12345',
+      },
+    }
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App providerState={BROWSER_LOCAL_STATE} />
+      </MemoryRouter>,
+    )
+    await screen.findByTestId('daemon-canvas-page')
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled())
+    const [, init] = fetchMock.mock.calls[0]
+    expect(String(fetchMock.mock.calls[0][0])).toBe(
+      'http://127.0.0.1:3099/api/reconnect-credential',
+    )
+    expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe(
+      'Bearer tok12345',
+    )
+    expect(JSON.parse(init?.body as string)).toEqual({
+      publicKeyJwk: { kty: 'EC', crv: 'P-256', x: 'x'.repeat(43), y: 'y'.repeat(43) },
+    })
+    // A new-daemon success does not persist a legacy secret — confirmation
+    // happens on the first successful challenge-response login, not here.
+    expect(loadReconnectSecret('http://127.0.0.1:3099')).toBeNull()
+  })
+
+  it('falls back to a legacy secret when the daemon responds with a pre-migration credential response', async () => {
+    const fetchMock = vi.fn(async () =>
       jsonResponse({ reconnectSecret: 'enrolled-secret', expiresInDays: 30 }),
     )
     vi.stubGlobal('fetch', fetchMock)
@@ -855,13 +954,6 @@ describe('App silent daemon reconnect', () => {
 
     await waitFor(() =>
       expect(loadReconnectSecret('http://127.0.0.1:3099')).toBe('enrolled-secret'),
-    )
-    const [, init] = fetchMock.mock.calls[0]
-    expect(String(fetchMock.mock.calls[0][0])).toBe(
-      'http://127.0.0.1:3099/api/reconnect-credential',
-    )
-    expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe(
-      'Bearer tok12345',
     )
   })
 
@@ -898,13 +990,7 @@ describe('App silent daemon reconnect', () => {
     expect(statusEl.textContent).toMatch(/Reconnecting to local daemon/i)
 
     await act(async () => {
-      resolveFetch?.(
-        jsonResponse({
-          token: 'redeemed-token',
-          reconnectSecret: 'rotated-secret',
-          expiresInDays: 30,
-        }),
-      )
+      resolveFetch?.(jsonResponse({ token: 'redeemed-token' }))
       await Promise.resolve()
     })
 
@@ -912,7 +998,9 @@ describe('App silent daemon reconnect', () => {
     expect(receivedDaemonPageProps?.token).toBe('redeemed-token')
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.slug).toBe('main')
-    await waitFor(() => expect(loadReconnectSecret('http://127.0.0.1:3099')).toBe('rotated-secret'))
+    // The new wire contract carries no secret rotation — the legacy secret
+    // stays exactly as presented.
+    expect(loadReconnectSecret('http://127.0.0.1:3099')).toBe('stored-secret')
   })
 
   it('keeps the URL-encoded canvas view on connect instead of overriding it with last-connected settings', async () => {
@@ -928,13 +1016,7 @@ describe('App silent daemon reconnect', () => {
     }))
     saveReconnectSecret('http://127.0.0.1:3099', 'stored-secret')
 
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({
-        token: 'redeemed-token',
-        reconnectSecret: 'rotated-secret',
-        expiresInDays: 30,
-      }),
-    )
+    const fetchMock = vi.fn(async () => jsonResponse({ token: 'redeemed-token' }))
     vi.stubGlobal('fetch', fetchMock)
     mockDaemonConnectionResult = { status: 'none' }
 
@@ -961,13 +1043,7 @@ describe('App silent daemon reconnect', () => {
     }))
     saveReconnectSecret('http://127.0.0.1:3099', 'stored-secret')
 
-    const fetchMock = vi.fn(async () =>
-      jsonResponse({
-        token: 'redeemed-token',
-        reconnectSecret: 'rotated-secret',
-        expiresInDays: 30,
-      }),
-    )
+    const fetchMock = vi.fn(async () => jsonResponse({ token: 'redeemed-token' }))
     vi.stubGlobal('fetch', fetchMock)
     mockDaemonConnectionResult = { status: 'none' }
 
