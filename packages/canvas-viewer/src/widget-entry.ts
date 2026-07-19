@@ -75,16 +75,20 @@ function registerFonts(): void {
   window.EXCALIDRAW_ASSET_PATH = resolveInertAssetPrefix()
 }
 
+const INERT_ASSET_PREFIX_FALLBACK = 'https://whiteboard-widget.invalid/'
+
 function resolveInertAssetPrefix(): string {
-  try {
-    return new URL('.', window.location.href).toString()
-  } catch {
+  // document.baseURI (inherited from the embedding document in srcdoc) usually
+  // works when location.href is the non-URL "about:srcdoc"; the fixed inert
+  // prefix is the final fallback if both bases fail to resolve.
+  for (const base of [window.location.href, document.baseURI]) {
     try {
-      return new URL('.', document.baseURI).toString()
+      return new URL('.', base).toString()
     } catch {
-      return 'https://whiteboard-widget.invalid/'
+      // Non-URL base (e.g. "about:srcdoc") throws; try the next candidate.
     }
   }
+  return INERT_ASSET_PREFIX_FALLBACK
 }
 
 // Scoped fallback for the case Excalidraw's lazy font loader still issues a
