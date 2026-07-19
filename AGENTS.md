@@ -9,13 +9,33 @@ Use this repo's standard development loop for every feature, bug fix, or refacto
 
 ## Test Layer Selection
 
-- Use `mcp-node` for pure functions, stores, routes, server behavior, and persistence logic.
-- Use `mcp-jsdom` for React components and hooks when browser layout and pointer behavior are not the core risk.
-- Use `mcp-browser` for popovers, dialogs, scroll, focus, keyboard, pointer behavior, restore flows, and other real browser interactions.
+- Use `mcp-node` for pure functions, stores, routes, server behavior, and persistence logic in `packages/mcp-server`.
+- Use `canvas-viewer-node` / `canvas-viewer-jsdom` for `packages/canvas-viewer` parsing, hooks, and components where browser layout and pointer behavior are not the core risk; use `canvas-viewer-browser` when they are.
+- Use the `apps/web` jsdom project (`apps/web/vitest.config.ts`) for React components and hooks when browser layout and pointer behavior are not the core risk.
 - Use `web-browser` for `apps/web` tests that require real browser APIs not available in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`. File suffix: `.browser.test.tsx`.
 - Promote to E2E when the bug depends on real routes, server composition, websocket timing, persistence order, or multi-step page flows.
 
 Do not jump to broad E2E first if a smaller failing test can isolate the bug.
+
+### Property-Based / Model-Based Testing (PBT)
+
+Prefer a property or model-based test (fast-check; shared wrappers in
+`packages/mcp-server/src/shared/test-utils/fast-check.ts` and
+`apps/web/src/test-utils/fast-check.ts`) over an example-only test when the change touches:
+
+- a parser/serializer (round-trip: `parse(serialize(x))` equals `x` or a well-defined normalization of `x`)
+- a state machine or store with time/TTL/revocation semantics (model-based: generate a random
+  command sequence, check invariants after each step)
+- a concurrent store (convergence: N concurrent operations settle on one agreed-upon result)
+- a CRDT or other mergeable structure (idempotence, commutativity, convergence under any merge order)
+- rounding, normalization, or other value transforms with an algebraic invariant
+
+Prefer example/browser tests for UI wiring, one-off integrations, and anything without a clean
+invariant to state. When a property finds a real bug, pin the shrunk counterexample as an example
+test before fixing the implementation — the example is the regression guard, the property is the
+generator that found it. Never pin a fast-check seed to make a flaky property pass; treat repeat
+failures under load as a signal to reduce `numRuns`, not to fix the RNG. Put arbitraries shared
+across test files in the owning package's `test-utils`, not duplicated per file.
 
 ## Required Workflow
 

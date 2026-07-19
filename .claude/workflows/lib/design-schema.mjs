@@ -1,0 +1,36 @@
+// Extracted so it can be unit-tested with node:test (see design-schema.test.mjs) without pulling
+// in the workflow-runtime globals (`args`, `agent`, `workflow`, ...) that dev-loop.workflow.mjs
+// only has when actually run inside a workflow.
+export const DESIGN_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    completionCriteria: { type: 'array', items: { type: 'string' } },
+    scope: { type: 'string' },
+    contractChanges: { type: 'string', description: 'Zod/contract/type impact, or "none"' },
+    testScenarios: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        unit: { type: 'array', items: { type: 'string' } },
+        browser: { type: 'array', items: { type: 'string' } },
+        e2e: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['unit'],
+    },
+    risks: { type: 'array', items: { type: 'string' } },
+    // Never empty: pins the invariants/round-trips/metamorphic relations this change must hold.
+    // A stateless/pure-UI design supplies exactly one sentinel entry `"none: <reason>"` so the
+    // justification lives inside this same field instead of contradicting a `minItems: 1` empty
+    // array. PlanReview fails the gate when a design that touches state/parser/store logic
+    // supplies only that sentinel.
+    properties: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 1,
+      description:
+        'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',
+    },
+  },
+  required: ['completionCriteria', 'scope', 'testScenarios', 'properties'],
+}

@@ -53,6 +53,8 @@ const disciplineNote =
   'Follow AGENTS.md: Zod as the single source of truth for cross-boundary contracts (annotate execute returns with z.infer), never call console.* in server code (use getLogger), keep changes immutable, and keep at least one nearest-layer test for the root cause.'
 
 // --- schemas ---
+// Mirrors .claude/workflows/lib/design-schema.mjs (unit-tested via node:test — the workflow
+// sandbox has no import/fs, so the schema is duplicated rather than imported; keep both in sync).
 const DESIGN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -71,8 +73,20 @@ const DESIGN_SCHEMA = {
       required: ['unit'],
     },
     risks: { type: 'array', items: { type: 'string' } },
+    // Never empty: pins the invariants/round-trips/metamorphic relations this change must hold.
+    // A stateless/pure-UI design supplies exactly one sentinel entry `"none: <reason>"` so the
+    // justification lives inside this same field instead of contradicting a `minItems: 1` empty
+    // array. PlanReview fails the gate when a design that touches state/parser/store logic
+    // supplies only that sentinel.
+    properties: {
+      type: 'array',
+      items: { type: 'string' },
+      minItems: 1,
+      description:
+        'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',
+    },
   },
-  required: ['completionCriteria', 'scope', 'testScenarios'],
+  required: ['completionCriteria', 'scope', 'testScenarios', 'properties'],
 }
 
 const PLAN_VERDICT_SCHEMA = {
@@ -128,7 +142,7 @@ let design = PROVIDED_DESIGN
 if (!SKIP_DESIGN && !PROVIDED_DESIGN) {
   phase('Design')
   design = await agent(
-    `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), and risks. Do NOT write code yet.`,
+    `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), risks, and \`properties\` — the invariants, round-trips, or metamorphic relations this change must preserve (e.g. parser/serializer round-trip, state-machine invariant, CRDT idempotence/convergence, concurrent-store convergence). \`properties\` must never be empty: for a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry \`"none: <reason>"\` instead. Do NOT write code yet.`,
     { label: 'design', phase: 'Design', schema: DESIGN_SCHEMA },
   )
 }
@@ -140,12 +154,12 @@ if (design) {
   phase('PlanReview')
   const reviewDesign = () =>
     agent(
-      `Review this design for completeness before implementation. Task: ${TASK}\nDesign: ${JSON.stringify(design)}\n\nCheck: do the test scenarios cover every completion criterion? Are high-risk angles (negative path, contract/Zod drift, migration/fallback, race/unmount) present? Is scope a single coherent change? Return pass=false with mustFix[] if not.`,
+      `Review this design for completeness before implementation. Task: ${TASK}\nDesign: ${JSON.stringify(design)}\n\nCheck: do the test scenarios cover every completion criterion? Are high-risk angles (negative path, contract/Zod drift, migration/fallback, race/unmount) present? Is scope a single coherent change? FAIL the gate if the design touches state, a parser/serializer, or a store (in-memory, persisted, or CRDT) and \`properties\` contains only the \`"none: <reason>"\` sentinel with no real invariant/round-trip/metamorphic property — that combination means an untested state-shape risk. Return pass=false with mustFix[] if not.`,
       { label: 'plan-review', phase: 'PlanReview', agentType: 'plan-reviewer', schema: PLAN_VERDICT_SCHEMA },
     )
   const codexReviewDesign = () =>
     agent(
-      `Independently review this implementation design as a gate BEFORE coding starts. Task: ${TASK}\nDesign: ${JSON.stringify(design)}\n\nFlag missing test coverage, contract/Zod-vs-runtime drift risk, hidden edge cases, scope creep, or wrong assumptions about the codebase. Return pass=false with concrete mustFix[] if implementation should not start as-is.`,
+      `Independently review this implementation design as a gate BEFORE coding starts. Task: ${TASK}\nDesign: ${JSON.stringify(design)}\n\nFlag missing test coverage, contract/Zod-vs-runtime drift risk, hidden edge cases, scope creep, or wrong assumptions about the codebase. FAIL the gate if the design touches state, a parser/serializer, or a store (in-memory, persisted, or CRDT) and \`properties\` contains only the \`"none: <reason>"\` sentinel with no real invariant/round-trip/metamorphic property. Return pass=false with concrete mustFix[] if implementation should not start as-is.`,
       { label: 'plan-review:codex', phase: 'PlanReview', agentType: 'codex:codex-rescue', schema: PLAN_VERDICT_SCHEMA },
     )
   // Both reviewers run; the gate fails if EITHER fails. Codex unavailable (null) never blocks.
