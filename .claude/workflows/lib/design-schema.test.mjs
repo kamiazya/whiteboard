@@ -13,6 +13,14 @@ test('requires a non-empty `properties` field pinning invariants/round-trips/met
   assert.ok(DESIGN_SCHEMA.required.includes('properties'))
 })
 
+test('rejects blank/whitespace-only `properties` entries via the item pattern', () => {
+  const itemPattern = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
+  assert.equal(itemPattern.test(''), false)
+  assert.equal(itemPattern.test('   '), false)
+  assert.equal(itemPattern.test('parse(serialize(x)) === x'), true)
+  assert.equal(itemPattern.test('none: pure UI wiring'), true)
+})
+
 test('describes the invariant intent and the none:<reason> escape hatch for stateless changes', () => {
   const description = DESIGN_SCHEMA.properties.properties.description || ''
   assert.match(description, /invariant/i)

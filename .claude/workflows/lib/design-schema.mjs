@@ -26,7 +26,9 @@ export const DESIGN_SCHEMA = {
     // supplies only that sentinel.
     properties: {
       type: 'array',
-      items: { type: 'string' },
+      // `pattern: '\\S'` rejects "", "   ", and other whitespace-only entries — minItems alone
+      // only guards array length, not per-entry content.
+      items: { type: 'string', pattern: '\\S' },
       minItems: 1,
       description:
         'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',

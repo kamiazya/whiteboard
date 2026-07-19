@@ -80,7 +80,9 @@ const DESIGN_SCHEMA = {
     // supplies only that sentinel.
     properties: {
       type: 'array',
-      items: { type: 'string' },
+      // `pattern: '\\S'` rejects "", "   ", and other whitespace-only entries — minItems alone
+      // only guards array length, not per-entry content.
+      items: { type: 'string', pattern: '\\S' },
       minItems: 1,
       description:
         'Invariants, round-trip, and metamorphic relations this change must preserve (e.g. "parse(serialize(x)) === x", "reconcile is idempotent"). Never empty. For a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry of the form "none: <reason>".',
@@ -137,9 +139,26 @@ const FIX_SCHEMA = {
   required: ['fixed', 'committed'],
 }
 
+// Guards a caller-provided `designDoc` against the same shape DESIGN_SCHEMA enforces on a
+// generated design, so a malformed/incomplete args.designDoc can't skip PlanReview's invariant
+// check by never passing through the schema-constrained agent() call in the first place.
+function isValidDesignShape(d) {
+  if (!d || typeof d !== 'object') return false
+  if (!Array.isArray(d.completionCriteria)) return false
+  if (typeof d.scope !== 'string') return false
+  if (!d.testScenarios || !Array.isArray(d.testScenarios.unit)) return false
+  if (!Array.isArray(d.properties) || d.properties.length < 1) return false
+  if (!d.properties.every((p) => typeof p === 'string')) return false
+  return true
+}
+
 // --- Phase 1: design ---
 let design = PROVIDED_DESIGN
-if (!SKIP_DESIGN && !PROVIDED_DESIGN) {
+if (design && !isValidDesignShape(design)) {
+  log('provided designDoc does not match DESIGN_SCHEMA (missing/invalid completionCriteria, scope, testScenarios.unit, or properties) — discarding it and generating a fresh design instead.')
+  design = null
+}
+if (!SKIP_DESIGN && !design) {
   phase('Design')
   design = await agent(
     `Write a design doc for this dev task. Task: ${TASK}\nSpec: ${SPEC}\n${cwdNote}\nInspect the relevant code first, then produce: completion criteria, change scope, contract/Zod/type impact, test scenarios (unit/browser/e2e), risks, and \`properties\` — the invariants, round-trips, or metamorphic relations this change must preserve (e.g. parser/serializer round-trip, state-machine invariant, CRDT idempotence/convergence, concurrent-store convergence). \`properties\` must never be empty: for a stateless/pure-UI change with no parser/store/state-machine surface, supply exactly one entry \`"none: <reason>"\` instead. Do NOT write code yet.`,
