@@ -72,4 +72,31 @@ describe('docs/ contract', () => {
       }
     }
   })
+
+  it('documents both real-browser vitest projects for `pnpm test:browser`', () => {
+    // The root vitest.config.ts wires two browser projects
+    // (canvas-viewer-browser + web-browser). A doc that describes only one
+    // misleads contributors about which package's browser regressions
+    // `pnpm test:browser` actually covers.
+    const rootVitestConfig = readFileSync(join(REPO_ROOT, 'vitest.config.ts'), 'utf8')
+    const browserProjectCount = [...rootVitestConfig.matchAll(/vitest\.browser\.config\.ts/g)]
+      .length
+    expect(browserProjectCount).toBe(2)
+
+    const testingDocPath = join(DOCS_ROOT, 'contributing/testing.md')
+    const content = readFileSync(testingDocPath, 'utf8')
+    expect(content).not.toContain('There is one real-browser Vitest project')
+    expect(content).toContain('canvas-viewer-browser')
+    expect(content).toContain('web-browser')
+  })
+
+  it('describes `pnpm test --project mcp-node` as a narrow, not a broad non-browser, pass', () => {
+    // mcp-node is one of eight root vitest.config.ts projects. A doc that
+    // frames it as merely "skipping the Playwright browser project" implies
+    // it still covers canvas-viewer and apps/web node/jsdom, which it does not.
+    const developmentDocPath = join(DOCS_ROOT, 'contributing/development.md')
+    const content = readFileSync(developmentDocPath, 'utf8')
+    expect(content).not.toMatch(/skips the Playwright browser project/i)
+    expect(content).toMatch(/mcp-node.*only.*project|only the.*mcp-node.*project/i)
+  })
 })

@@ -30,7 +30,7 @@ pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change 
 
 # 2. After targeted test passes, run the broader gate for the touched area
 pnpm test
-pnpm test:browser        # for browser-mode changes (apps/web web-browser)
+pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + apps/web web-browser)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
 ```
@@ -175,20 +175,21 @@ src/server/routes/canvas-output-path-error.ts
 
 ## Browser Testing
 
-There is one real-browser Vitest project:
+There are two real-browser Vitest projects:
 
 | Project | Package | Purpose |
 |---|---|---|
+| `canvas-viewer-browser` | `packages/canvas-viewer` | Popovers, dialogs, scroll, focus, keyboard, pointer, and restore flows where browser layout and pointer behavior are the core risk |
 | `web-browser` | `apps/web` | `apps/web` app browser regressions: popovers, dialogs, focus, keyboard, restore flows, and tests requiring real browser APIs unavailable in jsdom (IndexedDB, OPFS, `window.showOpenFilePicker`) |
 
 ```bash
-pnpm run test:browser         # web-browser
+pnpm run test:browser         # canvas-viewer-browser + web-browser
 pnpm run test:browser:trace   # same, with trace artifacts on failure
 ```
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
-Failure traces are stored under `apps/web/tmp/vitest-traces`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
+Failure traces are stored under `<package>/tmp/vitest-traces` — `packages/canvas-viewer/tmp/vitest-traces` for `canvas-viewer-browser`, `apps/web/tmp/vitest-traces` for `web-browser`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
 
 Prefer `web-browser` over apps/web jsdom whenever the scenario involves:
 - Focus, pointer, keyboard, or scroll behavior
