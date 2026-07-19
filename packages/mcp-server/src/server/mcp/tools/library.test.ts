@@ -89,9 +89,7 @@ describe('libraryPayloadV1Schema / libraryPayloadV2Schema', () => {
     const payload = {
       type: 'excalidrawlib',
       version: 1,
-      library: [
-        [{ id: 'el-1', type: 'rectangle', x: 0, y: 0, width: 100, height: 50 }],
-      ],
+      library: [[{ id: 'el-1', type: 'rectangle', x: 0, y: 0, width: 100, height: 50 }]],
     }
     const result = libraryPayloadV1Schema.safeParse(payload)
     expect(result.success).toBe(true)
@@ -313,7 +311,11 @@ describe('session library tools', () => {
       },
     )
     globalThis.fetch = vi.fn(async (input: string | URL) => {
-      expect(input.toString()).toBe('http://localhost:3099/api/user-libraries/icons')
+      const url = input.toString()
+      if (url.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
+      expect(url).toBe('http://localhost:3099/api/user-libraries/icons')
       return new Response(JSON.stringify(INSERT_LIBRARY), { status: 200 })
     }) as typeof globalThis.fetch
 
@@ -330,7 +332,7 @@ describe('session library tools', () => {
       client,
     )
 
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
     expect(apiGetSnapshotMock).toHaveBeenCalledTimes(1)
     expect(apiPostLoroUpdateMock).toHaveBeenCalledTimes(1)
     expect(res).toEqual({
@@ -358,6 +360,9 @@ describe('session library tools', () => {
         postedUpdate = update
       },
     )
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ exists: true }), { status: 200 }),
+    ) as typeof globalThis.fetch
 
     await tool.execute(
       {
@@ -390,6 +395,9 @@ describe('session library tools', () => {
     )
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       const url = input.toString()
+      if (url.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
       if (url === 'http://localhost:3099/api/user-libraries/icons') {
         return new Response(JSON.stringify(INSERT_LIBRARY), { status: 200 })
       }
@@ -419,7 +427,7 @@ describe('session library tools', () => {
 
     const [element] = readUpdateElements(postedUpdate!)
     expect(element).toMatchObject({ x: 10, y: 20, width: 20, height: 20 })
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    expect(globalThis.fetch).toHaveBeenCalledTimes(3)
   })
 
   it('library_insert_batch lets explicit item scale override metadata scale', async () => {
@@ -433,6 +441,9 @@ describe('session library tools', () => {
     )
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       const url = input.toString()
+      if (url.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
       if (url === 'http://localhost:3099/api/user-libraries/icons') {
         return new Response(JSON.stringify(INSERT_LIBRARY), { status: 200 })
       }
@@ -467,7 +478,13 @@ describe('session library tools', () => {
   it('library_insert_batch fails on invalid itemIndex without partial insert', async () => {
     const tool = libraryInsertBatchTool()
     apiGetSnapshotMock.mockResolvedValue(new LoroDoc())
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify(INSERT_LIBRARY), { status: 200 })) as typeof globalThis.fetch
+    globalThis.fetch = vi.fn(async (input: string | URL) => {
+      const url = input.toString()
+      if (url.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
+      return new Response(JSON.stringify(INSERT_LIBRARY), { status: 200 })
+    }) as typeof globalThis.fetch
 
     await expect(
       tool.execute(
@@ -497,7 +514,13 @@ describe('session library tools', () => {
         postedUpdate = update
       },
     )
-    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify(INSERT_LIBRARY), { status: 200 })) as typeof globalThis.fetch
+    globalThis.fetch = vi.fn(async (input: string | URL) => {
+      const url = input.toString()
+      if (url.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
+      return new Response(JSON.stringify(INSERT_LIBRARY), { status: 200 })
+    }) as typeof globalThis.fetch
 
     const res = await tool.execute(
       {
@@ -513,10 +536,42 @@ describe('session library tools', () => {
     )
 
     const elements = readUpdateElements(postedUpdate!)
-    const grouped = new Map(elements.map((element) => [element.id as string, element.groupIds as string[]]))
+    const grouped = new Map(
+      elements.map((element) => [element.id as string, element.groupIds as string[]]),
+    )
     expect(grouped.get(res.items[0].elementIds[0])).toEqual(['trial-sheet', 'selected-icon'])
     expect(grouped.get(res.items[0].elementIds[1])).toEqual(['trial-sheet', 'selected-icon'])
     expect(grouped.get(res.items[1].elementIds[0])).toEqual(['trial-sheet'])
+  })
+
+  it('library_insert_batch rejects an unknown canvasId before touching the library source', async () => {
+    const tool = libraryInsertBatchTool()
+    let touchedLibraryOrSnapshot = false
+    const fakeClient = {
+      port: 3099,
+      baseUrl: 'http://localhost:3099',
+      request: async (path: string) => {
+        if (path.endsWith('/exists')) {
+          return new Response(JSON.stringify({ exists: false }), { status: 200 })
+        }
+        touchedLibraryOrSnapshot = true
+        throw new Error(`Unexpected request: ${path}`)
+      },
+      touch: async () => undefined,
+    }
+
+    await expect(
+      tool.execute(
+        {
+          canvasId: 'unknown-ws/sticky-demo',
+          libraryPath: join(tempDir, 'icons.excalidrawlib'),
+          items: [{ itemIndex: 0, target: { x: 0, y: 0 } }],
+        },
+        fakeClient,
+      ),
+    ).rejects.toThrow(/canvas_create/)
+    expect(touchedLibraryOrSnapshot).toBe(false)
+    expect(apiGetSnapshotMock).not.toHaveBeenCalled()
   })
 
   it('library_insert_item keeps the existing single-item response shape', async () => {
@@ -525,6 +580,9 @@ describe('session library tools', () => {
     await writeFile(libraryPath, JSON.stringify(INSERT_LIBRARY))
     apiGetSnapshotMock.mockResolvedValue(new LoroDoc())
     apiPostLoroUpdateMock.mockResolvedValue(undefined)
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ exists: true }), { status: 200 }),
+    ) as typeof globalThis.fetch
 
     const res = await tool.execute(
       {
@@ -570,10 +628,12 @@ describe('user library tools', () => {
       return new Response(JSON.stringify({ name: 'icons', itemCount: 1 }), { status: 200 })
     }) as typeof globalThis.fetch
 
-    await expect(tool.execute({ name: 'icons', content: SAMPLE_LIBRARY }, client)).resolves.toEqual({
-      name: 'icons',
-      itemCount: 1,
-    })
+    await expect(tool.execute({ name: 'icons', content: SAMPLE_LIBRARY }, client)).resolves.toEqual(
+      {
+        name: 'icons',
+        itemCount: 1,
+      },
+    )
   })
 
   it('user_library_list reads via the daemon route', async () => {
@@ -581,7 +641,9 @@ describe('user library tools', () => {
     globalThis.fetch = vi.fn(async (input: string | URL) => {
       expect(input.toString()).toBe('http://localhost:3099/api/user-libraries')
       return new Response(
-        JSON.stringify({ libraries: [{ name: 'icons', path: '/tmp/icons.excalidrawlib', itemCount: 1 }] }),
+        JSON.stringify({
+          libraries: [{ name: 'icons', path: '/tmp/icons.excalidrawlib', itemCount: 1 }],
+        }),
         { status: 200 },
       )
     }) as typeof globalThis.fetch
@@ -740,8 +802,11 @@ describe('user library tools', () => {
 
   it('user_library_metadata_set surfaces daemon conflict responses', async () => {
     const tool = userLibraryMetadataSetTool()
-    globalThis.fetch = vi.fn(async () =>
-      new Response(JSON.stringify({ error: 'conflict', message: 'revision mismatch' }), { status: 409 }),
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: 'conflict', message: 'revision mismatch' }), {
+          status: 409,
+        }),
     ) as typeof globalThis.fetch
 
     await expect(
