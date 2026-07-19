@@ -96,7 +96,8 @@ export function SettingsPanel({
                   WebMCP
                 </p>
                 <p id={webMcpDescId} className="text-xs text-muted-foreground">
-                  Expose canvas tools to AI agents via WebMCP
+                  Lets in-page scripts in supporting browsers read a canvas summary (identifier,
+                  selection count, viewport). Never exposes secrets, tokens, or full scene content.
                 </p>
               </div>
               <button
