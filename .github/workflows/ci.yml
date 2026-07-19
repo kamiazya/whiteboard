@@ -222,6 +222,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Unused files/deps/exports (knip)
+        run: pnpm knip
+
       # canvas_view serves the built widget from mcp-server/dist/widget even
       # when the server itself runs from source (WHITEBOARD_DEV=1), so the
       # smokes that exercise ui://whiteboard/canvas-view need the widget

@@ -15,9 +15,9 @@ import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STATUS_SCHEMA_VERSION = 1 as const
 
-export type ServerStatusState = 'running' | 'missing' | 'stale' | 'malformed' | 'unverifiable'
+type ServerStatusState = 'running' | 'missing' | 'stale' | 'malformed' | 'unverifiable'
 
-export interface ServerStatusRunningResult {
+interface ServerStatusRunningResult {
   schemaVersion: typeof SERVER_STATUS_SCHEMA_VERSION
   ok: true
   state: 'running'
@@ -30,14 +30,14 @@ export interface ServerStatusRunningResult {
   recordFresh: true
 }
 
-export interface ServerStatusNotRunningResult {
+interface ServerStatusNotRunningResult {
   schemaVersion: typeof SERVER_STATUS_SCHEMA_VERSION
   ok: false
   state: Exclude<ServerStatusState, 'running'>
   recordFresh: false
 }
 
-export type ServerStatusResult = ServerStatusRunningResult | ServerStatusNotRunningResult
+type ServerStatusResult = ServerStatusRunningResult | ServerStatusNotRunningResult
 
 export interface RunServerStatusOptions {
   dataDir?: string

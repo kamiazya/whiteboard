@@ -91,10 +91,6 @@ describe('publish contract', () => {
         types: './src/shared/daemon-backend.ts',
         import: './dist/shared/daemon-backend.js',
       },
-      './migration-bundle': {
-        types: './src/shared/migration-bundle.ts',
-        import: './dist/shared/migration-bundle.js',
-      },
       './api-client': {
         types: './src/shared/api-client.ts',
         import: './dist/shared/api-client.js',
@@ -123,10 +119,6 @@ describe('publish contract', () => {
       './daemon-backend': {
         types: './dist/shared/daemon-backend.d.ts',
         import: './dist/shared/daemon-backend.js',
-      },
-      './migration-bundle': {
-        types: './dist/shared/migration-bundle.d.ts',
-        import: './dist/shared/migration-bundle.js',
       },
       './api-client': {
         types: './dist/shared/api-client.d.ts',

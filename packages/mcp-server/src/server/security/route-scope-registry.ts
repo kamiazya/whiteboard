@@ -64,9 +64,6 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   ) {
     return { kind: 'scoped', scopes: ['canvas:write'] }
   }
-  if (path === '/api/import-migration-bundle') {
-    return { kind: 'scoped', scopes: ['canvas:write'] }
-  }
   // Remaining /api/canvas/* routes: honor the write/read split so a mutating
   // POST (e.g. /viewport) isn't authorized by canvas:read alone. The
   // specific write routes above still take precedence via ordering.

@@ -82,7 +82,7 @@ export class IncompleteFileGcScanError extends Error {
   }
 }
 
-export function isIncompleteFileGcScanError(error: unknown): error is IncompleteFileGcScanError {
+function isIncompleteFileGcScanError(error: unknown): error is IncompleteFileGcScanError {
   return error instanceof IncompleteFileGcScanError
 }
 

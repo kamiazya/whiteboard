@@ -19,7 +19,7 @@ import { apiGetPalette } from './palette.js'
 import { type GridLayout, resolveGridPlacement, resolveLayout } from './resolve-layout.js'
 import { boundsSchema } from './shared-schemas.js'
 
-export const annotateBatchWarningSchema = z.object({
+const annotateBatchWarningSchema = z.object({
   index: z.number(),
   overflow: z.boolean().optional(),
   requiredWidth: z.number().optional(),
@@ -56,7 +56,7 @@ export const annotateBatchOutputSchema = z.object({
 // box_with_label does not auto-wrap, so insufficient width/height can cause
 // visible overflow. annotate_batch returns these diagnostics as warnings so the
 // caller can correct them up front.
-export interface AnnotationWarning {
+interface AnnotationWarning {
   index: number
   overflow?: boolean
   requiredWidth?: number

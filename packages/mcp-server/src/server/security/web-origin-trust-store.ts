@@ -51,7 +51,7 @@ const trustedWebOriginsFileSchema = z.object({
   origins: z.array(trustRecordSchema),
 })
 
-export type WebOriginTrustRecord = z.infer<typeof trustRecordSchema>
+type WebOriginTrustRecord = z.infer<typeof trustRecordSchema>
 type TrustedWebOriginsFile = z.infer<typeof trustedWebOriginsFileSchema>
 
 const EMPTY_FILE: TrustedWebOriginsFile = { schemaVersion: 1, origins: [] }

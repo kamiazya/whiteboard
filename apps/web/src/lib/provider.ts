@@ -18,8 +18,6 @@ function toInvalidConfigState(err: unknown): Extract<ProviderState, { kind: 'inv
   return { kind: 'invalid-config', message: GENERIC_INVALID_CONFIG_MESSAGE }
 }
 
-export type ProviderKind = 'browser-local' | 'local-daemon'
-
 // Static, in-process, per-provider-kind capability map — NOT a cross-process
 // or persisted contract (no negotiation, no wire payload), so this stays a
 // plain type + const map rather than a Zod schema. Deliberate, not an oversight.

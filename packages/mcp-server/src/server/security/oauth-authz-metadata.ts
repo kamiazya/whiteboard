@@ -9,14 +9,14 @@
 
 import { z } from 'zod'
 
-export const oauthProtectedResourceMetadataSchema = z.object({
+const oauthProtectedResourceMetadataSchema = z.object({
   resource: z.string().url(),
   authorization_servers: z.array(z.string().url()).min(1),
 })
 
 export type OAuthProtectedResourceMetadata = z.infer<typeof oauthProtectedResourceMetadataSchema>
 
-export const oauthAuthorizationServerMetadataSchema = z.object({
+const oauthAuthorizationServerMetadataSchema = z.object({
   issuer: z.string().url(),
   authorization_endpoint: z.string().url(),
   token_endpoint: z.string().url(),

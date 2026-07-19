@@ -2,10 +2,9 @@ import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 
 // Single source of truth for the `excalidraw:merge_committed` window CustomEvent
-// contract. MergeDialog dispatches; MergeToast/MergeHighlight subscribe. Before
-// this schema existed, all three declared the detail shape by hand, which is
-// exactly the drift pattern that shipped the create_frame bug elsewhere in the
-// app — see AGENTS.md's Zod Schema Discipline section.
+// contract. MergeDialog dispatches; MergeToast subscribes. A schema here
+// instead of independently hand-written detail shapes on each side avoids the
+// drift pattern flagged in AGENTS.md's Zod Schema Discipline section.
 export const MERGE_COMMITTED_EVENT = 'excalidraw:merge_committed'
 
 // Non-strict: unknown fields are stripped rather than rejected so the

@@ -7,13 +7,13 @@ export interface McpProtectedResourceMetadataConfig {
   scopesSupported?: string[]
 }
 
-export interface McpAuthRequestContext {
+interface McpAuthRequestContext {
   method: string
   authorizationHeader?: string
   requestUrl: string
 }
 
-export type McpAuthDecision =
+type McpAuthDecision =
   | { ok: true }
   | {
       ok: false
@@ -100,13 +100,11 @@ function createUnauthorizedHeaders(
 export function buildMcpProtectedResourceMetadata(
   strategy: McpHttpAuthStrategy,
   requestUrl: string,
-):
-  | {
-      resource: string
-      authorization_servers: string[]
-      scopes_supported?: string[]
-    }
-  | null {
+): {
+  resource: string
+  authorization_servers: string[]
+  scopes_supported?: string[]
+} | null {
   const metadata = strategy.protectedResourceMetadata
   if (!metadata) {
     return null
@@ -119,7 +117,7 @@ export function buildMcpProtectedResourceMetadata(
   }
 }
 
-export function createNoAuthMcpHttpAuthStrategy(
+function createNoAuthMcpHttpAuthStrategy(
   metadata?: McpProtectedResourceMetadataConfig,
 ): McpHttpAuthStrategy {
   return {

@@ -208,7 +208,7 @@ function checkoutCloneOrThrow(
   return clone
 }
 
-export interface LocalDaemonAppOptions {
+interface LocalDaemonAppOptions {
   authMode: 'local-daemon'
   token?: string
   mcpAuth?: McpHttpAuthStrategy

@@ -11,7 +11,6 @@ import { validateLoroRawElements } from '../shared/loro-raw-element.js'
 // Re-exported so existing route imports (`import { ..., OutputPathError } from
 // './export-json.js'`) keep compiling without churn.
 export { OutputPathError } from './output-path.js'
-export type { OutputPathErrorCode } from './output-path.js'
 
 const STRIP_CUSTOM_FIELDS = ['templateInstanceId'] as const
 

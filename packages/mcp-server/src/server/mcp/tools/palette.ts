@@ -22,7 +22,7 @@ export async function apiGetPalette(
   )
 }
 
-export async function apiSetPalette(
+async function apiSetPalette(
   client: DaemonClient,
   workspaceId: string,
   entries: PaletteEntries,
@@ -37,7 +37,7 @@ export async function apiSetPalette(
   )
 }
 
-export async function apiDeletePalette(
+async function apiDeletePalette(
   client: DaemonClient,
   workspaceId: string,
   keys: string[],

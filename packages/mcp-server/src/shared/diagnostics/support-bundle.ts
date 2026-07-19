@@ -1,8 +1,5 @@
 import { z } from 'zod'
-import {
-  type DaemonLogEntryInput,
-  formatDaemonLogEntriesAsJsonLines,
-} from './log-jsonl.js'
+import { type DaemonLogEntryInput, formatDaemonLogEntriesAsJsonLines } from './log-jsonl.js'
 import { redactDiagnosticText } from './redact.js'
 
 // Same auth-marker scrub the JSONL surface applies. The shared
@@ -64,13 +61,13 @@ function assertIsoTimestamp(value: string, label: string): string {
 
 export const SUPPORT_BUNDLE_SCHEMA_VERSION = 1
 
-export const supportBundleSectionSchema = z.enum([
+const supportBundleSectionSchema = z.enum([
   'manifest.json',
   'status.json',
   'doctor.json',
   'logs.jsonl',
 ])
-export type SupportBundleSection = z.infer<typeof supportBundleSectionSchema>
+type SupportBundleSection = z.infer<typeof supportBundleSectionSchema>
 
 export const supportBundleManifestSchema = z
   .object({
@@ -92,13 +89,13 @@ export const supportBundleManifestSchema = z
     sections: z.array(supportBundleSectionSchema),
   })
   .strict()
-export type SupportBundleManifest = z.infer<typeof supportBundleManifestSchema>
+type SupportBundleManifest = z.infer<typeof supportBundleManifestSchema>
 
 // Redacted status section. Mirrors `DaemonStatusResult` but only the
 // fields we explicitly want to expose. `record.token`,
 // `auth.hasToken`, `mcp.endpoint`, anything path-shaped goes through
 // the redactor or never copies.
-export interface SupportBundleStatusInput {
+interface SupportBundleStatusInput {
   ok: boolean
   reason: string | null
   recordFound: boolean
@@ -109,7 +106,7 @@ export interface SupportBundleStatusInput {
   record?: { pid: number; port: number; version: string; startedAt: string }
 }
 
-export interface SupportBundleStatusSection {
+interface SupportBundleStatusSection {
   schemaVersion: 1
   ok: boolean
   reason: string | null
@@ -150,7 +147,7 @@ function buildStatusSection(input: SupportBundleStatusInput): SupportBundleStatu
 // Redacted doctor section. The doctor result has a list of checks
 // with id/status/summary/detail/remediation; everything stringy runs
 // through the redactor.
-export interface SupportBundleDoctorCheckInput {
+interface SupportBundleDoctorCheckInput {
   id: string
   status: 'ok' | 'warning' | 'error' | 'skipped'
   summary: string

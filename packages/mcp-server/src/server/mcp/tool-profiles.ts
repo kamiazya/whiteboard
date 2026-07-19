@@ -4,18 +4,18 @@
 // Clients (Claude Code / Codex) use read-only / destructive flags for approval
 // UI and auto-run policy decisions.
 // openWorldHint: false means the tool operates only on local canvas state.
-export const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const
-export const DESTRUCTIVE_IDEMPOTENT = {
+const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const
+const DESTRUCTIVE_IDEMPOTENT = {
   destructiveHint: true,
   idempotentHint: true,
   openWorldHint: false,
 } as const
-export const MUTATING_IDEMPOTENT = { idempotentHint: true, openWorldHint: false } as const
+const MUTATING_IDEMPOTENT = { idempotentHint: true, openWorldHint: false } as const
 export const MUTATING = { openWorldHint: false } as const
 
 // Tools that fetch external URLs declare openWorldHint: true.
-export const READ_ONLY_EXTERNAL = { readOnlyHint: true, openWorldHint: true } as const
-export const MUTATING_EXTERNAL = { openWorldHint: true } as const
+const READ_ONLY_EXTERNAL = { readOnlyHint: true, openWorldHint: true } as const
+const MUTATING_EXTERNAL = { openWorldHint: true } as const
 
 // Map from tool name to annotation profile and human-friendly title. Used by
 // registerToolWithAnnotations when building McpServer annotations.

@@ -10,12 +10,11 @@ import {
 } from '../lib/canvas-sync-session.js'
 import type { SyncStatus, UseCanvasSyncOptions } from '../lib/canvas-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/canvas-sync-types.js'
-import { serializeSceneAsExcalidrawJson } from '@kamiazya/whiteboard-canvas-viewer/scene'
 
-export type { SyncStatus, UseCanvasSyncOptions }
-// Re-exported so existing call sites (e.g. DaemonCanvasPage) can keep
-// importing these from the hook module; the canonical definitions live in
-// lib/canvas-sync-types.ts alongside the session module that also needs them.
+export type { UseCanvasSyncOptions }
+// Re-exported so existing call sites can keep importing it from the hook
+// module; the canonical definition lives in lib/canvas-sync-types.ts
+// alongside the session module that also needs it.
 export { dispatchIdentityEvent }
 
 // Raster/vector are the only formats the underlying @excalidraw/excalidraw
@@ -186,12 +185,14 @@ export function useCanvasSync(
     if (format === 'png') {
       return exportToBlob({ elements, appState, files, exportPadding: 10 })
     }
+    // Callers are expected to route through createSceneExportHandler, which
+    // intercepts 'json' and delegates to commands.exportJson before this
+    // function is ever invoked. Guard defensively rather than silently
+    // falling through to exportToSvg and mislabeling the blob's content type.
     if (format === 'json') {
-      // Produces the standard .excalidraw envelope ({type:'excalidraw',
-      // version:2, ...}) matching the daemon's canvas_export_json, so the
-      // file round-trips with Excalidraw desktop / excalidraw.com.
-      const doc = serializeSceneAsExcalidrawJson(elements, appState, files)
-      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
+      throw new Error(
+        "exportScene does not support 'json' directly; route through createSceneExportHandler",
+      )
     }
     const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
     const serialized = new XMLSerializer().serializeToString(svg)

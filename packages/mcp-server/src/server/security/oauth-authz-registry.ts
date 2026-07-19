@@ -65,14 +65,14 @@ const exactRedirectUriSchema = z
     },
   )
 
-export const oauthClientRegistryEntrySchema = z.object({
+const oauthClientRegistryEntrySchema = z.object({
   clientId: z.string().min(1),
   redirectUris: z.array(exactRedirectUriSchema).min(1),
 })
 
 export const oauthClientRegistrySchema = z.array(oauthClientRegistryEntrySchema)
 
-export type OAuthClientRegistryEntry = z.infer<typeof oauthClientRegistryEntrySchema>
+type OAuthClientRegistryEntry = z.infer<typeof oauthClientRegistryEntrySchema>
 export type OAuthClientRegistry = z.infer<typeof oauthClientRegistrySchema>
 
 // Byte-for-byte comparison only. Do not normalize, decode, lowercase, or

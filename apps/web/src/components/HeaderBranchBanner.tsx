@@ -110,5 +110,3 @@ export function HeaderBranchBanner({
     </>
   )
 }
-
-export default HeaderBranchBanner

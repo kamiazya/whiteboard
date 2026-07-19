@@ -16,7 +16,7 @@ export interface LayoutEdge {
 }
 
 // Optional layout pin for fixing rank and cross-axis ordering.
-export interface LayoutPin {
+interface LayoutPin {
   id: string
   rank?: number
   anchor?: 'left' | 'right' | 'top' | 'bottom' | 'center'
@@ -25,12 +25,12 @@ export interface LayoutPin {
 
 // Optional grouping for laying out subgraphs independently before placing the
 // groups side-by-side on the cross axis.
-export interface LayoutGroup {
+interface LayoutGroup {
   id: string
   elementIds: string[]
 }
 
-export interface LayoutConfig {
+interface LayoutConfig {
   direction?: 'TB' | 'LR'
   // Gap between ranks. Default 80.
   layerGap?: number
@@ -213,10 +213,7 @@ function computeSingleBlock(input: AutoLayoutInput): AutoLayoutResult {
 
 // Lay out each group independently, then place the resulting blocks along the
 // cross axis. Unassigned nodes go into an implicit "__unassigned__" bucket.
-function layoutWithGroups(
-  input: AutoLayoutInput,
-  groups: LayoutGroup[],
-): AutoLayoutResult {
+function layoutWithGroups(input: AutoLayoutInput, groups: LayoutGroup[]): AutoLayoutResult {
   const direction = input.config?.direction ?? 'TB'
   const origin = input.config?.origin ?? { x: 0, y: 0 }
   const groupGap = input.config?.groupGap ?? 80
