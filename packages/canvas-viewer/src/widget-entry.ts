@@ -225,13 +225,21 @@ async function mountFromHost(
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), HOST_CONNECT_TIMEOUT_MS)),
   ])
 
-  // Only ever reveal Refresh when THIS race decided "connected" — a
-  // tool-result can legitimately arrive (and mount) before the timeout wins
-  // the race, but that must not resurrect Refresh once "not connected" has
-  // been decided, even if app.connect() itself resolves later. Deciding
-  // once here, rather than re-checking on every later event, is what keeps
-  // that outcome permanent for the rest of this document's lifetime.
-  if (connected) {
+  // A successful handshake alone does not guarantee the host can proxy tool
+  // calls back to the server — only app.getHostCapabilities()?.serverTools
+  // does (per the ext-apps host-capability negotiation). Creating Refresh
+  // without this check would show a control whose every click silently
+  // fails on hosts that never advertised the capability.
+  const canUseServerTools = app.getHostCapabilities()?.serverTools !== undefined
+
+  // Only ever reveal Refresh when THIS race decided "connected" AND the host
+  // advertised serverTools — a tool-result can legitimately arrive (and
+  // mount) before the timeout wins the race, but that must not resurrect
+  // Refresh once "not connected" has been decided, even if app.connect()
+  // itself resolves later. Deciding once here, rather than re-checking on
+  // every later event, is what keeps that outcome permanent for the rest of
+  // this document's lifetime.
+  if (connected && canUseServerTools) {
     let refreshInFlight = false
     refreshControl = createRefreshControl(() => {
       if (refreshInFlight || committedCanvasId === undefined) return

@@ -9,17 +9,24 @@ interface FakeAppInstance {
   ontoolresult?: (result: unknown) => void
   connect: () => Promise<void>
   callServerTool: (params: unknown) => Promise<unknown>
+  getHostCapabilities: () => { serverTools?: Record<string, unknown> } | undefined
 }
 
 const connectMock = vi.fn()
 const callServerToolMock = vi.fn()
 const fakeAppInstances: FakeAppInstance[] = []
+// Real hosts advertise this via the ext-apps handshake; defaulting to
+// "supported" here keeps the existing Refresh-flow tests focused on the
+// connect()/tool-result behavior they exist to cover. Tests for the
+// capability gate itself override this per-case.
+let getHostCapabilitiesMock: FakeAppInstance['getHostCapabilities'] = () => ({ serverTools: {} })
 
 vi.mock('@modelcontextprotocol/ext-apps', () => ({
   App: vi.fn(function FakeApp(this: FakeAppInstance) {
     fakeAppInstances.push(this)
     this.connect = connectMock
     this.callServerTool = callServerToolMock
+    this.getHostCapabilities = () => getHostCapabilitiesMock()
   }),
 }))
 
@@ -69,6 +76,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     fakeAppInstances.length = 0
     connectMock.mockReset()
     callServerToolMock.mockReset()
+    getHostCapabilitiesMock = () => ({ serverTools: {} })
     // The mount.js mock module instance persists across vi.resetModules()
     // calls (only the real module graph is reset), so its call history
     // must be cleared explicitly between tests.
@@ -255,6 +263,55 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
 
     expect(queryRefreshButton()).toBeNull()
     vi.useRealTimers()
+  })
+
+  it('never reveals Refresh when the host does not advertise the serverTools capability', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    getHostCapabilitiesMock = () => ({})
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = { elements: [{ id: 'a' }] }
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
+
+    // A committed canvasId would normally reveal Refresh (see the next
+    // test); the missing serverTools capability must suppress that.
+    expect(queryRefreshButton()).toBeNull()
+  })
+
+  it('reveals Refresh immediately when a tool-result commits a canvasId before the connect() race settles', async () => {
+    stubEmbeddedIframeParent()
+    let resolveConnect: (() => void) | undefined
+    connectMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveConnect = resolve
+        }),
+    )
+
+    await importFreshWidgetEntry()
+    // The tool-result fires synchronously right after import, before
+    // connect() has resolved — committedCanvasId is already set when
+    // connect() (and thus the `if (connected)` branch) resolves next.
+    const scene = { elements: [{ id: 'a' }] }
+    fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
+
+    resolveConnect?.()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // This is the `if (committedCanvasId !== undefined) refreshControl.show()`
+    // branch reflected in widget-entry.ts, not rememberCanvasId's own
+    // `refreshControl?.show()` call (the control did not exist yet when the
+    // tool-result arrived).
+    const button = queryRefreshButton()
+    expect(button).not.toBeNull()
+    expect(button?.style.display).toBe('block')
   })
 
   it('reveals Refresh only after connecting AND a valid tool-result commits a canvasId', async () => {
