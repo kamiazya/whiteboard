@@ -1,6 +1,6 @@
-import { z } from 'zod'
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
 import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types'
+import { z } from 'zod'
 
 // Producing the .excalidraw payload by hand rather than via excalidraw's own
 // serializeAsJSON: that helper is a top-level export ONLY in the package's
@@ -66,7 +66,10 @@ export const viewerSceneSchema = z
   })
   .strict()
 
-const normalizedSceneSchema = z.object({
+// Exported so callers/tests can validate against parseViewerScene's actual
+// output contract (appState/files always present) rather than the looser
+// input-side viewerSceneSchema, where both fields are optional.
+export const normalizedSceneSchema = z.object({
   elements: z.array(looseElementSchema).readonly(),
   appState: appStateShape,
   // Opaque pass-through, same rationale as excalidrawJsonDocSchema.files.
@@ -97,7 +100,12 @@ export interface ExcalidrawJsonDoc {
   version: 2
   source: string
   elements: readonly ExcalidrawElement[]
-  appState: { gridSize: number | null; viewBackgroundColor: string }
+  appState: {
+    gridSize: number | null
+    viewBackgroundColor: string
+    gridStep?: number
+    gridModeEnabled?: boolean
+  }
   files: BinaryFiles
 }
 
@@ -110,12 +118,15 @@ type _AssertSerializerMatchesSchema =
 const _serializerMatchesSchema: _AssertSerializerMatchesSchema = true
 void _serializerMatchesSchema
 
-// gridSize/viewBackgroundColor are the only appState fields the .excalidraw
-// format persists; both are read defensively since a caller may hand a
+// gridSize/viewBackgroundColor/gridStep/gridModeEnabled are exactly the
+// fields Excalidraw's own cleanAppStateForExport keeps for a real
+// .excalidraw export; both are read defensively since a caller may hand a
 // partial appState (e.g. the export path passes the live AppState).
 type SerializableAppState = {
   gridSize?: AppState['gridSize'] | null
   viewBackgroundColor?: string
+  gridStep?: AppState['gridStep']
+  gridModeEnabled?: AppState['gridModeEnabled']
 }
 
 export function serializeSceneAsExcalidrawJson(
@@ -134,6 +145,12 @@ export function serializeSceneAsExcalidrawJson(
     appState: {
       gridSize: appState.gridSize ?? null,
       viewBackgroundColor: appState.viewBackgroundColor ?? '#ffffff',
+      // Left genuinely unset (not defaulted) when absent, matching
+      // cleanAppStateForExport's optional-field contract.
+      ...(appState.gridStep !== undefined ? { gridStep: appState.gridStep } : {}),
+      ...(appState.gridModeEnabled !== undefined
+        ? { gridModeEnabled: appState.gridModeEnabled }
+        : {}),
     },
     files,
   }
