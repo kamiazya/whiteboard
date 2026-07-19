@@ -18,7 +18,7 @@
  *     with identical elements JSON.
  */
 import { LoroDoc, LoroMap } from 'loro-crdt'
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { reconcileElementsOnDoc } from './reconcile-elements.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
@@ -208,4 +208,36 @@ describe('reconcileElementsOnDoc property tests', () => {
       expect(snapshot(branchB)).toEqual(snapshot(branchA))
     },
   )
+
+  // KNOWN BUG — documented, not yet fixed. The convergence property above
+  // asserts the two replicas agree, but equality alone blesses a corrupted
+  // outcome: when two branches each independently reconcile a past-only id
+  // (step (3) of reconcileElementsOnDoc inserts a fresh LoroMap container),
+  // the CRDT merge keeps BOTH containers, leaving two live elements sharing
+  // one id. Both replicas are identically corrupted, so equality still
+  // passes. This test states the invariant that SHOULD hold — post-sync ids
+  // are unique — and is marked `it.fails` because it does not yet. When the
+  // reconcile dup-id hazard is fixed, `it.fails` starts failing (i.e. the
+  // body passes), which flags this to be flipped to a plain `it`.
+  // Tracked: reconcile-concurrent-dup-id.
+  it.fails('post-sync live ids are unique across concurrently reconciled branches', () => {
+    // Ancestor lacks id "a"; past has it — so both branches take the
+    // insert-new-container path for the same id independently.
+    const ancestor = docOf([])
+    const past = docOf([
+      { id: 'a', type: 'rectangle', x: 0, y: 0, width: 1, height: 1, version: 1 },
+    ])
+    const branchA = forkDoc(ancestor)
+    const branchB = forkDoc(ancestor)
+
+    reconcileElementsOnDoc(branchA, past)
+    branchA.commit()
+    reconcileElementsOnDoc(branchB, past)
+    branchB.commit()
+    syncDocs(branchA, branchB)
+
+    const live = snapshot(branchA).filter((el) => el.isDeleted !== true)
+    const uniqueIds = new Set(live.map((el) => el.id))
+    expect(uniqueIds.size).toBe(live.length)
+  })
 })
