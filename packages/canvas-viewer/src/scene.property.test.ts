@@ -3,18 +3,20 @@
  *
  * serializeSceneAsExcalidrawJson / parseViewerScene are NOT a strict
  * round-trip pair: serialize drops isDeleted elements, keeps only the
- * gridSize/viewBackgroundColor appState fields, and fills in defaults for
- * fields the caller omitted. The three properties fixed here are the actual
- * contract, not a naive round-trip:
+ * gridSize/viewBackgroundColor/gridStep/gridModeEnabled appState fields
+ * (Excalidraw's own cleanAppStateForExport shape), and fills in defaults for
+ * gridSize/viewBackgroundColor when the caller omitted them. The three
+ * properties fixed here are the actual contract, not a naive round-trip:
  *
  *  (a) Normalization round-trip — parse(serialize(x)) equals an explicitly
  *      computed normalize(x) (live elements only, supported appState fields
  *      only, defaults applied) for any input built from the supported shape.
  *  (b) Stability — for a scene already in the *normalized* shape (live
- *      elements only, appState limited to gridSize/viewBackgroundColor —
- *      i.e. anything produced by serializeSceneAsExcalidrawJson, which is
- *      what this suite's generators build), serializing it again and
- *      re-parsing is a no-op: parse(serialize(parse(s))) equals parse(s).
+ *      elements only, appState limited to
+ *      gridSize/viewBackgroundColor/gridStep/gridModeEnabled — i.e. anything
+ *      produced by serializeSceneAsExcalidrawJson, which is what this
+ *      suite's generators build), serializing it again and re-parsing is a
+ *      no-op: parse(serialize(parse(s))) equals parse(s).
  *      This does NOT hold for arbitrary parser-accepted input — parseViewerScene
  *      itself accepts deleted elements and extra appState fields (it does not
  *      normalize on the way in), so a raw scene carrying either loses that
@@ -26,9 +28,10 @@
  *      fully generic JSON with scene-shaped values so the successful-parse
  *      branch is actually exercised, not just the catch branch.
  */
-import { describe, expect, it } from 'vitest'
+
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
-import { parseViewerScene, serializeSceneAsExcalidrawJson, viewerSceneSchema } from './scene.js'
+import { describe, expect, it } from 'vitest'
+import { normalizedSceneSchema, parseViewerScene, serializeSceneAsExcalidrawJson } from './scene.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 // Opaque pass-through fields (id/type/x/y) plus one extra unknown-content
@@ -48,10 +51,15 @@ const elementArb = fc.record(
 
 // Only the fields serializeSceneAsExcalidrawJson actually reads — any other
 // appState field is dropped by design, so it is deliberately excluded here.
+// gridStep/gridModeEnabled are optional keys (requiredKeys stays empty) so
+// generated scenes exercise both the "field present" and "field omitted"
+// branches of the serializer.
 const appStateArb = fc.record(
   {
     gridSize: fc.oneof(fc.constant(null), fc.integer({ min: 0, max: 200 })),
     viewBackgroundColor: fc.string({ minLength: 1, maxLength: 7 }),
+    gridStep: fc.integer({ min: 0, max: 200 }),
+    gridModeEnabled: fc.boolean(),
   },
   { requiredKeys: [] },
 )
@@ -86,7 +94,12 @@ const validStructuredContentArb = fc.record(
 
 function normalize(
   elements: readonly ExcalidrawElement[],
-  appState: { gridSize?: number | null; viewBackgroundColor?: string },
+  appState: {
+    gridSize?: number | null
+    viewBackgroundColor?: string
+    gridStep?: number
+    gridModeEnabled?: boolean
+  },
   files: Record<string, unknown>,
 ) {
   return {
@@ -94,6 +107,10 @@ function normalize(
     appState: {
       gridSize: appState.gridSize ?? null,
       viewBackgroundColor: appState.viewBackgroundColor ?? '#ffffff',
+      ...(appState.gridStep !== undefined ? { gridStep: appState.gridStep } : {}),
+      ...(appState.gridModeEnabled !== undefined
+        ? { gridModeEnabled: appState.gridModeEnabled }
+        : {}),
     },
     files,
   }
@@ -124,7 +141,7 @@ describe('scene parse/serialize properties', () => {
     },
   )
 
-  it('parseViewerScene either throws or returns a value satisfying viewerSceneSchema', () => {
+  it('parseViewerScene either throws or returns a value satisfying its normalized output contract', () => {
     // fc.jsonValue() alone almost never produces the specific object shape
     // parseViewerScene accepts, which would make the property vacuously true
     // (every sample takes the catch branch). Mixing in scene-shaped
@@ -145,21 +162,30 @@ describe('scene parse/serialize properties', () => {
           return
         }
         successCount += 1
-        expect(viewerSceneSchema.safeParse(result).success).toBe(true)
+        // normalizedSceneSchema (appState/files required), not the looser
+        // input-side viewerSceneSchema (both optional) — parseViewerScene's
+        // documented contract always fills both in, so validating against
+        // the optional-field schema would let a regression that silently
+        // dropped appState or files still pass this property.
+        expect(normalizedSceneSchema.safeParse(result).success).toBe(true)
       }),
       { numRuns: 200 },
     )
     expect(successCount).toBeGreaterThan(0)
   })
 
-  it('parsing a raw scene with deleted elements and extra appState fields loses that data on re-serialization', () => {
+  it('parsing a raw scene with deleted elements and untracked appState fields loses only the untracked data on re-serialization', () => {
     // parseViewerScene itself does not normalize its input — it accepts
     // deleted elements and arbitrary extra appState fields (appStateShape's
     // .catchall). serializeSceneAsExcalidrawJson does normalize, dropping
-    // both. So a raw, parser-accepted scene is not stable across a
-    // serialize/parse round trip the way an already-normalized scene is
-    // (see property (b) above) — this test documents that real, current
-    // behavior instead of asserting the false round-trip invariant.
+    // deleted elements and any appState field outside its tracked set
+    // (gridSize/viewBackgroundColor/gridStep/gridModeEnabled — Excalidraw's
+    // own cleanAppStateForExport shape). So a raw, parser-accepted scene is
+    // not stable across a serialize/parse round trip the way an
+    // already-normalized scene is (see property (b) above) — this test
+    // documents that real, current behavior instead of asserting the false
+    // round-trip invariant. `gridStep` is tracked, so it survives; `theme`
+    // is not, so it is dropped.
     const raw = {
       elements: [{ id: 'gone', type: 'rectangle', isDeleted: true }],
       appState: { gridStep: 5, theme: 'dark' },
@@ -178,7 +204,11 @@ describe('scene parse/serialize properties', () => {
     const second = parseViewerScene(reserialized)
 
     expect(second.elements).toEqual([])
-    expect(second.appState).toEqual({ gridSize: null, viewBackgroundColor: '#ffffff' })
+    expect(second.appState).toEqual({
+      gridSize: null,
+      viewBackgroundColor: '#ffffff',
+      gridStep: 5,
+    })
     expect(second).not.toEqual(first)
   })
 })
