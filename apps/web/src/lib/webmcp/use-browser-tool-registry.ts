@@ -1,6 +1,9 @@
 import { useEffect } from 'react'
+import { getAppLogger } from '../app-logger.js'
 import type { WhiteboardCommands } from '../commands/index.js'
 import { webMcpTools } from './tool-definitions.js'
+
+const log = getAppLogger('use-browser-tool-registry')
 
 /**
  * Ambient shape of Chrome's imperative WebMCP API, confined to this single
@@ -14,6 +17,7 @@ export interface WebMcpToolDescriptor {
   readonly name: string
   readonly description: string
   readonly inputSchema: Record<string, unknown>
+  readonly annotations?: { readonly readOnlyHint?: boolean }
   execute(args: unknown): Promise<unknown>
 }
 
@@ -38,6 +42,18 @@ declare global {
  * this hook is a complete no-op: no listeners, no registration attempts, no
  * UI impact.
  *
+ * Every tool this app exposes reads canvas state (`no-canvas` is one of
+ * every command's documented CommandError codes), so `canvasKey === null`
+ * (no canvas open yet, or none selected) also skips registration entirely
+ * rather than advertising tools that would deterministically fail if
+ * called.
+ *
+ * `enabled` mirrors the user's persisted `capabilities.webMcpEnabled`
+ * setting (see user-settings-store.ts) — defaults to `true` so existing
+ * callers that don't pass it keep today's behavior, but an explicit `false`
+ * unregisters/skips registration the same way an absent `document.modelContext`
+ * does.
+ *
  * `commands` must be the same referentially-stable `WhiteboardCommands`
  * instance `useWhiteboardCommands` returns — each tool executor is a
  * one-line call into it (`commands.getAppContext()`, etc.), never
@@ -46,15 +62,11 @@ declare global {
 export function useBrowserToolRegistry(
   commands: WhiteboardCommands,
   canvasKey: string | null,
+  enabled = true,
 ): void {
   useEffect(() => {
     const modelContext = document.modelContext
-    if (!modelContext) return
-    // canvasKey is intentionally not read past this point beyond re-running
-    // the effect: it exists purely to force re-registration when the open
-    // canvas changes, mirroring the pattern useCanvasSync already uses for
-    // its own identity-keyed effects.
-    void canvasKey
+    if (!modelContext || !enabled || canvasKey === null) return
 
     const controller = new AbortController()
     for (const tool of webMcpTools) {
@@ -62,15 +74,20 @@ export function useBrowserToolRegistry(
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
-        execute: () => tool.execute(commands),
+        annotations: { readOnlyHint: tool.readOnlyHint },
+        execute: (args) => tool.execute(commands, args),
       }
       // A rejected registration (e.g. aborted before the browser finishes
-      // registering, or the browser refuses a duplicate name) must not
-      // become an unhandled promise rejection — there is no UI surface to
-      // report it to, so it is swallowed here. The catch runs even after
-      // an abort-triggered rejection since `.catch` always attaches
-      // regardless of ordering against `controller.abort()` below.
-      modelContext.registerTool(descriptor, { signal: controller.signal }).catch(() => {})
+      // registering, a duplicate-name refusal, or a draft-API incompatibility)
+      // must not become an unhandled promise rejection — there is no UI
+      // surface to report it to. It is still logged (dev-only, via
+      // getAppLogger) so a silently-missing tool is at least visible during
+      // development instead of only inferable from its absence. The catch
+      // runs even after an abort-triggered rejection since `.catch` always
+      // attaches regardless of ordering against `controller.abort()` below.
+      modelContext.registerTool(descriptor, { signal: controller.signal }).catch((err: unknown) => {
+        log.warn(`registerTool(${tool.name}) failed`, err)
+      })
     }
 
     return () => {
@@ -80,5 +97,5 @@ export function useBrowserToolRegistry(
     // referentially stable across re-renders: listing it here documents the
     // real dependency instead of relying on that stability contract holding
     // forever.
-  }, [commands, canvasKey])
+  }, [commands, canvasKey, enabled])
 }

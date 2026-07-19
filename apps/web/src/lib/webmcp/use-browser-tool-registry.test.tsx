@@ -49,11 +49,13 @@ function createFakeModelContext(): ModelContext & {
 function TestHarness({
   commands,
   canvasKey,
+  enabled,
 }: {
   commands: WhiteboardCommands
   canvasKey: string | null
+  enabled?: boolean
 }) {
-  useBrowserToolRegistry(commands, canvasKey)
+  useBrowserToolRegistry(commands, canvasKey, enabled)
   return null
 }
 
@@ -150,5 +152,96 @@ describe('useBrowserToolRegistry', () => {
     } finally {
       process.off('unhandledRejection', onUnhandledRejection)
     }
+  })
+
+  it('does not attempt registration when canvasKey is null (no canvas open)', async () => {
+    const fake = createFakeModelContext()
+    document.modelContext = fake
+
+    render(<TestHarness commands={fakeCommands()} canvasKey={null} />)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(fake.liveNames()).toEqual([])
+  })
+
+  it('does not attempt registration when enabled is explicitly false', async () => {
+    const fake = createFakeModelContext()
+    document.modelContext = fake
+
+    render(<TestHarness commands={fakeCommands()} canvasKey="c1" enabled={false} />)
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(fake.liveNames()).toEqual([])
+  })
+
+  it('advertises readOnlyHint: true for every registered tool', async () => {
+    const fake = createFakeModelContext()
+    const captured: WebMcpToolDescriptor[] = []
+    document.modelContext = fake
+    document.modelContext.registerTool = async (descriptor) => {
+      captured.push(descriptor)
+    }
+
+    render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)
+    await Promise.resolve()
+
+    expect(captured.length).toBeGreaterThan(0)
+    for (const descriptor of captured) {
+      expect(descriptor.annotations?.readOnlyHint).toBe(true)
+    }
+  })
+
+  it('forwards the caller-supplied args into the underlying command instead of always calling it with {}', async () => {
+    const fake = createFakeModelContext()
+    document.modelContext = fake
+    let captured: WebMcpToolDescriptor | undefined
+    document.modelContext.registerTool = async (descriptor) => {
+      if (descriptor.name === 'whiteboard_get_app_context') captured = descriptor
+    }
+    let receivedInput: unknown
+    const commands: WhiteboardCommands = {
+      ...fakeCommands(),
+      getAppContext: async (input) => {
+        receivedInput = input
+        return { provider: { mode: 'browser-local' }, canvas: null }
+      },
+    }
+
+    render(<TestHarness commands={commands} canvasKey="c1" />)
+    await Promise.resolve()
+
+    await captured!.execute({ unexpected: true })
+    expect(receivedInput).toEqual({ unexpected: true })
+  })
+
+  it('rejects an args payload that violates the advertised empty-object input schema', async () => {
+    const fake = createFakeModelContext()
+    document.modelContext = fake
+    let captured: WebMcpToolDescriptor | undefined
+    document.modelContext.registerTool = async (descriptor) => {
+      if (descriptor.name === 'whiteboard_get_app_context') captured = descriptor
+    }
+
+    // Real commands.getAppContext validates via its Zod input schema
+    // (assertValidInput) and rejects extra keys — exercised here with the
+    // real command layer via fakeCommands()'s sibling, createWhiteboardCommands.
+    const { createWhiteboardCommands } = await import('../commands/create-commands.js')
+    const { BROWSER_LOCAL_CAPABILITIES } = await import('../provider.js')
+    const realCommands = createWhiteboardCommands({
+      current: {
+        getExcalidrawApi: () => null,
+        provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
+        canvas: { canvasId: 'c1', name: 'c1' },
+      },
+    })
+
+    render(<TestHarness commands={realCommands} canvasKey="c1" />)
+    await Promise.resolve()
+
+    await expect(captured!.execute({ unexpected: true })).rejects.toMatchObject({
+      code: 'invalid-input',
+    })
   })
 })
