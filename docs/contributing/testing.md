@@ -349,8 +349,8 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#q
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # mcp-node + mcp-smoke + apps/web jsdom + web-browser
-pnpm test:browser   # web-browser (the real-browser project)
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test:browser   # canvas-viewer-browser + web-browser (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 ```
 
