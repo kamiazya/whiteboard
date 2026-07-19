@@ -156,6 +156,32 @@ describe('enrollForReconnectOnce', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('single-flight is keyed by origin: a concurrent enrollment for another origin still fetches', async () => {
+    const OTHER_ORIGIN = 'http://localhost:4000'
+    const deps = makeDeps()
+    let resolveFirstFetch: (() => void) | undefined
+    const fetchMock = vi.fn(
+      async () =>
+        new Promise<Response>((resolve) => {
+          resolveFirstFetch = () =>
+            resolve(jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }))
+        }),
+    )
+    const fetchMock2 = vi.fn(async () =>
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }),
+    )
+
+    // Origin A's enrollment starts and stays pending (fetch not yet resolved).
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
+
+    // Origin B's enrollment must not be swallowed by A's in-flight single-flight.
+    enrollForReconnectOnce(OTHER_ORIGIN, 'daemon-token', fetchMock2, deps)
+    await vi.waitFor(() => expect(fetchMock2).toHaveBeenCalled())
+
+    resolveFirstFetch?.()
+  })
+
   it('re-enrolls after a settled attempt (a later pairing in the same SPA session)', async () => {
     const deps = makeDeps()
     const fetchMock = vi.fn(async () =>

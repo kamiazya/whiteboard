@@ -25,14 +25,17 @@ export interface ReconnectEnrollmentDeps {
 
 const defaultDeps: ReconnectEnrollmentDeps = { getOrCreateKeypair, exportPublicJwk, clearKeypair }
 
-// Module-level single-flight (not per-component state) so a StrictMode
-// double-render, or two components racing to enroll on the same page load,
-// cannot fire two /api/reconnect-credential requests.
-let inFlight: Promise<void> | null = null
+// Module-level single-flight, keyed by origin (not per-component state) so a
+// StrictMode double-render, or two components racing to enroll on the same
+// page load, cannot fire two /api/reconnect-credential requests for the same
+// origin. Keyed rather than a single shared promise: useSilentReconnect can
+// legitimately enroll a different origin while a stale attempt for a prior
+// origin is still settling, and that migration must not be dropped.
+const inFlight = new Map<string, Promise<void>>()
 
 // Test-only: clears single-flight state between tests.
 export function resetReconnectEnrollmentForTests(): void {
-  inFlight = null
+  inFlight.clear()
 }
 
 /**
@@ -65,8 +68,8 @@ export function enrollForReconnectOnce(
   fetchImpl: FetchLike = defaultFetchImpl,
   deps: ReconnectEnrollmentDeps = defaultDeps,
 ): void {
-  if (inFlight) return
-  inFlight = (async () => {
+  if (inFlight.has(origin)) return
+  const attempt = (async () => {
     const keypair = await deps.getOrCreateKeypair(origin)
     const publicKeyJwk = await deps.exportPublicJwk(keypair.publicKey)
     const result = await enrollReconnectCredential(origin, daemonToken, publicKeyJwk, fetchImpl)
@@ -85,9 +88,10 @@ export function enrollForReconnectOnce(
       // Non-fatal by contract; see doc comment above.
     })
     .finally(() => {
-      // Single-flight guards only the PENDING window. Once settled, a later
-      // pairing in the same SPA session (or a retry after a transient
-      // failure) must be able to enroll again.
-      inFlight = null
+      // Single-flight guards only the PENDING window for this origin. Once
+      // settled, a later pairing for the same origin in the same SPA session
+      // (or a retry after a transient failure) must be able to enroll again.
+      inFlight.delete(origin)
     })
+  inFlight.set(origin, attempt)
 }
