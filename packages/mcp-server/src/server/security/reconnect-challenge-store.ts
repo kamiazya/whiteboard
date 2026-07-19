@@ -84,13 +84,22 @@ export function createReconnectChallengeStore(options?: {
     const record = challenges.get(challengeId)
     if (!record) return null
 
+    if (record.expiresAt < now()) {
+      // Actually expired: safe to reclaim the slot regardless of which
+      // origin is asking.
+      challenges.delete(challengeId)
+      return null
+    }
+
+    // A wrong-origin guess must not consume the legitimate holder's
+    // still-valid challenge — leave it in the map so the real client can
+    // still redeem it before the TTL expires.
+    if (record.origin !== origin) return null
+
     // Delete-on-redeem: Node's run-to-completion semantics make this
     // atomic — two concurrent redemptions racing the same challengeId
     // cannot both win because whichever runs second finds the key gone.
     challenges.delete(challengeId)
-
-    if (record.expiresAt < now()) return null
-    if (record.origin !== origin) return null
     return record.nonce
   }
 

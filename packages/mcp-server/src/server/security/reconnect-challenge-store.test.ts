@@ -46,6 +46,37 @@ describe('createReconnectChallengeStore', () => {
     expect(store.redeemChallenge(minted.challengeId, 'https://example.test')).toBeNull()
   })
 
+  it('treats the exact expiry instant as still valid (inclusive boundary)', () => {
+    let clock = 1_000_000
+    const store = createReconnectChallengeStore({ now: () => clock })
+    const minted = store.mintChallenge('https://example.test')
+    if (!minted) throw new Error('expected mint to succeed')
+
+    clock += 60_000 // exactly equal to expiresAt, not yet past it
+    expect(store.redeemChallenge(minted.challengeId, 'https://example.test')).toBe(minted.nonce)
+  })
+
+  it('does not consume the legitimate challenge when redeemed with a mismatched origin, so the real client can still redeem it', () => {
+    const store = createReconnectChallengeStore()
+    const minted = store.mintChallenge('https://example.test')
+    if (!minted) throw new Error('expected mint to succeed')
+
+    expect(store.redeemChallenge(minted.challengeId, 'https://attacker.test')).toBeNull()
+    expect(store.redeemChallenge(minted.challengeId, 'https://example.test')).toBe(minted.nonce)
+  })
+
+  it('mints challengeId and nonce as base64url-encoded 16-byte and 32-byte random values', () => {
+    const store = createReconnectChallengeStore()
+    const minted = store.mintChallenge('https://example.test')
+    if (!minted) throw new Error('expected mint to succeed')
+
+    const base64UrlPattern = /^[A-Za-z0-9_-]+$/
+    expect(minted.challengeId).toMatch(base64UrlPattern)
+    expect(minted.nonce).toMatch(base64UrlPattern)
+    expect(Buffer.from(minted.challengeId, 'base64url')).toHaveLength(16)
+    expect(Buffer.from(minted.nonce, 'base64url')).toHaveLength(32)
+  })
+
   it('rejects a forged/garbage challengeId that was never minted', () => {
     const store = createReconnectChallengeStore()
     expect(store.redeemChallenge('not-a-real-id', 'https://example.test')).toBeNull()
