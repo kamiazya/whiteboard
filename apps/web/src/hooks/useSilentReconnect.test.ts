@@ -128,7 +128,10 @@ describe('useSilentReconnect', () => {
       expect(enrollForReconnectOnce).toHaveBeenCalledWith(ORIGIN, 'daemon-token', fetchMock)
     })
 
-    it('does not re-enroll when a keypair is already present (pending or confirmed)', async () => {
+    it.each([
+      ['pending'],
+      ['confirmed'],
+    ] as const)('does not re-enroll when a %s keypair is already present', async (status) => {
       save(ORIGIN, 'secret-1')
       const fetchMock = vi.fn(async (url: string | URL) => {
         if (String(url).endsWith('/api/reconnect-challenge')) {
@@ -136,7 +139,7 @@ describe('useSilentReconnect', () => {
         }
         return jsonResponse({ token: 'daemon-token' })
       })
-      const deps = makeDeps({ loadKeypair: vi.fn(async () => fakeKeypair('confirmed')) })
+      const deps = makeDeps({ loadKeypair: vi.fn(async () => fakeKeypair(status)) })
       const { result } = renderHook(() =>
         useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
       )
@@ -173,6 +176,7 @@ describe('useSilentReconnect', () => {
       await waitFor(() => expect(result.current.status).toBe('failed'))
       expect(result.current).toEqual({ status: 'failed', reason: 'rejected' })
       expect(load(ORIGIN)).toBeNull()
+      expect(enrollForReconnectOnce).not.toHaveBeenCalled()
     })
 
     it('a pre-migration daemon rotating the legacy secret persists the replacement', async () => {
@@ -211,6 +215,7 @@ describe('useSilentReconnect', () => {
       await waitFor(() => expect(result.current.status).toBe('failed'))
       expect(result.current).toEqual({ status: 'failed', reason: 'network' })
       expect(load(ORIGIN)).toBe('secret-1')
+      expect(enrollForReconnectOnce).not.toHaveBeenCalled()
     })
 
     it('StrictMode-style double-mount for the same (origin, secret) makes exactly one network call', async () => {
