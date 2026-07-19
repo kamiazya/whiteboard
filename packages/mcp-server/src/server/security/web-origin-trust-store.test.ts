@@ -135,6 +135,47 @@ describe('web-origin-trust-store', () => {
     expect(await store.verifyLegacySecret('http://localhost:5173', secret)).toBe(false)
   })
 
+  it('expires a legacy secret past its absolute TTL from trustedAt even with a fresh lastUsedAt', async () => {
+    let now = Date.parse('2026-01-01T00:00:00.000Z')
+    const store = createWebOriginTrustStore({ dataDir, now: () => now })
+    const { secret } = await store.trustOrigin('http://localhost:5173')
+
+    // Repeated use keeps the SLIDING TTL fresh (each gap well under 30 days),
+    // but the ABSOLUTE TTL is measured from trustedAt and must still expire
+    // the credential once enough real time has passed — a legacy secret
+    // that never rotates must not be silently reconnectable forever.
+    for (let elapsedDays = 20; elapsedDays <= 80; elapsedDays += 20) {
+      now = Date.parse('2026-01-01T00:00:00.000Z') + elapsedDays * 24 * 60 * 60 * 1000
+      expect(await store.verifyLegacySecret('http://localhost:5173', secret)).toBe(true)
+    }
+
+    now = Date.parse('2026-01-01T00:00:00.000Z') + 91 * 24 * 60 * 60 * 1000
+    expect(await store.verifyLegacySecret('http://localhost:5173', secret)).toBe(false)
+  })
+
+  it('does not apply the absolute legacy TTL to an enrolled public-key credential', async () => {
+    const start = Date.parse('2026-01-01T00:00:00.000Z')
+    let now = start
+    const store = createWebOriginTrustStore({ dataDir, now: () => now })
+    const { publicJwk, privateKey } = await generateKeyPair()
+    await store.enrollPublicKey('http://localhost:5173', publicJwk)
+
+    // Repeated use well past the 90-day legacy absolute TTL (each gap under
+    // the 30-day sliding TTL) — a keypair credential is governed by the
+    // sliding TTL alone, not the legacy grace-period's absolute cap.
+    for (let elapsedDays = 20; elapsedDays <= 100; elapsedDays += 20) {
+      now = start + elapsedDays * 24 * 60 * 60 * 1000
+      const signature = await sign(privateKey, `nonce-${elapsedDays}`)
+      expect(
+        await store.verifySignedChallenge(
+          'http://localhost:5173',
+          `nonce-${elapsedDays}`,
+          signature,
+        ),
+      ).toBe(true)
+    }
+  })
+
   it('revokeAll empties the store', async () => {
     const store = createWebOriginTrustStore({ dataDir })
     await store.trustOrigin('http://localhost:5173')

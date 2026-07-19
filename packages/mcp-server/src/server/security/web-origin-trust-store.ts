@@ -44,6 +44,15 @@ const WEB_ORIGIN_TRUST_LOCK_DIRNAME = 'trusted-web-origins.lock'
 // desync from the real enforcement.
 export const TRUST_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
+// Absolute cap on the legacy Bearer-secret grace period, measured from
+// trustedAt rather than the sliding lastUsedAt: a legacy secret is a
+// migration-compatibility shim, never rotated, so periodic use alone (which
+// keeps the SLIDING TTL above perpetually fresh) must not let it stay
+// silently reconnectable forever. Deliberately NOT applied to
+// verifySignedChallenge — an enrolled public-key credential is the intended
+// long-term path and is governed by the sliding TTL alone.
+export const LEGACY_SECRET_ABSOLUTE_TTL_MS = 90 * 24 * 60 * 60 * 1000
+
 const trustRecordSchemaV2Base = z.object({
   origin: z.string(),
   publicKeyJwk: ecP256PublicJwkSchema.optional(),
@@ -365,6 +374,11 @@ export function createWebOriginTrustStore(
     return ageMs <= TRUST_TTL_MS
   }
 
+  function isWithinLegacySecretAbsoluteTtl(record: WebOriginTrustRecord): boolean {
+    const ageMs = now() - Date.parse(record.trustedAt)
+    return ageMs <= LEGACY_SECRET_ABSOLUTE_TTL_MS
+  }
+
   async function verifySignedChallenge(
     origin: string,
     nonce: string,
@@ -412,6 +426,7 @@ export function createWebOriginTrustStore(
       if (!record?.secretHash) return false
       if (!safeHashEqual(record.secretHash, hashReconnectSecret(secret))) return false
       if (!isRecordFresh(record)) return false
+      if (!isWithinLegacySecretAbsoluteTtl(record)) return false
 
       const nowIso = new Date(now()).toISOString()
       const updated: WebOriginTrustRecord = { ...record, lastUsedAt: nowIso }
