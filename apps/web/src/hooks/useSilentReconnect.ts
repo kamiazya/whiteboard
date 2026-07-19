@@ -106,7 +106,18 @@ async function attemptKeypairChallenge(
   if (challenge.status !== 'ok') {
     return { status: challenge.status }
   }
-  const signature = await deps.signReconnectNonce(privateKey, challenge.nonce)
+  // signReconnectNonce can reject (incompatible CryptoKey, browser crypto
+  // failure) rather than just returning a bad signature the daemon rejects.
+  // Treated the same as a network error — keep the stored keypair, no
+  // legacy fallback — instead of letting the rejection escape this
+  // singleFlight-wrapped call as an unhandled promise rejection that leaves
+  // the UI stuck in 'connecting' forever.
+  let signature: string
+  try {
+    signature = await deps.signReconnectNonce(privateKey, challenge.nonce)
+  } catch {
+    return { status: 'network-error' }
+  }
   return redeemReconnectSessionWithChallenge(origin, challenge.challengeId, signature, fetchImpl)
 }
 

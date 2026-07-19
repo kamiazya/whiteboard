@@ -309,6 +309,28 @@ describe('useSilentReconnect', () => {
       expect(deps.clearKeypair).toHaveBeenCalledWith(ORIGIN)
     })
 
+    it('a rejected signing operation reports failed(network) instead of hanging in connecting', async () => {
+      const deps = makeDeps({
+        loadKeypair: vi.fn(async () => fakeKeypair('confirmed')),
+        signReconnectNonce: vi.fn(async () => {
+          throw new DOMException('key usage mismatch', 'InvalidAccessError')
+        }),
+      })
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        if (String(url).endsWith('/api/reconnect-challenge')) {
+          return jsonResponse({ challengeId: 'c-1', nonce: 'nonce-1', expiresInSeconds: 60 })
+        }
+        return jsonResponse({ token: 'daemon-token' })
+      })
+
+      const { result } = renderHook(() =>
+        useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
+      )
+
+      await waitFor(() => expect(result.current.status).toBe('failed'))
+      expect(result.current).toEqual({ status: 'failed', reason: 'network' })
+    })
+
     it('a network error on the keypair path does NOT fall back to a legacy secret', async () => {
       const deps = makeDeps({ loadKeypair: vi.fn(async () => fakeKeypair('confirmed')) })
       save(ORIGIN, 'legacy-secret')
