@@ -117,6 +117,14 @@ async function assertEveryRecordHasACredential(real: RealEnv): Promise<void> {
   }
 }
 
+async function findRecord(
+  real: RealEnv,
+  origin: string,
+): Promise<{ trustedAt: string; lastUsedAt: string } | undefined> {
+  const records = await real.store.list()
+  return records.find((record) => record.origin === origin)
+}
+
 class TrustLegacyCommand implements TrustCommand {
   constructor(private readonly origin: string) {}
 
@@ -161,6 +169,8 @@ class EnrollKeyCommand implements TrustCommand {
       existing.keyIndex === this.keyIndex &&
       isFresh(existing, now)
 
+    const before = isIdempotentNoOp ? await findRecord(real, this.origin) : undefined
+
     await real.store.enrollPublicKey(this.origin, KEYS[this.keyIndex]!.publicJwk)
 
     if (!isIdempotentNoOp) {
@@ -170,6 +180,18 @@ class EnrollKeyCommand implements TrustCommand {
         trustedAt: existing?.trustedAt ?? now,
         lastUsedAt: now,
       })
+    } else {
+      // Assert the advertised idempotent-no-op contract directly against
+      // the persisted record, not just the model: a regression that
+      // rewrites trustedAt/lastUsedAt while keeping the same key would
+      // otherwise still pass this property.
+      const after = await findRecord(real, this.origin)
+      expect(after?.trustedAt, `enrollKey(${this.origin}) no-op must not bump trustedAt`).toBe(
+        before?.trustedAt,
+      )
+      expect(after?.lastUsedAt, `enrollKey(${this.origin}) no-op must not bump lastUsedAt`).toBe(
+        before?.lastUsedAt,
+      )
     }
     await assertEveryRecordHasACredential(real)
   }
