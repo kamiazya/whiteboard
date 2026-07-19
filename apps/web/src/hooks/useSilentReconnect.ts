@@ -14,6 +14,7 @@ import {
   save as saveLegacySecret,
 } from '../lib/reconnect-credential-store.js'
 import { signReconnectNonce } from '../lib/reconnect-crypto.js'
+import { enrollForReconnectOnce } from '../lib/reconnect-enrollment.js'
 import {
   clearKeypair,
   loadKeypair,
@@ -192,6 +193,19 @@ export function useSilentReconnect({
         // daemon already invalidated and gets rejected.
         if (result.rotatedSecret) {
           saveLegacySecret(origin, result.rotatedSecret)
+        }
+        // Best-effort upgrade: a pre-migration browser that just proved
+        // possession of the legacy secret has no keypair yet (the `run()`
+        // caller only reaches `tryLegacy` when `loadKeypair` returned null),
+        // so enroll one now rather than waiting for the legacy secret's
+        // 90-day absolute TTL to force a re-pairing. enrollForReconnectOnce
+        // never throws synchronously in practice, but it is invoked
+        // fire-and-forget on purpose: its success/failure must never affect
+        // this reconnect's own state transition.
+        try {
+          enrollForReconnectOnce(origin, result.token, fetchImpl)
+        } catch {
+          // Non-fatal by contract — see comment above.
         }
         if (isCurrent()) {
           seedDaemonToken(result.token)

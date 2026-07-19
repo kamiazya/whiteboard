@@ -2,12 +2,22 @@ import { readDaemonTokenOnce, resetTokenStoreForTests } from '@kamiazya/whiteboa
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clear as clearSecretStore, load, save } from '../lib/reconnect-credential-store.js'
+import { resetReconnectEnrollmentForTests } from '../lib/reconnect-enrollment.js'
 import type { ReconnectKeypairRecord } from '../lib/reconnect-keypair-store.js'
 import {
   resetSilentReconnectForTests,
   type UseSilentReconnectDeps,
   useSilentReconnect,
 } from './useSilentReconnect.js'
+
+vi.mock('../lib/reconnect-enrollment.js', async () => {
+  const actual = await vi.importActual<typeof import('../lib/reconnect-enrollment.js')>(
+    '../lib/reconnect-enrollment.js',
+  )
+  return { ...actual, enrollForReconnectOnce: vi.fn() }
+})
+
+const { enrollForReconnectOnce } = await import('../lib/reconnect-enrollment.js')
 
 const ORIGIN = 'http://localhost:3099'
 
@@ -52,7 +62,9 @@ function jsonResponse(body: unknown, status = 200): Response {
 afterEach(() => {
   clearSecretStore()
   resetSilentReconnectForTests()
+  resetReconnectEnrollmentForTests()
   resetTokenStoreForTests()
+  vi.mocked(enrollForReconnectOnce).mockClear()
   vi.restoreAllMocks()
 })
 
@@ -102,6 +114,48 @@ describe('useSilentReconnect', () => {
       expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe(
         'Bearer secret-1',
       )
+    })
+
+    it('a successful legacy redemption triggers a best-effort keypair enrollment', async () => {
+      save(ORIGIN, 'secret-1')
+      const fetchMock = vi.fn(async () => jsonResponse({ token: 'daemon-token' }))
+      const deps = makeDeps()
+      const { result } = renderHook(() =>
+        useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
+      )
+      await waitFor(() => expect(result.current.status).toBe('connected'))
+      expect(enrollForReconnectOnce).toHaveBeenCalledTimes(1)
+      expect(enrollForReconnectOnce).toHaveBeenCalledWith(ORIGIN, 'daemon-token', fetchMock)
+    })
+
+    it('does not re-enroll when a keypair is already present (pending or confirmed)', async () => {
+      save(ORIGIN, 'secret-1')
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        if (String(url).endsWith('/api/reconnect-challenge')) {
+          return jsonResponse({ challengeId: 'c-1', nonce: 'nonce-1', expiresInSeconds: 60 })
+        }
+        return jsonResponse({ token: 'daemon-token' })
+      })
+      const deps = makeDeps({ loadKeypair: vi.fn(async () => fakeKeypair('confirmed')) })
+      const { result } = renderHook(() =>
+        useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
+      )
+      await waitFor(() => expect(result.current.status).toBe('connected'))
+      expect(enrollForReconnectOnce).not.toHaveBeenCalled()
+    })
+
+    it('an enrollment failure after legacy success does not affect the reconnect result', async () => {
+      save(ORIGIN, 'secret-1')
+      const fetchMock = vi.fn(async () => jsonResponse({ token: 'daemon-token' }))
+      const deps = makeDeps()
+      vi.mocked(enrollForReconnectOnce).mockImplementation(() => {
+        throw new Error('enrollment blew up')
+      })
+      const { result } = renderHook(() =>
+        useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
+      )
+      await waitFor(() => expect(result.current.status).toBe('connected'))
+      expect(result.current).toEqual({ status: 'connected', token: 'daemon-token' })
     })
 
     it('403 clears the stored secret and reports failed(rejected)', async () => {

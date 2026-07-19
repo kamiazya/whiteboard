@@ -170,7 +170,12 @@ How it works:
   path is capped at a 90-day absolute TTL measured from first enrollment
   (not reset by use), on top of the normal 30-day sliding TTL, so a legacy
   secret cannot stay reconnectable forever just from periodic use — it is a
-  migration-compatibility shim, not the intended long-term path. If two tabs
+  migration-compatibility shim, not the intended long-term path. The first
+  successful silent redemption of a legacy secret also triggers a
+  best-effort keypair enrollment attempt in the background, so a
+  pre-migration browser upgrades to the public-key contract on its own
+  rather than waiting out the 90-day TTL into a forced re-pairing; the
+  enrollment's outcome never affects that reconnect's own result. If two tabs
   race to redeem the same legacy secret, the first to arrive wins and
   rotates it; the loser's request is rejected, and if a concurrent rotation
   is visible by then the app retries once with the winner's secret — the
