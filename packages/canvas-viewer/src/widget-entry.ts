@@ -369,10 +369,14 @@ async function mountFromHost(
         // Required, not optional: append-only means the new note is only
         // visible once canvas_view re-fetches. Routed through the same
         // coalescing performRefresh a concurrent manual Refresh uses, so
-        // neither call can silently skip the other's refresh. Fire-and-forget
-        // (not awaited) so the sticky control frees up as soon as annotate
-        // resolves, independent of the follow-up refresh completing.
-        void performRefresh()
+        // neither call can silently skip the other's refresh. Awaited
+        // (rather than fire-and-forget) so the sticky control — and the
+        // placement math a rapid next submission would read from
+        // lastValidScene — only re-enable once this refresh has actually
+        // updated lastValidScene; otherwise a second quick submission could
+        // compute its target from the stale pre-annotation scene and land on
+        // the same coordinates as the first note.
+        await performRefresh()
       } catch (err) {
         console.error('[whiteboard-widget] annotate via host callServerTool failed:', err)
       } finally {

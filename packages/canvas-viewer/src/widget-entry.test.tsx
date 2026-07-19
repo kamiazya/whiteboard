@@ -807,6 +807,42 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       await Promise.resolve()
     })
 
+    it('keeps the sticky control disabled until the required post-annotation refresh resolves', async () => {
+      await mountConnectedWithScene([{ id: 'a', x: 0, y: 0, width: 100, height: 50 }])
+
+      let resolveRefresh: ((value: unknown) => void) | undefined
+      callServerToolMock.mockImplementation((params: unknown) => {
+        const name = (params as { name: string }).name
+        if (name === 'annotate') {
+          return Promise.resolve({ structuredContent: { annotation: {} } })
+        }
+        return new Promise((resolve) => {
+          resolveRefresh = resolve
+        })
+      })
+
+      submitSticky('first')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // annotate already resolved, but the required follow-up canvas_view is
+      // still pending — the control (and the stale lastValidScene it would
+      // otherwise let a re-entrant submit compute placement from) must stay
+      // disabled until that refresh actually lands.
+      expect(callServerToolMock).toHaveBeenCalledTimes(2)
+      expect(queryStickyInput()?.disabled).toBe(true)
+
+      resolveRefresh?.({
+        structuredContent: { canvasId: 'ws/slug', scene: { elements: [] } },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(queryStickyInput()?.disabled).toBe(false)
+    })
+
     it('coalesces a required post-annotation refresh with an in-flight manual Refresh instead of skipping it', async () => {
       await mountConnectedWithScene([])
 
