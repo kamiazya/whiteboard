@@ -164,7 +164,6 @@ const ALLOWED_SHARED_EXACT = new Set([
   'daemon-backend.js', // WebSocket + apiFetch transport for the canvas editor, no Node APIs
   'external-url-policy.js', // pure URL validation, no Node APIs
   'loro-raw-element.js', // Zod schema for Loro-stored element shape — zod-only, no Node APIs
-  'migration-bundle.js', // MigrationBundle Zod contract — zod-only, no Node APIs
   'resolve-parented-elements.js', // pure data transformation
   'token-store.js', // in-memory daemon-token holder, no Node APIs
   'upload-files.js', // file upload transport, no Node APIs

@@ -26,14 +26,13 @@
         "src/cli/index.ts",
         "src/server/index.ts",
         // Published package.json subpath exports (browser-contract,
-        // browser-shared, daemon-backend, migration-bundle, api-client,
+        // browser-shared, daemon-backend, api-client,
         // api-contracts) — their exported symbols are the npm package's
         // public surface, not dead code, even where nothing inside this
         // repo currently imports a given member.
         "src/shared/canvas-backend-contract.ts",
         "src/shared/browser-shared-index.ts",
         "src/shared/daemon-backend.ts",
-        "src/shared/migration-bundle.ts",
         "src/shared/api-client.ts",
         "src/shared/api-contracts/index.ts",
         // browser-shared-index.ts (its own entry above) re-exports specific
