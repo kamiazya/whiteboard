@@ -3,10 +3,12 @@
 // from the package's public surface — this file is a build INPUT, loaded
 // only by the widget's own <script type="module"> tag.
 import { App } from '@modelcontextprotocol/ext-apps'
+import { z } from 'zod'
 import { FONT_FILENAME_MAP, WIDGET_FONTS } from 'virtual:widget-fonts'
 import { mountCanvasViewer, type CanvasViewerHandle } from './mount.js'
 import { parseViewerScene } from './scene.js'
 import { buildFontFaceDescriptors, resolveFontFetchDataUri } from './widget/font-registration.js'
+import { createRefreshControl } from './widget/refresh-control.js'
 
 declare global {
   interface Window {
@@ -74,16 +76,20 @@ function registerFonts(): void {
   window.EXCALIDRAW_ASSET_PATH = resolveInertAssetPrefix()
 }
 
+const INERT_ASSET_PREFIX_FALLBACK = 'https://whiteboard-widget.invalid/'
+
 function resolveInertAssetPrefix(): string {
-  try {
-    return new URL('.', window.location.href).toString()
-  } catch {
+  // document.baseURI (inherited from the embedding document in srcdoc) usually
+  // works when location.href is the non-URL "about:srcdoc"; the fixed inert
+  // prefix is the final fallback if both bases fail to resolve.
+  for (const base of [window.location.href, document.baseURI]) {
     try {
-      return new URL('.', document.baseURI).toString()
+      return new URL('.', base).toString()
     } catch {
-      return 'https://whiteboard-widget.invalid/'
+      // Non-URL base (e.g. "about:srcdoc") throws; try the next candidate.
     }
   }
+  return INERT_ASSET_PREFIX_FALLBACK
 }
 
 // Scoped fallback for the case Excalidraw's lazy font loader still issues a
@@ -122,10 +128,10 @@ function installFontFetchShim(): void {
 // result via `ui/notifications/tool-result`; `structuredContent` there is
 // the same `{canvasId, scene}` shape returned by canvas_view's Zod
 // outputSchema. This widget never receives daemon credentials — only the
-// scene snapshot — so it cannot call anything back into the daemon
-// directly (the only outbound path, when a host supports it, is
-// re-invoking canvas_view through the host's own MCP session, which this
-// Phase-A bootstrap does not yet do; there is no Refresh action here).
+// scene snapshot plus, once connected, the host's own MCP session — so its
+// only outbound path is re-invoking canvas_view through
+// `app.callServerTool`, which is what the Refresh control below does; there
+// is no direct daemon access from this document.
 //
 // When no ext-apps host is embedding this document (e.g. the widget opened
 // directly in a browser, or the widget-smoke harness), `app.connect()`
@@ -134,6 +140,58 @@ function installFontFetchShim(): void {
 // so bootstrap always falls back to mountCanvasViewer's own embedded-scene
 // slot instead of hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000
+
+// Both `ui/notifications/tool-result` and the CallToolResult that
+// `app.callServerTool` resolves with wrap canvas_view's payload the same
+// way: `{structuredContent: {canvasId, scene}}`. Sharing one extraction +
+// validation path for the initial mount and every refresh keeps the
+// malformed-payload defense (parseViewerScene before remount) and the
+// canvasId commit rule (never commit from a result that failed validation)
+// in exactly one place. The envelope crosses the host↔widget process
+// boundary, so it gets a Zod schema instead of a cast; `scene` stays
+// deliberately unknown here — parseViewerScene is its real validator.
+const toolResultEnvelopeSchema = z.object({
+  structuredContent: z
+    .object({
+      canvasId: z.string().optional(),
+      scene: z.unknown().optional(),
+    })
+    .catchall(z.unknown())
+    .optional(),
+})
+
+function extractCanvasIdAndScene(payload: unknown): { canvasId?: string; scene?: unknown } {
+  const parsed = toolResultEnvelopeSchema.safeParse(payload)
+  if (!parsed.success) return {}
+  const structuredContent = parsed.data.structuredContent
+  return { canvasId: structuredContent?.canvasId, scene: structuredContent?.scene }
+}
+
+// Validates BEFORE remount: remount disposes the live viewer first, so a
+// malformed payload would otherwise trade a working view for an empty
+// container. `onValidResult` only fires once parseViewerScene has actually
+// accepted the scene, which is what lets the canvasId commit rule ("never
+// remember an ID from an unvalidated result") hold for both the initial
+// tool-result and every subsequent refresh response.
+function applyToolResult(
+  payload: unknown,
+  container: HTMLElement,
+  remount: (mount: () => CanvasViewerHandle) => void,
+  onValidResult: (canvasId: string | undefined) => void,
+): void {
+  const { canvasId, scene } = extractCanvasIdAndScene(payload)
+  try {
+    parseViewerScene(scene)
+  } catch (err) {
+    // Surfaced for host-integration debugging: the widget deliberately
+    // keeps the current view on malformed payloads, which would otherwise
+    // make a host sending the wrong shape look like a silent no-op.
+    console.error('[whiteboard-widget] ignoring tool-result with invalid scene:', err)
+    return
+  }
+  remount(() => mountCanvasViewer(container, { scene }))
+  onValidResult(canvasId)
+}
 
 // `remount` is the single place a mount produced by this bridge happens.
 // `app.connect()` racing HOST_CONNECT_TIMEOUT_MS means a tool-result can
@@ -156,23 +214,20 @@ async function mountFromHost(
 
   const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
 
+  // Committed only once a tool-result has actually passed parseViewerScene —
+  // an unvalidated canvasId must never enable Refresh (it would call
+  // canvas_view with an ID nobody confirmed is real).
+  let committedCanvasId: string | undefined
+  let refreshControl: ReturnType<typeof createRefreshControl> | undefined
+
+  const rememberCanvasId = (canvasId: string | undefined): void => {
+    if (canvasId === undefined) return
+    committedCanvasId = canvasId
+    refreshControl?.show()
+  }
+
   app.ontoolresult = (result) => {
-    // canvas_view's outputSchema wraps the scene as {canvasId, scene}; only
-    // the `scene` field matches parseViewerScene's strict {elements,
-    // appState?, files?} contract, so the wrapper itself must never reach
-    // mountCanvasViewer.
-    const structuredContent = (result as { structuredContent?: { scene?: unknown } })
-      .structuredContent
-    const scene = structuredContent?.scene
-    // Validate BEFORE remount: remount disposes the live viewer first, so a
-    // malformed tool-result would otherwise trade a working view for an
-    // empty container. On invalid payloads the current view stays up.
-    try {
-      parseViewerScene(scene)
-    } catch {
-      return
-    }
-    remount(() => mountCanvasViewer(container, { scene }))
+    applyToolResult(result, container, remount, rememberCanvasId)
   }
 
   // connect() may reject after the timeout already won the race; a catch on
@@ -184,6 +239,48 @@ async function mountFromHost(
       .catch(() => false),
     new Promise<boolean>((resolve) => setTimeout(() => resolve(false), HOST_CONNECT_TIMEOUT_MS)),
   ])
+
+  // A successful handshake alone does not guarantee the host can proxy tool
+  // calls back to the server — only app.getHostCapabilities()?.serverTools
+  // does (per the ext-apps host-capability negotiation). Creating Refresh
+  // without this check would show a control whose every click silently
+  // fails on hosts that never advertised the capability.
+  const canUseServerTools = app.getHostCapabilities()?.serverTools !== undefined
+
+  // Only ever reveal Refresh when THIS race decided "connected" AND the host
+  // advertised serverTools — a tool-result can legitimately arrive (and
+  // mount) before the timeout wins the race, but that must not resurrect
+  // Refresh once "not connected" has been decided, even if app.connect()
+  // itself resolves later. Deciding once here, rather than re-checking on
+  // every later event, is what keeps that outcome permanent for the rest of
+  // this document's lifetime.
+  if (connected && canUseServerTools) {
+    let refreshInFlight = false
+    refreshControl = createRefreshControl(() => {
+      if (refreshInFlight || committedCanvasId === undefined) return
+      refreshInFlight = true
+      refreshControl?.setBusy(true)
+      void app
+        .callServerTool({ name: 'canvas_view', arguments: { canvasId: committedCanvasId } })
+        .then((result) => {
+          applyToolResult(result, container, remount, rememberCanvasId)
+        })
+        .catch((err) => {
+          // Network/host failure: the current view stays mounted (no
+          // remount was attempted) — nothing to recover here besides
+          // resetting the in-flight guard below. Logged so a failing
+          // host transport doesn't present as a dead button.
+          console.error('[whiteboard-widget] refresh via host callServerTool failed:', err)
+        })
+        .finally(() => {
+          refreshInFlight = false
+          refreshControl?.setBusy(false)
+        })
+    })
+    if (committedCanvasId !== undefined) {
+      refreshControl.show()
+    }
+  }
 
   return connected
 }

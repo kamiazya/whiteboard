@@ -16,19 +16,29 @@ no need to switch to a browser tab to see what the agent drew.
   all Excalidraw assets are inlined), so the client's CSP for the view can stay at its
   strictest default.
 
+## Refreshing the view
+
+On clients whose MCP Apps host advertises the `serverTools` capability, the widget
+shows a small **Refresh** button once the initial `canvas_view` result has loaded. It
+re-invokes `canvas_view` for the same `canvasId` through the host and swaps in the
+latest scene — you do not need to leave the chat or call the tool again by hand. On
+clients that do not advertise `serverTools`, or when the widget cannot confirm a host
+connection at all, the button never appears; call `canvas_view` again to see a fresh
+snapshot instead.
+
 ## What you do not get (yet)
 
 This is **Phase A** of MCP Apps support:
 
-- The view is **read-only**. There is no in-widget editing, annotation, or refresh
-  button yet — call `canvas_view` again to see a fresh snapshot.
+- The view is otherwise **read-only** — Refresh reloads the current scene, but there
+  is no in-widget editing or annotation.
 - Only `canvas_view` renders inline. `canvas_open` (opens the full editor in a real
   browser tab) and `export_canvas` (writes a file) are intentionally **not**
   UI-linked — `canvas_open` would need to pass the daemon's base URL into the widget,
   and `export_canvas` has a file-write side effect that a UI "refresh" action should
   never trigger silently.
-- Live sync (the view updating as the agent keeps drawing, without calling the tool
-  again) is a future phase.
+- Live sync (the view updating as the agent keeps drawing, without you or the widget
+  calling the tool again) is a future phase.
 
 ## Requirements
 
