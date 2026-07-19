@@ -20,6 +20,7 @@ describe('SettingsPanel', () => {
         onOpenChange={() => {}}
         theme="system"
         onThemeChange={onThemeChange}
+        webMcpEnabled={true}
       />,
     )
 
@@ -35,14 +36,15 @@ describe('SettingsPanel', () => {
     expect(onThemeChange).toHaveBeenCalledWith('dark')
   })
 
-  test('WebMCP toggle defaults to ON and persists OFF to user-settings', () => {
+  test('WebMCP toggle persists OFF to user-settings and notifies parent', () => {
     const onWebMcpChange = vi.fn()
-    render(
+    const { rerender } = render(
       <SettingsPanel
         open={true}
         onOpenChange={() => {}}
         theme="system"
         onThemeChange={() => {}}
+        webMcpEnabled={true}
         onWebMcpChange={onWebMcpChange}
       />,
     )
@@ -51,26 +53,33 @@ describe('SettingsPanel', () => {
     expect(toggle.getAttribute('aria-checked')).toBe('true')
 
     fireEvent.click(toggle)
-    expect(toggle.getAttribute('aria-checked')).toBe('false')
     expect(onWebMcpChange).toHaveBeenCalledWith(false)
+
+    rerender(
+      <SettingsPanel
+        open={true}
+        onOpenChange={() => {}}
+        theme="system"
+        onThemeChange={() => {}}
+        webMcpEnabled={false}
+        onWebMcpChange={onWebMcpChange}
+      />,
+    )
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
 
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY)!)
     expect(stored.capabilities.webMcpEnabled).toBe(false)
   })
 
-  test('WebMCP toggle reads persisted OFF state', () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        version: 1,
-        storage: {},
-        migration: {},
-        capabilities: { webMcpEnabled: false },
-      }),
-    )
-
+  test('WebMCP toggle reflects controlled OFF state', () => {
     render(
-      <SettingsPanel open={true} onOpenChange={() => {}} theme="light" onThemeChange={() => {}} />,
+      <SettingsPanel
+        open={true}
+        onOpenChange={() => {}}
+        theme="light"
+        onThemeChange={() => {}}
+        webMcpEnabled={false}
+      />,
     )
 
     const toggle = screen.getByRole('switch')
@@ -84,6 +93,7 @@ describe('SettingsPanel', () => {
         onOpenChange={() => {}}
         theme="system"
         onThemeChange={() => {}}
+        webMcpEnabled={true}
       />,
     )
 

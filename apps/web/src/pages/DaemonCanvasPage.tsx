@@ -478,6 +478,7 @@ export function DaemonCanvasPage({
           onOpenChange={setSettingsOpen}
           theme={theme}
           onThemeChange={setTheme}
+          webMcpEnabled={webMcpEnabled}
           onWebMcpChange={setWebMcpEnabled}
         />
       </main>

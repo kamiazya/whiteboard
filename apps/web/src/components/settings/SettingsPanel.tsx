@@ -1,5 +1,5 @@
 import { Monitor, Moon, Palette, Sun } from 'lucide-react'
-import { useCallback, useId, useState } from 'react'
+import { useCallback, useId } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,7 @@ interface SettingsPanelProps {
   onOpenChange: (open: boolean) => void
   theme: ThemeMode
   onThemeChange: (next: ThemeMode) => void
+  webMcpEnabled: boolean
   onWebMcpChange?: (enabled: boolean) => void
 }
 
@@ -31,26 +32,21 @@ export function SettingsPanel({
   onOpenChange,
   theme,
   onThemeChange,
+  webMcpEnabled,
   onWebMcpChange,
 }: SettingsPanelProps) {
   const themeGroupId = useId()
-
-  const [webMcpEnabled, setWebMcpEnabled] = useState(() => {
-    const settings = settingsStore.load()
-    return settings.capabilities.webMcpEnabled ?? true
-  })
+  const webMcpLabelId = useId()
+  const webMcpDescId = useId()
 
   const handleWebMcpToggle = useCallback(() => {
-    setWebMcpEnabled((prev) => {
-      const next = !prev
-      settingsStore.update((s) => ({
-        ...s,
-        capabilities: { ...s.capabilities, webMcpEnabled: next },
-      }))
-      onWebMcpChange?.(next)
-      return next
-    })
-  }, [onWebMcpChange])
+    const next = !webMcpEnabled
+    settingsStore.update((s) => ({
+      ...s,
+      capabilities: { ...s.capabilities, webMcpEnabled: next },
+    }))
+    onWebMcpChange?.(next)
+  }, [webMcpEnabled, onWebMcpChange])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,10 +90,12 @@ export function SettingsPanel({
           {/* Capabilities section */}
           <section>
             <h3 className="mb-3 text-sm font-medium">Capabilities</h3>
-            <label className="flex items-center justify-between gap-3">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm">WebMCP</p>
-                <p className="text-xs text-muted-foreground">
+                <p id={webMcpLabelId} className="text-sm">
+                  WebMCP
+                </p>
+                <p id={webMcpDescId} className="text-xs text-muted-foreground">
                   Expose canvas tools to AI agents via WebMCP
                 </p>
               </div>
@@ -105,6 +103,8 @@ export function SettingsPanel({
                 type="button"
                 role="switch"
                 aria-checked={webMcpEnabled}
+                aria-labelledby={webMcpLabelId}
+                aria-describedby={webMcpDescId}
                 onClick={handleWebMcpToggle}
                 className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors ${
                   webMcpEnabled ? 'bg-primary' : 'bg-input'
@@ -116,7 +116,7 @@ export function SettingsPanel({
                   }`}
                 />
               </button>
-            </label>
+            </div>
           </section>
         </div>
       </DialogContent>
