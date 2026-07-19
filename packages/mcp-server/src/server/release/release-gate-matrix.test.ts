@@ -536,8 +536,11 @@ describe('vitest.distribution.config.ts is wired into a release gate', () => {
 
   it('mcp-server package.json exposes a build-free test:distribution:only script', () => {
     expect(mcpPkg.scripts).toHaveProperty('test:distribution:only')
-    expect(mcpPkg.scripts['test:distribution:only']).toContain(
-      '--config vitest.distribution.config.ts',
+    // Assert the exact script rather than a substring: a value like
+    // "pnpm build && vitest run --config ..." would still contain the config
+    // flag, silently reintroducing the inline build this script exists to avoid.
+    expect(mcpPkg.scripts['test:distribution:only']).toBe(
+      'vitest run --config vitest.distribution.config.ts',
     )
   })
 
