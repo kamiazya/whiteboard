@@ -1,4 +1,4 @@
-import { Hono } from 'hono'
+import { type Context, Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
 import type {
@@ -26,6 +26,22 @@ export interface LiveDocRouterOptions {
   ) => Promise<VersionEntry | null>
 }
 
+// Validate the shared :workspaceId/:slug path params. Returns a 400 JSON
+// Response to short-circuit the handler on invalid input, or the parsed
+// params on success. Rethrows non-validation errors unchanged.
+function validatePathParams(c: Context): { workspaceId: string; slug: string } | Response {
+  const { workspaceId, slug } = c.req.param()
+  try {
+    validateWorkspaceId(workspaceId)
+    validateSlug(slug)
+  } catch (err) {
+    const body = validationErrorBody(err)
+    if (body) return c.json(body, 400)
+    throw err
+  }
+  return { workspaceId, slug }
+}
+
 // GET /api/canvas/:workspaceId/:slug/snapshot
 // GET /api/canvas/:workspaceId/:slug/exists
 // POST /api/canvas/:workspaceId/:slug/update
@@ -33,29 +49,17 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
 
   app.get('/api/canvas/:workspaceId/:slug/exists', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+    const params = validatePathParams(c)
+    if (params instanceof Response) return params
+    const { workspaceId, slug } = params
     const response: CanvasExistsResponse = { exists: await canvasExists(workspaceId, slug) }
     return c.json(response)
   })
 
   app.get('/api/canvas/:workspaceId/:slug/snapshot', async (c) => {
-    const { workspaceId, slug } = c.req.param()
-    try {
-      validateWorkspaceId(workspaceId)
-      validateSlug(slug)
-    } catch (err) {
-      const body = validationErrorBody(err)
-      if (body) return c.json(body, 400)
-      throw err
-    }
+    const params = validatePathParams(c)
+    if (params instanceof Response) return params
+    const { workspaceId, slug } = params
     const doc = await getDoc(workspaceId, slug)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
     return c.body(snapshot, 200, {
@@ -77,15 +81,9 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
         ),
     }),
     async (c) => {
-      const { workspaceId, slug } = c.req.param()
-      try {
-        validateWorkspaceId(workspaceId)
-        validateSlug(slug)
-      } catch (err) {
-        const body = validationErrorBody(err)
-        if (body) return c.json(body, 400)
-        throw err
-      }
+      const params = validatePathParams(c)
+      if (params instanceof Response) return params
+      const { workspaceId, slug } = params
       const bytes = new Uint8Array(await c.req.arrayBuffer())
 
       const doc = await getDoc(workspaceId, slug)
