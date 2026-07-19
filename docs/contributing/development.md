@@ -175,9 +175,15 @@ pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 Default regression triple after a change:
 
 ```bash
-pnpm test        # unit tests (~3s, 460+ tests)
+pnpm test        # full suite: mcp-node + mcp-smoke + apps/web jsdom + web-browser (Playwright, slower)
 pnpm typecheck   # tsc --noEmit (~10s)
 pnpm smoke:e2e   # stdio MCP subprocess: canvas_create -> version save/restore -> viewport no_client -> export_canvas (png/svg/json)
+```
+
+For a fast node-only pass while iterating (skips the Playwright browser project):
+
+```bash
+pnpm test --project mcp-node
 ```
 
 If you also need a zero-context LLM-level check:
