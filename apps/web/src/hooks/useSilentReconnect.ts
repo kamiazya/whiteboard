@@ -190,22 +190,37 @@ export function useSilentReconnect({
         // A pre-migration daemon still rotates the presented secret on every
         // redemption (see reconnect-client.ts's parseSessionOutcome) — persist
         // the replacement now, or the next reload presents a secret the
-        // daemon already invalidated and gets rejected.
+        // daemon already invalidated and gets rejected. `rotatedSecret`'s
+        // presence is also this response's ONLY signal that the daemon on
+        // the other end is pre-migration: it means /api/reconnect-session
+        // rotated a plaintext secret rather than returning a bare token, so
+        // /api/reconnect-credential on that same daemon would too — it
+        // cannot honor a public-key enrollment and would instead issue yet
+        // another plaintext secret. Attempting enrollment here anyway is
+        // fire-and-forget; if the tab closes or reloads before that second
+        // response lands, the daemon has still committed the rotation
+        // server-side, leaving the browser holding the secret just saved
+        // above but already invalidated — forcing a re-pairing. Skipping
+        // enrollment whenever `rotatedSecret` is present avoids that
+        // needless second rotation entirely; only a modern (token-only)
+        // response below attempts the keypair upgrade.
         if (result.rotatedSecret) {
           saveLegacySecret(origin, result.rotatedSecret)
-        }
-        // Best-effort upgrade: a pre-migration browser that just proved
-        // possession of the legacy secret has no keypair yet (the `run()`
-        // caller only reaches `tryLegacy` when `loadKeypair` returned null),
-        // so enroll one now rather than waiting for the legacy secret's
-        // 90-day absolute TTL to force a re-pairing. enrollForReconnectOnce
-        // never throws synchronously in practice, but it is invoked
-        // fire-and-forget on purpose: its success/failure must never affect
-        // this reconnect's own state transition.
-        try {
-          enrollForReconnectOnce(origin, result.token, fetchImpl)
-        } catch {
-          // Non-fatal by contract — see comment above.
+        } else {
+          // Best-effort upgrade: a browser that just proved possession of
+          // the legacy secret against a modern daemon has no keypair yet
+          // (the `run()` caller only reaches `tryLegacy` when `loadKeypair`
+          // returned null), so enroll one now rather than waiting for the
+          // legacy secret's 90-day absolute TTL to force a re-pairing.
+          // enrollForReconnectOnce never throws synchronously in practice,
+          // but it is invoked fire-and-forget on purpose: its success/
+          // failure must never affect this reconnect's own state
+          // transition.
+          try {
+            enrollForReconnectOnce(origin, result.token, fetchImpl)
+          } catch {
+            // Non-fatal by contract — see comment above.
+          }
         }
         if (isCurrent()) {
           seedDaemonToken(result.token)

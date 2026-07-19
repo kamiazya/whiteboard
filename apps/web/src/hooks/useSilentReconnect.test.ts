@@ -179,7 +179,7 @@ describe('useSilentReconnect', () => {
       expect(enrollForReconnectOnce).not.toHaveBeenCalled()
     })
 
-    it('a pre-migration daemon rotating the legacy secret persists the replacement', async () => {
+    it('a pre-migration daemon rotating the legacy secret persists the replacement and skips enrollment', async () => {
       save(ORIGIN, 'secret-1')
       const fetchMock = vi.fn(async () =>
         jsonResponse({ token: 'daemon-token', reconnectSecret: 'secret-2', expiresInDays: 30 }),
@@ -196,6 +196,14 @@ describe('useSilentReconnect', () => {
       await waitFor(() => expect(result.current.status).toBe('connected'))
       expect(result.current).toEqual({ status: 'connected', token: 'daemon-token' })
       expect(load(ORIGIN)).toBe('secret-2')
+      // `rotatedSecret` identifies this as a pre-migration daemon: its
+      // /api/reconnect-credential would issue yet another plaintext secret
+      // rather than accept a public-key enrollment. Attempting it anyway is
+      // fire-and-forget, so losing that second response (tab closed/reloaded
+      // before it lands) would leave the browser holding the secret just
+      // saved above while the daemon has already rotated past it again —
+      // forcing a re-pairing. Skip enrollment entirely in this branch.
+      expect(enrollForReconnectOnce).not.toHaveBeenCalled()
     })
 
     it('network error keeps the stored secret and reports failed(network)', async () => {
