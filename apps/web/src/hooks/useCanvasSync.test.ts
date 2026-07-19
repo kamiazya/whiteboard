@@ -1903,5 +1903,18 @@ describe('useCanvasSync', () => {
       const text = await blob!.text()
       expect(text).toContain('data-testid="exported-svg"')
     })
+
+    it("rejects a direct 'json' call instead of silently returning an SVG blob", async () => {
+      const backend = makeFakeBackend()
+      const api = makeApiStub()
+      const { result } = renderHook(() => useCanvasSync(backend))
+
+      act(() => {
+        result.current.setExcalidrawAPI(api as never)
+      })
+
+      await expect(result.current.exportScene('json')).rejects.toThrow()
+      expect(exportToSvg).not.toHaveBeenCalled()
+    })
   })
 })

@@ -185,8 +185,15 @@ export function useCanvasSync(
     if (format === 'png') {
       return exportToBlob({ elements, appState, files, exportPadding: 10 })
     }
-    // 'json' never reaches here: createSceneExportHandler intercepts it and
-    // delegates to commands.exportJson before exportScene is called.
+    // Callers are expected to route through createSceneExportHandler, which
+    // intercepts 'json' and delegates to commands.exportJson before this
+    // function is ever invoked. Guard defensively rather than silently
+    // falling through to exportToSvg and mislabeling the blob's content type.
+    if (format === 'json') {
+      throw new Error(
+        "exportScene does not support 'json' directly; route through createSceneExportHandler",
+      )
+    }
     const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
     const serialized = new XMLSerializer().serializeToString(svg)
     return new Blob([serialized], { type: 'image/svg+xml' })
