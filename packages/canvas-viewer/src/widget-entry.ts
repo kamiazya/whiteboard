@@ -341,21 +341,14 @@ async function mountFromHost(
       }
     }
 
-    refreshControl = createRefreshControl(() => {
-      void performRefresh()
-    })
-    if (committedCanvasId !== undefined) {
-      refreshControl.show()
-    }
-
     let annotateInFlight = false
-    stickyControl = createStickyNoteControl((text) => {
+    const performAnnotate = async (text: string): Promise<void> => {
       if (annotateInFlight || committedCanvasId === undefined) return
       annotateInFlight = true
       stickyControl?.setBusy(true)
       const target = computeStickyPlacement(lastValidScene?.elements ?? [])
-      void app
-        .callServerTool({
+      try {
+        const result = await app.callServerTool({
           name: 'annotate',
           arguments: {
             canvasId: committedCanvasId,
@@ -366,29 +359,39 @@ async function mountFromHost(
             backgroundColor: STICKY_BACKGROUND_COLOR,
           },
         })
-        .then((result) => {
-          if (isErrorResult(result)) {
-            console.error(
-              '[whiteboard-widget] annotate via host callServerTool returned an error result:',
-              result,
-            )
-            return
-          }
-          // Required, not optional: append-only means the new note is only
-          // visible once canvas_view re-fetches. Routed through the same
-          // coalescing performRefresh a concurrent manual Refresh uses, so
-          // neither call can silently skip the other's refresh.
-          void performRefresh()
-        })
-        .catch((err) => {
-          console.error('[whiteboard-widget] annotate via host callServerTool failed:', err)
-        })
-        .finally(() => {
-          annotateInFlight = false
-          stickyControl?.setBusy(false)
-        })
+        if (isErrorResult(result)) {
+          console.error(
+            '[whiteboard-widget] annotate via host callServerTool returned an error result:',
+            result,
+          )
+          return
+        }
+        // Required, not optional: append-only means the new note is only
+        // visible once canvas_view re-fetches. Routed through the same
+        // coalescing performRefresh a concurrent manual Refresh uses, so
+        // neither call can silently skip the other's refresh. Fire-and-forget
+        // (not awaited) so the sticky control frees up as soon as annotate
+        // resolves, independent of the follow-up refresh completing.
+        void performRefresh()
+      } catch (err) {
+        console.error('[whiteboard-widget] annotate via host callServerTool failed:', err)
+      } finally {
+        annotateInFlight = false
+        stickyControl?.setBusy(false)
+      }
+    }
+
+    refreshControl = createRefreshControl(() => {
+      void performRefresh()
     })
+    stickyControl = createStickyNoteControl((text) => {
+      void performAnnotate(text)
+    })
+
+    // A tool-result can commit an ID during connect() above, before either
+    // control existed to be shown — reveal both if that already happened.
     if (committedCanvasId !== undefined) {
+      refreshControl.show()
       stickyControl.show()
     }
   }
