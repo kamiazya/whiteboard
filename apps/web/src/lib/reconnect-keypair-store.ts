@@ -17,6 +17,13 @@ import { generateReconnectKeypair } from './reconnect-crypto.js'
 const keypairRecordSchema = z.object({
   v: z.literal(1),
   origin: z.string(),
+  // Identifies THIS generated key, independent of the CryptoKey object
+  // identity (which cannot be compared across a reload or another tab).
+  // Lets a caller compare-and-delete: only remove the record if it still
+  // holds the exact key an earlier operation observed, rather than
+  // unconditionally deleting whatever now occupies the origin slot — see
+  // clearKeypairIfMatches.
+  keyId: z.string().min(1),
   status: z.enum(['pending', 'confirmed']),
   publicKey: z.instanceof(CryptoKey),
   privateKey: z.instanceof(CryptoKey),
@@ -120,7 +127,14 @@ export async function getOrCreateKeypair(origin: string): Promise<ReconnectKeypa
   if (existing) return existing
 
   const { publicKey, privateKey } = await generateReconnectKeypair()
-  const record: ReconnectKeypairRecord = { v: 1, origin, status: 'pending', publicKey, privateKey }
+  const record: ReconnectKeypairRecord = {
+    v: 1,
+    origin,
+    keyId: crypto.randomUUID(),
+    status: 'pending',
+    publicKey,
+    privateKey,
+  }
 
   const db = await openWhiteboardDb()
   try {
@@ -177,8 +191,16 @@ export function markKeypairConfirmed(origin: string): Promise<void> {
   return putStatus(origin, 'confirmed')
 }
 
-/** Deletes `origin`'s stored keypair — used when the daemon rejects it (revoked/expired). */
-export async function clearKeypair(origin: string): Promise<void> {
+/**
+ * Deletes `origin`'s stored keypair, but ONLY if it still matches `keyId` —
+ * guards a cross-tab race where a rejection for the KEY THIS CALLER LOADED
+ * is handled after another tab already cleared it and enrolled a
+ * replacement: an unconditional delete would erase that newer, unrelated
+ * keypair instead of the one that was actually rejected. Get-then-delete
+ * inside a single readwrite transaction, so no concurrent write can land
+ * between the identity check and the delete.
+ */
+export async function clearKeypair(origin: string, keyId: string): Promise<void> {
   const db = await openWhiteboardDb()
   return new Promise((resolve, reject) => {
     let tx: IDBTransaction
@@ -189,7 +211,14 @@ export async function clearKeypair(origin: string): Promise<void> {
       reject(err)
       return
     }
-    tx.objectStore(STORE_NAME).delete(origin)
+    const store = tx.objectStore(STORE_NAME)
+    const getReq = store.get(origin)
+    getReq.onsuccess = () => {
+      const existing = getReq.result as ReconnectKeypairRecord | undefined
+      if (existing !== undefined && existing.keyId === keyId) {
+        store.delete(origin)
+      }
+    }
     tx.oncomplete = () => {
       db.close()
       resolve()

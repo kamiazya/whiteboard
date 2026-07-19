@@ -69,10 +69,24 @@ describe('reconnect keypair persistence (real IndexedDB + WebCrypto)', () => {
     expect(reloadedJwk).toEqual(originalJwk)
   })
 
-  it('clearKeypair removes the record entirely', async () => {
-    await getOrCreateKeypair(ORIGIN_A)
-    await clearKeypair(ORIGIN_A)
+  it('clearKeypair removes the record when the keyId matches', async () => {
+    const created = await getOrCreateKeypair(ORIGIN_A)
+    await clearKeypair(ORIGIN_A, created.keyId)
     expect(await loadKeypair(ORIGIN_A)).toBeNull()
+  })
+
+  it('clearKeypair leaves a replacement key untouched when the keyId does not match (cross-tab race)', async () => {
+    const original = await getOrCreateKeypair(ORIGIN_A)
+    // Simulate another tab already having cleared the original and enrolled
+    // a replacement before this call (which loaded `original`) gets around
+    // to handling a rejection for it.
+    await clearKeypair(ORIGIN_A, original.keyId)
+    const replacement = await getOrCreateKeypair(ORIGIN_A)
+
+    await clearKeypair(ORIGIN_A, original.keyId)
+
+    const stillStored = await loadKeypair(ORIGIN_A)
+    expect(stillStored?.keyId).toBe(replacement.keyId)
   })
 
   it('exports a canonical 4-field JWK (no ext/key_ops/alg) and the daemon can verify a signature made with the stored private key', async () => {

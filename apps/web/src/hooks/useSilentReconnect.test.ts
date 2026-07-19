@@ -13,11 +13,19 @@ const ORIGIN = 'http://localhost:3099'
 
 const FAKE_PUBLIC_KEY = {} as CryptoKey
 const FAKE_PRIVATE_KEY = {} as CryptoKey
+const FAKE_KEY_ID = 'key-id-1'
 
 function fakeKeypair(
   status: ReconnectKeypairRecord['status'] = 'confirmed',
 ): ReconnectKeypairRecord {
-  return { v: 1, origin: ORIGIN, status, publicKey: FAKE_PUBLIC_KEY, privateKey: FAKE_PRIVATE_KEY }
+  return {
+    v: 1,
+    origin: ORIGIN,
+    keyId: FAKE_KEY_ID,
+    status,
+    publicKey: FAKE_PUBLIC_KEY,
+    privateKey: FAKE_PRIVATE_KEY,
+  }
 }
 
 // No keypair enrolled (jsdom has no real IndexedDB / WebCrypto anyway — see
@@ -249,6 +257,27 @@ describe('useSilentReconnect', () => {
       expect(readDaemonTokenOnce()).toBe('daemon-token')
     })
 
+    it("a pending keypair success does not erase a DIFFERENT origin's legacy secret (cross-origin race)", async () => {
+      const OTHER_ORIGIN = 'http://localhost:4000'
+      const deps = makeDeps({ loadKeypair: vi.fn(async () => fakeKeypair('pending')) })
+      // Simulates another tab having saved a legacy secret for a different
+      // origin after this attempt started but before it completes.
+      save(OTHER_ORIGIN, 'other-origin-secret')
+      const fetchMock = vi.fn(async (url: string | URL) => {
+        if (String(url).endsWith('/api/reconnect-challenge')) {
+          return jsonResponse({ challengeId: 'c-1', nonce: 'nonce-1', expiresInSeconds: 60 })
+        }
+        return jsonResponse({ token: 'daemon-token' })
+      })
+
+      const { result } = renderHook(() =>
+        useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
+      )
+
+      await waitFor(() => expect(result.current.status).toBe('connected'))
+      expect(load(OTHER_ORIGIN)).toBe('other-origin-secret')
+    })
+
     it('an already-confirmed keypair does not re-confirm or touch the legacy secret store', async () => {
       const deps = makeDeps({ loadKeypair: vi.fn(async () => fakeKeypair('confirmed')) })
       const fetchMock = vi.fn(async (url: string | URL) => {
@@ -286,7 +315,7 @@ describe('useSilentReconnect', () => {
 
       await waitFor(() => expect(result.current.status).toBe('connected'))
       expect(result.current).toEqual({ status: 'connected', token: 'daemon-token' })
-      expect(deps.clearKeypair).toHaveBeenCalledWith(ORIGIN)
+      expect(deps.clearKeypair).toHaveBeenCalledWith(ORIGIN, FAKE_KEY_ID)
       // Legacy secret survives — it was the successful fallback credential.
       expect(load(ORIGIN)).toBe('legacy-secret')
     })
@@ -306,7 +335,7 @@ describe('useSilentReconnect', () => {
 
       await waitFor(() => expect(result.current.status).toBe('failed'))
       expect(result.current).toEqual({ status: 'failed', reason: 'rejected' })
-      expect(deps.clearKeypair).toHaveBeenCalledWith(ORIGIN)
+      expect(deps.clearKeypair).toHaveBeenCalledWith(ORIGIN, FAKE_KEY_ID)
     })
 
     it('a rejected signing operation reports failed(network) instead of hanging in connecting', async () => {
@@ -329,6 +358,46 @@ describe('useSilentReconnect', () => {
 
       await waitFor(() => expect(result.current.status).toBe('failed'))
       expect(result.current).toEqual({ status: 'failed', reason: 'network' })
+    })
+
+    it('a rejected loadKeypair (e.g. IndexedDB open failure) falls back to a legacy secret instead of surfacing the throw', async () => {
+      const deps = makeDeps({
+        loadKeypair: vi.fn(async () => {
+          throw new Error('IndexedDB open failed')
+        }),
+      })
+      save(ORIGIN, 'legacy-secret')
+      const fetchMock = vi.fn(async (_url: string | URL, _init?: RequestInit) =>
+        jsonResponse({ token: 'daemon-token' }),
+      )
+
+      const { result } = renderHook(() =>
+        useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
+      )
+
+      await waitFor(() => expect(result.current.status).toBe('connected'))
+      expect(result.current).toEqual({ status: 'connected', token: 'daemon-token' })
+      const [url, init] = fetchMock.mock.calls[0]
+      expect(String(url)).toBe(`${ORIGIN}/api/reconnect-session`)
+      expect((init?.headers as Record<string, string> | undefined)?.Authorization).toBe(
+        'Bearer legacy-secret',
+      )
+    })
+
+    it('a rejected loadKeypair with no legacy secret stays idle rather than reporting failed', async () => {
+      const deps = makeDeps({
+        loadKeypair: vi.fn(async () => {
+          throw new Error('IndexedDB open failed')
+        }),
+      })
+      const fetchMock = vi.fn()
+
+      const { result } = renderHook(() =>
+        useSilentReconnect({ enabled: true, origin: ORIGIN, fetchImpl: fetchMock, deps }),
+      )
+
+      await waitFor(() => expect(result.current).toEqual({ status: 'idle' }))
+      expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('a network error on the keypair path does NOT fall back to a legacy secret', async () => {

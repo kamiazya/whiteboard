@@ -9,7 +9,7 @@ import {
 } from '../lib/reconnect-client.js'
 import {
   clearIfMatches,
-  clear as clearLegacySecret,
+  clearIfOrigin as clearLegacySecretIfOrigin,
   load as loadLegacySecret,
   save as saveLegacySecret,
 } from '../lib/reconnect-credential-store.js'
@@ -28,7 +28,7 @@ import {
 export interface UseSilentReconnectDeps {
   loadKeypair: (origin: string) => Promise<ReconnectKeypairRecord | null>
   markKeypairConfirmed: (origin: string) => Promise<void>
-  clearKeypair: (origin: string) => Promise<void>
+  clearKeypair: (origin: string, keyId: string) => Promise<void>
   signReconnectNonce: (privateKey: CryptoKey, nonce: string) => Promise<string>
 }
 
@@ -232,7 +232,11 @@ export function useSilentReconnect({
         // right after enrollment's POST /api/reconnect-credential succeeded.
         if (keypair.status === 'pending') {
           await deps.markKeypairConfirmed(origin).catch(() => {})
-          clearLegacySecret()
+          // Conditional on origin, not unconditional: a completion that
+          // lands late can otherwise race a DIFFERENT origin's legacy
+          // secret that a concurrent tab saved after this attempt started,
+          // erasing credentials this hook has no business touching.
+          clearLegacySecretIfOrigin(origin)
         }
         if (isCurrent()) {
           seedDaemonToken(result.token)
@@ -246,7 +250,7 @@ export function useSilentReconnect({
         // origin delisted) — drop it and fall back to a legacy secret, if
         // one is still around, rather than getting stuck retrying a key
         // that will never be accepted again.
-        await deps.clearKeypair(origin).catch(() => {})
+        await deps.clearKeypair(origin, keypair.keyId).catch(() => {})
         await tryLegacy('rejected')
         return
       }

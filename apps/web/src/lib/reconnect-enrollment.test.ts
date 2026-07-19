@@ -26,7 +26,14 @@ const FAKE_PUBLIC_KEY = {} as CryptoKey
 const FAKE_PRIVATE_KEY = {} as CryptoKey
 
 function fakeKeypair(status: ReconnectKeypairRecord['status'] = 'pending'): ReconnectKeypairRecord {
-  return { v: 1, origin: ORIGIN, status, publicKey: FAKE_PUBLIC_KEY, privateKey: FAKE_PRIVATE_KEY }
+  return {
+    v: 1,
+    origin: ORIGIN,
+    keyId: 'key-id-1',
+    status,
+    publicKey: FAKE_PUBLIC_KEY,
+    privateKey: FAKE_PRIVATE_KEY,
+  }
 }
 
 function makeDeps(overrides: Partial<ReconnectEnrollmentDeps> = {}): ReconnectEnrollmentDeps {

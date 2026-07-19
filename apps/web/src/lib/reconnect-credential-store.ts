@@ -107,6 +107,19 @@ export function clearIfMatches(origin: string, secret: string): void {
   }
 }
 
+/**
+ * Clears the stored record, but ONLY if it currently belongs to `origin` —
+ * guards against a completion for one origin erasing a DIFFERENT origin's
+ * legacy secret that a concurrent tab saved after this call's caller
+ * started its attempt (this store holds a single record, not one per
+ * origin, so an unconditional clear can hit any origin's secret).
+ */
+export function clearIfOrigin(origin: string): void {
+  if (load(origin) !== null) {
+    safeRemoveItem(STORAGE_KEY)
+  }
+}
+
 export function clear(): void {
   safeRemoveItem(STORAGE_KEY)
 }

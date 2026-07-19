@@ -30,21 +30,37 @@ const FAKE_PUBLIC_KEY = {} as CryptoKey
 const FAKE_PRIVATE_KEY = {} as CryptoKey
 const fakeKeypairs = new Map<string, 'pending' | 'confirmed'>()
 
+const FAKE_KEY_ID = 'key-id-1'
+
 vi.mock('./lib/reconnect-keypair-store.js', () => ({
   getOrCreateKeypair: vi.fn(async (origin: string) => {
     const status = fakeKeypairs.get(origin) ?? 'pending'
     fakeKeypairs.set(origin, status)
-    return { v: 1, origin, status, publicKey: FAKE_PUBLIC_KEY, privateKey: FAKE_PRIVATE_KEY }
+    return {
+      v: 1,
+      origin,
+      keyId: FAKE_KEY_ID,
+      status,
+      publicKey: FAKE_PUBLIC_KEY,
+      privateKey: FAKE_PRIVATE_KEY,
+    }
   }),
   loadKeypair: vi.fn(async (origin: string) => {
     const status = fakeKeypairs.get(origin)
     if (!status) return null
-    return { v: 1, origin, status, publicKey: FAKE_PUBLIC_KEY, privateKey: FAKE_PRIVATE_KEY }
+    return {
+      v: 1,
+      origin,
+      keyId: FAKE_KEY_ID,
+      status,
+      publicKey: FAKE_PUBLIC_KEY,
+      privateKey: FAKE_PRIVATE_KEY,
+    }
   }),
   markKeypairConfirmed: vi.fn(async (origin: string) => {
     if (fakeKeypairs.has(origin)) fakeKeypairs.set(origin, 'confirmed')
   }),
-  clearKeypair: vi.fn(async (origin: string) => {
+  clearKeypair: vi.fn(async (origin: string, _keyId: string) => {
     fakeKeypairs.delete(origin)
   }),
 }))
