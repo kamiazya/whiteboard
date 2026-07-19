@@ -114,6 +114,32 @@ describe('reconnect keypair persistence (real IndexedDB + WebCrypto)', () => {
     expect(wrongVerified).toBe(false)
   })
 
+  it('recovers from a corrupt stored row instead of permanently bricking enrollment for that origin', async () => {
+    // Seed a schema-invalid row directly (e.g. a stale/half-written record
+    // from a previous app version) — loadKeypair maps this to null but must
+    // also clear it, or the later add() in getOrCreateKeypair permanently
+    // fails with ConstraintError since the corrupt row still owns the key.
+    const db = await openWhiteboardDb()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('reconnectKeypairs', 'readwrite')
+      tx.objectStore('reconnectKeypairs').put({ origin: ORIGIN_A, v: 1, status: 'bogus' })
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => reject(tx.error)
+    })
+
+    expect(await loadKeypair(ORIGIN_A)).toBeNull()
+
+    const recovered = await getOrCreateKeypair(ORIGIN_A)
+    expect(recovered.status).toBe('pending')
+    expect(recovered.publicKey).toBeInstanceOf(CryptoKey)
+
+    const reloaded = await loadKeypair(ORIGIN_A)
+    expect(reloaded?.publicKey).toBeInstanceOf(CryptoKey)
+  })
+
   it('two concurrent getOrCreateKeypair calls for the same origin converge on one stored key', async () => {
     const [first, second] = await Promise.all([
       getOrCreateKeypair(ORIGIN_A),

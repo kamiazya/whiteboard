@@ -30,26 +30,41 @@ function isConstraintError(err: unknown): boolean {
   return err instanceof DOMException && err.name === 'ConstraintError'
 }
 
-/** Reads the stored keypair record for `origin`, or null when absent/corrupt. */
+/**
+ * Reads the stored keypair record for `origin`, or null when absent/corrupt.
+ *
+ * A schema-invalid row (a stale/half-written record from a previous app
+ * version, or manual tampering) is deleted rather than merely ignored: a
+ * readonly transaction can't write, and returning null without clearing the
+ * row would leave it in place under the origin key — getOrCreateKeypair's
+ * subsequent add() would then hit a ConstraintError forever, permanently
+ * blocking silent-reconnect enrollment for that origin.
+ */
 export async function loadKeypair(origin: string): Promise<ReconnectKeypairRecord | null> {
   const db = await openWhiteboardDb()
   return new Promise((resolve, reject) => {
     let tx: IDBTransaction
     try {
-      tx = db.transaction(STORE_NAME, 'readonly')
+      tx = db.transaction(STORE_NAME, 'readwrite')
     } catch (err) {
       db.close()
       reject(err)
       return
     }
-    const req = tx.objectStore(STORE_NAME).get(origin)
+    const store = tx.objectStore(STORE_NAME)
+    const req = store.get(origin)
     req.onsuccess = () => {
       if (req.result === undefined) {
         resolve(null)
         return
       }
       const parsed = keypairRecordSchema.safeParse(req.result)
-      resolve(parsed.success ? parsed.data : null)
+      if (parsed.success) {
+        resolve(parsed.data)
+        return
+      }
+      store.delete(origin)
+      resolve(null)
     }
     req.onerror = () => reject(req.error)
     tx.oncomplete = () => db.close()
