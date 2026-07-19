@@ -123,6 +123,7 @@ export async function enrollReconnectCredential(
   const outcome = await postJson(url, headers, { publicKeyJwk }, fetchImpl, signal)
   if (outcome.status === 'network-error') return { status: 'network-error' }
   if (outcome.status === 'rejected') return { status: 'rejected' }
+  if (outcome.status === 'http-error') return { status: 'invalid-response' }
 
   const parsed = reconnectCredentialResponseSchema.safeParse(outcome.json)
   if (parsed.success) return { status: 'ok', expiresInDays: parsed.data.expiresInDays }

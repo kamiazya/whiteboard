@@ -99,6 +99,24 @@ describe('enrollReconnectCredential', () => {
       await enrollReconnectCredential('http://localhost:3099', 'token', PUBLIC_JWK, fetchMock),
     ).toEqual({ status: 'invalid-response' })
   })
+
+  it('maps a 5xx response with a success-shaped body to invalid-response, not ok', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ credentialKind: 'publicKey', expiresInDays: 30 }, 500),
+    )
+    expect(
+      await enrollReconnectCredential('http://localhost:3099', 'token', PUBLIC_JWK, fetchMock),
+    ).toEqual({ status: 'invalid-response' })
+  })
+
+  it('maps a 5xx response with a legacy-shaped body to invalid-response, not legacy', async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }, 500),
+    )
+    expect(
+      await enrollReconnectCredential('http://localhost:3099', 'token', PUBLIC_JWK, fetchMock),
+    ).toEqual({ status: 'invalid-response' })
+  })
 })
 
 describe('requestReconnectChallenge', () => {
