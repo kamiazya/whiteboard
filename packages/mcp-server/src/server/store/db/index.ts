@@ -1,5 +1,11 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+// @libsql/client is not imported directly anywhere in src — LibsqlDialect
+// pulls it in transitively — but package.json still declares it as a direct
+// dependency pinned newer (^0.17.3) than @libsql/kysely-libsql's own range
+// (^0.8.0). Keep the direct pin: it is what forces the whole workspace onto
+// the patched client version rather than whatever kysely-libsql's own
+// (older) range would otherwise resolve to.
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, sql } from 'kysely'
 import { getDataDir } from '../../config.js'

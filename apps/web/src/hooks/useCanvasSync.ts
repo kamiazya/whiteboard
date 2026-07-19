@@ -10,7 +10,6 @@ import {
 } from '../lib/canvas-sync-session.js'
 import type { SyncStatus, UseCanvasSyncOptions } from '../lib/canvas-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/canvas-sync-types.js'
-import { serializeSceneAsExcalidrawJson } from '@kamiazya/whiteboard-canvas-viewer/scene'
 
 export type { SyncStatus, UseCanvasSyncOptions }
 // Re-exported so existing call sites (e.g. DaemonCanvasPage) can keep
@@ -186,13 +185,8 @@ export function useCanvasSync(
     if (format === 'png') {
       return exportToBlob({ elements, appState, files, exportPadding: 10 })
     }
-    if (format === 'json') {
-      // Produces the standard .excalidraw envelope ({type:'excalidraw',
-      // version:2, ...}) matching the daemon's canvas_export_json, so the
-      // file round-trips with Excalidraw desktop / excalidraw.com.
-      const doc = serializeSceneAsExcalidrawJson(elements, appState, files)
-      return new Blob([JSON.stringify(doc)], { type: 'application/json' })
-    }
+    // 'json' never reaches here: createSceneExportHandler intercepts it and
+    // delegates to commands.exportJson before exportScene is called.
     const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
     const serialized = new XMLSerializer().serializeToString(svg)
     return new Blob([serialized], { type: 'image/svg+xml' })

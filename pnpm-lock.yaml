@@ -79,9 +79,6 @@ importers:
       secretlint:
         specifier: 13.0.2
         version: 13.0.2
-      vite-plugin-pwa:
-        specifier: 1.3.0
-        version: 1.3.0(vite@8.1.3(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))(workbox-build@7.4.1)(workbox-window@7.4.1)
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/browser-playwright@4.1.9)(@vitest/coverage-v8@4.1.9)(happy-dom@20.9.0)(jsdom@29.0.2(canvas@3.2.3))(msw@2.13.5(@types/node@24.13.1)(typescript@6.0.3))(vite@8.1.3(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))
@@ -91,9 +88,6 @@ importers:
       '@excalidraw/excalidraw':
         specifier: 'catalog:'
         version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@excalidraw/utils':
-        specifier: 0.1.3-test32
-        version: 0.1.3-test32
       '@kamiazya/whiteboard-canvas-viewer':
         specifier: workspace:*
         version: link:../../packages/canvas-viewer
@@ -370,45 +364,12 @@ importers:
       '@kamiazya/whiteboard-canvas-viewer':
         specifier: workspace:*
         version: link:../canvas-viewer
-      '@radix-ui/react-alert-dialog':
-        specifier: ^1.1.18
-        version: 1.1.18(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@radix-ui/react-dialog':
-        specifier: ^1.1.18
-        version: 1.1.18(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@radix-ui/react-dropdown-menu':
-        specifier: ^2.1.19
-        version: 2.1.19(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@radix-ui/react-scroll-area':
-        specifier: ^1.2.13
-        version: 1.2.13(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@radix-ui/react-separator':
-        specifier: ^1.1.11
-        version: 1.1.11(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      '@radix-ui/react-slot':
-        specifier: ^1.3.0
-        version: 1.3.0(@types/react@19.2.14)(react@19.2.5)
-      '@radix-ui/react-tooltip':
-        specifier: ^1.2.11
-        version: 1.2.11(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@stryker-mutator/core':
         specifier: ^9.6.1
         version: 9.6.1(@types/node@24.12.2)
       '@stryker-mutator/vitest-runner':
         specifier: ^9.6.1
         version: 9.6.1(@stryker-mutator/core@9.6.1(@types/node@24.12.2))(vitest@4.1.9)
-      '@tailwindcss/vite':
-        specifier: ^4
-        version: 4.2.4(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))
-      '@tanstack/intent':
-        specifier: ^0.0.29
-        version: 0.0.29
-      '@testing-library/dom':
-        specifier: ^10.4.1
-        version: 10.4.1
-      '@testing-library/react':
-        specifier: ^16.3.2
-        version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@types/node':
         specifier: ^24
         version: 24.12.2
@@ -421,21 +382,12 @@ importers:
       '@types/ws':
         specifier: ^8
         version: 8.18.1
-      '@vitejs/plugin-react':
-        specifier: ^6.0.3
-        version: 6.0.3(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))
       '@vitest/browser-playwright':
         specifier: 'catalog:'
         version: 4.1.9(msw@2.13.5(@types/node@24.12.2)(typescript@6.0.3))(playwright@1.61.1)(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))(vitest@4.1.9)
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(@vitest/browser@4.1.9)(vitest@4.1.9)
-      class-variance-authority:
-        specifier: ^0.7.1
-        version: 0.7.1
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
       concurrently:
         specifier: ^9
         version: 9.2.1
@@ -448,9 +400,6 @@ importers:
       libsql:
         specifier: ^0.5.29
         version: 0.5.29
-      lucide-react:
-        specifier: ^1.11.0
-        version: 1.11.0(react@19.2.5)
       playwright:
         specifier: ^1.61.1
         version: 1.61.1
@@ -460,36 +409,15 @@ importers:
       react-dom:
         specifier: 'catalog:'
         version: 19.2.5(react@19.2.5)
-      react-router-dom:
-        specifier: ^7.18.0
-        version: 7.18.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
-      tailwind-merge:
-        specifier: ^3.5.0
-        version: 3.5.0
-      tailwindcss:
-        specifier: ^4
-        version: 4.2.4
       tsx:
         specifier: ^4.23.0
         version: 4.23.0
-      tw-animate-css:
-        specifier: ^1.4.0
-        version: 1.4.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
       vite:
         specifier: 'catalog:'
         version: 8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)
-      vite-plugin-static-copy:
-        specifier: ^4.1.1
-        version: 4.1.1(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))
-      vite-plugin-top-level-await:
-        specifier: ^1
-        version: 1.6.0(rollup@4.62.2)(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))
-      vite-plugin-wasm:
-        specifier: ^3
-        version: 3.6.0(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(@vitest/browser-playwright@4.1.9)(@vitest/coverage-v8@4.1.9)(happy-dom@20.9.0)(jsdom@29.0.2(canvas@3.2.3))(msw@2.13.5(@types/node@24.12.2)(typescript@6.0.3))(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))
@@ -3630,10 +3558,6 @@ packages:
     resolution: {integrity: sha512-pCvohwOCspk3ZFn6eJzrrX3g4n2JY73H6MmYC87XfGPyTty4YsCjYTMArRZm/zOI8dIt3+EcrLHAFPe5A4bgtw==}
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
-
-  '@tanstack/intent@0.0.29':
-    resolution: {integrity: sha512-tJcWapEkXGRLHE7mQYvQS0xIWrzKm2n7fQ/lOy4LCdR1hX0Yxb9QnwRwd0oqmmr54ObP9/5sfiD8vELxL/r30g==}
-    hasBin: true
 
   '@tanstack/intent@0.0.40':
     resolution: {integrity: sha512-ZuUTzr4QrjNuWdv+DfTv0///uONz5+Sw3mR+2xOXHpob6vWsUXnSk3Ht7X9Rpu6zZdQYZlZnJCwN50CAZ21GCw==}
@@ -6912,12 +6836,6 @@ packages:
     peerDependenciesMeta:
       rollup:
         optional: true
-
-  vite-plugin-static-copy@4.1.1:
-    resolution: {integrity: sha512-GrlA8YklrAfSyxJ4M3fdQLOo9oNkp56IM9FYgX/WtEgeIFkPwhu4wzpufBCIuNKCa6Fn77FkRdYxkHqV0FwjAw==}
-    engines: {node: ^22.0.0 || >=24.0.0}
-    peerDependencies:
-      vite: ^6.0.0 || ^7.0.0 || ^8.0.0
 
   vite-plugin-top-level-await@1.6.0:
     resolution: {integrity: sha512-bNhUreLamTIkoulCR9aDXbTbhLk6n1YE8NJUTTxl5RYskNRtzOR0ASzSjBVRtNdjIfngDXo11qOsybGLNsrdww==}
@@ -10382,24 +10300,12 @@ snapshots:
       '@tailwindcss/oxide-win32-arm64-msvc': 4.2.4
       '@tailwindcss/oxide-win32-x64-msvc': 4.2.4
 
-  '@tailwindcss/vite@4.2.4(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))':
-    dependencies:
-      '@tailwindcss/node': 4.2.4
-      '@tailwindcss/oxide': 4.2.4
-      tailwindcss: 4.2.4
-      vite: 8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)
-
   '@tailwindcss/vite@4.2.4(vite@8.1.3(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))':
     dependencies:
       '@tailwindcss/node': 4.2.4
       '@tailwindcss/oxide': 4.2.4
       tailwindcss: 4.2.4
       vite: 8.1.3(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)
-
-  '@tanstack/intent@0.0.29':
-    dependencies:
-      cac: 6.7.14
-      yaml: 2.8.3
 
   '@tanstack/intent@0.0.40':
     dependencies:
@@ -10647,11 +10553,6 @@ snapshots:
     optionalDependencies:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
-
-  '@vitejs/plugin-react@6.0.3(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))':
-    dependencies:
-      '@rolldown/pluginutils': 1.0.1
-      vite: 8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)
 
   '@vitejs/plugin-react@6.0.3(vite@8.1.3(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3))':
     dependencies:
@@ -14145,25 +14046,6 @@ snapshots:
     optionalDependencies:
       rollup: 4.62.2
 
-  vite-plugin-static-copy@4.1.1(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)):
-    dependencies:
-      chokidar: 3.6.0
-      p-map: 7.0.4
-      picocolors: 1.1.1
-      tinyglobby: 0.2.17
-      vite: 8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)
-
-  vite-plugin-top-level-await@1.6.0(rollup@4.62.2)(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)):
-    dependencies:
-      '@rollup/plugin-virtual': 3.0.2(rollup@4.62.2)
-      '@swc/core': 1.15.24
-      '@swc/wasm': 1.15.24
-      uuid: 11.1.1
-      vite: 8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)
-    transitivePeerDependencies:
-      - '@swc/helpers'
-      - rollup
-
   vite-plugin-top-level-await@1.6.0(rollup@4.62.2)(vite@8.1.3(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)):
     dependencies:
       '@rollup/plugin-virtual': 3.0.2(rollup@4.62.2)
@@ -14174,10 +14056,6 @@ snapshots:
     transitivePeerDependencies:
       - '@swc/helpers'
       - rollup
-
-  vite-plugin-wasm@3.6.0(vite@8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)):
-    dependencies:
-      vite: 8.1.3(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)
 
   vite-plugin-wasm@3.6.0(vite@8.1.3(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.6.1)(terser@5.48.0)(tsx@4.23.0)(yaml@2.8.3)):
     dependencies:

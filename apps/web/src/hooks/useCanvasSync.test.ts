@@ -1903,23 +1903,5 @@ describe('useCanvasSync', () => {
       const text = await blob!.text()
       expect(text).toContain('data-testid="exported-svg"')
     })
-
-    it('exports a standard .excalidraw JSON blob built from the live scene', async () => {
-      const backend = makeFakeBackend()
-      const api = makeApiStub()
-      const { result } = renderHook(() => useCanvasSync(backend))
-
-      act(() => {
-        result.current.setExcalidrawAPI(api as never)
-      })
-
-      const blob = await result.current.exportScene('json')
-
-      expect(blob).not.toBeNull()
-      expect(blob!.type).toBe('application/json')
-      const parsed = JSON.parse(await blob!.text())
-      expect(parsed).toMatchObject({ type: 'excalidraw', version: 2 })
-      expect(Array.isArray(parsed.elements)).toBe(true)
-    })
   })
 })
