@@ -60,7 +60,7 @@
     "packages/canvas-viewer": {
       // widget-entry.ts and widget/refresh-control.ts are owned by a
       // concurrent in-flight lane — deliberately left unconfigured here so
-      // this knip.json doesn't need reconciling against that lane's changes;
+      // this knip.jsonc doesn't need reconciling against that lane's changes;
       // the integrator re-runs knip at fold time to confirm green.
       "entry": [
         "src/index.ts",
