@@ -150,6 +150,21 @@ async function verifyP1363Signature(
   }
 }
 
+// The schema only checks field names and decoded coordinate byte lengths —
+// it cannot tell a 32-byte (x, y) pair that sits on the P-256 curve from one
+// that doesn't. Actually importing the key is the only way to catch that,
+// so enrollment attempts it before persisting rather than deferring the
+// failure to the first signature verification against a key that can never
+// import successfully.
+export async function isImportableP256PublicKey(jwk: EcP256PublicJwk): Promise<boolean> {
+  try {
+    await importVerifyKey(jwk)
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function readFileMtime(path: string): Promise<number | null> {
   try {
     const info = await stat(path)
@@ -209,12 +224,20 @@ export interface WebOriginTrustStore {
   // Mints a fresh legacy reconnect secret for `origin`, replacing any
   // existing trust record for that exact origin. Returns the plaintext
   // secret once — it is never retrievable again, only its hash is
-  // persisted. Retained for the CLI pairing bootstrap, which still hands a
-  // caller a secret before a keypair can be enrolled.
+  // persisted. No production caller mints new legacy secrets today (every
+  // remaining call site is a test exercising the legacy grace path); kept as
+  // the fallback bootstrap primitive for a caller that cannot yet perform
+  // WebCrypto keypair enrollment. Overwrites unconditionally, including
+  // stripping any `publicKeyJwk` already on the record — do not call this
+  // against an origin that holds an enrolled keypair without accepting that
+  // downgrade.
   trustOrigin(origin: string): Promise<{ secret: string }>
   // Enrolls (or replaces) the public-key credential for `origin`, dropping
-  // any legacy secretHash on that record. Idempotent for an identical JWK —
-  // re-enrolling the same key is a no-op rather than bumping trustedAt.
+  // any legacy secretHash on that record. Idempotent for an identical, still
+  // FRESH JWK — re-enrolling the same key before its sliding TTL lapses is a
+  // no-op rather than bumping trustedAt/lastUsedAt. Re-enrolling the same key
+  // AFTER it expired renews lastUsedAt (treated as a fresh re-pair) rather
+  // than staying permanently expired despite a successful re-pair.
   enrollPublicKey(origin: string, jwk: EcP256PublicJwk): Promise<void>
   // Verifies a P1363 ECDSA signature over `nonce` against `origin`'s
   // enrolled public key. The cryptographic verify happens first (no lock
@@ -318,7 +341,11 @@ export function createWebOriginTrustStore(
     await enqueue(async () => {
       const current = await readCurrent()
       const existing = current.origins.find((o) => o.origin === origin)
-      if (existing?.publicKeyJwk && jwkEquals(existing.publicKeyJwk, jwk)) {
+      if (
+        existing?.publicKeyJwk &&
+        jwkEquals(existing.publicKeyJwk, jwk) &&
+        isRecordFresh(existing)
+      ) {
         return // idempotent no-op — keep trustedAt/lastUsedAt as-is.
       }
       const nowIso = new Date(now()).toISOString()

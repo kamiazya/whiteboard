@@ -209,6 +209,24 @@ describe('web-origin-trust-store', () => {
       expect(records[0]?.trustedAt).toBe(firstTrustedAt)
     })
 
+    it('renews an expired record on re-enrollment of the SAME key instead of no-op', async () => {
+      let now = Date.parse('2026-01-01T00:00:00.000Z')
+      const store = createWebOriginTrustStore({ dataDir, now: () => now })
+      const { publicJwk, privateKey } = await generateKeyPair()
+      await store.enrollPublicKey('http://localhost:5173', publicJwk)
+
+      now += 31 * 24 * 60 * 60 * 1000 // past the sliding TTL
+      await store.enrollPublicKey('http://localhost:5173', publicJwk) // re-pair with the identical key
+
+      const nonce = 'nonce-after-renewal'
+      const signature = await sign(privateKey, nonce)
+      // Without a renewed lastUsedAt, this signed reconnect would still read
+      // as expired even though the user just successfully re-paired.
+      expect(await store.verifySignedChallenge('http://localhost:5173', nonce, signature)).toBe(
+        true,
+      )
+    })
+
     it('a record with neither publicKeyJwk nor secretHash is rejected by the schema refinement', async () => {
       const filePath = getWebOriginTrustFilePath(dataDir)
       await mkdir(dataDir, { recursive: true })
