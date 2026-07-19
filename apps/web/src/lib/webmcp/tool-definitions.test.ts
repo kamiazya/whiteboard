@@ -46,19 +46,37 @@ describe('webMcpTools manifest', () => {
 
 // Minimal structural JSON Schema validator covering only the subset this
 // repo's static .schema.json literals use (object/string/integer/number/null,
-// required, additionalProperties: false, enum, const, anyOf). Not a general
-// JSON Schema implementation — just enough to prove the literal and the Zod
-// schema it mirrors agree on shape, without adding an ajv/zod-to-json-schema
-// dependency for Phase 0.
+// required, additionalProperties: false, enum, const, minimum, anyOf). Not a
+// general JSON Schema implementation — just enough to prove the literal and
+// the Zod schema it mirrors agree on shape, without adding an ajv/
+// zod-to-json-schema dependency for Phase 0.
+//
+// Every number/integer field in this repo's result schemas mirrors a Zod
+// `.finite()` or `.int().nonnegative()` constraint, so this validator
+// rejects NaN/Infinity for both — a JSON Schema literal that let a
+// non-finite number through would silently disagree with the Zod schema it
+// claims to mirror.
 function matchesJsonSchema(schema: unknown, value: unknown): boolean {
   const s = schema as Record<string, unknown>
   if (Array.isArray(s.anyOf)) {
     return s.anyOf.some((sub) => matchesJsonSchema(sub, value))
   }
+  if (Array.isArray(s.enum)) {
+    if (!s.enum.includes(value)) return false
+  }
+  if ('const' in s) {
+    if (value !== s.const) return false
+  }
   if (s.type === 'null') return value === null
   if (s.type === 'string') return typeof value === 'string'
-  if (s.type === 'integer') return typeof value === 'number' && Number.isInteger(value)
-  if (s.type === 'number') return typeof value === 'number'
+  if (s.type === 'integer') {
+    if (typeof value !== 'number' || !Number.isInteger(value)) return false
+    return matchesMinimum(s, value)
+  }
+  if (s.type === 'number') {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return false
+    return matchesMinimum(s, value)
+  }
   if (s.type === 'object') {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
     const obj = value as Record<string, unknown>
@@ -79,6 +97,11 @@ function matchesJsonSchema(schema: unknown, value: unknown): boolean {
     return true
   }
   return true
+}
+
+function matchesMinimum(s: Record<string, unknown>, value: number): boolean {
+  if (typeof s.minimum !== 'number') return true
+  return value >= s.minimum
 }
 
 describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => {
@@ -113,6 +136,50 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
 
     expect(getAppContextResultSchema.safeParse(withExtraKey).success).toBe(false)
     expect(matchesJsonSchema(whiteboardGetAppContextJsonSchema(), withExtraKey)).toBe(false)
+  })
+
+  it('get-app-context: rejects a provider.mode value outside the enum, in both directions', () => {
+    const wrongEnum = {
+      provider: { mode: 'not-a-real-mode' },
+      canvas: null,
+    }
+
+    expect(getAppContextResultSchema.safeParse(wrongEnum).success).toBe(false)
+    expect(matchesJsonSchema(whiteboardGetAppContextJsonSchema(), wrongEnum)).toBe(false)
+  })
+
+  it('get-app-context: rejects a canvas.kind that does not match its const, in both directions', () => {
+    const wrongConst = {
+      provider: { mode: 'daemon' },
+      canvas: { kind: 'browser-local', workspaceId: 'ws1', slug: 'c1' },
+    }
+
+    expect(getAppContextResultSchema.safeParse(wrongConst).success).toBe(false)
+    expect(matchesJsonSchema(whiteboardGetAppContextJsonSchema(), wrongConst)).toBe(false)
+  })
+
+  it('get-scene-summary: rejects a negative count that violates minimum: 0, in both directions', () => {
+    const negativeCount = {
+      elementCount: -1,
+      selectedCount: 0,
+      typeCounts: {},
+      viewport: { scrollX: 0, scrollY: 0, zoom: 1 },
+    }
+
+    expect(getSceneSummaryResultSchema.safeParse(negativeCount).success).toBe(false)
+    expect(matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), negativeCount)).toBe(false)
+  })
+
+  it('get-scene-summary: rejects a non-finite viewport value that the Zod schema requires .finite() for', () => {
+    const nonFiniteViewport = {
+      elementCount: 0,
+      selectedCount: 0,
+      typeCounts: {},
+      viewport: { scrollX: Number.POSITIVE_INFINITY, scrollY: 0, zoom: 1 },
+    }
+
+    expect(getSceneSummaryResultSchema.safeParse(nonFiniteViewport).success).toBe(false)
+    expect(matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), nonFiniteViewport)).toBe(false)
   })
 })
 
