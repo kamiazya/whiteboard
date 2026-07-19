@@ -35,9 +35,9 @@ export const ENV_KEYS = {
   DATA_DIR: 'WHITEBOARD_DATA_DIR',
 } as const
 
-export type ServerModeAuthStrategy = 'oauth-jwt'
+type ServerModeAuthStrategy = 'oauth-jwt'
 
-export interface ServerModeEnvConfig {
+interface ServerModeEnvConfig {
   /** Presence-validated; HTTPS/origin-only enforcement is downstream in planServerModeAuth. */
   externalUrl: string
   /** Raw trimmed/split list from env. Wildcard rejected here; URL validation is downstream. */
@@ -68,7 +68,7 @@ export interface ServerModeEnvConfig {
   dataDir: string | undefined
 }
 
-export type ServerModeEnvConfigFailureCode =
+type ServerModeEnvConfigFailureCode =
   | 'server_mode_env.external_url_required'
   | 'server_mode_env.auth_strategy_required'
   | 'server_mode_env.unknown_auth_strategy'

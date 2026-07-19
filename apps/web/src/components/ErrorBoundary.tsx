@@ -119,5 +119,3 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     )
   }
 }
-
-export default ErrorBoundary

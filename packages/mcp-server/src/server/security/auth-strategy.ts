@@ -69,7 +69,7 @@ export function hasRequiredScopes(
   return required.every((scope) => granted.includes(scope))
 }
 
-export type AuthContext =
+type AuthContext =
   | { kind: 'anonymous' }
   | { kind: 'local-token' }
   | { kind: 'oauth-resource-server'; subject: string; scopes: readonly AuthScope[] }

@@ -35,7 +35,7 @@ export const annotationResultSchema = z.object({
   titleId: z.string().optional(),
 })
 
-export const annotateWarningSchema = z.object({
+const annotateWarningSchema = z.object({
   overflow: z.boolean().optional(),
   requiredWidth: z.number().optional(),
   requiredHeight: z.number().optional(),
@@ -218,7 +218,7 @@ export const annotateInputSchema = z.object(annotateInputShape).superRefine((dat
 
 // box_with_label and group are composite types accepted only by the public
 // annotate API. Internally they are decomposed into primitive elements.
-export type AnnotatePublicType = AnnotationType | 'box_with_label' | 'group'
+type AnnotatePublicType = AnnotationType | 'box_with_label' | 'group'
 
 interface ExcalidrawElement {
   id: string

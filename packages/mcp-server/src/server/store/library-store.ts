@@ -30,7 +30,7 @@ export async function loadInstalledLibraries(
   return { urls: rows.map((r) => r.url) }
 }
 
-export async function saveInstalledLibraries(
+async function saveInstalledLibraries(
   workspaceId: string,
   libs: InstalledLibrariesResponse,
 ): Promise<void> {

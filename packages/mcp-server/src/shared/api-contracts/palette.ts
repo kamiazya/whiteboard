@@ -5,7 +5,7 @@ import { z } from 'zod'
 // types its `c.json(...)` responses) and the MCP tool client (parses fetch
 // responses) so a wire-format change has exactly one place to update.
 
-export const paletteEntriesSchema = z.record(z.string(), z.string())
+const paletteEntriesSchema = z.record(z.string(), z.string())
 
 export const paletteResponseSchema = z.object({
   palette: paletteEntriesSchema,
@@ -21,5 +21,5 @@ export const paletteDeleteRequestSchema = z.object({
 
 export type PaletteEntries = z.infer<typeof paletteEntriesSchema>
 export type PaletteResponse = z.infer<typeof paletteResponseSchema>
-export type PaletteSetRequest = z.infer<typeof paletteSetRequestSchema>
-export type PaletteDeleteRequest = z.infer<typeof paletteDeleteRequestSchema>
+type PaletteSetRequest = z.infer<typeof paletteSetRequestSchema>
+type PaletteDeleteRequest = z.infer<typeof paletteDeleteRequestSchema>

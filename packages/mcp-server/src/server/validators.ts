@@ -191,7 +191,7 @@ export function validateUserLibraryName(name: string): string {
   return name
 }
 
-export function isValidationError(error: unknown): error is ValidationError {
+function isValidationError(error: unknown): error is ValidationError {
   return error instanceof ValidationError
 }
 

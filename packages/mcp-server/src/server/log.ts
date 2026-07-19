@@ -9,8 +9,6 @@
 //   • Native NDJSON output, no console.* stray writes (stdio MCP keeps
 //     stdout reserved for JSON-RPC; we always write to stderr).
 //   • `child({ scope })` for per-module loggers without manual key spread.
-//   • `@opentelemetry/instrumentation-pino` auto-injects trace_id /
-//     span_id into every record so logs and spans correlate.
 //   • RFC 5424 levels by name (matching the MCP `notifications/message`
 //     spec) via pino's `customLevels` + `useOnlyCustomLevels`.
 //
@@ -39,7 +37,7 @@ export const LOG_LEVELS = [
 
 export type LogLevel = (typeof LOG_LEVELS)[number]
 
-export const LEVEL_VALUES: Record<LogLevel, number> = {
+const LEVEL_VALUES: Record<LogLevel, number> = {
   debug: 10,
   info: 20,
   notice: 30,

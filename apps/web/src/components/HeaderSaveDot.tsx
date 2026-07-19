@@ -67,5 +67,3 @@ export function HeaderSaveDot({
     </Tooltip>
   )
 }
-
-export default HeaderSaveDot

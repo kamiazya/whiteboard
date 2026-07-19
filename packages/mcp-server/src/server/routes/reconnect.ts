@@ -29,13 +29,6 @@ import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
 import { TRUST_TTL_MS, type WebOriginTrustStore } from '../security/web-origin-trust-store.js'
 import { parseBearerAuthorizationHeader } from './auth.js'
 
-export {
-  type ReconnectCredentialResponse,
-  reconnectCredentialResponseSchema,
-  type ReconnectSessionResponse,
-  reconnectSessionResponseSchema,
-}
-
 // Derived from the store's actually-enforced TTL rather than a second
 // hardcoded constant, so the value reported to clients can never drift from
 // the value the trust store enforces.

@@ -23,7 +23,7 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 const DAEMON_RUN_SCHEMA_VERSION = 1 as const
 
-export interface DaemonRunReadyResult {
+interface DaemonRunReadyResult {
   readonly schemaVersion: typeof DAEMON_RUN_SCHEMA_VERSION
   readonly ok: true
   readonly pid: number

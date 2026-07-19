@@ -9,14 +9,14 @@
 // - row colors reuse BranchMeta.color
 // - unknown branches fall back to neutral gray
 
-export interface MiniGraphBranch {
+interface MiniGraphBranch {
   name: string
   color: string
   baseBranch?: string
   baseVersionId?: string
 }
 
-export interface MiniGraphVersion {
+interface MiniGraphVersion {
   id: string
   branchName: string
   createdAt: string

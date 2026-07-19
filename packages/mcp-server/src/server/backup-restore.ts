@@ -47,7 +47,7 @@ export interface BackupRestoreOptions {
 //
 // Exported so CLI callers can canonicalize user-supplied paths before
 // passing them to helpers, ensuring the `allowedRoots` guard sees real paths.
-export async function canonicalizePath(p: string): Promise<string> {
+async function canonicalizePath(p: string): Promise<string> {
   const abs = resolve(p)
   const parts = abs.split(sep)
   let existingLen = parts.length

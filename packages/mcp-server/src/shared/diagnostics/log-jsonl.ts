@@ -27,11 +27,11 @@ import { type RedactionOptions, redactDiagnosticText, redactDiagnosticValue } fr
 //     accidental token / path / stack-frame leaks become the usual
 //     `[REDACTED_*]` sentinel strings.
 
-export const DAEMON_LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const
-export type DaemonLogLevel = (typeof DAEMON_LOG_LEVELS)[number]
+const DAEMON_LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const
+type DaemonLogLevel = (typeof DAEMON_LOG_LEVELS)[number]
 
-export const DAEMON_LOG_SOURCES = ['daemon', 'runtime', 'doctor', 'server', 'mcp'] as const
-export type DaemonLogSource = (typeof DAEMON_LOG_SOURCES)[number]
+const DAEMON_LOG_SOURCES = ['daemon', 'runtime', 'doctor', 'server', 'mcp'] as const
+type DaemonLogSource = (typeof DAEMON_LOG_SOURCES)[number]
 
 // Operational fields that producers are allowed to surface in JSONL
 // output. Anything outside this set is dropped at format time. The
@@ -44,7 +44,7 @@ export type DaemonLogSource = (typeof DAEMON_LOG_SOURCES)[number]
 // expose which workspace a log line came from to anyone reading the
 // stream. Add it later only if a concrete operational need motivates
 // the trade-off.
-export const OPERATIONAL_FIELD_ALLOWLIST = new Set<string>([
+const OPERATIONAL_FIELD_ALLOWLIST = new Set<string>([
   'checkId',
   'remediationId',
   'status',
@@ -60,7 +60,7 @@ export const OPERATIONAL_FIELD_ALLOWLIST = new Set<string>([
 // excludes them, but listing the deny-list explicitly makes the
 // intent grep-friendly and gives a future producer that mistakenly
 // adds one of these names to the allow-list a second wall to hit.
-export const CANVAS_PLAINTEXT_DENYLIST = new Set<string>([
+const CANVAS_PLAINTEXT_DENYLIST = new Set<string>([
   'canvasText',
   'elementText',
   'scene',

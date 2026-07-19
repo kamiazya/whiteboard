@@ -199,5 +199,3 @@ export function MergeToast({ workspaceId, slug, onRestored }: MergeToastProps): 
     </div>
   )
 }
-
-export default MergeToast

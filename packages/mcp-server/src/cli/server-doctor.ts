@@ -31,13 +31,7 @@ import { ENV_KEYS } from '../server/security/server-mode-env-config.js'
 import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './daemon-ping-client.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
-export const SERVER_DOCTOR_SCHEMA_VERSION = 1 as const
-
-export type {
-  DaemonDoctorCheck as ServerDoctorCheck,
-  DaemonDoctorOverallStatus as ServerDoctorOverallStatus,
-  DaemonDoctorResult as ServerDoctorResult,
-} from '../shared/api-contracts/daemon-doctor.js'
+const SERVER_DOCTOR_SCHEMA_VERSION = 1 as const
 
 export interface RunServerDoctorOptions {
   flags: ServerRunArgs & { kind: 'ok' }

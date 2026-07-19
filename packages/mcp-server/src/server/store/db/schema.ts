@@ -5,14 +5,14 @@ type Timestamp = ColumnType<number, number, number>
 // 0 / 1 stored as integer; expressed as boolean at the application layer.
 type Bool = ColumnType<number, number, number>
 
-export interface WorkspacesTable {
+interface WorkspacesTable {
   id: string
   displayName: string | null
   createdAt: Timestamp
   updatedAt: Timestamp
 }
 
-export interface CanvasesTable {
+interface CanvasesTable {
   // Stable nanoid that survives slug renames. PK so child tables can FK on it.
   id: string
   workspaceId: string
@@ -30,7 +30,7 @@ export interface CanvasesTable {
   lastCompactedAt: Timestamp | null
 }
 
-export interface BranchesTable {
+interface BranchesTable {
   canvasId: string
   name: string
   tipFrontiers: string
@@ -40,7 +40,7 @@ export interface BranchesTable {
   createdAt: Timestamp
 }
 
-export interface VersionsTable {
+interface VersionsTable {
   id: string
   canvasId: string
   branchName: string
@@ -57,19 +57,19 @@ export interface VersionsTable {
   createdAt: Timestamp
 }
 
-export interface PaletteTable {
+interface PaletteTable {
   workspaceId: string
   key: string
   value: string
 }
 
-export interface InstalledLibrariesTable {
+interface InstalledLibrariesTable {
   workspaceId: string
   url: string
   installedAt: Timestamp
 }
 
-export interface UserLibrariesTable {
+interface UserLibrariesTable {
   name: string
   itemCount: number | null
   createdAt: Timestamp
@@ -79,7 +79,7 @@ export interface UserLibrariesTable {
 // User-library metadata is keyed by library name and item key. Aliases / notes / scales
 // are stored as JSON-encoded strings to keep the schema simple while preserving the
 // nested manifest shape callers expect (UserLibraryMetadataManifest).
-export interface UserLibraryMetadataTable {
+interface UserLibraryMetadataTable {
   name: string
   manifestJson: string
   updatedAt: Timestamp
@@ -87,7 +87,7 @@ export interface UserLibraryMetadataTable {
 
 // Single-row key/value store for daemon-runtime markers (currentWorkspaceId,
 // daemonPid, daemonStartedAt, etc.). Keeps the FS clean of tiny dot-files.
-export interface RuntimeTable {
+interface RuntimeTable {
   key: string
   value: string | null
   updatedAt: Timestamp

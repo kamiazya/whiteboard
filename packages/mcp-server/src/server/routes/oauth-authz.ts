@@ -34,9 +34,9 @@ import {
 // existing `/mcp` suffix convention but for the `/api` resource instead.
 const PROTECTED_RESOURCE_METADATA_PATH = '/.well-known/oauth-protected-resource/api'
 const AUTHORIZATION_SERVER_METADATA_PATH = '/.well-known/oauth-authorization-server'
-export const OAUTH_TOKEN_PATH = '/token'
-export const OAUTH_AUTHORIZE_PATH = '/authorize'
-export const OAUTH_AUTHORIZE_DECISION_PATH = '/authorize/decision'
+const OAUTH_TOKEN_PATH = '/token'
+const OAUTH_AUTHORIZE_PATH = '/authorize'
+const OAUTH_AUTHORIZE_DECISION_PATH = '/authorize/decision'
 
 // Exported so the caller can attach this router's middleware to exactly these
 // paths. Hono's `app.route('/', subApp)` merges a sub-app's `use('*')` into the
@@ -66,7 +66,7 @@ export const OAUTH_AUTHZ_CORS_PATHS = [
   OAUTH_TOKEN_PATH,
 ] as const
 
-export const tokenRequestSchema = z.object({
+const tokenRequestSchema = z.object({
   grant_type: z.literal('authorization_code'),
   code: z.string().min(1),
   redirect_uri: z.string().min(1),
@@ -77,18 +77,18 @@ export const tokenRequestSchema = z.object({
   code_verifier: z.string().min(1),
 })
 
-export type TokenRequest = z.infer<typeof tokenRequestSchema>
+type TokenRequest = z.infer<typeof tokenRequestSchema>
 
-export const tokenResponseSchema = z.object({
+const tokenResponseSchema = z.object({
   access_token: z.string(),
   token_type: z.literal('Bearer'),
   expires_in: z.number().int().positive(),
   scope: z.string(),
 })
 
-export type TokenResponse = z.infer<typeof tokenResponseSchema>
+type TokenResponse = z.infer<typeof tokenResponseSchema>
 
-export const tokenErrorResponseSchema = z.object({
+const tokenErrorResponseSchema = z.object({
   error: z.enum(['invalid_request', 'invalid_grant']),
 })
 

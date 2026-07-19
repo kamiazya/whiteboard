@@ -24,7 +24,7 @@ import type { ServerRunArgs } from './server-run-args.js'
 
 const SERVER_RUN_SCHEMA_VERSION = 1 as const
 
-export interface ServerRunDryRunResult {
+interface ServerRunDryRunResult {
   readonly schemaVersion: typeof SERVER_RUN_SCHEMA_VERSION
   readonly ok: true
   readonly dryRun: true
@@ -33,7 +33,7 @@ export interface ServerRunDryRunResult {
   readonly authStrategy: 'oauth-jwt'
 }
 
-export interface ServerRunReadyResult {
+interface ServerRunReadyResult {
   readonly schemaVersion: typeof SERVER_RUN_SCHEMA_VERSION
   readonly ok: true
   readonly pid: number
@@ -44,7 +44,7 @@ export interface ServerRunReadyResult {
   readonly startedAt: string
 }
 
-export interface StartServerOptions {
+interface StartServerOptions {
   host: string
   port: number
   publicBaseUrl: string
@@ -52,7 +52,7 @@ export interface StartServerOptions {
   authStrategy: AsyncAuthStrategy
 }
 
-export interface ServerModeRunning {
+interface ServerModeRunning {
   port: number
   host: string
   startedAt: string

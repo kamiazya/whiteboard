@@ -66,7 +66,7 @@ export const canvasInspectOutputSchema = z.object({
     .describe('Per-element summaries in insertion order, including tombstones.'),
 })
 
-export type ElementSummary = z.infer<typeof elementSummarySchema>
+type ElementSummary = z.infer<typeof elementSummarySchema>
 export type CanvasSummary = z.infer<typeof canvasInspectOutputSchema>
 
 // Field allowlist derived from the schema so it can never drift from the contract.

@@ -11,10 +11,10 @@ import {
 import type { SyncStatus, UseCanvasSyncOptions } from '../lib/canvas-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/canvas-sync-types.js'
 
-export type { SyncStatus, UseCanvasSyncOptions }
-// Re-exported so existing call sites (e.g. DaemonCanvasPage) can keep
-// importing these from the hook module; the canonical definitions live in
-// lib/canvas-sync-types.ts alongside the session module that also needs them.
+export type { UseCanvasSyncOptions }
+// Re-exported so existing call sites can keep importing it from the hook
+// module; the canonical definition lives in lib/canvas-sync-types.ts
+// alongside the session module that also needs it.
 export { dispatchIdentityEvent }
 
 // Raster/vector are the only formats the underlying @excalidraw/excalidraw

@@ -19,5 +19,5 @@ export const exportSvgResponseSchema = z.object({
   filePath: z.string(),
 })
 
-export type ExportSvgRequest = z.infer<typeof exportSvgRequestSchema>
-export type ExportSvgResponse = z.infer<typeof exportSvgResponseSchema>
+type ExportSvgRequest = z.infer<typeof exportSvgRequestSchema>
+type ExportSvgResponse = z.infer<typeof exportSvgResponseSchema>

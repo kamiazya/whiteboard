@@ -5,7 +5,7 @@
 // the neutral reason onto its own stable failure-code namespace without this
 // module knowing about either.
 
-export type OriginValidationFailureReason = 'unparseable' | 'wildcard' | 'not_https' | 'not_origin'
+type OriginValidationFailureReason = 'unparseable' | 'wildcard' | 'not_https' | 'not_origin'
 
 export type OriginValidationResult =
   | { ok: true; origin: string }

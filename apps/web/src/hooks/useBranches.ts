@@ -82,7 +82,7 @@ export function parseBranchesResponse(raw: unknown): BranchesState {
 }
 
 // Throw structured HTTP errors so callers can branch on status and body.
-export interface BranchApiError {
+interface BranchApiError {
   status: number
   body: Record<string, unknown>
 }

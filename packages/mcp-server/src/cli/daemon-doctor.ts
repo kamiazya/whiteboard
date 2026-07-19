@@ -4,9 +4,9 @@ import {
   parseDaemonRecord,
 } from '../daemon/daemon-record.js'
 
-export type DoctorCheckStatus = 'ok' | 'warning' | 'error' | 'skipped'
+type DoctorCheckStatus = 'ok' | 'warning' | 'error' | 'skipped'
 
-export interface DaemonDoctorCheck {
+interface DaemonDoctorCheck {
   id: string
   status: DoctorCheckStatus
   summary: string

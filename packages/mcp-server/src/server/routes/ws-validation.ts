@@ -1,22 +1,8 @@
-import {
-  ValidationError,
-  validateWorkspaceId,
-  validateSlug,
-} from '../validators.js'
-import {
-  clientTextMessageSchema,
-  type ClientTextMessage,
-} from '../../shared/ws-messages.js'
+import { ValidationError, validateWorkspaceId, validateSlug } from '../validators.js'
+import { clientTextMessageSchema, type ClientTextMessage } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
 
 const log = getLogger('ws')
-
-export type {
-  ClientReadyMessage,
-  ExportResponseMessage,
-  ViewportResponseMessage,
-  ClientTextMessage as WsClientTextMessage,
-} from '../../shared/ws-messages.js'
 
 export function parseWsTargetFromRequestUrl(
   rawUrl: string | undefined,
@@ -52,10 +38,7 @@ export function parseWsClientTextMessage(text: string): ClientTextMessage | null
 
   const result = clientTextMessageSchema.safeParse(raw)
   if (!result.success) {
-    log.warning(
-      { reason: result.error.issues[0]?.message, raw },
-      'ignored invalid client message',
-    )
+    log.warning({ reason: result.error.issues[0]?.message, raw }, 'ignored invalid client message')
     return null
   }
   return result.data

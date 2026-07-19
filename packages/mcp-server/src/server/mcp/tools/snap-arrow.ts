@@ -3,7 +3,7 @@
 // the point where that ray intersects the rectangle boundary. If no box is
 // provided or the direction vector is zero, the original point is preserved.
 
-export interface Point {
+interface Point {
   x: number
   y: number
 }
@@ -53,8 +53,6 @@ export function snapArrowEndpoints(input: SnapArrowInput): SnapArrowResult {
   const start = input.startBox
     ? snapPointToBoxEdge(input.startBox, input.end, input.start)
     : input.start
-  const end = input.endBox
-    ? snapPointToBoxEdge(input.endBox, input.start, input.end)
-    : input.end
+  const end = input.endBox ? snapPointToBoxEdge(input.endBox, input.start, input.end) : input.end
   return { start, end }
 }

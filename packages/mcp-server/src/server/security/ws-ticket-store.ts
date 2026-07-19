@@ -29,7 +29,7 @@ interface WsTicketRecord {
   expiresAt: number
 }
 
-export interface RedeemedWsTicket {
+interface RedeemedWsTicket {
   scopes: readonly AuthScope[]
   clientId: string
 }

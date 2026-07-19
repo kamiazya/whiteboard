@@ -9,7 +9,7 @@ import { z } from 'zod'
 // / animate / scrollX / scrollY / zoom), so we accept any record here. The
 // canonical browser-side shape lives in shared/ws-messages.ts as
 // viewportRequestMessageSchema.
-export const viewportRequestSchema = z.record(z.string(), z.unknown())
+const viewportRequestSchema = z.record(z.string(), z.unknown())
 
 export const viewportResponseSchema = z.object({
   ok: z.literal(true),
@@ -29,7 +29,7 @@ export const clientCountResponseSchema = z.object({
   readyCount: z.number().int().nonnegative(),
 })
 
-export type ViewportRequest = z.infer<typeof viewportRequestSchema>
+type ViewportRequest = z.infer<typeof viewportRequestSchema>
 export type ViewportResponse = z.infer<typeof viewportResponseSchema>
 export type ViewportErrorBody = z.infer<typeof viewportErrorBodySchema>
 export type ClientCountResponse = z.infer<typeof clientCountResponseSchema>

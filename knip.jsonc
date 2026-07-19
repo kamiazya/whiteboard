@@ -1,0 +1,140 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [".claude/workflows/*.workflow.mjs", ".claude/scripts/*.mjs", "tools/check-pr-title.mjs"],
+      "project": [".claude/workflows/**/*.mjs", ".claude/scripts/**/*.mjs", "tools/**/*.mjs"]
+    },
+    "tools/checks": {
+      "entry": [
+        "src/pages-release.mjs",
+        "src/publish-gate.mjs",
+        // CI/test-invoked standalone scripts: run via `node tools/checks/...`
+        // (release.yml) or loaded with a dynamically-built path
+        // (`join(ROOT, 'tools/checks/src/...')`) from mcp-server's release
+        // tests, not statically imported within this workspace.
+        "src/ci-workflow-steps.mjs",
+        "src/env-scope-scanner.mjs",
+        "src/verify-pack-contents.mjs",
+        "src/release-gate-matrix-schema.mjs"
+      ],
+      "project": ["src/**/*.mjs"]
+    },
+    "packages/mcp-server": {
+      "entry": [
+        "src/server/mcp/index.ts",
+        "src/cli/index.ts",
+        "src/server/index.ts",
+        // Published package.json subpath exports (browser-contract,
+        // browser-shared, daemon-backend, migration-bundle, api-client,
+        // api-contracts) — their exported symbols are the npm package's
+        // public surface, not dead code, even where nothing inside this
+        // repo currently imports a given member.
+        "src/shared/canvas-backend-contract.ts",
+        "src/shared/browser-shared-index.ts",
+        "src/shared/daemon-backend.ts",
+        "src/shared/migration-bundle.ts",
+        "src/shared/api-client.ts",
+        "src/shared/api-contracts/index.ts",
+        // browser-shared-index.ts (its own entry above) re-exports specific
+        // members from these two — but apps/web's stricter tsconfig
+        // (noUnusedLocals) type-checks these source files wholesale via the
+        // "./browser-shared" subpath's "types" resolution, so every local
+        // declaration in them must stay `export`ed even when unused
+        // elsewhere, or apps/web's typecheck fails on "declared but never
+        // read"/"never used" for the bare (non-exported) symbol.
+        "src/shared/browser-tracing.ts",
+        "src/shared/ws-messages.ts",
+        "scripts/**/*.mjs"
+      ],
+      "project": ["src/**/*.ts", "scripts/**/*.mjs"],
+      "ignoreIssues": {
+        // AUTH_SCOPES (the literal tuple, source of the AuthScope union type)
+        // and ALL_AUTH_SCOPES (the same values re-typed as a plain
+        // `readonly AuthScope[]` for call sites that need the widened array
+        // type rather than the tuple) are both real, independently-consumed
+        // exports — not dead code. Knip's "duplicates" check only sees they
+        // share one runtime array reference.
+        "src/server/security/auth-strategy.ts": ["duplicates"]
+      }
+    },
+    "packages/canvas-viewer": {
+      // widget-entry.ts and widget/refresh-control.ts are owned by a
+      // concurrent in-flight lane — deliberately left unconfigured here so
+      // this knip.json doesn't need reconciling against that lane's changes;
+      // the integrator re-runs knip at fold time to confirm green.
+      "entry": [
+        "src/index.ts",
+        // Public subpath export (package.json "./scene") consumed by
+        // apps/web; not reachable from src/index.ts alone.
+        "src/scene.ts",
+        "scripts/*.mjs"
+      ],
+      "project": ["src/**/*.ts", "scripts/**/*.mjs"]
+    },
+    "apps/web": {
+      "entry": [
+        "src/main.tsx",
+        // Compile-time-only regression guard (tsc --noEmit fails/passes
+        // around it); intentionally never imported at runtime.
+        "src/_type-probe.ts",
+        // Regenerated on demand via `pnpm docs:snapshots`, not imported from
+        // the app entry point.
+        "src/docs-snapshots/*.docs-snapshot.test.tsx",
+        // Documented common entry point for every surface driving the
+        // canvas programmatically (WebMCP tool executor, in-page assistant,
+        // debug panel). Some re-exports (createSceneExportHandler,
+        // useWhiteboardCommands) are already consumed through this barrel;
+        // the rest is the module's intentional forward-looking public
+        // surface for those future consumers.
+        "src/lib/commands/index.ts",
+        "scripts/*.mjs"
+      ],
+      "project": ["src/**/*.tsx", "src/**/*.ts", "scripts/**/*.mjs"]
+    }
+  },
+  "ignoreDependencies": [
+    // Vite virtual module id — knip cannot resolve "virtual:" specifiers
+    // to a real dependency.
+    "virtual:widget-fonts",
+    // docs-snapshots `@docs-assets/*` alias resolves through Vite's
+    // `resolve.alias` (vitest.docs-snapshots.config.ts) to files under
+    // docs/assets-src/, not an npm package.
+    "@docs-assets/architecture.excalidraw",
+    // Tailwind v4 is loaded from CSS (`@import "tailwindcss"` /
+    // `@import "tw-animate-css"` in src/index.css); knip does not parse CSS
+    // imports, only JS/TS module graphs.
+    "tailwindcss",
+    "tw-animate-css",
+    // apps/web/wrangler.toml drives Cloudflare Pages preview deploys; CI
+    // invokes wrangler via `npx wrangler@<pinned>` / cloudflare/wrangler-action
+    // rather than this package.json's own devDependency. Kept so a local
+    // `pnpm --filter web exec wrangler ...` matches the CI-pinned version.
+    "wrangler",
+    // Not imported directly anywhere in src — @libsql/kysely-libsql pulls it
+    // in transitively — but the direct pin here forces the whole workspace
+    // onto a newer @libsql/client (^0.17.3) than kysely-libsql's own range
+    // (^0.8.0). See the comment next to the LibsqlDialect import in
+    // server/store/db/index.ts.
+    "@libsql/client",
+    // Loaded via .secretlintrc.json's "rules" list, not a JS/TS import.
+    "@secretlint/secretlint-rule-pattern",
+    "@secretlint/secretlint-rule-preset-recommend",
+    // Resolved from node_modules/.bin/cyclonedx-npm by path at runtime
+    // (scripts/release/generate-npm-sbom.mjs), not imported as a module.
+    "@cyclonedx/cyclonedx-npm"
+  ],
+  "ignoreBinaries": [
+    // Optional local tooling probed by smoke scripts / distribution tests;
+    // present in CI and on release-builder machines but not a project
+    // dependency knip can resolve.
+    "docker",
+    "cosign",
+    "claude",
+    "codex",
+    "openssl",
+    // lefthook.yml invokes secretlint via its literal node_modules/.bin path
+    // rather than a bare command name, which knip parses as the "binary".
+    "node_modules/.bin/secretlint"
+  ]
+}
