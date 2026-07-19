@@ -47,7 +47,13 @@ export function createRefreshControl(onRefresh: () => void): RefreshControl {
       button.style.display = 'block'
     },
     setBusy(busy: boolean): void {
+      // The inline background/color/cursor styles above override the
+      // browser's default disabled rendering, so `disabled` alone would
+      // leave the button looking clickable mid-flight.
       button.disabled = busy
+      button.style.opacity = busy ? '0.5' : ''
+      button.style.cursor = busy ? 'wait' : 'pointer'
+      button.textContent = busy ? 'Refreshing…' : 'Refresh'
     },
   }
 }
