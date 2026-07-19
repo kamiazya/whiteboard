@@ -15,7 +15,7 @@ Passing tests alone are not sufficient. The workflow is:
 1. Write the smallest failing test at the nearest layer.
 2. Make the smallest patch that turns it green.
 3. Manually verify the real behavior (browser, MCP smoke, or daemon log).
-4. Lock the verified flow into `web-browser` or E2E coverage.
+4. Lock the verified flow into `canvas-viewer-browser`/`web-browser` or E2E coverage.
 
 Skip step 3 only for pure helper changes with no observable runtime effect. Skip step 4 only when the verified scenario is already covered by an existing automation.
 
@@ -44,6 +44,7 @@ Choose the **narrowest** layer that can prove the behavior:
 | Layer | Config | When to use |
 |---|---|---|
 | `mcp-node` | `vitest.node.config.ts` (`packages/mcp-server`) | Pure functions, stores, routes, server behavior, persistence logic, schemas, CLI helpers |
+| `canvas-viewer-node` / `canvas-viewer-jsdom` | `vitest.node.config.ts` / `vitest.jsdom.config.ts` (`packages/canvas-viewer`) | `packages/canvas-viewer` parsing, hooks, and components when browser layout and pointer behavior are **not** the core risk |
 | apps/web jsdom | `apps/web/vitest.config.ts` | React components and hooks when real layout, focus, pointer, or browser APIs are **not** the core risk |
 | `web-browser` | `apps/web/vitest.browser.config.ts` | `apps/web` tests that need real browser APIs unavailable in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`, popovers/dialogs/focus/scroll/restore flows, and other platform APIs. File suffix: `.browser.test.tsx` |
 | E2E | `tests/e2e/` | Real routes, server composition, websocket timing, daemon process lifecycle, persistence order, packaging, or multi-step product journeys |
