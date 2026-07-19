@@ -1,4 +1,5 @@
 import { serializeSceneAsExcalidrawJson } from '@kamiazya/whiteboard-canvas-viewer/scene'
+import type { z } from 'zod'
 import {
   CommandError,
   type ExportJsonInput,
@@ -16,6 +17,33 @@ import {
   type WhiteboardCommandDeps,
   type WhiteboardCommands,
 } from './types.js'
+
+// Every command validates its input the same way: parse against its Zod
+// schema and turn any failure into a typed `invalid-input` CommandError so
+// consumers branch on `.code` instead of a raw ZodError. `commandName` only
+// shapes the human-readable message.
+function assertValidInput(schema: z.ZodTypeAny, input: unknown, commandName: string): void {
+  const parsed = schema.safeParse(input)
+  if (!parsed.success) {
+    throw new CommandError('invalid-input', `${commandName} received an invalid input payload.`, {
+      cause: parsed.error,
+    })
+  }
+}
+
+// Projects the open-canvas identity into the tool-facing shape field-by-field
+// (never a spread) so a daemon canvas exposes only workspaceId/slug and a
+// browser-local canvas only canvasId — no other ProviderState/canvas field
+// can leak through.
+function projectCanvasContext(
+  canvas: WhiteboardCommandDeps['canvas'],
+): GetAppContextResult['canvas'] {
+  if (!canvas) return null
+  if (canvas.workspaceId !== undefined) {
+    return { kind: 'daemon', workspaceId: canvas.workspaceId, slug: canvas.canvasId }
+  }
+  return { kind: 'browser-local', canvasId: canvas.canvasId }
+}
 
 /**
  * createWhiteboardCommands — the framework-free factory behind
@@ -60,12 +88,7 @@ export function createWhiteboardCommands(depsRef: {
   current: WhiteboardCommandDeps
 }): WhiteboardCommands {
   async function exportJson(input: ExportJsonInput = {}): Promise<ExportJsonResult> {
-    const parsedInput = exportJsonInputSchema.safeParse(input)
-    if (!parsedInput.success) {
-      throw new CommandError('invalid-input', 'exportJson received an invalid input payload.', {
-        cause: parsedInput.error,
-      })
-    }
+    assertValidInput(exportJsonInputSchema, input, 'exportJson')
 
     // Captured before any await so a concurrent depsRef swap (unmount,
     // canvas switch, provider change) can never mutate the identity this
@@ -99,14 +122,7 @@ export function createWhiteboardCommands(depsRef: {
   }
 
   async function getSceneSummary(input: GetSceneSummaryInput = {}): Promise<GetSceneSummaryResult> {
-    const parsedInput = getSceneSummaryInputSchema.safeParse(input)
-    if (!parsedInput.success) {
-      throw new CommandError(
-        'invalid-input',
-        'getSceneSummary received an invalid input payload.',
-        { cause: parsedInput.error },
-      )
-    }
+    assertValidInput(getSceneSummaryInputSchema, input, 'getSceneSummary')
 
     const deps = depsRef.current
     if (!deps.canvas) {
@@ -141,12 +157,7 @@ export function createWhiteboardCommands(depsRef: {
   }
 
   async function getAppContext(input: GetAppContextInput = {}): Promise<GetAppContextResult> {
-    const parsedInput = getAppContextInputSchema.safeParse(input)
-    if (!parsedInput.success) {
-      throw new CommandError('invalid-input', 'getAppContext received an invalid input payload.', {
-        cause: parsedInput.error,
-      })
-    }
+    assertValidInput(getAppContextInputSchema, input, 'getAppContext')
 
     const deps = depsRef.current
     // Field-by-field, never a spread of `deps.provider` — this is the
@@ -155,11 +166,7 @@ export function createWhiteboardCommands(depsRef: {
     const provider: GetAppContextResult['provider'] = {
       mode: deps.provider.kind === 'local-daemon' ? 'daemon' : 'browser-local',
     }
-    const canvas: GetAppContextResult['canvas'] = deps.canvas
-      ? deps.canvas.workspaceId !== undefined
-        ? { kind: 'daemon', workspaceId: deps.canvas.workspaceId, slug: deps.canvas.canvasId }
-        : { kind: 'browser-local', canvasId: deps.canvas.canvasId }
-      : null
+    const canvas = projectCanvasContext(deps.canvas)
 
     return getAppContextResultSchema.parse({ provider, canvas })
   }
