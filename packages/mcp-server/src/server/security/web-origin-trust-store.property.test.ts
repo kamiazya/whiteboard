@@ -385,12 +385,14 @@ const advanceTimeArb = fc
   .integer({ min: 0, max: MAX_TIME_DELTA_MS })
   .map((delta) => new AdvanceTimeCommand(delta) as TrustCommand)
 
-// verifyLegacyArb and advanceTimeArb are listed multiple times to bias
-// fc.commands' generation toward long "advance a bit, verify legacy" runs —
-// the sequence shape that isolates the legacy-absolute TTL from the
-// sliding TTL (see MAX_TIME_DELTA_MS above). Without the bias, mixing in
-// enroll/revoke/trustLegacy at equal weight makes that specific shape too
-// rare across a bounded numRuns to reliably exercise the absolute-TTL guard.
+// Each arbitrary here appears exactly once and carries equal weight, so a
+// long "advance a bit, verify legacy" run — the sequence shape that isolates
+// the legacy-absolute TTL from the sliding TTL (see MAX_TIME_DELTA_MS above)
+// — is too rare across a bounded numRuns to reliably exercise the
+// absolute-TTL guard on its own. That isolation is instead guaranteed by the
+// dedicated legacyTtlBoundaryCommandsArb test below, which is constructed to
+// cross the absolute-TTL boundary on every run; this property covers the
+// broader mix of operations without needing to bias toward that shape.
 const commandsArb = fc.commands(
   [trustLegacyArb, enrollKeyArb, verifySignedArb, verifyLegacyArb, revokeArb, advanceTimeArb],
   { maxCommands: 15 },
@@ -454,20 +456,38 @@ class AdvanceThenVerifyLegacyCommand implements TrustCommand {
 // eventually fail the check.
 const LEGACY_TTL_BOUNDARY_ORIGIN = ORIGIN_POOL[0]
 
-const legacyTtlBoundaryCommandsArb = fc.commands(
-  [
-    fc
-      .integer({ min: 1, max: 29 })
-      .map(
-        (days) =>
-          new AdvanceThenVerifyLegacyCommand(
-            LEGACY_TTL_BOUNDARY_ORIGIN,
-            days * 24 * 60 * 60 * 1000,
-          ) as TrustCommand,
-      ),
-  ],
-  { maxCommands: 20 },
-)
+// A randomly generated prefix can legitimately stay under the 90-day
+// legacy-absolute TTL for its entire length (e.g. few short steps, or an
+// empty sequence) — nothing about the property would then have exercised
+// the expiry path it exists to test. Topping off with additional
+// MAX_TIME_DELTA_MS-sized steps (each still under the 30-day sliding TTL,
+// per the AdvanceThenVerifyLegacyCommand contract) until the cumulative
+// elapsed time exceeds the absolute TTL guarantees every generated run
+// crosses the boundary, so the model's per-step assertion is guaranteed to
+// observe the true -> false transition at least once.
+function withGuaranteedTtlCrossing(prefixDeltasMs: readonly number[]): number[] {
+  const prefixTotalMs = prefixDeltasMs.reduce((sum, deltaMs) => sum + deltaMs, 0)
+  const topOffDeltasMs: number[] = []
+  let remainingMs = LEGACY_ABSOLUTE_TTL_MS - prefixTotalMs
+  while (remainingMs >= 0) {
+    const stepMs = Math.min(MAX_TIME_DELTA_MS, remainingMs + 24 * 60 * 60 * 1000)
+    topOffDeltasMs.push(stepMs)
+    remainingMs -= stepMs
+  }
+  return [...prefixDeltasMs, ...topOffDeltasMs]
+}
+
+const legacyTtlBoundaryCommandsArb = fc
+  .array(
+    fc.integer({ min: 1, max: 29 }).map((days) => days * 24 * 60 * 60 * 1000),
+    { maxLength: 15 },
+  )
+  .map((prefixDeltasMs) =>
+    withGuaranteedTtlCrossing(prefixDeltasMs).map(
+      (deltaMs) =>
+        new AdvanceThenVerifyLegacyCommand(LEGACY_TTL_BOUNDARY_ORIGIN, deltaMs) as TrustCommand,
+    ),
+  )
 
 describe('web-origin-trust-store — model-based properties', () => {
   fcTest.prop([commandsArb], withDefaults({ numRuns: 40 }))(
