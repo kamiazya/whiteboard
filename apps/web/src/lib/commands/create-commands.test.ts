@@ -265,6 +265,20 @@ describe('createWhiteboardCommands.getAppContext', () => {
     expect(result.canvas).toBeNull()
   })
 
+  it('throws an invalid-provider-state CommandError rather than misreporting mode for an invalid-config provider', async () => {
+    const depsRef = refOf(
+      baseDeps({
+        provider: { kind: 'invalid-config', message: 'bad config' },
+      }),
+    )
+    const commands = createWhiteboardCommands(depsRef)
+
+    await expect(commands.getAppContext()).rejects.toMatchObject({
+      code: 'invalid-provider-state',
+    })
+    await expect(commands.getAppContext()).rejects.toBeInstanceOf(CommandError)
+  })
+
   it('excludes secret-bearing fields even given a poisoned ProviderState (simulated future drift)', async () => {
     // Real ProviderState carries no token field today; this cast simulates
     // a future field added to ProviderState leaking through if the

@@ -45,6 +45,35 @@ function projectCanvasContext(
   return { kind: 'browser-local', canvasId: canvas.canvasId }
 }
 
+// Exhaustive over every ProviderState.kind rather than a two-way ternary: an
+// `invalid-config` provider (a failed/rejected runtime config) has no
+// meaningful "browser-local" or "daemon" mode to report, so getAppContext
+// must fail loudly instead of guessing. The `default` branch's `never`
+// assignment makes a future ProviderState variant a compile error here.
+function projectProviderMode(
+  provider: WhiteboardCommandDeps['provider'],
+): 'daemon' | 'browser-local' {
+  switch (provider.kind) {
+    case 'local-daemon':
+      return 'daemon'
+    case 'browser-local':
+      return 'browser-local'
+    case 'invalid-config': {
+      throw new CommandError(
+        'invalid-provider-state',
+        'Cannot report app context: the runtime provider configuration is invalid.',
+      )
+    }
+    default: {
+      const exhaustive: never = provider
+      throw new CommandError(
+        'invalid-provider-state',
+        `Cannot report app context: unrecognized provider state "${String((exhaustive as { kind?: unknown }).kind)}".`,
+      )
+    }
+  }
+}
+
 /**
  * createWhiteboardCommands — the framework-free factory behind
  * `WhiteboardCommands`. This is the single entry point a WebMCP tool
@@ -162,10 +191,11 @@ export function createWhiteboardCommands(depsRef: {
     const deps = depsRef.current
     // Field-by-field, never a spread of `deps.provider` — this is the
     // boundary that keeps daemonBaseUrl (and any future connection-ish
-    // field ProviderState grows) out of a WebMCP tool result.
-    const provider: GetAppContextResult['provider'] = {
-      mode: deps.provider.kind === 'local-daemon' ? 'daemon' : 'browser-local',
-    }
+    // field ProviderState grows) out of a WebMCP tool result. The switch is
+    // exhaustive over every ProviderState.kind (checked by the `never`
+    // assignment in default) so a future ProviderState variant fails
+    // typecheck here instead of silently falling through to the wrong mode.
+    const provider: GetAppContextResult['provider'] = { mode: projectProviderMode(deps.provider) }
     const canvas = projectCanvasContext(deps.canvas)
 
     return getAppContextResultSchema.parse({ provider, canvas })
