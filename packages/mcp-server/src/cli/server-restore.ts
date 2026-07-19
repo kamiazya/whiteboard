@@ -1,13 +1,9 @@
 import { lstat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { hasAncestorSymlink } from '../server/backup-restore.js'
-import {
-  restoreServerModeDataDir,
-} from '../server/server-mode-backup-restore.js'
+import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
-import {
-  readServerModeRecord,
-} from '../server/security/server-mode-record.js'
+import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
 
@@ -24,7 +20,7 @@ export type ServerRestoreOutcome =
   | { kind: 'invalid-target-path' }
   | { kind: 'error'; message: string }
 
-export interface ServerRestoreResult {
+interface ServerRestoreResult {
   schemaVersion: 1
   ok: true
   operation: 'restore'

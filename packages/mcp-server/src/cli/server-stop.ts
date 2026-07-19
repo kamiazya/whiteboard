@@ -21,9 +21,9 @@ import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STOP_SCHEMA_VERSION = 1 as const
 
-export type ServerStopAction = 'stopped' | 'not-running' | 'refused'
+type ServerStopAction = 'stopped' | 'not-running' | 'refused'
 
-export type ServerStopReason =
+type ServerStopReason =
   | null
   | 'server-record-not-found'
   | 'server-record-malformed'
@@ -35,7 +35,7 @@ export type ServerStopReason =
   // risk terminating an unrelated process that reused the recorded pid.
   | 'server-instance-unverifiable'
 
-export interface ServerStopResult {
+interface ServerStopResult {
   schemaVersion: typeof SERVER_STOP_SCHEMA_VERSION
   ok: boolean
   action: ServerStopAction

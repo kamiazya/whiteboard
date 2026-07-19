@@ -15,7 +15,7 @@ const KYSELY_CORRUPTED_MIGRATIONS_SIGNATURE = 'corrupted migrations'
 // list is whatever ships with the bundle. This intentionally diverges from
 // kysely's FileMigrationProvider so dist builds do not have to ship loose .js
 // files alongside the bundled server.
-export class StaticMigrationProvider implements MigrationProvider {
+class StaticMigrationProvider implements MigrationProvider {
   async getMigrations() {
     return migrations
   }
@@ -42,8 +42,6 @@ export async function runMigrations(db: Database): Promise<void> {
       )
     }
 
-    throw new Error(
-      `Database migration failed${failed ? ` at ${failed}` : ''}: ${detail}`,
-    )
+    throw new Error(`Database migration failed${failed ? ` at ${failed}` : ''}: ${detail}`)
   }
 }

@@ -27,7 +27,7 @@ export const CANVAS_VIEW_RESOURCE_URI = 'ui://whiteboard/canvas-view'
 // file) so the same path works from ts-node/tsx (dev, src/) and from the
 // compiled dist/ layout — see DIST_WEB_APP_DIR in config.ts for the same
 // pattern with apps/web's bundle.
-export const WIDGET_HTML_PATH = resolve(WHITEBOARD_ROOT, 'dist/widget/canvas-viewer.html')
+const WIDGET_HTML_PATH = resolve(WHITEBOARD_ROOT, 'dist/widget/canvas-viewer.html')
 
 let activeWidgetHtmlPath = WIDGET_HTML_PATH
 let cachedWidgetHtml: string | undefined

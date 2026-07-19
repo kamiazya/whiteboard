@@ -35,7 +35,7 @@ import {
 // Stable identifiers for logical route groups that will be scope-gated.
 // Each group maps to exactly one required AuthScope in SERVER_MODE_ROUTE_AUTH_PLAN,
 // so callers can check a single scope per resource rather than an AND-combination.
-export type RouteGroupId =
+type RouteGroupId =
   | 'canvas-read'
   | 'workspace-read'
   | 'versions-read'
@@ -48,7 +48,7 @@ export type RouteGroupId =
   | 'runtime-admin'
   | 'mcp'
 
-export interface RouteGroupAuthPlan {
+interface RouteGroupAuthPlan {
   readonly group: RouteGroupId
   readonly requiredScopes: readonly AuthScope[]
 }
@@ -57,7 +57,7 @@ export interface RouteGroupAuthPlan {
 //   'loopback'  — local-daemon must respond to PNA preflight from browser pages
 //                 that access the loopback interface.
 //   'disabled'  — server-mode runs on a proper HTTPS origin; no PNA header needed.
-export type PnaHeaderPolicy = 'loopback' | 'disabled'
+type PnaHeaderPolicy = 'loopback' | 'disabled'
 
 export type ServerModeAuthPlanDecision =
   | {

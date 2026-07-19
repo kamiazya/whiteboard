@@ -265,6 +265,7 @@ Before closing a change:
 - Complete manual verification of the real behavior.
 - Preserve the verified user scenario in `mcp-browser` or E2E coverage.
 - Run `pnpm test`.
+- Resolve any `pnpm knip` finding one of three ways before closing: delete the dead code, drop the unused `export`, or register it in `knip.jsonc` as an intentional public surface with a reason comment.
 - If the change can affect typing or packaging, also run:
 
 ```bash

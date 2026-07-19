@@ -32,8 +32,6 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 const MAX_AUTO_PER_CANVAS = 50
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 
-export { validateVersionId }
-
 export interface OperatorInfo {
   kind: 'ai' | 'human' | 'system'
   peerId: string

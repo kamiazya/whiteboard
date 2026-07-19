@@ -9,7 +9,7 @@ export const SEMANTIC_PALETTE = {
   info: '#0c8599',
 } as const satisfies Record<string, string>
 
-export type SemanticColorKey = keyof typeof SEMANTIC_PALETTE
+type SemanticColorKey = keyof typeof SEMANTIC_PALETTE
 
 const PALETTE_KEYS: ReadonlySet<string> = new Set(Object.keys(SEMANTIC_PALETTE))
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{3,8}$/
@@ -73,8 +73,8 @@ export function contrastRatio(hexA: string, hexB: string): number | null {
 // Inks used when the guard replaces an unreadable one. The dark ink matches
 // DEFAULT_COLORS.text in annotate.ts; the light one is plain white — both
 // clear WCAG large-text contrast (3:1) against any fill the other doesn't.
-export const READABLE_DARK_INK = '#1e1e2e'
-export const READABLE_LIGHT_INK = '#ffffff'
+const READABLE_DARK_INK = '#1e1e2e'
+const READABLE_LIGHT_INK = '#ffffff'
 
 export function readableInkForFill(fillHex: string): string | null {
   const lum = relativeLuminance(fillHex)

@@ -18,7 +18,7 @@ export const canvasFileRecordSchema = z.object({
   blob: z.instanceof(Blob),
 })
 
-export type CanvasFileRecord = z.infer<typeof canvasFileRecordSchema>
+type CanvasFileRecord = z.infer<typeof canvasFileRecordSchema>
 
 /**
  * Decode a data: URL into a Blob. Prefers the MIME type embedded in the

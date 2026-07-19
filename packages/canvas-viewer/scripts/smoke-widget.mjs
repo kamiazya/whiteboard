@@ -161,6 +161,30 @@ async function main() {
     await page.goto(`file://${tmpHtmlPath}`)
     await page.waitForSelector('canvas', { timeout: 10_000 })
 
+    // No embedding host peer (file:// top-level load: window.parent ===
+    // window), so widget-entry's Refresh control must never be created —
+    // asserting this here, rather than only via jsdom mocks, catches the
+    // control leaking into the no-host document under the real bundle.
+    const hasRefreshControl = await page.evaluate(
+      () => document.querySelector('[data-testid="widget-refresh"]') !== null,
+    )
+    if (hasRefreshControl) {
+      fail(
+        'expected no Refresh control without an embedding host (file:// load has no parent frame)',
+      )
+    }
+
+    // Same gate as Refresh: the sticky-note affordance must never appear
+    // without an embedding host peer.
+    const hasStickyNoteControl = await page.evaluate(
+      () => document.querySelector('[data-testid="widget-sticky-note"]') !== null,
+    )
+    if (hasStickyNoteControl) {
+      fail(
+        'expected no sticky-note control without an embedding host (file:// load has no parent frame)',
+      )
+    }
+
     const fontCheck = await page.evaluate(async (text) => {
       await document.fonts.ready
       // window.__whiteboardWidgetFonts__ (see widget-entry.ts) is exactly
@@ -312,6 +336,26 @@ async function main() {
     }
     if (srcdocPageErrors.length > 0) {
       fail(`uncaught page error(s) under srcdoc hosting: ${srcdocPageErrors.join(' | ')}`)
+    }
+
+    // No real MCP Apps host answers the postMessage handshake in this
+    // harness, so app.connect() loses the HOST_CONNECT_TIMEOUT_MS race —
+    // Refresh and the sticky-note affordance must both stay absent here too,
+    // the same as the file:// no-parent-frame load above.
+    if (srcdocCanvasCount > 0) {
+      const widgetFrame = srcdocPage.frames().find((frame) => frame !== srcdocPage.mainFrame())
+      const controlPresence = await widgetFrame
+        ?.evaluate(() => ({
+          refresh: document.querySelector('[data-testid="widget-refresh"]') !== null,
+          stickyNote: document.querySelector('[data-testid="widget-sticky-note"]') !== null,
+        }))
+        .catch(() => undefined)
+      if (controlPresence?.refresh) {
+        fail('expected no Refresh control under sandboxed srcdoc hosting with no real host')
+      }
+      if (controlPresence?.stickyNote) {
+        fail('expected no sticky-note control under sandboxed srcdoc hosting with no real host')
+      }
     }
 
     if (process.exitCode !== 1) {

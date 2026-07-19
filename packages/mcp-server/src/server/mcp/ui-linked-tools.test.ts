@@ -33,6 +33,50 @@ function toolNameOf(entry: string): string | null {
   return m ? m[1] : null
 }
 
+// Verifies a defineTool entry's `visibility` field, when present, is an
+// inline array literal that includes "app" — anything else (omitted,
+// literal-inclusive) is fine, but a non-literal reference (e.g. a shared
+// `visibility: MODEL_ONLY_VISIBILITY` constant) can't be checked textually,
+// so it must fail loudly rather than let the array-literal regex silently
+// find no match and pass vacuously.
+function assertVisibilityAllowsApp(entry: string): void {
+  // Presence is decided FIRST so that any expression form this guard does
+  // not understand (call expression, ternary, spread, member access, …)
+  // fails loudly instead of falling through to the "omitted" default —
+  // only a literally absent field may claim the ["model","app"] default.
+  if (!/\bvisibility\s*:/.test(entry)) {
+    return
+  }
+  const arrayMatch = entry.match(/visibility:\s*\[([^\]]*)\]/)
+  if (arrayMatch) {
+    expect(arrayMatch[1]).toMatch(/["']app["']/)
+    return
+  }
+  throw new Error(
+    'visibility uses an expression this guard cannot verify textually; ' +
+      'inline the array literal, or extend this check, so "app" inclusion stays provable',
+  )
+}
+
+describe('assertVisibilityAllowsApp guard', () => {
+  it('accepts an omitted field and an app-inclusive array literal', () => {
+    expect(() => assertVisibilityAllowsApp('name: viewTool.name, _meta: { ui: {} }')).not.toThrow()
+    expect(() => assertVisibilityAllowsApp("visibility: ['model', 'app'],")).not.toThrow()
+  })
+
+  it('fails loudly on every non-literal visibility expression, not just bare identifiers', () => {
+    expect(() => assertVisibilityAllowsApp('visibility: SHARED_VISIBILITY,')).toThrow(
+      /cannot verify textually/,
+    )
+    expect(() => assertVisibilityAllowsApp('visibility: getVisibility(),')).toThrow(
+      /cannot verify textually/,
+    )
+    expect(() => assertVisibilityAllowsApp("visibility: (dev ? ['app'] : ['model']),")).toThrow(
+      /cannot verify textually/,
+    )
+  })
+})
+
 describe('MCP Apps UI-linked tools coverage', () => {
   it('UI_LINKED_TOOLS is a subset of ALL_REGISTERED_TOOLS', () => {
     for (const name of UI_LINKED_TOOLS) {
@@ -72,5 +116,36 @@ describe('MCP Apps UI-linked tools coverage', () => {
     const entries = splitDefineToolEntries(registrationSrc)
     const linkedNames = entries.filter((e) => /_meta:\s*\{\s*ui:/.test(e)).map((e) => toolNameOf(e))
     expect(linkedNames).toEqual(['viewTool'])
+  })
+
+  it('canvas_view leaves `visibility` unset or app-inclusive, so the MCP Apps host can call it back for Refresh', () => {
+    // ext-apps' McpUiToolMeta.visibility defaults to ["model", "app"] when
+    // omitted (spec.types.d.ts), which already permits an app-initiated
+    // callServerTool — this pins that canvas_view never narrows it to
+    // ["model"] only, which would silently break the widget's Refresh
+    // button without touching any test that calls canvas_view as the model.
+    const entries = splitDefineToolEntries(registrationSrc)
+    const viewEntry = entries.find((e) => toolNameOf(e) === 'viewTool')
+    expect(viewEntry).toBeDefined()
+    assertVisibilityAllowsApp(viewEntry ?? '')
+  })
+
+  it('annotate has no `_meta.ui` and leaves `visibility` unset or app-inclusive, so the canvas-viewer widget can call it back for the sticky-note affordance', () => {
+    // annotate is deliberately NOT UI-linked (no _meta.ui — rendering stays
+    // exclusive to canvas_view), but the widget's sticky-note affordance
+    // still needs to CALL it via app.callServerTool, which requires the
+    // same app-inclusive visibility default as canvas_view's Refresh.
+    const entries = splitDefineToolEntries(registrationSrc)
+    const annotateEntry = entries.find((e) => toolNameOf(e) === 'annotateToolDef')
+    expect(annotateEntry).toBeDefined()
+    expect(annotateEntry).not.toMatch(/_meta:\s*\{\s*ui:/)
+    assertVisibilityAllowsApp(annotateEntry ?? '')
+  })
+
+  it('flags a non-literal `visibility` reference instead of passing vacuously', () => {
+    // Guards the guard: a future edit to `visibility: MODEL_ONLY_VISIBILITY`
+    // (a non-literal reference) must fail this check, not silently pass it
+    // the way a literal-array-only regex would.
+    expect(() => assertVisibilityAllowsApp('visibility: MODEL_ONLY_VISIBILITY,')).toThrow()
   })
 })

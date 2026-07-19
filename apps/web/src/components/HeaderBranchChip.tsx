@@ -618,5 +618,3 @@ export function HeaderBranchChip({
     </div>
   )
 }
-
-export default HeaderBranchChip

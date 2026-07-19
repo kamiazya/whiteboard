@@ -251,7 +251,7 @@ export interface FileGcSweeperOptions {
   versionStore?: VersionStore
 }
 
-export interface FileGcSweeperStopOptions {
+interface FileGcSweeperStopOptions {
   // Caps how long stop() waits for an in-flight pass before returning. A
   // full pass can be expensive (Loro fork+checkout per branch/version per
   // canvas, across every workspace), and stop() is invoked from the daemon's

@@ -59,6 +59,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "lint:noconsole": "biome lint --only=lint/suspicious/noConsole --diagnostic-level=error packages/mcp-server/src/server apps/web/src",
+    "knip": "knip",
     "secretlint": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "test:scripts": "node --test .claude/scripts/*.test.mjs",
     "prepare": "lefthook install || true"
@@ -69,9 +70,9 @@
     "@secretlint/secretlint-rule-pattern": "13.0.2",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.2",
     "@tanstack/intent": "^0.0.40",
+    "knip": "6.26.0",
     "lefthook": "^2.1.9",
     "secretlint": "13.0.2",
-    "vite-plugin-pwa": "1.3.0",
     "vitest": "catalog:"
   }
 }

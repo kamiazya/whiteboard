@@ -51,7 +51,7 @@ const wildcardOriginPatternSchema = z.object({
   port: z.string(),
 })
 
-export const originPatternSchema = z.discriminatedUnion('kind', [
+const originPatternSchema = z.discriminatedUnion('kind', [
   exactOriginPatternSchema,
   wildcardOriginPatternSchema,
 ])

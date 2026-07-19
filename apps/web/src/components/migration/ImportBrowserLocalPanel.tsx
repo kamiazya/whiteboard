@@ -11,7 +11,7 @@ const log = getAppLogger('import-browser-local-panel')
 
 // Minimal surface this panel needs from LoroStore — narrower than the full
 // class so tests can inject a plain object instead of touching IndexedDB.
-export interface ImportLoroStoreLike {
+interface ImportLoroStoreLike {
   load(canvasId: string): Promise<LoroLoadResult>
 }
 

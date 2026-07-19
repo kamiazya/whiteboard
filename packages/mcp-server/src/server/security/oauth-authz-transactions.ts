@@ -56,15 +56,9 @@ const createTransactionInputSchema = z.object({
   csrfToken: z.string().min(1),
 })
 
-export type CreateTransactionInput = z.infer<typeof createTransactionInputSchema>
+type CreateTransactionInput = z.infer<typeof createTransactionInputSchema>
 
-export type TransactionStatus =
-  | 'pending'
-  | 'approved'
-  | 'denied'
-  | 'code-issued'
-  | 'redeemed'
-  | 'expired'
+type TransactionStatus = 'pending' | 'approved' | 'denied' | 'code-issued' | 'redeemed' | 'expired'
 
 interface TransactionRecord {
   id: string
@@ -98,9 +92,9 @@ const redirectTargetSchema = z.object({
   state: z.string().min(1),
 })
 
-export type RedirectTarget = z.infer<typeof redirectTargetSchema>
+type RedirectTarget = z.infer<typeof redirectTargetSchema>
 
-export type RedeemAuthorizationCodeInput = {
+type RedeemAuthorizationCodeInput = {
   code: string
   clientId: string
   redirectUri: string
@@ -121,7 +115,7 @@ const grantSummarySchema = z.object({
   expiresAt: z.number(),
 })
 
-export type GrantSummary = z.infer<typeof grantSummarySchema>
+type GrantSummary = z.infer<typeof grantSummarySchema>
 
 // The authorization context a verified access token yields to the resource
 // server. `scopes` is the set the *user approved for this grant* — never the
@@ -132,7 +126,7 @@ const accessGrantContextSchema = z.object({
   scopes: z.array(z.enum(AUTH_SCOPES)),
 })
 
-export type AccessGrantContext = z.infer<typeof accessGrantContextSchema>
+type AccessGrantContext = z.infer<typeof accessGrantContextSchema>
 
 interface GrantRecord {
   id: string
@@ -143,7 +137,7 @@ interface GrantRecord {
   expiresAt: number
 }
 
-export type RedeemAuthorizationCodeResult =
+type RedeemAuthorizationCodeResult =
   | { ok: true; transactionId: string; scopes: readonly AuthScope[]; clientId: string }
   | {
       ok: false

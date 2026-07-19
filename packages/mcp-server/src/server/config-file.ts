@@ -33,7 +33,7 @@ const log = getLogger('config-file')
 // Order matters: cosmiconfig checks these, in this order, in the single
 // directory searched (cwd; no ancestor walk-up). JSON/YAML/rc-without-extension
 // formats only.
-export const CONFIG_FILE_SEARCH_PLACES = [
+const CONFIG_FILE_SEARCH_PLACES = [
   '.whiteboardrc',
   '.whiteboardrc.json',
   '.whiteboardrc.yaml',
@@ -46,7 +46,7 @@ export const CONFIG_FILE_SEARCH_PLACES = [
 
 // Fallback file consulted when nothing is found walking up from cwd, so a
 // single per-user default can apply across every project on a machine.
-export const HOME_CONFIG_FILE_RELATIVE_PATH = '.whiteboard/config.yaml'
+const HOME_CONFIG_FILE_RELATIVE_PATH = '.whiteboard/config.yaml'
 
 // cosmiconfig merges a caller's `loaders` option ON TOP of its own defaults
 // (`{...defaults.loaders, ...options.loaders}`), so merely omitting the JS
@@ -85,7 +85,7 @@ type KnownKey = (typeof KNOWN_KEYS)[number]
 // token is intentionally a plain string: file-stored tokens are a dev-only
 // convenience (the same footgun as committing a .env with a secret in it).
 // Docs must say so; this module never logs the value.
-export const whiteboardConfigFileSchema = z
+const whiteboardConfigFileSchema = z
   .object({
     allowedWebOrigins: z.array(z.string()).optional(),
     port: z.number().int().min(1).max(65535).optional(),

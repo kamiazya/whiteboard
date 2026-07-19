@@ -19,7 +19,7 @@ import {
   type OriginPatternFailureReason,
 } from './origin-pattern.js'
 
-export type WebOriginsFailureCode =
+type WebOriginsFailureCode =
   | 'web_origins.entry_must_be_https'
   | 'web_origins.entry_must_be_origin'
   | 'web_origins.wildcard_forbidden'

@@ -18,12 +18,12 @@ import type { OAuthTransactionStore } from '../security/oauth-authz-transactions
 import type { WsTicketStore } from '../security/ws-ticket-store.js'
 import { parseBearerAuthorizationHeader } from './auth.js'
 
-export const mintWsTicketResponseSchema = z.object({
+const mintWsTicketResponseSchema = z.object({
   ticket: z.string().min(1),
   expiresIn: z.number().positive(),
 })
 
-export type MintWsTicketResponse = z.infer<typeof mintWsTicketResponseSchema>
+type MintWsTicketResponse = z.infer<typeof mintWsTicketResponseSchema>
 
 export interface WsTicketRouterOptions {
   // Absent when the operator has not configured the hosted-origin OAuth

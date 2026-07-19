@@ -48,15 +48,6 @@ import {
 } from '../security/web-origin-trust-store.js'
 import { parseBearerAuthorizationHeader } from './auth.js'
 
-export {
-  type ReconnectChallengeResponse,
-  type ReconnectCredentialResponse,
-  type ReconnectSessionResponse,
-  reconnectChallengeResponseSchema,
-  reconnectCredentialResponseSchema,
-  reconnectSessionResponseSchema,
-}
-
 // Derived from the store's actually-enforced TTL rather than a second
 // hardcoded constant, so the value reported to clients can never drift from
 // the value the trust store enforces.

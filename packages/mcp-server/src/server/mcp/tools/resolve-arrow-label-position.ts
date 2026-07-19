@@ -5,9 +5,9 @@
 
 import { estimateTextWidth } from './estimate-text-width.js'
 
-export type ArrowLabelSide = 'auto' | 'above' | 'below' | 'left' | 'right'
+type ArrowLabelSide = 'auto' | 'above' | 'below' | 'left' | 'right'
 
-export interface Rect {
+interface Rect {
   x: number
   y: number
   width: number
@@ -37,12 +37,7 @@ const LABEL_HEIGHT = 24
 
 // Check overlap between axis-aligned rectangles. Edge-touching does not count.
 function rectsOverlap(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  )
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
 interface NormalVector {
@@ -152,7 +147,12 @@ export function resolveArrowLabelPosition(
   }
 
   // Search order: midpoint with varying offset/flip, then near-end positions.
-  const offsetLadder = [effectiveOffset, effectiveOffset * 3, effectiveOffset * 6, effectiveOffset * 10]
+  const offsetLadder = [
+    effectiveOffset,
+    effectiveOffset * 3,
+    effectiveOffset * 6,
+    effectiveOffset * 10,
+  ]
   const tLadder = [0.5, 0.25, 0.75, 0.15, 0.85]
   const flipOptions = [false, true]
 

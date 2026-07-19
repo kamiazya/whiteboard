@@ -45,7 +45,7 @@ import type { MiddlewareHandler } from 'hono'
 import { parseBearerAuthorizationHeader } from '../routes/auth.js'
 import type { AuthAuthorizeInput, AuthDecision, AuthScope } from './auth-strategy.js'
 
-export type OAuthResourceTokenValidationFailureReason =
+type OAuthResourceTokenValidationFailureReason =
   | 'missing'
   | 'malformed'
   | 'invalid_signature'

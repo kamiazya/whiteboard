@@ -26,7 +26,7 @@ export interface AutoOpenBrowserInput {
   openOption: boolean
 }
 
-export type AutoOpenBrowserSkipReason =
+type AutoOpenBrowserSkipReason =
   | 'opted-out'
   | 'non-interactive'
   | 'ci'

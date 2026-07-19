@@ -7,7 +7,7 @@ import { join } from 'node:path'
 // honours the rotation contract — and it costs no stat() per file in the
 // common case.
 
-export const DEFAULT_DAEMON_LOG_RETAIN_DAYS = 14
+const DEFAULT_DAEMON_LOG_RETAIN_DAYS = 14
 
 const FILENAME_RE = /^daemon-(\d{4})-(\d{2})-(\d{2})\.log$/
 
@@ -38,11 +38,7 @@ export async function purgeOldDaemonLogs(
   for (const entry of entries) {
     const match = FILENAME_RE.exec(entry)
     if (!match) continue
-    const fileDateUtcMs = Date.UTC(
-      Number(match[1]),
-      Number(match[2]) - 1,
-      Number(match[3]),
-    )
+    const fileDateUtcMs = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
     if (fileDateUtcMs >= cutoff) continue
     const path = join(dir, entry)
     try {

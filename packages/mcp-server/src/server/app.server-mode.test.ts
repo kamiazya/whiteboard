@@ -547,29 +547,8 @@ describe('app — server-mode composition', () => {
     expect(res.headers.get('WWW-Authenticate')).toBeNull()
   })
 
-  // Previously-unguarded routes: import-migration-bundle, export, viewport, status, libraries, palette
+  // Previously-unguarded routes: export, viewport, status, libraries, palette
   describe('server-mode: previously-unguarded routes are auth-gated', () => {
-    it('POST /api/import-migration-bundle → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/import-migration-bundle', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(401)
-      expect(res.headers.get('WWW-Authenticate')).toBe('Bearer')
-    })
-
-    it('POST /api/import-migration-bundle → 403 with canvas:read only (requires canvas:write)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/import-migration-bundle', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(403)
-    })
-
     it('POST /api/canvas/:wid/:slug/export → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['canvas:write']))
       const res = await app.request('/api/canvas/w1/canvas-a/export', {

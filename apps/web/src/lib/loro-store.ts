@@ -22,7 +22,7 @@ export const loroRecordEnvelopeSchema = z.object({
   deltas: z.array(uint8ArraySchema).optional(),
 })
 
-export type LoroRecordEnvelope = z.infer<typeof loroRecordEnvelopeSchema>
+type LoroRecordEnvelope = z.infer<typeof loroRecordEnvelopeSchema>
 
 export type LoroLoadResult =
   | { kind: 'ok'; snapshot: Uint8Array; deltas?: Uint8Array[] }

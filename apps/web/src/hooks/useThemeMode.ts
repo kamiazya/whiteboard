@@ -43,7 +43,7 @@ export function readPersistedTheme(): ThemeMode {
   return 'system'
 }
 
-export function getSystemTheme(): ResolvedTheme {
+function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'light'
   return window.matchMedia(SYSTEM_QUERY).matches ? 'dark' : 'light'
 }

@@ -1,8 +1,6 @@
 import { resolve } from 'node:path'
 import {
-  DATA_DIR,
   getDataDir,
-  overrideDataDir,
   resetDataDirForTests,
   resolveDataDir,
   setDataDirForTests,
@@ -13,15 +11,7 @@ import {
 // all existing server/store importers keep their '../server/config.js' import
 // paths unchanged. The definitions live in the shared layer so daemon files
 // can depend on them without importing upward into the server layer.
-export {
-  DATA_DIR,
-  getDataDir,
-  overrideDataDir,
-  resetDataDirForTests,
-  resolveDataDir,
-  setDataDirForTests,
-  WHITEBOARD_ROOT,
-}
+export { getDataDir, resetDataDirForTests, resolveDataDir, setDataDirForTests, WHITEBOARD_ROOT }
 
 // The compiled web-asset directory is a server-only concept (static-file
 // middleware). It must not live in the shared layer, which daemon and CLI

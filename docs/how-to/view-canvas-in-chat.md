@@ -16,19 +16,43 @@ no need to switch to a browser tab to see what the agent drew.
   all Excalidraw assets are inlined), so the client's CSP for the view can stay at its
   strictest default.
 
+## Refreshing the view
+
+On clients whose MCP Apps host advertises the `serverTools` capability, the widget
+shows a small **Refresh** button once the initial `canvas_view` result has loaded. It
+re-invokes `canvas_view` for the same `canvasId` through the host and swaps in the
+latest scene — you do not need to leave the chat or call the tool again by hand. On
+clients that do not advertise `serverTools`, or when the widget cannot confirm a host
+connection at all, the button never appears; call `canvas_view` again to see a fresh
+snapshot instead.
+
+## Adding a sticky note from the widget
+
+On the same clients that show Refresh (host connected and `serverTools`
+advertised), the widget also shows a small text field with an **Add** button
+in the top-left corner. Typing a note and submitting it calls the `annotate`
+tool through the host to add a `box_with_label` sticky note to the canvas,
+placed automatically so it does not overlap existing elements, then
+refreshes the view so the new note appears. This is **append-only** — there
+is no in-widget way to edit or remove an existing note or any other element;
+use the full editor or the `annotate` / other canvas tools directly for that.
+The field is disabled while a note is being added and re-enabled once the
+follow-up refresh completes.
+
 ## What you do not get (yet)
 
 This is **Phase A** of MCP Apps support:
 
-- The view is **read-only**. There is no in-widget editing, annotation, or refresh
-  button yet — call `canvas_view` again to see a fresh snapshot.
+- Beyond adding a new sticky note as described above, the view is
+  **read-only** — Refresh reloads the current scene, but there is no
+  in-widget editing, moving, or deleting of existing elements.
 - Only `canvas_view` renders inline. `canvas_open` (opens the full editor in a real
   browser tab) and `export_canvas` (writes a file) are intentionally **not**
   UI-linked — `canvas_open` would need to pass the daemon's base URL into the widget,
   and `export_canvas` has a file-write side effect that a UI "refresh" action should
   never trigger silently.
-- Live sync (the view updating as the agent keeps drawing, without calling the tool
-  again) is a future phase.
+- Live sync (the view updating as the agent keeps drawing, without you or the widget
+  calling the tool again) is a future phase.
 
 ## Requirements
 

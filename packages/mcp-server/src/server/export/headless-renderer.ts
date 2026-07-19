@@ -270,7 +270,7 @@ export async function prewarmHeadlessExporter(): Promise<void> {
 // error during prewarm) we drop the cached promise so the next call
 // retries from scratch — replaying a rejected promise forever would
 // brick every export until the daemon restarts.
-export function getHeadlessExporter(): Promise<HeadlessExporter> {
+function getHeadlessExporter(): Promise<HeadlessExporter> {
   if (!setupPromise) {
     const pending = buildExporter().catch((err) => {
       if (setupPromise === pending) setupPromise = null

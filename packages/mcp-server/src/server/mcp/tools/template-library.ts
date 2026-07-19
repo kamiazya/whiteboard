@@ -84,7 +84,7 @@ export type WhiteboardTemplate = z.infer<typeof whiteboardTemplateSchema> & {
   layout?: GridLayout
 }
 
-export type WhiteboardTemplateVariable = z.infer<typeof templateVariableSchema>
+type WhiteboardTemplateVariable = z.infer<typeof templateVariableSchema>
 
 export const BUILTIN_TEMPLATES: WhiteboardTemplate[] = [
   {

@@ -17,7 +17,7 @@ const LINE_HEIGHT_RATIO = 1.25
 const TITLE_GAP = 6
 const DEFAULT_PADDING = 20
 
-export interface GroupMemberElement {
+interface GroupMemberElement {
   id: string
   x: number
   y: number

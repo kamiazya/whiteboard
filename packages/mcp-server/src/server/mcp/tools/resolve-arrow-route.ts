@@ -2,14 +2,14 @@
 // horizontal-first L, then vertical-first L, then Z detours. If every option
 // collides, it falls back to the straight route without throwing.
 
-export interface Rect {
+interface Rect {
   x: number
   y: number
   width: number
   height: number
 }
 
-export interface Point {
+interface Point {
   x: number
   y: number
 }
@@ -27,12 +27,7 @@ export interface ResolveArrowRouteResult {
 
 // Check whether two rectangles overlap by area; edge-touching does not count.
 function rectsOverlap(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  )
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
 // Turn an axis-aligned segment into a tiny rectangle for intersection testing.
@@ -57,7 +52,9 @@ function segmentIntersectsRect(a: Point, b: Point, rect: Rect): boolean {
   const dy = b.y - a.y
   if (dx === 0 && dy === 0) {
     // Degenerate case: treat the segment as a point.
-    return a.x >= rect.x && a.x <= rect.x + rect.width && a.y >= rect.y && a.y <= rect.y + rect.height
+    return (
+      a.x >= rect.x && a.x <= rect.x + rect.width && a.y >= rect.y && a.y <= rect.y + rect.height
+    )
   }
   let t0 = 0
   let t1 = 1
@@ -139,13 +136,33 @@ export function resolveArrowRoute(input: ResolveArrowRouteInput): ResolveArrowRo
   const minObY = Math.min(...obstacles.map((o) => o.y))
   const zCandidates: Point[][] = [
     // Z-right
-    [start, { x: maxObX + DETOUR_MARGIN, y: start.y }, { x: maxObX + DETOUR_MARGIN, y: end.y }, end],
+    [
+      start,
+      { x: maxObX + DETOUR_MARGIN, y: start.y },
+      { x: maxObX + DETOUR_MARGIN, y: end.y },
+      end,
+    ],
     // Z-left
-    [start, { x: minObX - DETOUR_MARGIN, y: start.y }, { x: minObX - DETOUR_MARGIN, y: end.y }, end],
+    [
+      start,
+      { x: minObX - DETOUR_MARGIN, y: start.y },
+      { x: minObX - DETOUR_MARGIN, y: end.y },
+      end,
+    ],
     // Z-below
-    [start, { x: start.x, y: maxObY + DETOUR_MARGIN }, { x: end.x, y: maxObY + DETOUR_MARGIN }, end],
+    [
+      start,
+      { x: start.x, y: maxObY + DETOUR_MARGIN },
+      { x: end.x, y: maxObY + DETOUR_MARGIN },
+      end,
+    ],
     // Z-above
-    [start, { x: start.x, y: minObY - DETOUR_MARGIN }, { x: end.x, y: minObY - DETOUR_MARGIN }, end],
+    [
+      start,
+      { x: start.x, y: minObY - DETOUR_MARGIN },
+      { x: end.x, y: minObY - DETOUR_MARGIN },
+      end,
+    ],
   ]
   for (const z of zCandidates) {
     if (routeClear(z, obstacles)) {

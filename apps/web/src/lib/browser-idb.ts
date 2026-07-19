@@ -7,7 +7,7 @@
  * Owning DB_VERSION and onupgradeneeded in one place makes that impossible by
  * construction instead of relying on a hand-synced comment.
  */
-export const DB_NAME = 'whiteboard'
+const DB_NAME = 'whiteboard'
 
 /**
  * v2 -> v3: elements are canonical in the Loro doc ('loroCanvases'); the JSON
