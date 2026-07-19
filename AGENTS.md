@@ -5,7 +5,7 @@ Use this repo's standard development loop for every feature, bug fix, or refacto
 1. Start with the smallest failing test at the nearest layer.
 2. Make the smallest patch that turns it green.
 3. Manually verify the real behavior in a running app or browser.
-4. Lock the verified user flow into `mcp-browser` or a broader E2E test when browser-mode is not enough.
+4. Lock the verified user flow into `canvas-viewer-browser`/`web-browser` or a broader E2E test when browser-mode is not enough.
 
 ## Test Layer Selection
 
@@ -50,8 +50,8 @@ Run the narrowest project first:
 
 ```bash
 pnpm test --project mcp-node
-pnpm test --project mcp-jsdom
-pnpm test --project mcp-browser
+pnpm test --project canvas-viewer-jsdom
+pnpm test --project canvas-viewer-browser
 ```
 
 After the targeted test passes, run the broader suite that covers the touched area.
@@ -71,19 +71,19 @@ Passing tests alone are not sufficient.
 
 After manual verification, preserve the exact user flow:
 
-- Add or extend an `mcp-browser` test if component mount plus mocked fetches are enough.
+- Add or extend a `canvas-viewer-browser` or `web-browser` test if component mount plus mocked fetches are enough.
 - Add or extend E2E coverage if the scenario depends on real routing, websockets, persistence, daemon behavior, or page composition.
 
 Do not stop at manual verification without preserving the scenario in automation.
 
 ## Browser Mode And Trace
 
-`mcp-browser` is the default place for real browser regression tests in `packages/mcp-server`. Use `web-browser` for `apps/web` browser tests (IndexedDB, OPFS, etc.). `pnpm test:browser` runs both.
+`canvas-viewer-browser` is the default place for real browser regression tests in `packages/canvas-viewer`. Use `web-browser` for `apps/web` browser tests (IndexedDB, OPFS, etc.). `pnpm test:browser` runs both.
 
 Use:
 
 ```bash
-pnpm run test:browser        # mcp-browser + web-browser
+pnpm run test:browser        # canvas-viewer-browser + web-browser
 pnpm run test:browser:trace  # same, with trace artifacts on failure
 ```
 
@@ -283,7 +283,7 @@ Before closing a change:
 
 - Keep at least one nearest-layer automated test for the root cause.
 - Complete manual verification of the real behavior.
-- Preserve the verified user scenario in `mcp-browser` or E2E coverage.
+- Preserve the verified user scenario in `canvas-viewer-browser`/`web-browser` or E2E coverage.
 - Run `pnpm test`.
 - Resolve any `pnpm knip` finding one of three ways before closing: delete the dead code, drop the unused `export`, or register it in `knip.jsonc` as an intentional public surface with a reason comment.
 - If the change can affect typing or packaging, also run:
@@ -317,7 +317,7 @@ Workflow:
 3. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section. Show before/after when the change is a fix; show one annotated capture when adding a new affordance.
 4. Keep the actual screenshot file in `tmp/screenshots/` until the PR merges; remove it afterward to keep the dir lean (the GitHub upload is the durable copy).
 
-Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `mcp-browser` regressions.
+Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `canvas-viewer-browser`/`web-browser` regressions.
 
 ## Source Comment Discipline
 
