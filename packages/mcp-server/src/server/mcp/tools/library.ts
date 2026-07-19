@@ -9,6 +9,7 @@ import {
 } from '../../../shared/api-contracts/libraries.js'
 import { validateExternalUrl } from '../../validators.js'
 import { apiGetSnapshot, apiPostLoroUpdate } from './annotate.js'
+import { assertCanvasExists } from './canvas-existence.js'
 import { parseCanvasId } from './canvas-id.js'
 import { resolveLibraryItem, type LibraryElement } from './resolve-library-item.js'
 import { boundsSchema } from './shared-schemas.js'
@@ -291,6 +292,7 @@ async function insertLibraryBatch(
   items: Array<{ itemIndex: number; insertedCount: number; elementIds: string[] }>
 }> {
   const { workspaceId, slug } = parseCanvasId(args.canvasId)
+  await assertCanvasExists(client, workspaceId, slug)
   const items = await loadLibrarySource(args, client)
   let metadata: UserLibraryMetadataManifest | undefined
   const needsMetadata =

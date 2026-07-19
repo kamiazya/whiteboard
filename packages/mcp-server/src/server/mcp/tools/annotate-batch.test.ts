@@ -23,6 +23,9 @@ describe('annotate_batch', () => {
 
     fetchMock = vi.fn(async (url: string | URL, init?: { body?: unknown }) => {
       const u = url.toString()
+      if (u.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
       if (u.endsWith('/palette')) {
         return new Response(JSON.stringify({ palette: {} }), { status: 200 })
       }
@@ -59,8 +62,8 @@ describe('annotate_batch', () => {
     )
 
     expect(res.elementIds).toHaveLength(3)
-    // 1 palette GET + 1 snapshot GET + 1 update POST
-    expect(fetchMock).toHaveBeenCalledTimes(3)
+    // 1 canvases GET (existence check) + 1 palette GET + 1 snapshot GET + 1 update POST
+    expect(fetchMock).toHaveBeenCalledTimes(4)
     expect(postedUpdate).not.toBeNull()
     expect(postedUpdate!.byteLength).toBeGreaterThan(0)
   })
@@ -70,6 +73,34 @@ describe('annotate_batch', () => {
     const tool = annotateBatchTool()
     const res = await tool.execute({ canvasId: 'sid/slug', annotations: [] }, client)
     expect(res.elementIds).toEqual([])
+  })
+
+  it('rejects an unknown canvasId before touching palette/snapshot/update endpoints', async () => {
+    const { annotateBatchTool } = await import('./annotate-batch.js')
+    const tool = annotateBatchTool()
+    let touchedWriteEndpoint = false
+    const fakeClient = {
+      port: 3099,
+      baseUrl: 'http://localhost:3099',
+      request: async (path: string) => {
+        if (path.endsWith('/exists')) {
+          return new Response(JSON.stringify({ exists: false }), { status: 200 })
+        }
+        touchedWriteEndpoint = true
+        throw new Error(`Unexpected request: ${path}`)
+      },
+      touch: async () => undefined,
+    }
+    await expect(
+      tool.execute(
+        {
+          canvasId: 'unknown-ws/sticky-demo',
+          annotations: [{ type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute' }],
+        },
+        fakeClient,
+      ),
+    ).rejects.toThrow(/canvas_create/)
+    expect(touchedWriteEndpoint).toBe(false)
   })
   describe('warnings (box_with_label overflow)', () => {
     it('case 317', async () => {
@@ -742,6 +773,9 @@ describe('annotate_batch', () => {
     it('omits unknownPaletteKeys when all tokens resolve', async () => {
       fetchMock.mockImplementation(async (url: string | URL, init?: { body?: unknown }) => {
         const u = url.toString()
+        if (u.endsWith('/exists')) {
+          return new Response(JSON.stringify({ exists: true }), { status: 200 })
+        }
         if (u.endsWith('/palette')) {
           return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), {
             status: 200,

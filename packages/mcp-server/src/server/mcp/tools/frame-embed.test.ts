@@ -1,10 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { LoroDoc, LoroMap } from 'loro-crdt'
-import {
-  createEmbedTool,
-  createFrameTool,
-  updateFrameMembersTool,
-} from './frame-embed.js'
+import { createEmbedTool, createFrameTool, updateFrameMembersTool } from './frame-embed.js'
 
 const client = {
   port: 9999,
@@ -16,12 +12,16 @@ const client = {
 
 interface SnapshotState {
   doc: LoroDoc
+  exists?: boolean
 }
 
 function installFetchMock(state: SnapshotState) {
   const originalFetch = globalThis.fetch
   const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
     const u = url.toString()
+    if (u.endsWith('/exists')) {
+      return new Response(JSON.stringify({ exists: state.exists ?? true }), { status: 200 })
+    }
     if (u.endsWith('/palette')) {
       return new Response(JSON.stringify({ palette: {} }), { status: 200 })
     }
@@ -68,18 +68,34 @@ describe('create_frame', () => {
     expect(elements[0].id).toBe(res.elementId)
   })
 
+  it('rejects a canvasId that does not exist instead of silently registering it', async () => {
+    state.exists = false
+    const tool = createFrameTool()
+    await expect(
+      tool.execute({ canvasId: 'sid/ghost', x: 10, y: 20, width: 300, height: 200 }, client),
+    ).rejects.toThrow(/does not exist/)
+  })
+
   it('case 2', async () => {
     const list = state.doc.getMovableList('elements')
     const a = list.insertContainer(0, new LoroMap())
     a.set('id', 'el-a')
     a.set('type', 'rectangle')
-    a.set('x', 100); a.set('y', 100); a.set('width', 100); a.set('height', 50)
-    a.set('frameId', null); a.set('isDeleted', false)
+    a.set('x', 100)
+    a.set('y', 100)
+    a.set('width', 100)
+    a.set('height', 50)
+    a.set('frameId', null)
+    a.set('isDeleted', false)
     const b = list.insertContainer(1, new LoroMap())
     b.set('id', 'el-b')
     b.set('type', 'rectangle')
-    b.set('x', 300); b.set('y', 200); b.set('width', 80); b.set('height', 40)
-    b.set('frameId', null); b.set('isDeleted', false)
+    b.set('x', 300)
+    b.set('y', 200)
+    b.set('width', 80)
+    b.set('height', 40)
+    b.set('frameId', null)
+    b.set('isDeleted', false)
     state.doc.commit()
 
     const tool = createFrameTool()
@@ -137,6 +153,14 @@ describe('create_embed', () => {
     expect(elements[0].width).toBe(640)
     expect(elements[0].height).toBe(400)
   })
+
+  it('rejects a canvasId that does not exist instead of silently registering it', async () => {
+    state.exists = false
+    const tool = createEmbedTool()
+    await expect(
+      tool.execute({ canvasId: 'sid/ghost', url: 'https://youtu.be/dQw4w9WgXcQ' }, client),
+    ).rejects.toThrow(/does not exist/)
+  })
 })
 
 describe('update_frame_members', () => {
@@ -147,15 +171,28 @@ describe('update_frame_members', () => {
     const m = list.insertContainer(list.length, new LoroMap())
     m.set('id', id)
     m.set('type', 'frame')
-    m.set('x', x); m.set('y', y); m.set('width', w); m.set('height', h)
+    m.set('x', x)
+    m.set('y', y)
+    m.set('width', w)
+    m.set('height', h)
     m.set('isDeleted', false)
   }
-  const seedEl = (id: string, x: number, y: number, w: number, h: number, frameId: string | null = null): void => {
+  const seedEl = (
+    id: string,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    frameId: string | null = null,
+  ): void => {
     const list = state.doc.getMovableList('elements')
     const m = list.insertContainer(list.length, new LoroMap())
     m.set('id', id)
     m.set('type', 'rectangle')
-    m.set('x', x); m.set('y', y); m.set('width', w); m.set('height', h)
+    m.set('x', x)
+    m.set('y', y)
+    m.set('width', w)
+    m.set('height', h)
     m.set('isDeleted', false)
     m.set('frameId', frameId)
   }
@@ -171,6 +208,14 @@ describe('update_frame_members', () => {
   })
   afterEach(() => restore())
 
+  it('rejects a canvasId that does not exist instead of silently registering it', async () => {
+    state.exists = false
+    const tool = updateFrameMembersTool()
+    await expect(
+      tool.execute({ canvasId: 'sess/ghost', frameId: 'F', add: ['a'] }, client),
+    ).rejects.toThrow(/does not exist/)
+  })
+
   it('case 5', async () => {
     seedFrame('F', 0, 0, 100, 100)
     seedEl('a', 200, 100, 50, 50)
@@ -178,10 +223,7 @@ describe('update_frame_members', () => {
     state.doc.commit()
 
     const tool = updateFrameMembersTool()
-    await tool.execute(
-      { canvasId: 'sess/canvas', frameId: 'F', add: ['a', 'b'] },
-      client,
-    )
+    await tool.execute({ canvasId: 'sess/canvas', frameId: 'F', add: ['a', 'b'] }, client)
 
     expect(readEl('a')?.frameId).toBe('F')
     expect(readEl('b')?.frameId).toBe('F')
@@ -190,14 +232,11 @@ describe('update_frame_members', () => {
   it('case 6', async () => {
     seedFrame('F', 0, 0, 100, 100)
     seedEl('a', 200, 100, 50, 50, 'F') // Already belongs to F
-    seedEl('b', 260, 200, 40, 30)      // Will be added now
+    seedEl('b', 260, 200, 40, 30) // Will be added now
     state.doc.commit()
 
     const tool = updateFrameMembersTool()
-    await tool.execute(
-      { canvasId: 'sess/canvas', frameId: 'F', add: ['b'], padding: 10 },
-      client,
-    )
+    await tool.execute({ canvasId: 'sess/canvas', frameId: 'F', add: ['b'], padding: 10 }, client)
 
     const f = readEl('F')
     expect(f?.x).toBe(200 - 10)
@@ -213,10 +252,7 @@ describe('update_frame_members', () => {
     state.doc.commit()
 
     const tool = updateFrameMembersTool()
-    await tool.execute(
-      { canvasId: 'sess/canvas', frameId: 'F', remove: ['a'] },
-      client,
-    )
+    await tool.execute({ canvasId: 'sess/canvas', frameId: 'F', remove: ['a'] }, client)
 
     expect(readEl('a')?.frameId).toBeNull()
     expect(readEl('b')?.frameId).toBe('F')
@@ -229,10 +265,7 @@ describe('update_frame_members', () => {
     state.doc.commit()
 
     const tool = updateFrameMembersTool()
-    await tool.execute(
-      { canvasId: 'sess/canvas', frameId: 'F', add: ['b'], remove: ['a'] },
-      client,
-    )
+    await tool.execute({ canvasId: 'sess/canvas', frameId: 'F', add: ['b'], remove: ['a'] }, client)
 
     expect(readEl('a')?.frameId).toBeNull()
     expect(readEl('b')?.frameId).toBe('F')
@@ -265,10 +298,7 @@ describe('update_frame_members', () => {
     state.doc.commit()
     const tool = updateFrameMembersTool()
     await expect(
-      tool.execute(
-        { canvasId: 'sess/canvas', frameId: 'F', add: ['a', 'ghost'] },
-        client,
-      ),
+      tool.execute({ canvasId: 'sess/canvas', frameId: 'F', add: ['a', 'ghost'] }, client),
     ).rejects.toThrow(/not found/i)
     expect(readEl('a')?.frameId).toBeNull()
   })
@@ -299,10 +329,7 @@ describe('update_frame_members', () => {
     seedEl('a', 100, 100, 50, 50, 'F')
     state.doc.commit()
     const tool = updateFrameMembersTool()
-    const result = await tool.execute(
-      { canvasId: 'sess/canvas', frameId: 'F' },
-      client,
-    )
+    const result = await tool.execute({ canvasId: 'sess/canvas', frameId: 'F' }, client)
     expect(result.addedMembers).toEqual([])
     expect(result.removedMembers).toEqual([])
     expect(readEl('a')?.frameId).toBe('F')

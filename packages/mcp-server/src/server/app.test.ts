@@ -413,6 +413,9 @@ describe('createApp daemon mutation auth', () => {
       if (url === 'http://daemon.test/api/workspaces/M7lgM0WguBnkfP_1iOFtY/palette') {
         return new Response(JSON.stringify({ palette: {} }), { status: 200 })
       }
+      if (url === 'http://daemon.test/api/canvas/M7lgM0WguBnkfP_1iOFtY/via-mcp/exists') {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
       if (url === 'http://daemon.test/api/canvas/M7lgM0WguBnkfP_1iOFtY/via-mcp/snapshot') {
         return new Response(snapshot, { status: 200 })
       }

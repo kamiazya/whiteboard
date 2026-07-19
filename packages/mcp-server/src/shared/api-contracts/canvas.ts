@@ -99,6 +99,13 @@ export const updateCanvasResponseSchema = z.object({
   ok: z.literal(true),
 })
 
+// GET /api/canvas/:workspaceId/:slug/exists — success body. Read-only lookup
+// so callers can distinguish "canvas not yet created" from a live doc,
+// without the snapshot/update routes' silent lazy-create side effect.
+export const canvasExistsResponseSchema = z.object({
+  exists: z.boolean(),
+})
+
 // Workspace + canvas listings consumed by IndexPage to render the
 // "open workspaces" grid.
 export const workspaceSummarySchema = z.object({
@@ -135,6 +142,7 @@ export type ListCanvasesResponse = z.infer<typeof listCanvasesResponseSchema>
 export type ProblemDetailsError = z.infer<typeof problemDetailsErrorSchema>
 export type CreateCanvasResponse = z.infer<typeof createCanvasResponseSchema>
 export type UpdateCanvasResponse = z.infer<typeof updateCanvasResponseSchema>
+export type CanvasExistsResponse = z.infer<typeof canvasExistsResponseSchema>
 export type WorkspaceNames = z.infer<typeof workspaceNamesSchema>
 
 // GET /api/runtime/storage — response body.

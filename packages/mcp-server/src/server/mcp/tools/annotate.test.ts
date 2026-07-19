@@ -54,6 +54,38 @@ describe('annotateInputSchema — target conditionally required', () => {
   })
 })
 
+describe('annotate execute — unknown canvasId', () => {
+  it('returns an error mentioning canvas_create and never touches the snapshot/update endpoints', async () => {
+    const { annotateTool } = await import('./annotate.js')
+    const tool = annotateTool()
+    let touchedWriteEndpoint = false
+    const fakeClient = {
+      port: 3099,
+      baseUrl: 'http://localhost:3099',
+      request: async (path: string) => {
+        if (path.endsWith('/exists')) {
+          return new Response(JSON.stringify({ exists: false }), { status: 200 })
+        }
+        touchedWriteEndpoint = true
+        throw new Error(`Unexpected request: ${path}`)
+      },
+      touch: async () => undefined,
+    }
+    await expect(
+      tool.execute(
+        {
+          canvasId: 'unknown-ws/sticky-demo',
+          type: 'text',
+          target: { x: 0, y: 0 },
+          text: 'hi',
+        },
+        fakeClient,
+      ),
+    ).rejects.toThrow(/canvas_create/)
+    expect(touchedWriteEndpoint).toBe(false)
+  })
+})
+
 describe('annotate (single) execute — targetless box-snapped arrow parity', () => {
   function seedTwoRectsSnapshot(): Uint8Array {
     const doc = new LoroDoc()
@@ -84,6 +116,9 @@ describe('annotate (single) execute — targetless box-snapped arrow parity', ()
       port: 3099,
       baseUrl: 'http://localhost:3099',
       request: async (path: string, init?: RequestInit) => {
+        if (path.endsWith('/exists')) {
+          return new Response(JSON.stringify({ exists: true }), { status: 200 })
+        }
         if (path.endsWith('/palette')) {
           return new Response(JSON.stringify({ palette: {} }), { status: 200 })
         }
@@ -160,6 +195,9 @@ describe('annotate (single) warnings', () => {
 
     fetchMock = vi.fn(async (url: string | URL) => {
       const u = url.toString()
+      if (u.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
       if (u.endsWith('/palette')) {
         return new Response(JSON.stringify({ palette: {} }), { status: 200 })
       }
@@ -256,6 +294,9 @@ describe('annotate (single) warnings', () => {
   it('omits unknownPaletteKeys when all color tokens resolve', async () => {
     fetchMock.mockImplementation(async (url: string | URL) => {
       const u = url.toString()
+      if (u.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
       if (u.endsWith('/palette')) {
         return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), {
           status: 200,
@@ -373,6 +414,8 @@ describe('annotate (single) structured result shape', () => {
     const snapshot = emptyDoc.export({ mode: 'snapshot' })
     fetchMock = vi.fn(async (url: string | URL) => {
       const u = url.toString()
+      if (u.endsWith('/exists'))
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
       if (u.endsWith('/palette'))
         return new Response(JSON.stringify({ palette: {} }), { status: 200 })
       if (u.endsWith('/snapshot')) return new Response(snapshot, { status: 200 })

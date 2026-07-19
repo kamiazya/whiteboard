@@ -4,7 +4,12 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LoroDoc } from 'loro-crdt'
 
-import { instantiateTemplate, insertTemplateTool, listTemplatesTool, resolveTemplateSource } from './template.js'
+import {
+  instantiateTemplate,
+  insertTemplateTool,
+  listTemplatesTool,
+  resolveTemplateSource,
+} from './template.js'
 import { getBuiltinTemplate } from './template-library.js'
 
 function makeEmptySnapshot(): Uint8Array {
@@ -261,6 +266,9 @@ describe('template tools', () => {
     const updateBodies: Uint8Array[] = []
     globalThis.fetch = vi.fn(async (url: string | URL, init?: RequestInit) => {
       const textUrl = url.toString()
+      if (textUrl.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), { status: 200 })
+      }
       if (textUrl.endsWith('/palette')) {
         return new Response(JSON.stringify({ palette: {} }), { status: 200 })
       }
