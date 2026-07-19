@@ -31,9 +31,27 @@ vi.mock('@modelcontextprotocol/ext-apps', () => ({
 }))
 
 const REFRESH_SELECTOR = '[data-testid="widget-refresh"]'
+const STICKY_FORM_SELECTOR = '[data-testid="widget-sticky-note"]'
+const STICKY_INPUT_SELECTOR = '[data-testid="widget-sticky-note-input"]'
 
 function queryRefreshButton(): HTMLButtonElement | null {
   return document.querySelector(REFRESH_SELECTOR)
+}
+
+function queryStickyForm(): HTMLFormElement | null {
+  return document.querySelector(STICKY_FORM_SELECTOR)
+}
+
+function queryStickyInput(): HTMLInputElement | null {
+  return document.querySelector(STICKY_INPUT_SELECTOR)
+}
+
+function submitSticky(text: string): void {
+  const input = queryStickyInput() as HTMLInputElement
+  input.value = text
+  ;(queryStickyForm() as HTMLFormElement).dispatchEvent(
+    new Event('submit', { bubbles: true, cancelable: true }),
+  )
 }
 
 vi.mock('./mount.js', () => ({
@@ -579,5 +597,339 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       }),
     ).not.toThrow()
     expect(mountCanvasViewer).toHaveBeenCalledTimes(2)
+  })
+
+  describe('sticky-note affordance', () => {
+    it('is absent when there is no parent frame', async () => {
+      await importFreshWidgetEntry()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(queryStickyForm()).toBeNull()
+    })
+
+    it('is absent when the host does not advertise the serverTools capability', async () => {
+      stubEmbeddedIframeParent()
+      connectMock.mockImplementation(async () => undefined)
+      getHostCapabilitiesMock = () => ({})
+
+      await importFreshWidgetEntry()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      const scene = { elements: [{ id: 'a' }] }
+      fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
+
+      expect(queryStickyForm()).toBeNull()
+    })
+
+    it('stays hidden until a valid tool-result commits a canvasId', async () => {
+      stubEmbeddedIframeParent()
+      connectMock.mockImplementation(async () => undefined)
+
+      await importFreshWidgetEntry()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      const beforeResult = queryStickyForm()
+      if (beforeResult) {
+        expect(beforeResult.style.display).toBe('none')
+      }
+
+      const scene = { elements: [{ id: 'a' }] }
+      fakeAppInstances[0].ontoolresult?.({ structuredContent: { canvasId: 'ws/slug', scene } })
+
+      const form = queryStickyForm()
+      expect(form).not.toBeNull()
+      expect(form?.style.display).not.toBe('none')
+    })
+
+    async function mountConnectedWithScene(elements: unknown[]): Promise<void> {
+      stubEmbeddedIframeParent()
+      connectMock.mockImplementation(async () => undefined)
+
+      await importFreshWidgetEntry()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      fakeAppInstances[0].ontoolresult?.({
+        structuredContent: { canvasId: 'ws/slug', scene: { elements } },
+      })
+    }
+
+    it('submitting text calls callServerTool with the exact annotate sticky shape and no height/color keys', async () => {
+      await mountConnectedWithScene([{ id: 'a', x: 0, y: 0, width: 100, height: 50 }])
+
+      callServerToolMock.mockResolvedValueOnce({
+        structuredContent: { canvasId: 'ws/slug', scene: { elements: [] } },
+      })
+
+      submitSticky('hello sticky')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(callServerToolMock).toHaveBeenCalledWith({
+        name: 'annotate',
+        arguments: {
+          canvasId: 'ws/slug',
+          type: 'box_with_label',
+          target: { x: 124, y: 0 },
+          text: 'hello sticky',
+          width: 260,
+          backgroundColor: '#ffec99',
+        },
+      })
+      const callArgs = callServerToolMock.mock.calls.find(
+        (call) => (call[0] as { name: string }).name === 'annotate',
+      )?.[0] as { arguments: Record<string, unknown> }
+      expect(callArgs.arguments).not.toHaveProperty('height')
+      expect(callArgs.arguments).not.toHaveProperty('color')
+    })
+
+    it('empty or whitespace-only text is a no-op — no callServerTool call', async () => {
+      await mountConnectedWithScene([])
+
+      submitSticky('   ')
+      await Promise.resolve()
+
+      expect(callServerToolMock).not.toHaveBeenCalled()
+    })
+
+    it('on success, re-invokes canvas_view and remounts the appended scene', async () => {
+      await mountConnectedWithScene([])
+
+      const { mountCanvasViewer } = await import('./mount.js')
+      vi.mocked(mountCanvasViewer).mockClear()
+
+      const annotateResult = { structuredContent: { annotation: { type: 'box_with_label' } } }
+      const refreshedScene = { elements: [{ id: 'sticky-1' }] }
+      callServerToolMock.mockResolvedValueOnce(annotateResult).mockResolvedValueOnce({
+        structuredContent: { canvasId: 'ws/slug', scene: refreshedScene },
+      })
+
+      submitSticky('note text')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(callServerToolMock).toHaveBeenCalledTimes(2)
+      expect(callServerToolMock).toHaveBeenNthCalledWith(2, {
+        name: 'canvas_view',
+        arguments: { canvasId: 'ws/slug' },
+      })
+      expect(mountCanvasViewer).toHaveBeenCalledWith(
+        expect.any(HTMLElement),
+        expect.objectContaining({ scene: refreshedScene }),
+      )
+      // Submitted text is cleared only on full success — the user can add a
+      // second note without deleting the first one's text.
+      expect(queryStickyInput()?.value).toBe('')
+    })
+
+    it('keeps the current view and never refreshes when the annotate call rejects', async () => {
+      await mountConnectedWithScene([])
+
+      const { mountCanvasViewer } = await import('./mount.js')
+      vi.mocked(mountCanvasViewer).mockClear()
+
+      callServerToolMock.mockRejectedValueOnce(new Error('boom'))
+
+      submitSticky('note text')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(callServerToolMock).toHaveBeenCalledTimes(1)
+      expect(mountCanvasViewer).not.toHaveBeenCalled()
+      expect(queryStickyInput()?.disabled).toBe(false)
+      // Failure keeps the typed text so the user can retry without retyping.
+      expect(queryStickyInput()?.value).toBe('note text')
+    })
+
+    it('treats a resolved {isError:true} annotate result as failure — no follow-up refresh', async () => {
+      await mountConnectedWithScene([])
+
+      const { mountCanvasViewer } = await import('./mount.js')
+      vi.mocked(mountCanvasViewer).mockClear()
+
+      callServerToolMock.mockResolvedValueOnce({ isError: true, content: [] })
+
+      submitSticky('note text')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(callServerToolMock).toHaveBeenCalledTimes(1)
+      expect(mountCanvasViewer).not.toHaveBeenCalled()
+      expect(queryStickyInput()?.disabled).toBe(false)
+    })
+
+    it('keeps the current view when the follow-up canvas_view resolves with a malformed scene', async () => {
+      await mountConnectedWithScene([])
+
+      const { mountCanvasViewer } = await import('./mount.js')
+      vi.mocked(mountCanvasViewer).mockClear()
+
+      callServerToolMock
+        .mockResolvedValueOnce({ structuredContent: { annotation: {} } })
+        .mockResolvedValueOnce({
+          structuredContent: { canvasId: 'ws/slug', scene: { bogus: true } },
+        })
+
+      submitSticky('note text')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(mountCanvasViewer).not.toHaveBeenCalled()
+      expect(queryStickyInput()?.disabled).toBe(false)
+    })
+
+    it('ignores a re-entrant submit while an annotate call is already in flight', async () => {
+      await mountConnectedWithScene([])
+
+      let resolveCall: ((value: unknown) => void) | undefined
+      callServerToolMock.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveCall = resolve
+          }),
+      )
+
+      submitSticky('first')
+      submitSticky('second')
+      await Promise.resolve()
+
+      expect(callServerToolMock).toHaveBeenCalledTimes(1)
+      expect(queryStickyInput()?.disabled).toBe(true)
+
+      resolveCall?.({ structuredContent: { annotation: {} } })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    it('keeps the sticky control disabled until the required post-annotation refresh resolves', async () => {
+      await mountConnectedWithScene([{ id: 'a', x: 0, y: 0, width: 100, height: 50 }])
+
+      let resolveRefresh: ((value: unknown) => void) | undefined
+      callServerToolMock.mockImplementation((params: unknown) => {
+        const name = (params as { name: string }).name
+        if (name === 'annotate') {
+          return Promise.resolve({ structuredContent: { annotation: {} } })
+        }
+        return new Promise((resolve) => {
+          resolveRefresh = resolve
+        })
+      })
+
+      submitSticky('first')
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // annotate already resolved, but the required follow-up canvas_view is
+      // still pending — the control (and the stale lastValidScene it would
+      // otherwise let a re-entrant submit compute placement from) must stay
+      // disabled until that refresh actually lands.
+      expect(callServerToolMock).toHaveBeenCalledTimes(2)
+      expect(queryStickyInput()?.disabled).toBe(true)
+
+      resolveRefresh?.({
+        structuredContent: { canvasId: 'ws/slug', scene: { elements: [] } },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(queryStickyInput()?.disabled).toBe(false)
+    })
+
+    it('coalesces a required post-annotation refresh with an in-flight manual Refresh instead of skipping it', async () => {
+      await mountConnectedWithScene([])
+
+      const { mountCanvasViewer } = await import('./mount.js')
+      vi.mocked(mountCanvasViewer).mockClear()
+
+      let resolveManualRefresh: ((value: unknown) => void) | undefined
+      let resolveAnnotate: ((value: unknown) => void) | undefined
+
+      callServerToolMock.mockImplementation((params: unknown) => {
+        const name = (params as { name: string }).name
+        if (name === 'canvas_view') {
+          return new Promise((resolve) => {
+            resolveManualRefresh = resolve
+          })
+        }
+        return new Promise((resolve) => {
+          resolveAnnotate = resolve
+        })
+      })
+
+      // Manual Refresh starts first and stays pending.
+      const refreshButton = queryRefreshButton() as HTMLButtonElement
+      refreshButton.click()
+      await Promise.resolve()
+      expect(callServerToolMock).toHaveBeenCalledTimes(1)
+
+      // Annotate succeeds while the manual refresh is still in flight; its
+      // required follow-up refresh must be coalesced, not dropped.
+      submitSticky('note text')
+      await Promise.resolve()
+      resolveAnnotate?.({ structuredContent: { annotation: {} } })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // The in-flight manual refresh has not resolved yet, so no second
+      // canvas_view call has fired — but one is now pending.
+      expect(callServerToolMock).toHaveBeenCalledTimes(2)
+
+      resolveManualRefresh?.({
+        structuredContent: { canvasId: 'ws/slug', scene: { elements: [] } },
+      })
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      // The coalesced follow-up refresh now fires exactly once more.
+      expect(callServerToolMock).toHaveBeenCalledTimes(3)
+      expect(callServerToolMock).toHaveBeenNthCalledWith(3, {
+        name: 'canvas_view',
+        arguments: { canvasId: 'ws/slug' },
+      })
+      resolveManualRefresh = undefined
+
+      await Promise.resolve()
+    })
+  })
+})
+
+describe('widget-entry append-only invariant', () => {
+  it('only calls callServerTool with tool names from the append-only allowlist', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs')
+    const { dirname, resolve: resolvePath } = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+
+    const here = dirname(fileURLToPath(import.meta.url))
+    const widgetDir = resolvePath(here, 'widget')
+    const sources = [
+      readFileSync(resolvePath(here, 'widget-entry.ts'), 'utf-8'),
+      ...readdirSync(widgetDir)
+        .filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts') && !f.endsWith('.test.tsx'))
+        .map((f) => readFileSync(resolvePath(widgetDir, f), 'utf-8')),
+    ].join('\n')
+
+    const allowlist = new Set(['canvas_view', 'annotate'])
+    const callSiteNames = [...sources.matchAll(/callServerTool\(\s*\{\s*name:\s*'([^']+)'/g)].map(
+      (m) => m[1],
+    )
+
+    expect(callSiteNames.length).toBeGreaterThan(0)
+    for (const name of callSiteNames) {
+      expect(allowlist.has(name as string), `unexpected callServerTool name: ${name}`).toBe(true)
+    }
   })
 })
