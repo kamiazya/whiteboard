@@ -81,6 +81,7 @@ interface Props {
   // there is deliberately no PDF option here because no export path (this
   // app's or Excalidraw's own) produces one.
   onExport?: (format: SceneExportFormat) => Promise<Blob | null>
+  onOpenSettings?: () => void
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
@@ -110,6 +111,7 @@ export default function WorkspaceTopBar({
   versionRefreshSignal,
   versionPanelExtra,
   onExport,
+  onOpenSettings,
 }: Props) {
   const isLocalMode = dataMode === 'local'
   const versionsEnabled = capabilities?.versions ?? true
@@ -374,6 +376,7 @@ export default function WorkspaceTopBar({
         theme={theme}
         onToggleTheme={onToggleTheme}
         onEnterFullscreen={onEnterFullscreen}
+        onOpenSettings={onOpenSettings}
       />
 
       <NewCanvasDialog

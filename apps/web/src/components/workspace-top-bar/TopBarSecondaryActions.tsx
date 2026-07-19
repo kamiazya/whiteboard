@@ -1,4 +1,4 @@
-import { EllipsisVertical, History, Maximize2 } from 'lucide-react'
+import { EllipsisVertical, History, Maximize2, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -26,6 +26,7 @@ interface TopBarSecondaryActionsProps {
   theme?: ThemeMode
   onToggleTheme?: (next: ThemeMode) => void
   onEnterFullscreen?: () => void
+  onOpenSettings?: () => void
 }
 
 // Right side: version history, theme, and fullscreen — plus the "More
@@ -37,6 +38,7 @@ export function TopBarSecondaryActions({
   theme,
   onToggleTheme,
   onEnterFullscreen,
+  onOpenSettings,
 }: TopBarSecondaryActionsProps) {
   return (
     <>
@@ -78,6 +80,23 @@ export function TopBarSecondaryActions({
             <TooltipContent>Fullscreen (f)</TooltipContent>
           </Tooltip>
         )}
+        {onOpenSettings && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="size-8 p-0"
+                onClick={onOpenSettings}
+                aria-label="Settings"
+                data-testid="settings-trigger"
+              >
+                <Settings className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Settings</TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       <DropdownMenu>
@@ -111,6 +130,12 @@ export function TopBarSecondaryActions({
             <DropdownMenuItem onSelect={onEnterFullscreen} className="gap-2">
               <Maximize2 className="size-3.5" />
               Fullscreen
+            </DropdownMenuItem>
+          )}
+          {onOpenSettings && (
+            <DropdownMenuItem onSelect={onOpenSettings} className="gap-2">
+              <Settings className="size-3.5" />
+              Settings
             </DropdownMenuItem>
           )}
         </DropdownMenuContent>

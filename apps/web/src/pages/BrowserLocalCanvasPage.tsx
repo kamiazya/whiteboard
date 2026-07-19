@@ -1,7 +1,7 @@
 import { Excalidraw } from '@excalidraw/excalidraw'
 import '@excalidraw/excalidraw/index.css'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   AlertDialog,
@@ -23,6 +23,7 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
@@ -265,16 +266,16 @@ export function BrowserLocalCanvasPage({
 
   const handleExport = createSceneExportHandler(commands, exportScene)
 
-  // Identity key = canvasId — a switch to a different browser-local canvas
-  // re-registers the WebMCP tools against it. Honors the persisted
-  // capabilities.webMcpEnabled setting (see user-settings-store.ts);
-  // unset (the default) is treated as enabled. Read once at mount rather
-  // than on every (per-pointer-move) render.
-  const webMcpEnabled = useMemo(
+  // Reactive: toggling in the SettingsPanel updates this state, which causes
+  // useBrowserToolRegistry to re-run (ON→OFF triggers abort via the hook's
+  // internal AbortController; OFF→ON re-registers without a page reload).
+  const [webMcpEnabled, setWebMcpEnabled] = useState(
     () => settingsStore.load().capabilities.webMcpEnabled !== false,
-    [settingsStore],
   )
   useBrowserToolRegistry(commands, canvasId, webMcpEnabled)
+
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const handleOpenSettings = useCallback(() => setSettingsOpen(true), [])
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
@@ -373,6 +374,7 @@ export function BrowserLocalCanvasPage({
             merge: capabilities.merge,
           }}
           onExport={handleExport}
+          onOpenSettings={handleOpenSettings}
         />
       </Suspense>
       {/* Page-specific bits that WorkspaceTopBar has no slot for. A plain
@@ -452,6 +454,13 @@ export function BrowserLocalCanvasPage({
           theme={resolvedTheme}
         />
       </div>
+      <SettingsPanel
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        theme={theme}
+        onThemeChange={setTheme}
+        onWebMcpChange={setWebMcpEnabled}
+      />
     </main>
   )
 }
