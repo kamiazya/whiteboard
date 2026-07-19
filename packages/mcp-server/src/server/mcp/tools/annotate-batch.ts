@@ -11,6 +11,7 @@ import {
   flattenAnnotationResult,
 } from './annotate.js'
 import { decomposeBoxWithLabel } from './box-with-label.js'
+import { assertCanvasExists } from './canvas-existence.js'
 import { parseCanvasId } from './canvas-id.js'
 import { applyAssignToGroup } from './element-ops.js'
 import { resolvePaletteColor } from './color-palette.js'
@@ -380,6 +381,7 @@ export function annotateBatchTool() {
       client: DaemonClient,
     ): Promise<z.infer<typeof annotateBatchOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      await assertCanvasExists(client, workspaceId, slug)
       const sessionPalette = await apiGetPalette(client, workspaceId)
       const unknownPaletteKeySet = new Set<string>()
       for (const item of args.annotations) {

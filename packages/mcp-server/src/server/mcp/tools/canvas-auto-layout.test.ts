@@ -78,13 +78,23 @@ function installFetchMock(state: HarnessState) {
     const parts = url.pathname.split('/').filter(Boolean)
     const method = init?.method ?? 'GET'
 
+    if (parts[0] === 'api' && parts[1] === 'canvas' && parts[4] === 'exists') {
+      // This harness treats every referenced canvasId as already created
+      // (ensureCanvas lazily seeds it), so the existence check always passes.
+      return new Response(JSON.stringify({ exists: true }), { status: 200 })
+    }
+
     if (parts[0] === 'api' && parts[1] === 'canvas' && parts[4] === 'snapshot') {
       const canvasId = `${parts[2]}/${decodeURIComponent(parts[3])}`
       const doc = ensureCanvas(state, canvasId)
       return new Response(doc.export({ mode: 'snapshot' }), { status: 200 })
     }
 
-    if (parts[0] === 'api' && ['sessions', 'workspaces'].includes(parts[1] ?? '') && parts[3] === 'palette') {
+    if (
+      parts[0] === 'api' &&
+      ['sessions', 'workspaces'].includes(parts[1] ?? '') &&
+      parts[3] === 'palette'
+    ) {
       return new Response(JSON.stringify({ palette: {} }), { status: 200 })
     }
 
@@ -146,12 +156,7 @@ function toRect(element: CanvasElement): Rect {
 }
 
 function rectsOverlap(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.width &&
-    a.x + a.width > b.x &&
-    a.y < b.y + b.height &&
-    a.y + a.height > b.y
-  )
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
 function arrowAbsolutePoints(arrow: CanvasElement): Point[] {
@@ -350,7 +355,9 @@ describe('canvas_auto_layout', () => {
     const nextLabel = readElement(state, canvasId, labelId!)
     const nextObstacle = readElement(state, canvasId, obstacle.elementId)
     const nextNearbyText = readElement(state, canvasId, nearbyText.elementId)
-    expect(distanceRectToPolyline(toRect(nextLabel), arrowAbsolutePoints(nextArrow))).toBeLessThan(50)
+    expect(distanceRectToPolyline(toRect(nextLabel), arrowAbsolutePoints(nextArrow))).toBeLessThan(
+      50,
+    )
     expect(rectsOverlap(toRect(nextLabel), toRect(nextObstacle))).toBe(false)
     expect(Math.hypot(nextLabel.x - oldLabel.x, nextLabel.y - oldLabel.y)).toBeGreaterThan(80)
     expect(nextNearbyText.x).toBe(oldNearbyText.x)
@@ -424,7 +431,9 @@ describe('canvas_auto_layout', () => {
     const nextLabel = readElement(state, canvasId, labelId!)
     const nextDecoy = readElement(state, canvasId, decoy.elementId)
 
-    expect(distanceRectToPolyline(toRect(nextLabel), arrowAbsolutePoints(nextArrow))).toBeLessThan(50)
+    expect(distanceRectToPolyline(toRect(nextLabel), arrowAbsolutePoints(nextArrow))).toBeLessThan(
+      50,
+    )
     expect(Math.hypot(nextLabel.x - oldLabel.x, nextLabel.y - oldLabel.y)).toBeGreaterThan(80)
     expect(nextDecoy.x).toBe(oldDecoy.x)
     expect(nextDecoy.y).toBe(oldDecoy.y)
@@ -574,8 +583,20 @@ describe('layout regression cases', () => {
       {
         canvasId,
         annotations: [
-          { type: 'rectangle', coords: 'absolute', target: { x: 40, y: 40 }, width: 120, height: 60 },
-          { type: 'rectangle', coords: 'absolute', target: { x: 200, y: 40 }, width: 120, height: 60 },
+          {
+            type: 'rectangle',
+            coords: 'absolute',
+            target: { x: 40, y: 40 },
+            width: 120,
+            height: 60,
+          },
+          {
+            type: 'rectangle',
+            coords: 'absolute',
+            target: { x: 200, y: 40 },
+            width: 120,
+            height: 60,
+          },
         ],
       },
       client,
@@ -643,9 +664,11 @@ describe('layout regression cases', () => {
     expect(nextFrame.y + nextFrame.height).toBeGreaterThanOrEqual(
       Math.max(primaryRect.y + primaryRect.height, secondaryRect.y + secondaryRect.height),
     )
-    expect(elements.filter((el) => el.frameId === frame.elementId && el.isDeleted !== true).map((el) => el.id).sort()).toEqual(
-      [primaryRectId!, secondaryRectId!].sort(),
-    )
+    expect(
+      elements
+        .filter((el) => el.frameId === frame.elementId && el.isDeleted !== true)
+        .map((el) => el.id)
+        .sort(),
+    ).toEqual([primaryRectId!, secondaryRectId!].sort())
   })
-
 })

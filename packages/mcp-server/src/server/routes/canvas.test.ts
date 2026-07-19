@@ -258,6 +258,44 @@ describe('GET /api/canvas/:workspaceId/:slug/snapshot', () => {
   })
 })
 
+describe('GET /api/canvas/:workspaceId/:slug/exists', () => {
+  beforeEach(async () => {
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    clearCache()
+  })
+  afterEach(() => {
+    clearCache()
+  })
+
+  it('returns exists:true for a canvas that was actually saved', async () => {
+    const doc = new LoroDoc()
+    await saveCanvas('session1', 'canvas-a', doc)
+
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/canvas-a/exists')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ exists: true })
+  })
+
+  it('returns exists:false for an unregistered canvas without creating it', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/never-created/exists')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ exists: false })
+
+    // GET /exists must never have the getDoc/loadCanvas side effect that
+    // /snapshot has: the canvas should still be absent afterward.
+    const followUp = await app.request('/api/canvas/session1/never-created/exists')
+    expect(await followUp.json()).toEqual({ exists: false })
+  })
+
+  it('returns 400 for an invalid slug', async () => {
+    const app = createCanvasRouter()
+    const res = await app.request('/api/canvas/session1/bad.slug/exists')
+    expect(res.status).toBe(400)
+  })
+})
+
 describe('POST /api/workspaces/:workspaceId/canvases/:slug/compact', () => {
   function createVersionStoreMock() {
     return {

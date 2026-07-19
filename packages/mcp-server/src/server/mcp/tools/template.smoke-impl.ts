@@ -40,8 +40,17 @@ export async function runTemplateSmokeChecks(): Promise<void> {
 
   try {
     const posted: number[] = []
-    globalThis.fetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    globalThis.fetch = async (
+      url: string | URL | Request,
+      init?: RequestInit,
+    ): Promise<Response> => {
       const u = url.toString()
+      if (u.endsWith('/exists')) {
+        return new Response(JSON.stringify({ exists: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      }
       if (u.endsWith('/palette')) {
         return new Response(JSON.stringify({ palette: {} }), {
           status: 200,
@@ -53,9 +62,7 @@ export async function runTemplateSmokeChecks(): Promise<void> {
       }
       if (u.endsWith('/update')) {
         posted.push(
-          init?.body instanceof Uint8Array
-            ? init.body.byteLength
-            : String(init?.body ?? '').length,
+          init?.body instanceof Uint8Array ? init.body.byteLength : String(init?.body ?? '').length,
         )
         return new Response(null, { status: 200 })
       }
@@ -73,7 +80,10 @@ export async function runTemplateSmokeChecks(): Promise<void> {
     const list = await listTemplatesTool().execute()
     check('list.templates is array', Array.isArray(list.templates))
     check('list has 3 built-ins', list.templates.length === 3, `got ${list.templates.length}`)
-    check('list contains client-api-db', list.templates.some((t) => t.id === 'client-api-db'))
+    check(
+      'list contains client-api-db',
+      list.templates.some((t) => t.id === 'client-api-db'),
+    )
     const cad = list.templates.find((t) => t.id === 'client-api-db')!
     check('client-api-db exposes variables', cad.variables.length === 5)
     check('variable has default', cad.variables[0].default === 'Client')
@@ -87,10 +97,7 @@ export async function runTemplateSmokeChecks(): Promise<void> {
     check('insert returns templateId', r1.templateId === 'client-api-db')
     check('insert source=builtin', r1.source === 'builtin')
     check('insert annotations=5', (r1.annotations as unknown[])?.length === 5)
-    check(
-      'insert produced elementIds',
-      Array.isArray(r1.elementIds) && r1.elementIds.length >= 5,
-    )
+    check('insert produced elementIds', Array.isArray(r1.elementIds) && r1.elementIds.length >= 5)
     check('posted 1 update', posted.length === 1)
     check('default client=Client', r1.variables.client === 'Client')
 

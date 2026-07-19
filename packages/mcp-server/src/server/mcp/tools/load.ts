@@ -4,6 +4,7 @@ import { nanoid } from 'nanoid'
 import { imageSize } from 'image-size'
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
+import { assertCanvasExists } from './canvas-existence.js'
 import { parseCanvasId } from './canvas-id.js'
 
 export const loadImageOutputSchema = z.object({ elementId: z.string() })
@@ -85,6 +86,7 @@ export function loadImageTool() {
       client: DaemonClient,
     ): Promise<z.infer<typeof loadImageOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      await assertCanvasExists(client, workspaceId, slug)
       const position = args.position ?? 'center'
 
       // 1. Read the image file.

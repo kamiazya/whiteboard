@@ -8,6 +8,7 @@ import {
   buildAnnotationFields,
 } from './annotation-fields.js'
 import { decomposeBoxWithLabel, type SubTextPosition } from './box-with-label.js'
+import { assertCanvasExists } from './canvas-existence.js'
 import { parseCanvasId } from './canvas-id.js'
 import {
   contrastRatio,
@@ -825,6 +826,7 @@ export function annotateTool() {
         throw new Error(validation.error.issues[0]?.message ?? 'Invalid annotate arguments')
       }
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
+      await assertCanvasExists(client, workspaceId, slug)
       const sessionPalette = await apiGetPalette(client, workspaceId)
       const unknownPaletteKeySet = new Set<string>()
       for (const colorArg of [args.color, args.backgroundColor]) {

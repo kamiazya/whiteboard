@@ -308,6 +308,22 @@ async function main() {
   }
   console.log(`[e2e] annotate → rect`)
 
+  // annotate against an unregistered canvasId must fail loudly instead of
+  // silently creating the workspace/canvas on write — a hallucinated or
+  // mistyped canvasId should never succeed.
+  await expectRejected(
+    callTool('annotate', {
+      canvasId: `${created.id.split('/')[0]}/no-such-canvas`,
+      type: 'rectangle',
+      target: { x: 0, y: 0 },
+      width: 10,
+      height: 10,
+    }),
+    /canvas_create/i,
+    'annotate against unregistered canvas',
+  )
+  console.log('[e2e] annotate → canvas_create hint OK for unregistered canvas')
+
   // Exercises the exact argument shape the canvas-viewer widget's
   // sticky-note affordance sends (widget-entry.ts): box_with_label with
   // width but no height/color. canvas-viewer cannot z.infer this from
