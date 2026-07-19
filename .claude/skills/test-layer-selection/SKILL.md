@@ -25,8 +25,9 @@ Notes:
 
 ## Property-Based / Model-Based Testing (PBT)
 
-fast-check is already wired in via shared wrappers — `packages/mcp-server/src/shared/test-utils/fast-check.ts`
-and `apps/web/src/test-utils/fast-check.ts`. Reach for a property (or model-based) test instead of,
+fast-check is already wired in via shared wrappers — `packages/mcp-server/src/shared/test-utils/fast-check.ts`,
+`apps/web/src/test-utils/fast-check.ts`, and `packages/canvas-viewer/src/test-utils/fast-check.ts`. Reach for
+a property (or model-based) test instead of,
 or in addition to, an example test when the change is one of:
 
 - **Parser / serializer**: assert a round-trip (`parse(serialize(x))` equals `x`, or an explicitly
