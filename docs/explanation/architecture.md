@@ -67,6 +67,14 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | `version_save` / `version_restore` / `version_list` | Save and restore labeled canvas versions. `version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
 | `load_image` | Import an external image into the canvas. |
 
+`canvas_create` is the only tool that lazily creates a canvas on first
+touch. `annotate`, `annotate_batch`, `load_image`, `create_frame`,
+`create_embed`, and library-insert calls all check that `canvasId`
+resolves to an existing canvas first and fail with an explicit error
+(pointing at `canvas_create`) instead of silently creating a new, empty
+canvas — this catches a mistyped or hallucinated `canvasId` immediately
+rather than writing into the wrong place.
+
 `viewport_set` and `export_canvas({ format: "png" })` send instructions to the browser over WebSocket and settle on ACK, which is why they need a connected canvas tab. `export_canvas({ format: "svg" | "json" })` always renders headless from the persisted document instead. See [wire-protocol](../contributing/architecture/wire-protocol.md) for the full WebSocket message shapes.
 
 ## Why Loro
