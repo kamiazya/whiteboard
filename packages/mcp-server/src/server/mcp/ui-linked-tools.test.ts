@@ -73,4 +73,19 @@ describe('MCP Apps UI-linked tools coverage', () => {
     const linkedNames = entries.filter((e) => /_meta:\s*\{\s*ui:/.test(e)).map((e) => toolNameOf(e))
     expect(linkedNames).toEqual(['viewTool'])
   })
+
+  it('canvas_view leaves `visibility` unset or app-inclusive, so the MCP Apps host can call it back for Refresh', () => {
+    // ext-apps' McpUiToolMeta.visibility defaults to ["model", "app"] when
+    // omitted (spec.types.d.ts), which already permits an app-initiated
+    // callServerTool — this pins that canvas_view never narrows it to
+    // ["model"] only, which would silently break the widget's Refresh
+    // button without touching any test that calls canvas_view as the model.
+    const entries = splitDefineToolEntries(registrationSrc)
+    const viewEntry = entries.find((e) => toolNameOf(e) === 'viewTool')
+    expect(viewEntry).toBeDefined()
+    const visibilityMatch = viewEntry?.match(/visibility:\s*\[([^\]]*)\]/)
+    if (visibilityMatch) {
+      expect(visibilityMatch[1]).toMatch(/["']app["']/)
+    }
+  })
 })
