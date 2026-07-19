@@ -86,6 +86,10 @@ export function useBrowserToolRegistry(
       // runs even after an abort-triggered rejection since `.catch` always
       // attaches regardless of ordering against `controller.abort()` below.
       modelContext.registerTool(descriptor, { signal: controller.signal }).catch((err: unknown) => {
+        // An abort is the normal unmount/canvas-switch/StrictMode path, not a
+        // failure — logging it would fill the console with false positives on
+        // every teardown. Only genuine registration failures are surfaced.
+        if (controller.signal.aborted) return
         log.warn(`registerTool(${tool.name}) failed`, err)
       })
     }

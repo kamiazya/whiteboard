@@ -171,10 +171,16 @@ export function DaemonCanvasPage({
   // to a different daemon canvas re-registers the WebMCP tools against it.
   // Honors the persisted capabilities.webMcpEnabled setting (see
   // user-settings-store.ts); unset (the default) is treated as enabled.
+  // Read once at mount rather than on every (per-pointer-move) render — the
+  // setting only changes via an explicit user action + reload.
+  const webMcpEnabled = useMemo(
+    () => settingsStore.load().capabilities.webMcpEnabled !== false,
+    [settingsStore],
+  )
   useBrowserToolRegistry(
     commands,
     canvas !== null ? `${canvas.workspaceId}/${canvas.slug}` : null,
-    settingsStore.load().capabilities.webMcpEnabled !== false,
+    webMcpEnabled,
   )
 
   const saveVersion = async (): Promise<void> => {

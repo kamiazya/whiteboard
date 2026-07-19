@@ -176,7 +176,9 @@ export function createWhiteboardCommands(depsRef: {
 
       return getSceneSummaryResultSchema.parse({
         elementCount: liveElements.length,
-        selectedCount: Object.keys(appState.selectedElementIds).length,
+        // selectedElementIds can be absent in mock/degraded appState — a
+        // missing selection means zero selected, not a crash.
+        selectedCount: Object.keys(appState.selectedElementIds ?? {}).length,
         typeCounts,
         viewport: {
           scrollX: appState.scrollX,

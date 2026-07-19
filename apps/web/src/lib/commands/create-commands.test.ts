@@ -238,11 +238,25 @@ describe('createWhiteboardCommands.getSceneSummary', () => {
     await expect(commands.getSceneSummary()).rejects.toBeInstanceOf(CommandError)
   })
 
-  it('wraps an output-schema validation failure (malformed app state) in a summary-failed CommandError', async () => {
+  it('treats a missing selectedElementIds as zero selected rather than crashing', async () => {
     const api = {
       getSceneElements: () => [],
-      // selectedElementIds missing entirely — Object.keys(undefined) throws.
+      // selectedElementIds absent entirely — a degraded/mock appState must
+      // read as "nothing selected", not throw a TypeError.
       getAppState: () => ({ scrollX: 0, scrollY: 0, zoom: { value: 1 } }),
+      getFiles: () => ({}),
+    }
+    const depsRef = refOf(baseDeps({ getExcalidrawApi: () => api as never }))
+    const commands = createWhiteboardCommands(depsRef)
+
+    await expect(commands.getSceneSummary()).resolves.toMatchObject({ selectedCount: 0 })
+  })
+
+  it('wraps a genuine output-schema validation failure in a summary-failed CommandError', async () => {
+    const api = {
+      getSceneElements: () => [],
+      // zoom.value non-numeric — the result schema's .finite() rejects it.
+      getAppState: () => ({ scrollX: 0, scrollY: 0, selectedElementIds: {}, zoom: { value: 'x' } }),
       getFiles: () => ({}),
     }
     const depsRef = refOf(baseDeps({ getExcalidrawApi: () => api as never }))
