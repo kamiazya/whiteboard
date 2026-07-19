@@ -55,6 +55,31 @@ describe('serializeSceneAsExcalidrawJson', () => {
     expect(doc.appState.viewBackgroundColor).toBe('#ffffff')
   })
 
+  it('preserves gridStep and gridModeEnabled, matching cleanAppStateForExport', () => {
+    const doc = serializeSceneAsExcalidrawJson(
+      [],
+      { gridSize: 20, viewBackgroundColor: '#fff', gridStep: 5, gridModeEnabled: true },
+      {},
+    )
+
+    expect(doc.appState).toEqual({
+      gridSize: 20,
+      viewBackgroundColor: '#fff',
+      gridStep: 5,
+      gridModeEnabled: true,
+    })
+  })
+
+  it('omits gridStep/gridModeEnabled when the caller did not supply them', () => {
+    const doc = serializeSceneAsExcalidrawJson(
+      [],
+      { gridSize: null, viewBackgroundColor: '#fff' },
+      {},
+    )
+
+    expect(doc.appState).toEqual({ gridSize: null, viewBackgroundColor: '#fff' })
+  })
+
   it('round-trips through the excalidraw envelope Zod schema unchanged', () => {
     const doc = serializeSceneAsExcalidrawJson(
       [el({ id: 'a' })],
