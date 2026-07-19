@@ -59,6 +59,7 @@ describe('load_image execute', () => {
     const emptyDoc = new LoroDoc()
     const snapshot = emptyDoc.export({ mode: 'snapshot' })
     let uploadedBody: unknown
+    let uploadedFileId: string | undefined
     let postedUpdate: Uint8Array | null = null
 
     const fakeClient: DaemonClient = {
@@ -73,6 +74,7 @@ describe('load_image execute', () => {
         }
         if (path.includes('/file/')) {
           uploadedBody = init?.body
+          uploadedFileId = path.split('/file/')[1]
           return new Response(null, { status: 204 })
         }
         if (path.endsWith('/update')) {
@@ -88,5 +90,15 @@ describe('load_image execute', () => {
     expect(res.elementId).toBeDefined()
     expect(uploadedBody).toBeDefined()
     expect(postedUpdate).not.toBeNull()
+
+    const resultDoc = new LoroDoc()
+    resultDoc.import(postedUpdate!)
+    const elements = resultDoc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
+    expect(elements).toHaveLength(1)
+    expect(elements[0]).toMatchObject({
+      id: res.elementId,
+      type: 'image',
+      fileId: uploadedFileId,
+    })
   })
 })
