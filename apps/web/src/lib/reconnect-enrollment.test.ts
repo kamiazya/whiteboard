@@ -40,6 +40,7 @@ function makeDeps(overrides: Partial<ReconnectEnrollmentDeps> = {}): ReconnectEn
   return {
     getOrCreateKeypair: vi.fn(async () => fakeKeypair()),
     exportPublicJwk: vi.fn(async () => PUBLIC_JWK),
+    clearKeypair: vi.fn(async () => {}),
     ...overrides,
   }
 }
@@ -88,6 +89,20 @@ describe('enrollForReconnectOnce', () => {
     )
     enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
     await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+  })
+
+  it('on a legacy daemon response, clears the pending keypair so a reload prefers the legacy secret', async () => {
+    // A pre-migration daemon never learns to confirm this keypair (no
+    // challenge support) — if the pending record stayed, useSilentReconnect
+    // would keep preferring it over the legacy secret on every reload,
+    // permanently blocking the promised old-daemon fallback.
+    const deps = makeDeps()
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ reconnectSecret: 'secret-1', expiresInDays: 30 }),
+    )
+    enrollForReconnectOnce(ORIGIN, 'daemon-token', fetchMock, deps)
+    await vi.waitFor(() => expect(load(ORIGIN)).toBe('secret-1'))
+    expect(deps.clearKeypair).toHaveBeenCalledWith(ORIGIN, 'key-id-1')
   })
 
   it('on a new-daemon success, does NOT persist a legacy secret (confirmation happens on first login)', async () => {

@@ -1,7 +1,11 @@
 import { enrollReconnectCredential, type FetchLike } from './reconnect-client.js'
 import { save as saveLegacySecret } from './reconnect-credential-store.js'
 import { exportPublicJwk } from './reconnect-crypto.js'
-import { getOrCreateKeypair, type ReconnectKeypairRecord } from './reconnect-keypair-store.js'
+import {
+  clearKeypair,
+  getOrCreateKeypair,
+  type ReconnectKeypairRecord,
+} from './reconnect-keypair-store.js'
 
 function defaultFetchImpl(input: string | URL, init?: RequestInit): Promise<Response> {
   return globalThis.fetch(input, init)
@@ -16,9 +20,10 @@ export interface ReconnectEnrollmentDeps {
   exportPublicJwk: (
     publicKey: CryptoKey,
   ) => Promise<Parameters<typeof enrollReconnectCredential>[2]>
+  clearKeypair: (origin: string, keyId: string) => Promise<void>
 }
 
-const defaultDeps: ReconnectEnrollmentDeps = { getOrCreateKeypair, exportPublicJwk }
+const defaultDeps: ReconnectEnrollmentDeps = { getOrCreateKeypair, exportPublicJwk, clearKeypair }
 
 // Module-level single-flight (not per-component state) so a StrictMode
 // double-render, or two components racing to enroll on the same page load,
@@ -49,7 +54,10 @@ export function resetReconnectEnrollmentForTests(): void {
  * reconnect option and falls back to the existing DaemonDetectedBanner
  * one-click flow. A pre-migration daemon that responds with a legacy
  * plaintext secret instead of accepting the public key is handled by
- * persisting that secret for the legacy Bearer-secret fallback path.
+ * persisting that secret for the legacy Bearer-secret fallback path AND
+ * clearing the 'pending' keypair record just created — that daemon will
+ * never confirm it, and leaving it in place would make useSilentReconnect
+ * keep preferring the dead keypair over the legacy secret on every reload.
  */
 export function enrollForReconnectOnce(
   origin: string,
@@ -64,6 +72,13 @@ export function enrollForReconnectOnce(
     const result = await enrollReconnectCredential(origin, daemonToken, publicKeyJwk, fetchImpl)
     if (result.status === 'legacy') {
       saveLegacySecret(origin, result.secret)
+      // A pre-migration daemon never learns to confirm this keypair (no
+      // challenge-response support) — leaving the 'pending' record in place
+      // would make useSilentReconnect prefer it over the legacy secret just
+      // saved above on every subsequent reload, permanently blocking the
+      // fallback this branch exists to provide. Best-effort: if the clear
+      // itself fails, the outer catch still keeps enrollment non-fatal.
+      await deps.clearKeypair(origin, keypair.keyId).catch(() => {})
     }
   })()
     .catch(() => {
