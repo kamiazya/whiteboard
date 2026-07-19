@@ -125,7 +125,7 @@ describe('createCanvasSyncSession', () => {
     expect(sendReadySpy).toHaveBeenCalledTimes(1)
   })
 
-  it('dispose() flushes a pending debounced edit into this session before disconnecting', () => {
+  it('dispose() flushes a pending debounced edit into this session before disconnecting', async () => {
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())
     session.connect()
@@ -139,12 +139,15 @@ describe('createCanvasSyncSession', () => {
     session.dispose()
 
     // flush() runs the commit synchronously; the resulting
-    // subscribeLocalUpdates push fires on a microtask, which fake timers do
-    // not control — flushing microtasks with a real await is required.
-    return Promise.resolve().then(() => {
-      expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
-      expect(backend._ctrl.disconnectCalled).toBe(true)
-    })
+    // subscribeLocalUpdates push fires on a microtask, and dispose()'s drain
+    // phase defers backend.disconnect() a few more microtask turns behind
+    // that push — draining several turns with real awaits (fake timers do
+    // not control microtasks) covers both.
+    for (let i = 0; i < 30; i++) {
+      await Promise.resolve()
+    }
+    expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
+    expect(backend._ctrl.disconnectCalled).toBe(true)
   })
 
   it('mutation check: an isStale() guard on the subscribeLocalUpdates callback would drop the post-dispose flush push', async () => {
@@ -346,6 +349,41 @@ describe('createCanvasSyncSession', () => {
 
     expect(api.addFiles).not.toHaveBeenCalled()
     expect(api.updateScene).not.toHaveBeenCalled()
+  })
+
+  it('dispose() invokes backend.pushLocalUpdate for the flush-triggered commit before calling backend.disconnect()', async () => {
+    // Regression for the drain phase: disconnect() must never be called
+    // before the flush-triggered commit's subscribeLocalUpdates callback has
+    // invoked pushLocalUpdate, or the last edit made just before teardown
+    // never reaches the transport. Tracking call ORDER (not settle order) is
+    // the right assertion — a real transport's pushLocalUpdate may take an
+    // arbitrarily long time to settle (network ack), but the *call* itself
+    // is what puts bytes on a still-open connection.
+    const callOrder: string[] = []
+    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
+      ...makeFakeBackend(),
+      pushLocalUpdate(_bytes) {
+        callOrder.push('push-called')
+        return new Promise(() => {}) // never settles — disconnect must not wait for this
+      },
+      disconnect() {
+        callOrder.push('disconnect')
+      },
+    }
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+
+    session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {})
+    session.dispose()
+
+    // Drain a generous number of microtask turns without advancing fake
+    // timers (real transport call scheduling is not timer-driven).
+    for (let i = 0; i < 20; i++) {
+      await Promise.resolve()
+    }
+
+    expect(callOrder).toEqual(['push-called', 'disconnect'])
   })
 
   it('onAuthError sets error status and invokes options.onAuthError via getOptions', () => {
