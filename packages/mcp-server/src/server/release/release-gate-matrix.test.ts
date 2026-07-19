@@ -525,6 +525,47 @@ describe('pages-release tier wiring drift', () => {
   })
 })
 
+// The three vitest.distribution.config.ts specs (tarball / packaged / codex-config
+// distribution tests) exercised a packed-tarball install and the packaged
+// dist/server/mcp/index.js entry — the exact code path that broke a real npm
+// publish (v0.0.9+) — yet ran only via manual `pnpm --filter
+// @kamiazya/whiteboard-mcp test:distribution`, invisible to `pnpm test`,
+// lefthook, and every release gate. This block guards that they stay wired.
+describe('vitest.distribution.config.ts is wired into a release gate', () => {
+  const mcpPkg = readJson('packages/mcp-server/package.json') as { scripts: Record<string, string> }
+
+  it('mcp-server package.json exposes a build-free test:distribution:only script', () => {
+    expect(mcpPkg.scripts).toHaveProperty('test:distribution:only')
+    // Assert the exact script rather than a substring: a value like
+    // "pnpm build && vitest run --config ..." would still contain the config
+    // flag, silently reintroducing the inline build this script exists to avoid.
+    expect(mcpPkg.scripts['test:distribution:only']).toBe(
+      'vitest run --config vitest.distribution.config.ts',
+    )
+  })
+
+  it('the matrix has a "test:distribution" gate covering the distribution vitest suite', () => {
+    const gate = matrix.gates.find((g) => g.id === 'test:distribution')
+    expect(gate, 'a "test:distribution" gate must exist in the release gate matrix').toBeDefined()
+    expect(gate!.command).toBe('pnpm --filter @kamiazya/whiteboard-mcp test:distribution:only')
+    for (const tier of ['ci', 'local-release', 'docker-release', 'publish']) {
+      expect(gate!.requiredFor, `"test:distribution" must be required for "${tier}"`).toContain(
+        tier,
+      )
+    }
+  })
+
+  it('check:release-candidate runs the "test:distribution" gate command', () => {
+    const gate = matrix.gates.find((g) => g.id === 'test:distribution')
+    expect(gate).toBeDefined()
+    const script = rootPkg.scripts['check:release-candidate'] ?? ''
+    expect(
+      isGatePresentAsSegment(script, gate!),
+      'check:release-candidate must run the distribution vitest suite',
+    ).toBe(true)
+  })
+})
+
 describe('validateGate PBT', () => {
   const nonEmptyStr = fc.string({ minLength: 1, maxLength: 64 }).filter((s) => s.trim().length > 0)
   const tier = fc.constantFrom<'ci' | 'local-release' | 'docker-release' | 'publish'>(
