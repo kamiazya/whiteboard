@@ -175,9 +175,15 @@ pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 Default regression triple after a change:
 
 ```bash
-pnpm test        # unit tests (~3s, 460+ tests)
+pnpm test        # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
 pnpm typecheck   # tsc --noEmit (~10s)
 pnpm smoke:e2e   # stdio MCP subprocess: canvas_create -> version save/restore -> viewport no_client -> export_canvas (png/svg/json)
+```
+
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the eight configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, canvas-viewer node/jsdom, apps/web node/jsdom, and both browser projects — not just the Playwright browser project):
+
+```bash
+pnpm test --project mcp-node
 ```
 
 If you also need a zero-context LLM-level check:

@@ -15,7 +15,7 @@ Passing tests alone are not sufficient. The workflow is:
 1. Write the smallest failing test at the nearest layer.
 2. Make the smallest patch that turns it green.
 3. Manually verify the real behavior (browser, MCP smoke, or daemon log).
-4. Lock the verified flow into `web-browser` or E2E coverage.
+4. Lock the verified flow into `canvas-viewer-browser`/`web-browser` or E2E coverage.
 
 Skip step 3 only for pure helper changes with no observable runtime effect. Skip step 4 only when the verified scenario is already covered by an existing automation.
 
@@ -30,7 +30,7 @@ pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change 
 
 # 2. After targeted test passes, run the broader gate for the touched area
 pnpm test
-pnpm test:browser        # for browser-mode changes (apps/web web-browser)
+pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + apps/web web-browser)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
 ```
@@ -44,6 +44,7 @@ Choose the **narrowest** layer that can prove the behavior:
 | Layer | Config | When to use |
 |---|---|---|
 | `mcp-node` | `vitest.node.config.ts` (`packages/mcp-server`) | Pure functions, stores, routes, server behavior, persistence logic, schemas, CLI helpers |
+| `canvas-viewer-node` / `canvas-viewer-jsdom` | `vitest.node.config.ts` / `vitest.jsdom.config.ts` (`packages/canvas-viewer`) | `packages/canvas-viewer` parsing, hooks, and components when browser layout and pointer behavior are **not** the core risk |
 | apps/web jsdom | `apps/web/vitest.config.ts` | React components and hooks when real layout, focus, pointer, or browser APIs are **not** the core risk |
 | `web-browser` | `apps/web/vitest.browser.config.ts` | `apps/web` tests that need real browser APIs unavailable in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`, popovers/dialogs/focus/scroll/restore flows, and other platform APIs. File suffix: `.browser.test.tsx` |
 | E2E | `tests/e2e/` | Real routes, server composition, websocket timing, daemon process lifecycle, persistence order, packaging, or multi-step product journeys |
@@ -175,20 +176,21 @@ src/server/routes/canvas-output-path-error.ts
 
 ## Browser Testing
 
-There is one real-browser Vitest project:
+There are two real-browser Vitest projects:
 
 | Project | Package | Purpose |
 |---|---|---|
+| `canvas-viewer-browser` | `packages/canvas-viewer` | Popovers, dialogs, scroll, focus, keyboard, pointer, and restore flows where browser layout and pointer behavior are the core risk |
 | `web-browser` | `apps/web` | `apps/web` app browser regressions: popovers, dialogs, focus, keyboard, restore flows, and tests requiring real browser APIs unavailable in jsdom (IndexedDB, OPFS, `window.showOpenFilePicker`) |
 
 ```bash
-pnpm run test:browser         # web-browser
+pnpm run test:browser         # canvas-viewer-browser + web-browser
 pnpm run test:browser:trace   # same, with trace artifacts on failure
 ```
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
-Failure traces are stored under `apps/web/tmp/vitest-traces`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
+Failure traces are stored under `<package>/tmp/vitest-traces` — `packages/canvas-viewer/tmp/vitest-traces` for `canvas-viewer-browser`, `apps/web/tmp/vitest-traces` for `web-browser`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
 
 Prefer `web-browser` over apps/web jsdom whenever the scenario involves:
 - Focus, pointer, keyboard, or scroll behavior
@@ -349,8 +351,8 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#q
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # mcp-node + mcp-smoke + apps/web jsdom + web-browser
-pnpm test:browser   # web-browser (the real-browser project)
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test:browser   # canvas-viewer-browser + web-browser (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 ```
 
