@@ -559,14 +559,24 @@ export function createCanvasSyncSession(
   // cannot leave disconnect() pending forever.
   async function drainBeforePushHasFired(): Promise<void> {
     const chainAtDispose = commitChain
-    await Promise.race([
-      // Awaiting the commit chain lets any still-queued firing's
-      // doc.commit() run; one more microtask turn after that gives Loro's
-      // subscribeLocalUpdates callback (scheduled internally on commit,
-      // not synchronously) room to fire and call backend.pushLocalUpdate.
-      chainAtDispose.then(() => Promise.resolve()),
-      new Promise<void>((resolve) => setTimeout(resolve, DISPOSE_DRAIN_TIMEOUT_MS)),
-    ])
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        // Awaiting the commit chain lets any still-queued firing's
+        // doc.commit() run; one more microtask turn after that gives Loro's
+        // subscribeLocalUpdates callback (scheduled internally on commit,
+        // not synchronously) room to fire and call backend.pushLocalUpdate.
+        chainAtDispose.then(() => Promise.resolve()),
+        new Promise<void>((resolve) => {
+          timeoutId = setTimeout(resolve, DISPOSE_DRAIN_TIMEOUT_MS)
+        }),
+      ])
+    } finally {
+      // On the fast path (commit chain wins) the timer would otherwise stay
+      // armed for the full DISPOSE_DRAIN_TIMEOUT_MS, delaying real-timer test
+      // teardown and holding an event-loop handle needlessly.
+      if (timeoutId !== undefined) clearTimeout(timeoutId)
+    }
   }
 
   function dispose(): void {
