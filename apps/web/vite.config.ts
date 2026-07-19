@@ -92,6 +92,14 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/api-contracts/index.ts',
       ),
+      // Declared test/internal-only subpath (not in mcp-server's published
+      // npm exports) used by daemon-probe.schema-drift.test.ts to import the
+      // server's runtime schema through a contract surface instead of a
+      // relative deep import into another package's src/.
+      '@kamiazya/whiteboard-mcp/api-contracts-internal': resolve(
+        __dirname,
+        '../../packages/mcp-server/src/shared/api-contracts/runtime.ts',
+      ),
       // loro-crdt's export map resolves the production browser build to its
       // `browser/` entry, which loads the WASM via a SYNCHRONOUS XHR. Sync
       // XHR bypasses the service worker, so the precached WASM is never

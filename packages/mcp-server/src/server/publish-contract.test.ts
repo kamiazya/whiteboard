@@ -99,10 +99,17 @@ describe('publish contract', () => {
         types: './src/shared/api-contracts/index.ts',
         import: './dist/shared/api-contracts/index.js',
       },
+      './api-contracts-internal': {
+        types: './src/shared/api-contracts/runtime.ts',
+        import: './dist/shared/api-contracts/runtime.js',
+      },
       './package.json': './package.json',
     })
-    // publishConfig.exports is the shape pnpm substitutes on npm publish,
-    // so npm consumers get the compiled .d.ts declarations.
+    // publishConfig.exports is the shape pnpm substitutes on npm publish, so
+    // npm consumers get the compiled .d.ts declarations. api-contracts-internal
+    // is deliberately absent here: it is a workspace-only contract surface for
+    // this monorepo's own drift-pin tests, not part of the published npm
+    // package's semver liability.
     expect(mcpPackage.publishConfig.exports).toEqual({
       '.': {
         types: './dist/server/mcp/index.d.ts',
