@@ -113,6 +113,25 @@ describe('useSilentReconnect', () => {
       expect(load(ORIGIN)).toBeNull()
     })
 
+    it('a pre-migration daemon rotating the legacy secret persists the replacement', async () => {
+      save(ORIGIN, 'secret-1')
+      const fetchMock = vi.fn(async () =>
+        jsonResponse({ token: 'daemon-token', reconnectSecret: 'secret-2', expiresInDays: 30 }),
+      )
+      const deps = makeDeps()
+      const { result } = renderHook(() =>
+        useSilentReconnect({
+          enabled: true,
+          origin: ORIGIN,
+          fetchImpl: fetchMock,
+          deps,
+        }),
+      )
+      await waitFor(() => expect(result.current.status).toBe('connected'))
+      expect(result.current).toEqual({ status: 'connected', token: 'daemon-token' })
+      expect(load(ORIGIN)).toBe('secret-2')
+    })
+
     it('network error keeps the stored secret and reports failed(network)', async () => {
       save(ORIGIN, 'secret-1')
       const fetchMock = vi.fn(async () => {

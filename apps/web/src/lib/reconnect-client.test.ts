@@ -244,4 +244,23 @@ describe('redeemReconnectSessionWithLegacySecret', () => {
       ),
     ).toEqual({ status: 'network-error' })
   })
+
+  it('surfaces a rotated secret from a pre-migration daemon response as rotatedSecret', async () => {
+    // A pre-migration daemon's /api/reconnect-session still rotates the
+    // presented secret on every successful redemption (see git history:
+    // verifyAndRotate()) and echoes the replacement as `reconnectSecret`. The
+    // new client's response schema only declares `token`, so without this
+    // opportunistic extra field the rotated secret would be silently
+    // dropped, leaving the client holding a secret the daemon just
+    // invalidated.
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ token: 'daemon-token', reconnectSecret: 'secret-2', expiresInDays: 30 }),
+    )
+    const result = await redeemReconnectSessionWithLegacySecret(
+      'http://localhost:3099',
+      'secret-1',
+      fetchMock,
+    )
+    expect(result).toEqual({ status: 'ok', token: 'daemon-token', rotatedSecret: 'secret-2' })
+  })
 })

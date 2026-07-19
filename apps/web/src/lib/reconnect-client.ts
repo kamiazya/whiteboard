@@ -23,6 +23,18 @@ const legacyCredentialResponseSchema = z.object({
   expiresInDays: z.number().positive(),
 })
 
+// A pre-migration daemon's /api/reconnect-session response also rotates the
+// presented legacy secret on every successful redemption and echoes the
+// replacement as `reconnectSecret` (the current contract's
+// reconnectSessionResponseSchema declares only `token` and has no
+// `.strict()`, so it would parse such a response successfully while
+// silently dropping this field). Detected opportunistically alongside the
+// canonical parse so the caller can persist the rotated secret instead of
+// continuing to present one the daemon just invalidated.
+const legacySessionRotationSchema = z.object({
+  reconnectSecret: z.string().min(1),
+})
+
 export type EnrollResult =
   | { status: 'ok'; expiresInDays: number }
   | { status: 'legacy'; secret: string }
@@ -37,7 +49,7 @@ export type ChallengeResult =
   | { status: 'invalid-response' }
 
 export type RedeemResult =
-  | { status: 'ok'; token: string }
+  | { status: 'ok'; token: string; rotatedSecret?: string }
   | { status: 'rejected' }
   | { status: 'network-error' }
   | { status: 'invalid-response' }
@@ -164,8 +176,12 @@ export async function redeemReconnectSessionWithChallenge(
 /**
  * POSTs /api/reconnect-session presenting a legacy reconnect secret as
  * `Authorization: Bearer` — the grace-period fallback for an origin that has
- * not yet enrolled (or was refused enrolling) a keypair. No secret rotation:
- * the new wire contract's session response carries only `token`.
+ * not yet enrolled (or was refused enrolling) a keypair. The current wire
+ * contract's session response carries only `token` (no rotation), but a
+ * pre-migration daemon still rotates the secret on every redemption and
+ * echoes the replacement — see `parseSessionOutcome`'s opportunistic
+ * `rotatedSecret` detection, which the caller must persist to avoid being
+ * left holding a secret the daemon already invalidated.
  */
 export async function redeemReconnectSessionWithLegacySecret(
   origin: string,
@@ -186,5 +202,10 @@ function parseSessionOutcome(outcome: PostOutcome): RedeemResult {
 
   const parsed = reconnectSessionResponseSchema.safeParse(outcome.json)
   if (!parsed.success) return { status: 'invalid-response' }
+
+  const rotation = legacySessionRotationSchema.safeParse(outcome.json)
+  if (rotation.success) {
+    return { status: 'ok', token: parsed.data.token, rotatedSecret: rotation.data.reconnectSecret }
+  }
   return { status: 'ok', token: parsed.data.token }
 }

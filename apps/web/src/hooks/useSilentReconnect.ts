@@ -11,6 +11,7 @@ import {
   clearIfMatches,
   clear as clearLegacySecret,
   load as loadLegacySecret,
+  save as saveLegacySecret,
 } from '../lib/reconnect-credential-store.js'
 import { signReconnectNonce } from '../lib/reconnect-crypto.js'
 import {
@@ -174,6 +175,13 @@ export function useSilentReconnect({
         redeemReconnectSessionWithLegacySecret(origin, secret, fetchImpl),
       )
       if (result.status === 'ok') {
+        // A pre-migration daemon still rotates the presented secret on every
+        // redemption (see reconnect-client.ts's parseSessionOutcome) — persist
+        // the replacement now, or the next reload presents a secret the
+        // daemon already invalidated and gets rejected.
+        if (result.rotatedSecret) {
+          saveLegacySecret(origin, result.rotatedSecret)
+        }
         if (isCurrent()) {
           seedDaemonToken(result.token)
           setState({ status: 'connected', token: result.token })
