@@ -313,6 +313,30 @@ describe('createWhiteboardCommands.getAppContext', () => {
     await expect(commands.getAppContext()).rejects.toBeInstanceOf(CommandError)
   })
 
+  it('throws an invalid-provider-state CommandError when canvas.kind would disagree with provider.mode', async () => {
+    // canvas.kind is derived from the presence of workspaceId on the
+    // identity, independently of provider.kind — a daemon-mode provider
+    // paired with a browser-local-shaped identity (no workspaceId) hits the
+    // getAppContextResultSchema cross-field refine instead of silently
+    // returning an internally inconsistent result.
+    const depsRef = refOf(
+      baseDeps({
+        provider: {
+          kind: 'local-daemon',
+          daemonBaseUrl: 'http://127.0.0.1:9999',
+          capabilities: BROWSER_LOCAL_CAPABILITIES,
+        },
+        canvas: { canvasId: 'c1', name: 'Canvas 1' },
+      }),
+    )
+    const commands = createWhiteboardCommands(depsRef)
+
+    await expect(commands.getAppContext()).rejects.toMatchObject({
+      code: 'invalid-provider-state',
+    })
+    await expect(commands.getAppContext()).rejects.toBeInstanceOf(CommandError)
+  })
+
   it('excludes secret-bearing fields even given a poisoned ProviderState (simulated future drift)', async () => {
     // Real ProviderState carries no token field today; this cast simulates
     // a future field added to ProviderState leaking through if the
@@ -325,7 +349,12 @@ describe('createWhiteboardCommands.getAppContext', () => {
       authorization: 'Bearer shh',
       secret: 'shh',
     } as unknown as import('../provider.js').ProviderState
-    const depsRef = refOf(baseDeps({ provider: poisoned }))
+    const depsRef = refOf(
+      baseDeps({
+        provider: poisoned,
+        canvas: { workspaceId: 'ws1', canvasId: 'c1', name: 'Canvas 1' },
+      }),
+    )
     const commands = createWhiteboardCommands(depsRef)
 
     const result = await commands.getAppContext()

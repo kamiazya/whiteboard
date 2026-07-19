@@ -129,6 +129,16 @@ export const getAppContextResultSchema = z
       .nullable(),
   })
   .strict()
+  // A daemon-mode provider only ever opens a daemon canvas, and a
+  // browser-local-mode provider only ever opens a browser-local canvas —
+  // create-commands.ts derives `canvas.kind` independently of
+  // `provider.mode` (from the presence of `workspaceId` on the identity),
+  // so this cross-field check is the contract that keeps a future call
+  // site from constructing a result where the two disagree.
+  .refine((result) => result.canvas === null || result.canvas.kind === result.provider.mode, {
+    message: 'canvas.kind must match provider.mode when canvas is present',
+    path: ['canvas', 'kind'],
+  })
 export type GetAppContextResult = z.infer<typeof getAppContextResultSchema>
 
 export interface WhiteboardCommands {

@@ -209,7 +209,19 @@ export function createWhiteboardCommands(depsRef: {
     const provider: GetAppContextResult['provider'] = { mode: projectProviderMode(deps.provider) }
     const canvas = projectCanvasContext(deps.canvas)
 
-    return getAppContextResultSchema.parse({ provider, canvas })
+    // Only the schema parse is guarded here — projectProviderMode above
+    // already throws its own typed CommandError for an invalid-config
+    // provider, and letting that propagate unwrapped (rather than being
+    // re-caught and re-labeled by this catch) preserves its specific code.
+    const parsed = getAppContextResultSchema.safeParse({ provider, canvas })
+    if (!parsed.success) {
+      throw new CommandError(
+        'invalid-provider-state',
+        'Cannot report app context: the derived provider/canvas result is internally inconsistent.',
+        { cause: parsed.error },
+      )
+    }
+    return parsed.data
   }
 
   return { exportJson, getSceneSummary, getAppContext }
