@@ -33,6 +33,29 @@ function toolNameOf(entry: string): string | null {
   return m ? m[1] : null
 }
 
+// Verifies a defineTool entry's `visibility` field, when present, is an
+// inline array literal that includes "app" — anything else (omitted,
+// literal-inclusive) is fine, but a non-literal reference (e.g. a shared
+// `visibility: MODEL_ONLY_VISIBILITY` constant) can't be checked textually,
+// so it must fail loudly rather than let the array-literal regex silently
+// find no match and pass vacuously.
+function assertVisibilityAllowsApp(entry: string): void {
+  const arrayMatch = entry.match(/visibility:\s*\[([^\]]*)\]/)
+  if (arrayMatch) {
+    expect(arrayMatch[1]).toMatch(/["']app["']/)
+    return
+  }
+  const identifierMatch = entry.match(/visibility:\s*([A-Za-z_$][\w$]*)/)
+  if (identifierMatch) {
+    throw new Error(
+      `visibility uses a non-literal reference (${identifierMatch[1]}) this guard cannot verify textually; ` +
+        'inline the array literal, or extend this check, so "app" inclusion stays provable',
+    )
+  }
+  // visibility omitted entirely defaults to ["model", "app"] (see comment
+  // on the caller) — nothing further to assert.
+}
+
 describe('MCP Apps UI-linked tools coverage', () => {
   it('UI_LINKED_TOOLS is a subset of ALL_REGISTERED_TOOLS', () => {
     for (const name of UI_LINKED_TOOLS) {
@@ -83,9 +106,13 @@ describe('MCP Apps UI-linked tools coverage', () => {
     const entries = splitDefineToolEntries(registrationSrc)
     const viewEntry = entries.find((e) => toolNameOf(e) === 'viewTool')
     expect(viewEntry).toBeDefined()
-    const visibilityMatch = viewEntry?.match(/visibility:\s*\[([^\]]*)\]/)
-    if (visibilityMatch) {
-      expect(visibilityMatch[1]).toMatch(/["']app["']/)
-    }
+    assertVisibilityAllowsApp(viewEntry ?? '')
+  })
+
+  it('flags a non-literal `visibility` reference instead of passing vacuously', () => {
+    // Guards the guard: a future edit to `visibility: MODEL_ONLY_VISIBILITY`
+    // (a non-literal reference) must fail this check, not silently pass it
+    // the way a literal-array-only regex would.
+    expect(() => assertVisibilityAllowsApp('visibility: MODEL_ONLY_VISIBILITY,')).toThrow()
   })
 })
