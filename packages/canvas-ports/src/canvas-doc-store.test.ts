@@ -32,6 +32,39 @@ describe('CanvasDocStore method DTOs', () => {
     expect(saveSnapshotInputSchema.safeParse({ docRef, manifest, chunks: [] }).success).toBe(false)
   })
 
+  it('loadSnapshot/saveSnapshot: reject a manifest/chunks pair whose chunk count or total bytes disagree', () => {
+    const emptyManifest = { chunkCount: 0, totalBytes: 0, maxChunkBytes: 1 }
+    const nonEmptyChunk = { index: 0, of: 1, bytes: new Uint8Array([1, 2, 3]) }
+
+    // chunkCount says 0 chunks, but a well-formed non-empty chunk is supplied.
+    expect(
+      loadSnapshotResultSchema.safeParse({
+        manifest: emptyManifest,
+        chunks: [nonEmptyChunk],
+        frontier,
+      }).success,
+    ).toBe(false)
+    expect(
+      saveSnapshotInputSchema.safeParse({
+        docRef,
+        manifest: emptyManifest,
+        chunks: [nonEmptyChunk],
+        frontier,
+      }).success,
+    ).toBe(false)
+
+    // chunkCount matches, but the chunk's byte length disagrees with totalBytes.
+    const mismatchedManifest = { chunkCount: 1, totalBytes: 99, maxChunkBytes: 4 }
+    expect(
+      saveSnapshotInputSchema.safeParse({
+        docRef,
+        manifest: mismatchedManifest,
+        chunks: [nonEmptyChunk],
+        frontier,
+      }).success,
+    ).toBe(false)
+  })
+
   it('appendDeltas: accepts a docRef + deltaBatch input; result requires a frontier', () => {
     expect(
       appendDeltasInputSchema.safeParse({

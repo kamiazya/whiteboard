@@ -7,6 +7,33 @@ import { snapshotChunkSchema, snapshotManifestSchema } from './snapshot.js'
 export const loadSnapshotInputSchema = z.object({ docRef: docRefSchema }).strict()
 export type LoadSnapshotInput = z.infer<typeof loadSnapshotInputSchema>
 
+/**
+ * A schema-level cross-check between `manifest` and `chunks`: the array
+ * length must match `manifest.chunkCount` and the chunks' combined byte
+ * length must match `manifest.totalBytes`. Without this, a boundary-valid
+ * but internally inconsistent pair (e.g. an empty manifest paired with a
+ * non-empty chunk) parses successfully and only surfaces later, when
+ * `reassembleSnapshot`'s `chunkCount === 0` short-circuit silently discards
+ * the supplied chunk. This does not duplicate `reassembleSnapshot`'s deeper
+ * per-chunk checks (index range, duplicates, ordering, `of` agreement) —
+ * those remain the single source of truth for reassembly correctness.
+ */
+function manifestChunksConsistent(payload: {
+  manifest: z.infer<typeof snapshotManifestSchema>
+  chunks: z.infer<typeof snapshotChunkSchema>[]
+}): boolean {
+  if (payload.chunks.length !== payload.manifest.chunkCount) {
+    return false
+  }
+  const aggregateLength = payload.chunks.reduce((sum, chunk) => sum + chunk.bytes.byteLength, 0)
+  return aggregateLength === payload.manifest.totalBytes
+}
+
+const manifestChunksConsistencyIssue = {
+  message: 'chunks must match manifest.chunkCount and sum to manifest.totalBytes',
+  path: ['chunks'],
+}
+
 export const loadSnapshotResultSchema = z
   .object({
     manifest: snapshotManifestSchema,
@@ -14,6 +41,7 @@ export const loadSnapshotResultSchema = z
     frontier: frontierSchema,
   })
   .strict()
+  .refine(manifestChunksConsistent, manifestChunksConsistencyIssue)
   .nullable()
 export type LoadSnapshotResult = z.infer<typeof loadSnapshotResultSchema>
 
@@ -25,6 +53,7 @@ export const saveSnapshotInputSchema = z
     frontier: frontierSchema,
   })
   .strict()
+  .refine(manifestChunksConsistent, manifestChunksConsistencyIssue)
 export type SaveSnapshotInput = z.infer<typeof saveSnapshotInputSchema>
 
 export const appendDeltasInputSchema = z
