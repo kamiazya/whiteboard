@@ -217,30 +217,29 @@ const mathNodeSchema = z.object({
   meta: z.string().nullish(),
 })
 
+// Recursive (children-bearing) node schemas. Each is defined exactly once
+// below and shared by every union that can contain it, so a node's shape has
+// a single source of truth. The category unions above forward-reference these
+// through `z.lazy`, which is why the definitions can appear after the unions
+// that list them.
+//
+// Phrasing and cell-phrasing variants stay separate because their children
+// differ (a table cell's phrasing excludes `break`); they cannot share the
+// recursive objects the way the leaf schemas are shared.
+
 export const mdastPhrasingContentSchema: z.ZodType<MdastPhrasingContent> = z.lazy(() =>
   z.discriminatedUnion('type', [
     textNodeSchema,
-    z.object({ type: z.literal('emphasis'), children: z.array(mdastPhrasingContentSchema) }),
-    z.object({ type: z.literal('strong'), children: z.array(mdastPhrasingContentSchema) }),
+    emphasisNodeSchema,
+    strongNodeSchema,
     inlineCodeNodeSchema,
     breakNodeSchema,
     htmlNodeSchema,
-    z.object({
-      type: z.literal('link'),
-      url: z.string(),
-      title: z.string().nullish(),
-      children: z.array(mdastPhrasingContentSchema),
-    }),
+    linkNodeSchema,
     imageNodeSchema,
-    z.object({
-      type: z.literal('linkReference'),
-      identifier: z.string(),
-      label: z.string().nullish(),
-      referenceType: referenceTypeSchema,
-      children: z.array(mdastPhrasingContentSchema),
-    }),
+    linkReferenceNodeSchema,
     imageReferenceNodeSchema,
-    z.object({ type: z.literal('delete'), children: z.array(mdastPhrasingContentSchema) }),
+    deleteNodeSchema,
     inlineMathNodeSchema,
     wikiLinkNodeSchema,
     embedNodeSchema,
@@ -250,26 +249,15 @@ export const mdastPhrasingContentSchema: z.ZodType<MdastPhrasingContent> = z.laz
 export const mdastCellPhrasingContentSchema: z.ZodType<MdastCellPhrasingContent> = z.lazy(() =>
   z.discriminatedUnion('type', [
     textNodeSchema,
-    z.object({ type: z.literal('emphasis'), children: z.array(mdastCellPhrasingContentSchema) }),
-    z.object({ type: z.literal('strong'), children: z.array(mdastCellPhrasingContentSchema) }),
+    cellEmphasisNodeSchema,
+    cellStrongNodeSchema,
     inlineCodeNodeSchema,
     htmlNodeSchema,
-    z.object({
-      type: z.literal('link'),
-      url: z.string(),
-      title: z.string().nullish(),
-      children: z.array(mdastCellPhrasingContentSchema),
-    }),
+    cellLinkNodeSchema,
     imageNodeSchema,
-    z.object({
-      type: z.literal('linkReference'),
-      identifier: z.string(),
-      label: z.string().nullish(),
-      referenceType: referenceTypeSchema,
-      children: z.array(mdastCellPhrasingContentSchema),
-    }),
+    cellLinkReferenceNodeSchema,
     imageReferenceNodeSchema,
-    z.object({ type: z.literal('delete'), children: z.array(mdastCellPhrasingContentSchema) }),
+    cellDeleteNodeSchema,
     inlineMathNodeSchema,
     wikiLinkNodeSchema,
     embedNodeSchema,
@@ -278,54 +266,123 @@ export const mdastCellPhrasingContentSchema: z.ZodType<MdastCellPhrasingContent>
 
 export const mdastFlowContentSchema: z.ZodType<MdastFlowContent> = z.lazy(() =>
   z.discriminatedUnion('type', [
-    z.object({ type: z.literal('paragraph'), children: z.array(mdastPhrasingContentSchema) }),
-    z.object({
-      type: z.literal('heading'),
-      depth: headingDepthSchema,
-      children: z.array(mdastPhrasingContentSchema),
-    }),
-    z.object({ type: z.literal('blockquote'), children: z.array(mdastFlowContentSchema) }),
-    z.object({
-      type: z.literal('list'),
-      ordered: z.boolean().optional(),
-      start: z.number().int().optional(),
-      spread: z.boolean().optional(),
-      children: z.array(mdastListItemSchema),
-    }),
+    paragraphNodeSchema,
+    headingNodeSchema,
+    blockquoteNodeSchema,
+    listNodeSchema,
     codeNodeSchema,
     htmlNodeSchema,
     thematicBreakNodeSchema,
     definitionNodeSchema,
-    z.object({
-      type: z.literal('table'),
-      align: z.array(z.enum(['left', 'right', 'center']).nullable()).optional(),
-      children: z.array(mdastTableRowSchema),
-    }),
+    tableNodeSchema,
     mathNodeSchema,
   ]),
 )
 
-export const mdastListItemSchema: z.ZodType<MdastListItem> = z.lazy(() =>
-  z.object({
-    type: z.literal('listItem'),
-    checked: z.boolean().nullable().optional(),
-    spread: z.boolean().optional(),
-    children: z.array(mdastFlowContentSchema),
-  }),
-)
+export const mdastListItemSchema: z.ZodType<MdastListItem> = z.lazy(() => listItemNodeSchema)
 
-export const mdastTableCellSchema: z.ZodType<MdastTableCell> = z.lazy(() =>
-  z.object({ type: z.literal('tableCell'), children: z.array(mdastCellPhrasingContentSchema) }),
-)
+export const mdastTableCellSchema: z.ZodType<MdastTableCell> = z.lazy(() => tableCellNodeSchema)
 
-export const mdastTableRowSchema: z.ZodType<MdastTableRow> = z.lazy(() =>
-  z.object({ type: z.literal('tableRow'), children: z.array(mdastTableCellSchema) }),
-)
+export const mdastTableRowSchema: z.ZodType<MdastTableRow> = z.lazy(() => tableRowNodeSchema)
 
-export const mdastRootSchema: z.ZodType<MdastRoot> = z.object({
+const emphasisNodeSchema = z.object({
+  type: z.literal('emphasis'),
+  children: z.array(mdastPhrasingContentSchema),
+})
+const strongNodeSchema = z.object({
+  type: z.literal('strong'),
+  children: z.array(mdastPhrasingContentSchema),
+})
+const linkNodeSchema = z.object({
+  type: z.literal('link'),
+  url: z.string(),
+  title: z.string().nullish(),
+  children: z.array(mdastPhrasingContentSchema),
+})
+const linkReferenceNodeSchema = z.object({
+  type: z.literal('linkReference'),
+  identifier: z.string(),
+  label: z.string().nullish(),
+  referenceType: referenceTypeSchema,
+  children: z.array(mdastPhrasingContentSchema),
+})
+const deleteNodeSchema = z.object({
+  type: z.literal('delete'),
+  children: z.array(mdastPhrasingContentSchema),
+})
+
+// Cell-phrasing counterparts: same shapes, but children exclude `break`.
+const cellEmphasisNodeSchema = z.object({
+  type: z.literal('emphasis'),
+  children: z.array(mdastCellPhrasingContentSchema),
+})
+const cellStrongNodeSchema = z.object({
+  type: z.literal('strong'),
+  children: z.array(mdastCellPhrasingContentSchema),
+})
+const cellLinkNodeSchema = z.object({
+  type: z.literal('link'),
+  url: z.string(),
+  title: z.string().nullish(),
+  children: z.array(mdastCellPhrasingContentSchema),
+})
+const cellLinkReferenceNodeSchema = z.object({
+  type: z.literal('linkReference'),
+  identifier: z.string(),
+  label: z.string().nullish(),
+  referenceType: referenceTypeSchema,
+  children: z.array(mdastCellPhrasingContentSchema),
+})
+const cellDeleteNodeSchema = z.object({
+  type: z.literal('delete'),
+  children: z.array(mdastCellPhrasingContentSchema),
+})
+
+const paragraphNodeSchema = z.object({
+  type: z.literal('paragraph'),
+  children: z.array(mdastPhrasingContentSchema),
+})
+const headingNodeSchema = z.object({
+  type: z.literal('heading'),
+  depth: headingDepthSchema,
+  children: z.array(mdastPhrasingContentSchema),
+})
+const blockquoteNodeSchema = z.object({
+  type: z.literal('blockquote'),
+  children: z.array(mdastFlowContentSchema),
+})
+const listNodeSchema = z.object({
+  type: z.literal('list'),
+  ordered: z.boolean().optional(),
+  start: z.number().int().optional(),
+  spread: z.boolean().optional(),
+  children: z.array(mdastListItemSchema),
+})
+const listItemNodeSchema = z.object({
+  type: z.literal('listItem'),
+  checked: z.boolean().nullable().optional(),
+  spread: z.boolean().optional(),
+  children: z.array(mdastFlowContentSchema),
+})
+const tableNodeSchema = z.object({
+  type: z.literal('table'),
+  align: z.array(z.enum(['left', 'right', 'center']).nullable()).optional(),
+  children: z.array(mdastTableRowSchema),
+})
+const tableRowNodeSchema = z.object({
+  type: z.literal('tableRow'),
+  children: z.array(mdastTableCellSchema),
+})
+const tableCellNodeSchema = z.object({
+  type: z.literal('tableCell'),
+  children: z.array(mdastCellPhrasingContentSchema),
+})
+const rootNodeSchema = z.object({
   type: z.literal('root'),
   children: z.array(mdastFlowContentSchema),
 })
+
+export const mdastRootSchema: z.ZodType<MdastRoot> = rootNodeSchema
 
 /**
  * Union of every supported node kind, each with per-kind structurally-valid
@@ -334,59 +391,29 @@ export const mdastRootSchema: z.ZodType<MdastRoot> = z.object({
  */
 export const mdastNodeSchema: z.ZodType<MdastNode> = z.lazy(() =>
   z.discriminatedUnion('type', [
-    z.object({ type: z.literal('root'), children: z.array(mdastFlowContentSchema) }),
-    z.object({ type: z.literal('paragraph'), children: z.array(mdastPhrasingContentSchema) }),
-    z.object({
-      type: z.literal('heading'),
-      depth: headingDepthSchema,
-      children: z.array(mdastPhrasingContentSchema),
-    }),
+    rootNodeSchema,
+    paragraphNodeSchema,
+    headingNodeSchema,
     textNodeSchema,
-    z.object({ type: z.literal('emphasis'), children: z.array(mdastPhrasingContentSchema) }),
-    z.object({ type: z.literal('strong'), children: z.array(mdastPhrasingContentSchema) }),
+    emphasisNodeSchema,
+    strongNodeSchema,
     inlineCodeNodeSchema,
     codeNodeSchema,
-    z.object({ type: z.literal('blockquote'), children: z.array(mdastFlowContentSchema) }),
-    z.object({
-      type: z.literal('list'),
-      ordered: z.boolean().optional(),
-      start: z.number().int().optional(),
-      spread: z.boolean().optional(),
-      children: z.array(mdastListItemSchema),
-    }),
-    z.object({
-      type: z.literal('listItem'),
-      checked: z.boolean().nullable().optional(),
-      spread: z.boolean().optional(),
-      children: z.array(mdastFlowContentSchema),
-    }),
+    blockquoteNodeSchema,
+    listNodeSchema,
+    listItemNodeSchema,
     thematicBreakNodeSchema,
     breakNodeSchema,
-    z.object({
-      type: z.literal('link'),
-      url: z.string(),
-      title: z.string().nullish(),
-      children: z.array(mdastPhrasingContentSchema),
-    }),
+    linkNodeSchema,
     imageNodeSchema,
     htmlNodeSchema,
     definitionNodeSchema,
-    z.object({
-      type: z.literal('linkReference'),
-      identifier: z.string(),
-      label: z.string().nullish(),
-      referenceType: referenceTypeSchema,
-      children: z.array(mdastPhrasingContentSchema),
-    }),
+    linkReferenceNodeSchema,
     imageReferenceNodeSchema,
-    z.object({
-      type: z.literal('table'),
-      align: z.array(z.enum(['left', 'right', 'center']).nullable()).optional(),
-      children: z.array(mdastTableRowSchema),
-    }),
-    z.object({ type: z.literal('tableRow'), children: z.array(mdastTableCellSchema) }),
-    z.object({ type: z.literal('tableCell'), children: z.array(mdastCellPhrasingContentSchema) }),
-    z.object({ type: z.literal('delete'), children: z.array(mdastPhrasingContentSchema) }),
+    tableNodeSchema,
+    tableRowNodeSchema,
+    tableCellNodeSchema,
+    deleteNodeSchema,
     mathNodeSchema,
     inlineMathNodeSchema,
     wikiLinkNodeSchema,
