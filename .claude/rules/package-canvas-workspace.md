@@ -45,6 +45,10 @@
 - Segment validation matches the slug pattern
   `/^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/` — single characters
   are valid, leading/trailing hyphens are not.
+- LoroDoc spatial layout: `doc.getMap('nodes')` keyed by nodeId,
+  `doc.getMap('edges')` keyed by edgeId. Each value is a plain object
+  (not a nested LoroMap container) — this preserves node-level CRDT
+  merge while avoiding Loro's nested-container overwrite issues.
 
 ## Tests
 
@@ -56,6 +60,9 @@
   end-to-end with `resolveReferences` from canvas-codec (wikiLink + embed).
 - `extractBacklinks` tests: walks all mdast node types (paragraph, heading,
   blockquote, list, table, nested phrasing) with dedup assertion.
+- `readSpatialCanvas`/`writeSpatialCanvas` tests: round-trip all node types
+  (text/file/link/group), edges, x-whiteboard extensions, overwrite/delete
+  semantics, and CRDT merge of independent node additions.
 
 ## Common mistakes (append as review finds them)
 
