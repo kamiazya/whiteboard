@@ -123,8 +123,10 @@ function findDuplicateId(ids: string[]): string | undefined {
 
 export const spatialCanvasSchema = z
   .object({
-    nodes: z.array(spatialNodeSchema),
-    edges: z.array(canvasEdgeSchema),
+    // JSON Canvas 1.0 declares both top-level arrays optional; a bare `{}`
+    // is a valid (empty) canvas.
+    nodes: z.array(spatialNodeSchema).default([]),
+    edges: z.array(canvasEdgeSchema).default([]),
   })
   .superRefine((value, ctx) => {
     const duplicateNodeId = findDuplicateId(value.nodes.map((node) => node.id))
@@ -144,6 +146,24 @@ export const spatialCanvasSchema = z
         path: ['edges'],
       })
     }
+
+    const nodeIds = new Set(value.nodes.map((node) => node.id))
+    value.edges.forEach((edge, index) => {
+      if (!nodeIds.has(edge.fromNode)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `edge "${edge.id}" references nonexistent fromNode "${edge.fromNode}"`,
+          path: ['edges', index, 'fromNode'],
+        })
+      }
+      if (!nodeIds.has(edge.toNode)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `edge "${edge.id}" references nonexistent toNode "${edge.toNode}"`,
+          path: ['edges', index, 'toNode'],
+        })
+      }
+    })
   })
 
 export type SpatialCanvas = z.infer<typeof spatialCanvasSchema>

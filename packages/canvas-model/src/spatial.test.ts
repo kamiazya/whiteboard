@@ -259,4 +259,42 @@ describe('spatialCanvasSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('accepts an empty document with both arrays omitted, per JSON Canvas 1.0 optionality', () => {
+    const result = spatialCanvasSchema.safeParse({})
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toEqual({ nodes: [], edges: [] })
+    }
+  })
+
+  it('accepts a document with only nodes present', () => {
+    const result = spatialCanvasSchema.safeParse({ nodes: [node1] })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.edges).toEqual([])
+    }
+  })
+
+  it('accepts a document with only edges present (edges referencing nothing)', () => {
+    const result = spatialCanvasSchema.safeParse({ edges: [] })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.nodes).toEqual([])
+    }
+  })
+
+  it('rejects an edge whose fromNode or toNode references a nonexistent node id', () => {
+    const missingFrom = spatialCanvasSchema.safeParse({
+      nodes: [node2],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    expect(missingFrom.success).toBe(false)
+
+    const missingTo = spatialCanvasSchema.safeParse({
+      nodes: [node1],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+    })
+    expect(missingTo.success).toBe(false)
+  })
 })
