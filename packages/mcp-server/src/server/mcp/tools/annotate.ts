@@ -10,14 +10,7 @@ import {
 import { decomposeBoxWithLabel, type SubTextPosition } from './box-with-label.js'
 import { assertCanvasExists } from './canvas-existence.js'
 import { parseCanvasId } from './canvas-id.js'
-import {
-  contrastRatio,
-  isExplicitHexColor,
-  readableInkForFill,
-  resolvePaletteColor,
-} from './color-palette.js'
 import { decomposeGroup } from './group.js'
-import { apiGetPalette } from './palette.js'
 import { resolveAnnotationPosition, type CoordsMode } from './resolve-annotation-position.js'
 import { resolveArrowLabelPosition } from './resolve-arrow-label-position.js'
 import { resolveArrowRoute } from './resolve-arrow-route.js'
@@ -47,7 +40,6 @@ export const annotateOutputSchema = z.object({
   elementIds: z.array(z.string()).optional(),
   annotation: annotationResultSchema,
   warnings: z.array(annotateWarningSchema),
-  unknownPaletteKeys: z.array(z.string()).optional(),
 })
 
 // Single source of truth for the `annotate` tool's input contract: the raw
@@ -108,18 +100,11 @@ export const annotateInputShape = {
     .describe(
       'Auto-wrap long lines and auto-grow box height. Default true. Set false to honor explicit string[] line breaks strictly.',
     ),
-  color: z
-    .string()
-    .optional()
-    .describe(
-      'Stroke / text color. Accepts semantic keys ("primary","success","danger","warning","neutral","info") or palette key (declared via palette_set) or hex (#RRGGBB). For box_with_label on a solid fill, a semantic/palette text ink that would be unreadable against the fill is auto-adjusted for contrast; pass an explicit hex to opt out.',
-    ),
+  color: z.string().optional().describe('Stroke / text color as hex (#RRGGBB).'),
   backgroundColor: z
     .string()
     .optional()
-    .describe(
-      'Fill color (rectangle / highlight / box_with_label background). Same key vocabulary as `color`.',
-    ),
+    .describe('Fill color (rectangle / highlight / box_with_label background) as hex (#RRGGBB).'),
   fillStyle: z
     .enum(['solid', 'hachure', 'cross-hatch'])
     .optional()
@@ -299,7 +284,6 @@ export interface AnnotationSpec {
   // and arrow labels.
   fontFamily?: 1 | 2 | 3 | 5 | 6 | 7 | 8 | 9
   fontSize?: number
-  sessionPalette?: Record<string, string>
 }
 
 // Resolve a rectangle from an element id. Deleted or missing ids return
@@ -366,9 +350,7 @@ function appendSingleAnnotation(
   const actualX = textAnchor?.x ?? anchorX
   const actualY = textAnchor?.y ?? anchorY
   const elementId = nanoid()
-  const strokeColor = spec.color
-    ? resolvePaletteColor(spec.color, spec.sessionPalette ?? {}).color
-    : DEFAULT_COLORS[spec.type]
+  const strokeColor = spec.color ?? DEFAULT_COLORS[spec.type]
   const absoluteEndTarget = spec.endTarget
     ? resolveAnnotationPosition(
         { coords: spec.coords, imageId: spec.imageId, target: spec.endTarget },
@@ -464,9 +446,7 @@ function appendSingleAnnotation(
     textAlign: textAnchor?.textAlign,
     endTarget: snappedEnd,
     points: routedPoints,
-    backgroundColor: spec.backgroundColor
-      ? resolvePaletteColor(spec.backgroundColor, spec.sessionPalette ?? {}).color
-      : undefined,
+    backgroundColor: spec.backgroundColor,
     fillStyle: spec.fillStyle,
     strokeWidth: spec.strokeWidth,
     templateInstanceId: spec.templateInstanceId,
@@ -561,13 +541,11 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
     const { elementId: rectId } = appendSingleAnnotation(doc, {
       ...rectSpec,
       coords: 'absolute',
-      sessionPalette: spec.sessionPalette,
     })
     if (!titleSpec) return { type: 'group', rectId }
     const { elementId: titleId } = appendSingleAnnotation(doc, {
       ...titleSpec,
       coords: 'absolute',
-      sessionPalette: spec.sessionPalette,
     })
     return { type: 'group', rectId, titleId }
   }
@@ -623,7 +601,6 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
         // Mark midpoint label text so later arrow routing ignores it as an obstacle.
         isArrowLabel: true,
         fontFamily: spec.fontFamily,
-        sessionPalette: spec.sessionPalette,
       })
       return { type: 'arrow', arrowId: elementId, labelId }
     }
@@ -661,31 +638,6 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
     { coords: spec.coords, imageId: spec.imageId, target: spec.target },
     elements,
   )
-  // Text-ink contrast guard: when the caller delegated the color choice
-  // (semantic key / palette key / omitted — anything but an explicit hex)
-  // and the box has a solid fill, an ink below WCAG's large-text 3:1 against
-  // that fill is swapped for a readable one picked by the fill's luminance.
-  // The rectangle stroke keeps the requested color: the outline borders the
-  // canvas background, not the fill, and recoloring it would change the
-  // box's semantic identity.
-  const MIN_TEXT_FILL_CONTRAST = 3
-  const effectiveFillStyle = spec.fillStyle ?? (spec.backgroundColor ? 'solid' : undefined)
-  let readableTextInk: string | undefined
-  if (
-    spec.backgroundColor !== undefined &&
-    effectiveFillStyle === 'solid' &&
-    (spec.color === undefined || !isExplicitHexColor(spec.color))
-  ) {
-    const fill = resolvePaletteColor(spec.backgroundColor, spec.sessionPalette ?? {}).color
-    const ink = spec.color
-      ? resolvePaletteColor(spec.color, spec.sessionPalette ?? {}).color
-      : DEFAULT_COLORS.text
-    const ratio = contrastRatio(ink, fill)
-    if (ratio !== null && ratio < MIN_TEXT_FILL_CONTRAST) {
-      readableTextInk = readableInkForFill(fill) ?? undefined
-    }
-  }
-  const textInkOverride = readableTextInk !== undefined ? { color: readableTextInk } : {}
 
   const [rectSpec, textSpec, , subTextSpec, titleSpec] = decomposeBoxWithLabel({
     target: absoluteTarget,
@@ -708,30 +660,23 @@ export function appendAnnotationToDoc(doc: LoroDoc, spec: AnnotationSpec): Annot
   const { elementId: rectId } = appendSingleAnnotation(doc, {
     ...rectSpec,
     coords: 'absolute',
-    sessionPalette: spec.sessionPalette,
   })
   const titleId = titleSpec
     ? appendSingleAnnotation(doc, {
         ...titleSpec,
-        ...textInkOverride,
         coords: 'absolute',
-        sessionPalette: spec.sessionPalette,
       }).elementId
     : undefined
   const textId = textSpec
     ? appendSingleAnnotation(doc, {
         ...textSpec,
-        ...textInkOverride,
         coords: 'absolute',
-        sessionPalette: spec.sessionPalette,
       }).elementId
     : undefined
   const subTextId = subTextSpec
     ? appendSingleAnnotation(doc, {
         ...subTextSpec,
-        ...textInkOverride,
         coords: 'absolute',
-        sessionPalette: spec.sessionPalette,
       }).elementId
     : undefined
   // inside-bottom splits the rectangle into main/sub zones. Skip containerId
@@ -827,15 +772,6 @@ export function annotateTool() {
       }
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       await assertCanvasExists(client, workspaceId, slug)
-      const sessionPalette = await apiGetPalette(client, workspaceId)
-      const unknownPaletteKeySet = new Set<string>()
-      for (const colorArg of [args.color, args.backgroundColor]) {
-        if (colorArg) {
-          const { warningKey } = resolvePaletteColor(colorArg, sessionPalette)
-          if (warningKey) unknownPaletteKeySet.add(warningKey)
-        }
-      }
-      const unknownPaletteKeys = Array.from(unknownPaletteKeySet)
       const warnings: z.infer<typeof annotateWarningSchema>[] = []
       if (
         args.type === 'box_with_label' &&
@@ -864,7 +800,6 @@ export function annotateTool() {
       const spec: AnnotationSpec = {
         ...args,
         target: args.target ?? { x: 0, y: 0 },
-        sessionPalette,
       }
       const annotation = appendAnnotationToDoc(doc, spec)
       const elementIds = flattenAnnotationResult(annotation)
@@ -877,10 +812,9 @@ export function annotateTool() {
       )
       // Preserve the legacy elementId/elementIds contract and add the structured
       // annotation result for callers that need internal composite ids.
-      const unknownKeys = unknownPaletteKeys.length > 0 ? { unknownPaletteKeys } : {}
       return elementIds.length === 1
-        ? { elementId: elementIds[0], annotation, warnings, ...unknownKeys }
-        : { elementIds, annotation, warnings, ...unknownKeys }
+        ? { elementId: elementIds[0], annotation, warnings }
+        : { elementIds, annotation, warnings }
     },
   }
 }

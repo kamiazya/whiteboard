@@ -9,7 +9,7 @@ Like a whiteboard on the wall of a meeting room, this is a tool for AI and human
 Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the canvas and can be revisited and refined later.
 
-Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `palette_get` / `palette_set` / `palette_delete` / `load_image` / `export_canvas` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it with `export_canvas({ format })` as PNG, SVG, or standard `.excalidraw` JSON.
+Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `load_image` / `export_canvas` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it with `export_canvas({ format })` as PNG, SVG, or standard `.excalidraw` JSON.
 Open exported PNGs with the Read tool and inspect them visually.
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
@@ -95,24 +95,6 @@ At minimum:
 You can skip this step for generic rectangle-and-arrow flows, comparison matrices, before/after diffs, and screenshot annotation.
 If you cannot rely on a dedicated Claude Code subagent, hand [`references/library-research-prompt-template.md`](./references/library-research-prompt-template.md) to a General Subagent for library research.
 
-### Step 0.5: Set Up Semantic Colors Early
-
-If a comparison axis is already known **before drawing** - for example plans A/B/C, main path vs exception path, or stable color families - define workspace color keys first with `palette_set({ workspaceId, entries })`, then start `annotate_batch`.
-Hardcoded hex is easy to drift and hard for future readers or another AI to inherit correctly.
-
-```js
-palette_set({ workspaceId, entries: {
-  "plan.a.bg": "#dbeafe", "plan.a.fg": "#1971c2",
-  "plan.b.bg": "#f3e8ff", "plan.b.fg": "#9333ea",
-  "plan.c.bg": "#d1fae5", "plan.c.fg": "#047857",
-  "recommend.bg": "#fffbeb",
-  "system.bg": "#f1f5f9", "system.fg": "#475569"
-}})
-```
-
-Then use keys such as `"plan.a.bg"` in `annotate` / `annotate_batch` for `color`, `backgroundColor`, and `strokeColor`.
-Shortcut reminder: the moment you decide the board uses named options, families, or priority colors, define the palette before drawing.
-
 ### Step 1: State The Intent
 
 Describe the purpose of the diagram in 1-2 lines.
@@ -158,8 +140,7 @@ For vocabulary and visual distinction of main path / exceptions / uncertainty, p
 - **Fit the viewport after drawing**: call `viewport_set({ mode: "fit", padding: 40 })` so the whole composition is visible instead of leaving the browser on the default origin/zoom
 - **Use `annotate_batch` for multiple elements**: this is cheaper and cleaner than many individual `annotate` calls
 - **Long text wraps automatically by default (`autoFit: true`)**: `box_with_label` wraps long lines on whitespace and expands height as needed. Even if you pass `string[]`, long lines inside each entry can still wrap further. Use `autoFit: false` only when you need strict line control
-- **Prefer semantic color keys**: `primary` / `success` / `danger` / `warning` / `neutral` / `info` rather than hardcoded hex
-- **Save workspace-specific colors in the palette**: register keys such as `accent.target` or `plan.a` with `palette_set`, then use those keys in `annotate` / `annotate_batch`
+- **Colors are hex**: pass `#RRGGBB` for `color` / `backgroundColor` on `annotate` / `annotate_batch`
 - **Use plain `text` with `width` when you want wrapped headings or notes**
 - **Split `box_with_label` content into `title` / `text` / `subText`**: use `title` for emphasis, push supporting detail into `subText`, and use `subTextPosition: "top"` only when the caption truly belongs outside the rect
 - **For uneven matrix columns / rows**: use `layout.colWidths`, `layout.rowHeights`, `rowSpan`, `colSpan`, and inspect `dryRun: true` before committing

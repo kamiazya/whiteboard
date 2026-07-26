@@ -1,8 +1,8 @@
 // user-library-metadata-store does no FS writes outside the DB and no
 // internal Kysely transactions, so it qualifies for the file-scoped fixture
 // + per-test BEGIN/ROLLBACK pattern. Migrations run once for the whole file
-// instead of per `it`. See palette-store.test.ts for the rationale on why
-// raw BEGIN/ROLLBACK is used instead of `db.transaction().execute(...)`.
+// instead of per `it`. Raw BEGIN/ROLLBACK is used instead of
+// `db.transaction().execute(...)` so migrations can run once per file.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'

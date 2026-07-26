@@ -15,8 +15,6 @@ import { annotateTool } from './tools/annotate.js'
 import { annotateBatchTool } from './tools/annotate-batch.js'
 import { canvasInspectTool } from './tools/canvas-inspect.js'
 import { createCanvasTool, listCanvasTool, openCanvasTool } from './tools/canvas.js'
-import { SEMANTIC_PALETTE } from './tools/color-palette.js'
-import { paletteDeleteTool, paletteGetTool, paletteSetTool } from './tools/palette.js'
 import {
   canvasClearTool,
   deleteElementTool,
@@ -82,9 +80,6 @@ const tools: AnyTool[] = [
   loadImageTool(),
   annotateTool(),
   annotateBatchTool(),
-  paletteGetTool(),
-  paletteSetTool(),
-  paletteDeleteTool(),
   canvasInspectTool(),
   updateElementTool(),
   deleteElementTool(),
@@ -119,9 +114,6 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
       'load_image',
       'annotate',
       'annotate_batch',
-      'palette_get',
-      'palette_set',
-      'palette_delete',
       'update_element',
       'delete_element',
       'move_elements',
@@ -189,31 +181,6 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
     })
   })
 
-  // 4. Semantic color palette integrity.
-  // SEMANTIC_PALETTE keys must match the SKILL enumeration exactly. Order or
-  // spelling drift here is not acceptable.
-  describe('semantic color palette', () => {
-    const paletteKeys = Object.keys(SEMANTIC_PALETTE).sort()
-    // Extract the slash-delimited key list from the SKILL line. The SKILL wraps
-    // keywords in backticks, so the regex accepts them optionally.
-    const match = skillText.match(
-      /`?primary`?\s*\/\s*`?success`?\s*\/\s*`?danger`?\s*\/\s*`?warning`?\s*\/\s*`?neutral`?\s*\/\s*`?info`?/,
-    )
-
-    it('contains a semantic color enumeration line in SKILL.md', () => {
-      expect(match).not.toBeNull()
-    })
-
-    it('matches SEMANTIC_PALETTE keys exactly with the SKILL enumeration', () => {
-      // Strip backticks before comparing.
-      const skillKeys = match![0]
-        .split('/')
-        .map((s) => s.trim().replace(/`/g, ''))
-        .sort()
-      expect(skillKeys).toEqual(paletteKeys)
-    })
-  })
-
   // 5. Arrow box-snap parameters.
   // startBoxId and endBoxId must exist in both annotate_batch and annotate.
   describe('arrow snap params', () => {
@@ -265,9 +232,9 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
   // 8. Tool count invariant.
   // If a tool is added or removed, toolNames and SKILL.md must be updated too.
   describe('tool count invariants', () => {
-    it('keeps tools[] and toolByName at 22 entries', () => {
-      expect(tools.length).toBe(22)
-      expect(toolByName.size).toBe(22)
+    it('keeps tools[] and toolByName at 19 entries', () => {
+      expect(tools.length).toBe(19)
+      expect(toolByName.size).toBe(19)
     })
   })
 

@@ -15,10 +15,6 @@ const HELP_LINES = [
   '4. `viewport_set` or `canvas_open` when a human needs to review the board',
   '5. `export_canvas({ format: "png" | "svg" | "json" })` when you need an artifact',
   '',
-  'Color guidance:',
-  '- Use semantic color families instead of ad-hoc hex values when the board has stable categories.',
-  '- Prefer `palette_set` first when you know the diagram will use repeated states such as plan A/B/C or system/user/error.',
-  '',
   'Common starting points:',
   '- Architecture or flow: `annotate_batch` with boxes and arrows',
   '- Existing board review: `canvas_open`, then `annotate` for comments',
@@ -38,7 +34,6 @@ export function buildDrawDiagramPrompt(goal: string, diagramType?: string): stri
     `Create a whiteboard diagram for this goal: ${goal}`,
     typeLine,
     'Start by creating or selecting a canvas, then lay out the main entities or steps with annotate_batch.',
-    'Prefer semantic palette keys if the diagram has repeated categories or states.',
     'Inspect the canvas after each major draw step and export only after the structure is stable.',
   ].join('\n')
 }

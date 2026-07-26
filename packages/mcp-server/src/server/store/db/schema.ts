@@ -57,12 +57,6 @@ interface VersionsTable {
   createdAt: Timestamp
 }
 
-interface PaletteTable {
-  workspaceId: string
-  key: string
-  value: string
-}
-
 interface InstalledLibrariesTable {
   workspaceId: string
   url: string
@@ -98,7 +92,6 @@ export interface DatabaseSchema {
   canvases: CanvasesTable
   branches: BranchesTable
   versions: VersionsTable
-  palette: PaletteTable
   installed_libraries: InstalledLibrariesTable
   user_libraries: UserLibrariesTable
   user_library_metadata: UserLibraryMetadataTable

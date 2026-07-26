@@ -30,7 +30,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   export_canvas: { profile: READ_ONLY, title: 'Export canvas (png/svg/json)' },
   list_groups: { profile: READ_ONLY, title: 'List element groups' },
   template_list: { profile: READ_ONLY, title: 'List built-in templates' },
-  palette_get: { profile: READ_ONLY, title: 'Get palette entries' },
   user_library_list: { profile: READ_ONLY, title: 'List user libraries' },
   user_library_metadata_get: { profile: READ_ONLY, title: 'Get user library metadata' },
   library_list_items: { profile: READ_ONLY, title: 'List library items' },
@@ -44,7 +43,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   delete_element: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete element' },
   delete_elements: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete multiple elements' },
   delete_group: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete element group' },
-  palette_delete: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete palette entries' },
   library_uninstall: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Uninstall library' },
   user_library_remove: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Remove user library' },
   user_library_metadata_delete: {
@@ -65,7 +63,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   },
   reorder_elements: { profile: MUTATING_IDEMPOTENT, title: 'Reorder elements (front/back)' },
   viewport_set: { profile: MUTATING_IDEMPOTENT, title: 'Set browser viewport' },
-  palette_set: { profile: MUTATING_IDEMPOTENT, title: 'Set palette entries' },
   user_library_metadata_set: { profile: MUTATING_IDEMPOTENT, title: 'Set user library metadata' },
   assign_to_group: { profile: MUTATING_IDEMPOTENT, title: 'Assign elements to group' },
   update_frame_members: { profile: MUTATING_IDEMPOTENT, title: 'Update frame members' },

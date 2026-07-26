@@ -85,16 +85,6 @@ export const migration: Migration = {
       .execute()
 
     await db.schema
-      .createTable('palette')
-      .addColumn('workspaceId', 'text', (c) =>
-        c.notNull().references('workspaces.id').onDelete('cascade'),
-      )
-      .addColumn('key', 'text', (c) => c.notNull())
-      .addColumn('value', 'text', (c) => c.notNull())
-      .addPrimaryKeyConstraint('palette_pk', ['workspaceId', 'key'])
-      .execute()
-
-    await db.schema
       .createTable('installed_libraries')
       .addColumn('workspaceId', 'text', (c) =>
         c.notNull().references('workspaces.id').onDelete('cascade'),
@@ -134,7 +124,6 @@ export const migration: Migration = {
     await db.schema.dropTable('user_library_metadata').execute()
     await db.schema.dropTable('user_libraries').execute()
     await db.schema.dropTable('installed_libraries').execute()
-    await db.schema.dropTable('palette').execute()
     await db.schema.dropTable('versions').execute()
     await db.schema.dropTable('branches').execute()
     await db.schema.dropTable('canvases').execute()

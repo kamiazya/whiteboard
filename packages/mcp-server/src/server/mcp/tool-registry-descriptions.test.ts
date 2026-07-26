@@ -57,11 +57,6 @@ import {
   userLibrarySaveInputShape,
 } from './tools/library.js'
 import { loadImageInputShape } from './tools/load.js'
-import {
-  paletteDeleteInputShape,
-  paletteGetInputShape,
-  paletteSetInputShape,
-} from './tools/palette.js'
 import { createPairingLinkInputShape } from './tools/pairing-link.js'
 import { insertTemplateInputShape, listTemplatesInputShape } from './tools/template.js'
 import {
@@ -82,9 +77,6 @@ const REGISTERED_INPUT_SHAPES: Record<string, z.ZodRawShape> = {
   load_image: loadImageInputShape,
   annotate: annotateInputShape,
   annotate_batch: annotateBatchInputShape,
-  palette_get: paletteGetInputShape,
-  palette_set: paletteSetInputShape,
-  palette_delete: paletteDeleteInputShape,
   export_svg: exportSvgInputShape,
   export_canvas: exportCanvasInputShape,
   viewport_set: viewportSetInputShape,
@@ -176,6 +168,6 @@ describe('registered tool inputSchema descriptions', () => {
   it('covers every tool registered in tool-registration.ts (guards against a silently-skipped new tool)', () => {
     // Kept in sync manually with the `inputSchema:` count in tool-registration.ts.
     // A mismatch here means a new tool was registered without adding it above.
-    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(48)
+    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(45)
   })
 })

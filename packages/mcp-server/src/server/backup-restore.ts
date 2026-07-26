@@ -8,7 +8,7 @@ import { dirname, join, resolve, sep } from 'node:path'
 //   <data>/whiteboard.db                                   libsql DB
 //                                                          (workspaces, canvases, versions
 //                                                           metadata + frontiers, branches,
-//                                                           palette, libraries, runtime)
+//                                                           libraries, runtime)
 //   <data>/<workspaceId>/files/<fileId>.<ext>              binary file blobs (image attachments)
 //   <data>/blobs/<workspaceId>/canvas/<canvasId>.loro      Loro canvas snapshot
 //   <data>/blobs/<workspaceId>/versions/<versionId>.png    optional version thumbnail

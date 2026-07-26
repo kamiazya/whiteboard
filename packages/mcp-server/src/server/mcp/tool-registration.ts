@@ -145,15 +145,6 @@ import {
 } from './tools/library.js'
 import { loadImageInputShape, loadImageOutputSchema, loadImageTool } from './tools/load.js'
 import {
-  paletteDeleteInputShape,
-  paletteDeleteTool,
-  paletteGetInputShape,
-  paletteGetTool,
-  paletteOutputSchema,
-  paletteSetInputShape,
-  paletteSetTool,
-} from './tools/palette.js'
-import {
   buildPairingLinkText,
   createPairingLinkInputShape,
   createPairingLinkOutputSchema,
@@ -174,7 +165,7 @@ import {
 } from './tools/viewport.js'
 
 // A registered-tool entry, already bound to McpServer at construction time.
-// The array below is necessarily heterogeneous (48 different I/O generic
+// The array below is necessarily heterogeneous (45 different I/O generic
 // pairs), so this is the erased/existential form of each entry — but the
 // erasure happens only AFTER defineTool() below has type-checked the
 // handler against ToolHandlerReturn<O> for that specific entry.
@@ -237,9 +228,6 @@ export function registerAllTools(
   const exportCanvas = exportCanvasTool()
   const viewportTool = viewportSetTool()
   const autoLayoutTool = canvasAutoLayoutTool()
-  const paletteGet = paletteGetTool()
-  const paletteSet = paletteSetTool()
-  const paletteDelete = paletteDeleteTool()
   const libListTool = libraryListItemsTool()
   const libInsertTool = libraryInsertItemTool()
   const libInsertBatch = libraryInsertBatchTool()
@@ -366,43 +354,6 @@ export function registerAllTools(
             { canvasId, annotations, layout, dryRun, overlapThreshold, groupAs },
             client,
           ),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: paletteGet.name,
-      description: paletteGet.description,
-      inputSchema: paletteGetInputShape,
-      outputSchema: paletteOutputSchema,
-      handler: async ({ workspaceId }) => {
-        const result = await withDaemon((client) => paletteGet.execute({ workspaceId }, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: paletteSet.name,
-      description: paletteSet.description,
-      inputSchema: paletteSetInputShape,
-      outputSchema: paletteOutputSchema,
-      handler: async ({ workspaceId, entries }) => {
-        const result = await withDaemon((client) =>
-          paletteSet.execute({ workspaceId, entries }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: paletteDelete.name,
-      description: paletteDelete.description,
-      inputSchema: paletteDeleteInputShape,
-      outputSchema: paletteOutputSchema,
-      handler: async ({ workspaceId, keys }) => {
-        const result = await withDaemon((client) =>
-          paletteDelete.execute({ workspaceId, keys }, client),
         )
         return structuredJsonResult(result)
       },
