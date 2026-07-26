@@ -5,5 +5,6 @@ export default defineProject({
     name: 'canvas-render-node',
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    exclude: ['src/**/*.browser.test.ts'],
   },
 })
