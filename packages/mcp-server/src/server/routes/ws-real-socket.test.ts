@@ -85,8 +85,14 @@ const { handleWsUpgrade, setOnPersistedForTests } = await import('./ws.js')
 // code path that still reads the frozen module-load DATA_DIR instead of the
 // getDataDir() seam would write here too, but the final fakeHomeDir
 // assertion alone can't see it — comparing this snapshot against the same
-// listing in afterAll closes that gap.
-const initialFakeHomeDirSnapshotAfterModuleLoad = readdirSync(initialFakeHomeDir).sort()
+// listing in afterAll closes that gap. `recursive: true` is required: a
+// leaking write lands *inside* `.whiteboard` (e.g. `.whiteboard/whiteboard.db`
+// or `.whiteboard/blobs/...`), which a non-recursive listing of
+// initialFakeHomeDir would never see since `.whiteboard` itself is expected
+// to already exist in both snapshots.
+const initialFakeHomeDirSnapshotAfterModuleLoad = readdirSync(initialFakeHomeDir, {
+  recursive: true,
+}).sort()
 
 // Starts a real HTTP + WebSocket server bound to an ephemeral loopback port
 // and wired to handleWsUpgrade, resolving once it is listening.
@@ -169,8 +175,9 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     // Nothing wrote to initialFakeHomeDir beyond the eager module-load
     // creation captured above, across the whole suite — a stronger check
     // than the fakeHomeDir-only assertion below, which never inspects this
-    // directory.
-    expect(readdirSync(initialFakeHomeDir).sort()).toEqual(
+    // directory. Recursive listing so a leak nested under `.whiteboard`
+    // (rather than a new direct child of initialFakeHomeDir) is caught too.
+    expect(readdirSync(initialFakeHomeDir, { recursive: true }).sort()).toEqual(
       initialFakeHomeDirSnapshotAfterModuleLoad,
     )
     await rm(initialFakeHomeDir, { recursive: true, force: true })
