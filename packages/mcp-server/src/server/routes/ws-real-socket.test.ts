@@ -18,7 +18,7 @@
 // path that resolves the home dir directly (bypassing the getDataDir() seam)
 // would still visibly create a `.whiteboard` directory under the fake home.
 
-import { existsSync, mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -78,6 +78,15 @@ const { setDataDirForTests, resetDataDirForTests } = await import('../../shared/
 const { clearCache } = await import('../store/doc-cache.js')
 const { loadCanvas } = await import('../store/canvas-store.js')
 const { handleWsUpgrade, setOnPersistedForTests } = await import('./ws.js')
+
+// Snapshot of initialFakeHomeDir's contents immediately after the
+// data-dir-secure import above resolves its module-load DATA_DIR (the only
+// expected write: canWriteDir's eager `mkdirSync` of `.whiteboard`). Any
+// code path that still reads the frozen module-load DATA_DIR instead of the
+// getDataDir() seam would write here too, but the final fakeHomeDir
+// assertion alone can't see it — comparing this snapshot against the same
+// listing in afterAll closes that gap.
+const initialFakeHomeDirSnapshotAfterModuleLoad = readdirSync(initialFakeHomeDir).sort()
 
 // Starts a real HTTP + WebSocket server bound to an ephemeral loopback port
 // and wired to handleWsUpgrade, resolving once it is listening.
@@ -157,6 +166,13 @@ function waitForPersisted(workspaceId: string, slug: string): Promise<void> {
 
 describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
   afterAll(async () => {
+    // Nothing wrote to initialFakeHomeDir beyond the eager module-load
+    // creation captured above, across the whole suite — a stronger check
+    // than the fakeHomeDir-only assertion below, which never inspects this
+    // directory.
+    expect(readdirSync(initialFakeHomeDir).sort()).toEqual(
+      initialFakeHomeDirSnapshotAfterModuleLoad,
+    )
     await rm(initialFakeHomeDir, { recursive: true, force: true })
   })
 
