@@ -45,6 +45,7 @@ describe('docs/ contract', () => {
     // of requiring an exact directory-name match.
     const docMentionTokenForPackageDir: Record<string, string> = {
       'packages/mcp-server': 'mcp',
+      'packages/canvas-model': 'canvas-model',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',
     }
