@@ -52,6 +52,10 @@
   `vitest.config.ts`).
 - Unit tests for tree operations, alias derivation, segment validation,
   sibling conflict detection, and CRDT merge behavior.
+- `createAliasResolver` integration tests: confirms the bridge works
+  end-to-end with `resolveReferences` from canvas-codec (wikiLink + embed).
+- `extractBacklinks` tests: walks all mdast node types (paragraph, heading,
+  blockquote, list, table, nested phrasing) with dedup assertion.
 
 ## Common mistakes (append as review finds them)
 
