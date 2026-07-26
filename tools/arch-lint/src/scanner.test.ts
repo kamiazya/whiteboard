@@ -22,6 +22,16 @@ describe('scanSourceForBoundaryViolations', () => {
     expect(violationKinds("import { injectable } from 'inversify'")).toContain('inversify-import')
   })
 
+  it('flags a loro-crdt import', () => {
+    expect(violationKinds("import { LoroDoc } from 'loro-crdt'")).toContain('loro-crdt-import')
+  })
+
+  it('flags a loro-crdt subpath import', () => {
+    expect(violationKinds("import { LoroDoc } from 'loro-crdt/base64'")).toContain(
+      'loro-crdt-import',
+    )
+  })
+
   it('flags a node builtin in export * from', () => {
     expect(violationKinds("export * from 'node:path'")).toContain('node-builtin-import')
   })
@@ -64,6 +74,13 @@ describe('scanSourceForBoundaryViolations', () => {
 
   it('does not flag a property access with a banned-name key', () => {
     expect(violationKinds('const x = { window: 1 }; const y = x.window')).toHaveLength(0)
+  })
+
+  it('flags a banned global used as the object of a member access', () => {
+    expect(violationKinds('const y = window.location.href')).toContain('dom-global')
+    expect(violationKinds('const t = document.title')).toContain('dom-global')
+    expect(violationKinds('const e = process.env.FOO')).toContain('node-ambient-global')
+    expect(violationKinds('const b = Buffer.from("x")')).toContain('node-ambient-global')
   })
 
   it('passes clean on compliant source with no banned constructs', () => {

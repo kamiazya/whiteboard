@@ -4,6 +4,7 @@ import ts from 'typescript'
 export type BoundaryViolationKind =
   | 'node-builtin-import'
   | 'inversify-import'
+  | 'loro-crdt-import'
   | 'dom-global'
   | 'node-ambient-global'
 
@@ -84,14 +85,17 @@ function collectBannedGlobalIdentifierUsages(
   const violations: BoundaryViolation[] = []
 
   function visit(node: ts.Node): void {
-    // A property access like `foo.window` or a declared local named
+    // A property access like `foo.window` (banned name as the *property*,
+    // i.e. the right side of the access) or a declared local named
     // `process` is not a use of the ambient global — only a bare identifier
-    // reference (not the name being declared, and not the right side of a
-    // member access) counts.
+    // reference (not the name being declared, and not the property side of
+    // a member access) counts. `window.location.href` and `process.env.FOO`
+    // must still be flagged: there `window`/`process` is the *object* side
+    // (`.expression`), not the `.name`, of the PropertyAccessExpression.
     if (
       ts.isIdentifier(node) &&
       bannedNames.has(node.text) &&
-      !ts.isPropertyAccessExpression(node.parent) &&
+      !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node) &&
       !(
         (ts.isVariableDeclaration(node.parent) ||
           ts.isFunctionDeclaration(node.parent) ||
@@ -125,6 +129,9 @@ export function scanSourceForBoundaryViolations(
     }
     if (specifier === 'inversify') {
       violations.push({ kind: 'inversify-import', name: specifier, line })
+    }
+    if (specifier === 'loro-crdt' || specifier.startsWith('loro-crdt/')) {
+      violations.push({ kind: 'loro-crdt-import', name: specifier, line })
     }
   }
 
