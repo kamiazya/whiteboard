@@ -2,6 +2,7 @@
   "name": "@kamiazya/whiteboard-canvas-model",
   "private": true,
   "version": "0.0.0",
+  "license": "Apache-2.0",
   "description": "OpenCanvas data-model Zod schemas (meta/facets/spatial/markdown/workspace-tree/mdast subset). Package name chosen to match the monorepo's per-concern packages/* layout (sibling to canvas-viewer); \"canvas-model\" reflects that this is the pure data-model contract, not rendering or serialization.",
   "type": "module",
   "main": "./src/index.ts",
