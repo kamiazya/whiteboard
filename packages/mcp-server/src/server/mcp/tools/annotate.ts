@@ -460,9 +460,9 @@ function appendSingleAnnotation(
   for (const [key, value] of Object.entries(fields satisfies AnnotationFields)) {
     map.set(key, value as Parameters<LoroMap['set']>[1])
   }
-  // For coords:'parent', persist parent-follow metadata. resolveParentedElements
-  // re-resolves it before render/export, while x/y keep the latest absolute
-  // fallback if the parent disappears.
+  // For coords:'parent', persist parent-follow metadata alongside the absolute
+  // x/y fallback. OpenCanvas migration: render-time parent re-resolution was
+  // removed, so x/y is currently authoritative until the rewrite restores it.
   if (resolved.parentId !== undefined) {
     map.set('parentId', resolved.parentId)
     map.set('relX', resolved.relX as number)

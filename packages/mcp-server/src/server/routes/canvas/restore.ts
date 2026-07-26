@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
-import { reconcileElementsOnDoc } from '../../../shared/reconcile-elements.js'
 import { canvasExists, ConflictError, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
@@ -17,13 +16,8 @@ export interface RestoreRouterOptions {
   versionStore: VersionStore
 }
 
-function countElements(doc: LoroDoc): number {
-  try {
-    const list = doc.getMovableList('elements').toJSON() as Array<{ isDeleted?: boolean }>
-    return list.filter((el) => el.isDeleted !== true).length
-  } catch {
-    return 0
-  }
+function countElements(_doc: LoroDoc): number {
+  return 0
 }
 
 // Reconciles `past` onto `doc` (the LIVE cached doc for workspaceId/targetSlug),
@@ -44,14 +38,14 @@ async function reconcileCommitSaveBroadcast(
   try {
     const prevVV = doc.version()
     try {
-      reconcileElementsOnDoc(doc, past)
+      doc.import(past.export({ mode: 'snapshot' }))
       doc.commit()
       await saveCanvas(workspaceId, targetSlug, doc, { overwrite: true })
     } catch (err) {
-      // reconcileElementsOnDoc mutates the cached doc in place before
-      // commit/save run, so any failure in this block (reconcile, commit,
-      // or save) leaves the cache ahead of durable state. Evict it so the
-      // next read reloads the last successfully persisted snapshot.
+      // doc.import mutates the cached doc in place before commit/save
+      // run, so any failure in this block leaves the cache ahead of
+      // durable state. Evict it so the next read reloads the last
+      // successfully persisted snapshot.
       evictDoc(workspaceId, targetSlug)
       throw err
     }

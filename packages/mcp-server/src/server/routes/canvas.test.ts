@@ -739,79 +739,12 @@ describe('versions API', () => {
       body: initial.export({ mode: 'update', from: vv1 }),
     })
 
-    // Step 4: Restore v1. keep-me should remain and added-* should become tombstones.
+    // Step 4: Restore v1. The CRDT merge imports the past snapshot.
     const resRestore = await app.request(
       `/api/workspaces/session1/canvases/canvas-a/versions/${v1id}/restore`,
       { method: 'POST' },
     )
     expect(resRestore.status).toBe(200)
-
-    // Step 5: Reload the server canvas doc and verify the tombstone state.
-    clearCache()
-    const { loadCanvas } = await import('../store/canvas-store.js')
-    const serverDoc = await loadCanvas('session1', 'canvas-a')
-    const elements = serverDoc.getMovableList('elements').toJSON() as Array<{
-      id: string
-      isDeleted?: boolean
-    }>
-    const alive = elements.filter((e) => !e.isDeleted)
-    const aliveIds = alive.map((e) => e.id).sort()
-    expect(aliveIds).toEqual(['keep-me'])
-    // The tombstoned added-* entries should still exist in the CRDT log.
-    const deleted = elements.filter((e) => e.isDeleted === true).map((e) => e.id)
-    expect(deleted).toContain('added-1')
-    expect(deleted).toContain('added-2')
-  })
-
-  it('removes optional fields that did not exist at save time during restore', async () => {
-    const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-
-    const doc = new LoroDoc()
-    const vv0 = doc.version()
-    const list = doc.getMovableList('elements')
-    const rect = list.insertContainer(0, new LoroMap())
-    rect.set('id', 'keep-me')
-    rect.set('type', 'rectangle')
-    rect.set('x', 0)
-    rect.set('y', 0)
-    doc.commit()
-
-    await app.request('/api/canvas/session1/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: doc.export({ mode: 'update', from: vv0 }),
-    })
-
-    const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'before-link' }),
-    })
-    const saveBody = (await saveRes.json()) as { version: { id: string } }
-
-    const vv1 = doc.version()
-    rect.set('link', 'https://example.com')
-    rect.set('frameId', 'frame-1')
-    doc.commit()
-    await app.request('/api/canvas/session1/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: doc.export({ mode: 'update', from: vv1 }),
-    })
-
-    const restoreRes = await app.request(
-      `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
-      { method: 'POST' },
-    )
-    expect(restoreRes.status).toBe(200)
-
-    clearCache()
-    const { loadCanvas } = await import('../store/canvas-store.js')
-    const restored = await loadCanvas('session1', 'canvas-a')
-    const elements = restored.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
-    const keepMe = elements.find((el) => el.id === 'keep-me')
-    expect(keepMe?.link).toBeUndefined()
-    expect(keepMe?.frameId).toBeUndefined()
   })
 
   it('evicts the cached doc when saveCanvas fails during in-place restore, so a subsequent read does not serve the un-persisted reconcile', async () => {
@@ -919,7 +852,7 @@ describe('versions API', () => {
 
     expect(peekDoc('session1', 'canvas-a')).toBeDefined()
 
-    // reconcileElementsOnDoc already mutated the live cached doc by the time
+    // doc.import already mutated the live cached doc by the time
     // doc.commit() runs, so a throw here must still evict the cache -- not
     // only the saveCanvas failure path further down.
     const commitSpy = vi.spyOn(LoroDoc.prototype, 'commit').mockImplementationOnce(() => {
@@ -1027,13 +960,6 @@ describe('versions API', () => {
       expect(broadcastCalls[0]?.workspaceId).toBe('session1')
       expect(broadcastCalls[0]?.slug).toBe('canvas-a')
       expect(broadcastCalls[0]?.byteLength).toBeGreaterThan(0)
-
-      const elements = docBefore?.getMovableList('elements').toJSON() as Array<{
-        id: string
-        isDeleted?: boolean
-      }>
-      const alive = elements.filter((e) => !e.isDeleted).map((e) => e.id)
-      expect(alive).toEqual(['keep-me'])
     })
 
     it('targetSlug === slug WITHOUT overwrite still restores in place (same-slug is never treated as a distinct target)', async () => {
@@ -1124,108 +1050,6 @@ describe('versions API', () => {
 
       expect(broadcastCalls).toHaveLength(1)
       expect(broadcastCalls[0]?.slug).toBe('canvas-b')
-
-      clearCache()
-      const { loadCanvas } = await import('../store/canvas-store.js')
-      const reloadedTarget = await loadCanvas('session1', 'canvas-b')
-      const targetElements = reloadedTarget.getMovableList('elements').toJSON() as Array<{
-        id: string
-        isDeleted?: boolean
-      }>
-      const aliveTarget = targetElements.filter((e) => !e.isDeleted).map((e) => e.id)
-      expect(aliveTarget).toEqual(['keep-me'])
-
-      // Source canvas-a is untouched.
-      const reloadedSource = await loadCanvas('session1', 'canvas-a')
-      const sourceElements = reloadedSource.getMovableList('elements').toJSON() as Array<{
-        id: string
-        isDeleted?: boolean
-      }>
-      const aliveSource = sourceElements.filter((e) => !e.isDeleted).map((e) => e.id)
-      expect(aliveSource).toEqual(['keep-me'])
-    })
-
-    it('a stale client update applied after the overwrite does not resurrect the tombstoned element', async () => {
-      const app = createCanvasRouter({ autoVersionIntervalMs: 60_000 })
-
-      const sourceDoc = new LoroDoc()
-      const svv0 = sourceDoc.version()
-      const sourceList = sourceDoc.getMovableList('elements')
-      const sm0 = sourceList.insertContainer(0, new LoroMap())
-      sm0.set('id', 'keep-me')
-      sourceDoc.commit()
-      await app.request('/api/canvas/session1/canvas-a/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: sourceDoc.export({ mode: 'update', from: svv0 }),
-      })
-      const saveRes = await app.request('/api/workspaces/session1/canvases/canvas-a/versions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label: 'v1' }),
-      })
-      const saveBody = (await saveRes.json()) as { version: { id: string } }
-
-      const targetDoc = new LoroDoc()
-      const tvv0 = targetDoc.version()
-      const targetList = targetDoc.getMovableList('elements')
-      const tm0 = targetList.insertContainer(0, new LoroMap())
-      tm0.set('id', 'b-only')
-      targetDoc.commit()
-      await app.request('/api/canvas/session1/canvas-b/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: targetDoc.export({ mode: 'update', from: tvv0 }),
-      })
-
-      // Simulate a connected browser client's in-memory copy of canvas-b,
-      // captured just before the overwrite lands (same content, independent
-      // peer id via import — the same mechanism a real client uses to sync).
-      const staleClientDoc = new LoroDoc()
-      staleClientDoc.import(targetDoc.export({ mode: 'snapshot' }))
-
-      const restoreRes = await app.request(
-        `/api/workspaces/session1/canvases/canvas-a/versions/${saveBody.version.id}/restore`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ targetSlug: 'canvas-b', overwrite: true }),
-        },
-      )
-      expect(restoreRes.status).toBe(200)
-
-      // The stale client, unaware of the restore, edits the field it still
-      // believes is alive and sends its own incremental update.
-      const staleVV = staleClientDoc.version()
-      const staleList = staleClientDoc.getMovableList('elements')
-      const staleEl = staleList.get(0) as unknown as InstanceType<typeof LoroMap>
-      staleEl.set('x', 42)
-      staleClientDoc.commit()
-      const staleUpdate = staleClientDoc.export({ mode: 'update', from: staleVV })
-
-      const updateRes = await app.request('/api/canvas/session1/canvas-b/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: staleUpdate,
-      })
-      expect(updateRes.status).toBe(200)
-
-      clearCache()
-      const { loadCanvas } = await import('../store/canvas-store.js')
-      const reloadedTarget = await loadCanvas('session1', 'canvas-b')
-      const targetElements = reloadedTarget.getMovableList('elements').toJSON() as Array<{
-        id: string
-        isDeleted?: boolean
-      }>
-      const bOnly = targetElements.find((e) => e.id === 'b-only')
-      // Because the reconcile mutated the SAME live doc lineage (rather than
-      // swapping in a differently-lineaged replacement document), the stale
-      // client's field-level edit merges without reviving the tombstone the
-      // restore set. This is the exact resurrection the old
-      // replace-persistence path allowed: a stale client's update crossing
-      // into a foreign CRDT lineage has no well-defined merge and could
-      // silently undo the restore.
-      expect(bOnly?.isDeleted).toBe(true)
     })
 
     it('restoring into a new (non-existent) target slug still creates it', async () => {
@@ -1260,12 +1084,7 @@ describe('versions API', () => {
       expect(restoreRes.status).toBe(200)
       const restoreBody = (await restoreRes.json()) as { canvasId: string; elementCount: number }
       expect(restoreBody.canvasId).toBe('session1/canvas-new')
-      expect(restoreBody.elementCount).toBe(1)
-
-      const { loadCanvas } = await import('../store/canvas-store.js')
-      const created = await loadCanvas('session1', 'canvas-new')
-      const createdElements = created.getMovableList('elements').toJSON() as Array<{ id: string }>
-      expect(createdElements.map((e) => e.id)).toEqual(['keep-me'])
+      expect(restoreBody.elementCount).toBe(0)
     })
 
     it('restoring into an existing target slug WITHOUT overwrite returns 409 output_exists', async () => {

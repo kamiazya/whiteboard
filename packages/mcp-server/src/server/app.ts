@@ -8,7 +8,6 @@ import { bodyLimit } from 'hono/body-limit'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { detectMergeBadges } from '../shared/merge-engine.js'
-import { reconcileElementsOnDoc } from '../shared/reconcile-elements.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createExcalidrawMcpServer } from './mcp/index.js'
@@ -755,7 +754,7 @@ export function createApp(options: AppOptions) {
             'tipFrontiers could not be checked out against the live document',
           )
           const prevVV = doc.version()
-          reconcileElementsOnDoc(doc, clone)
+          doc.import(clone.export({ mode: 'snapshot' }))
           doc.commit()
           await saveCanvas(sid, slug, doc, { overwrite: true })
           const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
@@ -931,7 +930,7 @@ export function createApp(options: AppOptions) {
           const latest = await loadCanvasBranches(sid, slug)
           if (latest.head === into && sourceTip && sourceTip.length > 0) {
             const prevVV = liveDoc.version()
-            reconcileElementsOnDoc(liveDoc, previewDoc)
+            liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
             liveDoc.commit()
             await saveCanvas(sid, slug, liveDoc, { overwrite: true })
             const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
@@ -956,7 +955,7 @@ export function createApp(options: AppOptions) {
               // Reconcile and broadcast the live doc to match the target preview.
               // This is already done when HEAD===target, but HEAD===source needs it here.
               const prevVV = liveDoc.version()
-              reconcileElementsOnDoc(liveDoc, previewDoc)
+              liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
               liveDoc.commit()
               await saveCanvas(sid, slug, liveDoc, { overwrite: true })
               const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array

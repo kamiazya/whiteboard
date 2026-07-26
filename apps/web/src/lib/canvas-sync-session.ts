@@ -7,11 +7,7 @@ import type {
   ExcalidrawImperativeAPI,
 } from '@excalidraw/excalidraw/types'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
-import {
-  exportResponseMessageSchema,
-  resolveParentedElements,
-  validateLoroRawElements,
-} from '@kamiazya/whiteboard-mcp/browser-shared'
+import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, UndoManager } from 'loro-crdt'
 import type { z } from 'zod'
@@ -213,8 +209,9 @@ export function createCanvasSyncSession(
     const chosenRaw: unknown[] =
       movable.length > 0 ? movable : targetDoc.getList('elements').toJSON()
 
-    const validated = validateLoroRawElements(chosenRaw)
-    const elements = resolveParentedElements(validated) as unknown as ExcalidrawElement[]
+    // OpenCanvas migration: raw-element validation and parent-follow resolution
+    // were removed; Excalidraw's restoreElements sanitizes the raw scene downstream.
+    const elements = chosenRaw as unknown as ExcalidrawElement[]
 
     const missingIds: string[] = []
     for (const el of elements) {

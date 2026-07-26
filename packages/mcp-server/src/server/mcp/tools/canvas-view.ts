@@ -1,8 +1,5 @@
 import { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import { resolveParentedElements } from '../../../shared/resolve-parented-elements.js'
-import { loroRawElementSchema, validateLoroRawElements } from '../../../shared/loro-raw-element.js'
-import { getLogger } from '../../log.js'
 import { loadCanvasFiles } from '../../export/load-canvas-files.js'
 import type { DaemonClient } from '../daemon-client.js'
 import { parseCanvasId } from './canvas-id.js'
@@ -23,9 +20,12 @@ const canvasViewFileSchema = z.object({
   created: z.number(),
 })
 
+// OpenCanvas migration: the Excalidraw raw-element schema was removed. Elements
+// are passed through as opaque records; the viewer widget's parseViewerScene is
+// the strict boundary that validates their shape.
 const canvasViewSceneSchema = z
   .object({
-    elements: z.array(loroRawElementSchema),
+    elements: z.array(z.record(z.string(), z.unknown())),
     files: z.record(z.string(), canvasViewFileSchema),
   })
   .strict()
@@ -68,12 +68,7 @@ export function canvasViewTool() {
       const doc = new LoroDoc()
       doc.import(bytes)
       const raw = doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
-      const log = getLogger('canvas-view')
-      const validated = validateLoroRawElements(raw, ({ index, error }) => {
-        log.warning({ index, reason: error.issues[0]?.message }, 'dropped corrupt element')
-      })
-      const resolved = resolveParentedElements(validated)
-      const elements = resolved.filter((el) => el.isDeleted !== true)
+      const elements = raw.filter((el) => el.isDeleted !== true)
 
       // Mirror headless-export.ts's buildExportScene: image elements only
       // carry a fileId, so the referenced binaries must be loaded and

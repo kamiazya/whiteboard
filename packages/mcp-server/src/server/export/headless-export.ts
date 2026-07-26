@@ -10,10 +10,6 @@
 
 import { applyMinFontPx } from '../../shared/min-font-px.js'
 import { embedExcalidrawScene } from '../../shared/png-embed-scene.js'
-import {
-  type ParentedElement,
-  resolveParentedElements,
-} from '../../shared/resolve-parented-elements.js'
 import { getDoc } from '../store/doc-cache.js'
 import {
   type HeadlessExportResult,
@@ -44,10 +40,11 @@ async function buildExportScene(
   options?: HeadlessCanvasExportOptions,
 ) {
   const doc = await getDoc(workspaceId, slug)
-  const rawElements = doc.getMovableList('elements').toJSON() as Array<Record<string, unknown>>
-  const elements = resolveParentedElements(
-    rawElements as unknown as ParentedElement[],
-  ) as unknown as Array<Record<string, unknown> & { id: string; type: string; isDeleted?: boolean }>
+  // OpenCanvas migration: parent-follow resolution was removed; elements are
+  // rendered from their persisted absolute x/y directly.
+  const elements = doc.getMovableList('elements').toJSON() as Array<
+    Record<string, unknown> & { id: string; type: string; isDeleted?: boolean }
+  >
   const liveElements = elements.filter((e) => e.isDeleted !== true)
   const sizedElements = applyMinFontPx(liveElements, options?.minFontPx)
   const referencedFileIds = new Set<string>()
