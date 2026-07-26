@@ -57,12 +57,6 @@ interface VersionsTable {
   createdAt: Timestamp
 }
 
-interface PaletteTable {
-  workspaceId: string
-  key: string
-  value: string
-}
-
 // Single-row key/value store for daemon-runtime markers (currentWorkspaceId,
 // daemonPid, daemonStartedAt, etc.). Keeps the FS clean of tiny dot-files.
 interface RuntimeTable {
@@ -76,6 +70,5 @@ export interface DatabaseSchema {
   canvases: CanvasesTable
   branches: BranchesTable
   versions: VersionsTable
-  palette: PaletteTable
   runtime: RuntimeTable
 }

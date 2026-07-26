@@ -22,9 +22,6 @@ function installFetchMock(state: SnapshotState) {
     if (u.endsWith('/exists')) {
       return new Response(JSON.stringify({ exists: state.exists ?? true }), { status: 200 })
     }
-    if (u.endsWith('/palette')) {
-      return new Response(JSON.stringify({ palette: {} }), { status: 200 })
-    }
     if (u.endsWith('/snapshot')) {
       return new Response(state.doc.export({ mode: 'snapshot' }), { status: 200 })
     }

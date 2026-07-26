@@ -26,9 +26,6 @@ describe('annotate_batch', () => {
       if (u.endsWith('/exists')) {
         return new Response(JSON.stringify({ exists: true }), { status: 200 })
       }
-      if (u.endsWith('/palette')) {
-        return new Response(JSON.stringify({ palette: {} }), { status: 200 })
-      }
       if (u.endsWith('/snapshot')) {
         return new Response(snapshot, { status: 200 })
       }
@@ -62,8 +59,8 @@ describe('annotate_batch', () => {
     )
 
     expect(res.elementIds).toHaveLength(3)
-    // 1 canvases GET (existence check) + 1 palette GET + 1 snapshot GET + 1 update POST
-    expect(fetchMock).toHaveBeenCalledTimes(4)
+    // 1 canvases GET (existence check) + 1 snapshot GET + 1 update POST
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(postedUpdate).not.toBeNull()
     expect(postedUpdate!.byteLength).toBeGreaterThan(0)
   })
@@ -75,7 +72,7 @@ describe('annotate_batch', () => {
     expect(res.elementIds).toEqual([])
   })
 
-  it('rejects an unknown canvasId before touching palette/snapshot/update endpoints', async () => {
+  it('rejects an unknown canvasId before touching snapshot/update endpoints', async () => {
     const { annotateBatchTool } = await import('./annotate-batch.js')
     const tool = annotateBatchTool()
     let touchedWriteEndpoint = false
@@ -723,86 +720,6 @@ describe('annotate_batch', () => {
       expect(postedUpdate).toBeNull()
       expect(res.placements).toHaveLength(2)
       expect(res.overlaps).toEqual([expect.objectContaining({ a: 0, b: 1 })])
-    })
-  })
-
-  describe('unknownPaletteKeys', () => {
-    it('reports unknown dotted color tokens absent from the palette', async () => {
-      const { annotateBatchTool } = await import('./annotate-batch.js')
-      const tool = annotateBatchTool()
-      const res = await tool.execute(
-        {
-          canvasId: 'sid/slug',
-          annotations: [
-            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
-            {
-              type: 'rectangle',
-              target: { x: 100, y: 0 },
-              coords: 'absolute',
-              backgroundColor: 'role.server',
-            },
-          ],
-        },
-        client,
-      )
-      expect(res.unknownPaletteKeys).toEqual(expect.arrayContaining(['role.client', 'role.server']))
-      expect(res.unknownPaletteKeys).toHaveLength(2)
-    })
-
-    it('deduplicates repeated unknown tokens', async () => {
-      const { annotateBatchTool } = await import('./annotate-batch.js')
-      const tool = annotateBatchTool()
-      const res = await tool.execute(
-        {
-          canvasId: 'sid/slug',
-          annotations: [
-            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
-            {
-              type: 'rectangle',
-              target: { x: 100, y: 0 },
-              coords: 'absolute',
-              color: 'role.client',
-            },
-          ],
-        },
-        client,
-      )
-      expect(res.unknownPaletteKeys).toEqual(['role.client'])
-    })
-
-    it('omits unknownPaletteKeys when all tokens resolve', async () => {
-      fetchMock.mockImplementation(async (url: string | URL, init?: { body?: unknown }) => {
-        const u = url.toString()
-        if (u.endsWith('/exists')) {
-          return new Response(JSON.stringify({ exists: true }), { status: 200 })
-        }
-        if (u.endsWith('/palette')) {
-          return new Response(JSON.stringify({ palette: { 'role.client': '#ff0000' } }), {
-            status: 200,
-          })
-        }
-        if (u.endsWith('/snapshot')) {
-          const emptyDoc = new LoroDoc()
-          return new Response(emptyDoc.export({ mode: 'snapshot' }), { status: 200 })
-        }
-        if (u.endsWith('/update')) {
-          postedUpdate = new Uint8Array(init!.body as ArrayBuffer)
-          return new Response(null, { status: 204 })
-        }
-        throw new Error(`Unexpected fetch: ${u}`)
-      })
-      const { annotateBatchTool } = await import('./annotate-batch.js')
-      const tool = annotateBatchTool()
-      const res = await tool.execute(
-        {
-          canvasId: 'sid/slug',
-          annotations: [
-            { type: 'rectangle', target: { x: 0, y: 0 }, coords: 'absolute', color: 'role.client' },
-          ],
-        },
-        client,
-      )
-      expect(res.unknownPaletteKeys).toBeUndefined()
     })
   })
 

@@ -269,9 +269,6 @@ describe('template tools', () => {
       if (textUrl.endsWith('/exists')) {
         return new Response(JSON.stringify({ exists: true }), { status: 200 })
       }
-      if (textUrl.endsWith('/palette')) {
-        return new Response(JSON.stringify({ palette: {} }), { status: 200 })
-      }
       if (textUrl.endsWith('/snapshot')) {
         return new Response(snapshot, { status: 200 })
       }

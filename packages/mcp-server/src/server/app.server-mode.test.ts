@@ -547,7 +547,7 @@ describe('app — server-mode composition', () => {
     expect(res.headers.get('WWW-Authenticate')).toBeNull()
   })
 
-  // Previously-unguarded routes: export, viewport, status, libraries, palette
+  // Previously-unguarded routes: export, viewport, status
   describe('server-mode: previously-unguarded routes are auth-gated', () => {
     it('POST /api/canvas/:wid/:slug/export → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['canvas:write']))
@@ -641,63 +641,6 @@ describe('app — server-mode composition', () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
       const res = await app.request('/api/canvas/w1/canvas-a/client-count')
       expect(res.status).toBe(401)
-    })
-
-    it('GET /api/workspaces/:wid/libraries → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries')
-      expect(res.status).toBe(401)
-    })
-
-    it('GET /api/workspaces/:wid/libraries → 403 with canvas:read only (requires workspace:read)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/workspaces/:wid/libraries → auth passes with workspace:read', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).not.toBe(401)
-      expect(res.status).not.toBe(403)
-    })
-
-    it('POST /api/workspaces/:wid/libraries → 403 with workspace:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({ url: 'https://example.com/lib.json' }),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/workspaces/:wid/palette → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/palette')
-      expect(res.status).toBe(401)
-    })
-
-    it('GET /api/workspaces/:wid/palette → 403 with canvas:write only (requires workspace:read)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/workspaces/w1/palette', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('PUT /api/workspaces/:wid/palette → 403 with workspace:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/palette', {
-        method: 'PUT',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(403)
     })
 
     // Workspace write operations

@@ -24,7 +24,6 @@ import {
   OAUTH_AUTHZ_CORS_PATHS,
   OAUTH_AUTHZ_PATHS,
 } from './routes/oauth-authz.js'
-import { createPaletteRouter } from './routes/palette.js'
 import { createReconnectRouter } from './routes/reconnect.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
@@ -676,7 +675,6 @@ export function createApp(options: AppOptions) {
   app.route('/', createViewportRouter())
   app.route('/', createDebugRouter({ token }))
   app.route('/', createStatusRouter())
-  app.route('/', createPaletteRouter())
   // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
   // OAuth grant to a WS upgrade — server-mode's WS auth goes through its own
   // AsyncAuthStrategy and never needs this. Mounted even when no OAuth

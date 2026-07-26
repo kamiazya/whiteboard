@@ -85,16 +85,6 @@ export const migration: Migration = {
       .execute()
 
     await db.schema
-      .createTable('palette')
-      .addColumn('workspaceId', 'text', (c) =>
-        c.notNull().references('workspaces.id').onDelete('cascade'),
-      )
-      .addColumn('key', 'text', (c) => c.notNull())
-      .addColumn('value', 'text', (c) => c.notNull())
-      .addPrimaryKeyConstraint('palette_pk', ['workspaceId', 'key'])
-      .execute()
-
-    await db.schema
       .createTable('runtime')
       .addColumn('key', 'text', (c) => c.primaryKey())
       .addColumn('value', 'text')
@@ -104,7 +94,6 @@ export const migration: Migration = {
 
   async down(db: Kysely<unknown>): Promise<void> {
     await db.schema.dropTable('runtime').execute()
-    await db.schema.dropTable('palette').execute()
     await db.schema.dropTable('versions').execute()
     await db.schema.dropTable('branches').execute()
     await db.schema.dropTable('canvases').execute()

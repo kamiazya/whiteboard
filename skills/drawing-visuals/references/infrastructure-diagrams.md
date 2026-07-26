@@ -81,7 +81,7 @@ Even when using provider icons, keep the role legible through labels, legends, a
 
 ## Brand Adaptation
 
-- Apply company / product brand colors first through `palette_set`, headings, legends, and boundaries
+- Apply company / product brand colors through headings, legends, and boundaries
 - Do not force provider icons toward the brand if that hurts recognizability
 - If brand colors conflict with semantic colors, prioritize the semantic meaning for paths, security, trust boundaries, and similar elements
 - Use branding as a reading aid, not as decoration; it is safer in legends and frames than on the main path

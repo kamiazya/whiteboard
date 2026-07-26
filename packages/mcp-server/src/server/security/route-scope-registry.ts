@@ -103,8 +103,7 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['versions:write'] }
   }
 
-  // Workspace routes (including palette sub-resources, which are
-  // workspace-scoped state): default write -> workspace:write, read -> workspace:read.
+  // Workspace routes: default write -> workspace:write, read -> workspace:read.
   if (path.startsWith('/api/workspaces')) {
     return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
   }

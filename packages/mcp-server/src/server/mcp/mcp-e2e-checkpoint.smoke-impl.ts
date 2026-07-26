@@ -272,12 +272,6 @@ export async function runE2eCheckpointSmoke({
       `[e2e] canvas_list → ${(listed.workspaces as unknown[]).length} workspaces, ${totalCanvases} canvases`,
     )
 
-    const palette = await callTool('palette_get', { workspaceId })
-    if (typeof palette.palette !== 'object' || palette.palette === null) {
-      throw new Error(`palette_get returned unexpected shape: ${JSON.stringify(palette)}`)
-    }
-    console.log('[e2e] palette_get → OK')
-
     const ann = await callTool('annotate', {
       canvasId: created.id,
       type: 'rectangle',

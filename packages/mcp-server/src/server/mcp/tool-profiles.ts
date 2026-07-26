@@ -26,14 +26,12 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   export_canvas: { profile: READ_ONLY, title: 'Export canvas (png/svg/json)' },
   list_groups: { profile: READ_ONLY, title: 'List element groups' },
   template_list: { profile: READ_ONLY, title: 'List built-in templates' },
-  palette_get: { profile: READ_ONLY, title: 'Get palette entries' },
 
   // Destructive + idempotent (safe to rerun; tombstone/delete)
   canvas_clear: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Clear canvas (delete all elements)' },
   delete_element: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete element' },
   delete_elements: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete multiple elements' },
   delete_group: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete element group' },
-  palette_delete: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete palette entries' },
 
   // Mutating + idempotent (safe to rerun with the same arguments)
   update_element: { profile: MUTATING_IDEMPOTENT, title: 'Update element fields' },
@@ -48,7 +46,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   },
   reorder_elements: { profile: MUTATING_IDEMPOTENT, title: 'Reorder elements (front/back)' },
   viewport_set: { profile: MUTATING_IDEMPOTENT, title: 'Set browser viewport' },
-  palette_set: { profile: MUTATING_IDEMPOTENT, title: 'Set palette entries' },
   assign_to_group: { profile: MUTATING_IDEMPOTENT, title: 'Assign elements to group' },
   update_frame_members: { profile: MUTATING_IDEMPOTENT, title: 'Update frame members' },
   optimize_canvases: {
