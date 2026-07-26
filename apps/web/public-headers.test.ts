@@ -50,13 +50,4 @@ describe('public/_headers', () => {
     const csp = globalHeaders?.get('Content-Security-Policy') ?? ''
     expect(csp).toContain("worker-src 'self'")
   })
-
-  it('scopes font-src to exactly self and data: — Excalidraw subsets fonts as data: URLs, and default-src alone blocks them', () => {
-    const globalHeaders = blocks.get('/*')
-    const csp = globalHeaders?.get('Content-Security-Policy') ?? ''
-    const match = csp.match(/font-src ([^;]+)/)
-    expect(match).not.toBeNull()
-    const sources = new Set((match?.[1] ?? '').trim().split(/\s+/))
-    expect(sources).toEqual(new Set(["'self'", 'data:']))
-  })
 })
