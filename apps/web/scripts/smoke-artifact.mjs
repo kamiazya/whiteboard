@@ -25,40 +25,38 @@ function readDist(rel) {
   return readFileSync(p, 'utf-8')
 }
 
-// Collect all text artifact files: html, js, css, plain-text, and the
-// Cloudflare Pages config files (_headers, _redirects).
-function collectArtifactFiles(dir) {
+// Recursively lists files under `dir`, keeping only entries for which
+// `keep(entry)` returns true.
+function walkFiles(dir, keep) {
   const results = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
-      results.push(...collectArtifactFiles(full))
-    } else if (
-      /\.(html|js|css|txt)$/.test(entry.name) ||
-      entry.name === '_headers' ||
-      entry.name === '_redirects'
-    ) {
+      results.push(...walkFiles(full, keep))
+    } else if (keep(entry)) {
       results.push(full)
     }
   }
   return results
 }
 
-// Recursively lists every REGULAR file under `dir` (no extension filter —
-// unlike collectArtifactFiles above, this must also see binary assets like
-// .wasm so a stripped-source_map regression can't hide behind an unusual
-// extension).
+const ARTIFACT_EXTENSION = /\.(html|js|css|txt)$/
+const CLOUDFLARE_CONFIG_FILES = new Set(['_headers', '_redirects'])
+
+// Collect all text artifact files: html, js, css, plain-text, and the
+// Cloudflare Pages config files (_headers, _redirects).
+function collectArtifactFiles(dir) {
+  return walkFiles(
+    dir,
+    (entry) => ARTIFACT_EXTENSION.test(entry.name) || CLOUDFLARE_CONFIG_FILES.has(entry.name),
+  )
+}
+
+// Lists every REGULAR file under `dir` (no extension filter — unlike
+// collectArtifactFiles, this must also see binary assets like .wasm so a
+// stripped-source_map regression can't hide behind an unusual extension).
 export function listAllRegularFiles(dir) {
-  const results = []
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) {
-      results.push(...listAllRegularFiles(full))
-    } else if (entry.isFile()) {
-      results.push(full)
-    }
-  }
-  return results
+  return walkFiles(dir, (entry) => entry.isFile())
 }
 
 // Scans every regular file under `dir` for `needle` as raw bytes (not text

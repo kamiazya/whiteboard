@@ -20,6 +20,10 @@ const REPLACEMENT_EVENT = 'pagehide'
 
 type ListenerArgs = Parameters<typeof window.addEventListener>
 
+function mapEventType(type: ListenerArgs[0]): ListenerArgs[0] {
+  return type === UNLOAD_EVENT ? REPLACEMENT_EVENT : type
+}
+
 /**
  * Installs the unload→pagehide translation on `window`.
  * Returns an uninstall function that restores the original methods.
@@ -28,16 +32,12 @@ export function installUnloadShim(): () => void {
   const originalAdd = window.addEventListener.bind(window)
   const originalRemove = window.removeEventListener.bind(window)
 
-  window.addEventListener = ((...args: ListenerArgs) => {
-    const [type, listener, options] = args
-    const mappedType = type === UNLOAD_EVENT ? REPLACEMENT_EVENT : type
-    return originalAdd(mappedType, listener, options)
+  window.addEventListener = ((type, listener, options) => {
+    return originalAdd(mapEventType(type), listener, options)
   }) as typeof window.addEventListener
 
-  window.removeEventListener = ((...args: ListenerArgs) => {
-    const [type, listener, options] = args
-    const mappedType = type === UNLOAD_EVENT ? REPLACEMENT_EVENT : type
-    return originalRemove(mappedType, listener, options)
+  window.removeEventListener = ((type, listener, options) => {
+    return originalRemove(mapEventType(type), listener, options)
   }) as typeof window.removeEventListener
 
   return function uninstallUnloadShim() {
