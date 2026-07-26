@@ -20,8 +20,12 @@ export function stripWasmSourceMapPlugin(): Plugin {
       for (const asset of Object.values(bundle)) {
         if (asset.type !== 'asset' || !asset.fileName.endsWith('.wasm')) continue
         const source = asset.source
+        // A string source for a binary asset is a latin1 (one-char-per-byte)
+        // representation; TextEncoder would UTF-8-re-encode bytes >= 0x80 into
+        // multi-byte sequences and corrupt the wasm. Decode as latin1 so each
+        // byte round-trips.
         const bytes =
-          typeof source === 'string' ? new TextEncoder().encode(source) : new Uint8Array(source)
+          typeof source === 'string' ? Buffer.from(source, 'latin1') : new Uint8Array(source)
         asset.source = Buffer.from(stripWasmSourceMap(bytes))
       }
     },

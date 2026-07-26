@@ -73,6 +73,27 @@ describe('stripWasmSourceMapPlugin', () => {
     expect(bytesContain(stripped.source as Buffer, 'unpkg.com')).toBe(false)
   })
 
+  it('preserves bytes >= 0x80 in a string (latin1) source instead of UTF-8-corrupting them', () => {
+    // Real wasm modules are full of high bytes; a latin1 string source must
+    // decode one-char-per-byte. TextEncoder (UTF-8) would expand each >= 0x80
+    // byte into a multi-byte sequence and grow/garble the module. Append a
+    // non-.wasm-recognized trailer of high bytes after the header so the
+    // stripper passes it through unchanged and we can assert byte identity.
+    const highBytes = [0x80, 0xc3, 0xff, 0x90, 0xa5]
+    const wasm = new Uint8Array([...WASM_MAGIC_AND_VERSION, ...highBytes])
+    const bundle: Rollup.OutputBundle = {
+      'app.wasm': outputAsset('app.wasm', Buffer.from(wasm).toString('latin1')),
+    }
+
+    runGenerateBundle(bundle)
+
+    const stripped = bundle['app.wasm']
+    if (!stripped || stripped.type !== 'asset') throw new Error('expected asset to survive')
+    const out = stripped.source as Buffer
+    // Byte-identical to the original: latin1 round-trips, UTF-8 would not.
+    expect(Buffer.from(out).equals(Buffer.from(wasm))).toBe(true)
+  })
+
   it('strips the sourceMappingURL section from a .wasm asset with a Uint8Array source', () => {
     const wasm = wasmWithSourceMappingUrlSection('https://unpkg.com/x')
     const bundle: Rollup.OutputBundle = {
