@@ -34,6 +34,14 @@ const FREE_REGION_GRID_PX = 20
  * regions are dropped rather than risking unbounded allocation.
  */
 const FREE_REGION_MAX_CELLS = 250_000
+/**
+ * Upper bound on the entry count fed into the pairwise O(n^2)
+ * overlap/containment/cluster derivation below. Scene node counts are
+ * caller-supplied and unbounded, so past this bound each of the three
+ * fields degrades to empty rather than risking a runaway pairwise scan —
+ * mirroring FREE_REGION_MAX_CELLS's guard for the grid allocation above.
+ */
+const PAIRWISE_MAX_ENTRIES = 2_000
 
 interface DigestEntry {
   readonly id: string
@@ -75,6 +83,7 @@ function gapBetween(a: BoundingBox, b: BoundingBox): number {
 }
 
 function computeOverlaps(entries: readonly DigestEntry[]): [string, string][] {
+  if (entries.length > PAIRWISE_MAX_ENTRIES) return []
   const pairs: [string, string][] = []
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
@@ -90,6 +99,7 @@ function computeOverlaps(entries: readonly DigestEntry[]): [string, string][] {
 }
 
 function computeContainment(entries: readonly DigestEntry[]): { parent: string; child: string }[] {
+  if (entries.length > PAIRWISE_MAX_ENTRIES) return []
   const result: { parent: string; child: string }[] = []
   for (const child of entries) {
     const candidates = entries.filter(
@@ -109,6 +119,7 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
 
 /** Single-linkage union-find clustering by proximity gap. */
 function computeClusters(entries: readonly DigestEntry[]): string[][] {
+  if (entries.length > PAIRWISE_MAX_ENTRIES) return []
   const parent = new Map<string, string>(entries.map((e) => [e.id, e.id]))
   function find(id: string): string {
     let current = id

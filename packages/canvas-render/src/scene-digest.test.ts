@@ -149,6 +149,28 @@ describe('sceneDigest', () => {
     expect(parsed).toEqual(digest)
   })
 
+  it('bounds pairwise overlap/containment/cluster derivation for scenes with very many nodes', () => {
+    // PAIRWISE_MAX_ENTRIES + 1 boxes, spaced far enough apart that with no
+    // cap they'd contribute zero overlaps/containment and one cluster per
+    // box anyway — the assertion is about the cap itself, not the geometry.
+    const manyBoxes = Array.from({ length: 2001 }, (_, i) => ({
+      x: i * 1000,
+      y: 0,
+      w: 10,
+      h: 10,
+    }))
+    const digest = sceneDigest(scene(...manyBoxes))
+    expect(digest.nodes).toHaveLength(2001)
+    expect(digest.overlaps).toEqual([])
+    expect(digest.containment).toEqual([])
+    expect(digest.clusters).toEqual([])
+  })
+
+  it('does not cap pairwise derivation for a small scene', () => {
+    const digest = sceneDigest(scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 }))
+    expect(digest.overlaps).toHaveLength(1)
+  })
+
   it('is deterministic across repeated calls', () => {
     const s = scene(
       { x: 0, y: 0, w: 10, h: 10 },
