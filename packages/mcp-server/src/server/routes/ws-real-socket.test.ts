@@ -6,17 +6,47 @@
 // (setDataDirForTests) instead of a hand-rolled per-file mock, proving the
 // seam is sufficient to keep a real-socket persistence test off the
 // developer's real home directory.
+//
+// Home-dir isolation is asserted against a mocked, per-test fake home
+// directory rather than statSync(realHome).mtimeMs. Directory mtime changes
+// whenever ANY process (a parallel test worker, an unrelated tool) adds or
+// removes a direct child of the real home, so sampling it before/after and
+// asserting equality is a race against every other process on the machine,
+// not a property of this test's own behavior. Mocking `node:os`'s homedir()
+// to a scratch directory this test alone controls makes the check immune to
+// concurrent writers while staying at least as strong: any in-process code
+// path that resolves the home dir directly (bypassing the getDataDir() seam)
+// would still visibly create a `.whiteboard` directory under the fake home.
 
-import { existsSync, statSync } from 'node:fs'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { createServer } from 'node:http'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebSocket, WebSocketServer } from 'ws'
 
 let scratchDir: string
+let fakeHomeDir: string
+
+const { getFakeHomeDir, setFakeHomeDir } = vi.hoisted(() => {
+  let dir = ''
+  return {
+    getFakeHomeDir: (): string => dir,
+    setFakeHomeDir: (next: string): void => {
+      dir = next
+    },
+  }
+})
+
+vi.mock('node:os', async () => {
+  const actual = await vi.importActual<typeof import('node:os')>('node:os')
+  return {
+    ...actual,
+    homedir: () => getFakeHomeDir(),
+  }
+})
 
 vi.mock('../config.js', async () => {
   const actual = await import('../../shared/data-dir-secure.js')
@@ -35,7 +65,7 @@ vi.mock('../config.js', async () => {
 const { setDataDirForTests, resetDataDirForTests } = await import('../../shared/data-dir-secure.js')
 const { clearCache } = await import('../store/doc-cache.js')
 const { loadCanvas } = await import('../store/canvas-store.js')
-const { handleWsUpgrade } = await import('./ws.js')
+const { handleWsUpgrade, setOnPersistedForTests } = await import('./ws.js')
 
 function connectAndWaitForOpen(url: string): Promise<WebSocket> {
   return new Promise((resolve, reject) => {
@@ -63,22 +93,36 @@ function connectAndCaptureSnapshot(
   })
 }
 
-describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
-  const realHomeWhiteboard = join(homedir(), '.whiteboard')
-  let realHomeStatBefore: ReturnType<typeof statSync> | undefined
+// Resolves once the WS persistence path signals it has finished saving for
+// this exact (workspaceId, slug) — a deterministic completion event instead
+// of polling loadCanvas() until an expectation happens to pass.
+function waitForPersisted(workspaceId: string, slug: string): Promise<void> {
+  return new Promise((resolve) => {
+    setOnPersistedForTests((persistedWorkspaceId, persistedSlug) => {
+      if (persistedWorkspaceId === workspaceId && persistedSlug === slug) {
+        setOnPersistedForTests(undefined)
+        resolve()
+      }
+    })
+  })
+}
 
+describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
   beforeEach(async () => {
+    fakeHomeDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-real-socket-fake-home-'))
+    setFakeHomeDir(fakeHomeDir)
     scratchDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-real-socket-'))
     await mkdir(join(scratchDir, 'session1'), { recursive: true })
     setDataDirForTests(scratchDir)
     clearCache()
-    realHomeStatBefore = existsSync(realHomeWhiteboard) ? statSync(realHomeWhiteboard) : undefined
   })
 
   afterEach(async () => {
     resetDataDirForTests()
     clearCache()
+    setOnPersistedForTests(undefined)
     await rm(scratchDir, { recursive: true, force: true })
+    await rm(fakeHomeDir, { recursive: true, force: true })
   })
 
   it('persists a binary Loro update under the injected scratch dir and never touches the real home dir', async () => {
@@ -116,27 +160,30 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       clientDoc.commit()
 
       const update = Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array)
+      const persisted = waitForPersisted('session1', 'canvas-a')
       client.send(update)
+      await persisted
 
-      // saveCanvas is awaited inside the message handler; poll briefly for
-      // the write to land instead of pinning to a specific timeout value.
-      await vi.waitFor(async () => {
-        const saved = await loadCanvas('session1', 'canvas-a')
-        const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
-        expect(elements.map((entry) => entry.id)).toContain('real-socket-elem')
-      })
+      const saved = await loadCanvas('session1', 'canvas-a')
+      const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
+      expect(elements.map((entry) => entry.id)).toContain('real-socket-elem')
     } finally {
       client.close()
       wss.close()
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
 
-    // Persistence landed under the injected scratch dir, not the real home.
+    // Persistence landed under the injected scratch dir: the sqlite db plus
+    // the canvas blob artifact tree, not just the top-level file.
     expect(existsSync(join(scratchDir, 'whiteboard.db'))).toBe(true)
-    const realHomeStatAfter = existsSync(realHomeWhiteboard)
-      ? statSync(realHomeWhiteboard)
-      : undefined
-    expect(realHomeStatAfter?.mtimeMs).toBe(realHomeStatBefore?.mtimeMs)
+    const blobDir = join(scratchDir, 'blobs', 'session1', 'canvas')
+    expect(existsSync(blobDir)).toBe(true)
+    const blobFiles = await readdir(blobDir)
+    expect(blobFiles.length).toBeGreaterThan(0)
+
+    // Nothing wrote to the (fake, per-test) home dir. No concurrent process
+    // can perturb this directory the way the real ~/.whiteboard can.
+    expect(existsSync(join(fakeHomeDir, '.whiteboard'))).toBe(false)
   })
 
   it('closes only the offending socket with 1003 on a malformed binary frame while the daemon and concurrent connections survive', async () => {
@@ -187,13 +234,9 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       map.set('type', 'rectangle')
       clientDoc.commit()
       const update = Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array)
+      const persisted = waitForPersisted('session1', 'canvas-a')
       clientB.send(update)
-
-      await vi.waitFor(async () => {
-        const saved = await loadCanvas('session1', 'canvas-a')
-        const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
-        expect(elements.map((entry) => entry.id)).toContain('survivor-elem')
-      })
+      await persisted
 
       // Only B's element made it to disk; A's malformed bytes never
       // decoded into anything that could be persisted.
