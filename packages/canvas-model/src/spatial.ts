@@ -54,14 +54,17 @@ export const xWhiteboardSchema = z.discriminatedUnion('kind', [
 export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
 
 // JSON Canvas 1.0 geometry is specified in integer pixels.
-const geometryFieldSchema = z.number().int()
+const positionFieldSchema = z.number().int()
+// Sizes reject negatives. Zero stays valid: a straight-line freehand stroke carried
+// via x-whiteboard legitimately has a zero-width or zero-height bounding box.
+const sizeFieldSchema = z.number().int().nonnegative()
 
 const sharedNodeFieldsSchema = z.object({
   id: nodeIdSchema,
-  x: geometryFieldSchema,
-  y: geometryFieldSchema,
-  width: geometryFieldSchema,
-  height: geometryFieldSchema,
+  x: positionFieldSchema,
+  y: positionFieldSchema,
+  width: sizeFieldSchema,
+  height: sizeFieldSchema,
   color: canvasColorSchema.optional(),
   'x-whiteboard': xWhiteboardSchema.optional(),
 })

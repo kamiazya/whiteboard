@@ -43,6 +43,30 @@ describe('spatialNodeSchema (text)', () => {
       spatialNodeSchema.safeParse({ ...baseGeometry, x: 1.5, type: 'text', text: 'hi' }).success,
     ).toBe(false)
   })
+
+  it('rejects negative width and height', () => {
+    expect(
+      spatialNodeSchema.safeParse({ ...baseGeometry, width: -1, type: 'text', text: 'hi' }).success,
+    ).toBe(false)
+    expect(
+      spatialNodeSchema.safeParse({ ...baseGeometry, height: -1, type: 'text', text: 'hi' })
+        .success,
+    ).toBe(false)
+  })
+
+  it('accepts zero width/height (degenerate freehand bounding boxes) and negative x/y', () => {
+    expect(
+      spatialNodeSchema.safeParse({
+        ...baseGeometry,
+        x: -50,
+        y: -50,
+        width: 0,
+        height: 0,
+        type: 'text',
+        text: 'hi',
+      }).success,
+    ).toBe(true)
+  })
 })
 
 describe('spatialNodeSchema (file)', () => {

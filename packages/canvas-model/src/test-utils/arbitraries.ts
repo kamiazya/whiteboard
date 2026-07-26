@@ -59,6 +59,7 @@ export const facetsRawArbitrary = fc.dictionary(facetsRawKeyArbitrary, fc.jsonVa
 })
 
 const geometryArbitrary = fc.integer({ min: -10_000, max: 10_000 })
+const sizeArbitrary = fc.integer({ min: 0, max: 10_000 })
 const canvasColorArbitrary: fc.Arbitrary<string> = fc.oneof(
   fc.constantFrom('1', '2', '3', '4', '5', '6'),
   fc
@@ -70,8 +71,8 @@ const sharedNodeGeometryArbitrary = {
   id: nodeIdArbitrary,
   x: geometryArbitrary,
   y: geometryArbitrary,
-  width: geometryArbitrary,
-  height: geometryArbitrary,
+  width: sizeArbitrary,
+  height: sizeArbitrary,
   color: fc.option(canvasColorArbitrary, { nil: undefined }),
 }
 
@@ -143,7 +144,7 @@ export const markdownCanvasArbitrary = fc.record({ body: fc.string({ maxLength: 
 
 const segmentArbitrary: fc.Arbitrary<string> = fc
   .string({ minLength: 1, maxLength: 20 })
-  .filter((segment) => !segment.includes('/'))
+  .filter((segment) => !segment.includes('/') && segment !== '.' && segment !== '..')
 
 export const workspaceTreeNodeDataArbitrary = fc.record({
   canvasId: canonicalUlidArbitrary,
