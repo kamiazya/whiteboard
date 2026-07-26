@@ -3,7 +3,7 @@
   "version": "0.0.19",
   "description": "MCP server + Excalidraw whiteboard UI for AI-assisted diagramming (Claude Code / Codex).",
   "author": "kamiazya",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "mcp",
     "mcp-server",
@@ -64,6 +64,7 @@
     "skills",
     "README.md",
     "LICENSE",
+    "NOTICE",
     "CHANGELOG.md"
   ],
   "sideEffects": [
