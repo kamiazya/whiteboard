@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { escapeXmlAttr, escapeXmlText, formatCoord } from './format.js'
+import { escapeXmlAttr, escapeXmlText, formatCoord, sanitizeHref } from './format.js'
 
 describe('formatCoord', () => {
   it('rounds to the fixed decimal precision and strips trailing zeros', () => {
@@ -42,6 +42,39 @@ describe('escapeXmlText', () => {
     // A valid surrogate pair (an astral character) is preserved.
     expect(escapeXmlText('a😀b')).toBe('a😀b')
   })
+
+  it('strips the XML noncharacters U+FFFE and U+FFFF', () => {
+    // XML 1.0 forbids these noncharacters; leaving them in would let
+    // escapeXmlText emit malformed XML.
+    expect(escapeXmlText('a￾b￿c')).toBe('abc')
+  })
+})
+
+describe('sanitizeHref', () => {
+  it('returns a safe scheme unchanged', () => {
+    expect(sanitizeHref('https://example.com')).toBe('https://example.com')
+  })
+
+  it('returns a relative/hash link unchanged', () => {
+    expect(sanitizeHref('#section')).toBe('#section')
+    expect(sanitizeHref('/path')).toBe('/path')
+  })
+
+  it('rejects a disallowed scheme', () => {
+    expect(sanitizeHref('javascript:alert(1)')).toBe('#')
+  })
+
+  it('rejects a scheme obfuscated with a leading tab', () => {
+    expect(sanitizeHref('\tjavascript:alert(1)')).toBe('#')
+  })
+
+  it('rejects a scheme obfuscated by splitting it with a newline', () => {
+    expect(sanitizeHref('java\nscript:alert(1)')).toBe('#')
+  })
+
+  it('rejects a scheme obfuscated with a leading space', () => {
+    expect(sanitizeHref(' javascript:alert(1)')).toBe('#')
+  })
 })
 
 describe('escapeXmlAttr', () => {
@@ -51,5 +84,9 @@ describe('escapeXmlAttr', () => {
 
   it('strips XML-forbidden control characters and lone surrogates', () => {
     expect(escapeXmlAttr('a\x00\uD800b')).toBe('ab')
+  })
+
+  it('strips the XML noncharacters U+FFFE and U+FFFF', () => {
+    expect(escapeXmlAttr('a￾b￿c')).toBe('abc')
   })
 })

@@ -55,8 +55,10 @@ const XML_ATTR_ESCAPES: ReadonlyArray<readonly [RegExp, string]> = [
 const XML_CONTROL_CHARS_SOURCE = '[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F\\x7F-\\x9F]'
 const XML_LONE_SURROGATE_SOURCE =
   '[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])|(?<![\\uD800-\\uDBFF])[\\uDC00-\\uDFFF]'
+/** U+FFFE and U+FFFF are XML 1.0 noncharacters, forbidden alongside the C0/C1 controls above. */
+const XML_NONCHARACTERS_SOURCE = '[\\uFFFE\\uFFFF]'
 const XML_INVALID_CHARS = new RegExp(
-  `${XML_CONTROL_CHARS_SOURCE}|${XML_LONE_SURROGATE_SOURCE}`,
+  `${XML_CONTROL_CHARS_SOURCE}|${XML_LONE_SURROGATE_SOURCE}|${XML_NONCHARACTERS_SOURCE}`,
   'g',
 )
 
@@ -93,12 +95,31 @@ const SAFE_URL_SCHEMES = new Set(['http', 'https', 'mailto', 'tel'])
 const URL_SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
 
 /**
+ * The URL parser strips ASCII tab/LF/CR anywhere in the input and trims
+ * leading C0-control-or-space before resolving a scheme (WHATWG URL §4.4,
+ * "remove all ASCII tab or newline" / "remove leading C0 control or space").
+ * A scheme check that skips this normalization is bypassable with e.g.
+ * `\tjavascript:...` or `java\nscript:...`, which look scheme-less to
+ * `URL_SCHEME_PATTERN` but resolve to `javascript:` once activated. Built via
+ * the RegExp constructor (not a literal) for the same Biome
+ * noControlCharactersInRegex reason as XML_CONTROL_CHARS_SOURCE above.
+ */
+const ASCII_TAB_OR_NEWLINE_SOURCE = '[\\t\\n\\r]'
+const LEADING_C0_OR_SPACE_SOURCE = '^[\\x00-\\x20]+'
+const ASCII_TAB_OR_NEWLINE = new RegExp(ASCII_TAB_OR_NEWLINE_SOURCE, 'g')
+const LEADING_C0_OR_SPACE = new RegExp(LEADING_C0_OR_SPACE_SOURCE)
+
+function normalizeHrefForSchemeCheck(href: string): string {
+  return href.replace(ASCII_TAB_OR_NEWLINE, '').replace(LEADING_C0_OR_SPACE, '')
+}
+
+/**
  * Returns `href` unchanged when it has no scheme (relative/hash link) or an
  * allow-listed scheme, otherwise `#` — never throws, degrades to a safe
  * same-page anchor rather than rejecting the whole render.
  */
 export function sanitizeHref(href: string): string {
-  const match = URL_SCHEME_PATTERN.exec(href)
+  const match = URL_SCHEME_PATTERN.exec(normalizeHrefForSchemeCheck(href))
   if (!match) return href
   return SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? href : '#'
 }
