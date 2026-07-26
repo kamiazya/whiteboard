@@ -27,6 +27,13 @@ export type SceneDigest = z.infer<typeof sceneDigestSchema>
 const PROXIMITY_THRESHOLD_PX = 24
 /** Grid granularity for free-region computation, in px. */
 const FREE_REGION_GRID_PX = 20
+/**
+ * Upper bound on the occupancy grid's cell count. Scene coordinates are
+ * caller-supplied and unbounded, so two distant boxes could otherwise size
+ * an arbitrarily large `rows x cols` boolean matrix; past this bound free
+ * regions are dropped rather than risking unbounded allocation.
+ */
+const FREE_REGION_MAX_CELLS = 250_000
 
 interface DigestEntry {
   readonly id: string
@@ -140,13 +147,18 @@ function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
 
   const cols = Math.max(1, Math.ceil((maxX - minX) / FREE_REGION_GRID_PX))
   const rows = Math.max(1, Math.ceil((maxY - minY) / FREE_REGION_GRID_PX))
+  if (cols * rows > FREE_REGION_MAX_CELLS) return []
   const occupied: boolean[][] = Array.from({ length: rows }, () => Array<boolean>(cols).fill(false))
 
   for (const entry of entries) {
     const c0 = Math.floor((entry.bbox.x - minX) / FREE_REGION_GRID_PX)
-    const c1 = Math.floor((entry.bbox.x + entry.bbox.w - minX) / FREE_REGION_GRID_PX)
+    // The right/bottom edges are exclusive, so a box ending exactly on a
+    // grid line must not occupy the next cell: ceil(...) - 1 agrees with
+    // floor(...) except exactly at a grid boundary, where it correctly
+    // stops one cell earlier.
+    const c1 = Math.ceil((entry.bbox.x + entry.bbox.w - minX) / FREE_REGION_GRID_PX) - 1
     const r0 = Math.floor((entry.bbox.y - minY) / FREE_REGION_GRID_PX)
-    const r1 = Math.floor((entry.bbox.y + entry.bbox.h - minY) / FREE_REGION_GRID_PX)
+    const r1 = Math.ceil((entry.bbox.y + entry.bbox.h - minY) / FREE_REGION_GRID_PX) - 1
     for (let r = r0; r <= Math.min(r1, rows - 1); r++) {
       for (let c = c0; c <= Math.min(c1, cols - 1); c++) {
         if (r >= 0 && c >= 0) occupied[r][c] = true
