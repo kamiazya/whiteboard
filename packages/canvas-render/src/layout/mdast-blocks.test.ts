@@ -208,6 +208,23 @@ describe('layoutMdastBlocks — node-kind coverage', () => {
   })
 })
 
+describe('layoutMdastBlocks — default math fallback', () => {
+  it('escapes untrusted math source in the default renderMath fallback fragment', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'math', value: '</text><script>alert(1)</script><text>', meta: null }],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const fragment = scene.nodes.find((n) => n.kind === 'svgFragment')
+    expect(fragment?.kind).toBe('svgFragment')
+    if (fragment?.kind !== 'svgFragment') throw new Error('unreachable')
+    expect(fragment.svg).not.toContain('<script>')
+    expect(fragment.svg).toBe(
+      '<text>&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script&gt;&lt;text&gt;</text>',
+    )
+  })
+})
+
 describe('layoutMdastBlocks — single render path', () => {
   it('produces a deep-equal scene for preview, spatial-text-node, and export callers', () => {
     const root: MdastRoot = {

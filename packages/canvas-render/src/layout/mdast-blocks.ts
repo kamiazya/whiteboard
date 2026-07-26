@@ -26,6 +26,7 @@ import type {
   ThematicBreakNode,
   UnresolvedReferenceNode,
 } from '../scene-graph.js'
+import { escapeXmlText } from '../svg/format.js'
 
 /**
  * Minimal layout constants. Deliberately NOT a theme/design-token system
@@ -64,8 +65,15 @@ export interface MdastLayoutOptions {
   readonly renderMath?: (value: string, displayMode: boolean) => string
 }
 
+/**
+ * Fallback used only when the composition root has not supplied a real
+ * math renderer. `value` is untrusted markdown-embedded math source, so it
+ * must be escaped like any other text content — unlike a `renderMath`
+ * result (or an `SvgFragmentNode.svg`), which is the composition root's own
+ * precondition to supply as well-formed, already-trusted SVG.
+ */
 function defaultRenderMath(value: string): string {
-  return `<text>${value}</text>`
+  return `<text>${escapeXmlText(value)}</text>`
 }
 
 interface Cursor {
