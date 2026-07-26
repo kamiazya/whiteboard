@@ -72,4 +72,31 @@ describe('resolveReferences', () => {
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
     expect(children.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: 'Display Name' }])
   })
+
+  it('resolves ![[canvas:ULID]] to an embed node, not a wikiLink', () => {
+    const root = paragraph(`![[canvas:${ULID}]]`)
+    const resolved = resolveReferences(root)
+
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([{ type: 'embed', canvasId: ULID }])
+  })
+
+  it('resolves ![[alias]] to an embed node through the resolver', () => {
+    const root = paragraph('![[My Note]]')
+    const resolved = resolveReferences(root, (alias) => (alias === 'My Note' ? ULID : null))
+
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([{ type: 'embed', canvasId: ULID }])
+  })
+
+  it('leaves ![[Missing]] as text when the resolver returns null', () => {
+    const root = paragraph('![[Missing]]')
+    const resolved = resolveReferences(root, () => null)
+
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([{ type: 'text', value: '![[Missing]]' }])
+  })
 })
