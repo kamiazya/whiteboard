@@ -149,19 +149,12 @@ function layoutPhrasing(
         break
       }
       case 'linkReference': {
-        const label = child.identifier
+        const link: LinkProvenance = { kind: 'link', href: `#${child.identifier}` }
         if (child.children.length === 0) {
-          emit(label, {
-            link: { kind: 'link', href: `#${label}` },
-          })
+          emit(child.identifier, { link })
         } else {
           const nested = layoutPhrasing(child.children, cursor, options, fontSizePx, style)
-          runs.push(
-            ...nested.map((r) => ({
-              ...r,
-              link: { kind: 'link', href: `#${label}` } as LinkProvenance,
-            })),
-          )
+          runs.push(...nested.map((r) => ({ ...r, link })))
         }
         break
       }
