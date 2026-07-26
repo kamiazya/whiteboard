@@ -46,6 +46,7 @@ describe('docs/ contract', () => {
     const docMentionTokenForPackageDir: Record<string, string> = {
       'packages/mcp-server': 'mcp',
       'packages/canvas-model': 'canvas-model',
+      'packages/canvas-render': 'canvas-render',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',
     }
@@ -98,7 +99,11 @@ describe('docs/ contract', () => {
     })
     // Pin the known set so this test also fails (rather than silently
     // shrinking its coverage) if a browser project is ever removed.
-    expect(browserProjectNames.sort()).toEqual(['canvas-viewer-browser', 'web-browser'])
+    expect(browserProjectNames.sort()).toEqual([
+      'canvas-render-browser',
+      'canvas-viewer-browser',
+      'web-browser',
+    ])
 
     const testingDocPath = join(DOCS_ROOT, 'contributing/testing.md')
     const content = readFileSync(testingDocPath, 'utf8')
