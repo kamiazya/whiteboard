@@ -106,6 +106,67 @@ describe('mdastNodeSchema', () => {
     )
   })
 
+  it('parses a code node with null lang and meta, as real parsers emit for a plain fence', () => {
+    const result = mdastNodeSchema.safeParse({
+      type: 'code',
+      lang: null,
+      meta: null,
+      value: 'plain fence',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('parses a link and image with a null title, as real parsers emit when no title is given', () => {
+    expect(
+      mdastNodeSchema.safeParse({
+        type: 'link',
+        url: 'https://example.com',
+        title: null,
+        children: [{ type: 'text', value: 'link' }],
+      }).success,
+    ).toBe(true)
+    expect(
+      mdastNodeSchema.safeParse({
+        type: 'image',
+        url: 'https://example.com/a.png',
+        title: null,
+        alt: null,
+      }).success,
+    ).toBe(true)
+  })
+
+  it('parses a definition node', () => {
+    const result = mdastNodeSchema.safeParse({
+      type: 'definition',
+      identifier: 'foo',
+      label: 'Foo',
+      url: 'https://example.com',
+      title: null,
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('parses linkReference and imageReference nodes', () => {
+    expect(
+      mdastNodeSchema.safeParse({
+        type: 'linkReference',
+        identifier: 'foo',
+        label: 'Foo',
+        referenceType: 'full',
+        children: [{ type: 'text', value: 'foo' }],
+      }).success,
+    ).toBe(true)
+    expect(
+      mdastNodeSchema.safeParse({
+        type: 'imageReference',
+        identifier: 'foo',
+        label: 'Foo',
+        referenceType: 'collapsed',
+        alt: null,
+      }).success,
+    ).toBe(true)
+  })
+
   it('parses an arbitrarily deep nesting of blockquotes without stack failure', () => {
     let node: unknown = { type: 'text', value: 'leaf' }
     for (let i = 0; i < 200; i++) {

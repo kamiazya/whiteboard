@@ -37,15 +37,36 @@ export type MdastNode =
   | { type: 'emphasis'; children: MdastNode[] }
   | { type: 'strong'; children: MdastNode[] }
   | { type: 'inlineCode'; value: string }
-  | { type: 'code'; value: string; lang?: string; meta?: string }
+  | { type: 'code'; value: string; lang?: string | null; meta?: string | null }
   | { type: 'blockquote'; children: MdastNode[] }
   | { type: 'list'; ordered?: boolean; start?: number; spread?: boolean; children: MdastNode[] }
   | { type: 'listItem'; checked?: boolean | null; spread?: boolean; children: MdastNode[] }
   | { type: 'thematicBreak' }
   | { type: 'break' }
-  | { type: 'link'; url: string; title?: string; children: MdastNode[] }
-  | { type: 'image'; url: string; title?: string; alt?: string }
+  | { type: 'link'; url: string; title?: string | null; children: MdastNode[] }
+  | { type: 'image'; url: string; title?: string | null; alt?: string | null }
   | { type: 'html'; value: string }
+  | {
+      type: 'definition'
+      identifier: string
+      label?: string | null
+      url: string
+      title?: string | null
+    }
+  | {
+      type: 'linkReference'
+      identifier: string
+      label?: string | null
+      referenceType: 'shortcut' | 'collapsed' | 'full'
+      children: MdastNode[]
+    }
+  | {
+      type: 'imageReference'
+      identifier: string
+      label?: string | null
+      referenceType: 'shortcut' | 'collapsed' | 'full'
+      alt?: string | null
+    }
   | { type: 'table'; align?: MdastAlign[]; children: MdastNode[] }
   | { type: 'tableRow'; children: MdastNode[] }
   | { type: 'tableCell'; children: MdastNode[] }
@@ -80,8 +101,8 @@ export const mdastNodeSchema: z.ZodType<MdastNode> = z.lazy(() =>
     z.object({
       type: z.literal('code'),
       value: z.string(),
-      lang: z.string().optional(),
-      meta: z.string().optional(),
+      lang: z.string().nullish(),
+      meta: z.string().nullish(),
     }),
     z.object({ type: z.literal('blockquote'), children: z.array(mdastNodeSchema) }),
     z.object({
@@ -102,16 +123,37 @@ export const mdastNodeSchema: z.ZodType<MdastNode> = z.lazy(() =>
     z.object({
       type: z.literal('link'),
       url: z.string(),
-      title: z.string().optional(),
+      title: z.string().nullish(),
       children: z.array(mdastNodeSchema),
     }),
     z.object({
       type: z.literal('image'),
       url: z.string(),
-      title: z.string().optional(),
-      alt: z.string().optional(),
+      title: z.string().nullish(),
+      alt: z.string().nullish(),
     }),
     z.object({ type: z.literal('html'), value: z.string() }),
+    z.object({
+      type: z.literal('definition'),
+      identifier: z.string(),
+      label: z.string().nullish(),
+      url: z.string(),
+      title: z.string().nullish(),
+    }),
+    z.object({
+      type: z.literal('linkReference'),
+      identifier: z.string(),
+      label: z.string().nullish(),
+      referenceType: z.enum(['shortcut', 'collapsed', 'full']),
+      children: z.array(mdastNodeSchema),
+    }),
+    z.object({
+      type: z.literal('imageReference'),
+      identifier: z.string(),
+      label: z.string().nullish(),
+      referenceType: z.enum(['shortcut', 'collapsed', 'full']),
+      alt: z.string().nullish(),
+    }),
     z.object({
       type: z.literal('table'),
       align: z.array(z.enum(['left', 'right', 'center']).nullable()).optional(),
