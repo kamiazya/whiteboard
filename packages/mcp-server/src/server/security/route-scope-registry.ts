@@ -58,10 +58,7 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   }
 
   // Canvas write operations that arrive as POST but mutate state.
-  if (
-    /^\/api\/canvas\/[^/]+\/[^/]+\/(update|export|export-json)$/.test(path) &&
-    method === 'POST'
-  ) {
+  if (/^\/api\/canvas\/[^/]+\/[^/]+\/(update|export)$/.test(path) && method === 'POST') {
     return { kind: 'scoped', scopes: ['canvas:write'] }
   }
   // Remaining /api/canvas/* routes: honor the write/read split so a mutating

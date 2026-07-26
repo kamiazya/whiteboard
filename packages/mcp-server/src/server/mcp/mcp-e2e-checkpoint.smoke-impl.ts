@@ -475,8 +475,8 @@ export async function runE2eCheckpointSmoke({
     })
     console.log('[e2e] export_svg overwrite forwarded OK')
 
-    // export_canvas unifies png/svg/json behind one tool — exercise all three
-    // formats so structuredContent validation against each format's branch of
+    // export_canvas unifies png/svg behind one tool — exercise both formats
+    // so structuredContent validation against each format's branch of
     // exportCanvasOutputSchema runs at least once. PNG also falls back to
     // headless rendering when no browser is connected, so this doubles as the
     // no-client-headless-render regression check.
@@ -499,36 +499,6 @@ export async function runE2eCheckpointSmoke({
       throw new Error('export_canvas(format:svg) did not produce real SVG markup')
     }
     console.log('[e2e] export_canvas(format:svg) OK (real <svg> markup on disk)')
-
-    const canvasJson = await callTool('export_canvas', { canvasId: created.id, format: 'json' })
-    if (canvasJson.format !== 'json' || !(canvasJson.filePath as string).endsWith('.excalidraw')) {
-      throw new Error(
-        `export_canvas(format:json) returned unexpected shape: ${JSON.stringify(canvasJson)}`,
-      )
-    }
-    const exportedJsonBody = JSON.parse(await readFile(canvasJson.filePath as string, 'utf-8')) as {
-      type: string
-      version: number
-      elements: Array<{ type: string }>
-    }
-    if (exportedJsonBody.type !== 'excalidraw' || exportedJsonBody.version !== 2) {
-      throw new Error(
-        `exported JSON has wrong wrapper: ${JSON.stringify({ type: exportedJsonBody.type, version: exportedJsonBody.version })}`,
-      )
-    }
-    if (
-      !Array.isArray(exportedJsonBody.elements) ||
-      exportedJsonBody.elements.length !== canvasJson.elementCount
-    ) {
-      throw new Error(
-        `element count mismatch: body.elements=${exportedJsonBody.elements?.length} elementCount=${canvasJson.elementCount}`,
-      )
-    }
-    const rectInExport = exportedJsonBody.elements.find((el) => el.type === 'rectangle')
-    if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
-    console.log(
-      `[e2e] export_canvas(format:json) OK → ${exportedJsonBody.elements.length} elems (type=${exportedJsonBody.type}, v${exportedJsonBody.version})`,
-    )
 
     console.log('\n[e2e] ALL OK')
   } catch (err) {

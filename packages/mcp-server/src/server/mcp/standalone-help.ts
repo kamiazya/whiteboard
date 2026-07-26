@@ -12,7 +12,7 @@ const HELP_LINES = [
   '2. `annotate_batch` for boxes/arrows/text in one pass',
   '3. `canvas_inspect` to verify structure',
   '4. `viewport_set` or `canvas_open` when a human needs to review the board',
-  '5. `export_canvas({ format: "png" | "svg" | "json" })` when you need an artifact',
+  '5. `export_canvas({ format: "png" | "svg" })` when you need an artifact',
   '',
   'Common starting points:',
   '- Architecture or flow: `annotate_batch` with boxes and arrows',

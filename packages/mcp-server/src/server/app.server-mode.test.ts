@@ -569,41 +569,6 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/canvas/:wid/:slug/export-json → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/canvas/w1/canvas-a/export-json', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(401)
-      expect(res.headers.get('WWW-Authenticate')).toBe('Bearer')
-    })
-
-    it('POST /api/canvas/:wid/:slug/export-json → 403 with canvas:read only (requires canvas:write)', async () => {
-      // Regression: export-json writes to the exports directory and supports overwrite;
-      // canvas:read alone must not be sufficient to authorize this endpoint.
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/canvas/w1/canvas-a/export-json', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('POST /api/canvas/:wid/:slug/export-json passes auth layer with canvas:write', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/canvas/w1/canvas-a/export-json', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      // Auth layer passes; canvas handler may return 4xx for missing data.
-      expect(res.status).not.toBe(401)
-      expect(res.status).not.toBe(403)
-    })
-
     it('POST /api/canvas/:wid/:slug/viewport → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
       const res = await app.request('/api/canvas/w1/canvas-a/viewport', {

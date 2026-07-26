@@ -11,9 +11,8 @@
 //   1. canvas_create -> annotate -> canvas_inspect
 //   2. viewport_set rejects immediately with no_client when no browser is connected
 //   3. export_canvas(format:png) falls back to headless rendering when no browser is connected
-//   4. export_canvas(format:json) round-trips a known element shape
-//   5. export_canvas(format:png) honours theme=light / theme=dark
-//   6. export_canvas(format:svg) renders real SVG markup headless
+//   4. export_canvas(format:png) honours theme=light / theme=dark
+//   5. export_canvas(format:svg) renders real SVG markup headless
 //
 // For 2 and 3 there is no browser WS client, so success behavior is not
 // observed. Instead, the smoke proves that both route wiring and MCP wrapping
@@ -743,32 +742,6 @@ async function main() {
     throw new Error('export_canvas(format:svg) did not produce real SVG markup')
   }
   console.log('[e2e] export_canvas(format:svg) OK (real <svg> markup on disk)')
-
-  // export_canvas(format:json): pure LoroDoc readback with no browser
-  // required, exported to standard .excalidraw format. Read the JSON back and
-  // verify wrapper shape and element count directly.
-  const canvasJson = await callTool('export_canvas', { canvasId: created.id, format: 'json' })
-  if (canvasJson.format !== 'json' || !canvasJson.filePath.endsWith('.excalidraw')) {
-    throw new Error(
-      `export_canvas(format:json) returned unexpected shape: ${JSON.stringify(canvasJson)}`,
-    )
-  }
-  const body = JSON.parse(await readFile(canvasJson.filePath, 'utf-8'))
-  if (body.type !== 'excalidraw' || body.version !== 2) {
-    throw new Error(
-      `exported JSON has wrong wrapper: ${JSON.stringify({ type: body.type, version: body.version })}`,
-    )
-  }
-  if (!Array.isArray(body.elements) || body.elements.length !== canvasJson.elementCount) {
-    throw new Error(
-      `element count mismatch: body.elements=${body.elements?.length} elementCount=${canvasJson.elementCount}`,
-    )
-  }
-  const rectInExport = body.elements.find((el) => el.type === 'rectangle')
-  if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
-  console.log(
-    `[e2e] export_canvas(format:json) OK → ${body.elements.length} elems (type=${body.type}, v${body.version})`,
-  )
 
   // create_pairing_link: the MCP SDK validates structuredContent against the
   // tool's outputSchema at runtime, so this exercises drift the type system

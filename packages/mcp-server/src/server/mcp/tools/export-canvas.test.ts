@@ -58,27 +58,6 @@ describe('exportCanvasTool execute', () => {
     expect(JSON.parse(init?.body as string)).toEqual({ frameId: 'f1' })
   })
 
-  it('routes format:"json" to the JSON export route and tags the result', async () => {
-    fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ filePath: '/tmp/out.excalidraw', elementCount: 3 }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    )
-
-    const { exportCanvasTool } = await import('./export-canvas.js')
-    const tool = exportCanvasTool()
-    const res = await tool.execute(
-      { canvasId: 'sid/slug', format: 'json', includeCustomFields: true },
-      client,
-    )
-
-    expect(res).toEqual({ format: 'json', filePath: '/tmp/out.excalidraw', elementCount: 3 })
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url.toString()).toBe('http://localhost:3099/api/canvas/sid/slug/export-json')
-    expect(JSON.parse(init?.body as string)).toEqual({ includeCustomFields: true })
-  })
-
   it('rejects an unsupported format instead of silently rendering PNG', async () => {
     // The registered MCP tool's inputSchema (a Zod enum) rejects an
     // out-of-enum format before this ever runs. This guards the function
