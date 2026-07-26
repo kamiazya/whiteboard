@@ -24,6 +24,11 @@ function mapEventType(type: ListenerArgs[0]): ListenerArgs[0] {
   return type === UNLOAD_EVENT ? REPLACEMENT_EVENT : type
 }
 
+interface TranslatedListener {
+  listener: ListenerArgs[1]
+  options: ListenerArgs[2]
+}
+
 /**
  * Installs the unload→pagehide translation on `window`.
  * Returns an uninstall function that restores the original methods.
@@ -31,9 +36,18 @@ function mapEventType(type: ListenerArgs[0]): ListenerArgs[0] {
 export function installUnloadShim(): () => void {
   const originalAdd = window.addEventListener.bind(window)
   const originalRemove = window.removeEventListener.bind(window)
+  // Tracks listeners the shim translated to `pagehide` so uninstall() can
+  // detach them explicitly — once the native methods are restored,
+  // `removeEventListener('unload', fn)` targets the (never-registered)
+  // native 'unload' type and can no longer reach the translated listener.
+  const translatedListeners: TranslatedListener[] = []
 
   window.addEventListener = ((type, listener, options) => {
-    return originalAdd(mapEventType(type), listener, options)
+    const mappedType = mapEventType(type)
+    if (mappedType === REPLACEMENT_EVENT && type === UNLOAD_EVENT) {
+      translatedListeners.push({ listener, options })
+    }
+    return originalAdd(mappedType, listener, options)
   }) as typeof window.addEventListener
 
   window.removeEventListener = ((type, listener, options) => {
@@ -41,6 +55,9 @@ export function installUnloadShim(): () => void {
   }) as typeof window.removeEventListener
 
   return function uninstallUnloadShim() {
+    for (const { listener, options } of translatedListeners) {
+      originalRemove(REPLACEMENT_EVENT, listener, options)
+    }
     window.addEventListener = originalAdd
     window.removeEventListener = originalRemove
   }

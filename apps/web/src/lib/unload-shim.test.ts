@@ -66,4 +66,16 @@ describe('installUnloadShim', () => {
     const registeredTypes = nativeAdd.mock.calls.map((call) => call[0])
     expect(registeredTypes).toContain('unload')
   })
+
+  it('uninstall detaches any translated "unload" listener registered before teardown', () => {
+    const teardown = installUnloadShim()
+    const handler = vi.fn()
+    window.addEventListener('unload', handler)
+
+    teardown()
+
+    window.dispatchEvent(new Event('pagehide'))
+
+    expect(handler).not.toHaveBeenCalled()
+  })
 })
