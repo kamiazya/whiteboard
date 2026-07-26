@@ -15,7 +15,7 @@ description: Monitor and triage the POST-PUSH automated-review surface for the w
 | **CodeRabbit** | AI PR review (line comments + summary). **Skips while the PR title contains `WIP`/draft** | `gh pr view <PR> --json reviews,comments`; `gh api repos/{owner}/{repo}/pulls/<PR>/comments` |
 | **AccessLint** | accessibility review app | its check + PR review comments |
 | **WIP** | blocks merge while the title says WIP | `gh pr checks` shows it pending; remove `WIP`/`(WIP)` from the title to release it + un-skip CodeRabbit |
-| **CodeQL** | security code-scanning (may be unconfigured — `code-scanning/alerts` → 404 "no analysis") | `gh api repos/{owner}/{repo}/code-scanning/alerts` (needs `security_events`/admin scope) |
+| **CodeQL** | security code-scanning | **primary (scope-free):** its findings post as PR review comments by `github-advanced-security[bot]` — `gh api repos/{owner}/{repo}/pulls/<PR>/comments --jq '.[]\|select(.user.login=="github-advanced-security[bot]")'`. **enrichment (may 404 on scope / "no analysis"):** `gh api repos/{owner}/{repo}/code-scanning/alerts` (needs `security_events`/admin) for severity/state |
 | **Dependabot** | dependency-bump PRs + security alerts | **handled by its own flow** — the `dependabot-triage` workflow + `dependabot-review` skill (semver×ecosystem classify, conflict-cascade-safe merge, `pnpm audit --prod` gate). Don't triage it here. |
 
 Note: some security APIs need `gh auth refresh -s security_events` (or admin) — if a fetch 404s on scope, skip that source and note it rather than failing the triage.
@@ -56,7 +56,7 @@ done
 - **CI `verify` failure** → almost always REAL and blocking. Read `--log-failed`, reproduce locally, fix on the spot (it gates merge). A flaky-isolation failure (see `audit-test-fixture-dedup`) is the one exception — re-run before treating as real.
 - **CodeRabbit** → high recall, variable precision. Treat each comment as a CANDIDATE: keep correctness/security/contract points; drop style nits already covered by Biome and "consider"-grade suggestions that don't apply. Verify against the actual code before filing (it hallucinates context).
 - **AccessLint** → real a11y findings on UI diffs; keep, file under the touched component.
-- **CodeQL** → security; treat HIGH+ as task-track, verify the data-flow is real (not a sanitized path).
+- **CodeQL** (`github-advanced-security[bot]` PR comments) → security; verify the data-flow is real (not an already-sanitized path). A finding on an **untrusted-input path** (a parser/regex over user/document content — ReDoS, injection) is REAL and **blocking**: fix it on the branch (red test first) before merge, don't just task-track it. Genuinely lower-severity or false-positive ones → task-track / dismiss with a recorded rationale.
 - **Dependabot** → not triaged here; use the `dependabot-triage` workflow + `dependabot-review` skill (PRs + alerts, security-first, `pnpm audit --prod` gate).
 
 ## Filing (integrator)
