@@ -29,9 +29,7 @@ export const coreFacetsArbitrary = fc.record(
   { requiredKeys: ['type'] },
 )
 
-const domainArbitrary = fc
-  .stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
-  .filter((domain) => /^[a-z]/.test(domain))
+const domainArbitrary = fc.stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
 const versionArbitrary = fc.integer({ min: 0, max: 99 }).map((n) => String(n))
 
 const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
