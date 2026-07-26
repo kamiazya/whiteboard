@@ -3,7 +3,7 @@
 // Run after `pnpm build` to catch regressions before deploy.
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = resolve(ROOT, 'dist')
@@ -225,6 +225,11 @@ function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// import.meta.url is always percent-encoded (spaces, non-ASCII, etc.) while
+// process.argv[1] is a raw filesystem path — comparing them as strings fails
+// on a checkout path containing characters that need encoding, so main()
+// silently never runs. Route argv[1] through pathToFileURL for a like-for-like
+// URL comparison instead.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main()
 }

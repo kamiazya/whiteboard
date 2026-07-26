@@ -47,8 +47,10 @@ function hasWasmMagic(bytes: Uint8Array): boolean {
 /**
  * Removes any custom section named `sourceMappingURL` from a wasm module.
  * Byte-identical to the input for every other section, in original order.
- * Non-wasm or truncated input is returned unchanged rather than throwing —
- * this runs inside a build plugin where a parse surprise must not break the
+ * Non-wasm or truncated/malformed input is returned unchanged rather than
+ * throwing or partially rewritten — even if a valid sourceMappingURL section
+ * was found and removed before the truncation/malformation was hit. This
+ * runs inside a build plugin where a parse surprise must not break the
  * build; the smoke-artifact unpkg.com scan is the backstop that catches a
  * silently-unstripped module.
  */
@@ -60,6 +62,7 @@ export function stripWasmSourceMap(bytes: Uint8Array): Uint8Array {
   const chunks: Uint8Array[] = [bytes.subarray(0, HEADER_LENGTH)]
   let offset = HEADER_LENGTH
   let changed = false
+  let malformed = false
 
   while (offset < bytes.length) {
     const sectionStart = offset
@@ -72,6 +75,7 @@ export function stripWasmSourceMap(bytes: Uint8Array): Uint8Array {
       // Truncated trailing bytes: keep them verbatim rather than dropping data.
       chunks.push(bytes.subarray(sectionStart))
       offset = bytes.length
+      malformed = true
       break
     }
     const contentStart = cursor + sizeInfo.bytesRead
@@ -80,6 +84,7 @@ export function stripWasmSourceMap(bytes: Uint8Array): Uint8Array {
       // Malformed/truncated module — bail out and keep the remainder as-is.
       chunks.push(bytes.subarray(sectionStart))
       offset = bytes.length
+      malformed = true
       break
     }
 
@@ -106,7 +111,10 @@ export function stripWasmSourceMap(bytes: Uint8Array): Uint8Array {
     offset = contentEnd
   }
 
-  if (!changed) {
+  // A malformed/truncated trailing section means the module wasn't fully
+  // parsed; honor the fail-safe contract and return it unchanged even if a
+  // valid sourceMappingURL section was removed earlier in the byte stream.
+  if (!changed || malformed) {
     return bytes
   }
 

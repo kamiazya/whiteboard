@@ -131,6 +131,27 @@ describe('stripWasmSourceMap', () => {
     expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
   })
 
+  it('returns the input unchanged when a truncated section follows a valid sourceMappingURL section', () => {
+    const url = 'https://unpkg.com/x'
+    const urlBytes = Array.from(Buffer.from(url, 'utf8'))
+    const sourceMappingSection = customSection('sourceMappingURL', [
+      ...uleb128(urlBytes.length),
+      ...urlBytes,
+    ])
+    // A trailing section id followed only by continuation-flagged ULEB128 bytes
+    // (high bit set, never terminated) — the buffer ends mid-varint, after a
+    // removable section was already seen.
+    const truncatedTail = [0x00, 0x80, 0x80]
+    const wasm = new Uint8Array([
+      ...buildWasm([typeSection(), sourceMappingSection]),
+      ...truncatedTail,
+    ])
+
+    const stripped = stripWasmSourceMap(wasm)
+
+    expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
+  })
+
   it('leaves a custom section untouched when its declared name length overruns its own content', () => {
     // Custom section content: name-length ULEB128 (10) but only 3 bytes of
     // name/payload actually follow — nameEnd > contentEnd inside the section.
