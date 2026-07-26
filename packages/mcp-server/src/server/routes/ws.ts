@@ -387,7 +387,19 @@ export async function handleWsUpgrade(
       }
 
       await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
-      onPersistedForTests?.(workspaceId, slug)
+      // Isolated in its own try/catch: this hook exists only so tests can
+      // await a deterministic "persisted" signal instead of polling. A
+      // callback throwing must never be able to make an already-successful
+      // save look like a persistence failure (cache eviction + 1011 close
+      // + dropped broadcast) to real clients.
+      try {
+        onPersistedForTests?.(workspaceId, slug)
+      } catch (err: unknown) {
+        getLogger('ws').warning(
+          { workspaceId, slug, err },
+          'onPersistedForTests test hook threw; ignoring',
+        )
+      }
       broadcastLoroUpdate(workspaceId, slug, bytes, ws)
 
       // Trigger auto-versioning on the WS path as well, since browser edits primarily use it.
