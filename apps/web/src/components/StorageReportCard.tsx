@@ -139,19 +139,31 @@ export function StorageReportCard() {
   // the callback resumes (e.g. end-of-test-file jsdom teardown racing a
   // pending setTimeout), the same call throws.
   const mountedRef = useRef(true)
+  // Every id here is a still-pending scheduleStatusClear timeout. Cleared on
+  // unmount so none of them can fire after the environment that scheduled
+  // them (e.g. a jsdom `window`) is gone — the mountedRef guard alone stops
+  // the resulting setState, but not the timer callback itself from running
+  // and touching globals that may no longer exist.
+  const pendingStatusClearIds = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
   useEffect(() => {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
+      for (const id of pendingStatusClearIds.current) {
+        clearTimeout(id)
+      }
+      pendingStatusClearIds.current.clear()
     }
   }, [])
 
   // Clear a transient action status after STATUS_CLEAR_MS, skipping the
   // setState if the component unmounted while the timer was pending.
   const scheduleStatusClear = useCallback((clear: () => void) => {
-    window.setTimeout(() => {
+    const id = setTimeout(() => {
+      pendingStatusClearIds.current.delete(id)
       if (mountedRef.current) clear()
     }, STATUS_CLEAR_MS)
+    pendingStatusClearIds.current.add(id)
   }, [])
 
   // Coarse tick so the "Updated …" / "Auto-optimised …" lines stay live
