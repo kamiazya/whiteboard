@@ -99,4 +99,87 @@ describe('resolveReferences', () => {
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
     expect(children.children).toEqual([{ type: 'text', value: '![[Missing]]' }])
   })
+
+  it('resolves a [[canvas:ULID]] reference nested inside a blockquote', () => {
+    const root = {
+      type: 'root' as const,
+      children: [
+        {
+          type: 'blockquote' as const,
+          children: [
+            {
+              type: 'paragraph' as const,
+              children: [{ type: 'text' as const, value: `[[canvas:${ULID}]]` }],
+            },
+          ],
+        },
+      ],
+    }
+    const resolved = resolveReferences(root)
+
+    const blockquote = resolved.children[0]
+    if (blockquote.type !== 'blockquote') throw new Error('expected blockquote')
+    const inner = blockquote.children[0]
+    if (inner.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(inner.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: undefined }])
+  })
+
+  it('resolves a [[canvas:ULID]] reference nested inside a list item', () => {
+    const root = {
+      type: 'root' as const,
+      children: [
+        {
+          type: 'list' as const,
+          children: [
+            {
+              type: 'listItem' as const,
+              children: [
+                {
+                  type: 'paragraph' as const,
+                  children: [{ type: 'text' as const, value: `[[canvas:${ULID}]]` }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const resolved = resolveReferences(root)
+
+    const list = resolved.children[0]
+    if (list.type !== 'list') throw new Error('expected list')
+    const listItem = list.children[0]
+    const paragraphNode = listItem.children[0]
+    if (paragraphNode.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(paragraphNode.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: undefined }])
+  })
+
+  it('resolves a [[canvas:ULID]] reference nested inside a table cell', () => {
+    const root = {
+      type: 'root' as const,
+      children: [
+        {
+          type: 'table' as const,
+          children: [
+            {
+              type: 'tableRow' as const,
+              children: [
+                {
+                  type: 'tableCell' as const,
+                  children: [{ type: 'text' as const, value: `[[canvas:${ULID}]]` }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const resolved = resolveReferences(root)
+
+    const table = resolved.children[0]
+    if (table.type !== 'table') throw new Error('expected table')
+    const row = table.children[0]
+    const cell = row.children[0]
+    expect(cell.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: undefined }])
+  })
 })
