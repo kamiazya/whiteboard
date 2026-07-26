@@ -12,9 +12,8 @@ export type SpatialSerializeMode = 'strict' | 'extended'
  * Canvas 1.0 document, not merely "close enough" JSON.
  */
 export function serializeSpatial(canvas: SpatialCanvas, mode: SpatialSerializeMode): string {
-  const output = mode === 'strict' ? strictDegrade(canvas) : canvas
-  if (mode === 'strict') {
-    spatialCanvasSchema.parse(output)
-  }
-  return JSON.stringify(output)
+  if (mode === 'extended') return JSON.stringify(canvas)
+  const degraded = strictDegrade(canvas)
+  spatialCanvasSchema.parse(degraded)
+  return JSON.stringify(degraded)
 }

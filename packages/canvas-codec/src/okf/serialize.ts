@@ -12,7 +12,7 @@ function canonicalizeFacets(
   facets: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (facets === undefined) return undefined
-  const sortedKeys = Object.keys(facets).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  const sortedKeys = Object.keys(facets).sort()
   const canonical: Record<string, unknown> = {}
   for (const key of sortedKeys) canonical[key] = facets[key]
   return canonical
