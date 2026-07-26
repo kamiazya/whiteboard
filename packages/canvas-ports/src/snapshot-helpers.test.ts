@@ -3,7 +3,7 @@ import { snapshotChunkSchema, snapshotManifestSchema } from './snapshot.js'
 import { chunkSnapshot, reassembleSnapshot } from './snapshot-helpers.js'
 import { SnapshotReassemblyError } from './snapshot-reassembly-error.js'
 
-function bytesOf(length: number): Uint8Array {
+function bytesOf(length: number): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(length)
   for (let i = 0; i < length; i++) out[i] = i % 256
   return out
@@ -156,6 +156,34 @@ describe('reassembleSnapshot', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(SnapshotReassemblyError)
       expect((error as SnapshotReassemblyError).code).toBe('EMPTY_CHUNK_LIST')
+    }
+  })
+
+  it('throws a typed SnapshotReassemblyError(WRONG_TOTAL_LENGTH), never a raw RangeError, when totalBytes undercounts otherwise well-formed chunks', () => {
+    // Both chunks individually pass the per-chunk maxChunkBytes bound, but their
+    // combined length (8) exceeds the manifest's totalBytes (5) — this must be
+    // caught before allocating/writing into the destination buffer.
+    const manifest = { chunkCount: 2, totalBytes: 5, maxChunkBytes: 4 }
+    try {
+      reassembleSnapshot(manifest, [
+        { index: 0, of: 2, bytes: bytesOf(4) },
+        { index: 1, of: 2, bytes: bytesOf(4) },
+      ])
+      expect.fail('expected reassembleSnapshot to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(SnapshotReassemblyError)
+      expect((error as SnapshotReassemblyError).code).toBe('WRONG_TOTAL_LENGTH')
+    }
+  })
+
+  it('throws SnapshotReassemblyError(INVALID_MANIFEST) when chunkCount is 0 but chunks is non-empty', () => {
+    const manifest = { chunkCount: 0, totalBytes: 0, maxChunkBytes: 4 }
+    try {
+      reassembleSnapshot(manifest, [{ index: 0, of: 1, bytes: bytesOf(1) }])
+      expect.fail('expected reassembleSnapshot to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(SnapshotReassemblyError)
+      expect((error as SnapshotReassemblyError).code).toBe('INVALID_MANIFEST')
     }
   })
 })

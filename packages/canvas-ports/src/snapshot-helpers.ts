@@ -48,6 +48,12 @@ export function reassembleSnapshot(
   const { chunkCount, totalBytes, maxChunkBytes } = manifest
 
   if (chunkCount === 0) {
+    if (chunks.length > 0) {
+      throw new SnapshotReassemblyError(
+        'INVALID_MANIFEST',
+        `manifest declares chunkCount 0 but received ${chunks.length} chunk(s)`,
+      )
+    }
     return new Uint8Array(0)
   }
 
@@ -107,18 +113,24 @@ export function reassembleSnapshot(
     }
   }
 
+  // Sum the (already length-validated) chunks and compare against
+  // manifest.totalBytes before allocating/writing into the destination
+  // buffer. Deferring this check until after `combined.set(...)` would let
+  // an inconsistent manifest (chunks summing to more than totalBytes) throw
+  // a raw, untyped RangeError instead of the promised SnapshotReassemblyError.
+  const aggregateLength = sorted.reduce((sum, chunk) => sum + chunk.bytes.byteLength, 0)
+  if (aggregateLength !== totalBytes) {
+    throw new SnapshotReassemblyError(
+      'WRONG_TOTAL_LENGTH',
+      `reassembled ${aggregateLength} bytes, expected totalBytes ${totalBytes}`,
+    )
+  }
+
   const combined = new Uint8Array(totalBytes)
   let offset = 0
   for (const chunk of sorted) {
     combined.set(chunk.bytes, offset)
     offset += chunk.bytes.byteLength
-  }
-
-  if (offset !== totalBytes) {
-    throw new SnapshotReassemblyError(
-      'WRONG_TOTAL_LENGTH',
-      `reassembled ${offset} bytes, expected totalBytes ${totalBytes}`,
-    )
   }
 
   return combined
