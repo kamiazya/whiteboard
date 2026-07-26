@@ -6,6 +6,7 @@ export default defineConfig({
       'packages/mcp-server/vitest.node.config.ts',
       'packages/mcp-server/vitest.smoke.config.ts',
       'packages/canvas-model/vitest.node.config.ts',
+      'packages/canvas-ports/vitest.node.config.ts',
       'packages/canvas-viewer/vitest.node.config.ts',
       'packages/canvas-viewer/vitest.jsdom.config.ts',
       'packages/canvas-viewer/vitest.browser.config.ts',

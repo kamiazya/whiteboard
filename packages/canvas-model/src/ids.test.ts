@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canvasIdSchema, nodeIdSchema } from './ids.js'
+import { canvasIdSchema, nodeIdSchema, workspaceIdSchema } from './ids.js'
 
 describe('canvasIdSchema', () => {
   it('accepts a canonical 26-char ULID starting with 0-7', () => {
@@ -32,5 +32,31 @@ describe('nodeIdSchema', () => {
 
   it('rejects an empty string', () => {
     expect(nodeIdSchema.safeParse('').success).toBe(false)
+  })
+})
+
+describe('workspaceIdSchema', () => {
+  it('accepts existing path-safe-slug workspace ids used across the codebase', () => {
+    for (const id of ['workspace-a', 'ws_main', 'session-1', 'sid', 'M7lgM0WguBnkfP_1iOFtY']) {
+      expect(workspaceIdSchema.safeParse(id).success).toBe(true)
+    }
+  })
+
+  it('rejects an empty string', () => {
+    expect(workspaceIdSchema.safeParse('').success).toBe(false)
+  })
+
+  it('rejects path-traversal and path-separator characters', () => {
+    expect(workspaceIdSchema.safeParse('../escape').success).toBe(false)
+    expect(workspaceIdSchema.safeParse('a/b').success).toBe(false)
+  })
+
+  it('rejects dots and whitespace', () => {
+    expect(workspaceIdSchema.safeParse('a.b').success).toBe(false)
+    expect(workspaceIdSchema.safeParse(' ws').success).toBe(false)
+  })
+
+  it('rejects non-ASCII characters', () => {
+    expect(workspaceIdSchema.safeParse('wsé').success).toBe(false)
   })
 })

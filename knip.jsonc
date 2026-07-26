@@ -72,6 +72,13 @@
       "entry": ["src/index.ts", "src/mdast/index.ts"],
       "project": ["src/**/*.ts"]
     },
+    "packages/canvas-ports": {
+      // Contracts-only package; consumed by future canvas-workspace /
+      // server-core / composition-root slices, not yet by anything in this
+      // repo. Deliberately unreferenced until those land.
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "packages/canvas-viewer": {
       // widget-entry.ts and widget/refresh-control.ts are owned by a
       // concurrent in-flight lane — deliberately left unconfigured here so

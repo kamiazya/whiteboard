@@ -8,7 +8,14 @@ import type {
   FacetsRaw,
   facetsRawSchema,
 } from './facets.js'
-import type { CanvasId, canvasIdSchema, NodeId, nodeIdSchema } from './ids.js'
+import type {
+  CanvasId,
+  canvasIdSchema,
+  NodeId,
+  nodeIdSchema,
+  WorkspaceId,
+  workspaceIdSchema,
+} from './ids.js'
 import type { MarkdownCanvas, markdownCanvasSchema } from './markdown.js'
 import type { MdastNode } from './mdast/index.js'
 import { mdastNodeSchema } from './mdast/index.js'
@@ -43,6 +50,7 @@ it('type-source invariant: exported types equal z.infer of their schema', () => 
   expectTypeOf<FacetsRaw>().toEqualTypeOf<z.infer<typeof facetsRawSchema>>()
   expectTypeOf<CanvasId>().toEqualTypeOf<z.infer<typeof canvasIdSchema>>()
   expectTypeOf<NodeId>().toEqualTypeOf<z.infer<typeof nodeIdSchema>>()
+  expectTypeOf<WorkspaceId>().toEqualTypeOf<z.infer<typeof workspaceIdSchema>>()
   expectTypeOf<CanvasColor>().toEqualTypeOf<z.infer<typeof canvasColorSchema>>()
   expectTypeOf<SpatialNode>().toEqualTypeOf<z.infer<typeof spatialNodeSchema>>()
   expectTypeOf<CanvasEdge>().toEqualTypeOf<z.infer<typeof canvasEdgeSchema>>()
