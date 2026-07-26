@@ -1,6 +1,5 @@
 export const WHITEBOARD_HELP_URI = 'whiteboard://help/getting-started'
 export const WHITEBOARD_DRAW_PROMPT = 'whiteboard.draw_diagram'
-export const WHITEBOARD_INSTALLED_LIBRARIES_URI = 'whiteboard://state/libraries/installed'
 export const WHITEBOARD_RECENT_CANVASES_URI = 'whiteboard://state/canvases/recent'
 
 const HELP_LINES = [
@@ -41,19 +40,6 @@ export function buildDrawDiagramPrompt(goal: string, diagramType?: string): stri
     'Prefer semantic palette keys if the diagram has repeated categories or states.',
     'Inspect the canvas after each major draw step and export only after the structure is stable.',
   ].join('\n')
-}
-
-export function formatInstalledLibrariesResource(installedUrls: string[]): string {
-  if (installedUrls.length === 0) {
-    return [
-      '# Installed libraries',
-      '',
-      'No libraries are currently installed in this workspace.',
-      'Use `library_install` or the browser library dialog to add one.',
-    ].join('\n')
-  }
-
-  return ['# Installed libraries', '', ...installedUrls.map((url) => `- ${url}`)].join('\n')
 }
 
 export function formatRecentCanvasesResource(

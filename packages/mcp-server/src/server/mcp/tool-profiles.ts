@@ -13,10 +13,6 @@ const DESTRUCTIVE_IDEMPOTENT = {
 const MUTATING_IDEMPOTENT = { idempotentHint: true, openWorldHint: false } as const
 export const MUTATING = { openWorldHint: false } as const
 
-// Tools that fetch external URLs declare openWorldHint: true.
-const READ_ONLY_EXTERNAL = { readOnlyHint: true, openWorldHint: true } as const
-const MUTATING_EXTERNAL = { openWorldHint: true } as const
-
 // Map from tool name to annotation profile and human-friendly title. Used by
 // registerToolWithAnnotations when building McpServer annotations.
 export type AnnotationProfile = Readonly<Record<string, boolean>>
@@ -31,13 +27,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   list_groups: { profile: READ_ONLY, title: 'List element groups' },
   template_list: { profile: READ_ONLY, title: 'List built-in templates' },
   palette_get: { profile: READ_ONLY, title: 'Get palette entries' },
-  user_library_list: { profile: READ_ONLY, title: 'List user libraries' },
-  user_library_metadata_get: { profile: READ_ONLY, title: 'Get user library metadata' },
-  library_list_items: { profile: READ_ONLY, title: 'List library items' },
-  library_list_installed: { profile: READ_ONLY, title: 'List installed libraries' },
-
-  // Read-only (external fetch)
-  library_catalog_list: { profile: READ_ONLY_EXTERNAL, title: 'Search official library catalog' },
 
   // Destructive + idempotent (safe to rerun; tombstone/delete)
   canvas_clear: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Clear canvas (delete all elements)' },
@@ -45,12 +34,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   delete_elements: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete multiple elements' },
   delete_group: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete element group' },
   palette_delete: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete palette entries' },
-  library_uninstall: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Uninstall library' },
-  user_library_remove: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Remove user library' },
-  user_library_metadata_delete: {
-    profile: DESTRUCTIVE_IDEMPOTENT,
-    title: 'Delete user library metadata fields',
-  },
 
   // Mutating + idempotent (safe to rerun with the same arguments)
   update_element: { profile: MUTATING_IDEMPOTENT, title: 'Update element fields' },
@@ -66,7 +49,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   reorder_elements: { profile: MUTATING_IDEMPOTENT, title: 'Reorder elements (front/back)' },
   viewport_set: { profile: MUTATING_IDEMPOTENT, title: 'Set browser viewport' },
   palette_set: { profile: MUTATING_IDEMPOTENT, title: 'Set palette entries' },
-  user_library_metadata_set: { profile: MUTATING_IDEMPOTENT, title: 'Set user library metadata' },
   assign_to_group: { profile: MUTATING_IDEMPOTENT, title: 'Assign elements to group' },
   update_frame_members: { profile: MUTATING_IDEMPOTENT, title: 'Update frame members' },
   optimize_canvases: {
@@ -89,13 +71,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   template_insert: { profile: MUTATING, title: 'Insert template parts' },
   create_frame: { profile: MUTATING, title: 'Create frame container' },
   create_embed: { profile: MUTATING, title: 'Embed external URL into canvas' },
-  library_insert_item: { profile: MUTATING, title: 'Insert library item' },
-  library_insert_batch: { profile: MUTATING, title: 'Insert multiple library items' },
-  user_library_save: { profile: MUTATING, title: 'Save user library' },
   version_save: { profile: MUTATING, title: 'Save labeled version' },
   version_restore: { profile: MUTATING, title: 'Restore canvas from version' },
   version_list: { profile: READ_ONLY, title: 'List versions' },
-
-  // Mutating + external (fetches over HTTPS and writes daemon state)
-  library_install: { profile: MUTATING_EXTERNAL, title: 'Install library from HTTPS URL' },
 }

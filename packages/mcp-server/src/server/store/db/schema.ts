@@ -63,28 +63,6 @@ interface PaletteTable {
   value: string
 }
 
-interface InstalledLibrariesTable {
-  workspaceId: string
-  url: string
-  installedAt: Timestamp
-}
-
-interface UserLibrariesTable {
-  name: string
-  itemCount: number | null
-  createdAt: Timestamp
-  updatedAt: Timestamp
-}
-
-// User-library metadata is keyed by library name and item key. Aliases / notes / scales
-// are stored as JSON-encoded strings to keep the schema simple while preserving the
-// nested manifest shape callers expect (UserLibraryMetadataManifest).
-interface UserLibraryMetadataTable {
-  name: string
-  manifestJson: string
-  updatedAt: Timestamp
-}
-
 // Single-row key/value store for daemon-runtime markers (currentWorkspaceId,
 // daemonPid, daemonStartedAt, etc.). Keeps the FS clean of tiny dot-files.
 interface RuntimeTable {
@@ -99,8 +77,5 @@ export interface DatabaseSchema {
   branches: BranchesTable
   versions: VersionsTable
   palette: PaletteTable
-  installed_libraries: InstalledLibrariesTable
-  user_libraries: UserLibrariesTable
-  user_library_metadata: UserLibraryMetadataTable
   runtime: RuntimeTable
 }

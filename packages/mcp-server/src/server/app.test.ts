@@ -547,20 +547,12 @@ describe('createApp daemon mutation auth', () => {
     await transport.close()
   })
 
-  it('exposes dynamic installed-library and recent-canvas resources', async () => {
+  it('exposes dynamic recent-canvas resources', async () => {
     const app = createApp(createRuntimeOptions('secret'))
     globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = input.toString()
       if (url === 'http://daemon.test/api/runtime/touch') {
         return new Response(null, { status: 204 })
-      }
-      if (/^http:\/\/daemon\.test\/api\/workspaces\/[^/]+\/libraries$/.test(url)) {
-        return new Response(
-          JSON.stringify({
-            urls: ['https://libraries.example.com/architecture.excalidrawlib'],
-          }),
-          { status: 200 },
-        )
       }
       if (url === 'http://daemon.test/api/workspaces') {
         return new Response(
@@ -606,29 +598,16 @@ describe('createApp daemon mutation auth', () => {
     expect(resources.resources).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          uri: 'whiteboard://state/libraries/installed',
-          name: 'whiteboard-installed-libraries',
-        }),
-        expect.objectContaining({
           uri: 'whiteboard://state/canvases/recent',
           name: 'whiteboard-recent-canvases',
         }),
       ]),
     )
 
-    const installedLibraries = await client.readResource({
-      uri: 'whiteboard://state/libraries/installed',
-    })
     const recentCanvases = await client.readResource({
       uri: 'whiteboard://state/canvases/recent',
     })
 
-    expect(installedLibraries.contents).toEqual([
-      expect.objectContaining({
-        uri: 'whiteboard://state/libraries/installed',
-        text: expect.stringContaining('https://libraries.example.com/architecture.excalidrawlib'),
-      }),
-    ])
     expect(recentCanvases.contents).toEqual([
       expect.objectContaining({
         uri: 'whiteboard://state/canvases/recent',

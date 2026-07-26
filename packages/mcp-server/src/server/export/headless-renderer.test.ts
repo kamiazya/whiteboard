@@ -219,7 +219,7 @@ describe('headless-renderer', () => {
     expect(onlyFrameSvg.svg.length).toBeLessThan(wholeSceneSvg.svg.length)
   })
 
-  it('does not replace globalThis.fetch (would break DaemonClient.request, ensureDaemon ping, library tools)', async () => {
+  it('does not replace globalThis.fetch (would break DaemonClient.request, ensureDaemon ping)', async () => {
     // Pin the original Node fetch BEFORE forcing renderer init — anything
     // touching the renderer must not flip this reference, otherwise
     // process-wide HTTP calls start throwing "fetch is disabled".

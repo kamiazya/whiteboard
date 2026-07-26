@@ -19,7 +19,6 @@ import { createCanvasRouter } from './routes/canvas.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createExportRouter, resolveExportRequest } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
-import { createLibrariesRouter } from './routes/libraries.js'
 import {
   createOAuthAuthzRouter,
   OAUTH_AUTHZ_CORS_PATHS,
@@ -677,7 +676,6 @@ export function createApp(options: AppOptions) {
   app.route('/', createViewportRouter())
   app.route('/', createDebugRouter({ token }))
   app.route('/', createStatusRouter())
-  app.route('/', createLibrariesRouter())
   app.route('/', createPaletteRouter())
   // POST /api/ws-ticket (ADR-0005) is a local-daemon-only bridge from an
   // OAuth grant to a WS upgrade — server-mode's WS auth goes through its own

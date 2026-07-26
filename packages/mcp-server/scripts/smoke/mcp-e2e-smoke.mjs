@@ -770,32 +770,6 @@ async function main() {
     `[e2e] export_canvas(format:json) OK → ${body.elements.length} elems (type=${body.type}, v${body.version})`,
   )
 
-  // library_list_items via a local .excalidrawlib file: validates that the
-  // schema-based normalizeLibraryPayload accepts a standard v2 payload and that
-  // the MCP SDK validates the structured response against libraryListItemsOutputSchema.
-  const libPath = join(tmpDataDir, 'smoke.excalidrawlib')
-  writeFileSync(
-    libPath,
-    JSON.stringify({
-      type: 'excalidrawlib',
-      version: 2,
-      libraryItems: [
-        {
-          id: 'smoke-item',
-          name: 'smoke rect',
-          elements: [{ id: 'el-1', type: 'rectangle', x: 0, y: 0, width: 100, height: 50 }],
-        },
-      ],
-    }),
-  )
-  const libListed = await callTool('library_list_items', { libraryPath: libPath })
-  if (libListed.itemCount !== 1 || libListed.items[0]?.name !== 'smoke rect') {
-    throw new Error(`library_list_items returned unexpected shape: ${JSON.stringify(libListed)}`)
-  }
-  console.log(
-    `[e2e] library_list_items → itemCount=${libListed.itemCount} name=${libListed.items[0].name}`,
-  )
-
   // create_pairing_link: the MCP SDK validates structuredContent against the
   // tool's outputSchema at runtime, so this exercises drift the type system
   // can't see. Decode the emitted fragment and structurally check it against

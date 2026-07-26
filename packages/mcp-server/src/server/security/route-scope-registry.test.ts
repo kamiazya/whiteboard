@@ -177,21 +177,6 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     }
   })
 
-  // User libraries are workspace-shared state, so reading them is a workspace
-  // read — not a canvas read. Collapsing the read side onto canvas:read would
-  // let a grant approved only to read a canvas also enumerate the workspace's
-  // shared library, a broader surface than the user consented to.
-  it('reading a user library requires workspace:read, not canvas:read', () => {
-    expect(resolveApiRouteScope('GET', '/api/user-libraries')).toEqual({
-      kind: 'scoped',
-      scopes: ['workspace:read'],
-    })
-    expect(resolveApiRouteScope('PUT', '/api/user-libraries')).toEqual({
-      kind: 'scoped',
-      scopes: ['workspace:write'],
-    })
-  })
-
   // Destructive maintenance routes must not fall through to the broad
   // /api/workspaces workspace:write fallback — they need the narrower scope
   // that actually matches what they mutate (attachments vs. canvas history).

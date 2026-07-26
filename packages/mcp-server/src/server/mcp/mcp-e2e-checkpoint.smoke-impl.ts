@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { retryDaemonStartup } from './daemon-readiness.js'
@@ -277,50 +277,6 @@ export async function runE2eCheckpointSmoke({
       throw new Error(`palette_get returned unexpected shape: ${JSON.stringify(palette)}`)
     }
     console.log('[e2e] palette_get → OK')
-
-    const libsInstalled = await callTool('library_list_installed', {})
-    if (!Array.isArray(libsInstalled.installedUrls)) {
-      throw new Error(
-        `library_list_installed returned unexpected shape: ${JSON.stringify(libsInstalled)}`,
-      )
-    }
-    console.log(
-      `[e2e] library_list_installed → ${(libsInstalled.installedUrls as unknown[]).length} urls`,
-    )
-
-    // library_uninstall with a never-installed URL. removeInstalledLibrary is an idempotent SQL DELETE
-    // that returns the current installed list, so this succeeds offline without any HTTPS fetch.
-    const libUninstalled = await callTool('library_uninstall', {
-      libraryUrl: 'https://smoke-test.example.com/never-installed.excalidrawlib',
-    })
-    if (!Array.isArray(libUninstalled.installedUrls)) {
-      throw new Error(
-        `library_uninstall returned unexpected shape: ${JSON.stringify(libUninstalled)}`,
-      )
-    }
-    console.log('[e2e] library_uninstall (idempotent) → OK')
-
-    // library_list_items with a local fixture file — no HTTPS fetch required.
-    const libFixturePath = join(tmpDataDir, 'e2e-smoke.excalidrawlib')
-    await writeFile(
-      libFixturePath,
-      JSON.stringify({
-        type: 'excalidrawlib',
-        version: 2,
-        libraryItems: [
-          {
-            id: 'smoke-item-1',
-            name: 'smoke-rect',
-            elements: [{ id: 'se-1', type: 'rectangle', x: 0, y: 0, width: 40, height: 40 }],
-          },
-        ],
-      }),
-    )
-    const libItems = await callTool('library_list_items', { libraryPath: libFixturePath })
-    if ((libItems.itemCount as number) !== 1) {
-      throw new Error(`library_list_items returned unexpected shape: ${JSON.stringify(libItems)}`)
-    }
-    console.log(`[e2e] library_list_items (libraryPath) → ${libItems.itemCount} items`)
 
     const ann = await callTool('annotate', {
       canvasId: created.id,

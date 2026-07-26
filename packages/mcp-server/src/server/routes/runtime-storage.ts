@@ -20,7 +20,6 @@ export interface StorageReport {
     blobs: { bytes: number; files: number }
     versions: { bytes: number; files: number }
     files: { bytes: number; files: number }
-    libraries: { bytes: number; files: number }
     db: { bytes: number; files: number }
     // PNG / JSON exports the user produced via export_canvas.
     // Kept separate from "other" because they are
@@ -47,7 +46,6 @@ function emptyBucket(): Bucket {
 // writes today:
 //   blobs/<workspaceId>/canvas/<id>.loro         — canvas Loro snapshots
 //   blobs/<workspaceId>/versions/<id>.png        — version thumbnails
-//   blobs/.user-libraries/<name>.excalidrawlib   — user library JSON
 //   <workspaceId>/files/<id>.png                 — user-uploaded files
 //   <workspaceId>/exports/<file>.excalidraw.png  — export artifacts
 //   logs/                                        — daemon log files
@@ -57,10 +55,6 @@ function categorize(relPath: string): keyof StorageReport['byCategory'] {
   const segments = relPath.split('/').filter(Boolean)
   const head = segments[0] ?? ''
   if (head === 'blobs') {
-    // User libraries are stashed inside blobs/.user-libraries/ to share the
-    // same data dir as canvas snapshots — the directory name itself is the
-    // discriminator, not the depth.
-    if (segments[1] === '.user-libraries') return 'libraries'
     // Version thumbnails live at blobs/<ws>/versions/{id}.png; canvas
     // snapshots at blobs/<ws>/canvas/{id}.loro. Anything else under blobs/
     // is treated as canvas storage.
@@ -116,7 +110,6 @@ export async function computeStorageReport(dataDir: string): Promise<StorageRepo
       blobs: emptyBucket(),
       versions: emptyBucket(),
       files: emptyBucket(),
-      libraries: emptyBucket(),
       db: emptyBucket(),
       exports: emptyBucket(),
       logs: emptyBucket(),

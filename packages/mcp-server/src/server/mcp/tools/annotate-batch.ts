@@ -576,7 +576,7 @@ export function annotateBatchTool() {
       }
       // Per-item groupAs is additive on top of the batch-level group: an item
       // with its own groupAs ends up in both the shared batch group and its
-      // own sub-group, mirroring library_insert_batch's batch+item grouping.
+      // own sub-group.
       for (let index = 0; index < annotations.length; index++) {
         const itemGroupAs = bindings[index]?.groupAs
         if (!itemGroupAs) continue

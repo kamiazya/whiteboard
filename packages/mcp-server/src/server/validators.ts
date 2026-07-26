@@ -8,7 +8,6 @@ import {
 const SAFE_SLUG_SEGMENT = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
 const SAFE_WORKSPACE_ID = /^[a-zA-Z0-9_-]+$/
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9_-]+$/
-const SAFE_USER_LIBRARY_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/
 const SAFE_BRANCH_NAME = /^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$/
 const PRIVATE_ADDRESS_ERROR = 'Private or local addresses are not allowed in external URLs.'
 
@@ -179,16 +178,6 @@ export function validateVersionId(id: string): string {
 
 export function validateFileId(id: string): string {
   return validateSafeIdentifier(id, 'file id', 128)
-}
-
-export function validateUserLibraryName(name: string): string {
-  if (!SAFE_USER_LIBRARY_NAME.test(name) || name.includes('..')) {
-    throw new ValidationError(
-      'invalid_user_library_name',
-      `Invalid user library name: "${name}". Use letters, digits, dots, hyphens, and underscores.`,
-    )
-  }
-  return name
 }
 
 function isValidationError(error: unknown): error is ValidationError {

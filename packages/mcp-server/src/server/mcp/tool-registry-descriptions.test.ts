@@ -41,21 +41,6 @@ import {
   createFrameInputShape,
   updateFrameMembersInputShape,
 } from './tools/frame-embed.js'
-import { libraryCatalogListInputShape } from './tools/library-catalog.js'
-import {
-  libraryInsertBatchInputShape,
-  libraryInsertItemInputShape,
-  libraryInstallInputShape,
-  libraryListInstalledInputShape,
-  libraryListItemsInputShape,
-  libraryUninstallInputShape,
-  userLibraryListInputShape,
-  userLibraryMetadataDeleteInputShape,
-  userLibraryMetadataGetInputShape,
-  userLibraryMetadataSetInputShape,
-  userLibraryRemoveInputShape,
-  userLibrarySaveInputShape,
-} from './tools/library.js'
 import { loadImageInputShape } from './tools/load.js'
 import {
   paletteDeleteInputShape,
@@ -89,19 +74,6 @@ const REGISTERED_INPUT_SHAPES: Record<string, z.ZodRawShape> = {
   export_canvas: exportCanvasInputShape,
   viewport_set: viewportSetInputShape,
   canvas_auto_layout: canvasAutoLayoutInputShape,
-  library_list_items: libraryListItemsInputShape,
-  library_insert_item: libraryInsertItemInputShape,
-  library_insert_batch: libraryInsertBatchInputShape,
-  library_install: libraryInstallInputShape,
-  library_uninstall: libraryUninstallInputShape,
-  library_list_installed: libraryListInstalledInputShape,
-  library_catalog_list: libraryCatalogListInputShape,
-  user_library_save: userLibrarySaveInputShape,
-  user_library_list: userLibraryListInputShape,
-  user_library_remove: userLibraryRemoveInputShape,
-  user_library_metadata_get: userLibraryMetadataGetInputShape,
-  user_library_metadata_set: userLibraryMetadataSetInputShape,
-  user_library_metadata_delete: userLibraryMetadataDeleteInputShape,
   canvas_inspect: canvasInspectInputShape,
   template_list: listTemplatesInputShape,
   template_insert: insertTemplateInputShape,
@@ -176,6 +148,6 @@ describe('registered tool inputSchema descriptions', () => {
   it('covers every tool registered in tool-registration.ts (guards against a silently-skipped new tool)', () => {
     // Kept in sync manually with the `inputSchema:` count in tool-registration.ts.
     // A mismatch here means a new tool was registered without adding it above.
-    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(48)
+    expect(Object.keys(REGISTERED_INPUT_SHAPES)).toHaveLength(35)
   })
 })

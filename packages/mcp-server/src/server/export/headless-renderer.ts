@@ -131,10 +131,9 @@ async function buildExporter(): Promise<HeadlessExporter> {
   // Disable fetch *only* on the happy-dom window so any Excalidraw code
   // that reaches for `window.fetch` to load remote fonts / assets at
   // render time fails fast. Crucially we do NOT touch `globalThis.fetch`
-  // — that is the same fetch used by DaemonClient.request,
-  // ensureDaemon's ping, and the user-library install tools, and
-  // overwriting it would break every HTTP call across the daemon after
-  // the first headless export.
+  // — that is the same fetch used by DaemonClient.request and
+  // ensureDaemon's ping, and overwriting it would break every HTTP call
+  // across the daemon after the first headless export.
   Object.defineProperty(win, 'fetch', {
     value: async () => {
       throw new Error('fetch is disabled in headless-renderer')

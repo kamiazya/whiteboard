@@ -700,24 +700,6 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('GET /api/user-libraries → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries')
-      expect(res.status).toBe(401)
-    })
-
-    it('GET /api/user-libraries → 403 with runtime:read only (requires canvas:read)', async () => {
-      const app = createApp(makeServerModeOptions(['runtime:read']))
-      const res = await app.request('/api/user-libraries', { headers: { authorization: BEARER } })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/user-libraries/foo/metadata → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/foo/metadata')
-      expect(res.status).toBe(401)
-    })
-
     // Workspace write operations
     it('POST /api/workspaces/:wid/canvases → 403 with workspace:read only (requires workspace:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
@@ -745,47 +727,6 @@ describe('app — server-mode composition', () => {
         method: 'PUT',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({ name: 'New Canvas Name' }),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    // User library write operations
-    it('PUT /api/user-libraries/:name → 403 with canvas:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/my-lib', {
-        method: 'PUT',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({ elements: [] }),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('DELETE /api/user-libraries/:name → 403 with canvas:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/my-lib', {
-        method: 'DELETE',
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('POST /api/user-libraries/:name/metadata → 403 with canvas:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/my-lib/metadata', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    // DELETE /api/workspaces/:wid/libraries requires workspace:write
-    it('DELETE /api/workspaces/:wid/libraries → 403 with workspace:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        method: 'DELETE',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({ url: 'https://example.com/lib.json' }),
       })
       expect(res.status).toBe(403)
     })

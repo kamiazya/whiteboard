@@ -13,16 +13,13 @@ import { ensureWorkspaceId } from './session-resolver.js'
 import { installStdioLifecycle } from './stdio-lifecycle.js'
 import {
   buildDrawDiagramPrompt,
-  formatInstalledLibrariesResource,
   formatRecentCanvasesResource,
   getStandaloneHelpText,
   WHITEBOARD_DRAW_PROMPT,
   WHITEBOARD_HELP_URI,
-  WHITEBOARD_INSTALLED_LIBRARIES_URI,
   WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
 import { listCanvasTool } from './tools/canvas.js'
-import { libraryListInstalledTool } from './tools/library.js'
 import { registerAllTools } from './tool-registration.js'
 
 export async function createExcalidrawMcpServer() {
@@ -115,30 +112,7 @@ export async function createExcalidrawMcpServer() {
   }
 
   // Dynamic resources need tool instances for their data fetch.
-  const libListInstalled = libraryListInstalledTool(workspaceId)
   const listTool = listCanvasTool()
-
-  server.registerResource(
-    'whiteboard-installed-libraries',
-    WHITEBOARD_INSTALLED_LIBRARIES_URI,
-    {
-      title: 'Installed libraries',
-      description: 'Dynamic summary of library URLs installed in the current workspace.',
-      mimeType: 'text/markdown',
-    },
-    async () => {
-      const libraries = await withDaemon((client) => libListInstalled.execute({}, client))
-      return {
-        contents: [
-          {
-            uri: WHITEBOARD_INSTALLED_LIBRARIES_URI,
-            mimeType: 'text/markdown',
-            text: formatInstalledLibrariesResource(libraries.installedUrls),
-          },
-        ],
-      }
-    },
-  )
 
   server.registerResource(
     'whiteboard-recent-canvases',
