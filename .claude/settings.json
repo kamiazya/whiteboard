@@ -40,6 +40,19 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/hooks/pre-pr-check-base.mjs",
+            "_comment": "Blocks `gh pr create` when the branch is behind a freshly fetched origin/main, so PRs are never born stale. Fail-open no-op for every other Bash call.",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash",

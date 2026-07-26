@@ -1,6 +1,6 @@
 # Integrator Flow (git / CI mechanics)
 
-Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout — if the hook reports "pull skipped", resolve the cause rather than ignoring it.
+Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, a PreToolUse hook blocks `gh pr create` while the branch is behind origin/main, and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause rather than working around it.
 
 ## pnpm-lock.yaml conflict recipe
 
