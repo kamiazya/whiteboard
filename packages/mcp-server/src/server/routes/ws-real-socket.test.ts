@@ -20,7 +20,7 @@
 
 import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
-import { createServer } from 'node:http'
+import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -67,12 +67,28 @@ const { clearCache } = await import('../store/doc-cache.js')
 const { loadCanvas } = await import('../store/canvas-store.js')
 const { handleWsUpgrade, setOnPersistedForTests } = await import('./ws.js')
 
-function connectAndWaitForOpen(url: string): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url)
-    ws.once('open', () => resolve(ws))
-    ws.once('error', reject)
+// Starts a real HTTP + WebSocket server bound to an ephemeral loopback port
+// and wired to handleWsUpgrade, resolving once it is listening.
+function startWsServer(): Promise<{ server: Server; wss: WebSocketServer; port: number }> {
+  const server = createServer()
+  const wss = new WebSocketServer({ server })
+  wss.on('connection', (ws, req) => {
+    void handleWsUpgrade(req, ws)
   })
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      if (address === null || typeof address === 'string') {
+        throw new Error('expected server to bind to a TCP port')
+      }
+      resolve({ server, wss, port: address.port })
+    })
+  })
+}
+
+function closeWsServer(server: Server, wss: WebSocketServer): Promise<void> {
+  wss.close()
+  return new Promise((resolve) => server.close(() => resolve()))
 }
 
 // Attaches the message listener at socket-creation time, not after `open`
@@ -126,27 +142,16 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
   })
 
   it('persists a binary Loro update under the injected scratch dir and never touches the real home dir', async () => {
-    const server = createServer()
-    const wss = new WebSocketServer({ server })
-    wss.on('connection', (ws, req) => {
-      void handleWsUpgrade(req, ws)
-    })
+    const { server, wss, port } = await startWsServer()
 
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    const address = server.address()
-    if (address === null || typeof address === 'string') {
-      throw new Error('expected server to bind to a TCP port')
-    }
-    const { port } = address
-
-    const client = await connectAndWaitForOpen(`ws://127.0.0.1:${port}/ws/session1/canvas-a`)
+    const { ws: client, snapshot } = await connectAndCaptureSnapshot(
+      `ws://127.0.0.1:${port}/ws/session1/canvas-a`,
+    )
     try {
       // First frame off the wire is always the initial snapshot; wait for
       // it before sending an update so the client doc's version vector is
       // based on the server's starting state.
-      const snapshotBytes = await new Promise<Buffer>((resolve) => {
-        client.once('message', (data: Buffer) => resolve(data))
-      })
+      const snapshotBytes = await snapshot
       const serverDoc = new LoroDoc()
       serverDoc.import(new Uint8Array(snapshotBytes))
       const prevVV = serverDoc.version()
@@ -169,8 +174,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       expect(elements.map((entry) => entry.id)).toContain('real-socket-elem')
     } finally {
       client.close()
-      wss.close()
-      await new Promise<void>((resolve) => server.close(() => resolve()))
+      await closeWsServer(server, wss)
     }
 
     // Persistence landed under the injected scratch dir: the sqlite db plus
@@ -187,18 +191,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
   })
 
   it('closes only the offending socket with 1003 on a malformed binary frame while the daemon and concurrent connections survive', async () => {
-    const server = createServer()
-    const wss = new WebSocketServer({ server })
-    wss.on('connection', (ws, req) => {
-      void handleWsUpgrade(req, ws)
-    })
-
-    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
-    const address = server.address()
-    if (address === null || typeof address === 'string') {
-      throw new Error('expected server to bind to a TCP port')
-    }
-    const { port } = address
+    const { server, wss, port } = await startWsServer()
 
     const { ws: clientA, snapshot: snapshotA } = await connectAndCaptureSnapshot(
       `ws://127.0.0.1:${port}/ws/session1/canvas-a`,
@@ -246,8 +239,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     } finally {
       clientA.close()
       clientB.close()
-      wss.close()
-      await new Promise<void>((resolve) => server.close(() => resolve()))
+      await closeWsServer(server, wss)
     }
   })
 })
