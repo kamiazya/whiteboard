@@ -11,10 +11,10 @@
 // each turn rather than reaching into scheduler/react-dom internals, so a
 // future React scheduling-channel change degrades this to a harmless no-op
 // instead of silently breaking.
-const DEFAULT_DRAIN_TURNS = 5
+const DRAIN_TURNS = 5
 
-export async function drainSchedulerMacrotasks(turns = DEFAULT_DRAIN_TURNS): Promise<void> {
-  for (let i = 0; i < turns; i += 1) {
+export async function drainSchedulerMacrotasks(): Promise<void> {
+  for (let i = 0; i < DRAIN_TURNS; i += 1) {
     await new Promise<void>((resolve) => setImmediate(resolve))
     await new Promise<void>((resolve) => setTimeout(resolve, 0))
   }
