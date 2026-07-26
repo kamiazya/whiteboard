@@ -47,6 +47,7 @@ describe('docs/ contract', () => {
       'packages/mcp-server': 'mcp',
       'packages/canvas-model': 'canvas-model',
       'packages/canvas-ports': 'canvas-ports',
+      'packages/canvas-codec': 'canvas-codec',
       'packages/canvas-render': 'canvas-render',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',
@@ -115,7 +116,7 @@ describe('docs/ contract', () => {
   })
 
   it('describes `pnpm test --project mcp-node` as a narrow, not a broad non-browser, pass', () => {
-    // mcp-node is one of eight root vitest.config.ts projects. A doc that
+    // mcp-node is one of thirteen root vitest.config.ts projects. A doc that
     // frames it as merely "skipping the Playwright browser project" implies
     // it still covers canvas-viewer and apps/web node/jsdom, which it does not.
     const developmentDocPath = join(DOCS_ROOT, 'contributing/development.md')
