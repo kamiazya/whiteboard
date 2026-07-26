@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
+import { drainSchedulerMacrotasks } from '@/test-utils/scheduler-drain.js'
 import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
 const PAYLOAD = {
@@ -213,6 +214,14 @@ describe('StorageReportCard', () => {
     // fetch response and MIN_REFRESH_MS floor — this is the timing window
     // that let a post-unmount setLoading(false) fire during jsdom teardown.
     unmount()
+    // Give React's own scheduler (MessageChannel/setImmediate based) a
+    // chance to run any trailing post-unmount work now, while `window` is
+    // still real — otherwise that work can fire later, after this test (or
+    // this file) tears down its environment, and throw
+    // "ReferenceError: window is not defined" attributed to an unrelated
+    // test. Real timers only: fake timers do not advance setImmediate.
+    vi.useRealTimers()
+    await drainSchedulerMacrotasks()
     // Simulate the jsdom environment being torn down (as Vitest does once a
     // test file's tests finish) while refresh()'s pending setTimeout is
     // still scheduled. React 19 silently no-ops a setState call on an
@@ -225,13 +234,17 @@ describe('StorageReportCard', () => {
     delete (globalThis as { window?: unknown }).window
     let thrown: unknown = null
     try {
-      await vi.advanceTimersByTimeAsync(500)
+      await new Promise((resolve) => setTimeout(resolve, 500))
     } catch (err) {
       thrown = err
     } finally {
       ;(globalThis as { window?: unknown }).window = savedWindow
     }
     expect(thrown).toBeNull()
+    // Drain once more before returning so no scheduler callback armed
+    // during the window-absent span above leaks into this file's Vitest
+    // teardown either.
+    await drainSchedulerMacrotasks()
   })
 
   it(
@@ -275,6 +288,14 @@ describe('StorageReportCard', () => {
       // scheduleStatusClear's own mountedRef branch instead of refresh()'s.
       unmount()
 
+      // Give React's own scheduler a bounded window to run any trailing
+      // post-unmount work now, while `window` is still real — see
+      // scheduler-drain.ts for why this is necessary even though the
+      // component itself no longer leaks the status-clear timer past
+      // unmount (that timer is clearTimeout-ed by the mount effect's
+      // cleanup; this drains unrelated React-internal scheduler work).
+      await drainSchedulerMacrotasks()
+
       // Simulate the jsdom environment being torn down before the timer
       // fires — the same "window is not defined" hazard the refresh() test
       // guards against, reached through a different handler this time.
@@ -289,9 +310,61 @@ describe('StorageReportCard', () => {
         ;(globalThis as { window?: unknown }).window = savedWindow
       }
       expect(thrown).toBeNull()
+      // Drain once more before returning so no scheduler callback armed
+      // during the window-absent span above leaks into this file's Vitest
+      // teardown either.
+      await drainSchedulerMacrotasks()
     },
     STATUS_CLEAR_MS + 5000,
   )
+
+  it('clears the pending status-clear timer on unmount instead of leaking it', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
+    fetchMock.mockImplementation((input: RequestInfo | URL) => {
+      const url =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (url === '/api/runtime/storage') {
+        return Promise.resolve(jsonResponse(PAYLOAD))
+      }
+      if (url === '/api/workspaces') {
+        return Promise.resolve(jsonResponse({ workspaces: [] }))
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`))
+    })
+
+    vi.useRealTimers()
+
+    const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
+    const clearTimeoutSpy = vi.spyOn(window, 'clearTimeout')
+
+    const { container, unmount } = render(<StorageReportCard />)
+    await waitFor(() => {
+      expect(container.querySelector('[data-storage-row="blobs"]')).not.toBeNull()
+    })
+
+    const blobsActions = container.querySelector('[data-storage-actions="blobs"]')!
+    fireEvent.click(blobsActions.querySelector('button')!)
+
+    // Wait for optimizeAll's finally block to arm the STATUS_CLEAR_MS timer
+    // via scheduleStatusClear, then capture the exact id it returned — not
+    // just "some" pending timer, since other setTimeout calls (e.g. the
+    // min-refresh floor) share the component.
+    let statusClearTimeoutId: ReturnType<typeof setTimeout> | undefined
+    await waitFor(() => {
+      const call = setTimeoutSpy.mock.calls.find(([, delay]) => delay === STATUS_CLEAR_MS)
+      expect(call).toBeDefined()
+      const index = setTimeoutSpy.mock.calls.indexOf(call!)
+      statusClearTimeoutId = setTimeoutSpy.mock.results[index]?.value
+      expect(statusClearTimeoutId).toBeDefined()
+    })
+
+    unmount()
+
+    expect(clearTimeoutSpy).toHaveBeenCalledWith(statusClearTimeoutId)
+
+    setTimeoutSpy.mockRestore()
+    clearTimeoutSpy.mockRestore()
+  })
 
   it('opens the libraries dialog, fetches rows, and renders the "file missing" branch', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
