@@ -305,7 +305,7 @@ tsx scripts/smoke/mcp-template-smoke.mjs
 
 | Gate | Command | What it enforces | Build / browser needed |
 |---|---|---|---|
-| Artifact smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:artifact` | `dist/index.html` + `dist/_headers` exist; CSP has no wildcard sources; no Cloudflare secrets in any artifact; preview-origin rejection wired into the JS bundle | `pnpm build` first (reads `apps/web/dist/`) |
+| Artifact smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:artifact` | `dist/index.html` + `dist/_headers` exist; CSP has no wildcard sources; no `unpkg.com` references anywhere in `dist/` (loro-crdt's WASM ships a `sourceMappingURL` custom section pointing at unpkg.com, stripped at build time — see `vite-plugin-strip-wasm-sourcemap.ts`); no Cloudflare secrets in any artifact; preview-origin rejection wired into the JS bundle | `pnpm build` first (reads `apps/web/dist/`) |
 | Preview-origin smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin` | Built `dist/` loaded in real Chromium with a preview `publicOrigin` renders `data-provider="invalid-config"`, not browser-local | Build + Playwright |
 | Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserLocalCanvasPage.browser.test.tsx`: IndexedDB save / reload / cleanup / post-cleanup-reload, plus the network-negative gate (no `/api/*` or daemon fetch during editing) | Real browser (Playwright) |
 | Origin policy | `pnpm --filter @kamiazya/whiteboard-web test` (`pages-origin-policy.test.ts`, `headers-policy.test.ts`) | `classifyPagesOrigin` keeps preview origins a distinct rejected class — a preview origin is never `production`, so it never enters a trusted/local-daemon allowlist; `_headers` CSP shape | jsdom only |
