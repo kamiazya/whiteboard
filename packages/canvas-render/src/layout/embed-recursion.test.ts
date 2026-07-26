@@ -113,6 +113,23 @@ describe('resolveEmbeds', () => {
     if (child?.kind === 'embedPlaceholder') expect(child.reason).toBe('unresolvable')
   })
 
+  it('renders a placeholder rather than resolving an inherited prototype key', () => {
+    // `docs` is looked up with `docs[canvasId]`; canvasId '__proto__' or
+    // 'toString' must not resolve to an inherited Object.prototype value.
+    const bundle: ResolvedDocBundle = {
+      root: { canvasId: 'A' },
+      docs: { A: doc('A', 'A', ['__proto__', 'toString']) },
+    }
+    const result = resolveEmbeds(bundle)
+    expect(result.kind).toBe('embedResolved')
+    const children = result.kind === 'embedResolved' ? result.children : []
+    expect(children).toHaveLength(2)
+    for (const child of children) {
+      expect(child.kind).toBe('embedPlaceholder')
+      if (child.kind === 'embedPlaceholder') expect(child.reason).toBe('unresolvable')
+    }
+  })
+
   it('never throws and terminates over a dense cyclic bundle', () => {
     const docs: ResolvedDocBundle['docs'] = {}
     const ids = ['A', 'B', 'C', 'D', 'E']

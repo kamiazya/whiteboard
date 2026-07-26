@@ -55,7 +55,11 @@ function resolveNode(
   depth: number,
   pathVisited: readonly string[],
 ): EmbedResolvedNode | EmbedPlaceholderNode {
-  const entry = bundle.docs[canvasId]
+  // `docs` is a caller-supplied plain object; a bracket lookup alone would
+  // resolve inherited Object.prototype members (e.g. canvasId '__proto__' or
+  // 'toString'), breaking totality. `Object.hasOwn` restricts the lookup to
+  // the object's own keys.
+  const entry = Object.hasOwn(bundle.docs, canvasId) ? bundle.docs[canvasId] : undefined
   const knownTitle = entry && 'embeds' in entry ? entry.title : undefined
 
   if (pathVisited.includes(canvasId)) {
