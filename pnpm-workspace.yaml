@@ -20,10 +20,10 @@ catalog:
   "@excalidraw/excalidraw": "^0.18.1"
   # shared build/test tooling
   typescript: "^6.0.3"
-  vite: "^8.1.3"
-  vitest: "^4.1.8"
-  "@vitest/browser-playwright": "^4.1.8"
-  "@vitest/coverage-v8": "^4.1.8"
+  vite: "^8.1.5"
+  vitest: "^4.1.10"
+  "@vitest/browser-playwright": "^4.1.10"
+  "@vitest/coverage-v8": "^4.1.10"
 
 # Supply-chain hardening: only install package versions published at least 7 days
 # (10080 min) ago, so a compromised fresh release (npm account takeover / malicious
