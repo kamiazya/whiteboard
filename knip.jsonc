@@ -64,6 +64,14 @@
         "src/server/security/auth-strategy.ts": ["duplicates"]
       }
     },
+    "packages/canvas-model": {
+      // Public surface for opencanvas slices 2/3 (serializer, scene/layout);
+      // intentionally unreferenced from any existing package until those
+      // land. "./internal" is the mdast subset's deliberately-separate,
+      // not-yet-public subpath.
+      "entry": ["src/index.ts", "src/mdast/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "packages/canvas-viewer": {
       // widget-entry.ts and widget/refresh-control.ts are owned by a
       // concurrent in-flight lane — deliberately left unconfigured here so
