@@ -1,12 +1,6 @@
 # Integrator Flow (git / CI mechanics)
 
-Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident.
-
-## Keep local main fresh
-
-- Immediately after every `gh pr merge`: `git pull --ff-only origin main` at the repo root. A stale local main makes every subsequently created branch start BEHIND and invites lockfile splits.
-- Create worktrees from an explicit, freshly fetched ref — `git fetch origin && git worktree add -b <name> <path> origin/main` — never from whatever HEAD the current checkout happens to be on.
-- Shell cwd persists between commands. `cd` to the repo root (absolute path) before creating worktrees or running repo-level git commands; running `new-worktree.mjs` from inside another worktree silently branches off that feature branch.
+Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout — if the hook reports "pull skipped", resolve the cause rather than ignoring it.
 
 ## pnpm-lock.yaml conflict recipe
 

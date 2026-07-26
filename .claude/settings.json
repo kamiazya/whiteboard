@@ -39,6 +39,19 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/scripts/hooks/post-merge-pull-main.mjs",
+            "_comment": "After a successful `gh pr merge`, fast-forward the local main checkout so the next branch/worktree never starts from a stale base. No-op (silent exit 0) for every other Bash call.",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   }
 }
