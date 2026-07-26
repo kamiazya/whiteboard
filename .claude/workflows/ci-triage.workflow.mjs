@@ -37,7 +37,7 @@ const SOURCES = Array.isArray(A.sources) && A.sources.length
       },
       {
         key: 'codeql',
-        brief: `CodeQL code-scanning alerts for PR #${PR} / the repo. Try \`gh api repos/kamiazya/whiteboard/code-scanning/alerts --jq '.[] | {rule: .rule.id, sev: .rule.security_severity_level, state, path: .most_recent_instance.location.path}'\`. If it 404s ("no analysis found") or fails on auth scope (security_events/admin), report that CodeQL is unconfigured/unavailable and skip — do NOT fail. For any real alert, keep HIGH+ and verify the data-flow is genuine (not an already-sanitized path).`,
+        brief: `CodeQL code-scanning for PR #${PR}. PRIMARY (scope-free, always works): CodeQL posts its findings as ordinary PR review comments authored by \`github-advanced-security[bot]\` — fetch them with \`gh api repos/kamiazya/whiteboard/pulls/${PR}/comments --jq '.[] | select(.user.login=="github-advanced-security[bot]") | {path, line, body}'\`. This needs NO special scope and is the reliable source; treat these comments as the CodeQL findings for this PR. ENRICHMENT (optional, may fail): \`gh api repos/kamiazya/whiteboard/code-scanning/alerts --jq '.[] | {rule: .rule.id, sev: .rule.security_severity_level, state, path: .most_recent_instance.location.path}'\` for severity/state — if it 404s ("no analysis found") or fails on auth scope (security_events/admin), just rely on the PR comments; do NOT fail. For any real finding, keep HIGH+ and verify the data-flow is genuine (not an already-sanitized path); a ReDoS/injection finding on an untrusted-input parser is real and blocking.`,
       },
     ]
 
