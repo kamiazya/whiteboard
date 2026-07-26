@@ -3,7 +3,7 @@
 > A collaborative Excalidraw canvas for Claude Code, Codex, and Gemini CLI. Draw with your AI agent to align on specs, architecture, and workflows — directly on a shared real-time whiteboard.
 
 [![npm version](https://img.shields.io/npm/v/@kamiazya/whiteboard-mcp.svg)](https://www.npmjs.com/package/@kamiazya/whiteboard-mcp)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 [![CI](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml/badge.svg)](https://github.com/kamiazya/whiteboard/actions/workflows/ci.yml)
 
 ## Start here
@@ -220,4 +220,8 @@ See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sand
 
 ## License
 
-[MIT](LICENSE)
+[Apache-2.0](LICENSE).
+
+The whole codebase lives in this public monorepo. Today every package is Apache-2.0. When the managed-hosting (SaaS) composition layer lands, only that layer — the Cloudflare Workers app and its Cloudflare-specific storage adapters — will be published under the [Fair Source License (FSL-1.1-Apache-2.0)](https://fsl.software/): free to self-host and use internally, not usable to offer a competing hosted service, and automatically becoming Apache-2.0 two years after each release. Everything else stays Apache-2.0.
+
+The project name and logo are not licensed for use in third-party commercial hosting offerings.

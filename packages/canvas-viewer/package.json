@@ -2,6 +2,7 @@
   "name": "@kamiazya/whiteboard-canvas-viewer",
   "private": true,
   "version": "0.0.0",
+  "license": "Apache-2.0",
   "description": "Read-only Excalidraw scene viewer, shared between apps/web and future embedded surfaces (MCP Apps widget, HTML export). Never published to npm.",
   "type": "module",
   "main": "./src/index.ts",
