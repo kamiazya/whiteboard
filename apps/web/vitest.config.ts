@@ -53,6 +53,26 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
+    // Safety net behind vitest.setup.ts's scheduler drain: React's scheduler
+    // can still fire deferred work after jsdom teardown (window gone →
+    // ReferenceError) from component timers the drain window missed. That
+    // race is environmental, not a test failure — log it but do not fail the
+    // run. Deliberately narrow (this exact symptom from react-dom/scheduler
+    // frames only) so genuine unhandled errors keep failing CI.
+    onUnhandledError(error) {
+      const stack = 'stack' in error && typeof error.stack === 'string' ? error.stack : ''
+      if (
+        error.name === 'ReferenceError' &&
+        error.message.includes('window is not defined') &&
+        /react-dom|scheduler/.test(stack)
+      ) {
+        console.warn(
+          '[vitest.config] filtered post-teardown React scheduler error (see vitest.setup.ts drain):',
+          error.message,
+        )
+        return false
+      }
+    },
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     // *.docs-snapshot.test.tsx files run only via `pnpm docs:snapshots`
     // (vitest.docs-snapshots.config.ts) — they write PNGs into the repo
