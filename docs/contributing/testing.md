@@ -176,15 +176,16 @@ src/server/routes/canvas-output-path-error.ts
 
 ## Browser Testing
 
-There are two real-browser Vitest projects:
+There are three real-browser Vitest projects:
 
 | Project | Package | Purpose |
 |---|---|---|
+| `canvas-render-browser` | `packages/canvas-render` | Cross-platform SVG-serialization determinism: the same scene must render byte-identical SVG in a real browser as it does in `canvas-render-node` |
 | `canvas-viewer-browser` | `packages/canvas-viewer` | Popovers, dialogs, scroll, focus, keyboard, pointer, and restore flows where browser layout and pointer behavior are the core risk |
 | `web-browser` | `apps/web` | `apps/web` app browser regressions: popovers, dialogs, focus, keyboard, restore flows, and tests requiring real browser APIs unavailable in jsdom (IndexedDB, OPFS, `window.showOpenFilePicker`) |
 
 ```bash
-pnpm run test:browser         # canvas-viewer-browser + web-browser
+pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser
 pnpm run test:browser:trace   # same, with trace artifacts on failure
 ```
 
@@ -351,8 +352,8 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#q
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-model node, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
-pnpm test:browser   # canvas-viewer-browser + web-browser (the real-browser projects)
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-model node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 ```
 

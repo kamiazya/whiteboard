@@ -6,7 +6,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 |---|---|---|
 | `packages/canvas-model` | Zod schemas for the OpenCanvas data model (single source of truth) | zod only |
 | `packages/canvas-codec` (planned) | OKF Markdown / JSON Canvas serialize+parse, remark pipeline, Loro⇔model | model, loro-crdt, remark |
-| `packages/canvas-render` (planned) | scene graph, layout, themes, SVG backend, sceneDigest | model |
+| `packages/canvas-render` | scene graph, layout, themes, SVG backend, sceneDigest | model |
 | `packages/canvas-ports` (planned) | store/sync port contracts + Symbol `TOKENS` | model |
 | `packages/canvas-workspace` (planned) | tree ops, alias derivation, index derivation, link extraction | model, codec, ports |
 | `packages/server-core` (planned) | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | workspace, render |

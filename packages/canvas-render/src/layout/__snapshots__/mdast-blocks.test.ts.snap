@@ -1,0 +1,258 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layoutMdastBlocks — golden block layout > matches the committed golden bbox/geometry snapshot 1`] = `
+{
+  "nodes": [
+    {
+      "bbox": {
+        "h": 32,
+        "w": 600,
+        "x": 0,
+        "y": 0,
+      },
+      "kind": "heading",
+      "level": 1,
+      "runs": [
+        {
+          "bbox": {
+            "h": 32,
+            "w": 57.599999999999994,
+            "x": 0,
+            "y": 0,
+          },
+          "kind": "textRun",
+          "text": "Doc",
+        },
+      ],
+    },
+    {
+      "bbox": {
+        "h": 16,
+        "w": 600,
+        "x": 0,
+        "y": 40,
+      },
+      "kind": "paragraph",
+      "runs": [
+        {
+          "bbox": {
+            "h": 16,
+            "w": 153.6,
+            "x": 0,
+            "y": 40,
+          },
+          "kind": "textRun",
+          "text": "Intro paragraph.",
+        },
+      ],
+    },
+    {
+      "bbox": {
+        "h": 48,
+        "w": 600,
+        "x": 0,
+        "y": 64,
+      },
+      "depth": 0,
+      "items": [
+        {
+          "bbox": {
+            "h": 48,
+            "w": 576,
+            "x": 24,
+            "y": 64,
+          },
+          "children": [
+            {
+              "bbox": {
+                "h": 16,
+                "w": 576,
+                "x": 0,
+                "y": 64,
+              },
+              "kind": "paragraph",
+              "runs": [
+                {
+                  "bbox": {
+                    "h": 16,
+                    "w": 48,
+                    "x": 0,
+                    "y": 64,
+                  },
+                  "kind": "textRun",
+                  "text": "first",
+                },
+              ],
+            },
+            {
+              "bbox": {
+                "h": 24,
+                "w": 576,
+                "x": 0,
+                "y": 88,
+              },
+              "depth": 1,
+              "items": [
+                {
+                  "bbox": {
+                    "h": 24,
+                    "w": 528,
+                    "x": 48,
+                    "y": 88,
+                  },
+                  "children": [
+                    {
+                      "bbox": {
+                        "h": 16,
+                        "w": 552,
+                        "x": 0,
+                        "y": 88,
+                      },
+                      "kind": "paragraph",
+                      "runs": [
+                        {
+                          "bbox": {
+                            "h": 16,
+                            "w": 57.599999999999994,
+                            "x": 0,
+                            "y": 88,
+                          },
+                          "kind": "textRun",
+                          "text": "nested",
+                        },
+                      ],
+                    },
+                  ],
+                  "kind": "listItem",
+                },
+              ],
+              "kind": "list",
+              "ordered": false,
+            },
+          ],
+          "kind": "listItem",
+          "ordinal": 1,
+        },
+      ],
+      "kind": "list",
+      "ordered": true,
+    },
+    {
+      "bbox": {
+        "h": 24,
+        "w": 600,
+        "x": 0,
+        "y": 112,
+      },
+      "kind": "table",
+      "rows": [
+        {
+          "bbox": {
+            "h": 24,
+            "w": 600,
+            "x": 0,
+            "y": 112,
+          },
+          "cells": [
+            {
+              "bbox": {
+                "h": 24,
+                "w": 300,
+                "x": 0,
+                "y": 112,
+              },
+              "kind": "tableCell",
+              "runs": [
+                {
+                  "bbox": {
+                    "h": 16,
+                    "w": 9.6,
+                    "x": 0,
+                    "y": 112,
+                  },
+                  "kind": "textRun",
+                  "text": "a",
+                },
+              ],
+            },
+            {
+              "bbox": {
+                "h": 24,
+                "w": 300,
+                "x": 300,
+                "y": 112,
+              },
+              "kind": "tableCell",
+              "runs": [
+                {
+                  "bbox": {
+                    "h": 16,
+                    "w": 9.6,
+                    "x": 0,
+                    "y": 112,
+                  },
+                  "kind": "textRun",
+                  "text": "b",
+                },
+              ],
+            },
+          ],
+          "kind": "tableRow",
+        },
+      ],
+    },
+    {
+      "bbox": {
+        "h": 20,
+        "w": 600,
+        "x": 0,
+        "y": 144,
+      },
+      "kind": "codeBlock",
+      "lang": "ts",
+      "value": "const x = 1",
+    },
+    {
+      "bbox": {
+        "h": 24,
+        "w": 600,
+        "x": 0,
+        "y": 172,
+      },
+      "children": [
+        {
+          "bbox": {
+            "h": 16,
+            "w": 600,
+            "x": 0,
+            "y": 172,
+          },
+          "kind": "paragraph",
+          "runs": [
+            {
+              "bbox": {
+                "h": 16,
+                "w": 57.599999999999994,
+                "x": 0,
+                "y": 172,
+              },
+              "kind": "textRun",
+              "text": "quoted",
+            },
+          ],
+        },
+      ],
+      "kind": "blockquote",
+    },
+    {
+      "bbox": {
+        "h": 1,
+        "w": 600,
+        "x": 0,
+        "y": 196,
+      },
+      "kind": "thematicBreak",
+    },
+  ],
+}
+`;
