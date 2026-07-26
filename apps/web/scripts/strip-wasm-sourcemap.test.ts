@@ -152,6 +152,31 @@ describe('stripWasmSourceMap', () => {
     expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
   })
 
+  it('rejects an overlong (six-byte) ULEB128 section size instead of wrapping it into a small in-range value', () => {
+    const magicAndVersion = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]
+    const typeSectionBytes = typeSection()
+    // A u32 ULEB128 never needs more than 5 bytes (ceil(32/7)). This size
+    // encodes 24 across 6 bytes (five zero continuation bytes, then a
+    // terminating byte of 3). A shift-without-bounds-checking reader wraps
+    // `3 << 35` down to `3 << 3 = 24` via JS's mod-32 shift semantics,
+    // misreading the overlong encoding as a valid, in-range section size —
+    // exactly long enough to match a real sourceMappingURL payload placed
+    // after it — instead of rejecting the malformed encoding outright.
+    const name = 'sourceMappingURL'
+    const nameBytes = Array.from(Buffer.from(name, 'utf8'))
+    const payload = [0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41]
+    const content = [nameBytes.length, ...nameBytes, ...payload]
+    expect(content.length).toBe(24) // must equal the wrapped-around size below
+    const overlongSizeSection = [0x00, 0x80, 0x80, 0x80, 0x80, 0x80, 0x03, ...content]
+    const wasm = new Uint8Array([...magicAndVersion, ...typeSectionBytes, ...overlongSizeSection])
+
+    const stripped = stripWasmSourceMap(wasm)
+
+    // The fail-safe contract: a malformed module is returned unchanged,
+    // never partially rewritten based on a misparsed size.
+    expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
+  })
+
   it('leaves a custom section untouched when its declared name length overruns its own content', () => {
     // Custom section content: name-length ULEB128 (10) but only 3 bytes of
     // name/payload actually follow — nameEnd > contentEnd inside the section.

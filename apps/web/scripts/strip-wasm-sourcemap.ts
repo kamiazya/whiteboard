@@ -15,6 +15,12 @@ const WASM_MAGIC = [0x00, 0x61, 0x73, 0x6d]
 const HEADER_LENGTH = 8 // magic(4) + version(4)
 const CUSTOM_SECTION_ID = 0
 const SOURCE_MAPPING_URL_SECTION_NAME = 'sourceMappingURL'
+// A canonical u32 ULEB128 never needs more than ceil(32/7) = 5 bytes. JS's
+// `<<` operator masks its shift amount modulo 32, so an unbounded reader
+// would silently wrap a 6+ byte ("overlong") encoding into a small in-range
+// value instead of rejecting it — letting malformed input slip past the
+// fail-safe contract below.
+const MAX_ULEB128_BYTES = 5
 
 interface ULEB128Result {
   value: number
@@ -28,6 +34,9 @@ function readULEB128(bytes: Uint8Array, offset: number): ULEB128Result {
   for (;;) {
     if (offset + bytesRead >= bytes.length) {
       throw new Error('truncated wasm module: unterminated ULEB128')
+    }
+    if (bytesRead >= MAX_ULEB128_BYTES) {
+      throw new Error('malformed wasm module: overlong ULEB128')
     }
     const byte = bytes[offset + bytesRead] as number
     bytesRead++
