@@ -79,3 +79,26 @@ export function escapeXmlAttr(value: string): string {
     stripXmlInvalidChars(value),
   )
 }
+
+/**
+ * URL schemes allowed to navigate to from a rendered `<a href>`. Markdown
+ * link URLs are caller-supplied and unrestricted; XML-escaping prevents
+ * attribute-value breakout but does not stop a `javascript:`/`vbscript:`/
+ * `data:` scheme from executing when the SVG is opened directly or
+ * embedded inline.
+ */
+const SAFE_URL_SCHEMES = new Set(['http', 'https', 'mailto', 'tel'])
+
+/** Matches a URL's scheme prefix (e.g. `javascript:`), per the URL spec's scheme grammar. */
+const URL_SCHEME_PATTERN = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
+
+/**
+ * Returns `href` unchanged when it has no scheme (relative/hash link) or an
+ * allow-listed scheme, otherwise `#` — never throws, degrades to a safe
+ * same-page anchor rather than rejecting the whole render.
+ */
+export function sanitizeHref(href: string): string {
+  const match = URL_SCHEME_PATTERN.exec(href)
+  if (!match) return href
+  return SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? href : '#'
+}

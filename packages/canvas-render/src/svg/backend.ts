@@ -7,7 +7,7 @@ import type {
   TableRowSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
-import { escapeXmlAttr, escapeXmlText, formatCoord } from './format.js'
+import { escapeXmlAttr, escapeXmlText, formatCoord, sanitizeHref } from './format.js'
 
 /**
  * Decorative/presentational elements (backgrounds, dividers, group
@@ -25,7 +25,7 @@ function rectAttrs(bbox: BoundingBox): string {
 function renderTextRun(run: TextRunNode): string {
   const attrs = [`x="${formatCoord(run.bbox.x)}"`, `y="${formatCoord(run.bbox.y)}"`]
   if (run.link) {
-    const href = run.link.kind === 'link' ? run.link.href : run.link.canvasId
+    const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.canvasId
     return `<a href="${escapeXmlAttr(href)}"><text ${attrs.join(' ')}>${escapeXmlText(run.text)}</text></a>`
   }
   return `<text ${attrs.join(' ')}>${escapeXmlText(run.text)}</text>`

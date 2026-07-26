@@ -66,6 +66,60 @@ describe('renderSceneToSvg', () => {
     expect(isWellFormedXmlFragment(svg)).toBe(true)
   })
 
+  it('allows http/https/mailto/tel and relative link hrefs through unchanged', () => {
+    for (const href of [
+      'https://example.com',
+      'http://example.com',
+      'mailto:a@example.com',
+      'tel:+15551234567',
+      '#anchor',
+      '/relative/path',
+      'relative/path',
+    ]) {
+      const scene: Scene = {
+        nodes: [
+          {
+            kind: 'paragraph',
+            bbox: { x: 0, y: 0, w: 100, h: 16 },
+            runs: [
+              {
+                kind: 'textRun',
+                bbox: { x: 0, y: 0, w: 10, h: 16 },
+                text: 'link',
+                link: { kind: 'link', href },
+              },
+            ],
+          },
+        ],
+      }
+      expect(renderSceneToSvg(scene)).toContain(`href="${href}"`)
+    }
+  })
+
+  it('rejects unsafe URL schemes (javascript:, data:, vbscript:) on link hrefs', () => {
+    for (const href of ['javascript:alert(1)', 'data:text/html,<script>1</script>', 'vbscript:x']) {
+      const scene: Scene = {
+        nodes: [
+          {
+            kind: 'paragraph',
+            bbox: { x: 0, y: 0, w: 100, h: 16 },
+            runs: [
+              {
+                kind: 'textRun',
+                bbox: { x: 0, y: 0, w: 10, h: 16 },
+                text: 'link',
+                link: { kind: 'link', href },
+              },
+            ],
+          },
+        ],
+      }
+      const svg = renderSceneToSvg(scene)
+      expect(svg).not.toContain(href)
+      expect(svg).toContain('href="#"')
+    }
+  })
+
   it('is deterministic: same scene renders byte-identical output on repeated calls', () => {
     const scene: Scene = {
       nodes: [
