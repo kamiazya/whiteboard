@@ -61,6 +61,58 @@ describe('routeEdge', () => {
     expect(result.toSide).toBe('right')
   })
 
+  it('routes a self-edge loop outward along the right side when explicitly selected', () => {
+    const nodes = [node('a', 0, 0, 100, 100)]
+    const result = routeEdge(
+      nodes,
+      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'right', toSide: 'right' }),
+    )
+    // The right side's outward normal is +x, so the loop control points must
+    // sit strictly to the right of the node (x > 100).
+    for (const point of result.path.slice(1, -1)) {
+      expect(point.x).toBeGreaterThan(100)
+    }
+  })
+
+  it('routes a self-edge loop outward along the left side when explicitly selected', () => {
+    const nodes = [node('a', 0, 0, 100, 100)]
+    const result = routeEdge(
+      nodes,
+      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'left', toSide: 'left' }),
+    )
+    // The left side's outward normal is -x, so the loop control points must
+    // sit strictly to the left of the node (x < 0).
+    for (const point of result.path.slice(1, -1)) {
+      expect(point.x).toBeLessThan(0)
+    }
+  })
+
+  it('routes a self-edge loop outward along the top side when explicitly selected', () => {
+    const nodes = [node('a', 0, 0, 100, 100)]
+    const result = routeEdge(
+      nodes,
+      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'top', toSide: 'top' }),
+    )
+    // The top side's outward normal is -y, so the loop control points must
+    // sit strictly above the node (y < 0).
+    for (const point of result.path.slice(1, -1)) {
+      expect(point.y).toBeLessThan(0)
+    }
+  })
+
+  it('routes a self-edge loop outward along the bottom side when explicitly selected', () => {
+    const nodes = [node('a', 0, 0, 100, 100)]
+    const result = routeEdge(
+      nodes,
+      edge({ id: 'e1', fromNode: 'a', toNode: 'a', fromSide: 'bottom', toSide: 'bottom' }),
+    )
+    // The bottom side's outward normal is +y, so the loop control points
+    // must sit strictly below the node (y > 100).
+    for (const point of result.path.slice(1, -1)) {
+      expect(point.y).toBeGreaterThan(100)
+    }
+  })
+
   it('handles coincident/zero-sized nodes deterministically without throwing', () => {
     const nodes = [node('a', 10, 10, 0, 0), node('b', 10, 10, 0, 0)]
     const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))

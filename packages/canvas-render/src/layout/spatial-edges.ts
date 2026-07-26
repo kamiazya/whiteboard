@@ -45,6 +45,42 @@ function deriveDefaultSides(fromRect: Rect, toRect: Rect): { fromSide: Side; toS
   return dy >= 0 ? { fromSide: 'bottom', toSide: 'top' } : { fromSide: 'top', toSide: 'bottom' }
 }
 
+/** Distance the self-edge loop bulges out along the selected side's outward normal, in px. */
+const SELF_EDGE_LOOP_OFFSET_PX = 40
+/** Half-width of the self-edge loop along the side perpendicular to the outward normal, in px. */
+const SELF_EDGE_LOOP_SPREAD_PX = 20
+
+/**
+ * Two control points for a self-edge loop, offset outward from `start` along
+ * `side`'s outward normal (not toward the node interior) and spread along the
+ * perpendicular axis so the loop reads as a visible bulge rather than a
+ * straight line back to itself.
+ */
+function selfEdgeLoopControlPoints(start: Point, side: Side): [Point, Point] {
+  switch (side) {
+    case 'right':
+      return [
+        { x: start.x + SELF_EDGE_LOOP_OFFSET_PX, y: start.y - SELF_EDGE_LOOP_SPREAD_PX },
+        { x: start.x + SELF_EDGE_LOOP_OFFSET_PX, y: start.y + SELF_EDGE_LOOP_SPREAD_PX },
+      ]
+    case 'left':
+      return [
+        { x: start.x - SELF_EDGE_LOOP_OFFSET_PX, y: start.y - SELF_EDGE_LOOP_SPREAD_PX },
+        { x: start.x - SELF_EDGE_LOOP_OFFSET_PX, y: start.y + SELF_EDGE_LOOP_SPREAD_PX },
+      ]
+    case 'top':
+      return [
+        { x: start.x - SELF_EDGE_LOOP_SPREAD_PX, y: start.y - SELF_EDGE_LOOP_OFFSET_PX },
+        { x: start.x + SELF_EDGE_LOOP_SPREAD_PX, y: start.y - SELF_EDGE_LOOP_OFFSET_PX },
+      ]
+    case 'bottom':
+      return [
+        { x: start.x - SELF_EDGE_LOOP_SPREAD_PX, y: start.y + SELF_EDGE_LOOP_OFFSET_PX },
+        { x: start.x + SELF_EDGE_LOOP_SPREAD_PX, y: start.y + SELF_EDGE_LOOP_OFFSET_PX },
+      ]
+  }
+}
+
 /**
  * Resolves one canvas-model edge into a scene-graph edge with a concrete
  * point path. Pure function of (nodes, edge): never throws — a missing
@@ -77,8 +113,7 @@ export function routeEdge(nodes: readonly SpatialNode[], edge: CanvasEdge): Reso
     const fromSide: Side = edge.fromSide ?? 'right'
     const toSide: Side = edge.toSide ?? 'right'
     const start = sidePoint(fromRect, fromSide)
-    const loopOut = { x: start.x + fromRect.w * 0.5 + 40, y: start.y - 20 }
-    const loopBack = { x: start.x + fromRect.w * 0.5 + 40, y: start.y + 20 }
+    const [loopOut, loopBack] = selfEdgeLoopControlPoints(start, fromSide)
     const end = sidePoint(toRect, toSide)
     return { kind: 'edge', id: edge.id, path: [start, loopOut, loopBack, end], fromSide, toSide }
   }
