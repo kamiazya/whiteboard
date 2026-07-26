@@ -43,7 +43,7 @@ export class ValidationError extends Error {
   }
 }
 
-export interface ExternalUrlLookupResult {
+interface ExternalUrlLookupResult {
   address: string
   family: number
 }
@@ -187,12 +187,6 @@ function isValidationError(error: unknown): error is ValidationError {
 export function validationErrorBody(error: unknown): { error: string; message: string } | null {
   if (!isValidationError(error)) return null
   return { error: error.error, message: error.message }
-}
-
-export function __setExternalUrlLookupForTest(
-  lookup?: (hostname: string) => Promise<ExternalUrlLookupResult[]>,
-): void {
-  externalUrlLookup = lookup ?? defaultExternalUrlLookup
 }
 
 export async function validateExternalUrl(
