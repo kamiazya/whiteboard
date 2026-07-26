@@ -1,5 +1,6 @@
 import type { Rollup } from 'vite'
 import { describe, expect, it } from 'vitest'
+import { bytesContain } from './src/test-utils/byte-search.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 
 const WASM_MAGIC_AND_VERSION = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]
@@ -69,7 +70,7 @@ describe('stripWasmSourceMapPlugin', () => {
     const stripped = bundle['app.wasm']
     if (!stripped || stripped.type !== 'asset') throw new Error('expected asset to survive')
     expect(Buffer.isBuffer(stripped.source)).toBe(true)
-    expect((stripped.source as Buffer).includes('unpkg.com')).toBe(false)
+    expect(bytesContain(stripped.source as Buffer, 'unpkg.com')).toBe(false)
   })
 
   it('strips the sourceMappingURL section from a .wasm asset with a Uint8Array source', () => {
@@ -82,7 +83,7 @@ describe('stripWasmSourceMapPlugin', () => {
 
     const stripped = bundle['app.wasm']
     if (!stripped || stripped.type !== 'asset') throw new Error('expected asset to survive')
-    expect((stripped.source as Buffer).includes('unpkg.com')).toBe(false)
+    expect(bytesContain(stripped.source as Buffer, 'unpkg.com')).toBe(false)
   })
 
   it('leaves non-wasm assets untouched', () => {

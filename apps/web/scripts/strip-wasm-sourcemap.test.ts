@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { bytesContain } from '../src/test-utils/byte-search.js'
 import { stripWasmSourceMap } from './strip-wasm-sourcemap.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -45,8 +46,8 @@ describe('stripWasmSourceMap', () => {
 
     const stripped = stripWasmSourceMap(wasm)
 
-    expect(Buffer.from(stripped).includes('unpkg.com')).toBe(false)
-    expect(Buffer.from(stripped).includes('sourceMappingURL')).toBe(false)
+    expect(bytesContain(stripped, 'unpkg.com')).toBe(false)
+    expect(bytesContain(stripped, 'sourceMappingURL')).toBe(false)
     expect(WebAssembly.validate(stripped)).toBe(true)
   })
 
@@ -97,11 +98,11 @@ describe('stripWasmSourceMap', () => {
   it('strips the unpkg.com sourceMappingURL from the real loro-crdt bundler wasm artifact', () => {
     const wasmPath = resolve(__dirname, '../node_modules/loro-crdt/bundler/loro_wasm_bg.wasm')
     const original = readFileSync(wasmPath)
-    expect(original.includes('unpkg.com')).toBe(true) // guards against the fixture going stale
+    expect(bytesContain(original, 'unpkg.com')).toBe(true) // guards against the fixture going stale
 
     const stripped = stripWasmSourceMap(new Uint8Array(original))
 
-    expect(Buffer.from(stripped).includes('unpkg.com')).toBe(false)
+    expect(bytesContain(stripped, 'unpkg.com')).toBe(false)
     expect(WebAssembly.validate(stripped)).toBe(true)
   })
 
