@@ -52,6 +52,21 @@ describe('renderSceneToSvg', () => {
     expect(svg).toContain('<g><circle r="5"/></g>')
   })
 
+  it('marks an svgFragment with role: presentation as decorative', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'svgFragment',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          svg: '<circle r="5"/>',
+          role: 'presentation',
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('<g role="presentation"><circle r="5"/></g>')
+  })
+
   it('produces well-formed XML (balanced, single-root, no unescaped raw &/</>)', () => {
     const scene: Scene = {
       nodes: [

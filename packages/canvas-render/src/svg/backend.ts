@@ -71,7 +71,9 @@ function renderNode(node: SceneNode): string {
     case 'svgFragment':
       // Precondition: the caller has already validated `svg` is well-formed
       // XML before constructing this node — emitted verbatim, not escaped.
-      return `<g>${node.svg}</g>`
+      return node.role === 'presentation'
+        ? `<g ${PRESENTATION_ATTR}>${node.svg}</g>`
+        : `<g>${node.svg}</g>`
     case 'embedPlaceholder':
       return `<a href="#${escapeXmlAttr(node.canvasId)}"><text ${rectAttrs(node.bbox)}>${escapeXmlText(node.title)}</text></a>`
     case 'embedResolved':
