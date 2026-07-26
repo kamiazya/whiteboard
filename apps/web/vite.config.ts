@@ -7,6 +7,7 @@ import { defineConfig, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
+import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -175,6 +176,10 @@ export default defineConfig({
     // guard is scripts/check-pwa-precache.mjs, which fails the build if the
     // generated precache manifest is missing font entries).
     excalidrawFontsPlugin(),
+    // Must run before VitePWA: see stripWasmSourceMapPlugin's doc comment —
+    // VitePWA hashes dist/ contents for the precache manifest in closeBundle,
+    // so the wasm bytes must already be stripped when that hook runs.
+    stripWasmSourceMapPlugin(),
     VitePWA(pwaOptions),
   ],
 })
