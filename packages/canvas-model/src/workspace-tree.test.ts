@@ -20,6 +20,21 @@ describe('workspaceTreeNodeDataSchema', () => {
     ).toBe(false)
   })
 
+  it('rejects "." and ".." traversal segments', () => {
+    expect(
+      workspaceTreeNodeDataSchema.safeParse({
+        canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        segment: '.',
+      }).success,
+    ).toBe(false)
+    expect(
+      workspaceTreeNodeDataSchema.safeParse({
+        canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        segment: '..',
+      }).success,
+    ).toBe(false)
+  })
+
   it('rejects an empty segment', () => {
     expect(
       workspaceTreeNodeDataSchema.safeParse({ canvasId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', segment: '' })

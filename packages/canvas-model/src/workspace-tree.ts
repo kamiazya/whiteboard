@@ -12,8 +12,8 @@ export const workspaceTreeNodeDataSchema = z.object({
   segment: z
     .string()
     .min(1)
-    .refine((value) => !value.includes('/'), {
-      message: 'segment must not contain "/"',
+    .refine((value) => !value.includes('/') && value !== '.' && value !== '..', {
+      message: 'segment must not contain "/" and must not be "." or ".."',
     }),
 })
 
