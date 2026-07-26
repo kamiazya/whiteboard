@@ -104,4 +104,46 @@ describe('stripWasmSourceMap', () => {
     expect(Buffer.from(stripped).includes('unpkg.com')).toBe(false)
     expect(WebAssembly.validate(stripped)).toBe(true)
   })
+
+  it('keeps a section with a truncated (unterminated) ULEB128 size verbatim instead of throwing', () => {
+    const magicAndVersion = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]
+    const typeSectionBytes = typeSection()
+    // A trailing section id followed only by continuation-flagged ULEB128 bytes
+    // (high bit set, never terminated) — the buffer ends mid-varint.
+    const truncatedTail = [0x00, 0x80, 0x80]
+    const wasm = new Uint8Array([...magicAndVersion, ...typeSectionBytes, ...truncatedTail])
+
+    const stripped = stripWasmSourceMap(wasm)
+
+    expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
+  })
+
+  it('keeps a section whose declared size overruns the buffer verbatim instead of throwing', () => {
+    const magicAndVersion = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]
+    const typeSectionBytes = typeSection()
+    // Custom section (id 0) claiming a content size (200) far larger than the
+    // bytes actually available after it.
+    const overrunSection = [0x00, ...uleb128(200), 0x01, 0x02, 0x03]
+    const wasm = new Uint8Array([...magicAndVersion, ...typeSectionBytes, ...overrunSection])
+
+    const stripped = stripWasmSourceMap(wasm)
+
+    expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
+  })
+
+  it('leaves a custom section untouched when its declared name length overruns its own content', () => {
+    // Custom section content: name-length ULEB128 (10) but only 3 bytes of
+    // name/payload actually follow — nameEnd > contentEnd inside the section.
+    const oversizedNameContent = [...uleb128(10), 0x61, 0x62, 0x63]
+    const malformedCustomSection = [
+      0x00,
+      ...uleb128(oversizedNameContent.length),
+      ...oversizedNameContent,
+    ]
+    const wasm = buildWasm([typeSection(), malformedCustomSection])
+
+    const stripped = stripWasmSourceMap(wasm)
+
+    expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
+  })
 })
