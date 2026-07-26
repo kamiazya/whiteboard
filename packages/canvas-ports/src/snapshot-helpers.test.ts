@@ -101,6 +101,18 @@ describe('reassembleSnapshot', () => {
     }
   })
 
+  it('throws EXTRA_CHUNK for a negative chunk index', () => {
+    const { manifest, chunks } = chunkSnapshot(bytesOf(8), 4)
+    const tampered = chunks.map((c, i) => (i === 0 ? { ...c, index: -1 } : c))
+    try {
+      reassembleSnapshot(manifest, tampered)
+      expect.fail('expected reassembleSnapshot to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(SnapshotReassemblyError)
+      expect((error as SnapshotReassemblyError).code).toBe('EXTRA_CHUNK')
+    }
+  })
+
   it('throws SnapshotReassemblyError(DUPLICATE_INDEX) when an index repeats', () => {
     const { manifest, chunks } = chunkSnapshot(bytesOf(9), 4)
     try {

@@ -66,7 +66,7 @@ export function reassembleSnapshot(
 
   const seenIndices = new Set<number>()
   for (const chunk of chunks) {
-    if (chunk.index >= chunkCount) {
+    if (!Number.isInteger(chunk.index) || chunk.index < 0 || chunk.index >= chunkCount) {
       throw new SnapshotReassemblyError(
         'EXTRA_CHUNK',
         `chunk index ${chunk.index} is out of range for chunkCount ${chunkCount}`,
