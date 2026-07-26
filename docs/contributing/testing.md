@@ -191,7 +191,7 @@ pnpm run test:browser:trace   # same, with trace artifacts on failure
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
-Failure traces are stored under `<package>/tmp/vitest-traces` — `packages/canvas-viewer/tmp/vitest-traces` for `canvas-viewer-browser`, `apps/web/tmp/vitest-traces` for `web-browser`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
+Failure traces are stored under `<package>/tmp/vitest-traces` — `packages/canvas-render/tmp/vitest-traces` for `canvas-render-browser`, `packages/canvas-viewer/tmp/vitest-traces` for `canvas-viewer-browser`, `apps/web/tmp/vitest-traces` for `web-browser`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
 
 Prefer `web-browser` over apps/web jsdom whenever the scenario involves:
 - Focus, pointer, keyboard, or scroll behavior
