@@ -6,7 +6,7 @@
 // main working tree. The integrator launches a dev-loop with cwd=<this path>, and
 // reconciles the branches before folding.
 //
-//   node .claude/scripts/new-worktree.mjs <name> [baseRef]      (baseRef default: HEAD)
+//   node .claude/scripts/new-worktree.mjs <name> [baseRef]      (baseRef default: freshly fetched origin/main)
 //
 // Remove when done: git worktree remove --force .claude/worktrees/<name>
 import { execFileSync, spawnSync } from 'node:child_process'
@@ -55,13 +55,20 @@ function isRunAsScript() {
 function main() {
   const [, , nameArg, baseArg] = process.argv
   if (!nameArg) {
-    console.error('usage: node .claude/scripts/new-worktree.mjs <name> [baseRef]  (baseRef default: HEAD)')
+    console.error('usage: node .claude/scripts/new-worktree.mjs <name> [baseRef]  (baseRef default: freshly fetched origin/main)')
     process.exit(1)
   }
   const name = nameArg.replace(/[^A-Za-z0-9._-]/g, '-')
-  const base = baseArg || 'HEAD'
+  // Default to a freshly fetched origin/main, not HEAD: HEAD depends on which
+  // checkout (or nested worktree) the caller happens to be in, which has
+  // produced branches silently based on a stale main or on another feature
+  // branch. An explicit baseRef still overrides.
+  const base = baseArg || 'origin/main'
 
-  const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
+  // Resolve the MAIN checkout root even when invoked from inside a linked
+  // worktree (whose --show-toplevel would nest the new worktree under it).
+  const commonDir = execFileSync('git', ['rev-parse', '--git-common-dir'], { encoding: 'utf8' }).trim()
+  const repoRoot = resolve(process.cwd(), commonDir, '..')
   const wtPath = resolve(repoRoot, '.claude/worktrees', name)
   if (existsSync(wtPath)) {
     console.error(`worktree already exists: ${wtPath}`)
@@ -69,6 +76,7 @@ function main() {
   }
 
   const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit' })
+  if (!baseArg) run('git', ['-C', repoRoot, 'fetch', 'origin'])
   run('git', ['-C', repoRoot, 'worktree', 'add', wtPath, '-b', name, base])
   run('pnpm', ['--dir', wtPath, 'install', '--prefer-offline'])
 

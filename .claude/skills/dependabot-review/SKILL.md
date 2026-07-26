@@ -166,3 +166,11 @@ re-run CI.
 - **GitHub Security alerts ⇄ `pnpm audit --prod` can diverge**: a dev-only path vuln shows in the
   Security tab but not in `pnpm audit --prod`, so it does not gate CI. Track those in `tmp/issues/`
   rather than churning the lockfile.
+- **Catalog-managed groups need a manual bump**: for deps versioned via the pnpm-workspace.yaml
+  `catalog:` (vite/vitest family), Dependabot's rebase/recreate cannot regenerate a lockfile
+  consistent with the catalog — every attempt fails `check` with `ERR_PNPM_OUTDATED_LOCKFILE`
+  and cascades to ~8 red jobs. Do not keep recreating: bump the catalog entries yourself
+  (`pnpm up -r <pkgs>` in a fresh worktree), open a `chore(deps):` PR, and close the Dependabot
+  PR as superseded.
+- **After each merge**: pull main immediately and rebase only the next PR (see
+  `.claude/rules/integrator-flow.md` for the full post-merge mechanics).
