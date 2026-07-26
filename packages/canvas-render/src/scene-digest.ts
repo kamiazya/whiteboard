@@ -51,12 +51,20 @@ function area(box: BoundingBox): number {
   return box.w * box.h
 }
 
+/**
+ * A parent must be strictly larger in area than its child — an identical
+ * bbox on two distinct nodes is overlap, not containment. Without this,
+ * two equal-area boxes each qualify as the other's unique smallest
+ * containing candidate, and computeContainment emits both directions,
+ * a contradictory (non-antisymmetric) relation in the AI-facing digest.
+ */
 function contains(parent: BoundingBox, child: BoundingBox): boolean {
   return (
     child.x >= parent.x &&
     child.y >= parent.y &&
     child.x + child.w <= parent.x + parent.w &&
-    child.y + child.h <= parent.y + parent.h
+    child.y + child.h <= parent.y + parent.h &&
+    area(parent) > area(child)
   )
 }
 

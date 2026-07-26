@@ -39,6 +39,20 @@ describe('routeEdge', () => {
     expect(result.toSide).toBe('top')
   })
 
+  it('derives default sides deterministically when b is to the left of a', () => {
+    const nodes = [node('a', 300, 0, 100, 100), node('b', 0, 0, 100, 100)]
+    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    expect(result.fromSide).toBe('left')
+    expect(result.toSide).toBe('right')
+  })
+
+  it('derives default sides deterministically when b is above a', () => {
+    const nodes = [node('a', 0, 300, 100, 100), node('b', 0, 0, 100, 100)]
+    const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'b' }))
+    expect(result.fromSide).toBe('top')
+    expect(result.toSide).toBe('bottom')
+  })
+
   it('produces a deterministic self-edge loop path without throwing', () => {
     const nodes = [node('a', 0, 0, 100, 100)]
     const result = routeEdge(nodes, edge({ id: 'e1', fromNode: 'a', toNode: 'a' }))

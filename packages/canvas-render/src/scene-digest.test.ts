@@ -46,6 +46,17 @@ describe('sceneDigest', () => {
     expect(containment?.parent).toBe(digest.nodes[1].id)
   })
 
+  it('does not treat two distinct nodes with an identical bbox as containing each other', () => {
+    const digest = sceneDigest(
+      scene(
+        { x: 0, y: 0, w: 10, h: 10 }, // node 0
+        { x: 0, y: 0, w: 10, h: 10 }, // node 1, identical bbox
+      ),
+    )
+    // Neither can be a strict container of the other, so containment must be empty.
+    expect(digest.containment).toEqual([])
+  })
+
   it('clusters nodes within the proximity threshold via single-linkage', () => {
     const digest = sceneDigest(
       scene(
