@@ -1,0 +1,18 @@
+{
+  "name": "@kamiazya/whiteboard-arch-lint",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "description": "Shared-layer boundary lint + dependency-direction check, driven by the TypeScript compiler API (real AST, not regex). Enforces .claude/rules/architecture-map.md.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.node.config.ts"
+  },
+  "dependencies": {
+    "typescript": "catalog:"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

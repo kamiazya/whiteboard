@@ -68,8 +68,22 @@
       // Public surface for opencanvas slices 2/3 (serializer, scene/layout);
       // intentionally unreferenced from any existing package until those
       // land. "./internal" is the mdast subset's deliberately-separate,
-      // not-yet-public subpath.
-      "entry": ["src/index.ts", "src/mdast/index.ts"],
+      // not-yet-public subpath. "./test-utils" is a test-only subpath
+      // (arbitraries + fast-check wrapper) consumed by canvas-codec's tests.
+      "entry": ["src/index.ts", "src/mdast/index.ts", "src/test-utils/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/canvas-codec": {
+      // Public surface for the opencanvas migration's later slices
+      // (canvas-workspace, server-core); intentionally unreferenced from any
+      // existing package until those land.
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "tools/arch-lint": {
+      // Standalone lint tool invoked via its vitest project
+      // (`arch-lint-node`), not imported by any other workspace.
+      "entry": ["src/scanner.ts", "src/direction-check.ts", "src/architecture-map.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-render": {
