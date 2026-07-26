@@ -19,7 +19,8 @@ const { clearCache } = await import('../store/doc-cache.js')
 const { loadCanvas } = await import('../store/canvas-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createAutoVersionTrigger } = await import('./canvas.js')
-const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest } = await import('./ws.js')
+const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest, setOnPersistedForTests } =
+  await import('./ws.js')
 const { captureLogsForTests } = await import('../log.js')
 
 class FakeWebSocket {
@@ -784,6 +785,50 @@ describe('handleWsUpgrade binary update persistence failure', () => {
 
       ws.emitClose()
     } finally {
+      logs.restore()
+    }
+  })
+
+  it('does not fail persistence when the onPersistedForTests test hook throws', async () => {
+    setAutoVersionTrigger(() => Promise.resolve(null))
+    const logs = captureLogsForTests()
+    try {
+      const ws = new FakeWebSocket()
+      await handleWsUpgrade(
+        { url: '/ws/session1/canvas-hook-throws', headers: { host: 'localhost:3099' } } as never,
+        ws as never,
+        ['canvas:read', 'canvas:write'],
+      )
+
+      const clientDoc = new LoroDoc()
+      const prevVV = clientDoc.version()
+      const list = clientDoc.getMovableList('elements')
+      const map = list.insertContainer(0, new LoroMap())
+      map.set('id', 'hook-elem')
+      clientDoc.commit()
+      const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+
+      setOnPersistedForTests(() => {
+        throw new Error('simulated test-hook failure')
+      })
+
+      await ws.emitMessage(Buffer.from(update), true)
+
+      // A throwing test hook must not be able to make an already-successful
+      // save look like a persistence failure: no 1011 close, data lands on
+      // disk, and the throw is only logged, not fatal.
+      expect(ws.closes).toEqual([])
+      const saved = await loadCanvas('session1', 'canvas-hook-throws')
+      expect(saved.getMovableList('elements').toJSON()).toEqual([{ id: 'hook-elem' }])
+
+      const warningRecord = logs.records.find(
+        (r) => r.level === 'warning' && r.msg === 'onPersistedForTests test hook threw; ignoring',
+      )
+      expect(warningRecord).toBeDefined()
+      expect(warningRecord?.data?.workspaceId).toBe('session1')
+      expect(warningRecord?.data?.slug).toBe('canvas-hook-throws')
+    } finally {
+      setOnPersistedForTests(undefined)
       logs.restore()
     }
   })
