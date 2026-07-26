@@ -2,6 +2,7 @@
   "name": "@kamiazya/whiteboard-web",
   "private": true,
   "version": "0.0.0",
+  "license": "Apache-2.0",
   "description": "Hosted browser app for whiteboard — Cloudflare Pages deploy target",
   "type": "module",
   "scripts": {

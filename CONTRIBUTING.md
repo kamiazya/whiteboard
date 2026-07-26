@@ -138,4 +138,4 @@ Do **not** open public issues for security vulnerabilities. See [SECURITY.md](SE
 
 ## License
 
-By contributing, you agree your work is released under the [MIT License](LICENSE).
+By contributing, you agree your work is released under the [Apache License 2.0](LICENSE). Per Section 5 of the license, any contribution intentionally submitted for inclusion is licensed under Apache-2.0, without any additional terms.
