@@ -18,13 +18,13 @@
 // path that resolves the home dir directly (bypassing the getDataDir() seam)
 // would still visibly create a `.whiteboard` directory under the fake home.
 
-import { existsSync } from 'node:fs'
+import { existsSync, mkdtempSync } from 'node:fs'
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebSocket, WebSocketServer } from 'ws'
 
 let scratchDir: string
@@ -39,6 +39,18 @@ const { getFakeHomeDir, setFakeHomeDir } = vi.hoisted(() => {
     },
   }
 })
+
+// Seed a real, writable fake home dir synchronously, before the
+// `await import('../../shared/data-dir-secure.js')` below can run.
+// data-dir-secure.ts resolves a module-load-time `DATA_DIR` constant via
+// `resolveDataDir()` as a side effect of being imported, and at that point
+// `beforeEach` has not run yet, so the mocked homedir() would still return
+// the initial `''`. `resolveDataDir` would then resolve `'.whiteboard'`
+// against the process cwd (the checkout) and canWriteDir's mkdirSync would
+// actually create it there — a leak the final assertion never inspects
+// because it only checks this test's per-test fakeHomeDir.
+const initialFakeHomeDir = mkdtempSync(join(tmpdir(), 'whiteboard-ws-real-socket-fake-home-init-'))
+setFakeHomeDir(initialFakeHomeDir)
 
 vi.mock('node:os', async () => {
   const actual = await vi.importActual<typeof import('node:os')>('node:os')
@@ -109,13 +121,33 @@ function connectAndCaptureSnapshot(
   })
 }
 
+// How long to wait for the WS persistence path to signal completion before
+// failing with a clear diagnostic instead of hanging until Vitest's global
+// test timeout (which reports no information about which (workspaceId, slug)
+// never arrived).
+const PERSISTED_SIGNAL_TIMEOUT_MS = 5_000
+
 // Resolves once the WS persistence path signals it has finished saving for
 // this exact (workspaceId, slug) — a deterministic completion event instead
-// of polling loadCanvas() until an expectation happens to pass.
+// of polling loadCanvas() until an expectation happens to pass. Rejects if
+// that signal never arrives within PERSISTED_SIGNAL_TIMEOUT_MS (e.g.
+// saveCanvas throws, or a regression changes/drops the callback args), so a
+// broken persistence path fails fast with a clear message instead of hanging.
 function waitForPersisted(workspaceId: string, slug: string): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      setOnPersistedForTests(undefined)
+      reject(
+        new Error(
+          `waitForPersisted timed out after ${PERSISTED_SIGNAL_TIMEOUT_MS}ms waiting for ` +
+            `(workspaceId=${workspaceId}, slug=${slug}) to persist`,
+        ),
+      )
+    }, PERSISTED_SIGNAL_TIMEOUT_MS)
+
     setOnPersistedForTests((persistedWorkspaceId, persistedSlug) => {
       if (persistedWorkspaceId === workspaceId && persistedSlug === slug) {
+        clearTimeout(timer)
         setOnPersistedForTests(undefined)
         resolve()
       }
@@ -124,6 +156,10 @@ function waitForPersisted(workspaceId: string, slug: string): Promise<void> {
 }
 
 describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
+  afterAll(async () => {
+    await rm(initialFakeHomeDir, { recursive: true, force: true })
+  })
+
   beforeEach(async () => {
     fakeHomeDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-real-socket-fake-home-'))
     setFakeHomeDir(fakeHomeDir)
