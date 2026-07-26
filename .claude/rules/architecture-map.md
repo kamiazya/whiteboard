@@ -5,7 +5,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | Package | Role | May depend on |
 |---|---|---|
 | `packages/canvas-model` | Zod schemas for the OpenCanvas data model (single source of truth) | zod only |
-| `packages/canvas-codec` (planned) | OKF Markdown / JSON Canvas serialize+parse, remark pipeline, Loro⇔model | model, loro-crdt, remark |
+| `packages/canvas-codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
 | `packages/canvas-render` (planned) | scene graph, layout, themes, SVG backend, sceneDigest | model |
 | `packages/canvas-ports` (planned) | store/sync port contracts + Symbol `TOKENS` | model |
 | `packages/canvas-workspace` (planned) | tree ops, alias derivation, index derivation, link extraction | model, codec, ports |
@@ -19,4 +19,6 @@ Absolute rules:
 2. Dependencies flow only in the table's direction. Composition roots are never imported by shared packages.
 3. Unsure where code goes → load the `package-placement` skill (planned). DI wiring → `di-container` skill (planned).
 
-These rules are enforced by boundary lint + dependency-direction tests (introduced with canvas-codec); until those land, review against this table. Per-package details live in `.claude/rules/package-<name>.md` (path-scoped). Note: `./skills/` (product MCP skills) is unrelated to `.claude/skills/` (dev workflow skills).
+These rules are enforced by `tools/arch-lint` (vitest project `arch-lint-node`): a TypeScript-compiler-API scan for banned imports/globals, plus a package.json dependency-direction check against this table's data-driven mirror (`tools/arch-lint/src/architecture-map.ts`). It currently covers `canvas-model` and `canvas-codec`; extend its package list as later shared-layer packages land. Per-package details live in `.claude/rules/package-<name>.md` (path-scoped). Note: `./skills/` (product MCP skills) is unrelated to `.claude/skills/` (dev workflow skills).
+
+The LoroDoc<->model bridge originally scoped for `canvas-codec` is DEFERRED to `canvas-workspace` — a single-document codec has no need for CRDT merge semantics, and pulling `loro-crdt` into this package would violate its own "model + remark only" dependency rule.

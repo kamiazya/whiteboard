@@ -16,6 +16,10 @@
       "types": "./src/mdast/index.ts",
       "import": "./src/mdast/index.ts"
     },
+    "./test-utils": {
+      "types": "./src/test-utils/index.ts",
+      "import": "./src/test-utils/index.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

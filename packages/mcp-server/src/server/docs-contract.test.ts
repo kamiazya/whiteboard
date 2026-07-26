@@ -46,6 +46,7 @@ describe('docs/ contract', () => {
     const docMentionTokenForPackageDir: Record<string, string> = {
       'packages/mcp-server': 'mcp',
       'packages/canvas-model': 'canvas-model',
+      'packages/canvas-codec': 'canvas-codec',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',
     }
