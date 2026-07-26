@@ -8,6 +8,8 @@ export default defineConfig({
       'packages/canvas-model/vitest.node.config.ts',
       'packages/canvas-codec/vitest.node.config.ts',
       'tools/arch-lint/vitest.node.config.ts',
+      'packages/canvas-render/vitest.node.config.ts',
+      'packages/canvas-render/vitest.browser.config.ts',
       'packages/canvas-viewer/vitest.node.config.ts',
       'packages/canvas-viewer/vitest.jsdom.config.ts',
       'packages/canvas-viewer/vitest.browser.config.ts',

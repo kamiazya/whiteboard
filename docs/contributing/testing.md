@@ -176,21 +176,22 @@ src/server/routes/canvas-output-path-error.ts
 
 ## Browser Testing
 
-There are two real-browser Vitest projects:
+There are three real-browser Vitest projects:
 
 | Project | Package | Purpose |
 |---|---|---|
+| `canvas-render-browser` | `packages/canvas-render` | Cross-platform SVG-serialization determinism: the same scene must render byte-identical SVG in a real browser as it does in `canvas-render-node` |
 | `canvas-viewer-browser` | `packages/canvas-viewer` | Popovers, dialogs, scroll, focus, keyboard, pointer, and restore flows where browser layout and pointer behavior are the core risk |
 | `web-browser` | `apps/web` | `apps/web` app browser regressions: popovers, dialogs, focus, keyboard, restore flows, and tests requiring real browser APIs unavailable in jsdom (IndexedDB, OPFS, `window.showOpenFilePicker`) |
 
 ```bash
-pnpm run test:browser         # canvas-viewer-browser + web-browser
+pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser
 pnpm run test:browser:trace   # same, with trace artifacts on failure
 ```
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
-Failure traces are stored under `<package>/tmp/vitest-traces` — `packages/canvas-viewer/tmp/vitest-traces` for `canvas-viewer-browser`, `apps/web/tmp/vitest-traces` for `web-browser`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
+Failure traces are stored under `<package>/tmp/vitest-traces` — `packages/canvas-render/tmp/vitest-traces` for `canvas-render-browser`, `packages/canvas-viewer/tmp/vitest-traces` for `canvas-viewer-browser`, `apps/web/tmp/vitest-traces` for `web-browser`. Check traces before adding temporary debug code. Remove temporary debug overlays and instrumentation before finishing.
 
 Prefer `web-browser` over apps/web jsdom whenever the scenario involves:
 - Focus, pointer, keyboard, or scroll behavior
@@ -351,8 +352,8 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#q
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-model node, canvas-codec node, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
-pnpm test:browser   # canvas-viewer-browser + web-browser (the real-browser projects)
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, canvas-model node, canvas-codec node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 ```
 

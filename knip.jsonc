@@ -86,6 +86,13 @@
       "entry": ["src/scanner.ts", "src/direction-check.ts", "src/architecture-map.ts"],
       "project": ["src/**/*.ts"]
     },
+    "packages/canvas-render": {
+      // Public surface for opencanvas slices 5/7/8 (canvas-workspace,
+      // server-core, apps/web composition roots); intentionally
+      // unreferenced from any existing package until those land.
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "packages/canvas-viewer": {
       // widget-entry.ts and widget/refresh-control.ts are owned by a
       // concurrent in-flight lane — deliberately left unconfigured here so
