@@ -177,6 +177,27 @@ describe('stripWasmSourceMap', () => {
     expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
   })
 
+  it('rejects a five-byte ULEB128 whose final byte overflows the u32 range', () => {
+    const magicAndVersion = [0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]
+    const typeSectionBytes = typeSection()
+    // Five bytes is a legal ULEB128 length for u32, but the fifth byte only
+    // has 4 usable payload bits (28 already consumed). A terminating fifth
+    // byte of 0x10 encodes bit 32 — out of u32 range — and JS's mod-32 shift
+    // would wrap `0x10 << 28` down to 0, yielding a small in-range size (24
+    // here) instead of an error. Same fail-safe contract as the six-byte case.
+    const name = 'sourceMappingURL'
+    const nameBytes = Array.from(Buffer.from(name, 'utf8'))
+    const payload = [0x41, 0x41, 0x41, 0x41, 0x41, 0x41, 0x41]
+    const content = [nameBytes.length, ...nameBytes, ...payload]
+    expect(content.length).toBe(24)
+    const overflowingSizeSection = [0x00, 0x98, 0x80, 0x80, 0x80, 0x10, ...content]
+    const wasm = new Uint8Array([...magicAndVersion, ...typeSectionBytes, ...overflowingSizeSection])
+
+    const stripped = stripWasmSourceMap(wasm)
+
+    expect(Buffer.from(stripped).equals(Buffer.from(wasm))).toBe(true)
+  })
+
   it('leaves a custom section untouched when its declared name length overruns its own content', () => {
     // Custom section content: name-length ULEB128 (10) but only 3 bytes of
     // name/payload actually follow — nameEnd > contentEnd inside the section.

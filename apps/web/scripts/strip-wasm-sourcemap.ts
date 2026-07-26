@@ -40,6 +40,12 @@ function readULEB128(bytes: Uint8Array, offset: number): ULEB128Result {
     }
     const byte = bytes[offset + bytesRead] as number
     bytesRead++
+    // The fifth byte has only 4 usable bits for a u32 (28 already consumed);
+    // payload above that would silently wrap under JS's 32-bit shift and turn
+    // an out-of-range size into a small in-range one.
+    if (shift === 28 && (byte & 0x70) !== 0) {
+      throw new Error('malformed wasm module: ULEB128 exceeds u32 range')
+    }
     result |= (byte & 0x7f) << shift
     if ((byte & 0x80) === 0) break
     shift += 7

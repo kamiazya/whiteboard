@@ -42,7 +42,11 @@ export function installUnloadShim(): () => void {
   // native 'unload' type and can no longer reach the translated listener.
   const translatedListeners: TranslatedListener[] = []
 
-  window.addEventListener = ((type, listener, options) => {
+  window.addEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ) => {
     const mappedType = mapEventType(type)
     if (mappedType === REPLACEMENT_EVENT && type === UNLOAD_EVENT) {
       translatedListeners.push({ listener, options })
@@ -50,7 +54,24 @@ export function installUnloadShim(): () => void {
     return originalAdd(mappedType, listener, options)
   }) as typeof window.addEventListener
 
-  window.removeEventListener = ((type, listener, options) => {
+  window.removeEventListener = ((
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | EventListenerOptions,
+  ) => {
+    if (type === UNLOAD_EVENT) {
+      // Drop the tracking record so re-add/remove cycles (Excalidraw does
+      // this on editor-mode changes) don't accumulate and uninstall doesn't
+      // re-detach an already-removed listener. Match by listener + capture
+      // flag, mirroring how the DOM identifies listener entries.
+      const capture = typeof options === 'boolean' ? options : (options?.capture ?? false)
+      const index = translatedListeners.findIndex((entry) => {
+        const entryCapture =
+          typeof entry.options === 'boolean' ? entry.options : (entry.options?.capture ?? false)
+        return entry.listener === listener && entryCapture === capture
+      })
+      if (index !== -1) translatedListeners.splice(index, 1)
+    }
     return originalRemove(mapEventType(type), listener, options)
   }) as typeof window.removeEventListener
 
