@@ -93,6 +93,10 @@
       "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]
     },
+    "packages/canvas-workspace": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "packages/canvas-render": {
       // Public surface for opencanvas slices 5/7/8 (canvas-workspace,
       // server-core, apps/web composition roots); intentionally

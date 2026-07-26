@@ -8,6 +8,11 @@
 export const ARCHITECTURE_MAP: Readonly<Record<string, readonly string[]>> = {
   '@kamiazya/whiteboard-canvas-model': [],
   '@kamiazya/whiteboard-canvas-codec': ['@kamiazya/whiteboard-canvas-model'],
+  '@kamiazya/whiteboard-canvas-workspace': [
+    '@kamiazya/whiteboard-canvas-model',
+    '@kamiazya/whiteboard-canvas-codec',
+    '@kamiazya/whiteboard-canvas-ports',
+  ],
 }
 
 export function allowedDependencies(packageName: string): readonly string[] {
