@@ -9,10 +9,80 @@ import type {
   MdastTableRow,
 } from '@kamiazya/whiteboard-canvas-model/internal'
 
-const REFERENCE_PATTERN = /(!)?\[\[([^\]|]+)(?:\|([^\]]*))?\]\]/g
 const CANVAS_ID_PREFIX = 'canvas:'
 
 export type AliasResolver = (alias: string) => string | null
+
+interface ReferenceMatch {
+  /** Index of the match start (the `!` when present, otherwise the first `[`). */
+  index: number
+  /** Full matched text, e.g. `[[canvas:ID]]` or `![[target|alias]]`. */
+  full: string
+  isEmbed: boolean
+  target: string
+  alias: string | undefined
+}
+
+/**
+ * Finds the next `[[...]]`/`![[...]]` occurrence at or after `cursor`, scanning
+ * with `indexOf` instead of a regex. A quantified-class regex equivalent to
+ * this grammar (`[^\]|]+` for the target, `[^\]]*` for the alias) is
+ * super-linear on adversarial input: every `[[` that never finds a closing
+ * `]]` forces a fresh forward scan to the end of the string, so a string of
+ * N repeated `[[` costs O(N^2). This scan instead advances `cursor`
+ * monotonically past everything it has already inspected, so each character
+ * is visited a bounded number of times and the whole pass is O(n).
+ */
+function findNextReference(value: string, cursor: number): ReferenceMatch | undefined {
+  let pos = cursor
+  while (pos < value.length) {
+    const openIndex = value.indexOf('[[', pos)
+    if (openIndex === -1) return undefined
+
+    const hasBang = openIndex > 0 && value[openIndex - 1] === '!'
+    const matchStart = hasBang ? openIndex - 1 : openIndex
+    const contentStart = openIndex + 2
+
+    let i = contentStart
+    while (i < value.length && value[i] !== ']' && value[i] !== '|') i++
+    if (i >= value.length) return undefined // no `]`/`|` left anywhere -> no possible match remains
+
+    const target = value.slice(contentStart, i)
+    if (target.length === 0) {
+      pos = contentStart
+      continue
+    }
+
+    if (value[i] === ']') {
+      if (value[i + 1] === ']') {
+        return {
+          index: matchStart,
+          full: value.slice(matchStart, i + 2),
+          isEmbed: hasBang,
+          target,
+          alias: undefined,
+        }
+      }
+      pos = i + 1
+      continue
+    }
+
+    let j = i + 1
+    while (j < value.length && value[j] !== ']') j++
+    if (j < value.length && value[j + 1] === ']') {
+      const alias = value.slice(i + 1, j)
+      return {
+        index: matchStart,
+        full: value.slice(matchStart, j + 2),
+        isEmbed: hasBang,
+        target,
+        alias,
+      }
+    }
+    pos = j + 1
+  }
+  return undefined
+}
 
 /**
  * Splits a plain-text node's value on `[[...]]`/`![[...]]` occurrences,
@@ -30,16 +100,21 @@ function splitTextReferences(
 ): MdastPhrasingContent[] {
   const result: MdastPhrasingContent[] = []
   let lastIndex = 0
+  let cursor = 0
 
-  for (const match of value.matchAll(REFERENCE_PATTERN)) {
-    const [full, bang, target, alias] = match
-    const index = match.index ?? 0
-    if (index > lastIndex) result.push({ type: 'text', value: value.slice(lastIndex, index) })
+  for (;;) {
+    const match = findNextReference(value, cursor)
+    if (match === undefined) break
 
-    const resolved = resolveTarget(target, alias, resolver, bang !== undefined)
-    result.push(resolved ?? { type: 'text', value: full })
+    if (match.index > lastIndex) {
+      result.push({ type: 'text', value: value.slice(lastIndex, match.index) })
+    }
 
-    lastIndex = index + full.length
+    const resolved = resolveTarget(match.target, match.alias, resolver, match.isEmbed)
+    result.push(resolved ?? { type: 'text', value: match.full })
+
+    lastIndex = match.index + match.full.length
+    cursor = lastIndex
   }
 
   if (lastIndex < value.length) result.push({ type: 'text', value: value.slice(lastIndex) })

@@ -154,6 +154,52 @@ describe('resolveReferences', () => {
     expect(paragraphNode.children).toEqual([{ type: 'wikiLink', canvasId: ULID, alias: undefined }])
   })
 
+  it('does not hang on a pathological unterminated ![[ + many backslashes', () => {
+    const pathological = `![[${'\\'.repeat(50000)}`
+    const root = paragraph(pathological)
+
+    const start = performance.now()
+    const resolved = resolveReferences(root)
+    const elapsed = performance.now() - start
+
+    expect(elapsed).toBeLessThan(1000)
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([{ type: 'text', value: pathological }])
+  })
+
+  it('does not hang on a pathological unterminated [[ with repeated pipes', () => {
+    const pathological = `[[${'a|'.repeat(50000)}`
+    const root = paragraph(pathological)
+
+    const start = performance.now()
+    const resolved = resolveReferences(root)
+    const elapsed = performance.now() - start
+
+    expect(elapsed).toBeLessThan(1000)
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([{ type: 'text', value: pathological }])
+  })
+
+  it('does not hang on many repeated unterminated [[ (super-linear backtracking trigger)', () => {
+    // Each "[[" is its own would-be match start with no closing "]]" anywhere in
+    // the string, which is the shape that made the original quantified-class
+    // regex super-linear (O(n^2)): every occurrence forced a fresh forward scan
+    // to the end of the string looking for a terminator that was never found.
+    const pathological = '[['.repeat(16000)
+    const root = paragraph(pathological)
+
+    const start = performance.now()
+    const resolved = resolveReferences(root)
+    const elapsed = performance.now() - start
+
+    expect(elapsed).toBeLessThan(1000)
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([{ type: 'text', value: pathological }])
+  })
+
   it('resolves a [[canvas:ULID]] reference nested inside a table cell', () => {
     const root = {
       type: 'root' as const,
