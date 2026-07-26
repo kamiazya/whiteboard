@@ -129,6 +129,19 @@ function layoutPhrasing(
     line.x += width
   }
 
+  /** Walk `nodes`, then stamp `link` provenance onto every run they produced. */
+  const walkLinked = (
+    nodes: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
+    currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+    link: LinkProvenance,
+  ) => {
+    const startIndex = runs.length
+    walk(nodes, currentStyle)
+    for (let i = startIndex; i < runs.length; i++) {
+      runs[i] = { ...runs[i], link }
+    }
+  }
+
   const walk = (
     nodes: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
     currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
@@ -163,11 +176,7 @@ function layoutPhrasing(
             href: child.url,
             ...(child.title ? { title: child.title } : {}),
           }
-          const startIndex = runs.length
-          walk(child.children, currentStyle)
-          for (let i = startIndex; i < runs.length; i++) {
-            runs[i] = { ...runs[i], link }
-          }
+          walkLinked(child.children, currentStyle, link)
           break
         }
         case 'linkReference': {
@@ -175,11 +184,7 @@ function layoutPhrasing(
           if (child.children.length === 0) {
             emit(child.identifier, { link }, currentStyle)
           } else {
-            const startIndex = runs.length
-            walk(child.children, currentStyle)
-            for (let i = startIndex; i < runs.length; i++) {
-              runs[i] = { ...runs[i], link }
-            }
+            walkLinked(child.children, currentStyle, link)
           }
           break
         }
