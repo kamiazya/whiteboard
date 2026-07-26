@@ -225,6 +225,99 @@ describe('layoutMdastBlocks — default math fallback', () => {
   })
 })
 
+describe('layoutMdastBlocks — inline cursor', () => {
+  it('advances a horizontal cursor across runs so they do not overlap on one line', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'plain ' },
+            { type: 'strong', children: [{ type: 'text', value: 'bold' }] },
+            { type: 'text', value: ' tail' },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(3)
+    const [first, second, third] = paragraph.runs
+
+    // All runs stay on the same line.
+    expect(first.bbox.y).toBe(second.bbox.y)
+    expect(second.bbox.y).toBe(third.bbox.y)
+
+    // x is a monotonically increasing running cursor, never reset to 0.
+    expect(first.bbox.x).toBe(0)
+    expect(second.bbox.x).toBe(first.bbox.x + first.bbox.w)
+    expect(third.bbox.x).toBe(second.bbox.x + second.bbox.w)
+
+    // No pair of runs overlaps horizontally.
+    expect(first.bbox.x + first.bbox.w).toBeLessThanOrEqual(second.bbox.x)
+    expect(second.bbox.x + second.bbox.w).toBeLessThanOrEqual(third.bbox.x)
+  })
+
+  it('resets x and advances y to a new line on a hard break', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'first line' },
+            { type: 'break' },
+            { type: 'text', value: 'second line' },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(2)
+    const [firstLine, secondLine] = paragraph.runs
+
+    expect(secondLine.bbox.x).toBe(0)
+    expect(secondLine.bbox.y).toBeGreaterThan(firstLine.bbox.y)
+  })
+
+  it('grows a multi-line paragraph bbox.h to cover every line produced', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'line one' },
+            { type: 'break' },
+            { type: 'text', value: 'line two' },
+            { type: 'break' },
+            { type: 'text', value: 'line three' },
+          ],
+        },
+        // A following block's y must start after all 3 lines, proving the
+        // block cursor also advanced by the full multi-line height.
+        { type: 'paragraph', children: [{ type: 'text', value: 'next block' }] },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const [multiLine, nextBlock] = scene.nodes
+    expect(multiLine.kind).toBe('paragraph')
+    expect(nextBlock.kind).toBe('paragraph')
+    if (multiLine.kind !== 'paragraph' || nextBlock.kind !== 'paragraph') {
+      throw new Error('unreachable')
+    }
+    const lineHeight = multiLine.runs[0].bbox.h
+    expect(multiLine.bbox.h).toBe(3 * lineHeight)
+    expect(nextBlock.bbox.y).toBeGreaterThanOrEqual(multiLine.bbox.y + multiLine.bbox.h)
+  })
+})
+
 describe('layoutMdastBlocks — single render path', () => {
   it('produces a deep-equal scene for preview, spatial-text-node, and export callers', () => {
     const root: MdastRoot = {

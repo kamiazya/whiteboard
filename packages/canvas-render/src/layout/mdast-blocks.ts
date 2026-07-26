@@ -85,111 +85,135 @@ function measureRunWidth(measure: MeasureText, text: string, sizePx: number): nu
   return clampAdvance(metrics.advanceWidth)
 }
 
-/** Flattens phrasing content into an ordered list of styled text runs, at y with the given font size. */
+/** Result of laying out one block's inline phrasing content. */
+interface PhrasingLayout {
+  readonly runs: readonly TextRunNode[]
+  /** Number of lines produced (>= 1); a hard break starts a new line. */
+  readonly lineCount: number
+}
+
+/**
+ * Flattens phrasing content into an ordered list of styled text runs,
+ * starting at the block's top-left corner (`cursor.y`, x = 0).
+ *
+ * This is a minimal non-wrapping inline cursor: within one line, each run's
+ * `bbox.x` is the running horizontal cursor (previous runs' widths summed),
+ * so sibling runs never overlap. Word-wrap at `options.maxWidth` is still
+ * deferred to the future theme/line-layout slice — a single line can exceed
+ * `maxWidth` — but a hard break (mdast `break`) always resets the cursor to
+ * the block's left edge and advances to a new line one `fontSizePx` down.
+ */
 function layoutPhrasing(
   children: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
   cursor: Cursor,
   options: MdastLayoutOptions,
   fontSizePx: number,
   style: { emphasis?: boolean; strong?: boolean; deleted?: boolean } = {},
-): TextRunNode[] {
+): PhrasingLayout {
   const runs: TextRunNode[] = []
-  // Horizontal run placement (word-wrap-aware x/width accumulation) is
-  // deferred; each run's bbox.x is left at 0 pending that follow-up. This
-  // does not affect semantic provenance (heading level, list nesting, link
-  // targets) or block-level (y-axis) geometry, which the golden test covers.
-  const emit = (text: string, extra: Partial<TextRunNode> = {}) => {
+  const line = { x: 0, index: 0 }
+
+  const emit = (
+    text: string,
+    extra: Partial<TextRunNode> = {},
+    runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean } = style,
+  ) => {
     const width = measureRunWidth(options.measure, text, fontSizePx)
     runs.push({
       kind: 'textRun',
-      bbox: { x: 0, y: cursor.y, w: width, h: fontSizePx },
+      bbox: { x: line.x, y: cursor.y + line.index * fontSizePx, w: width, h: fontSizePx },
       text,
-      ...style,
+      ...runStyle,
       ...extra,
     })
+    line.x += width
   }
 
-  for (const child of children) {
-    switch (child.type) {
-      case 'text':
-        emit(child.value)
-        break
-      case 'inlineCode':
-        emit(child.value, { code: true })
-        break
-      case 'break':
-        break
-      case 'html':
-        emit(child.value)
-        break
-      case 'emphasis':
-        runs.push(
-          ...layoutPhrasing(child.children, cursor, options, fontSizePx, {
-            ...style,
-            emphasis: true,
-          }),
-        )
-        break
-      case 'strong':
-        runs.push(
-          ...layoutPhrasing(child.children, cursor, options, fontSizePx, {
-            ...style,
-            strong: true,
-          }),
-        )
-        break
-      case 'delete':
-        runs.push(
-          ...layoutPhrasing(child.children, cursor, options, fontSizePx, {
-            ...style,
-            deleted: true,
-          }),
-        )
-        break
-      case 'link': {
-        const link: LinkProvenance = {
-          kind: 'link',
-          href: child.url,
-          ...(child.title ? { title: child.title } : {}),
+  const walk = (
+    nodes: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
+    currentStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+  ) => {
+    for (const child of nodes) {
+      switch (child.type) {
+        case 'text':
+          emit(child.value, {}, currentStyle)
+          break
+        case 'inlineCode':
+          emit(child.value, { code: true }, currentStyle)
+          break
+        case 'break':
+          line.x = 0
+          line.index += 1
+          break
+        case 'html':
+          emit(child.value, {}, currentStyle)
+          break
+        case 'emphasis':
+          walk(child.children, { ...currentStyle, emphasis: true })
+          break
+        case 'strong':
+          walk(child.children, { ...currentStyle, strong: true })
+          break
+        case 'delete':
+          walk(child.children, { ...currentStyle, deleted: true })
+          break
+        case 'link': {
+          const link: LinkProvenance = {
+            kind: 'link',
+            href: child.url,
+            ...(child.title ? { title: child.title } : {}),
+          }
+          const startIndex = runs.length
+          walk(child.children, currentStyle)
+          for (let i = startIndex; i < runs.length; i++) {
+            runs[i] = { ...runs[i], link }
+          }
+          break
         }
-        const nested = layoutPhrasing(child.children, cursor, options, fontSizePx, style)
-        runs.push(...nested.map((r) => ({ ...r, link })))
-        break
-      }
-      case 'linkReference': {
-        const link: LinkProvenance = { kind: 'link', href: `#${child.identifier}` }
-        if (child.children.length === 0) {
-          emit(child.identifier, { link })
-        } else {
-          const nested = layoutPhrasing(child.children, cursor, options, fontSizePx, style)
-          runs.push(...nested.map((r) => ({ ...r, link })))
+        case 'linkReference': {
+          const link: LinkProvenance = { kind: 'link', href: `#${child.identifier}` }
+          if (child.children.length === 0) {
+            emit(child.identifier, { link }, currentStyle)
+          } else {
+            const startIndex = runs.length
+            walk(child.children, currentStyle)
+            for (let i = startIndex; i < runs.length; i++) {
+              runs[i] = { ...runs[i], link }
+            }
+          }
+          break
         }
-        break
+        case 'image':
+          emit(child.alt ?? '', {}, currentStyle)
+          break
+        case 'imageReference':
+          emit(child.alt ?? child.identifier, {}, currentStyle)
+          break
+        case 'inlineMath':
+          emit(child.value, {}, currentStyle)
+          break
+        case 'wikiLink':
+          emit(
+            child.alias ?? child.canvasId,
+            {
+              link: {
+                kind: 'wikiLink',
+                canvasId: child.canvasId,
+                ...(child.alias ? { alias: child.alias } : {}),
+              },
+            },
+            currentStyle,
+          )
+          break
+        case 'embed':
+          emit(child.canvasId, { link: { kind: 'embed', canvasId: child.canvasId } }, currentStyle)
+          break
       }
-      case 'image':
-        emit(child.alt ?? '')
-        break
-      case 'imageReference':
-        emit(child.alt ?? child.identifier)
-        break
-      case 'inlineMath':
-        emit(child.value)
-        break
-      case 'wikiLink':
-        emit(child.alias ?? child.canvasId, {
-          link: {
-            kind: 'wikiLink',
-            canvasId: child.canvasId,
-            ...(child.alias ? { alias: child.alias } : {}),
-          },
-        })
-        break
-      case 'embed':
-        emit(child.canvasId, { link: { kind: 'embed', canvasId: child.canvasId } })
-        break
     }
   }
-  return runs
+
+  walk(children, style)
+  return { runs, lineCount: line.index + 1 }
 }
 
 function layoutBlock(
@@ -200,8 +224,9 @@ function layoutBlock(
 ): SceneNode {
   switch (node.type) {
     case 'heading': {
-      const runs = layoutPhrasing(node.children, cursor, options, HEADING_FONT_SIZE_PX[node.depth])
-      const height = HEADING_FONT_SIZE_PX[node.depth]
+      const fontSizePx = HEADING_FONT_SIZE_PX[node.depth]
+      const { runs, lineCount } = layoutPhrasing(node.children, cursor, options, fontSizePx)
+      const height = lineCount * fontSizePx
       const heading: HeadingBlockNode = {
         kind: 'heading',
         bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
@@ -212,13 +237,14 @@ function layoutBlock(
       return heading
     }
     case 'paragraph': {
-      const runs = layoutPhrasing(node.children, cursor, options, BODY_FONT_SIZE_PX)
+      const { runs, lineCount } = layoutPhrasing(node.children, cursor, options, BODY_FONT_SIZE_PX)
+      const height = lineCount * BODY_FONT_SIZE_PX
       const paragraph: ParagraphBlockNode = {
         kind: 'paragraph',
-        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: BODY_FONT_SIZE_PX },
+        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
         runs,
       }
-      cursor.y += BODY_FONT_SIZE_PX + BLOCK_GAP_PX
+      cursor.y += height + BLOCK_GAP_PX
       return paragraph
     }
     case 'blockquote': {
@@ -302,7 +328,7 @@ function layoutBlock(
       const rows: TableRowSceneNode[] = node.children.map((row) => {
         const rowY = cursor.y
         const cells: TableCellSceneNode[] = row.children.map((cell, cellIndex) => {
-          const runs = layoutPhrasing(cell.children, { y: rowY }, options, BODY_FONT_SIZE_PX)
+          const { runs } = layoutPhrasing(cell.children, { y: rowY }, options, BODY_FONT_SIZE_PX)
           return {
             kind: 'tableCell',
             bbox: { x: cellIndex * colWidth, y: rowY, w: colWidth, h: TABLE_ROW_HEIGHT_PX },
