@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { mdastNodeSchema } from './index.js'
+import {
+  mdastFlowContentArbitrary,
+  mdastPhrasingContentArbitrary,
+  mdastRootArbitrary,
+  mdastTableRowArbitrary,
+} from '../test-utils/arbitraries.js'
+import { fc } from '../test-utils/fast-check.js'
+import { mdastFlowContentSchema, mdastNodeSchema, mdastRootSchema } from './index.js'
 
 describe('mdastNodeSchema', () => {
   it('parses a paragraph containing text, emphasis, and strong', () => {
@@ -168,10 +175,217 @@ describe('mdastNodeSchema', () => {
   })
 
   it('parses an arbitrarily deep nesting of blockquotes without stack failure', () => {
-    let node: unknown = { type: 'text', value: 'leaf' }
+    // blockquote children are FlowContent, so the innermost leaf must be a
+    // flow node (paragraph), not a bare phrasing `text` node.
+    let node: unknown = { type: 'paragraph', children: [{ type: 'text', value: 'leaf' }] }
     for (let i = 0; i < 200; i++) {
       node = { type: 'blockquote', children: [node] }
     }
     expect(mdastNodeSchema.safeParse(node).success).toBe(true)
+  })
+
+  it('parses a math node with meta:null, as mdast-util-math emits for a plain fence', () => {
+    expect(mdastNodeSchema.safeParse({ type: 'math', value: 'E=mc^2', meta: null }).success).toBe(
+      true,
+    )
+  })
+
+  it('accepts html as both a flow child and a phrasing child (dual-category)', () => {
+    expect(
+      mdastRootSchema.safeParse({
+        type: 'root',
+        children: [{ type: 'html', value: '<div>flow</div>' }],
+      }).success,
+    ).toBe(true)
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'paragraph',
+        children: [{ type: 'html', value: '<span>inline</span>' }],
+      }).success,
+    ).toBe(true)
+  })
+
+  it('accepts a root document with a top-level definition', () => {
+    const result = mdastRootSchema.safeParse({
+      type: 'root',
+      children: [
+        { type: 'definition', identifier: 'foo', url: 'https://example.com' },
+        { type: 'paragraph', children: [{ type: 'text', value: 'body' }] },
+      ],
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('still accepts a standalone structurally-valid listItem/tableRow/tableCell via mdastNodeSchema', () => {
+    expect(
+      mdastNodeSchema.safeParse({
+        type: 'listItem',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'item' }] }],
+      }).success,
+    ).toBe(true)
+    expect(
+      mdastNodeSchema.safeParse({
+        type: 'tableRow',
+        children: [{ type: 'tableCell', children: [{ type: 'text', value: 'a' }] }],
+      }).success,
+    ).toBe(true)
+    expect(
+      mdastNodeSchema.safeParse({
+        type: 'tableCell',
+        children: [{ type: 'text', value: 'a' }],
+      }).success,
+    ).toBe(true)
+  })
+})
+
+describe('mdast content-model placement (contextual, via parent/root schemas)', () => {
+  it('rejects a root whose child is root (root never appears as a child)', () => {
+    expect(
+      mdastRootSchema.safeParse({
+        type: 'root',
+        children: [{ type: 'root', children: [] }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a paragraph containing root', () => {
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'paragraph',
+        children: [{ type: 'root', children: [] }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects bare text directly under blockquote (blockquote children are flow-only)', () => {
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'blockquote',
+        children: [{ type: 'text', value: 'bare' }],
+      }).success,
+    ).toBe(false)
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'blockquote',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'ok' }] }],
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejects listItem outside a list (e.g. as a blockquote child), accepts it inside a list', () => {
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'blockquote',
+        children: [
+          {
+            type: 'listItem',
+            children: [{ type: 'paragraph', children: [{ type: 'text', value: 'item' }] }],
+          },
+        ],
+      }).success,
+    ).toBe(false)
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'list',
+        children: [
+          {
+            type: 'listItem',
+            children: [{ type: 'paragraph', children: [{ type: 'text', value: 'item' }] }],
+          },
+        ],
+      }).success,
+    ).toBe(true)
+  })
+
+  it('rejects tableRow outside a table (e.g. as a blockquote child), accepts it inside a table', () => {
+    const tableRow = {
+      type: 'tableRow',
+      children: [{ type: 'tableCell', children: [{ type: 'text', value: 'a' }] }],
+    }
+    expect(
+      mdastFlowContentSchema.safeParse({ type: 'blockquote', children: [tableRow] }).success,
+    ).toBe(false)
+    expect(mdastFlowContentSchema.safeParse({ type: 'table', children: [tableRow] }).success).toBe(
+      true,
+    )
+  })
+
+  it('rejects tableCell as a direct child of table (skipping tableRow)', () => {
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'table',
+        children: [{ type: 'tableCell', children: [{ type: 'text', value: 'a' }] }],
+      }).success,
+    ).toBe(false)
+  })
+
+  it('generates trees that cover every supported node kind (arbitrary coverage)', () => {
+    const expectedKinds = new Set([
+      'root',
+      'paragraph',
+      'heading',
+      'text',
+      'emphasis',
+      'strong',
+      'inlineCode',
+      'code',
+      'blockquote',
+      'list',
+      'listItem',
+      'thematicBreak',
+      'break',
+      'link',
+      'image',
+      'html',
+      'definition',
+      'linkReference',
+      'imageReference',
+      'table',
+      'tableRow',
+      'tableCell',
+      'delete',
+      'math',
+      'inlineMath',
+      'wikiLink',
+      'embed',
+    ])
+
+    const seenKinds = new Set<string>()
+    const collect = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      const record = node as Record<string, unknown>
+      if (typeof record.type === 'string') seenKinds.add(record.type)
+      if (Array.isArray(record.children)) {
+        for (const child of record.children) collect(child)
+      }
+    }
+
+    for (const sample of fc.sample(mdastRootArbitrary(3), 300)) collect(sample)
+    for (const sample of fc.sample(mdastFlowContentArbitrary(3), 300)) collect(sample)
+    for (const sample of fc.sample(mdastPhrasingContentArbitrary(3), 300)) collect(sample)
+    for (const sample of fc.sample(mdastTableRowArbitrary(3), 300)) collect(sample)
+
+    const missing = [...expectedKinds].filter((kind) => !seenKinds.has(kind))
+    expect(missing).toEqual([])
+  })
+
+  it('rejects break inside a tableCell, accepts break inside a paragraph', () => {
+    const table = {
+      type: 'table',
+      children: [
+        {
+          type: 'tableRow',
+          children: [{ type: 'tableCell', children: [{ type: 'break' }] }],
+        },
+      ],
+    }
+    expect(mdastFlowContentSchema.safeParse(table).success).toBe(false)
+
+    expect(
+      mdastFlowContentSchema.safeParse({
+        type: 'paragraph',
+        children: [{ type: 'text', value: 'a' }, { type: 'break' }, { type: 'text', value: 'b' }],
+      }).success,
+    ).toBe(true)
   })
 })

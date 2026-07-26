@@ -7,7 +7,11 @@ import {
 } from './facets.js'
 import { canvasIdSchema } from './ids.js'
 import { markdownCanvasSchema } from './markdown.js'
-import { mdastNodeSchema } from './mdast/index.js'
+import {
+  mdastFlowContentSchema,
+  mdastPhrasingContentSchema,
+  mdastRootSchema,
+} from './mdast/index.js'
 import { canvasMetaSchema } from './meta.js'
 import {
   canvasEdgeSchema,
@@ -23,7 +27,9 @@ import {
   extensionFacetsArbitrary,
   facetsRawArbitrary,
   markdownCanvasArbitrary,
-  mdastNodeArbitrary,
+  mdastFlowContentArbitrary,
+  mdastPhrasingContentArbitrary,
+  mdastRootArbitrary,
   spatialNodeArbitrary,
   workspaceMetaArbitrary,
   workspaceTreeNodeDataArbitrary,
@@ -81,10 +87,88 @@ describe('arbitrary-conformance: every generator agrees with its schema', () => 
   })
 
   fcTest.prop(
-    [fc.integer({ min: 1, max: 3 }).chain((depth) => mdastNodeArbitrary(depth))],
+    [fc.integer({ min: 0, max: 3 }).chain((depth) => mdastPhrasingContentArbitrary(depth))],
     withDefaults({ numRuns: 50 }),
-  )('mdastNodeSchema', (value) => {
-    expect(mdastNodeSchema.safeParse(value).success).toBe(true)
+  )('mdastPhrasingContentSchema', (value) => {
+    expect(mdastPhrasingContentSchema.safeParse(value).success).toBe(true)
+  })
+
+  fcTest.prop(
+    [fc.integer({ min: 0, max: 3 }).chain((depth) => mdastFlowContentArbitrary(depth))],
+    withDefaults({ numRuns: 50 }),
+  )('mdastFlowContentSchema', (value) => {
+    expect(mdastFlowContentSchema.safeParse(value).success).toBe(true)
+  })
+
+  fcTest.prop(
+    [fc.integer({ min: 0, max: 3 }).chain((depth) => mdastRootArbitrary(depth))],
+    withDefaults({ numRuns: 50 }),
+  )('mdastRootSchema', (value) => {
+    expect(mdastRootSchema.safeParse(value).success).toBe(true)
+  })
+})
+
+describe('mdast content-model: disallowed cross-category child always rejects', () => {
+  // A misplaced-child pool built from kinds whose content category is
+  // genuinely disjoint from a paragraph's allowed content (phrasing only).
+  // `html` is deliberately excluded — it is dual-category (both flow and
+  // phrasing) so grafting it under a paragraph is actually valid mdast.
+  const flowOnlyNodeArbitrary = fc.oneof(
+    fc.constant({ type: 'thematicBreak' }),
+    fc
+      .record({ value: fc.string({ maxLength: 10 }) })
+      .map(({ value }) => ({ type: 'code', value })),
+    fc
+      .record({ identifier: fc.string({ minLength: 1, maxLength: 10 }), url: fc.webUrl() })
+      .map(({ identifier, url }) => ({ type: 'definition', identifier, url })),
+    fc.constant({ type: 'root', children: [] }),
+    fc.constant({ type: 'listItem', children: [] }),
+    fc.constant({ type: 'tableRow', children: [] }),
+  )
+
+  fcTest.prop([flowOnlyNodeArbitrary], withDefaults())(
+    'a flow-only or structural node grafted as a paragraph child fails to parse',
+    (misplacedChild) => {
+      const grafted = { type: 'paragraph', children: [misplacedChild] }
+      expect(mdastFlowContentSchema.safeParse(grafted).success).toBe(false)
+    },
+  )
+
+  const nonFlowNodeArbitrary = fc.oneof(
+    fc
+      .record({ value: fc.string({ maxLength: 10 }) })
+      .map(({ value }) => ({ type: 'text', value })),
+    fc.constant({ type: 'break' }),
+    fc.constant({ type: 'root', children: [] }),
+    fc.constant({ type: 'tableCell', children: [] }),
+  )
+
+  fcTest.prop([nonFlowNodeArbitrary], withDefaults())(
+    'a non-flow node grafted as a blockquote child fails to parse',
+    (misplacedChild) => {
+      const grafted = { type: 'blockquote', children: [misplacedChild] }
+      expect(mdastFlowContentSchema.safeParse(grafted).success).toBe(false)
+    },
+  )
+})
+
+describe('mdast schemas are pure and idempotent', () => {
+  fcTest.prop(
+    [fc.integer({ min: 0, max: 3 }).chain((depth) => mdastFlowContentArbitrary(depth))],
+    withDefaults(),
+  )('safeParse does not mutate its input', (value) => {
+    const before = structuredClone(value)
+    mdastFlowContentSchema.safeParse(value)
+    expect(value).toEqual(before)
+  })
+
+  fcTest.prop(
+    [fc.integer({ min: 0, max: 3 }).chain((depth) => mdastFlowContentArbitrary(depth))],
+    withDefaults(),
+  )('parsing the same valid tree twice yields deeply-equal outputs', (value) => {
+    const once = mdastFlowContentSchema.parse(value)
+    const twice = mdastFlowContentSchema.parse(once)
+    expect(twice).toEqual(once)
   })
 })
 
