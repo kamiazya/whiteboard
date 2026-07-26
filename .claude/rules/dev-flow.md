@@ -46,7 +46,7 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 
-**コード配置とパッケージ境界**は `.claude/rules/architecture-map.md`（常時）と `.claude/rules/package-*.md`（パス駆動）が正。新パッケージの PR にはパス指定 rule を同梱する。
+**Code placement and package boundaries** are governed by `.claude/rules/architecture-map.md` (always-on) and `.claude/rules/package-*.md` (path-scoped). Every PR that adds a package ships its path-scoped rule in the same increment.
 
 ## Ticketing (no GitHub Issues — all local-private)
 
