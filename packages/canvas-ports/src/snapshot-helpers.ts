@@ -13,11 +13,7 @@ export function chunkSnapshot(
   bytes: Uint8Array,
   maxChunkBytes: number,
 ): { manifest: SnapshotManifest; chunks: SnapshotChunk[] } {
-  if (
-    !Number.isInteger(maxChunkBytes) ||
-    !Number.isSafeInteger(maxChunkBytes) ||
-    maxChunkBytes <= 0
-  ) {
+  if (!Number.isSafeInteger(maxChunkBytes) || maxChunkBytes <= 0) {
     throw new RangeError('maxChunkBytes must be a positive safe integer')
   }
 
@@ -98,17 +94,15 @@ export function reassembleSnapshot(
 
   const lastIndex = chunkCount - 1
   for (const chunk of sorted) {
-    const isLast = chunk.index === lastIndex
-    const expectedLength = isLast ? undefined : maxChunkBytes
-    const withinLastBounds =
-      isLast && chunk.bytes.byteLength > 0 && chunk.bytes.byteLength <= maxChunkBytes
-    if (
-      (expectedLength !== undefined && chunk.bytes.byteLength !== expectedLength) ||
-      (isLast && !withinLastBounds)
-    ) {
+    const length = chunk.bytes.byteLength
+    // Every chunk but the last must be exactly maxChunkBytes; the last holds
+    // the remainder, so any non-empty length up to maxChunkBytes is valid.
+    const isValidLength =
+      chunk.index === lastIndex ? length > 0 && length <= maxChunkBytes : length === maxChunkBytes
+    if (!isValidLength) {
       throw new SnapshotReassemblyError(
         'WRONG_BYTE_LENGTH',
-        `chunk ${chunk.index} has byte length ${chunk.bytes.byteLength}, which does not fit maxChunkBytes ${maxChunkBytes}`,
+        `chunk ${chunk.index} has byte length ${length}, which does not fit maxChunkBytes ${maxChunkBytes}`,
       )
     }
   }
