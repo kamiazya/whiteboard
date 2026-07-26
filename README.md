@@ -222,6 +222,6 @@ See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sand
 
 [Apache-2.0](LICENSE).
 
-The whole codebase lives in this public monorepo. Today every package is Apache-2.0. When the managed-hosting (SaaS) composition layer lands, only that layer — the Cloudflare Workers app and its Cloudflare-specific storage adapters — will be published under the [Fair Source License (FSL-1.1-Apache-2.0)](https://fsl.software/): free to self-host and use internally, not usable to offer a competing hosted service, and automatically becoming Apache-2.0 two years after each release. Everything else stays Apache-2.0.
+The whole codebase lives in this public monorepo. Today every package is Apache-2.0. The relicense applies to this source tree and to releases made from it going forward; npm versions published before the switch remain MIT-licensed. When the managed-hosting (SaaS) composition layer lands, only that layer — the Cloudflare Workers app and its Cloudflare-specific storage adapters — will be published under the [Fair Source License (FSL-1.1-Apache-2.0)](https://fsl.software/): free to self-host and use internally, not usable to offer a competing hosted service, and automatically becoming Apache-2.0 two years after each release. Everything else stays Apache-2.0.
 
 The project name and logo are not licensed for use in third-party commercial hosting offerings.
