@@ -49,6 +49,7 @@ describe('docs/ contract', () => {
       'packages/canvas-ports': 'canvas-ports',
       'packages/canvas-codec': 'canvas-codec',
       'packages/canvas-render': 'canvas-render',
+      'packages/canvas-workspace': 'canvas-workspace',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',
     }
