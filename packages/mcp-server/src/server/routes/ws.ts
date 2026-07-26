@@ -97,6 +97,17 @@ export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
   autoVersionTrigger = fn
 }
 
+// Test-only completion signal for the WS persistence path. Firing strictly
+// after `saveCanvas` resolves lets a real-socket test await a deterministic
+// event instead of polling the filesystem/store — a no-op in production
+// since nothing ever registers a callback.
+let onPersistedForTests: ((workspaceId: string, slug: string) => void) | undefined
+export function setOnPersistedForTests(
+  fn: ((workspaceId: string, slug: string) => void) | undefined,
+): void {
+  onPersistedForTests = fn
+}
+
 export function sendVersionCreated(workspaceId: string, slug: string, version: VersionEntry): void {
   broadcastTextMessage(workspaceId, slug, { type: 'version_created', version })
 }
@@ -376,6 +387,19 @@ export async function handleWsUpgrade(
       }
 
       await saveCanvas(workspaceId, slug, currentDoc, { overwrite: true })
+      // Isolated in its own try/catch: this hook exists only so tests can
+      // await a deterministic "persisted" signal instead of polling. A
+      // callback throwing must never be able to make an already-successful
+      // save look like a persistence failure (cache eviction + 1011 close
+      // + dropped broadcast) to real clients.
+      try {
+        onPersistedForTests?.(workspaceId, slug)
+      } catch (err: unknown) {
+        getLogger('ws').warning(
+          { workspaceId, slug, err },
+          'onPersistedForTests test hook threw; ignoring',
+        )
+      }
       broadcastLoroUpdate(workspaceId, slug, bytes, ws)
 
       // Trigger auto-versioning on the WS path as well, since browser edits primarily use it.
