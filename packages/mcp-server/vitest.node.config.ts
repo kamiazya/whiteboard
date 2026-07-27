@@ -8,6 +8,7 @@ export default mergeConfig(
       name: 'mcp-node',
       include: [
         'src/daemon/**/*.test.ts',
+        'src/di/**/*.test.ts',
         'src/server/**/*.test.ts',
         'src/shared/**/*.test.ts',
         'src/cli/**/*.test.ts',
