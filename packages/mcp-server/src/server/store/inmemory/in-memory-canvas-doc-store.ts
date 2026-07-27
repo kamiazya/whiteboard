@@ -13,6 +13,7 @@ import type {
   SnapshotChunk,
   SnapshotManifest,
 } from '@kamiazya/whiteboard-canvas-ports'
+import { cloneBytes } from './clone-bytes.js'
 import { docRefKey } from './doc-ref-key.js'
 
 interface DocRecord {
@@ -26,13 +27,6 @@ interface DocRecord {
 
 function emptyRecord(): DocRecord {
   return { snapshot: null, frontier: null, deltas: [] }
-}
-
-function cloneBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  // `new Uint8Array(bytes)` (the array-like overload) always allocates a
-  // fresh `ArrayBuffer` — unlike `Uint8Array.from`, whose return type widens
-  // to `ArrayBufferLike` and no longer matches canvas-ports' DTOs.
-  return new Uint8Array(bytes)
 }
 
 function cloneChunk(chunk: SnapshotChunk): SnapshotChunk {

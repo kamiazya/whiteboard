@@ -10,17 +10,11 @@ import type {
   BlobRef,
   BlobStore,
 } from '@kamiazya/whiteboard-canvas-ports'
+import { cloneBytes } from './clone-bytes.js'
 
 interface BlobRecord {
   readonly bytes: Uint8Array
   readonly contentType?: string
-}
-
-function cloneBytes(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  // `new Uint8Array(bytes)` (the array-like overload) always allocates a
-  // fresh `ArrayBuffer` — unlike `Uint8Array.from`, whose return type widens
-  // to `ArrayBufferLike` and no longer matches canvas-ports' DTOs.
-  return new Uint8Array(bytes)
 }
 
 function digestHex(bytes: Uint8Array): string {
