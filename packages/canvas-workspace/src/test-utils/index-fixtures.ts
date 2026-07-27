@@ -59,7 +59,7 @@ export function buildFixtureWorkspace(): {
     {
       canvasId: PROJECT_ID,
       updatedAtMs: 2_000,
-      coreFacets: { type: 'doc', title: 'Whiteboard Project' },
+      coreFacets: { type: 'doc', title: 'Whiteboard Project', view: 'kanban/1' },
       extensionFacets: { 'kanban/1': { columns: ['todo', 'done'] } },
       resolvedBody: projectBody,
     },

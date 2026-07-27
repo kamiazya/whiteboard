@@ -35,6 +35,7 @@ describe('deriveFacetIndexRows', () => {
       { facet: 'type', value: 'doc', canvasId: NOTES_ID },
       { facet: 'type', value: 'doc', canvasId: PROJECT_ID },
       { facet: 'type', value: 'spatial', canvasId: DIAGRAM_ID },
+      { facet: 'view', value: 'kanban/1', canvasId: PROJECT_ID },
     ])
     for (const row of rows) expect(() => facetIndexRowSchema.parse(row)).not.toThrow()
   })
