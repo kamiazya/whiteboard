@@ -58,6 +58,28 @@ describe('InMemoryCanvasDocStore', () => {
     expect(loaded.updates).toEqual([updateA, updateB])
   })
 
+  it('ignores a non-empty sinceFrontier and returns the full accumulated delta log', async () => {
+    const store = new InMemoryCanvasDocStore()
+    const docRef = canvasRef('canvas-b')
+    const updateA = new Uint8Array([1])
+    const updateB = new Uint8Array([2])
+
+    await store.appendDeltas({
+      docRef,
+      deltaBatch: { updates: [updateA], newFrontier: new Uint8Array([1]) },
+    })
+    await store.appendDeltas({
+      docRef,
+      deltaBatch: { updates: [updateB], newFrontier: new Uint8Array([2]) },
+    })
+
+    const loaded = await store.loadDeltas({
+      docRef,
+      sinceFrontier: new Uint8Array([1]),
+    })
+    expect(loaded.updates).toEqual([updateA, updateB])
+  })
+
   it('isolates deltas between distinct docRefs', async () => {
     const store = new InMemoryCanvasDocStore()
     const refA = canvasRef('canvas-a')
