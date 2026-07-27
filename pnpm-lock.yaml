@@ -436,9 +436,6 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.10
         version: 2.0.10(hono@4.12.27)
-      '@kamiazya/whiteboard-canvas-ports':
-        specifier: workspace:*
-        version: link:../canvas-ports
       '@libsql/client':
         specifier: ^0.17.3
         version: 0.17.3
@@ -536,6 +533,9 @@ importers:
       '@fast-check/vitest':
         specifier: ^0.4.1
         version: 0.4.1(vitest@4.1.10)
+      '@kamiazya/whiteboard-canvas-ports':
+        specifier: workspace:*
+        version: link:../canvas-ports
       '@kamiazya/whiteboard-canvas-viewer':
         specifier: workspace:*
         version: link:../canvas-viewer
