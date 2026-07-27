@@ -21,19 +21,14 @@ vi.mock('./session-resolver.js', () => ({
 }))
 vi.mock('./standalone-help.js', () => ({
   buildDrawDiagramPrompt: vi.fn(() => ''),
-  formatInstalledLibrariesResource: vi.fn(() => ''),
   formatRecentCanvasesResource: vi.fn(() => ''),
   getStandaloneHelpText: vi.fn(() => ''),
   WHITEBOARD_DRAW_PROMPT: 'draw-diagram',
   WHITEBOARD_HELP_URI: 'whiteboard://help',
-  WHITEBOARD_INSTALLED_LIBRARIES_URI: 'whiteboard://installed-libraries',
   WHITEBOARD_RECENT_CANVASES_URI: 'whiteboard://recent-canvases',
 }))
 vi.mock('./tools/canvas.js', () => ({
   listCanvasTool: vi.fn(() => ({ execute: vi.fn(async () => ({ workspaces: [] })) })),
-}))
-vi.mock('./tools/library.js', () => ({
-  libraryListInstalledTool: vi.fn(() => ({ execute: vi.fn(async () => ({ installedUrls: [] })) })),
 }))
 vi.mock('./tool-registration.js', () => ({
   registerAllTools: vi.fn(),

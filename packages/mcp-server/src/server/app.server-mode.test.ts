@@ -547,7 +547,7 @@ describe('app — server-mode composition', () => {
     expect(res.headers.get('WWW-Authenticate')).toBeNull()
   })
 
-  // Previously-unguarded routes: export, viewport, status, libraries, palette
+  // Previously-unguarded routes: export, viewport, status
   describe('server-mode: previously-unguarded routes are auth-gated', () => {
     it('POST /api/canvas/:wid/:slug/export → 401 without auth', async () => {
       const app = createApp(makeServerModeOptions(['canvas:write']))
@@ -567,41 +567,6 @@ describe('app — server-mode composition', () => {
         body: JSON.stringify({}),
       })
       expect(res.status).toBe(403)
-    })
-
-    it('POST /api/canvas/:wid/:slug/export-json → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/canvas/w1/canvas-a/export-json', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(401)
-      expect(res.headers.get('WWW-Authenticate')).toBe('Bearer')
-    })
-
-    it('POST /api/canvas/:wid/:slug/export-json → 403 with canvas:read only (requires canvas:write)', async () => {
-      // Regression: export-json writes to the exports directory and supports overwrite;
-      // canvas:read alone must not be sufficient to authorize this endpoint.
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/canvas/w1/canvas-a/export-json', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('POST /api/canvas/:wid/:slug/export-json passes auth layer with canvas:write', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/canvas/w1/canvas-a/export-json', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      // Auth layer passes; canvas handler may return 4xx for missing data.
-      expect(res.status).not.toBe(401)
-      expect(res.status).not.toBe(403)
     })
 
     it('POST /api/canvas/:wid/:slug/viewport → 401 without auth', async () => {
@@ -643,81 +608,6 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(401)
     })
 
-    it('GET /api/workspaces/:wid/libraries → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries')
-      expect(res.status).toBe(401)
-    })
-
-    it('GET /api/workspaces/:wid/libraries → 403 with canvas:read only (requires workspace:read)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/workspaces/:wid/libraries → auth passes with workspace:read', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).not.toBe(401)
-      expect(res.status).not.toBe(403)
-    })
-
-    it('POST /api/workspaces/:wid/libraries → 403 with workspace:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({ url: 'https://example.com/lib.json' }),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/workspaces/:wid/palette → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/palette')
-      expect(res.status).toBe(401)
-    })
-
-    it('GET /api/workspaces/:wid/palette → 403 with canvas:write only (requires workspace:read)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:write']))
-      const res = await app.request('/api/workspaces/w1/palette', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('PUT /api/workspaces/:wid/palette → 403 with workspace:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/palette', {
-        method: 'PUT',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/user-libraries → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries')
-      expect(res.status).toBe(401)
-    })
-
-    it('GET /api/user-libraries → 403 with runtime:read only (requires canvas:read)', async () => {
-      const app = createApp(makeServerModeOptions(['runtime:read']))
-      const res = await app.request('/api/user-libraries', { headers: { authorization: BEARER } })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/user-libraries/foo/metadata → 401 without auth', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/foo/metadata')
-      expect(res.status).toBe(401)
-    })
-
     // Workspace write operations
     it('POST /api/workspaces/:wid/canvases → 403 with workspace:read only (requires workspace:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:read']))
@@ -745,47 +635,6 @@ describe('app — server-mode composition', () => {
         method: 'PUT',
         headers: { authorization: BEARER, 'content-type': 'application/json' },
         body: JSON.stringify({ name: 'New Canvas Name' }),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    // User library write operations
-    it('PUT /api/user-libraries/:name → 403 with canvas:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/my-lib', {
-        method: 'PUT',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({ elements: [] }),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('DELETE /api/user-libraries/:name → 403 with canvas:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/my-lib', {
-        method: 'DELETE',
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('POST /api/user-libraries/:name/metadata → 403 with canvas:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/user-libraries/my-lib/metadata', {
-        method: 'POST',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      expect(res.status).toBe(403)
-    })
-
-    // DELETE /api/workspaces/:wid/libraries requires workspace:write
-    it('DELETE /api/workspaces/:wid/libraries → 403 with workspace:read only (requires workspace:write)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/libraries', {
-        method: 'DELETE',
-        headers: { authorization: BEARER, 'content-type': 'application/json' },
-        body: JSON.stringify({ url: 'https://example.com/lib.json' }),
       })
       expect(res.status).toBe(403)
     })

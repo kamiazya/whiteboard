@@ -58,10 +58,7 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   }
 
   // Canvas write operations that arrive as POST but mutate state.
-  if (
-    /^\/api\/canvas\/[^/]+\/[^/]+\/(update|export|export-json)$/.test(path) &&
-    method === 'POST'
-  ) {
+  if (/^\/api\/canvas\/[^/]+\/[^/]+\/(update|export)$/.test(path) && method === 'POST') {
     return { kind: 'scoped', scopes: ['canvas:write'] }
   }
   // Remaining /api/canvas/* routes: honor the write/read split so a mutating
@@ -69,13 +66,6 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // specific write routes above still take precedence via ordering.
   if (path.startsWith('/api/canvas/')) {
     return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
-  }
-
-  // User library routes are workspace-level shared state: a read is a
-  // workspace read (not a canvas read — collapsing it onto canvas:read would
-  // let a canvas-only grant enumerate the shared library), a write mutates it.
-  if (path.startsWith('/api/user-libraries')) {
-    return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
   }
 
   // Version history, thumbnails, restore, compact — version-control
@@ -110,8 +100,7 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['versions:write'] }
   }
 
-  // Workspace routes (including palette and library sub-resources, which are
-  // workspace-scoped state): default write -> workspace:write, read -> workspace:read.
+  // Workspace routes: default write -> workspace:write, read -> workspace:read.
   if (path.startsWith('/api/workspaces')) {
     return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
   }

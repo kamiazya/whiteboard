@@ -1,6 +1,5 @@
 export const WHITEBOARD_HELP_URI = 'whiteboard://help/getting-started'
 export const WHITEBOARD_DRAW_PROMPT = 'whiteboard.draw_diagram'
-export const WHITEBOARD_INSTALLED_LIBRARIES_URI = 'whiteboard://state/libraries/installed'
 export const WHITEBOARD_RECENT_CANVASES_URI = 'whiteboard://state/canvases/recent'
 
 const HELP_LINES = [
@@ -13,11 +12,7 @@ const HELP_LINES = [
   '2. `annotate_batch` for boxes/arrows/text in one pass',
   '3. `canvas_inspect` to verify structure',
   '4. `viewport_set` or `canvas_open` when a human needs to review the board',
-  '5. `export_canvas({ format: "png" | "svg" | "json" })` when you need an artifact',
-  '',
-  'Color guidance:',
-  '- Use semantic color families instead of ad-hoc hex values when the board has stable categories.',
-  '- Prefer `palette_set` first when you know the diagram will use repeated states such as plan A/B/C or system/user/error.',
+  '5. `export_canvas({ format: "png" | "svg" })` when you need an artifact',
   '',
   'Common starting points:',
   '- Architecture or flow: `annotate_batch` with boxes and arrows',
@@ -38,22 +33,8 @@ export function buildDrawDiagramPrompt(goal: string, diagramType?: string): stri
     `Create a whiteboard diagram for this goal: ${goal}`,
     typeLine,
     'Start by creating or selecting a canvas, then lay out the main entities or steps with annotate_batch.',
-    'Prefer semantic palette keys if the diagram has repeated categories or states.',
     'Inspect the canvas after each major draw step and export only after the structure is stable.',
   ].join('\n')
-}
-
-export function formatInstalledLibrariesResource(installedUrls: string[]): string {
-  if (installedUrls.length === 0) {
-    return [
-      '# Installed libraries',
-      '',
-      'No libraries are currently installed in this workspace.',
-      'Use `library_install` or the browser library dialog to add one.',
-    ].join('\n')
-  }
-
-  return ['# Installed libraries', '', ...installedUrls.map((url) => `- ${url}`)].join('\n')
 }
 
 export function formatRecentCanvasesResource(

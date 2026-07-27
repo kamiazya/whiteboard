@@ -14,9 +14,7 @@ import { decomposeBoxWithLabel } from './box-with-label.js'
 import { assertCanvasExists } from './canvas-existence.js'
 import { parseCanvasId } from './canvas-id.js'
 import { applyAssignToGroup } from './element-ops.js'
-import { resolvePaletteColor } from './color-palette.js'
 import { decomposeGroup } from './group.js'
-import { apiGetPalette } from './palette.js'
 import { type GridLayout, resolveGridPlacement, resolveLayout } from './resolve-layout.js'
 import { boundsSchema } from './shared-schemas.js'
 
@@ -36,7 +34,6 @@ export const annotateBatchOutputSchema = z.object({
   elementIds: z.array(z.string()),
   annotations: z.array(annotationResultSchema),
   warnings: z.array(annotateBatchWarningSchema),
-  unknownPaletteKeys: z.array(z.string()).optional(),
   byName: z.record(z.string(), annotationResultSchema),
   placements: z.array(
     z.object({
@@ -223,17 +220,12 @@ export const annotateBatchInputShape = {
           .describe(
             'box_with_label only: auto-fit box height to text. Default true (ON). Pass false to opt out — box keeps the caller-specified height and overflow is reported as a warning.',
           ),
-        color: z
-          .string()
-          .optional()
-          .describe(
-            'Stroke color. Accepts hex (#rrggbb) or semantic key: primary / success / danger / warning / neutral / info (case-insensitive).',
-          ),
+        color: z.string().optional().describe('Stroke color as hex (#RRGGBB).'),
         backgroundColor: z
           .string()
           .optional()
           .describe(
-            'Fill color for rectangle / box_with_label / highlight / arrow. Hex or semantic key. Default: transparent for rect/box, strokeColor for highlight. Pair with fillStyle=solid for filled box.',
+            'Fill color for rectangle / box_with_label / highlight / arrow as hex (#RRGGBB). Default: transparent for rect/box, strokeColor for highlight. Pair with fillStyle=solid for filled box.',
           ),
         fillStyle: z
           .enum(['solid', 'hachure', 'cross-hatch'])
@@ -382,18 +374,6 @@ export function annotateBatchTool() {
     ): Promise<z.infer<typeof annotateBatchOutputSchema>> => {
       const { workspaceId, slug } = parseCanvasId(args.canvasId)
       await assertCanvasExists(client, workspaceId, slug)
-      const sessionPalette = await apiGetPalette(client, workspaceId)
-      const unknownPaletteKeySet = new Set<string>()
-      for (const item of args.annotations) {
-        for (const colorArg of [item.color, item.backgroundColor]) {
-          if (colorArg) {
-            const { warningKey } = resolvePaletteColor(colorArg, sessionPalette)
-            if (warningKey) unknownPaletteKeySet.add(warningKey)
-          }
-        }
-      }
-      const unknownPaletteKeys =
-        unknownPaletteKeySet.size > 0 ? Array.from(unknownPaletteKeySet) : undefined
       const warnings: AnnotationWarning[] = []
       // Layer 1: resolve targets for items that need layout before touching the doc.
       // Fail fast before fetching a snapshot if layout resolution fails.
@@ -473,7 +453,7 @@ export function annotateBatchTool() {
           ...rest
         } = item
         bindings.push({ name, startBoxName, endBoxName, groupAs: itemGroupAs })
-        return { ...rest, target, width, height, sessionPalette } as AnnotationSpec
+        return { ...rest, target, width, height } as AnnotationSpec
       })
       // Layer 2: collect box_with_label overflow diagnostics without touching the doc.
       // decomposeBoxWithLabel returns [rect, text, diagnostics], so only diagnostics matter here.
@@ -576,7 +556,7 @@ export function annotateBatchTool() {
       }
       // Per-item groupAs is additive on top of the batch-level group: an item
       // with its own groupAs ends up in both the shared batch group and its
-      // own sub-group, mirroring library_insert_batch's batch+item grouping.
+      // own sub-group.
       for (let index = 0; index < annotations.length; index++) {
         const itemGroupAs = bindings[index]?.groupAs
         if (!itemGroupAs) continue
@@ -650,7 +630,6 @@ export function annotateBatchTool() {
         elementIds,
         annotations,
         warnings,
-        ...(unknownPaletteKeys ? { unknownPaletteKeys } : {}),
         byName,
         placements,
         overlaps,

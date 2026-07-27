@@ -31,17 +31,15 @@ describe('computeStorageReport', () => {
     }
   })
 
-  it('categorises canvas blobs, version thumbnails, files, libraries, db, exports, logs, and other', async () => {
+  it('categorises canvas blobs, version thumbnails, files, db, exports, logs, and other', async () => {
     // Match the layout the daemon actually writes — uploaded files live
-    // under <DATA_DIR>/<workspaceId>/files/ (canvas-store.ts) and user
-    // libraries under <DATA_DIR>/blobs/.user-libraries/ (user-library
-    // -store.ts), so the categorizer has to recognise the real per-
-    // workspace paths, not the top-level shorthand.
+    // under <DATA_DIR>/<workspaceId>/files/ (canvas-store.ts), so the
+    // categorizer has to recognise the real per-workspace paths, not the
+    // top-level shorthand.
     await seed('blobs/ws_1/canvas/abc.loro', 1000)
     await seed('blobs/ws_1/canvas/def.loro', 2000)
     await seed('blobs/ws_1/versions/v1.png', 500) // version thumbnail
     await seed('ws_1/files/image-1.png', 4000) // user-uploaded image (real layout)
-    await seed('blobs/.user-libraries/icons.excalidrawlib', 250) // user library (real layout)
     await seed('whiteboard.db', 8000)
     await seed('whiteboard.db-wal', 16) // SQLite WAL
     await seed('daemon.json', 32) // runtime metadata folded into "db"
@@ -50,15 +48,12 @@ describe('computeStorageReport', () => {
     await seed('stray.txt', 9) // genuinely unclassified → other
 
     const report = await computeStorageReport(tempDir)
-    expect(report.fileCount).toBe(11)
-    expect(report.totalBytes).toBe(
-      1000 + 2000 + 500 + 4000 + 250 + 8000 + 16 + 32 + 75 + 6000 + 9,
-    )
+    expect(report.fileCount).toBe(10)
+    expect(report.totalBytes).toBe(1000 + 2000 + 500 + 4000 + 8000 + 16 + 32 + 75 + 6000 + 9)
 
     expect(report.byCategory.blobs).toEqual({ bytes: 3000, files: 2 })
     expect(report.byCategory.versions).toEqual({ bytes: 500, files: 1 })
     expect(report.byCategory.files).toEqual({ bytes: 4000, files: 1 })
-    expect(report.byCategory.libraries).toEqual({ bytes: 250, files: 1 })
     expect(report.byCategory.db).toEqual({ bytes: 8048, files: 3 })
     expect(report.byCategory.logs).toEqual({ bytes: 75, files: 1 })
     expect(report.byCategory.exports).toEqual({ bytes: 6000, files: 1 })

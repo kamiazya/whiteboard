@@ -90,14 +90,6 @@ function installFetchMock(state: HarnessState) {
       return new Response(doc.export({ mode: 'snapshot' }), { status: 200 })
     }
 
-    if (
-      parts[0] === 'api' &&
-      ['sessions', 'workspaces'].includes(parts[1] ?? '') &&
-      parts[3] === 'palette'
-    ) {
-      return new Response(JSON.stringify({ palette: {} }), { status: 200 })
-    }
-
     if (parts[0] === 'api' && parts[1] === 'canvas' && parts[4] === 'update' && method === 'POST') {
       const canvasId = `${parts[2]}/${decodeURIComponent(parts[3])}`
       const doc = ensureCanvas(state, canvasId)

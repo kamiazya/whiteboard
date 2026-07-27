@@ -103,56 +103,7 @@ import {
   updateFrameMembersOutputSchema,
   updateFrameMembersTool,
 } from './tools/frame-embed.js'
-import {
-  libraryCatalogListInputShape,
-  libraryCatalogListOutputSchema,
-  libraryCatalogListTool,
-} from './tools/library-catalog.js'
-import {
-  installedUrlsOutputSchema,
-  libInsertItemOutputSchema,
-  libraryInsertBatchInputShape,
-  libraryInsertBatchOutputSchema,
-  libraryInsertBatchTool,
-  libraryInsertItemInputShape,
-  libraryInsertItemTool,
-  libraryInstallInputShape,
-  libraryInstallOutputSchema,
-  libraryInstallTool,
-  libraryListInstalledInputShape,
-  libraryListInstalledTool,
-  libraryListItemsInputShape,
-  libraryListItemsOutputSchema,
-  libraryListItemsTool,
-  libraryUninstallInputShape,
-  libraryUninstallTool,
-  userLibraryListInputShape,
-  userLibraryListOutputSchema,
-  userLibraryListTool,
-  userLibraryMetadataDeleteInputShape,
-  userLibraryMetadataDeleteTool,
-  userLibraryMetadataGetInputShape,
-  userLibraryMetadataGetTool,
-  userLibraryMetadataManifestSchema,
-  userLibraryMetadataSetInputShape,
-  userLibraryMetadataSetTool,
-  userLibraryRemoveInputShape,
-  userLibraryRemoveOutputSchema,
-  userLibraryRemoveTool,
-  userLibrarySaveInputShape,
-  userLibrarySaveOutputSchema,
-  userLibrarySaveTool,
-} from './tools/library.js'
 import { loadImageInputShape, loadImageOutputSchema, loadImageTool } from './tools/load.js'
-import {
-  paletteDeleteInputShape,
-  paletteDeleteTool,
-  paletteGetInputShape,
-  paletteGetTool,
-  paletteOutputSchema,
-  paletteSetInputShape,
-  paletteSetTool,
-} from './tools/palette.js'
 import {
   buildPairingLinkText,
   createPairingLinkInputShape,
@@ -174,7 +125,7 @@ import {
 } from './tools/viewport.js'
 
 // A registered-tool entry, already bound to McpServer at construction time.
-// The array below is necessarily heterogeneous (48 different I/O generic
+// The array below is necessarily heterogeneous (45 different I/O generic
 // pairs), so this is the erased/existential form of each entry — but the
 // erasure happens only AFTER defineTool() below has type-checked the
 // handler against ToolHandlerReturn<O> for that specific entry.
@@ -237,22 +188,6 @@ export function registerAllTools(
   const exportCanvas = exportCanvasTool()
   const viewportTool = viewportSetTool()
   const autoLayoutTool = canvasAutoLayoutTool()
-  const paletteGet = paletteGetTool()
-  const paletteSet = paletteSetTool()
-  const paletteDelete = paletteDeleteTool()
-  const libListTool = libraryListItemsTool()
-  const libInsertTool = libraryInsertItemTool()
-  const libInsertBatch = libraryInsertBatchTool()
-  const libInstall = libraryInstallTool(workspaceId)
-  const libUninstall = libraryUninstallTool(workspaceId)
-  const libListInstalled = libraryListInstalledTool(workspaceId)
-  const libCatalog = libraryCatalogListTool()
-  const userLibSave = userLibrarySaveTool()
-  const userLibList = userLibraryListTool()
-  const userLibRemove = userLibraryRemoveTool()
-  const userLibMetadataGet = userLibraryMetadataGetTool()
-  const userLibMetadataSet = userLibraryMetadataSetTool()
-  const userLibMetadataDelete = userLibraryMetadataDeleteTool()
   const inspectTool = canvasInspectTool()
   const viewTool = canvasViewTool()
   const listTemplates = listTemplatesTool()
@@ -372,43 +307,6 @@ export function registerAllTools(
     }),
 
     defineTool({
-      name: paletteGet.name,
-      description: paletteGet.description,
-      inputSchema: paletteGetInputShape,
-      outputSchema: paletteOutputSchema,
-      handler: async ({ workspaceId }) => {
-        const result = await withDaemon((client) => paletteGet.execute({ workspaceId }, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: paletteSet.name,
-      description: paletteSet.description,
-      inputSchema: paletteSetInputShape,
-      outputSchema: paletteOutputSchema,
-      handler: async ({ workspaceId, entries }) => {
-        const result = await withDaemon((client) =>
-          paletteSet.execute({ workspaceId, entries }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: paletteDelete.name,
-      description: paletteDelete.description,
-      inputSchema: paletteDeleteInputShape,
-      outputSchema: paletteOutputSchema,
-      handler: async ({ workspaceId, keys }) => {
-        const result = await withDaemon((client) =>
-          paletteDelete.execute({ workspaceId, keys }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
       name: viewportTool.name,
       description: viewportTool.description,
       inputSchema: viewportSetInputShape,
@@ -458,183 +356,6 @@ export function registerAllTools(
       outputSchema: canvasAutoLayoutOutputSchema,
       handler: async (args) => {
         const result = await withDaemon((client) => autoLayoutTool.execute(args, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: libListTool.name,
-      description: libListTool.description,
-      inputSchema: libraryListItemsInputShape,
-      outputSchema: libraryListItemsOutputSchema,
-      handler: async ({ libraryUrl, libraryPath, userLibraryName }) => {
-        const result = await withDaemon((client) =>
-          libListTool.execute({ libraryUrl, libraryPath, userLibraryName }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: libInsertTool.name,
-      description: libInsertTool.description,
-      inputSchema: libraryInsertItemInputShape,
-      outputSchema: libInsertItemOutputSchema,
-      handler: async ({
-        canvasId,
-        libraryUrl,
-        libraryPath,
-        userLibraryName,
-        itemIndex,
-        target,
-        scale,
-      }) => {
-        const result = await withDaemon((client) =>
-          libInsertTool.execute(
-            { canvasId, libraryUrl, libraryPath, userLibraryName, itemIndex, target, scale },
-            client,
-          ),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: libInsertBatch.name,
-      description: libInsertBatch.description,
-      inputSchema: libraryInsertBatchInputShape,
-      outputSchema: libraryInsertBatchOutputSchema,
-      handler: async ({
-        canvasId,
-        libraryUrl,
-        libraryPath,
-        userLibraryName,
-        groupAs,
-        scale,
-        items,
-      }) => {
-        const result = await withDaemon((client) =>
-          libInsertBatch.execute(
-            { canvasId, libraryUrl, libraryPath, userLibraryName, groupAs, scale, items },
-            client,
-          ),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: libInstall.name,
-      description: libInstall.description,
-      inputSchema: libraryInstallInputShape,
-      outputSchema: libraryInstallOutputSchema,
-      handler: async ({ libraryUrl }) => {
-        const result = await withDaemon((client) => libInstall.execute({ libraryUrl }, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: libUninstall.name,
-      description: libUninstall.description,
-      inputSchema: libraryUninstallInputShape,
-      outputSchema: installedUrlsOutputSchema,
-      handler: async ({ libraryUrl }) => {
-        const result = await withDaemon((client) => libUninstall.execute({ libraryUrl }, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: libListInstalled.name,
-      description: libListInstalled.description,
-      inputSchema: libraryListInstalledInputShape,
-      outputSchema: installedUrlsOutputSchema,
-      handler: async () => {
-        const result = await withDaemon((client) => libListInstalled.execute({}, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: libCatalog.name,
-      description: libCatalog.description,
-      inputSchema: libraryCatalogListInputShape,
-      outputSchema: libraryCatalogListOutputSchema,
-      handler: async ({ query, limit }) => {
-        const result = await libCatalog.execute({ query, limit })
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: userLibSave.name,
-      description: userLibSave.description,
-      inputSchema: userLibrarySaveInputShape,
-      outputSchema: userLibrarySaveOutputSchema,
-      handler: async ({ name, fromUrl, content }) => {
-        const result = await withDaemon((client) =>
-          userLibSave.execute({ name, fromUrl, content }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: userLibList.name,
-      description: userLibList.description,
-      inputSchema: userLibraryListInputShape,
-      outputSchema: userLibraryListOutputSchema,
-      handler: async () => {
-        const result = await withDaemon((client) => userLibList.execute({}, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: userLibRemove.name,
-      description: userLibRemove.description,
-      inputSchema: userLibraryRemoveInputShape,
-      outputSchema: userLibraryRemoveOutputSchema,
-      handler: async ({ name }) => {
-        const result = await withDaemon((client) => userLibRemove.execute({ name }, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: userLibMetadataGet.name,
-      description: userLibMetadataGet.description,
-      inputSchema: userLibraryMetadataGetInputShape,
-      outputSchema: userLibraryMetadataManifestSchema,
-      handler: async ({ name }) => {
-        const result = await withDaemon((client) => userLibMetadataGet.execute({ name }, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: userLibMetadataSet.name,
-      description: userLibMetadataSet.description,
-      inputSchema: userLibraryMetadataSetInputShape,
-      outputSchema: userLibraryMetadataManifestSchema,
-      handler: async ({ name, revision, aliases, notes, scales }) => {
-        const result = await withDaemon((client) =>
-          userLibMetadataSet.execute({ name, revision, aliases, notes, scales }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: userLibMetadataDelete.name,
-      description: userLibMetadataDelete.description,
-      inputSchema: userLibraryMetadataDeleteInputShape,
-      outputSchema: userLibraryMetadataManifestSchema,
-      handler: async ({ name, revision, aliasKeys, noteKeys, scaleKeys }) => {
-        const result = await withDaemon((client) =>
-          userLibMetadataDelete.execute({ name, revision, aliasKeys, noteKeys, scaleKeys }, client),
-        )
         return structuredJsonResult(result)
       },
     }),

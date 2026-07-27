@@ -4,15 +4,14 @@ import { dirname, join, resolve, sep } from 'node:path'
 // Backup / restore drill helper for the local daemon data directory.
 //
 // Layout the data dir is expected to carry (see store/db, canvas-store,
-// version-store, routes/files, user-library-store):
+// version-store, routes/files):
 //   <data>/whiteboard.db                                   libsql DB
 //                                                          (workspaces, canvases, versions
 //                                                           metadata + frontiers, branches,
-//                                                           palette, libraries, runtime)
+//                                                           runtime)
 //   <data>/<workspaceId>/files/<fileId>.<ext>              binary file blobs (image attachments)
 //   <data>/blobs/<workspaceId>/canvas/<canvasId>.loro      Loro canvas snapshot
 //   <data>/blobs/<workspaceId>/versions/<versionId>.png    optional version thumbnail
-//   <data>/blobs/.user-libraries/*.excalidrawlib           user libraries
 // Per-version `.loro` files are NOT written — version state is captured by
 // frontiers in the DB plus the live canvas snapshot.
 //

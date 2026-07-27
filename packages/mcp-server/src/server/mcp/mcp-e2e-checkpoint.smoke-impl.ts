@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { retryDaemonStartup } from './daemon-readiness.js'
@@ -272,56 +272,6 @@ export async function runE2eCheckpointSmoke({
       `[e2e] canvas_list → ${(listed.workspaces as unknown[]).length} workspaces, ${totalCanvases} canvases`,
     )
 
-    const palette = await callTool('palette_get', { workspaceId })
-    if (typeof palette.palette !== 'object' || palette.palette === null) {
-      throw new Error(`palette_get returned unexpected shape: ${JSON.stringify(palette)}`)
-    }
-    console.log('[e2e] palette_get → OK')
-
-    const libsInstalled = await callTool('library_list_installed', {})
-    if (!Array.isArray(libsInstalled.installedUrls)) {
-      throw new Error(
-        `library_list_installed returned unexpected shape: ${JSON.stringify(libsInstalled)}`,
-      )
-    }
-    console.log(
-      `[e2e] library_list_installed → ${(libsInstalled.installedUrls as unknown[]).length} urls`,
-    )
-
-    // library_uninstall with a never-installed URL. removeInstalledLibrary is an idempotent SQL DELETE
-    // that returns the current installed list, so this succeeds offline without any HTTPS fetch.
-    const libUninstalled = await callTool('library_uninstall', {
-      libraryUrl: 'https://smoke-test.example.com/never-installed.excalidrawlib',
-    })
-    if (!Array.isArray(libUninstalled.installedUrls)) {
-      throw new Error(
-        `library_uninstall returned unexpected shape: ${JSON.stringify(libUninstalled)}`,
-      )
-    }
-    console.log('[e2e] library_uninstall (idempotent) → OK')
-
-    // library_list_items with a local fixture file — no HTTPS fetch required.
-    const libFixturePath = join(tmpDataDir, 'e2e-smoke.excalidrawlib')
-    await writeFile(
-      libFixturePath,
-      JSON.stringify({
-        type: 'excalidrawlib',
-        version: 2,
-        libraryItems: [
-          {
-            id: 'smoke-item-1',
-            name: 'smoke-rect',
-            elements: [{ id: 'se-1', type: 'rectangle', x: 0, y: 0, width: 40, height: 40 }],
-          },
-        ],
-      }),
-    )
-    const libItems = await callTool('library_list_items', { libraryPath: libFixturePath })
-    if ((libItems.itemCount as number) !== 1) {
-      throw new Error(`library_list_items returned unexpected shape: ${JSON.stringify(libItems)}`)
-    }
-    console.log(`[e2e] library_list_items (libraryPath) → ${libItems.itemCount} items`)
-
     const ann = await callTool('annotate', {
       canvasId: created.id,
       type: 'rectangle',
@@ -525,8 +475,8 @@ export async function runE2eCheckpointSmoke({
     })
     console.log('[e2e] export_svg overwrite forwarded OK')
 
-    // export_canvas unifies png/svg/json behind one tool — exercise all three
-    // formats so structuredContent validation against each format's branch of
+    // export_canvas unifies png/svg behind one tool — exercise both formats
+    // so structuredContent validation against each format's branch of
     // exportCanvasOutputSchema runs at least once. PNG also falls back to
     // headless rendering when no browser is connected, so this doubles as the
     // no-client-headless-render regression check.
@@ -549,36 +499,6 @@ export async function runE2eCheckpointSmoke({
       throw new Error('export_canvas(format:svg) did not produce real SVG markup')
     }
     console.log('[e2e] export_canvas(format:svg) OK (real <svg> markup on disk)')
-
-    const canvasJson = await callTool('export_canvas', { canvasId: created.id, format: 'json' })
-    if (canvasJson.format !== 'json' || !(canvasJson.filePath as string).endsWith('.excalidraw')) {
-      throw new Error(
-        `export_canvas(format:json) returned unexpected shape: ${JSON.stringify(canvasJson)}`,
-      )
-    }
-    const exportedJsonBody = JSON.parse(await readFile(canvasJson.filePath as string, 'utf-8')) as {
-      type: string
-      version: number
-      elements: Array<{ type: string }>
-    }
-    if (exportedJsonBody.type !== 'excalidraw' || exportedJsonBody.version !== 2) {
-      throw new Error(
-        `exported JSON has wrong wrapper: ${JSON.stringify({ type: exportedJsonBody.type, version: exportedJsonBody.version })}`,
-      )
-    }
-    if (
-      !Array.isArray(exportedJsonBody.elements) ||
-      exportedJsonBody.elements.length !== canvasJson.elementCount
-    ) {
-      throw new Error(
-        `element count mismatch: body.elements=${exportedJsonBody.elements?.length} elementCount=${canvasJson.elementCount}`,
-      )
-    }
-    const rectInExport = exportedJsonBody.elements.find((el) => el.type === 'rectangle')
-    if (!rectInExport) throw new Error('exported JSON missing rectangle we annotated earlier')
-    console.log(
-      `[e2e] export_canvas(format:json) OK → ${exportedJsonBody.elements.length} elems (type=${exportedJsonBody.type}, v${exportedJsonBody.version})`,
-    )
 
     console.log('\n[e2e] ALL OK')
   } catch (err) {

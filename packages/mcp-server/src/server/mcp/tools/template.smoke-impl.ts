@@ -51,12 +51,6 @@ export async function runTemplateSmokeChecks(): Promise<void> {
           headers: { 'Content-Type': 'application/json' },
         })
       }
-      if (u.endsWith('/palette')) {
-        return new Response(JSON.stringify({ palette: {} }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      }
       if (u.endsWith('/snapshot')) {
         return new Response(makeEmptySnapshot(), { status: 200 })
       }

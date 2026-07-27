@@ -20,7 +20,7 @@ const EXPORT_OPTIONS_BODY_LIMIT_BYTES = 1024 * 1024
 // POST /api/canvas/:workspaceId/:slug/export-svg
 //
 // Unlike PNG export, this always renders headless straight from the
-// persisted LoroDoc — mirroring export-json.ts rather than export.ts. SVG
+// persisted LoroDoc — unlike export.ts (PNG, which prefers the browser). SVG
 // requests are typically automation / doc-generation use cases, not "match
 // what's on the connected browser's screen right now", so there is no WS
 // round-trip and no browser-connection requirement to plumb through.

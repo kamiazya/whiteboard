@@ -1,28 +1,22 @@
 import { z } from 'zod'
 import type { DaemonClient } from '../daemon-client.js'
-import { canvasExportJsonTool } from './canvas-export-json.js'
 import { exportPngTool } from './export.js'
 import { exportSvgTool } from './export-svg.js'
 
-// Unifies the three per-format export tools (png / svg / json) behind one
-// `format` switch. This is the only registered MCP export tool — the
-// project is pre-1.0 with no external users to keep a deprecated dual
-// surface for (ADR-0001), so the former standalone export_png and
-// canvas_export_json tools were removed rather than kept as wrappers.
-// Their format-specific HTTP/output-path/error-handling implementations
-// still live in export.ts / canvas-export-json.ts and are delegated to here
-// rather than re-implemented a third time.
+// Unifies the per-format export tools (png / svg) behind one `format`
+// switch. This is the only registered MCP export tool — the project is
+// pre-1.0 with no external users to keep a deprecated dual surface for
+// (ADR-0001).
 export const exportCanvasOutputSchema = z.object({
-  format: z.enum(['png', 'svg', 'json']),
+  format: z.enum(['png', 'svg']),
   filePath: z.string(),
   imageBase64: z.string().optional(),
   svgMarkup: z.string().optional(),
-  elementCount: z.number().optional(),
 })
 
 interface ExportCanvasArgs {
   canvasId: string
-  format: 'png' | 'svg' | 'json'
+  format: 'png' | 'svg'
   padding?: number
   scale?: number
   minFontPx?: number
@@ -30,7 +24,6 @@ interface ExportCanvasArgs {
   outputPath?: string
   overwrite?: boolean
   theme?: 'light' | 'dark'
-  includeCustomFields?: boolean
 }
 
 export const exportCanvasInputShape = {
@@ -40,9 +33,9 @@ export const exportCanvasInputShape = {
       'Canvas ID in "{workspaceId}/{slug}" form. For format:"png", the browser must be connected (call canvas_open first) unless no client is connected, in which case it falls back to headless rendering.',
     ),
   format: z
-    .enum(['png', 'svg', 'json'])
+    .enum(['png', 'svg'])
     .describe(
-      'Output format. "png": raster image (prefers the connected browser, falls back to headless). "svg": vector image, always rendered headless from the persisted document. "json": standard .excalidraw JSON, always rendered headless.',
+      'Output format. "png": raster image (prefers the connected browser, falls back to headless). "svg": vector image, always rendered headless from the persisted document.',
     ),
   padding: z
     .number()
@@ -54,7 +47,7 @@ export const exportCanvasInputShape = {
     .number()
     .optional()
     .describe(
-      'PNG only. Export scale factor (appState.exportScale). Default 1. Use 2-3 for high-DPI exports of large canvases. Ignored for svg/json (SVG is resolution-independent).',
+      'PNG only. Export scale factor (appState.exportScale). Default 1. Use 2-3 for high-DPI exports of large canvases. Ignored for svg (SVG is resolution-independent).',
     ),
   minFontPx: z
     .number()
@@ -86,18 +79,12 @@ export const exportCanvasInputShape = {
     .describe(
       'PNG/SVG only. Force the rendered scene into "light" or "dark" without mutating the persisted appState.',
     ),
-  includeCustomFields: z
-    .boolean()
-    .optional()
-    .describe(
-      'JSON only. Keep internal custom fields (parentId / relX / relY) in the exported JSON. Default: false.',
-    ),
 } satisfies z.ZodRawShape
 
 export function exportCanvasTool() {
   return {
     name: 'export_canvas',
-    description: 'Unified canvas export: choose format "png" | "svg" | "json" in one tool.',
+    description: 'Unified canvas export: choose format "png" | "svg" in one tool.',
     inputSchema: z.toJSONSchema(z.object(exportCanvasInputShape)) as {
       type: 'object'
       properties: Record<string, unknown>
@@ -107,18 +94,6 @@ export function exportCanvasTool() {
       args: ExportCanvasArgs,
       client: DaemonClient,
     ): Promise<z.infer<typeof exportCanvasOutputSchema>> => {
-      if (args.format === 'json') {
-        const result = await canvasExportJsonTool().execute(
-          {
-            canvasId: args.canvasId,
-            includeCustomFields: args.includeCustomFields,
-            outputPath: args.outputPath,
-            overwrite: args.overwrite,
-          },
-          client,
-        )
-        return { format: 'json', filePath: result.filePath, elementCount: result.elementCount }
-      }
       if (args.format === 'svg') {
         const result = await exportSvgTool().execute(
           {

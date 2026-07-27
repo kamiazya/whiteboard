@@ -15,8 +15,6 @@ import { annotateTool } from './tools/annotate.js'
 import { annotateBatchTool } from './tools/annotate-batch.js'
 import { canvasInspectTool } from './tools/canvas-inspect.js'
 import { createCanvasTool, listCanvasTool, openCanvasTool } from './tools/canvas.js'
-import { SEMANTIC_PALETTE } from './tools/color-palette.js'
-import { paletteDeleteTool, paletteGetTool, paletteSetTool } from './tools/palette.js'
 import {
   canvasClearTool,
   deleteElementTool,
@@ -30,21 +28,12 @@ import { exportCanvasTool } from './tools/export-canvas.js'
 import { loadImageTool } from './tools/load.js'
 import { insertTemplateTool, listTemplatesTool } from './tools/template.js'
 import { createFrameTool, createEmbedTool } from './tools/frame-embed.js'
-import {
-  libraryInsertItemTool,
-  libraryInsertBatchTool,
-  userLibraryMetadataDeleteTool,
-  userLibraryMetadataGetTool,
-  userLibraryMetadataSetTool,
-} from './tools/library.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const SKILL_PATH = resolve(__dirname, '../../../../../skills/drawing-visuals/SKILL.md')
 // SKILL.md uses progressive disclosure and moves details into references/*.md,
 // so schema string matching also reads the reference notes.
-const SKILL_REFERENCE_PATHS = [
-  resolve(__dirname, '../../../../../skills/drawing-visuals/references/library-first-workflow.md'),
-]
+const SKILL_REFERENCE_PATHS: string[] = []
 const skillText = [SKILL_PATH, ...SKILL_REFERENCE_PATHS]
   .map((p) => readFileSync(p, 'utf-8'))
   .join('\n')
@@ -52,12 +41,11 @@ const skillText = [SKILL_PATH, ...SKILL_REFERENCE_PATHS]
 // schema can be compared with the JSON inputSchema. JSON schema fields could
 // exist while zod silently strips them, so this test compares source-level
 // key sets directly. Input shapes live next to their tool in tools/*.ts
-// (annotateBatchInputShape, libraryInsertBatchInputShape, etc.), not inlined
-// in tool-registration.ts, so all three are read and concatenated.
+// (annotateBatchInputShape, etc.), not inlined
+// in tool-registration.ts, so both are read and concatenated.
 const ZOD_SOURCE_PATHS = [
   resolve(__dirname, 'tool-registration.ts'),
   resolve(__dirname, 'tools/annotate-batch.ts'),
-  resolve(__dirname, 'tools/library.ts'),
 ]
 const mcpIndexText = ZOD_SOURCE_PATHS.map((p) => readFileSync(p, 'utf-8')).join('\n')
 
@@ -82,9 +70,6 @@ const tools: AnyTool[] = [
   loadImageTool(),
   annotateTool(),
   annotateBatchTool(),
-  paletteGetTool(),
-  paletteSetTool(),
-  paletteDeleteTool(),
   canvasInspectTool(),
   updateElementTool(),
   deleteElementTool(),
@@ -119,9 +104,6 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
       'load_image',
       'annotate',
       'annotate_batch',
-      'palette_get',
-      'palette_set',
-      'palette_delete',
       'update_element',
       'delete_element',
       'move_elements',
@@ -189,31 +171,6 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
     })
   })
 
-  // 4. Semantic color palette integrity.
-  // SEMANTIC_PALETTE keys must match the SKILL enumeration exactly. Order or
-  // spelling drift here is not acceptable.
-  describe('semantic color palette', () => {
-    const paletteKeys = Object.keys(SEMANTIC_PALETTE).sort()
-    // Extract the slash-delimited key list from the SKILL line. The SKILL wraps
-    // keywords in backticks, so the regex accepts them optionally.
-    const match = skillText.match(
-      /`?primary`?\s*\/\s*`?success`?\s*\/\s*`?danger`?\s*\/\s*`?warning`?\s*\/\s*`?neutral`?\s*\/\s*`?info`?/,
-    )
-
-    it('contains a semantic color enumeration line in SKILL.md', () => {
-      expect(match).not.toBeNull()
-    })
-
-    it('matches SEMANTIC_PALETTE keys exactly with the SKILL enumeration', () => {
-      // Strip backticks before comparing.
-      const skillKeys = match![0]
-        .split('/')
-        .map((s) => s.trim().replace(/`/g, ''))
-        .sort()
-      expect(skillKeys).toEqual(paletteKeys)
-    })
-  })
-
   // 5. Arrow box-snap parameters.
   // startBoxId and endBoxId must exist in both annotate_batch and annotate.
   describe('arrow snap params', () => {
@@ -265,9 +222,9 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
   // 8. Tool count invariant.
   // If a tool is added or removed, toolNames and SKILL.md must be updated too.
   describe('tool count invariants', () => {
-    it('keeps tools[] and toolByName at 22 entries', () => {
-      expect(tools.length).toBe(22)
-      expect(toolByName.size).toBe(22)
+    it('keeps tools[] and toolByName at 19 entries', () => {
+      expect(tools.length).toBe(19)
+      expect(toolByName.size).toBe(19)
     })
   })
 
@@ -288,61 +245,5 @@ describe('SKILL.md ↔ MCP schema integrity', () => {
         expect(mcpIndexText).toMatch(pattern)
       })
     }
-  })
-
-  describe('library batch + metadata tools', () => {
-    const singleInsertTool = libraryInsertItemTool()
-    const batchTool = libraryInsertBatchTool()
-    const metadataGetTool = userLibraryMetadataGetTool()
-    const metadataSetTool = userLibraryMetadataSetTool()
-    const metadataDeleteTool = userLibraryMetadataDeleteTool()
-
-    it('SKILL.md mentions the new library tools', () => {
-      for (const name of [
-        batchTool.name,
-        metadataGetTool.name,
-        metadataSetTool.name,
-        metadataDeleteTool.name,
-      ]) {
-        expect(skillText).toContain(name)
-      }
-    })
-
-    it('library_insert_item exposes explicit scale override in schema and zod', () => {
-      expect(singleInsertTool.inputSchema.properties).toHaveProperty('scale')
-      expect(mcpIndexText).toContain('libInsertTool.name')
-      expect(skillText).toContain('library_insert_item')
-      // Check that explicit scale override is documented conceptually, not just
-      // through a literal numeric example such as "1.1".
-      expect(skillText).toMatch(/explicit\s+`?scale`?/)
-    })
-
-    it('library_insert_batch documents and exposes batch groupAs + item groupAs', () => {
-      expect(batchTool.inputSchema.properties).toHaveProperty('groupAs')
-      expect(batchTool.inputSchema.properties).toHaveProperty('scale')
-      const items = batchTool.inputSchema.properties.items as {
-        items: { properties: Record<string, unknown> }
-      }
-      expect(items.items.properties).toHaveProperty('groupAs')
-      expect(items.items.properties).toHaveProperty('scale')
-      expect(mcpIndexText).toContain('libInsertBatch.name')
-      // Match `<key>: z.` loosely (description chains vary in length/wrapping)
-      // rather than the exact zod call, so this survives .describe() edits.
-      expect(mcpIndexText).toMatch(/\bgroupAs\s*:\s*z\s*\.\s*string\s*\(\s*\)\s*\.optional\s*\(/)
-      expect(mcpIndexText).toMatch(/\bscale\s*:\s*z\s*\.\s*number\s*\(\s*\)\s*\.optional\s*\(/)
-      expect(skillText).toContain('library_insert_batch')
-    })
-
-    it('metadata tools expose the expected revisioned fields', () => {
-      expect(metadataGetTool.inputSchema.required).toEqual(['name'])
-      expect(metadataSetTool.inputSchema.required).toEqual(['name', 'revision'])
-      expect(metadataDeleteTool.inputSchema.required).toEqual(['name', 'revision'])
-      expect(metadataSetTool.inputSchema.properties).toHaveProperty('aliases')
-      expect(metadataSetTool.inputSchema.properties).toHaveProperty('notes')
-      expect(metadataSetTool.inputSchema.properties).toHaveProperty('scales')
-      expect(metadataDeleteTool.inputSchema.properties).toHaveProperty('aliasKeys')
-      expect(metadataDeleteTool.inputSchema.properties).toHaveProperty('noteKeys')
-      expect(metadataDeleteTool.inputSchema.properties).toHaveProperty('scaleKeys')
-    })
   })
 })

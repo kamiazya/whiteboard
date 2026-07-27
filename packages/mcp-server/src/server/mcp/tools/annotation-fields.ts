@@ -38,7 +38,7 @@ export interface BuildAnnotationFieldsInput {
   fillStyle?: 'solid' | 'hachure' | 'cross-hatch'
   strokeWidth?: number
   // Shared ID used by template_insert so all elements from one insert can be
-  // targeted together later. export_canvas({format:'json'}) strips it by default.
+  // targeted together later.
   templateInstanceId?: string
   // Marks text created as an arrow midpoint label so routing can ignore it as
   // an obstacle.

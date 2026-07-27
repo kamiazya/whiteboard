@@ -5,17 +5,15 @@ import {
   validateFileId,
   validateWorkspaceId,
   validateSlug,
-  validateUserLibraryName,
   validateVersionId,
 } from './validators.js'
 
 describe('shared validators', () => {
-  it('accepts valid session ids, slugs, ids, and user library names', async () => {
+  it('accepts valid session ids, slugs, and ids', async () => {
     expect(validateWorkspaceId('sess_1-abc')).toBe('sess_1-abc')
     expect(validateSlug('621/header-v2')).toBe('621/header-v2')
     expect(validateVersionId('ver-1')).toBe('ver-1')
     expect(validateFileId('file_1-abc')).toBe('file_1-abc')
-    expect(validateUserLibraryName('icons.v1')).toBe('icons.v1')
 
     await expect(
       validateExternalUrl('https://example.com/lib.excalidrawlib', {
@@ -29,7 +27,6 @@ describe('shared validators', () => {
     expect(() => validateSlug('../escape')).toThrow(/Invalid slug/)
     expect(() => validateVersionId('bad.id')).toThrow(/Invalid version id/)
     expect(() => validateFileId('bad/id')).toThrow(/Invalid file id/)
-    expect(() => validateUserLibraryName('../icons')).toThrow(/Invalid user library name/)
   })
 
   it('accepts the canonical "main" branch name and normal branch names', () => {

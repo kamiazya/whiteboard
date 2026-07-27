@@ -23,17 +23,13 @@ export interface ResolveArgs {
 export interface ResolvedPosition {
   x: number
   y: number
-  // Only set for coords:'parent'. The caller persists these fields so
-  // resolveParentedElements can re-resolve them before render/export.
+  // Only set for coords:'parent'.
   parentId?: string
   relX?: number
   relY?: number
 }
 
-function findImage(
-  elements: ElementRef[],
-  imageId: string | undefined,
-): ElementRef | undefined {
+function findImage(elements: ElementRef[], imageId: string | undefined): ElementRef | undefined {
   if (imageId) {
     return elements.find((el) => el.id === imageId && !el.isDeleted)
   }

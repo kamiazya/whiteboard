@@ -5,7 +5,7 @@
 // src/shared/api-contracts/ for browser-safety, but it does not — and
 // structurally cannot — assert what the barrel itself re-exports. Without
 // this test, someone could add `export * from './runtime.js'` (or
-// canvas-runtime / daemon-doctor / export / libraries / palette) to the
+// canvas-runtime / daemon-doctor / export / libraries) to the
 // barrel and widen the public semver surface without any test noticing.
 
 import { readFileSync } from 'node:fs'

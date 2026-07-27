@@ -163,8 +163,6 @@ const ALLOWED_SHARED_EXACT = new Set([
   'canvas-backend-contract.js', // transport/callback seam — types + Zod re-exports only, no Node APIs
   'daemon-backend.js', // WebSocket + apiFetch transport for the canvas editor, no Node APIs
   'external-url-policy.js', // pure URL validation, no Node APIs
-  'loro-raw-element.js', // Zod schema for Loro-stored element shape — zod-only, no Node APIs
-  'resolve-parented-elements.js', // pure data transformation
   'token-store.js', // in-memory daemon-token holder, no Node APIs
   'upload-files.js', // file upload transport, no Node APIs
   'ws-messages.js', // WebSocket protocol types/constants
@@ -290,7 +288,6 @@ describe('src/shared allowlist', () => {
   it('explicitly listed browser-safe helpers are allowed', () => {
     expect(check('../../shared/canvas-backend-contract.js')).toBeNull()
     expect(check('../../shared/external-url-policy.js')).toBeNull()
-    expect(check('../../shared/resolve-parented-elements.js')).toBeNull()
     expect(check('../../shared/ws-messages.js')).toBeNull()
     expect(check('../../shared/ws-protocol.js')).toBeNull()
   })

@@ -46,31 +46,15 @@ export const ALL_REGISTERED_TOOLS = [
   'distribute_elements',
   'export_canvas',
   'export_svg',
-  'library_catalog_list',
-  'library_insert_batch',
-  'library_insert_item',
-  'library_install',
-  'library_list_installed',
-  'library_list_items',
-  'library_uninstall',
   'list_groups',
   'load_image',
   'move_elements',
   'optimize_canvases',
-  'palette_delete',
-  'palette_get',
-  'palette_set',
   'reorder_elements',
   'template_insert',
   'template_list',
   'update_element',
   'update_frame_members',
-  'user_library_list',
-  'user_library_metadata_delete',
-  'user_library_metadata_get',
-  'user_library_metadata_set',
-  'user_library_remove',
-  'user_library_save',
   'version_list',
   'version_restore',
   'version_save',
@@ -88,12 +72,8 @@ export const COVERED_TOOLS = [
   'version_save',
   'version_restore',
   'version_list',
-  'palette_get',
-  'library_list_installed',
-  'library_list_items',
   'export_svg',
   'export_canvas',
-  'library_uninstall',
 ] as const
 
 export const ERROR_PATH_ONLY_TOOLS = ['viewport_set'] as const
@@ -116,26 +96,15 @@ export const UNIT_ONLY_TOOLS = [
   'delete_elements',
   'delete_group',
   'distribute_elements',
-  'library_catalog_list',
-  'library_insert_batch',
-  'library_insert_item',
   'list_groups',
   'load_image',
   'move_elements',
   'optimize_canvases',
-  'palette_delete',
-  'palette_set',
   'reorder_elements',
   'template_insert',
   'template_list',
   'update_element',
   'update_frame_members',
-  'user_library_list',
-  'user_library_metadata_delete',
-  'user_library_metadata_get',
-  'user_library_metadata_set',
-  'user_library_remove',
-  'user_library_save',
 ] as const
 
 export type DeferredTool = {
@@ -144,12 +113,4 @@ export type DeferredTool = {
   unblock: string
 }
 
-export const DEFERRED_TOOLS: DeferredTool[] = [
-  {
-    name: 'library_install',
-    reason:
-      'Success path calls fetchExternalLibraryPayload() → global fetch. Additionally, validateExternalUrl() rejects localhost and private-range IPs, so a plain node:http.createServer stub is blocked before the fetch even fires.',
-    unblock:
-      'Use nock or MSW to intercept fetch at the DNS/request level (bypasses validateExternalUrl), OR make the external-URL lookup injectable so the smoke can whitelist a loopback address.',
-  },
-]
+export const DEFERRED_TOOLS: DeferredTool[] = []

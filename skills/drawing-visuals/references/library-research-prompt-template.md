@@ -49,7 +49,7 @@ The General Subagent should evaluate at least:
 ## Principles For Brand / Design Guideline Application
 
 - Do **not** recolor or distort external provider icons in ways that hurt recognizability
-- Handle brand adaptation mainly through `palette_set`, label colors, frames, legends, and annotation tone
+- Handle brand adaptation mainly through label colors, frames, legends, and annotation tone
 - If company / product typography or emphasis rules exist, reflect them in the surrounding text rather than on the icon
 - An infrastructure diagram is not a marketing banner; prioritize reading order and semantic separation over brand expression
 - If strong brand colors would break semantic color meaning for data paths or trust boundaries, preserve semantic color and shift brand expression into supporting elements
