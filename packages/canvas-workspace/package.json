@@ -22,12 +22,9 @@
     "@kamiazya/whiteboard-canvas-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-codec": "workspace:*",
     "@kamiazya/whiteboard-canvas-ports": "workspace:*",
-    "loro-crdt": "catalog:",
-    "zod": "catalog:"
+    "loro-crdt": "catalog:"
   },
   "devDependencies": {
-    "@fast-check/vitest": "^0.4.1",
-    "fast-check": "^4.7.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

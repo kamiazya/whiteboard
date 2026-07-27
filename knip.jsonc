@@ -94,7 +94,6 @@
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-workspace": {
-      "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-render": {
