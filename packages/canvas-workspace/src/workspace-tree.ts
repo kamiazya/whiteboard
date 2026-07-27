@@ -76,10 +76,11 @@ export class WorkspaceTree {
     return kids.map(toWorkspaceNode)
   }
 
-  resolveAlias(id: TreeID): string {
+  resolveAlias(id: TreeID): string | undefined {
+    const node = this.#tree.getNodeByID(id)
+    if (!node || this.#tree.isNodeDeleted(id)) return undefined
     const segments: string[] = []
-    let current: LoroTreeNode<{ canvasId: string; segment: string }> | undefined =
-      this.#tree.getNodeByID(id)
+    let current: LoroTreeNode<{ canvasId: string; segment: string }> | undefined = node
     while (current) {
       segments.unshift(current.data.get('segment') as string)
       current = current.parent()

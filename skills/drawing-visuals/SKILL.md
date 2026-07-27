@@ -1,15 +1,15 @@
 ---
 name: drawing-visuals
-description: Draw and annotate visuals with your AI agent on a shared Excalidraw canvas. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone.
+description: Draw and annotate visuals with your AI agent on a shared canvas. Use it when screen layout, structure, flow, or comparison still feels too ambiguous in text alone.
 ---
 
 # drawing-visuals
 
-Like a whiteboard on the wall of a meeting room, this is a tool for AI and humans to **align by drawing on the same Excalidraw workspace**.
+Like a whiteboard on the wall of a meeting room, this is a tool for AI and humans to **align by drawing on the same workspace**.
 Use it when drawing and pointing is faster than iterating in prose.
 What you draw stays on the canvas and can be revisited and refined later.
 
-Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `library_catalog_list` / `library_list_items` / `library_insert_item` / `library_insert_batch` / `user_library_save` / `user_library_list` / `user_library_remove` / `user_library_metadata_get` / `user_library_metadata_set` / `user_library_metadata_delete` / `annotate` / `annotate_batch` / `load_image` / `export_canvas` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it with `export_canvas({ format })` as PNG, SVG, or standard `.excalidraw` JSON.
+Use the whiteboard MCP tools (`canvas_create` / `canvas_list` / `canvas_open` / `template_list` / `template_insert` / `annotate` / `annotate_batch` / `load_image` / `export_canvas` / `canvas_inspect` / `update_element` / `delete_element` / `delete_elements` / `move_elements` / `align_elements` / `distribute_elements` / `canvas_clear` / `assign_to_group` / `delete_group` / `list_groups` / `create_frame` / `update_frame_members` / `viewport_set` / `version_save` / `version_restore` / `version_list`) to create a canvas, draw the diagram, and export it with `export_canvas({ format })` as PNG or SVG.
 Open exported PNGs with the Read tool and inspect them visually.
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
