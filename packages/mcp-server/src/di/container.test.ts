@@ -20,6 +20,14 @@ describe('createContainer', () => {
     const container = createContainer()
     expect(container.get(TOKENS.WorkspaceIndex)).toBeInstanceOf(InMemoryWorkspaceIndex)
   })
+
+  it('resolves each port to the same singleton instance across repeated calls', () => {
+    const container = createContainer()
+
+    expect(container.get(TOKENS.CanvasDocStore)).toBe(container.get(TOKENS.CanvasDocStore))
+    expect(container.get(TOKENS.BlobStore)).toBe(container.get(TOKENS.BlobStore))
+    expect(container.get(TOKENS.WorkspaceIndex)).toBe(container.get(TOKENS.WorkspaceIndex))
+  })
 })
 
 describe('canvas-ports TOKENS identity', () => {
