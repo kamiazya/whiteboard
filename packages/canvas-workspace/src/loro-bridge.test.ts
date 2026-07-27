@@ -222,8 +222,12 @@ describe('loro-bridge', () => {
 
     const result = readSpatialCanvas(doc)
     expect(result.nodes).toHaveLength(1)
-    expect(result.nodes[0].text).toBe('Updated text')
-    expect(result.nodes[0].x).toBe(999)
+    const node0 = result.nodes[0]
+    expect(node0.type).toBe('text')
+    if (node0.type === 'text') {
+      expect(node0.text).toBe('Updated text')
+    }
+    expect(node0.x).toBe(999)
   })
 
   test('round-trips edge with minimal fields', () => {
