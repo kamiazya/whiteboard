@@ -36,13 +36,15 @@ export const getCanvasInputSchema = z
   })
   .strict()
 
-export const getCanvasOutputSchema = z
+export const canvasDetailSchema = z
   .object({
     canvasId: canvasIdSchema,
     segment: z.string(),
     alias: z.string(),
   })
   .strict()
+
+export const getCanvasOutputSchema = canvasDetailSchema
 
 export const listCanvasesInputSchema = z
   .object({
@@ -50,19 +52,9 @@ export const listCanvasesInputSchema = z
   })
   .strict()
 
-// Not exported: only consumed as the array element of
-// listCanvasesOutputSchema below.
-const canvasListItemSchema = z
-  .object({
-    canvasId: canvasIdSchema,
-    segment: z.string(),
-    alias: z.string(),
-  })
-  .strict()
-
 export const listCanvasesOutputSchema = z
   .object({
-    canvases: z.array(canvasListItemSchema),
+    canvases: z.array(canvasDetailSchema),
   })
   .strict()
 

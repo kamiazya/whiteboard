@@ -16,13 +16,9 @@ export class CanvasNotFoundError extends Error {
 }
 
 export class CanvasSegmentConflictError extends Error {
-  constructor(
-    readonly segment: string,
-    cause: unknown,
-  ) {
+  constructor(readonly segment: string) {
     super(`Segment conflict: "${segment}" already exists under this parent`)
     this.name = 'CanvasSegmentConflictError'
-    this.cause = cause
   }
 }
 

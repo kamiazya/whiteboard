@@ -1,5 +1,6 @@
 import type { TreeID } from 'loro-crdt'
 import type { z } from 'zod'
+import type { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
 import type { ServerDeps } from '../server-deps.js'
 import {
   CanvasNotFoundError,
@@ -19,6 +20,18 @@ import type {
 import { generateCanvasId } from './generate-canvas-id.js'
 import { loadWorkspaceTree, saveWorkspaceTree } from './workspace-tree-io.js'
 
+/**
+ * Finds the tree node whose `canvasId` matches, or throws
+ * `CanvasNotFoundError`. Shared by get/delete handlers.
+ */
+function findNodeOrThrow(tree: WorkspaceTree, workspaceId: string, canvasId: string) {
+  const node = tree.snapshot().nodes.find((n) => n.canvasId === canvasId)
+  if (!node) {
+    throw new CanvasNotFoundError(workspaceId, canvasId)
+  }
+  return node
+}
+
 export async function wbCanvasCreate(
   deps: ServerDeps,
   input: z.infer<typeof createCanvasInputSchema>,
@@ -32,7 +45,7 @@ export async function wbCanvasCreate(
 
   const conflict = tree.children(parentId).find((sibling) => sibling.segment === input.segment)
   if (conflict) {
-    throw new CanvasSegmentConflictError(input.segment, undefined)
+    throw new CanvasSegmentConflictError(input.segment)
   }
 
   const canvasId = generateCanvasId()
@@ -47,10 +60,7 @@ export async function wbCanvasGet(
   input: z.infer<typeof getCanvasInputSchema>,
 ): Promise<z.infer<typeof getCanvasOutputSchema>> {
   const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-  const node = tree.snapshot().nodes.find((n) => n.canvasId === input.canvasId)
-  if (!node) {
-    throw new CanvasNotFoundError(input.workspaceId, input.canvasId)
-  }
+  const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
   const alias = tree.resolveAlias(node.id)
   return { canvasId: node.canvasId, segment: node.segment, alias: alias ?? node.segment }
 }
@@ -60,9 +70,8 @@ export async function wbCanvasList(
   input: z.infer<typeof listCanvasesInputSchema>,
 ): Promise<z.infer<typeof listCanvasesOutputSchema>> {
   const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-  const nodes = tree.snapshot().nodes
   return {
-    canvases: nodes.map((node) => ({
+    canvases: tree.snapshot().nodes.map((node) => ({
       canvasId: node.canvasId,
       segment: node.segment,
       alias: tree.resolveAlias(node.id) ?? node.segment,
@@ -75,10 +84,7 @@ export async function wbCanvasDelete(
   input: z.infer<typeof deleteCanvasInputSchema>,
 ): Promise<z.infer<typeof deleteCanvasOutputSchema>> {
   const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-  const node = tree.snapshot().nodes.find((n) => n.canvasId === input.canvasId)
-  if (!node) {
-    throw new CanvasNotFoundError(input.workspaceId, input.canvasId)
-  }
+  const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
   tree.delete(node.id)
   await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
   return { deleted: true }
