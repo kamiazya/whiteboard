@@ -5,7 +5,7 @@
 // Output: structured JSON summary to stdout on success; generic message to
 // stderr and exit 1 on failure. Full build logs never reach stdout.
 
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
@@ -40,6 +40,9 @@ mkdirSync(OUT_DIR, { recursive: true })
 // dependency-install and compile layers survive between runs (the plain
 // `docker build` engine and the ACTIONS_CACHE_URL credentials it needs are
 // only available inside a runner, not on a local dev machine).
+// Read NODE_VERSION from .node-version (single source of truth).
+const nodeVersion = readFileSync(join(REPO_ROOT, '.node-version'), 'utf-8').trim()
+
 const isGitHubActions = process.env.GITHUB_ACTIONS === 'true'
 const buildArgs = isGitHubActions
   ? [
@@ -50,6 +53,8 @@ const buildArgs = isGitHubActions
       '--cache-to',
       'type=gha,mode=max',
       '--load',
+      '--build-arg',
+      `NODE_VERSION=${nodeVersion}`,
       '-f',
       DOCKERFILE,
       '-t',
@@ -57,7 +62,17 @@ const buildArgs = isGitHubActions
       '--progress=plain',
       '.',
     ]
-  : ['build', '-f', DOCKERFILE, '-t', IMAGE_TAG, '--progress=plain', '.']
+  : [
+      'build',
+      '--build-arg',
+      `NODE_VERSION=${nodeVersion}`,
+      '-f',
+      DOCKERFILE,
+      '-t',
+      IMAGE_TAG,
+      '--progress=plain',
+      '.',
+    ]
 
 const buildResult = spawnSync('docker', buildArgs, {
   cwd: REPO_ROOT,
