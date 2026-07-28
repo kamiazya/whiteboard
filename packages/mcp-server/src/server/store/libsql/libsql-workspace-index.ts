@@ -19,6 +19,15 @@ const log = getLogger('libsql-workspace-index')
 
 type Db = Kysely<DatabaseSchema>
 
+/** All five WorkspaceIndex-backing tables, used by the delete sweep in applyRows. */
+const WORKSPACE_INDEX_TABLES = [
+  'workspaceIndexCanvasList',
+  'workspaceIndexFacets',
+  'workspaceIndexAliases',
+  'workspaceIndexBacklinks',
+  'workspaceIndexAliasHistory',
+] as const
+
 /**
  * libSQL-backed `WorkspaceIndex`. `applyRows` is a full delete-then-insert
  * replace of all five tables for the given `workspaceId`, run inside a
@@ -40,20 +49,9 @@ export class LibsqlWorkspaceIndex implements WorkspaceIndex {
     const { workspaceId, canvasList, facets, aliases, backlinks, aliasHistory } = input
 
     await this.db.transaction().execute(async (trx) => {
-      await trx
-        .deleteFrom('workspaceIndexCanvasList')
-        .where('workspaceId', '=', workspaceId)
-        .execute()
-      await trx.deleteFrom('workspaceIndexFacets').where('workspaceId', '=', workspaceId).execute()
-      await trx.deleteFrom('workspaceIndexAliases').where('workspaceId', '=', workspaceId).execute()
-      await trx
-        .deleteFrom('workspaceIndexBacklinks')
-        .where('workspaceId', '=', workspaceId)
-        .execute()
-      await trx
-        .deleteFrom('workspaceIndexAliasHistory')
-        .where('workspaceId', '=', workspaceId)
-        .execute()
+      for (const table of WORKSPACE_INDEX_TABLES) {
+        await trx.deleteFrom(table).where('workspaceId', '=', workspaceId).execute()
+      }
 
       if (canvasList.length > 0) {
         await trx
@@ -143,22 +141,23 @@ export class LibsqlWorkspaceIndex implements WorkspaceIndex {
   }
 
   async resolveAlias(input: ResolveAliasInput): Promise<ResolveAliasResult> {
-    const row = await this.db
-      .selectFrom('workspaceIndexAliases')
-      .select('canvasId')
-      .where('workspaceId', '=', input.workspaceId)
-      .where('alias', '=', input.alias)
-      .orderBy('seq', 'asc')
-      .executeTakeFirst()
-    return row ? { canvasId: row.canvasId } : null
+    return this.findAliasByTable('workspaceIndexAliases', input.workspaceId, input.alias)
   }
 
   async resolveAliasHistory(input: ResolveAliasHistoryInput): Promise<ResolveAliasResult> {
+    return this.findAliasByTable('workspaceIndexAliasHistory', input.workspaceId, input.alias)
+  }
+
+  private async findAliasByTable(
+    table: 'workspaceIndexAliases' | 'workspaceIndexAliasHistory',
+    workspaceId: string,
+    alias: string,
+  ): Promise<ResolveAliasResult> {
     const row = await this.db
-      .selectFrom('workspaceIndexAliasHistory')
+      .selectFrom(table)
       .select('canvasId')
-      .where('workspaceId', '=', input.workspaceId)
-      .where('alias', '=', input.alias)
+      .where('workspaceId', '=', workspaceId)
+      .where('alias', '=', alias)
       .orderBy('seq', 'asc')
       .executeTakeFirst()
     return row ? { canvasId: row.canvasId } : null
