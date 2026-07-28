@@ -78,6 +78,17 @@ describe('FsBlobStore', () => {
     expect(await store.get({ ref })).toBeNull()
   })
 
+  it('does not swallow non-missing delete failures', async () => {
+    // A directory sitting where the blob file is expected makes `rm` fail
+    // with EISDIR (not ENOENT), which must propagate rather than be
+    // treated as an already-deleted blob.
+    const ref: BlobRef = { algorithm: 'sha-256', digestHex: '5'.repeat(64) }
+    const filePath = join(baseDir, 'blobs', ref.digestHex.slice(0, 2), ref.digestHex.slice(2))
+    await mkdir(filePath, { recursive: true })
+
+    await expect(store.delete({ ref })).rejects.toMatchObject({ code: 'ERR_FS_EISDIR' })
+  })
+
   it('is content-addressed: identical bytes yield the same ref and dedup to one file', async () => {
     const bytesA = new Uint8Array([9, 9, 9])
     const bytesB = new Uint8Array([9, 9, 9])
