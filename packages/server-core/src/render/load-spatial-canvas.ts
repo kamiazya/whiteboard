@@ -3,7 +3,7 @@ import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { LoroDoc } from 'loro-crdt'
-import type { ServerDeps } from '../create-server.js'
+import type { ServerDeps } from '../server-deps.js'
 
 /**
  * Thrown when no snapshot exists for the requested canvas. Not a Zod
