@@ -6,6 +6,9 @@ import { join } from 'node:path'
 import { retryDaemonStartup } from './daemon-readiness.js'
 import { ALL_REGISTERED_TOOLS } from './mcp-smoke-coverage.js'
 
+/** Workspace slug used for every canvas the smoke creates. */
+const WORKSPACE_ID = 'e2e'
+
 interface RunOptions {
   /** Absolute path to the MCP server entry point (.ts for dev, .js for packaged). */
   entry: string
@@ -47,16 +50,17 @@ export function buildCheckpointChildEnv(
 }
 
 /**
- * Issues the daemon-triggering canvas_create call, optionally retried across
- * bounded cold-start windows via retryDaemonStartup. Extracted so the retry
- * wiring is unit-testable against a fake callTool without spawning a real
- * MCP child process.
+ * Issues the first daemon-triggering tool call (wb_canvas_create), optionally
+ * retried across bounded cold-start windows via retryDaemonStartup. Extracted
+ * so the retry wiring is unit-testable against a fake callTool without spawning
+ * a real MCP child process.
  */
 export function triggerDaemonCanvasCreate(
   callTool: (name: string, args: unknown) => Promise<Record<string, unknown>>,
   options: { retryDaemonStartup: boolean; maxDaemonStartupRetries: number },
 ): Promise<Record<string, unknown>> {
-  const attempt = () => callTool('canvas_create', { slug: 'e2e-src' })
+  const attempt = () =>
+    callTool('wb_canvas_create', { workspaceId: WORKSPACE_ID, segment: 'e2e-src' })
   return options.retryDaemonStartup
     ? retryDaemonStartup({ attempt, maxRetries: options.maxDaemonStartupRetries })
     : attempt()
@@ -183,20 +187,6 @@ export async function runE2eCheckpointSmoke({
     return JSON.parse(text) as Record<string, unknown>
   }
 
-  async function expectRejected(
-    promise: Promise<unknown>,
-    pattern: RegExp,
-    label: string,
-  ): Promise<void> {
-    try {
-      await promise
-    } catch (err) {
-      if (err instanceof Error && pattern.test(err.message)) return
-      throw new Error(`${label}: wrong error: ${err instanceof Error ? err.message : String(err)}`)
-    }
-    throw new Error(`${label}: expected rejection but resolved`)
-  }
-
   // Kill child and clean up tmp dir on forced process exit (e.g. SIGINT in CLI wrapper).
   const exitHandler = () => {
     try {
@@ -248,100 +238,37 @@ export async function runE2eCheckpointSmoke({
       }
     }
 
-    // canvas_create is the first daemon-dependent RPC, so its failure mode is
+    // wb_canvas_create is the first daemon-dependent RPC, so its failure mode is
     // the daemon cold-starting under contention. Retrying is opt-in: only the
     // tarball smoke (no fixed vitest testTimeout) enables it.
     const created = await triggerDaemonCanvasCreate(callTool, {
       retryDaemonStartup: shouldRetryDaemonStartup,
       maxDaemonStartupRetries,
     })
-    if (!created.id || !created.url) throw new Error(`canvas_create returned unexpected shape`)
-    console.log(`[e2e] canvas_create → ${created.id}`)
-
-    const workspaceId = (created.id as string).split('/')[0]
-
-    const listed = await callTool('canvas_list', {})
-    if (!Array.isArray(listed.workspaces)) {
-      throw new Error(`canvas_list returned unexpected shape: ${JSON.stringify(listed)}`)
+    if (typeof created.canvasId !== 'string' || created.segment !== 'e2e-src') {
+      throw new Error(`wb_canvas_create returned unexpected shape: ${JSON.stringify(created)}`)
     }
-    const totalCanvases = (listed.workspaces as Array<{ canvases: unknown[] }>).reduce(
-      (n, ws) => n + (Array.isArray(ws.canvases) ? ws.canvases.length : 0),
-      0,
-    )
-    console.log(
-      `[e2e] canvas_list → ${(listed.workspaces as unknown[]).length} workspaces, ${totalCanvases} canvases`,
-    )
+    const canvasId = created.canvasId
+    console.log(`[e2e] wb_canvas_create → ${canvasId}`)
 
-    const ann = await callTool('annotate', {
-      canvasId: created.id,
-      type: 'rectangle',
-      target: { x: 10, y: 20 },
-      coords: 'absolute',
-      width: 80,
-      height: 40,
-      color: '#1971c2',
-    })
-    if (!ann.elementId && !ann.elementIds) {
-      throw new Error(`annotate returned unexpected shape: ${JSON.stringify(ann)}`)
-    }
-    console.log(`[e2e] annotate → rect`)
-
-    // Exercise create_frame so any drift between its zod outputSchema
-    // (assignedMembers etc.) and the runtime payload trips the SDK's structured-
-    // content validator at this layer instead of leaking out to MCP clients.
-    const rectId = (ann.elementId ?? (ann.elementIds as string[] | undefined)?.[0]) as
-      | string
-      | undefined
-    if (!rectId) throw new Error('annotate returned no rectangle id to seed create_frame')
-    const frame = await callTool('create_frame', {
-      canvasId: created.id,
-      name: 'e2e-frame',
-      memberIds: [rectId],
-    })
-    if (!frame.elementId || !Array.isArray(frame.assignedMembers)) {
-      throw new Error(`create_frame returned unexpected shape: ${JSON.stringify(frame)}`)
-    }
-    console.log(
-      `[e2e] create_frame → ${frame.elementId} (${(frame.assignedMembers as unknown[]).length} members)`,
-    )
-
-    const insBefore = await callTool('canvas_inspect', { canvasId: created.id })
-    if ((insBefore.elementCount as number) < 1) {
-      throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
-    }
-
-    // version_save / version_list / version_restore are wired through
-    // server-core (createServer(deps).tools.version*), not the legacy
-    // Excalidraw daemon-client path above, so they operate on a ULID
-    // canvasId (wb_canvas_create) rather than the "{workspaceId}/{slug}"
-    // form the annotate/create_frame calls above use.
-    const versionCanvas = await callTool('wb_canvas_create', {
-      workspaceId,
-      segment: 'e2e-version-canvas',
-    })
-    if (!versionCanvas.canvasId) {
-      throw new Error(
-        `wb_canvas_create returned unexpected shape: ${JSON.stringify(versionCanvas)}`,
-      )
-    }
-    console.log(`[e2e] wb_canvas_create → ${versionCanvas.canvasId}`)
-
+    // facet_set seeds extension-facet state on the created canvas so the version
+    // saved below has content to round-trip through restore.
     const facets = await callTool('facet_set', {
-      canvasId: versionCanvas.canvasId,
+      canvasId,
       facets: { 'e2e/1': { note: 'before-save' } },
     })
-    if (facets.canvasId !== versionCanvas.canvasId) {
+    if (facets.canvasId !== canvasId) {
       throw new Error(`facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
     }
     console.log('[e2e] facet_set → seeded canvas state')
 
     const saved = await callTool('version_save', {
-      canvasId: versionCanvas.canvasId,
+      canvasId,
       label: 'e2e-version-1',
     })
     if (
       !saved.versionId ||
-      saved.canvasId !== versionCanvas.canvasId ||
+      saved.canvasId !== canvasId ||
       saved.label !== 'e2e-version-1' ||
       !saved.timestamp ||
       !saved.frontier
@@ -350,8 +277,8 @@ export async function runE2eCheckpointSmoke({
     }
     console.log(`[e2e] version_save → ${saved.versionId}`)
 
-    const versions = await callTool('version_list', { canvasId: versionCanvas.canvasId })
-    if (versions.canvasId !== versionCanvas.canvasId || !Array.isArray(versions.versions)) {
+    const versions = await callTool('version_list', { canvasId })
+    if (versions.canvasId !== canvasId || !Array.isArray(versions.versions)) {
       throw new Error(`version_list returned unexpected shape: ${JSON.stringify(versions)}`)
     }
     const versionEntries = versions.versions as Array<{ versionId: string }>
@@ -361,11 +288,11 @@ export async function runE2eCheckpointSmoke({
     console.log(`[e2e] version_list → ${versionEntries.length} version(s)`)
 
     const restored = await callTool('version_restore', {
-      canvasId: versionCanvas.canvasId,
+      canvasId,
       versionId: saved.versionId,
     })
     if (
-      restored.canvasId !== versionCanvas.canvasId ||
+      restored.canvasId !== canvasId ||
       restored.restoredVersionId !== saved.versionId ||
       restored.label !== saved.label ||
       restored.frontier !== saved.frontier
@@ -373,137 +300,6 @@ export async function runE2eCheckpointSmoke({
       throw new Error(`version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
     }
     console.log(`[e2e] version_restore → ${restored.restoredVersionId}`)
-
-    console.log('[e2e] version_save / version_list / version_restore (server-core wiring) all OK')
-
-    await expectRejected(
-      callTool('viewport_set', { canvasId: created.id, mode: 'fit' }),
-      /No browser client/i,
-      'viewport_set without browser client',
-    )
-    console.log('[e2e] viewport_set → no_client OK (route wiring verified)')
-
-    // A frame whose bounding box is disjoint from the rectangle drawn above
-    // (x:10 y:20 w:80 h:40), so a frameId-scoped export can be distinguished
-    // from a full-canvas export by the rectangle's stroke color (#1971c2)
-    // being absent from the scoped output.
-    const emptyFrame = await callTool('create_frame', {
-      canvasId: created.id,
-      x: 500,
-      y: 500,
-      width: 100,
-      height: 100,
-      name: 'e2e-empty-frame',
-    })
-    if (!emptyFrame.elementId) {
-      throw new Error(`create_frame returned unexpected shape: ${JSON.stringify(emptyFrame)}`)
-    }
-    console.log(`[e2e] create_frame → ${emptyFrame.elementId}`)
-
-    const readSvgMarkup = async (result: Record<string, unknown>): Promise<string> =>
-      typeof result.svgMarkup === 'string'
-        ? result.svgMarkup
-        : await readFile(result.filePath as string, 'utf-8')
-
-    // export_canvas(format:'svg') delegates in-process to exportSvgTool().execute(),
-    // bypassing the registered export_svg tool's own registerToolWithAnnotations
-    // binding and structuredContent validation entirely. Call export_svg directly
-    // too so a drift confined to that standalone registration wrapper (as opposed
-    // to the shared execute() body) is still caught here. Exercise every optional
-    // field the wrapper destructures and forwards
-    // (packages/mcp-server/src/server/mcp/tool-registration.ts) and assert an
-    // effect specific to each one, so dropping any single field from that
-    // forwarding list turns this red rather than staying green:
-    //  - outputPath: returned filePath matches the requested path
-    //  - theme: rendered background switches to the dark default (#121212)
-    //  - frameId: scoping to the empty frame excludes the rectangle (#1971c2)
-    const svgOutputPath = join(tmpDataDir, workspaceId, 'exports', 'e2e-direct.svg')
-    const svgDirect = await callTool('export_svg', {
-      canvasId: created.id,
-      outputPath: svgOutputPath,
-      theme: 'dark',
-      frameId: emptyFrame.elementId,
-      padding: 5,
-    })
-    if (svgDirect.filePath !== svgOutputPath) {
-      throw new Error(
-        `export_svg ignored outputPath: expected ${svgOutputPath}, got ${JSON.stringify(svgDirect)}`,
-      )
-    }
-    const svgDirectMarkup = await readSvgMarkup(svgDirect)
-    if (!svgDirectMarkup.trim().startsWith('<svg')) {
-      throw new Error('export_svg did not produce real SVG markup')
-    }
-    // Hex colors are compared case-insensitively — serializers are free to
-    // emit uppercase hex.
-    if (!svgDirectMarkup.toLowerCase().includes('#121212')) {
-      throw new Error(`export_svg ignored theme: expected dark background in ${svgDirectMarkup}`)
-    }
-    if (svgDirectMarkup.toLowerCase().includes('#1971c2')) {
-      throw new Error(
-        'export_svg ignored frameId: scoping to the empty frame should exclude the rectangle',
-      )
-    }
-    console.log('[e2e] export_svg (direct, outputPath+theme+frameId forwarded) OK')
-
-    // padding: re-export the same frame-scoped canvas with a much larger
-    // padding and assert the viewBox actually widened, so dropping `padding`
-    // from the forwarding list (which would silently fall back to the
-    // default) also turns this red.
-    const svgWidePadding = await callTool('export_svg', {
-      canvasId: created.id,
-      frameId: emptyFrame.elementId,
-      padding: 300,
-    })
-    const svgWidePaddingMarkup = await readSvgMarkup(svgWidePadding)
-    const extractViewBoxWidth = (markup: string): number => {
-      const match = markup.match(/viewBox=["'][-\d.]+\s+[-\d.]+\s+([\d.]+)\s+[-\d.]+["']/)
-      if (!match) throw new Error(`export_svg output missing viewBox: ${markup.slice(0, 200)}`)
-      return Number.parseFloat(match[1])
-    }
-    if (extractViewBoxWidth(svgWidePaddingMarkup) <= extractViewBoxWidth(svgDirectMarkup)) {
-      throw new Error('export_svg ignored padding: a wider padding did not widen the viewBox')
-    }
-    console.log('[e2e] export_svg padding forwarded (viewBox widened) OK')
-
-    // overwrite: without it, re-exporting to the same outputPath must be
-    // rejected; with it, the same call must succeed.
-    await expectRejected(
-      callTool('export_svg', { canvasId: created.id, outputPath: svgOutputPath }),
-      /already exists/,
-      'export_svg duplicate outputPath without overwrite',
-    )
-    await callTool('export_svg', {
-      canvasId: created.id,
-      outputPath: svgOutputPath,
-      overwrite: true,
-    })
-    console.log('[e2e] export_svg overwrite forwarded OK')
-
-    // export_canvas unifies png/svg behind one tool — exercise both formats
-    // so structuredContent validation against each format's branch of
-    // exportCanvasOutputSchema runs at least once. PNG also falls back to
-    // headless rendering when no browser is connected, so this doubles as the
-    // no-client-headless-render regression check.
-    const canvasPng = await callTool('export_canvas', { canvasId: created.id, format: 'png' })
-    if (canvasPng.format !== 'png' || !canvasPng.filePath) {
-      throw new Error(
-        `export_canvas(format:png) returned unexpected shape: ${JSON.stringify(canvasPng)}`,
-      )
-    }
-    console.log('[e2e] export_canvas(format:png) OK (headless render, no browser client)')
-
-    const canvasSvg = await callTool('export_canvas', { canvasId: created.id, format: 'svg' })
-    if (canvasSvg.format !== 'svg' || !(canvasSvg.filePath as string).endsWith('.svg')) {
-      throw new Error(
-        `export_canvas(format:svg) returned unexpected shape: ${JSON.stringify(canvasSvg)}`,
-      )
-    }
-    const svgMarkup = await readFile(canvasSvg.filePath as string, 'utf-8')
-    if (!svgMarkup.trim().startsWith('<svg')) {
-      throw new Error('export_canvas(format:svg) did not produce real SVG markup')
-    }
-    console.log('[e2e] export_canvas(format:svg) OK (real <svg> markup on disk)')
 
     console.log('\n[e2e] ALL OK')
   } catch (err) {
