@@ -18,6 +18,7 @@ import type {
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
 import { generateCanvasId } from './generate-canvas-id.js'
+import { reindexWorkspace } from './reindex.js'
 import { loadWorkspaceTree, saveWorkspaceTree } from './workspace-tree-io.js'
 
 /**
@@ -51,6 +52,7 @@ export async function wbCanvasCreate(
   const canvasId = generateCanvasId()
   tree.createNode(canvasId, input.segment, parentId)
   await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+  await reindexWorkspace(deps, input.workspaceId)
 
   return { canvasId, segment: input.segment }
 }
@@ -87,5 +89,6 @@ export async function wbCanvasDelete(
   const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
   tree.delete(node.id)
   await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+  await reindexWorkspace(deps, input.workspaceId)
   return { deleted: true }
 }

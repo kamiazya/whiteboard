@@ -1,13 +1,17 @@
-import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
+import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { reindexWorkspace } from './reindex.js'
 import { parseVersionRecord } from './version-record.js'
 
 export const versionRestoreInputSchema = z
   .object({
+    workspaceId: workspaceIdSchema.describe(
+      'Workspace ID that owns the canvas, used to reindex after restore.',
+    ),
     canvasId: canvasIdSchema.describe('Canvas ID (ULID) to restore a version onto, in place.'),
     versionId: z.string().min(1).describe('Version id returned by version_save or version_list.'),
   })
@@ -67,6 +71,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
       doc.commit()
 
       await saveDocSnapshot(deps, input.canvasId, doc)
+      await reindexWorkspace(deps, input.workspaceId)
 
       return {
         canvasId: input.canvasId,

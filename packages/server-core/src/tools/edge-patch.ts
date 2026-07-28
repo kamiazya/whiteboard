@@ -4,11 +4,13 @@ import {
   canvasIdSchema,
   nodeIdSchema,
   spatialCanvasSchema,
+  workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { EdgeNotFoundError, PatchValidationError } from './errors.js'
+import { reindexWorkspace } from './reindex.js'
 
 export const edgePatchFieldsSchema = z
   .object({
@@ -24,6 +26,7 @@ export type EdgePatchFields = z.infer<typeof edgePatchFieldsSchema>
 
 export const edgePatchInputSchema = z
   .object({
+    workspaceId: workspaceIdSchema,
     canvasId: canvasIdSchema,
     // canvas-model has no distinct edgeIdSchema — edges and nodes share
     // the same nanoid-style id shape (`nodeIdSchema` only enforces
@@ -75,6 +78,7 @@ export function createEdgePatchTool(deps: ServerDeps) {
       }
 
       await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await reindexWorkspace(deps, input.workspaceId)
 
       return { canvasId: input.canvasId, edge: updatedEdge }
     },

@@ -89,3 +89,10 @@ export {
   VersionNotFoundError,
 } from './tools/version-restore.js'
 export type { VersionRestoreInput, VersionRestoreOutput } from './tools/version-restore.js'
+export { reindexWorkspace } from './tools/reindex.js'
+export {
+  createReindexTool,
+  reindexInputSchema,
+  reindexOutputSchema,
+} from './tools/reindex-tool.js'
+export type { ReindexInput, ReindexOutput } from './tools/reindex-tool.js'
