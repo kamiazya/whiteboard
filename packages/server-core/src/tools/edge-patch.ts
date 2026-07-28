@@ -11,6 +11,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { EdgeNotFoundError, PatchValidationError } from './errors.js'
 import { reindexWorkspace } from './reindex.js'
+import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const edgePatchFieldsSchema = z
   .object({
@@ -52,6 +53,7 @@ export function createEdgePatchTool(deps: ServerDeps) {
     inputSchema: edgePatchInputSchema,
     outputSchema: edgePatchOutputSchema,
     async execute(input: EdgePatchInput): Promise<EdgePatchOutput> {
+      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
 
       const edge = canvas.edges.find((candidate) => candidate.id === input.edgeId)

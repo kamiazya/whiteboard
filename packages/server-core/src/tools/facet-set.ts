@@ -9,6 +9,7 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { reindexWorkspace } from './reindex.js'
+import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{domain}/{version}` key
@@ -40,6 +41,7 @@ export function createFacetSetTool(deps: ServerDeps) {
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     async execute(input: FacetSetInput): Promise<FacetSetOutput> {
+      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
       const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...input.facets }

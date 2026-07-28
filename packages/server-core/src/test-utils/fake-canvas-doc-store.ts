@@ -12,7 +12,8 @@ import type {
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-canvas-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import type { CanvasId } from '@kamiazya/whiteboard-canvas-model'
+import type { CanvasId, WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
+import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
@@ -25,9 +26,10 @@ function docRefKey(docRef: DocRef): string {
 
 /**
  * An in-memory CanvasDocStore fake shared across server-core tool tests.
- * Keyed by `DocRef` (canvas or workspace-tree) so a single fake instance
- * can back both a mutation tool's canvas doc and the `reindexWorkspace`
- * call it triggers, which reads the workspace-tree doc.
+ * Keyed by `docRef` (canvas OR workspace-tree) so a single fake instance
+ * backs both a mutation tool's canvas doc and the workspace-tree reindex
+ * reads that a mutation now triggers, matching how a real store scopes
+ * storage by DocRef rather than by store instance.
  */
 export class FakeCanvasDocStore implements CanvasDocStore {
   private readonly saved = new Map<string, SaveSnapshotInput>()
@@ -75,5 +77,31 @@ export async function seedDoc(
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+  })
+}
+
+/**
+ * Registers `canvasId` under `workspaceId`'s workspace tree so
+ * `assertCanvasInWorkspace` (the workspace-ownership guard every mutation
+ * tool runs before touching a canvas doc) accepts the pair. Tool tests that
+ * seed a canvas doc directly via `seedDoc`/`seedCanvas` — bypassing
+ * `wbCanvasCreate` — need this to keep exercising the "known, owned canvas"
+ * path rather than tripping the ownership guard by accident.
+ */
+export async function registerCanvasInWorkspace(
+  store: FakeCanvasDocStore,
+  workspaceId: WorkspaceId,
+  canvasId: CanvasId,
+  segment = 'doc',
+): Promise<void> {
+  const tree = new WorkspaceTree(new LoroDoc())
+  tree.createNode(canvasId, segment)
+  const bytes = tree.exportSnapshot()
+  const { manifest, chunks } = chunkSnapshot(bytes, SNAPSHOT_MAX_CHUNK_BYTES)
+  await store.saveSnapshot({
+    docRef: { kind: 'workspace-tree', workspaceId },
+    manifest,
+    chunks,
+    frontier: tree.exportFrontier(),
   })
 }

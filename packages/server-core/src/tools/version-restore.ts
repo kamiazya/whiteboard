@@ -6,12 +6,11 @@ import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { reindexWorkspace } from './reindex.js'
 import { parseVersionRecord } from './version-record.js'
+import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const versionRestoreInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema.describe(
-      'Workspace ID that owns the canvas, used to reindex after restore.',
-    ),
+    workspaceId: workspaceIdSchema.describe('Workspace ID the target canvas belongs to.'),
     canvasId: canvasIdSchema.describe('Canvas ID (ULID) to restore a version onto, in place.'),
     versionId: z.string().min(1).describe('Version id returned by version_save or version_list.'),
   })
@@ -44,6 +43,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
     async execute(input: VersionRestoreInput): Promise<VersionRestoreOutput> {
+      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
       const versions = doc.getMap('versions')

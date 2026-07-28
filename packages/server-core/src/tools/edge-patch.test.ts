@@ -2,9 +2,13 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, test } from 'vitest'
-import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
-import { FakeWorkspaceIndex } from '../test-utils/fake-workspace-index.js'
+import { describe, expect, test, vi } from 'vitest'
+import {
+  FakeCanvasDocStore,
+  registerCanvasInWorkspace,
+} from '../test-utils/fake-canvas-doc-store.js'
+import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
+import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { createEdgePatchTool } from './edge-patch.js'
 import { EdgeNotFoundError, PatchValidationError } from './errors.js'
 
@@ -15,6 +19,7 @@ async function seedCanvas(
   canvasDocStore: FakeCanvasDocStore,
   canvas: SpatialCanvas,
 ): Promise<void> {
+  await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
@@ -27,7 +32,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: new FakeWorkspaceIndex(), blobStore: {} as never }
+  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
 }
 
 const BASE_CANVAS: SpatialCanvas = {
@@ -62,6 +67,28 @@ describe('edge_patch tool', () => {
     })
   })
 
+  test('reindexes the workspace after patching an edge', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    const deps = makeDeps(canvasDocStore)
+    const applyRowsSpy = vi.spyOn(deps.workspaceIndex, 'applyRows')
+    const tool = createEdgePatchTool(deps)
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      edgeId: 'e1',
+      patch: { color: '3' },
+    })
+
+    // Spying on `applyRows` (rather than re-checking `listCanvases`/
+    // `queryFacet`, which an edge patch never changes) is what actually
+    // pins the reindex-after-mutation wiring in this tool.
+    expect(applyRowsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: WORKSPACE_ID }),
+    )
+  })
+
   test('throws EdgeNotFoundError for an unknown edgeId', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
     await seedCanvas(canvasDocStore, BASE_CANVAS)
@@ -90,5 +117,20 @@ describe('edge_patch tool', () => {
         patch: { toNode: 'does-not-exist' },
       }),
     ).rejects.toThrow(PatchValidationError)
+  })
+
+  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, BASE_CANVAS)
+    const tool = createEdgePatchTool(makeDeps(canvasDocStore))
+
+    await expect(
+      tool.execute({
+        workspaceId: 'ws-other',
+        canvasId: CANVAS_ID,
+        edgeId: 'e1',
+        patch: { color: '1' },
+      }),
+    ).rejects.toThrow(CanvasNotFoundError)
   })
 })

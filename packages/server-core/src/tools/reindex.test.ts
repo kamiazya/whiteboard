@@ -1,113 +1,190 @@
-import type {
-  ApplyRowsInput,
-  CanvasDocStore,
-  WorkspaceIndex,
-} from '@kamiazya/whiteboard-canvas-ports'
-import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
+import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
+import { WorkspaceTree, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as logModule from '../log.js'
+import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
-import { createFacetSetTool } from './facet-set.js'
-import { reindexWorkspace } from './reindex.js'
-import { saveWorkspaceTree } from './workspace-tree-io.js'
+import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
+import { reindexAllWorkspaces, reindexWorkspace } from './reindex.js'
+import { loadWorkspaceTree, saveWorkspaceTree } from './workspace-tree-io.js'
 
-const WORKSPACE_ID = 'ws-1'
-const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const MAX_CHUNK_BYTES = 1_000_000
 
-class RecordingWorkspaceIndex implements WorkspaceIndex {
-  readonly calls: ApplyRowsInput[] = []
-
-  async applyRows(input: ApplyRowsInput): Promise<void> {
-    this.calls.push(input)
-  }
-
-  async resolveAlias(): Promise<never> {
-    throw new Error('not implemented')
-  }
-
-  async resolveAliasHistory(): Promise<never> {
-    throw new Error('not implemented')
-  }
-
-  async listCanvases(): Promise<never> {
-    throw new Error('not implemented')
-  }
-
-  async queryFacet(): Promise<never> {
-    throw new Error('not implemented')
-  }
-
-  async listBacklinks(): Promise<never> {
-    throw new Error('not implemented')
+function makeDeps(): ServerDeps {
+  return {
+    canvasDocStore: createInMemoryCanvasDocStore(),
+    workspaceIndex: createInMemoryWorkspaceIndex(),
+    blobStore: {} as never,
   }
 }
 
-function makeDeps(canvasDocStore: CanvasDocStore, workspaceIndex: WorkspaceIndex) {
-  return { canvasDocStore, workspaceIndex, blobStore: {} as never }
+async function saveCanvasWithFacets(
+  deps: ServerDeps,
+  canvasId: string,
+  facets: Record<string, unknown>,
+): Promise<void> {
+  const doc = new LoroDoc()
+  writeFacets(doc, facets)
+  const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), MAX_CHUNK_BYTES)
+  await deps.canvasDocStore.saveSnapshot({
+    docRef: { kind: 'canvas', canvasId },
+    manifest,
+    chunks,
+    frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+  })
+}
+
+async function createWorkspaceWithCanvas(
+  deps: ServerDeps,
+  workspaceId: string,
+  segment: string,
+): Promise<string> {
+  const tree = new WorkspaceTree(new LoroDoc())
+  const canvasId = `canvas-${segment}`
+  tree.createNode(canvasId, segment)
+  await saveWorkspaceTree(deps.canvasDocStore, workspaceId, tree)
+  return canvasId
 }
 
 describe('reindexWorkspace', () => {
-  test('applies empty rows for a workspace with no tree nodes', async () => {
-    const canvasDocStore = createInMemoryCanvasDocStore()
-    const workspaceIndex = new RecordingWorkspaceIndex()
+  it('applies rows reflecting every canvas currently in the workspace', async () => {
+    const deps = makeDeps()
+    const canvasId = await createWorkspaceWithCanvas(deps, 'ws-1', 'doc-a')
+    await saveCanvasWithFacets(deps, canvasId, { 'example/1': { hello: 'world' } })
 
-    await reindexWorkspace(makeDeps(canvasDocStore, workspaceIndex), WORKSPACE_ID)
+    await reindexWorkspace(deps, 'ws-1')
 
-    expect(workspaceIndex.calls).toHaveLength(1)
-    expect(workspaceIndex.calls[0]).toEqual({
-      workspaceId: WORKSPACE_ID,
-      canvasList: [],
+    const listed = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-1' })
+    expect(listed.rows.map((row) => row.canvasId)).toEqual([canvasId])
+
+    const facetHit = await deps.workspaceIndex.queryFacet({
+      workspaceId: 'ws-1',
+      facet: 'facets.example/1',
+      value: '',
+    })
+    expect(facetHit.canvasIds).toEqual([canvasId])
+  })
+
+  it('applies empty rows (clearing stale state) for a workspace with zero canvases', async () => {
+    const deps = makeDeps()
+    // Prime the index with stale rows from a previous (now-gone) canvas.
+    await deps.workspaceIndex.applyRows({
+      workspaceId: 'ws-empty',
+      canvasList: [{ canvasId: 'stale', title: 'stale', updatedAtMs: 0 }],
       facets: [],
       aliases: [],
       backlinks: [],
       aliasHistory: [],
     })
+
+    await reindexWorkspace(deps, 'ws-empty')
+
+    const listed = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-empty' })
+    expect(listed.rows).toEqual([])
   })
 
-  test('derives canvas list, alias, and facet rows from a saved tree + canvas doc', async () => {
-    const canvasDocStore = createInMemoryCanvasDocStore()
-    const workspaceIndex = new RecordingWorkspaceIndex()
+  it('produces a canvas-list row with the tree segment as title when no doc was ever saved', async () => {
+    const deps = makeDeps()
+    const canvasId = await createWorkspaceWithCanvas(deps, 'ws-1', 'orphan-segment')
 
-    const tree = new WorkspaceTree(new LoroDoc())
-    tree.createNode(CANVAS_ID, 'my-canvas')
-    await saveWorkspaceTree(canvasDocStore, WORKSPACE_ID, tree)
+    await reindexWorkspace(deps, 'ws-1')
 
-    const deps = makeDeps(canvasDocStore, workspaceIndex)
-    const facetSet = createFacetSetTool(deps)
-    await facetSet.execute({
-      workspaceId: WORKSPACE_ID,
-      canvasId: CANVAS_ID,
-      facets: { 'kanban/1': { status: 'todo' } },
+    const listed = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-1' })
+    expect(listed.rows).toEqual([
+      { canvasId, title: 'orphan-segment', updatedAtMs: expect.any(Number) },
+    ])
+  })
+
+  it('skips a canvas whose doc snapshot cannot be reassembled instead of aborting the whole reindex', async () => {
+    const deps = makeDeps()
+    const goodCanvasId = await createWorkspaceWithCanvas(deps, 'ws-1', 'good')
+    const existingTree = await loadWorkspaceTree(deps.canvasDocStore, 'ws-1')
+    existingTree.createNode('canvas-corrupt', 'corrupt')
+    await saveWorkspaceTree(deps.canvasDocStore, 'ws-1', existingTree)
+
+    // A manifest claiming more chunks than are actually stored makes
+    // `reassembleSnapshot` throw when this canvas doc is loaded.
+    await deps.canvasDocStore.saveSnapshot({
+      docRef: { kind: 'canvas', canvasId: 'canvas-corrupt' },
+      manifest: { chunkCount: 1, totalBytes: 10, maxChunkBytes: 1_000_000 },
+      chunks: [{ index: 0, of: 1, bytes: new Uint8Array([1, 2, 3]) }],
+      frontier: new Uint8Array(),
     })
 
-    // facet_set already triggers its own reindex; this call is redundant but
-    // must be idempotent against unchanged state.
-    await reindexWorkspace(deps, WORKSPACE_ID)
+    await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeTypeOf('number')
 
-    expect(workspaceIndex.calls).toHaveLength(2)
-    const applied = workspaceIndex.calls[1]
-    expect(applied.workspaceId).toBe(WORKSPACE_ID)
-    expect(applied.canvasList).toEqual([
-      { canvasId: CANVAS_ID, title: 'my-canvas', updatedAtMs: expect.any(Number) },
-    ])
-    expect(applied.aliases).toEqual([{ alias: 'my-canvas', canvasId: CANVAS_ID }])
-    expect(applied.facets).toEqual([{ facet: 'facets.kanban/1', value: '', canvasId: CANVAS_ID }])
+    const listed = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-1' })
+    expect(listed.rows.map((row) => row.canvasId)).toEqual([goodCanvasId])
   })
 
-  test('skips a tree node whose canvas has no saved snapshot yet', async () => {
-    const canvasDocStore = createInMemoryCanvasDocStore()
-    const workspaceIndex = new RecordingWorkspaceIndex()
+  it('logs at error level and does not throw when applyRows rejects', async () => {
+    const deps = makeDeps()
+    await createWorkspaceWithCanvas(deps, 'ws-1', 'doc-a')
+    const errorSpy = vi.fn()
+    logModule.setLogSink((record) => {
+      if (record.level === 'error') errorSpy(record)
+    })
+    try {
+      deps.workspaceIndex.applyRows = vi.fn().mockRejectedValue(new Error('write failed'))
 
-    const tree = new WorkspaceTree(new LoroDoc())
-    tree.createNode(CANVAS_ID, 'unsaved-canvas')
-    await saveWorkspaceTree(canvasDocStore, WORKSPACE_ID, tree)
+      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeTypeOf('number')
 
-    await reindexWorkspace(makeDeps(canvasDocStore, workspaceIndex), WORKSPACE_ID)
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: 'reindex',
+          level: 'error',
+          msg: expect.stringContaining('apply workspace index rows'),
+        }),
+      )
+    } finally {
+      logModule.setLogSink(() => {})
+    }
+  })
 
-    const applied = workspaceIndex.calls[0]
-    expect(applied.facets).toEqual([])
-    // the alias row is still derived from the tree itself, independent of doc state
-    expect(applied.aliases).toEqual([{ alias: 'unsaved-canvas', canvasId: CANVAS_ID }])
-    expect(applied.canvasList).toEqual([])
+  it('logs at error level and does not throw when the workspace-tree manifest cannot be reassembled', async () => {
+    const deps = makeDeps()
+    // A manifest claiming more chunks than are actually stored makes
+    // `reassembleSnapshot` throw when the workspace-tree doc itself is
+    // loaded (as opposed to a per-canvas doc, covered above).
+    await deps.canvasDocStore.saveSnapshot({
+      docRef: { kind: 'workspace-tree', workspaceId: 'ws-1' },
+      manifest: { chunkCount: 1, totalBytes: 10, maxChunkBytes: 1_000_000 },
+      chunks: [{ index: 0, of: 1, bytes: new Uint8Array([1, 2, 3]) }],
+      frontier: new Uint8Array(),
+    })
+    const errorSpy = vi.fn()
+    logModule.setLogSink((record) => {
+      if (record.level === 'error') errorSpy(record)
+    })
+
+    try {
+      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeTypeOf('number')
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: 'reindex',
+          level: 'error',
+          msg: expect.stringContaining('derive workspace index rows'),
+        }),
+      )
+    } finally {
+      logModule.setLogSink(() => {})
+    }
+  })
+})
+
+describe('reindexAllWorkspaces', () => {
+  it('backfills every listed workspace', async () => {
+    const deps = makeDeps()
+    const canvasA = await createWorkspaceWithCanvas(deps, 'ws-a', 'doc-a')
+    const canvasB = await createWorkspaceWithCanvas(deps, 'ws-b', 'doc-b')
+
+    await reindexAllWorkspaces(deps, ['ws-a', 'ws-b'])
+
+    const listedA = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-a' })
+    const listedB = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-b' })
+    expect(listedA.rows.map((r) => r.canvasId)).toEqual([canvasA])
+    expect(listedB.rows.map((r) => r.canvasId)).toEqual([canvasB])
   })
 })

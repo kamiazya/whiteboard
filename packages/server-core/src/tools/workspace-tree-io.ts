@@ -3,6 +3,7 @@ import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-p
 import type { CanvasDocStore } from '@kamiazya/whiteboard-canvas-ports'
 import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
+import { CanvasNotFoundError } from './canvas-crud.errors.js'
 
 // Cloudflare Durable Objects cap inbound/outbound WebSocket messages at
 // roughly 2MB; 1MB leaves headroom for the manifest+chunk plumbing around
@@ -28,6 +29,27 @@ export async function loadWorkspaceTree(
   }
   const bytes = reassembleSnapshot(result.manifest, result.chunks)
   return WorkspaceTree.fromSnapshot(bytes)
+}
+
+/**
+ * Guards a mutation tool against a caller-supplied `workspaceId` that does
+ * not actually own `canvasId` (stale cached id, copy-paste across two open
+ * canvases, client bug). Without this check a mismatched pair would still
+ * pass every canvas-doc-level validation — `loadCanvasDoc`/
+ * `loadOrCreateCanvasDoc` address the doc purely by `canvasId` — and the
+ * only symptom would be a silently stale `WorkspaceIndex` for the real
+ * workspace, since `reindexWorkspace` fails open and only logs. Call this
+ * before any mutation so the caller gets an explicit, typed rejection
+ * instead of a hard-to-detect index-staleness bug.
+ */
+export async function assertCanvasInWorkspace(
+  canvasDocStore: CanvasDocStore,
+  workspaceId: WorkspaceId,
+  canvasId: string,
+): Promise<void> {
+  const tree = await loadWorkspaceTree(canvasDocStore, workspaceId)
+  const exists = tree.snapshot().nodes.some((node) => node.canvasId === canvasId)
+  if (!exists) throw new CanvasNotFoundError(workspaceId, canvasId)
 }
 
 /**
