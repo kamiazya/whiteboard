@@ -7,7 +7,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { reindexAllWorkspaces, reindexWorkspace } from './reindex.js'
-import { saveWorkspaceTree } from './workspace-tree-io.js'
+import { loadWorkspaceTree, saveWorkspaceTree } from './workspace-tree-io.js'
 
 const MAX_CHUNK_BYTES = 1_000_000
 
@@ -99,15 +99,9 @@ describe('reindexWorkspace', () => {
   it('skips a canvas whose doc snapshot cannot be reassembled instead of aborting the whole reindex', async () => {
     const deps = makeDeps()
     const goodCanvasId = await createWorkspaceWithCanvas(deps, 'ws-1', 'good')
-    const badTree = new WorkspaceTree(new LoroDoc())
-    // Reuse the already-created tree rather than a fresh one so both nodes
-    // land under the same workspace.
-    const existingTree = await import('./workspace-tree-io.js').then((m) =>
-      m.loadWorkspaceTree(deps.canvasDocStore, 'ws-1'),
-    )
+    const existingTree = await loadWorkspaceTree(deps.canvasDocStore, 'ws-1')
     existingTree.createNode('canvas-corrupt', 'corrupt')
     await saveWorkspaceTree(deps.canvasDocStore, 'ws-1', existingTree)
-    void badTree
 
     // A manifest claiming more chunks than are actually stored makes
     // `reassembleSnapshot` throw when this canvas doc is loaded.
