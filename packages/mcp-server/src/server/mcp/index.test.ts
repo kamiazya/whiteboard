@@ -47,6 +47,21 @@ vi.mock('../store/db/prepare.js', () => ({
 vi.mock('./stdio-lifecycle.js', () => ({
   installStdioLifecycle: vi.fn(() => () => undefined),
 }))
+vi.mock('./opencanvas-tools.js', () => ({
+  registerOpenCanvasTools: vi.fn(),
+}))
+vi.mock('../store/db/index.js', () => ({
+  getDb: vi.fn(async () => ({})),
+}))
+vi.mock('../store/libsql/libsql-canvas-doc-store.js', () => ({
+  LibsqlCanvasDocStore: vi.fn(),
+}))
+vi.mock('../store/libsql/libsql-workspace-index.js', () => ({
+  LibsqlWorkspaceIndex: vi.fn(),
+}))
+vi.mock('../store/fs/fs-blob-store.js', () => ({
+  FsBlobStore: vi.fn(),
+}))
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: vi.fn(function FakeMcpServer(this: Record<string, unknown>) {
     this.server = { registerCapabilities: vi.fn() }
