@@ -56,7 +56,7 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
 
   // version_save / version_list / version_restore are already registered
   // via the legacy Excalidraw tool path (tool-registration.ts). Skipped
-  // here to avoid double-registration; 7f-2 will retire the old path.
+  // here to avoid double-registration.
 
   // body_patch uses z.discriminatedUnion — flatten its options into a
   // raw shape so registerToolWithAnnotations can consume it.
