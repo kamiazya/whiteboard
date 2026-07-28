@@ -1,0 +1,58 @@
+import type { WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
+import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
+import type { CanvasDocStore } from '@kamiazya/whiteboard-canvas-ports'
+import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
+import { LoroDoc } from 'loro-crdt'
+
+// Cloudflare Durable Objects cap inbound/outbound WebSocket messages at
+// roughly 2MB; 1MB leaves headroom for the manifest+chunk plumbing around
+// the raw bytes. This constant lives here (a composition-root-facing tool),
+// not in canvas-ports, per that package's rule that chunk-size caps are
+// always a caller-supplied parameter.
+const MAX_CHUNK_BYTES = 1_000_000
+
+/**
+ * Loads the workspace-tree LoroDoc for `workspaceId` from `canvasDocStore`.
+ * A workspace with no persisted tree yet (first access) resolves to an
+ * empty `WorkspaceTree` rather than throwing.
+ */
+export async function loadWorkspaceTree(
+  canvasDocStore: CanvasDocStore,
+  workspaceId: WorkspaceId,
+): Promise<WorkspaceTree> {
+  const result = await canvasDocStore.loadSnapshot({
+    docRef: { kind: 'workspace-tree', workspaceId },
+  })
+  if (result === null) {
+    return new WorkspaceTree(new LoroDoc())
+  }
+  const bytes = reassembleSnapshot(result.manifest, result.chunks)
+  return WorkspaceTree.fromSnapshot(bytes)
+}
+
+/**
+ * Persists `tree` back to `canvasDocStore` for `workspaceId`.
+ *
+ * Known limitation: this is a read-modify-write over the same document with
+ * no optimistic-concurrency check against the frontier read at load time.
+ * Two concurrent requests against the same workspace can race and the
+ * later save wins, silently discarding the earlier mutation. Accepted for
+ * this slice; revisit with a frontier-compare-before-save guard once
+ * multi-request concurrency on a single workspace is a real deployment
+ * shape.
+ */
+export async function saveWorkspaceTree(
+  canvasDocStore: CanvasDocStore,
+  workspaceId: WorkspaceId,
+  tree: WorkspaceTree,
+): Promise<void> {
+  const bytes = tree.exportSnapshot()
+  const { manifest, chunks } = chunkSnapshot(bytes, MAX_CHUNK_BYTES)
+  const frontier = tree.exportFrontier()
+  await canvasDocStore.saveSnapshot({
+    docRef: { kind: 'workspace-tree', workspaceId },
+    manifest,
+    chunks,
+    frontier,
+  })
+}
