@@ -254,6 +254,7 @@ export async function runE2eCheckpointSmoke({
     // facet_set seeds extension-facet state on the created canvas so the version
     // saved below has content to round-trip through restore.
     const facets = await callTool('facet_set', {
+      workspaceId: WORKSPACE_ID,
       canvasId,
       facets: { 'e2e/1': { note: 'before-save' } },
     })
@@ -288,6 +289,7 @@ export async function runE2eCheckpointSmoke({
     console.log(`[e2e] version_list → ${versionEntries.length} version(s)`)
 
     const restored = await callTool('version_restore', {
+      workspaceId: WORKSPACE_ID,
       canvasId,
       versionId: saved.versionId,
     })
