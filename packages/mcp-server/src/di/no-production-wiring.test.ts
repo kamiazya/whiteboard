@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
 /**
- * storeMemoryModule/createContainer/the InMemory doubles are a test-level
- * composition, not something the live server wires up yet. Real store
- * implementations (libSQL/fs) land in a later slice and bind into the same
- * container factory — until then, production entrypoints must stay free of
- * this surface so a reviewer sees at a glance that it isn't load-bearing.
+ * storeMemoryModule/the InMemory doubles are test-only composition and must
+ * never leak into production wiring. createContainer/createStoreLocalModule
+ * ARE the production boot path now (real libSQL/fs implementations bound
+ * through the DI container) — but the boot path must construct stores only
+ * through that container, never by importing the concrete store classes
+ * directly, so a reviewer can see at a glance that DI is the single wiring
+ * point.
  *
  * Sources are captured via Vite's build-time `import.meta.glob` (raw text),
  * not `node:fs` at runtime, so a bad glob pattern fails loudly (empty match)
@@ -42,15 +44,29 @@ const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
     name: 'static import of di/store-memory.module',
     pattern: /from\s+['"].*di\/store-memory\.module/,
   },
-  { name: 'static import of di/container', pattern: /from\s+['"].*di\/container/ },
   {
     name: 'dynamic import of di/store-memory.module',
     pattern: /import\(['"].*di\/store-memory\.module/,
   },
-  { name: 'dynamic import of di/container', pattern: /import\(['"].*di\/container/ },
   { name: 'server/store/inmemory import', pattern: /server\/store\/inmemory/ },
-  { name: 'bare createContainer identifier', pattern: /\bcreateContainer\b/ },
   { name: 'bare storeMemoryModule identifier', pattern: /\bstoreMemoryModule\b/ },
+]
+
+// The boot path (server/mcp/index.ts) must construct stores only through the
+// DI container (createContainer + createStoreLocalModule), never by
+// importing a concrete store class directly — that would let a manual
+// `new LibsqlCanvasDocStore(...)` construction bypass the container and
+// silently drift from what the container actually binds.
+const FORBIDDEN_MANUAL_STORE_IMPORTS_IN_BOOT_PATH: readonly { name: string; pattern: RegExp }[] = [
+  {
+    name: 'direct import of LibsqlCanvasDocStore',
+    pattern: /from\s+['"].*libsql-canvas-doc-store/,
+  },
+  {
+    name: 'direct import of LibsqlWorkspaceIndex',
+    pattern: /from\s+['"].*libsql-workspace-index/,
+  },
+  { name: 'direct import of FsBlobStore', pattern: /from\s+['"].*fs-blob-store/ },
 ]
 
 function isProductionSource(path: string): boolean {
@@ -68,6 +84,20 @@ describe('DI/in-memory composition stays out of production wiring', () => {
 
   it.each(productionEntries)('%s does not import the DI/in-memory surface', (path, contents) => {
     for (const { name, pattern } of FORBIDDEN_PATTERNS) {
+      expect(pattern.test(contents), `${path} matched forbidden pattern: ${name}`).toBe(false)
+    }
+  })
+
+  const bootPathEntries = productionEntries.filter(([path]) => path.includes('server/mcp/index.ts'))
+
+  it('scans the mcp boot path entrypoint', () => {
+    expect(bootPathEntries.length).toBe(1)
+  })
+
+  it.each(
+    bootPathEntries,
+  )('%s constructs stores only through the DI container, not by direct class import', (path, contents) => {
+    for (const { name, pattern } of FORBIDDEN_MANUAL_STORE_IMPORTS_IN_BOOT_PATH) {
       expect(pattern.test(contents), `${path} matched forbidden pattern: ${name}`).toBe(false)
     }
   })

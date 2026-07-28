@@ -39,14 +39,16 @@ vi.mock('./opencanvas-tools.js', () => ({
 vi.mock('../store/db/index.js', () => ({
   getDb: vi.fn(async () => ({})),
 }))
-vi.mock('../store/libsql/libsql-canvas-doc-store.js', () => ({
-  LibsqlCanvasDocStore: vi.fn(),
+vi.mock('../../di/store-local.module.js', () => ({
+  createStoreLocalModule: vi.fn(() => 'fake-store-local-module'),
 }))
-vi.mock('../store/libsql/libsql-workspace-index.js', () => ({
-  LibsqlWorkspaceIndex: vi.fn(),
-}))
-vi.mock('../store/fs/fs-blob-store.js', () => ({
-  FsBlobStore: vi.fn(),
+vi.mock('../../di/container.js', () => ({
+  createContainer: vi.fn(() => 'fake-container'),
+  resolveServerDeps: vi.fn(() => ({
+    canvasDocStore: {},
+    workspaceIndex: {},
+    blobStore: {},
+  })),
 }))
 vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
   McpServer: vi.fn(function FakeMcpServer(this: Record<string, unknown>) {
