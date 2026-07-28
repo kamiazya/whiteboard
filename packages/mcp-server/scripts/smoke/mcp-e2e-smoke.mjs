@@ -497,66 +497,63 @@ async function main() {
   }
   console.log(`[e2e] canvas_view → scene with ${viewed.scene.elements.length} element(s) OK`)
 
-  // version_save labels the current state and returns a versionId. The
-  // restore-as-new-canvas flow (formerly the checkpoint pair) is now
-  // version_restore with targetSlug.
-  const saved = await callTool('version_save', { canvasId: created.id, label: 'e2e' })
-  if (!saved.versionId) throw new Error('version_save returned no id')
-  if (saved.elementCount !== insBefore.elementCount) {
-    throw new Error(
-      `element count mismatch: save=${saved.elementCount} inspect=${insBefore.elementCount}`,
-    )
+  // version_save/list/restore are wired through server-core and operate on
+  // ULID canvasIds (wb_canvas_create), not the {workspaceId}/{slug} form.
+  const workspaceId = created.id.split('/')[0]
+  const versionCanvas = await callTool('wb_canvas_create', {
+    workspaceId,
+    segment: 'e2e-version-canvas',
+  })
+  if (!versionCanvas.canvasId) {
+    throw new Error(`wb_canvas_create returned unexpected shape: ${JSON.stringify(versionCanvas)}`)
   }
-  console.log(`[e2e] version_save → ${saved.versionId} (${saved.elementCount} elems)`)
+  console.log(`[e2e] wb_canvas_create → ${versionCanvas.canvasId}`)
+
+  const facets = await callTool('facet_set', {
+    canvasId: versionCanvas.canvasId,
+    facets: { 'e2e/1': { note: 'before-save' } },
+  })
+  if (facets.canvasId !== versionCanvas.canvasId) {
+    throw new Error(`facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
+  }
+  console.log('[e2e] facet_set → seeded canvas state')
+
+  const saved = await callTool('version_save', {
+    canvasId: versionCanvas.canvasId,
+    label: 'e2e',
+  })
+  if (
+    !saved.versionId ||
+    saved.canvasId !== versionCanvas.canvasId ||
+    saved.label !== 'e2e' ||
+    !saved.timestamp ||
+    !saved.frontier
+  ) {
+    throw new Error(`version_save returned unexpected shape: ${JSON.stringify(saved)}`)
+  }
+  console.log(`[e2e] version_save → ${saved.versionId}`)
 
   const restored = await callTool('version_restore', {
-    canvasId: created.id,
+    canvasId: versionCanvas.canvasId,
     versionId: saved.versionId,
-    targetSlug: 'e2e-restored',
   })
-  if (restored.restoredAs !== 'new-canvas') {
-    throw new Error(`expected new-canvas restore, got ${restored.restoredAs}`)
+  if (
+    restored.canvasId !== versionCanvas.canvasId ||
+    restored.restoredVersionId !== saved.versionId ||
+    restored.label !== saved.label ||
+    restored.frontier !== saved.frontier
+  ) {
+    throw new Error(`version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
   }
-  if (!restored.canvasId.endsWith('/e2e-restored')) {
-    throw new Error(`unexpected restore canvasId: ${restored.canvasId}`)
-  }
-  console.log(`[e2e] version_restore → ${restored.canvasId}`)
-
-  const insAfter = await callTool('canvas_inspect', { canvasId: restored.canvasId })
-  if (insAfter.elementCount !== insBefore.elementCount) {
-    throw new Error(
-      `restored elementCount ${insAfter.elementCount} ≠ original ${insBefore.elementCount}`,
-    )
-  }
-  const types = (insAfter.elements ?? []).map((e) => e.type)
-  if (!types.includes('rectangle'))
-    throw new Error(`restored canvas missing rectangle: ${JSON.stringify(insAfter)}`)
-  console.log(
-    `[e2e] canvas_inspect(restored) → ${insAfter.elementCount} elems, types=${types.join(',')}`,
-  )
-
-  // Confirm overwrite behavior when the restore target already exists.
-  await expectRejected(
-    callTool('version_restore', {
-      canvasId: created.id,
-      versionId: saved.versionId,
-      targetSlug: 'e2e-restored',
-    }),
-    /already exists/,
-    'duplicate restore without overwrite',
-  )
-
-  await callTool('version_restore', {
-    canvasId: created.id,
-    versionId: saved.versionId,
-    targetSlug: 'e2e-restored',
-    overwrite: true,
-  })
-  console.log(`[e2e] version_restore overwrite=true OK`)
+  console.log(`[e2e] version_restore → ${restored.restoredVersionId}`)
 
   // version_list should surface the version we just saved.
-  const listed = await callTool('version_list', { canvasId: created.id })
-  if (!listed.versions.some((v) => v.id === saved.versionId)) {
+  const listed = await callTool('version_list', { canvasId: versionCanvas.canvasId })
+  if (
+    listed.canvasId !== versionCanvas.canvasId ||
+    !Array.isArray(listed.versions) ||
+    !listed.versions.some((v) => v.versionId === saved.versionId)
+  ) {
     throw new Error(`version_list missing the saved id: ${JSON.stringify(listed)}`)
   }
   console.log('[e2e] version_list contains saved versionId')
