@@ -13,6 +13,13 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, readonly string[]>> = {
     '@kamiazya/whiteboard-canvas-codec',
     '@kamiazya/whiteboard-canvas-ports',
   ],
+  '@kamiazya/whiteboard-server-core': [
+    '@kamiazya/whiteboard-canvas-model',
+    '@kamiazya/whiteboard-canvas-codec',
+    '@kamiazya/whiteboard-canvas-render',
+    '@kamiazya/whiteboard-canvas-ports',
+    '@kamiazya/whiteboard-canvas-workspace',
+  ],
 }
 
 export function allowedDependencies(packageName: string): readonly string[] {

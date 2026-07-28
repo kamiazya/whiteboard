@@ -50,6 +50,7 @@ describe('docs/ contract', () => {
       'packages/canvas-codec': 'canvas-codec',
       'packages/canvas-render': 'canvas-render',
       'packages/canvas-workspace': 'canvas-workspace',
+      'packages/server-core': 'server-core',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',
     }
