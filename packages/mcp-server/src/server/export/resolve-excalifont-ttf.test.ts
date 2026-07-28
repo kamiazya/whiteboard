@@ -4,7 +4,7 @@
 // as a test failure in the PNG-only headless-renderer.test.ts above it. This
 // test asserts the real dist/web-app layout resolves to a non-null buffer.
 
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -34,7 +34,10 @@ describe('resolveExcalifontTtf against the real dist/web-app layout', () => {
   let createdFontsDir = false
 
   beforeAll(() => {
-    if (existsSync(DIST_WEB_APP_FONTS_DIR)) return
+    const hasWoff2 =
+      existsSync(DIST_WEB_APP_FONTS_DIR) &&
+      readdirSync(DIST_WEB_APP_FONTS_DIR).some((f) => f.endsWith('.woff2'))
+    if (hasWoff2) return
     // Mirror what apps/web's vite build + copy-into-mcp-dist.mjs produce:
     // dist/web-app/fonts/Excalifont/*.woff2 (flat, no node_modules subpath).
     mkdirSync(DIST_WEB_APP_FONTS_DIR, { recursive: true })
