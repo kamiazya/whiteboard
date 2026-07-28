@@ -36,7 +36,7 @@ export const getCanvasInputSchema = z
   })
   .strict()
 
-export const canvasDetailSchema = z
+const canvasDetailSchema = z
   .object({
     canvasId: canvasIdSchema,
     segment: z.string(),
