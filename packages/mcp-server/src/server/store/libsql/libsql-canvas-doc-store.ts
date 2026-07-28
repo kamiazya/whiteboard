@@ -77,18 +77,14 @@ export class LibsqlCanvasDocStore implements CanvasDocStore {
       return null
     }
 
-    const [chunkRows, frontierRow] = await Promise.all([
+    const [chunkRows, frontier] = await Promise.all([
       this.db
         .selectFrom('canvasDocSnapshotChunks')
         .select(['chunkIndex', 'bytes'])
         .where('docKey', '=', docKey)
         .orderBy('chunkIndex', 'asc')
         .execute(),
-      this.db
-        .selectFrom('canvasDocFrontiers')
-        .select('frontier')
-        .where('docKey', '=', docKey)
-        .executeTakeFirst(),
+      this.currentFrontier(docKey),
     ])
 
     const chunks: SnapshotChunk[] = chunkRows.map((row) => ({
@@ -104,8 +100,20 @@ export class LibsqlCanvasDocStore implements CanvasDocStore {
         maxChunkBytes: header.maxChunkBytes,
       },
       chunks,
-      frontier: frontierRow ? normalizeBlob(frontierRow.frontier) : new Uint8Array(),
+      frontier,
     }
+  }
+
+  // Current "latest write wins" frontier for a doc, or an empty frontier when
+  // the doc has never been written. loadSnapshot/loadDeltas report this rather
+  // than a per-log frontier — see their doc comments for why.
+  private async currentFrontier(docKey: string): Promise<Frontier> {
+    const row = await this.db
+      .selectFrom('canvasDocFrontiers')
+      .select('frontier')
+      .where('docKey', '=', docKey)
+      .executeTakeFirst()
+    return row ? normalizeBlob(row.frontier) : new Uint8Array()
   }
 
   async saveSnapshot({ docRef, manifest, chunks, frontier }: SaveSnapshotInput): Promise<void> {
@@ -196,21 +204,19 @@ export class LibsqlCanvasDocStore implements CanvasDocStore {
    */
   async loadDeltas({ docRef }: LoadDeltasInput): Promise<LoadDeltasResult> {
     const docKey = docRefKey(docRef)
-    const rows = await this.db
-      .selectFrom('canvasDocDeltas')
-      .select('bytes')
-      .where('docKey', '=', docKey)
-      .orderBy('seq', 'asc')
-      .execute()
-    const frontierRow = await this.db
-      .selectFrom('canvasDocFrontiers')
-      .select('frontier')
-      .where('docKey', '=', docKey)
-      .executeTakeFirst()
+    const [rows, frontier] = await Promise.all([
+      this.db
+        .selectFrom('canvasDocDeltas')
+        .select('bytes')
+        .where('docKey', '=', docKey)
+        .orderBy('seq', 'asc')
+        .execute(),
+      this.currentFrontier(docKey),
+    ])
 
     return {
       updates: rows.map((row) => normalizeBlob(row.bytes)),
-      frontier: frontierRow ? normalizeBlob(frontierRow.frontier) : new Uint8Array(),
+      frontier,
     }
   }
 
