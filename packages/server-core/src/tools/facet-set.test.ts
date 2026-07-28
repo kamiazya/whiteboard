@@ -1,51 +1,10 @@
-import type {
-  AppendDeltasInput,
-  AppendDeltasResult,
-  CanvasDocStore,
-  LoadDeltasInput,
-  LoadDeltasResult,
-  LoadSnapshotInput,
-  LoadSnapshotResult,
-  ReadFrontierInput,
-  ReadFrontierResult,
-  SaveSnapshotInput,
-} from '@kamiazya/whiteboard-canvas-ports'
+import { readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { readFacets } from '@kamiazya/whiteboard-canvas-workspace'
+import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
-
-/** An in-memory CanvasDocStore fake, scoped to this test file only. */
-class FakeCanvasDocStore implements CanvasDocStore {
-  private saved: SaveSnapshotInput | undefined
-
-  async loadSnapshot(_input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
-    if (this.saved === undefined) return null
-    return {
-      manifest: this.saved.manifest,
-      chunks: this.saved.chunks,
-      frontier: this.saved.frontier,
-    }
-  }
-
-  async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
-    this.saved = input
-  }
-
-  async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
-    throw new Error('not implemented')
-  }
-
-  async loadDeltas(_input: LoadDeltasInput): Promise<LoadDeltasResult> {
-    throw new Error('not implemented')
-  }
-
-  async readFrontier(_input: ReadFrontierInput): Promise<ReadFrontierResult> {
-    throw new Error('not implemented')
-  }
-}
 
 describe('facet_set tool', () => {
   test('sets a facet on a canvas with no prior snapshot', async () => {

@@ -13,7 +13,10 @@ import {
   listCanvasesInputSchema,
 } from './tools/canvas-crud.schemas.js'
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
+import { createBodyPatchTool } from './tools/body-patch.js'
+import { createEdgePatchTool } from './tools/edge-patch.js'
 import { createFacetSetTool } from './tools/facet-set.js'
+import { createNodePatchTool } from './tools/node-patch.js'
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono()
@@ -78,6 +81,9 @@ export function createServer(deps: ServerDeps) {
 
   const tools = {
     facetSet: createFacetSetTool(deps),
+    nodePatch: createNodePatchTool(deps),
+    edgePatch: createEdgePatchTool(deps),
+    bodyPatch: createBodyPatchTool(deps),
   }
   return { app, tools }
 }
