@@ -190,6 +190,7 @@
     "pino": "^10.3.1",
     "wawoff2": "^2.0.1",
     "ws": "^8.21.0",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

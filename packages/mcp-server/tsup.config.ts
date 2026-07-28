@@ -43,11 +43,15 @@ export default defineConfig({
   // rather than churn a shared root config.
   dts: { compilerOptions: { ignoreDeprecations: '6.0' } },
   clean: true,
+  // yaml is CJS; bundling it into ESM triggers `require("process")` failures.
+  // Keep it external and list it in dependencies so npx finds it at runtime.
+  external: ['yaml'],
   noExternal: [
     '@kamiazya/whiteboard-canvas-model',
     '@kamiazya/whiteboard-canvas-codec',
     '@kamiazya/whiteboard-canvas-render',
     '@kamiazya/whiteboard-canvas-ports',
     '@kamiazya/whiteboard-canvas-workspace',
+    '@kamiazya/whiteboard-server-core',
   ],
 })
