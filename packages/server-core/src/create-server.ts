@@ -15,8 +15,6 @@ import {
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 
-export type { ServerDeps } from './server-deps.js'
-
 export function createServer(deps: ServerDeps) {
   const app = new Hono()
 
