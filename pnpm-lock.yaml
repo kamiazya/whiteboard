@@ -605,12 +605,24 @@ importers:
 
   packages/server-core:
     dependencies:
+      '@kamiazya/whiteboard-canvas-model':
+        specifier: workspace:*
+        version: link:../canvas-model
       '@kamiazya/whiteboard-canvas-ports':
         specifier: workspace:*
         version: link:../canvas-ports
+      '@kamiazya/whiteboard-canvas-workspace':
+        specifier: workspace:*
+        version: link:../canvas-workspace
       hono:
         specifier: ^4.12.27
         version: 4.12.27
+      loro-crdt:
+        specifier: 'catalog:'
+        version: 1.13.6
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
       typescript:
         specifier: 'catalog:'

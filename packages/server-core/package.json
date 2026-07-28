@@ -19,8 +19,12 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
+    "@kamiazya/whiteboard-canvas-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-ports": "workspace:*",
-    "hono": "^4.12.27"
+    "@kamiazya/whiteboard-canvas-workspace": "workspace:*",
+    "hono": "^4.12.27",
+    "loro-crdt": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "typescript": "catalog:",
