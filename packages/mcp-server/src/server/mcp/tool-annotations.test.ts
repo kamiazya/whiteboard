@@ -42,8 +42,10 @@ function countRegisterCalls(src: string): number {
 }
 
 function countOpenCanvasTools(src: string): number {
-  const zodObject = (src.match(/registerZodObjectTool\(server,/g) ?? []).length
-  const direct = (src.match(/registerToolWithAnnotations\(\s*\n\s*server,/g) ?? []).length
+  const zodObject = (src.match(/registerZodObjectTool\(server, tools\./g) ?? []).length
+  const direct = (
+    src.match(/registerToolWithAnnotations\(\s*\n\s*server,\s*\n\s*(?:'[a-z_]+'|bp\.name)/g) ?? []
+  ).length
   return zodObject + direct
 }
 
