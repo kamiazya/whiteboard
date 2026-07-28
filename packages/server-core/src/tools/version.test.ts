@@ -115,7 +115,9 @@ describe('version_restore tool', () => {
 
     const beforeRestore = await loadDoc(store, CANVAS_ID)
     const beforeCanvas = readSpatialCanvas(beforeRestore)
-    expect(beforeCanvas.nodes[0].text).toBe('modified')
+    const beforeNode = beforeCanvas.nodes[0]
+    expect(beforeNode.type).toBe('text')
+    if (beforeNode.type === 'text') expect(beforeNode.text).toBe('modified')
 
     const result = await restoreTool.execute({
       canvasId: CANVAS_ID,
@@ -127,7 +129,9 @@ describe('version_restore tool', () => {
 
     const afterRestore = await loadDoc(store, CANVAS_ID)
     const afterCanvas = readSpatialCanvas(afterRestore)
-    expect(afterCanvas.nodes[0].text).toBe('original')
+    const afterNode = afterCanvas.nodes[0]
+    expect(afterNode.type).toBe('text')
+    if (afterNode.type === 'text') expect(afterNode.text).toBe('original')
   })
 
   test('throws VersionNotFoundError for unknown versionId', async () => {
