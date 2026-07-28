@@ -1,4 +1,4 @@
-import type { LoroDoc, LoroTree, LoroTreeNode, TreeID } from 'loro-crdt'
+import { LoroDoc, type LoroTree, type LoroTreeNode, type TreeID } from 'loro-crdt'
 
 const TREE_KEY = 'tree'
 const SEGMENT_PATTERN = /^[a-zA-Z0-9]([a-zA-Z0-9_-]*[a-zA-Z0-9])?$/
@@ -23,6 +23,20 @@ export class WorkspaceTree {
       canvasId: string
       segment: string
     }>
+  }
+
+  static fromSnapshot(bytes: Uint8Array): WorkspaceTree {
+    const doc = LoroDoc.fromSnapshot(bytes)
+    return new WorkspaceTree(doc)
+  }
+
+  exportSnapshot(): Uint8Array {
+    return this.#doc.export({ mode: 'snapshot' })
+  }
+
+  exportFrontier(): Uint8Array<ArrayBuffer> {
+    const encoded = this.#doc.version().encode()
+    return new Uint8Array(encoded)
   }
 
   createNode(canvasId: string, segment: string, parent?: TreeID, index?: number): TreeID {
