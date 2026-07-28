@@ -745,7 +745,6 @@ async function main() {
   // can't see. Decode the emitted fragment and structurally check it against
   // the daemon-connection-payload contract (baseUrl matches the live daemon,
   // authMode/bootstrapToken coherent).
-  const workspaceId = created.id.split('/')[0]
   const pairing = await callTool('create_pairing_link', {
     workspaceId,
     slug: sourceSlug,
