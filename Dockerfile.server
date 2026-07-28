@@ -31,18 +31,21 @@ RUN corepack enable && corepack prepare pnpm@11.12.0 --activate
 WORKDIR /workspace
 
 # Install dependencies before copying source (cache-friendly layer order).
-# canvas-viewer is included because mcp-server's build copies its built
-# widget bundle (ui://whiteboard/canvas-view) into dist. canvas-ports and
-# canvas-model are workspace deps mcp-server compiles against (source-only
-# packages whose exports point at src/*.ts); their package.json must be
-# present for `pnpm install` to materialize the workspace link so tsc can
-# resolve them during the build. `pnpm deploy` below bundles them into the
-# self-contained runtime, so they never need to be published to npm.
+# Every workspace package.json must be present so pnpm can resolve the full
+# workspace graph from the lockfile — a partial set causes resolution failures
+# for transitive deps (e.g. canvas-ports' zod) because pnpm cannot reconcile
+# the lockfile against a workspace where some packages are missing.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/mcp-server/package.json packages/mcp-server/
 COPY packages/canvas-viewer/package.json packages/canvas-viewer/
 COPY packages/canvas-ports/package.json packages/canvas-ports/
 COPY packages/canvas-model/package.json packages/canvas-model/
+COPY packages/canvas-codec/package.json packages/canvas-codec/
+COPY packages/canvas-render/package.json packages/canvas-render/
+COPY packages/canvas-workspace/package.json packages/canvas-workspace/
+COPY apps/web/package.json apps/web/
+COPY tools/arch-lint/package.json tools/arch-lint/
+COPY tools/checks/package.json tools/checks/
 RUN pnpm install --frozen-lockfile
 
 # Build the self-contained canvas widget, then compile TypeScript (whose
