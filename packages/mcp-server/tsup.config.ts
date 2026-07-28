@@ -17,6 +17,9 @@ export default defineConfig({
   entry: {
     'server/mcp/index': 'src/server/mcp/index.ts',
     'server/index': 'src/server/index.ts',
+    'server/app': 'src/server/app.ts',
+    'server/backup-restore': 'src/server/backup-restore.ts',
+    'server/security/server-mode-auth-plan': 'src/server/security/server-mode-auth-plan.ts',
     'shared/canvas-backend-contract': 'src/shared/canvas-backend-contract.ts',
     'shared/browser-shared-index': 'src/shared/browser-shared-index.ts',
     'shared/daemon-backend': 'src/shared/daemon-backend.ts',
