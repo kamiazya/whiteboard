@@ -87,7 +87,7 @@ describe('wireMcpLogging', () => {
   it('does not leak destinations when the caller forgets to call restore() but the server closes', async () => {
     // The HTTP /mcp handler in app.ts closes the underlying transport in
     // its finally block. wireMcpLogging discards the handle inside
-    // createExcalidrawMcpServer, so the destination has to come back
+    // createMcpServer, so the destination has to come back
     // automatically when the server closes — otherwise every per-request
     // server permanently grows the destination set.
     const { _destinationCountForTests } = await import('../log.js')
@@ -98,7 +98,7 @@ describe('wireMcpLogging', () => {
       vi.spyOn(server, 'sendLoggingMessage').mockResolvedValue(
         {} as Awaited<ReturnType<typeof server.sendLoggingMessage>>,
       )
-      // Match the createExcalidrawMcpServer wiring: chain restore() onto
+      // Match the createMcpServer wiring: chain restore() onto
       // the server's onclose so the caller does not have to remember.
       const handle = wireMcpLogging(server)
       const previousOnClose = server.server.onclose?.bind(server.server)

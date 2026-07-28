@@ -3,14 +3,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../config.js'
-import { createExcalidrawMcpServer } from './index.js'
+import { createMcpServer } from './index.js'
 
-// createExcalidrawMcpServer is reused per-request by the HTTP /mcp handler.
+// createMcpServer is reused per-request by the HTTP /mcp handler.
 // If it ever installed process-level stdin/signal listeners itself (instead
 // of only the stdio-only main() doing so via stdio-lifecycle.ts), every HTTP
 // request would leak another listener, and an unrelated stdio client's
 // disconnect could exit the long-lived HTTP daemon.
-describe('createExcalidrawMcpServer process-listener isolation', () => {
+describe('createMcpServer process-listener isolation', () => {
   let tmpDataDir: string | undefined
 
   afterEach(() => {
@@ -31,7 +31,7 @@ describe('createExcalidrawMcpServer process-listener isolation', () => {
       stdinError: process.stdin.listenerCount('error'),
     }
 
-    await createExcalidrawMcpServer()
+    await createMcpServer()
 
     expect(process.listenerCount('SIGTERM')).toBe(before.sigterm)
     expect(process.listenerCount('SIGINT')).toBe(before.sigint)

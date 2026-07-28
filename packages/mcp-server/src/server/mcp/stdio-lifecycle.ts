@@ -38,7 +38,7 @@ export interface StdioLifecycleDeps {
  * hard-exit timer guarantees termination even if server.close() hangs, so
  * the timer itself never keeps the event loop alive.
  *
- * Only call this from the stdio entrypoint's main(). createExcalidrawMcpServer
+ * Only call this from the stdio entrypoint's main(). createMcpServer
  * is reused per-request by the HTTP /mcp handler, and installing process-level
  * stdin/signal listeners there would leak a listener per request and could
  * exit the long-lived HTTP daemon on an unrelated client's disconnect.
