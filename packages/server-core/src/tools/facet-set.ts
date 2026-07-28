@@ -5,7 +5,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-model'
 import { readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
-import type { ServerDeps } from '../create-server.js'
+import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 
 /**

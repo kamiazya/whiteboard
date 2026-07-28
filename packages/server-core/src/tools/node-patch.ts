@@ -6,7 +6,7 @@ import {
   spatialNodeSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
-import type { ServerDeps } from '../create-server.js'
+import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { NodeNotFoundError, PatchValidationError } from './errors.js'
 

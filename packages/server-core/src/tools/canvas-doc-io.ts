@@ -2,7 +2,7 @@ import type { CanvasId, SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
-import type { ServerDeps } from '../create-server.js'
+import type { ServerDeps } from '../server-deps.js'
 import { CanvasDocNotFoundError } from './errors.js'
 
 /**
