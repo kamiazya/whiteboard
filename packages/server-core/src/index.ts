@@ -17,3 +17,5 @@ export {
 } from './tools/canvas-crud.schemas.js'
 export { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
 export { generateCanvasId } from './tools/generate-canvas-id.js'
+export { createFacetSetTool, facetSetInputSchema, facetSetOutputSchema } from './tools/facet-set.js'
+export type { FacetSetInput, FacetSetOutput } from './tools/facet-set.js'

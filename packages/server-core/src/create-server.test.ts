@@ -11,4 +11,14 @@ describe('createServer', () => {
     expect(app).toBeDefined()
     expect(app.fetch).toBeTypeOf('function')
   })
+
+  it('wires the facet_set tool', () => {
+    const { tools } = createServer({
+      canvasDocStore: {} as never,
+      workspaceIndex: {} as never,
+      blobStore: {} as never,
+    })
+    expect(tools.facetSet.name).toBe('facet_set')
+    expect(tools.facetSet.execute).toBeTypeOf('function')
+  })
 })

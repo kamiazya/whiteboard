@@ -2,13 +2,16 @@ import type { LoroDoc } from 'loro-crdt'
 import {
   spatialNodeSchema,
   canvasEdgeSchema,
+  extensionFacetsSchema,
   type SpatialCanvas,
   type SpatialNode,
   type CanvasEdge,
+  type ExtensionFacets,
 } from '@kamiazya/whiteboard-canvas-model'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
+const FACETS_KEY = 'facets'
 
 type Fields = Record<string, unknown>
 
@@ -107,4 +110,41 @@ export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
   }
 
   return { nodes, edges }
+}
+
+/**
+ * Extension facets (the `{domain}/{version}` keyed bucket from
+ * canvas-model's `extensionFacetsSchema`) are stored the same way as
+ * nodes/edges above: a plain-object-valued `LoroMap` keyed by facet key, so
+ * one domain's CRDT merge never overwrites another's.
+ */
+export function writeFacets(doc: LoroDoc, facets: ExtensionFacets): void {
+  const facetsMap = doc.getMap(FACETS_KEY)
+  const existingKeys = new Set<string>(facetsMap.keys())
+  const incomingKeys = new Set<string>(Object.keys(facets))
+
+  for (const [key, value] of Object.entries(facets)) {
+    facetsMap.set(key, value)
+  }
+  for (const key of existingKeys) {
+    if (!incomingKeys.has(key)) facetsMap.delete(key)
+  }
+
+  doc.commit()
+}
+
+/**
+ * A per-key parse (rather than one whole-record parse) means a single
+ * corrupt entry in the underlying LoroMap is dropped instead of failing the
+ * entire read — consistent with readSpatialCanvas's per-node tolerance.
+ */
+export function readFacets(doc: LoroDoc): ExtensionFacets {
+  const facetsMap = doc.getMap(FACETS_KEY)
+  const result: ExtensionFacets = {}
+  for (const key of facetsMap.keys()) {
+    const value = facetsMap.get(key)
+    const parsed = extensionFacetsSchema.safeParse({ [key]: value })
+    if (parsed.success) result[key] = parsed.data[key]
+  }
+  return result
 }

@@ -13,14 +13,10 @@ import {
   listCanvasesInputSchema,
 } from './tools/canvas-crud.schemas.js'
 import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
+import { createFacetSetTool } from './tools/facet-set.js'
 
 export type { ServerDeps } from './server-deps.js'
 
-// Server-core is a shared-layer package (no node:*, no logger abstraction
-// exists here yet — see .claude/rules/package-server-core.md). Route
-// handlers below deliberately do not log caught errors; that responsibility
-// stays with a composition root (mcp-server / apps/web) once one wraps this
-// factory with its own `getLogger`-backed middleware.
 export function createServer(deps: ServerDeps) {
   const app = new Hono()
 
@@ -82,7 +78,10 @@ export function createServer(deps: ServerDeps) {
     }
   })
 
-  return { app }
+  const tools = {
+    facetSet: createFacetSetTool(deps),
+  }
+  return { app, tools }
 }
 
 function mapCanvasError(c: Context, err: unknown) {
