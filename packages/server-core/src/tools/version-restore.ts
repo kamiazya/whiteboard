@@ -4,6 +4,7 @@ import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { parseVersionRecord } from './version-record.js'
 
 export const versionRestoreInputSchema = z
   .object({
@@ -47,18 +48,11 @@ export function createVersionRestoreTool(deps: ServerDeps) {
         throw new VersionNotFoundError(input.canvasId, input.versionId)
       }
 
-      let label: string
-      let frontier: string
-      try {
-        const parsed = JSON.parse(raw) as Record<string, unknown>
-        if (typeof parsed.label !== 'string' || typeof parsed.frontier !== 'string') {
-          throw new VersionNotFoundError(input.canvasId, input.versionId)
-        }
-        label = parsed.label
-        frontier = parsed.frontier
-      } catch {
+      const record = parseVersionRecord(raw)
+      if (record === null) {
         throw new VersionNotFoundError(input.canvasId, input.versionId)
       }
+      const { label, frontier } = record
 
       const frontierBytes = new Uint8Array(
         (frontier.match(/.{2}/g) ?? []).map((h) => Number.parseInt(h, 16)),

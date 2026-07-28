@@ -2,15 +2,11 @@ import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc } from './canvas-doc-io.js'
+import { parseVersionRecord, versionRecordSchema } from './version-record.js'
 
-const versionEntrySchema = z
-  .object({
-    versionId: z.string(),
-    label: z.string(),
-    timestamp: z.string(),
-    frontier: z.string(),
-  })
-  .strict()
+const versionEntrySchema = versionRecordSchema.extend({
+  versionId: z.string(),
+})
 
 export const versionListInputSchema = z
   .object({
@@ -41,17 +37,10 @@ export function createVersionListTool(deps: ServerDeps) {
       for (const versionId of versions.keys()) {
         const raw = versions.get(versionId)
         if (typeof raw !== 'string') continue
-        try {
-          const parsed = JSON.parse(raw) as Record<string, unknown>
-          const { label, timestamp, frontier } = parsed
-          if (
-            typeof label === 'string' &&
-            typeof timestamp === 'string' &&
-            typeof frontier === 'string'
-          ) {
-            entries.push({ versionId, label, timestamp, frontier })
-          }
-        } catch {}
+        const record = parseVersionRecord(raw)
+        if (record !== null) {
+          entries.push({ versionId, ...record })
+        }
       }
 
       entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp))

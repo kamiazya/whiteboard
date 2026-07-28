@@ -4,6 +4,7 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { generateCanvasId } from './generate-canvas-id.js'
+import { versionRecordSchema } from './version-record.js'
 
 export const versionSaveInputSchema = z
   .object({
@@ -38,7 +39,8 @@ export function createVersionSaveTool(deps: ServerDeps) {
       const frontier = Array.from(frontierBytes, (b) => b.toString(16).padStart(2, '0')).join('')
 
       const versions = doc.getMap('versions')
-      versions.set(versionId, JSON.stringify({ label: input.label, timestamp, frontier }))
+      const record = versionRecordSchema.parse({ label: input.label, timestamp, frontier })
+      versions.set(versionId, JSON.stringify(record))
       doc.commit()
 
       await saveDocSnapshot(deps, input.canvasId, doc)
