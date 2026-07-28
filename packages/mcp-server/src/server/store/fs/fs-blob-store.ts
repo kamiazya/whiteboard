@@ -12,8 +12,9 @@ import type {
   BlobRef,
   BlobStore,
 } from '@kamiazya/whiteboard-canvas-ports'
+import { z } from 'zod'
 import { getLogger } from '../../log.js'
-import { isMissingFileError } from '../corrupt-stored-data.js'
+import { corruptStoredData, isMissingFileError } from '../corrupt-stored-data.js'
 import { assertPathWithinDir } from '../path-guard.js'
 
 const log = getLogger('fs-blob-store')
@@ -21,13 +22,19 @@ const log = getLogger('fs-blob-store')
 // Blob content and content-type share the same address, so both are
 // written as one JSON envelope rather than two files — avoids a dangling
 // content-type file if a process crashes between two separate writes.
-interface BlobEnvelope {
-  readonly bytesBase64: string
-  readonly contentType?: string
-}
+const blobEnvelopeSchema = z.object({
+  bytesBase64: z.string(),
+  contentType: z.string().optional(),
+})
+
+type BlobEnvelope = z.infer<typeof blobEnvelopeSchema>
 
 function digestHex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
 }
 
 /**
@@ -77,7 +84,12 @@ export class FsBlobStore implements BlobStore {
       }
       throw err
     }
-    const envelope = JSON.parse(raw) as BlobEnvelope
+    let envelope: BlobEnvelope
+    try {
+      envelope = blobEnvelopeSchema.parse(JSON.parse(raw))
+    } catch (err) {
+      throw corruptStoredData(filePath, `invalid blob envelope (${errorMessage(err)})`)
+    }
     return {
       bytes: new Uint8Array(Buffer.from(envelope.bytesBase64, 'base64')),
       contentType: envelope.contentType,

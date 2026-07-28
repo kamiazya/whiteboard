@@ -1,9 +1,10 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, readdir, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { BlobRef } from '@kamiazya/whiteboard-canvas-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { isCorruptStoredDataError } from '../corrupt-stored-data.js'
 import { InMemoryBlobStore } from '../inmemory/in-memory-blob-store.js'
 import { FsBlobStore } from './fs-blob-store.js'
 
@@ -122,6 +123,28 @@ describe('FsBlobStore', () => {
     expect(ref.digestHex).toBe(sha256Hex(bytes))
     const result = await store.get({ ref })
     expect(result?.bytes).toEqual(bytes)
+  })
+
+  it('get throws CorruptStoredDataError when the on-disk envelope is malformed JSON', async () => {
+    const ref: BlobRef = { algorithm: 'sha-256', digestHex: '3'.repeat(64) }
+    const filePath = join(baseDir, 'blobs', ref.digestHex.slice(0, 2), ref.digestHex.slice(2))
+    await mkdir(dirname(filePath), { recursive: true })
+    await writeFile(filePath, 'not json', 'utf8')
+
+    const error = await store.get({ ref }).catch((err: unknown) => err)
+
+    expect(isCorruptStoredDataError(error)).toBe(true)
+  })
+
+  it('get throws CorruptStoredDataError when the envelope is missing bytesBase64', async () => {
+    const ref: BlobRef = { algorithm: 'sha-256', digestHex: '4'.repeat(64) }
+    const filePath = join(baseDir, 'blobs', ref.digestHex.slice(0, 2), ref.digestHex.slice(2))
+    await mkdir(dirname(filePath), { recursive: true })
+    await writeFile(filePath, JSON.stringify({ contentType: 'image/png' }), 'utf8')
+
+    const error = await store.get({ ref }).catch((err: unknown) => err)
+
+    expect(isCorruptStoredDataError(error)).toBe(true)
   })
 
   it('matches InMemoryBlobStore observable behavior across a fixed operation sequence', async () => {
