@@ -157,6 +157,49 @@ describe('WorkspaceTree', () => {
     })
   })
 
+  describe('snapshot round-trip', () => {
+    it('exports a Uint8Array snapshot', () => {
+      const { tree } = makeTree()
+      tree.createNode('c-1', 'alpha')
+      const bytes = tree.exportSnapshot()
+      expect(bytes).toBeInstanceOf(Uint8Array)
+      expect(bytes.byteLength).toBeGreaterThan(0)
+    })
+
+    it('round-trips tree state through exportSnapshot / fromSnapshot', () => {
+      const { tree } = makeTree()
+      const parentId = tree.createNode('folder', 'projects')
+      tree.createNode('c-1', 'alpha', parentId)
+      tree.createNode('c-2', 'beta', parentId)
+
+      const bytes = tree.exportSnapshot()
+      const restored = WorkspaceTree.fromSnapshot(bytes)
+
+      const roots = restored.children()
+      expect(roots).toHaveLength(1)
+      expect(roots[0]!.segment).toBe('projects')
+
+      const kids = restored.children(roots[0]!.id)
+      expect(kids).toHaveLength(2)
+      expect(kids.map((k) => k.segment).sort()).toEqual(['alpha', 'beta'])
+    })
+
+    it('preserves alias resolution after round-trip', () => {
+      const { tree } = makeTree()
+      const folderId = tree.createNode('f', 'docs')
+      const leafId = tree.createNode('c-1', 'readme', folderId)
+      const alias = tree.resolveAlias(leafId)
+
+      const restored = WorkspaceTree.fromSnapshot(tree.exportSnapshot())
+      const restoredLeaf = restored.findByAlias('docs/readme')
+      expect(restoredLeaf).toBeDefined()
+      expect(restoredLeaf!.canvasId).toBe('c-1')
+
+      const restoredAlias = restored.resolveAlias(restoredLeaf!.id)
+      expect(restoredAlias).toBe(alias)
+    })
+  })
+
   describe('CRDT merge', () => {
     it('merges two independent trees via snapshot import', () => {
       const { doc: doc1, tree: tree1 } = makeTree()

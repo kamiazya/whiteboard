@@ -539,6 +539,9 @@ importers:
       '@kamiazya/whiteboard-canvas-viewer':
         specifier: workspace:*
         version: link:../canvas-viewer
+      '@kamiazya/whiteboard-canvas-workspace':
+        specifier: workspace:*
+        version: link:../canvas-workspace
       '@stryker-mutator/core':
         specifier: ^9.6.1
         version: 9.6.1(@types/node@24.12.2)
