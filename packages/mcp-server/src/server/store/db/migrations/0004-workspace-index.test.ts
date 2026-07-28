@@ -23,26 +23,47 @@ async function tableExists(db: Kysely<DatabaseSchema>, name: string): Promise<bo
   return row.rows.length > 0
 }
 
+async function indexExists(db: Kysely<DatabaseSchema>, name: string): Promise<boolean> {
+  const row = await sql<{
+    name: string
+  }>`select name from sqlite_master where type = 'index' and name = ${name}`.execute(db)
+  return row.rows.length > 0
+}
+
+const TABLES = [
+  'workspaceIndexCanvasList',
+  'workspaceIndexFacets',
+  'workspaceIndexAliases',
+  'workspaceIndexBacklinks',
+  'workspaceIndexAliasHistory',
+]
+
+// One lookup index per workspace-scoped table that queryFacet/listBacklinks/
+// alias resolution rely on for non-scan lookups (workspaceIndexCanvasList has
+// no dedicated lookup index — it is read in full per workspace).
+const LOOKUP_INDEXES = [
+  'workspaceIndexFacets_lookup',
+  'workspaceIndexAliases_lookup',
+  'workspaceIndexBacklinks_lookup',
+  'workspaceIndexAliasHistory_lookup',
+]
+
 describe('0004-workspace-index migration', () => {
-  it('up creates all five tables; down drops them', async () => {
+  it('up creates all five tables and their lookup indexes; down drops the tables', async () => {
     const db = await createMemoryDb()
-    const tables = [
-      'workspaceIndexCanvasList',
-      'workspaceIndexFacets',
-      'workspaceIndexAliases',
-      'workspaceIndexBacklinks',
-      'workspaceIndexAliasHistory',
-    ]
     try {
       await migration.up(db as unknown as Kysely<unknown>)
 
-      for (const table of tables) {
+      for (const table of TABLES) {
         expect(await tableExists(db, table)).toBe(true)
+      }
+      for (const index of LOOKUP_INDEXES) {
+        expect(await indexExists(db, index)).toBe(true)
       }
 
       await migration.down(db as unknown as Kysely<unknown>)
 
-      for (const table of tables) {
+      for (const table of TABLES) {
         expect(await tableExists(db, table)).toBe(false)
       }
     } finally {
