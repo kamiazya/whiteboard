@@ -328,7 +328,7 @@ export async function runE2eCheckpointSmoke({
 
     const facets = await callTool('facet_set', {
       canvasId: versionCanvas.canvasId,
-      facets: { 'e2e/v1': { note: 'before-save' } },
+      facets: { 'e2e/1': { note: 'before-save' } },
     })
     if (facets.canvasId !== versionCanvas.canvasId) {
       throw new Error(`facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
