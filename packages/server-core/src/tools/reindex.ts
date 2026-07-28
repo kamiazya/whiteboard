@@ -77,8 +77,12 @@ async function loadCanvasIndexInput(
  * already been persisted. The index is eventually consistent, not a gate
  * on mutation success.
  */
-export async function reindexWorkspace(deps: ServerDeps, workspaceId: WorkspaceId): Promise<void> {
+export async function reindexWorkspace(
+  deps: ServerDeps,
+  workspaceId: WorkspaceId,
+): Promise<number> {
   let rows: ReturnType<typeof deriveWorkspaceIndexRows>
+  let canvasCount = 0
   try {
     const tree = await loadWorkspaceTree(deps.canvasDocStore, workspaceId)
     const nodes = tree.snapshot().nodes
@@ -88,6 +92,7 @@ export async function reindexWorkspace(deps: ServerDeps, workspaceId: WorkspaceI
       const input = await loadCanvasIndexInput(deps, workspaceId, node.canvasId)
       if (input !== undefined) canvases.push(input)
     }
+    canvasCount = canvases.length
 
     rows = deriveWorkspaceIndexRows({ workspaceId, tree, canvases })
   } catch (err) {
@@ -95,7 +100,7 @@ export async function reindexWorkspace(deps: ServerDeps, workspaceId: WorkspaceI
       workspaceId,
       err,
     })
-    return
+    return canvasCount
   }
 
   try {
@@ -103,6 +108,7 @@ export async function reindexWorkspace(deps: ServerDeps, workspaceId: WorkspaceI
   } catch (err) {
     log.error('failed to apply workspace index rows', { workspaceId, err })
   }
+  return canvasCount
 }
 
 /**

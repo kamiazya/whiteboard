@@ -112,7 +112,7 @@ describe('reindexWorkspace', () => {
       frontier: new Uint8Array(),
     })
 
-    await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeUndefined()
+    await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeTypeOf('number')
 
     const listed = await deps.workspaceIndex.listCanvases({ workspaceId: 'ws-1' })
     expect(listed.rows.map((row) => row.canvasId)).toEqual([goodCanvasId])
@@ -128,7 +128,7 @@ describe('reindexWorkspace', () => {
     try {
       deps.workspaceIndex.applyRows = vi.fn().mockRejectedValue(new Error('write failed'))
 
-      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeUndefined()
+      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeTypeOf('number')
 
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -159,7 +159,7 @@ describe('reindexWorkspace', () => {
     })
 
     try {
-      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeUndefined()
+      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeTypeOf('number')
 
       expect(errorSpy).toHaveBeenCalledWith(
         expect.objectContaining({
