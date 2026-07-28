@@ -1,6 +1,5 @@
 export const WHITEBOARD_HELP_URI = 'whiteboard://help/getting-started'
 export const WHITEBOARD_DRAW_PROMPT = 'whiteboard.draw_diagram'
-export const WHITEBOARD_RECENT_CANVASES_URI = 'whiteboard://state/canvases/recent'
 
 const HELP_LINES = [
   '# Whiteboard MCP quickstart',
@@ -34,40 +33,5 @@ export function buildDrawDiagramPrompt(goal: string, diagramType?: string): stri
     typeLine,
     'Start by creating or selecting a canvas, then lay out the main entities or steps with annotate_batch.',
     'Inspect the canvas after each major draw step and export only after the structure is stable.',
-  ].join('\n')
-}
-
-export function formatRecentCanvasesResource(
-  workspaces: Array<{
-    workspaceId: string
-    canvases: Array<{ id: string; slug: string; updatedAt: string }>
-  }>,
-): string {
-  const canvases = workspaces
-    .flatMap((workspace) =>
-      workspace.canvases.map((canvas) => ({
-        workspaceId: workspace.workspaceId,
-        ...canvas,
-      })),
-    )
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 10)
-
-  if (canvases.length === 0) {
-    return [
-      '# Recent canvases',
-      '',
-      'No canvases were found in the current workspace set.',
-      'Start with `canvas_create` to create one.',
-    ].join('\n')
-  }
-
-  return [
-    '# Recent canvases',
-    '',
-    ...canvases.map(
-      (canvas) =>
-        `- ${canvas.id} (slug: ${canvas.slug}, workspace: ${canvas.workspaceId}, updated: ${canvas.updatedAt})`,
-    ),
   ].join('\n')
 }

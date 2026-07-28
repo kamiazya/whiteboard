@@ -404,26 +404,6 @@ describe('createApp daemon mutation auth', () => {
 
   it('exposes an MCP Streamable HTTP endpoint for tool discovery', async () => {
     const app = createApp(createRuntimeOptions('secret'))
-    const snapshot = new LoroDoc().export({ mode: 'snapshot' })
-    globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      const url = input.toString()
-      if (url === 'http://daemon.test/api/runtime/touch') {
-        return new Response(null, { status: 204 })
-      }
-      if (url === 'http://daemon.test/api/canvas/M7lgM0WguBnkfP_1iOFtY/via-mcp/exists') {
-        return new Response(JSON.stringify({ exists: true }), { status: 200 })
-      }
-      if (url === 'http://daemon.test/api/canvas/M7lgM0WguBnkfP_1iOFtY/via-mcp/snapshot') {
-        return new Response(snapshot, { status: 200 })
-      }
-      if (url === 'http://daemon.test/api/canvas/M7lgM0WguBnkfP_1iOFtY/via-mcp/update') {
-        return new Response(null, { status: 204 })
-      }
-      if (/^http:\/\/daemon\.test\/api\/workspaces\/[^/]+\/canvases$/.test(url)) {
-        return new Response(JSON.stringify({ slug: 'via-mcp' }), { status: 200 })
-      }
-      throw new Error(`Unexpected daemon fetch: ${url} ${init?.method ?? 'GET'}`)
-    }) as typeof globalThis.fetch
     const client = new Client({ name: 'app-test-client', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
       fetch: (input, init) => {
@@ -439,49 +419,22 @@ describe('createApp daemon mutation auth', () => {
 
     await client.connect(transport)
     const tools = await client.listTools()
-    const canvasCreateTool = tools.tools.find((tool) => tool.name === 'canvas_create')
-    const annotateBatchTool = tools.tools.find((tool) => tool.name === 'annotate_batch')
+    const canvasCreateTool = tools.tools.find((tool) => tool.name === 'wb_canvas_create')
     const createResult = await client.callTool({
-      name: 'canvas_create',
-      arguments: { slug: 'via-mcp', overwrite: true },
-    })
-    const annotateBatchResult = await client.callTool({
-      name: 'annotate_batch',
-      arguments: {
-        canvasId: 'M7lgM0WguBnkfP_1iOFtY/via-mcp',
-        annotations: [{ type: 'rectangle', target: { x: 100, y: 80 }, coords: 'absolute' }],
-      },
+      name: 'wb_canvas_create',
+      arguments: { workspaceId: 'default', segment: 'via-mcp' },
     })
 
     expect(canvasCreateTool).toBeDefined()
-    expect(annotateBatchTool).toBeDefined()
     expect(canvasCreateTool?.outputSchema).toBeDefined()
-    expect(annotateBatchTool?.outputSchema).toBeDefined()
     expect(createResult.structuredContent).toMatchObject({
-      id: expect.stringContaining('/via-mcp'),
-      url: expect.stringContaining('/canvas/'),
+      canvasId: expect.any(String),
+      segment: 'via-mcp',
     })
     expect(createResult.content).toEqual([
       {
         type: 'text',
         text: JSON.stringify(createResult.structuredContent),
-      },
-    ])
-    expect(annotateBatchResult.structuredContent).toMatchObject({
-      elementIds: [expect.any(String)],
-      annotations: [
-        {
-          type: 'rectangle',
-          elementId: expect.any(String),
-        },
-      ],
-      warnings: [],
-      overlaps: [],
-    })
-    expect(annotateBatchResult.content).toEqual([
-      {
-        type: 'text',
-        text: JSON.stringify(annotateBatchResult.structuredContent),
       },
     ])
     await transport.close()
@@ -540,78 +493,6 @@ describe('createApp daemon mutation auth', () => {
         }),
       }),
     ])
-
-    await transport.close()
-  })
-
-  it('exposes dynamic recent-canvas resources', async () => {
-    const app = createApp(createRuntimeOptions('secret'))
-    globalThis.fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
-      const url = input.toString()
-      if (url === 'http://daemon.test/api/runtime/touch') {
-        return new Response(null, { status: 204 })
-      }
-      if (url === 'http://daemon.test/api/workspaces') {
-        return new Response(
-          JSON.stringify({
-            workspaces: [
-              {
-                workspaceId: 'M7lgM0WguBnkfP_1iOFtY',
-              },
-            ],
-          }),
-          { status: 200 },
-        )
-      }
-      if (/^http:\/\/daemon\.test\/api\/workspaces\/[^/]+\/canvases$/.test(url)) {
-        return new Response(
-          JSON.stringify({
-            canvases: [
-              { slug: 'payments-flow', updatedAt: '2026-04-25T10:30:00.000Z' },
-              { slug: 'system-overview', updatedAt: '2026-04-24T08:15:00.000Z' },
-            ],
-          }),
-          { status: 200 },
-        )
-      }
-      throw new Error(`Unexpected daemon fetch: ${url} ${init?.method ?? 'GET'}`)
-    }) as typeof globalThis.fetch
-    const client = new Client({ name: 'app-dynamic-resource-client', version: '1.0.0' })
-    const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
-      fetch: (input, init) => {
-        const headers = new Headers(init?.headers)
-        headers.set('Authorization', 'Bearer secret')
-        headers.set('Origin', 'http://127.0.0.1:6274')
-        return app.request(input instanceof URL ? input.toString() : String(input), {
-          ...init,
-          headers,
-        })
-      },
-    })
-
-    await client.connect(transport)
-    const resources = await client.listResources()
-
-    expect(resources.resources).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          uri: 'whiteboard://state/canvases/recent',
-          name: 'whiteboard-recent-canvases',
-        }),
-      ]),
-    )
-
-    const recentCanvases = await client.readResource({
-      uri: 'whiteboard://state/canvases/recent',
-    })
-
-    expect(recentCanvases.contents).toEqual([
-      expect.objectContaining({
-        uri: 'whiteboard://state/canvases/recent',
-        text: expect.stringContaining('/payments-flow'),
-      }),
-    ])
-    expect(recentCanvases.contents[0]?.text).toContain('system-overview')
 
     await transport.close()
   })

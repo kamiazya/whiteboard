@@ -7,12 +7,6 @@ import { describe, expect, it, vi } from 'vitest'
 // module's own lifecycle handler is installed would otherwise be silently
 // swallowed. This test locks in the fix: installStdioLifecycle() must run
 // before initTracing() so a startup-window signal is always handled.
-vi.mock('../../daemon/ensure-daemon.js', () => ({
-  ensureDaemon: vi.fn(async () => ({})),
-}))
-vi.mock('./daemon-client.js', () => ({
-  createDaemonClient: vi.fn(() => ({ touch: vi.fn(async () => undefined) })),
-}))
 vi.mock('./logging.js', () => ({
   wireMcpLogging: vi.fn(() => ({ restore: vi.fn() })),
 }))
@@ -21,17 +15,9 @@ vi.mock('./session-resolver.js', () => ({
 }))
 vi.mock('./standalone-help.js', () => ({
   buildDrawDiagramPrompt: vi.fn(() => ''),
-  formatRecentCanvasesResource: vi.fn(() => ''),
   getStandaloneHelpText: vi.fn(() => ''),
   WHITEBOARD_DRAW_PROMPT: 'draw-diagram',
   WHITEBOARD_HELP_URI: 'whiteboard://help',
-  WHITEBOARD_RECENT_CANVASES_URI: 'whiteboard://recent-canvases',
-}))
-vi.mock('./tools/canvas.js', () => ({
-  listCanvasTool: vi.fn(() => ({ execute: vi.fn(async () => ({ workspaces: [] })) })),
-}))
-vi.mock('./tool-registration.js', () => ({
-  registerAllTools: vi.fn(),
 }))
 vi.mock('../config.js', () => ({
   getDataDir: vi.fn(() => '/tmp/whiteboard-index-test'),
