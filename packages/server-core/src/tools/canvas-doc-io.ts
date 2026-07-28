@@ -39,6 +39,47 @@ export async function loadCanvasDoc(
 }
 
 /**
+ * Loads an existing canvas doc or creates a fresh one when no snapshot
+ * exists yet. Used by `facet_set` where setting facets on a never-saved
+ * canvas is valid (unlike spatial patch tools, which require an existing
+ * element to target).
+ */
+export async function loadOrCreateCanvasDoc(
+  deps: ServerDeps,
+  canvasId: CanvasId,
+): Promise<LoroDoc> {
+  const docRef = { kind: 'canvas' as const, canvasId }
+  const existing = await deps.canvasDocStore.loadSnapshot({ docRef })
+  const doc = new LoroDoc()
+  if (existing !== null) {
+    doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
+  }
+  return doc
+}
+
+/**
+ * Exports the LoroDoc as a chunked snapshot and persists it. Shared by
+ * `saveCanvasDoc` (spatial patch tools) and `facet_set` (facet-only
+ * mutations) so the chunk+save logic lives in one place.
+ */
+export async function saveDocSnapshot(
+  deps: ServerDeps,
+  canvasId: CanvasId,
+  doc: LoroDoc,
+): Promise<void> {
+  const { manifest, chunks } = chunkSnapshot(
+    doc.export({ mode: 'snapshot' }),
+    SNAPSHOT_MAX_CHUNK_BYTES,
+  )
+  await deps.canvasDocStore.saveSnapshot({
+    docRef: { kind: 'canvas', canvasId },
+    manifest,
+    chunks,
+    frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+  })
+}
+
+/**
  * Saves a patched canvas doc. `canvas` must be the FULL `nodes`/`edges`
  * arrays (one entry replaced) — `writeSpatialCanvas` deletes any id
  * present in the doc but absent from `canvas`, so passing a lone patched
@@ -57,14 +98,5 @@ export async function saveCanvasDoc(
   canvas: SpatialCanvas,
 ): Promise<void> {
   writeSpatialCanvas(doc, canvas)
-  const { manifest, chunks } = chunkSnapshot(
-    doc.export({ mode: 'snapshot' }),
-    SNAPSHOT_MAX_CHUNK_BYTES,
-  )
-  await deps.canvasDocStore.saveSnapshot({
-    docRef: { kind: 'canvas', canvasId },
-    manifest,
-    chunks,
-    frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-  })
+  await saveDocSnapshot(deps, canvasId, doc)
 }
