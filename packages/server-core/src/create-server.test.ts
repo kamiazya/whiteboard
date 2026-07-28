@@ -21,4 +21,26 @@ describe('createServer', () => {
     expect(tools.facetSet.name).toBe('facet_set')
     expect(tools.facetSet.execute).toBeTypeOf('function')
   })
+
+  it('wires the render/export tools with input and output schemas', () => {
+    const { tools } = createServer({
+      canvasDocStore: {} as never,
+      workspaceIndex: {} as never,
+      blobStore: {} as never,
+    })
+
+    const expectations = [
+      { tool: tools.canvasRenderSvg, name: 'canvas_render_svg' },
+      { tool: tools.canvasDigest, name: 'canvas_digest' },
+      { tool: tools.canvasExportOkf, name: 'canvas_export_okf' },
+      { tool: tools.canvasExportJsonCanvas, name: 'canvas_export_json_canvas' },
+    ]
+
+    for (const { tool, name } of expectations) {
+      expect(tool.name).toBe(name)
+      expect(tool.execute).toBeTypeOf('function')
+      expect(tool.inputSchema).toBeDefined()
+      expect(tool.outputSchema).toBeDefined()
+    }
+  })
 })
