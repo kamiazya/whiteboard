@@ -37,6 +37,7 @@ FROM node:${NODE_VERSION}-alpine AS base
 
 # corepack reads the pnpm version from root package.json's packageManager
 # field — no hardcoded version here.
+ENV CI=true
 RUN corepack enable
 WORKDIR /workspace
 
