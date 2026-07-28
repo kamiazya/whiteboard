@@ -36,5 +36,8 @@ if (__entry === (() => { try { return realpathSync(fileURLToPath(import.meta.url
 `
 
 if (!mcpSource.includes('__entry')) {
-  await writeFile(mcpEntry, mcpSource.replace(/\/\/#\s*sourceMappingURL=.*$/, AUTO_RUN))
+  await writeFile(
+    mcpEntry,
+    mcpSource.replace(/\/\/#\s*sourceMappingURL=.*$/, (sourceMap) => `${AUTO_RUN}${sourceMap}`),
+  )
 }
