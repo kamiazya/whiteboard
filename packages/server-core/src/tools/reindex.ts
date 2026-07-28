@@ -70,22 +70,33 @@ async function loadCanvasIndexInput(
  * today. An incremental/delta reindex is deferred until workspace size
  * makes a full reload a real cost.
  *
- * Never throws: an `applyRows` failure is logged at `error` level and
- * swallowed, so a transient index-store error never blocks the mutation
- * whose state has already been persisted. The index is eventually
- * consistent, not a gate on mutation success.
+ * Never throws: loading the workspace tree, loading/deriving the row set,
+ * and the `applyRows` call are each guarded, and any failure is logged at
+ * `error` level and swallowed. A transient index-store error, or a corrupt
+ * workspace-tree manifest, never blocks the mutation whose state has
+ * already been persisted. The index is eventually consistent, not a gate
+ * on mutation success.
  */
 export async function reindexWorkspace(deps: ServerDeps, workspaceId: WorkspaceId): Promise<void> {
-  const tree = await loadWorkspaceTree(deps.canvasDocStore, workspaceId)
-  const nodes = tree.snapshot().nodes
+  let rows: ReturnType<typeof deriveWorkspaceIndexRows>
+  try {
+    const tree = await loadWorkspaceTree(deps.canvasDocStore, workspaceId)
+    const nodes = tree.snapshot().nodes
 
-  const canvases: CanvasIndexInput[] = []
-  for (const node of nodes) {
-    const input = await loadCanvasIndexInput(deps, workspaceId, node.canvasId)
-    if (input !== undefined) canvases.push(input)
+    const canvases: CanvasIndexInput[] = []
+    for (const node of nodes) {
+      const input = await loadCanvasIndexInput(deps, workspaceId, node.canvasId)
+      if (input !== undefined) canvases.push(input)
+    }
+
+    rows = deriveWorkspaceIndexRows({ workspaceId, tree, canvases })
+  } catch (err) {
+    log.error('failed to derive workspace index rows; skipping index update', {
+      workspaceId,
+      err,
+    })
+    return
   }
-
-  const rows = deriveWorkspaceIndexRows({ workspaceId, tree, canvases })
 
   try {
     await deps.workspaceIndex.applyRows(rows)

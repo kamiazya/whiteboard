@@ -125,18 +125,52 @@ describe('reindexWorkspace', () => {
     logModule.setLogSink((record) => {
       if (record.level === 'error') errorSpy(record)
     })
-    deps.workspaceIndex.applyRows = vi.fn().mockRejectedValue(new Error('write failed'))
+    try {
+      deps.workspaceIndex.applyRows = vi.fn().mockRejectedValue(new Error('write failed'))
 
-    await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeUndefined()
+      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeUndefined()
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        scope: 'reindex',
-        level: 'error',
-        msg: expect.stringContaining('apply workspace index rows'),
-      }),
-    )
-    logModule.setLogSink(() => {})
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: 'reindex',
+          level: 'error',
+          msg: expect.stringContaining('apply workspace index rows'),
+        }),
+      )
+    } finally {
+      logModule.setLogSink(() => {})
+    }
+  })
+
+  it('logs at error level and does not throw when the workspace-tree manifest cannot be reassembled', async () => {
+    const deps = makeDeps()
+    // A manifest claiming more chunks than are actually stored makes
+    // `reassembleSnapshot` throw when the workspace-tree doc itself is
+    // loaded (as opposed to a per-canvas doc, covered above).
+    await deps.canvasDocStore.saveSnapshot({
+      docRef: { kind: 'workspace-tree', workspaceId: 'ws-1' },
+      manifest: { chunkCount: 1, totalBytes: 10, maxChunkBytes: 1_000_000 },
+      chunks: [{ index: 0, of: 1, bytes: new Uint8Array([1, 2, 3]) }],
+      frontier: new Uint8Array(),
+    })
+    const errorSpy = vi.fn()
+    logModule.setLogSink((record) => {
+      if (record.level === 'error') errorSpy(record)
+    })
+
+    try {
+      await expect(reindexWorkspace(deps, 'ws-1')).resolves.toBeUndefined()
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          scope: 'reindex',
+          level: 'error',
+          msg: expect.stringContaining('derive workspace index rows'),
+        }),
+      )
+    } finally {
+      logModule.setLogSink(() => {})
+    }
   })
 })
 
