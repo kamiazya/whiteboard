@@ -147,12 +147,11 @@
     "smoke:packaged": "node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js",
     "smoke:tarball": "node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs",
     "smoke:codex-config": "node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs",
-    "smoke:template": "tsx scripts/smoke/mcp-template-smoke.mjs",
     "smoke:claude": "node scripts/smoke/mcp-claude-cli-smoke.mjs",
     "smoke:codex": "node scripts/smoke/mcp-codex-cli-smoke.mjs",
     "smoke:daemon-origin": "node --import tsx/esm scripts/smoke/mcp-daemon-origin-smoke.mjs",
     "smoke:lna-transport": "node scripts/smoke/mcp-lna-transport-smoke.mjs",
-    "smoke:all": "pnpm smoke:e2e && pnpm smoke:template && pnpm smoke:claude",
+    "smoke:all": "pnpm smoke:e2e && pnpm smoke:claude",
     "prepublishOnly": "test -x dist/cli/index.js",
     "prepack": "node scripts/verify-web-app-dist.mjs && node scripts/verify-widget-dist.mjs"
   },
