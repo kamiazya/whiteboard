@@ -18,13 +18,14 @@
 *.code-workspace
 
 # Build artifacts regenerated inside the Docker build stages.
-node_modules/
-packages/mcp-server/node_modules/
-packages/mcp-server/dist/
+# ** matches at any depth — without it, node_modules/ only excludes
+# the root directory, and host-side GVS symlinks in nested packages
+# (e.g. packages/canvas-model/node_modules/) leak into the build
+# context and overwrite the correctly-installed Docker-layer symlinks.
+**/node_modules/
+**/dist/
 packages/mcp-server/coverage/
 packages/mcp-server/tmp/
-packages/canvas-viewer/node_modules/
-packages/canvas-viewer/dist/
 
 # Test suites and distribution smokes (not needed to build the image).
 tests/

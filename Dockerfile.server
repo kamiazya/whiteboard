@@ -26,22 +26,41 @@
 # ── Stage 1: build ─────────────────────────────────────────────────────────
 FROM node:22-alpine AS build
 
+ENV CI=true
 RUN corepack enable && corepack prepare pnpm@11.12.0 --activate
 
 WORKDIR /workspace
 
 # Install dependencies before copying source (cache-friendly layer order).
-# canvas-viewer is included because mcp-server's build copies its built
-# widget bundle (ui://whiteboard/canvas-view) into dist.
+# Every workspace package.json must be present so pnpm can resolve the full
+# workspace graph from the lockfile — a partial set causes resolution failures
+# for transitive deps (e.g. canvas-ports' zod) because pnpm cannot reconcile
+# the lockfile against a workspace where some packages are missing.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/mcp-server/package.json packages/mcp-server/
 COPY packages/canvas-viewer/package.json packages/canvas-viewer/
-RUN pnpm install --frozen-lockfile
+COPY packages/canvas-ports/package.json packages/canvas-ports/
+COPY packages/canvas-model/package.json packages/canvas-model/
+COPY packages/canvas-codec/package.json packages/canvas-codec/
+COPY packages/canvas-render/package.json packages/canvas-render/
+COPY packages/canvas-workspace/package.json packages/canvas-workspace/
+COPY apps/web/package.json apps/web/
+COPY tools/arch-lint/package.json tools/arch-lint/
+COPY tools/checks/package.json tools/checks/
+# GVS (enableGlobalVirtualStore) assumes a persistent global store that
+# survives across installs; inside an ephemeral Docker build layer there is
+# none, so symlinks into the store dangle and workspace deps like zod go
+# unresolved. Disable it for the build.
+RUN pnpm install --frozen-lockfile --config.enable-global-virtual-store=false
 
 # Build the self-contained canvas widget, then compile TypeScript (whose
-# build step copies the widget bundle into mcp-server/dist).
+# build step copies the widget bundle into mcp-server/dist). canvas-ports and
+# canvas-model are source-only (no build step) — copying their source is
+# enough for mcp-server's tsc to compile against them.
 COPY packages/canvas-viewer/ packages/canvas-viewer/
 RUN pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
+COPY packages/canvas-model/ packages/canvas-model/
+COPY packages/canvas-ports/ packages/canvas-ports/
 COPY packages/mcp-server/ packages/mcp-server/
 RUN pnpm --filter @kamiazya/whiteboard-mcp build
 
