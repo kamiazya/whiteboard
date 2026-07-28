@@ -21,6 +21,7 @@ import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createNodePatchTool } from './tools/node-patch.js'
+import { createReindexTool } from './tools/reindex-tool.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
@@ -98,6 +99,7 @@ export function createServer(deps: ServerDeps) {
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),
+    reindex: createReindexTool(deps),
   }
   return { app, tools }
 }

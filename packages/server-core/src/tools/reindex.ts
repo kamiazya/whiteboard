@@ -17,8 +17,14 @@ import { loadWorkspaceTree } from './workspace-tree-io.js'
  * `resolvedBody` (backlinks, requiring the markdown resolve pipeline) are
  * not wired yet — this reindexes on tree membership + extension facets
  * only, matching what canvas docs persist today.
+ *
+ * Returns the number of canvases whose rows were derived (tree nodes with
+ * a saved doc snapshot), for callers that report a reindex result.
  */
-export async function reindexWorkspace(deps: ServerDeps, workspaceId: WorkspaceId): Promise<void> {
+export async function reindexWorkspace(
+  deps: ServerDeps,
+  workspaceId: WorkspaceId,
+): Promise<number> {
   const tree = await loadWorkspaceTree(deps.canvasDocStore, workspaceId)
 
   const canvases: CanvasIndexInput[] = []
@@ -40,4 +46,5 @@ export async function reindexWorkspace(deps: ServerDeps, workspaceId: WorkspaceI
 
   const rows = deriveWorkspaceIndexRows({ workspaceId, tree, canvases })
   await deps.workspaceIndex.applyRows(rows)
+  return canvases.length
 }
