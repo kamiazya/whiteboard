@@ -98,3 +98,115 @@ describe('workspace tree persistence', () => {
     expect(restoredB!.children().map((n) => n.segment)).toEqual(['from-ws2'])
   })
 })
+
+// The beforeEach store is memory-backed (`:memory:`), which cannot outlive its
+// connection. A restart proof needs the DB state to survive a full connection
+// teardown, so these tests dispose the in-memory handle and drive their own
+// file-backed handles (`memory: false`) against the shared tempDir — store A
+// writes, is disposed, then a fresh store B on the same file reads. That file
+// is what stands in for the daemon's on-disk database across a process restart.
+describe('restart durability', () => {
+  it('survives simulated restart with non-trivial tree structure', async () => {
+    await handle.dispose()
+
+    const handleA = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    const storeA = new LibsqlCanvasDocStore(handleA.db)
+    const doc = new LoroDoc()
+    const tree = new WorkspaceTree(doc)
+    const projectsId = tree.createNode('c-projects', 'projects')
+    const alphaId = tree.createNode('c-alpha', 'alpha', projectsId)
+    tree.createNode('c-beta', 'beta', projectsId)
+    tree.createNode('c-alpha-docs', 'docs', alphaId)
+    await saveWorkspaceTree(storeA, 'ws-restart', tree)
+    await handleA.dispose()
+
+    const handleB = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    const storeB = new LibsqlCanvasDocStore(handleB.db)
+    handle = handleB
+
+    const restored = await loadWorkspaceTree(storeB, 'ws-restart')
+    expect(restored).not.toBeNull()
+
+    const roots = restored!.children()
+    expect(roots).toHaveLength(1)
+    expect(roots[0]!.segment).toBe('projects')
+
+    const projectKids = restored!.children(roots[0]!.id)
+    expect(projectKids.map((k) => k.segment).sort()).toEqual(['alpha', 'beta'])
+
+    const restoredAlpha = projectKids.find((k) => k.segment === 'alpha')
+    expect(restoredAlpha).toBeDefined()
+    const alphaKids = restored!.children(restoredAlpha!.id)
+    expect(alphaKids.map((k) => k.segment)).toEqual(['docs'])
+
+    const found = restored!.findByAlias('projects/alpha/docs')
+    expect(found).toBeDefined()
+    expect(found!.canvasId).toBe('c-alpha-docs')
+    expect(restored!.resolveAlias(found!.id)).toBe('projects/alpha/docs')
+  })
+
+  it('returns null from a truly fresh database on a second handle', async () => {
+    await handle.dispose()
+
+    const handleA = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    await handleA.dispose()
+
+    const handleB = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    const storeB = new LibsqlCanvasDocStore(handleB.db)
+    handle = handleB
+
+    const result = await loadWorkspaceTree(storeB, 'ws-never-saved')
+    expect(result).toBeNull()
+  })
+
+  it("workspace trees don't cross-contaminate after restart", async () => {
+    await handle.dispose()
+
+    const handleA = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    const storeA = new LibsqlCanvasDocStore(handleA.db)
+    const docX = new LoroDoc()
+    const treeX = new WorkspaceTree(docX)
+    treeX.createNode('c-x', 'only-in-x')
+    await saveWorkspaceTree(storeA, 'ws-x', treeX)
+
+    const docY = new LoroDoc()
+    const treeY = new WorkspaceTree(docY)
+    treeY.createNode('c-y', 'only-in-y')
+    await saveWorkspaceTree(storeA, 'ws-y', treeY)
+    await handleA.dispose()
+
+    const handleB = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    const storeB = new LibsqlCanvasDocStore(handleB.db)
+    handle = handleB
+
+    const restoredX = await loadWorkspaceTree(storeB, 'ws-x')
+    const restoredY = await loadWorkspaceTree(storeB, 'ws-y')
+
+    expect(restoredX!.children().map((n) => n.segment)).toEqual(['only-in-x'])
+    expect(restoredY!.children().map((n) => n.segment)).toEqual(['only-in-y'])
+  })
+
+  it('overwritten tree reflects latest state after restart', async () => {
+    await handle.dispose()
+
+    const handleA = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    const storeA = new LibsqlCanvasDocStore(handleA.db)
+    const doc = new LoroDoc()
+    const tree = new WorkspaceTree(doc)
+    tree.createNode('c-v1', 'v1-node')
+    await saveWorkspaceTree(storeA, 'ws-versioned', tree)
+
+    tree.createNode('c-v2', 'v2-node')
+    await saveWorkspaceTree(storeA, 'ws-versioned', tree)
+    await handleA.dispose()
+
+    const handleB = await createIsolatedDb({ dataDir: tempDir, memory: false })
+    const storeB = new LibsqlCanvasDocStore(handleB.db)
+    handle = handleB
+
+    const restored = await loadWorkspaceTree(storeB, 'ws-versioned')
+    const roots = restored!.children()
+    expect(roots).toHaveLength(2)
+    expect(roots.map((r) => r.segment).sort()).toEqual(['v1-node', 'v2-node'])
+  })
+})
