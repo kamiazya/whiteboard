@@ -3,7 +3,7 @@ import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-canvas-codec'
 import { readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
-import type { ServerDeps } from '../create-server.js'
+import type { ServerDeps } from '../server-deps.js'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 
 /**

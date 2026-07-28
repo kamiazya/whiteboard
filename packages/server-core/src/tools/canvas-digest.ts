@@ -2,7 +2,7 @@ import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-m
 import { sceneDigest, sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
 import type { SceneDigest } from '@kamiazya/whiteboard-canvas-render'
 import { z } from 'zod'
-import type { ServerDeps } from '../create-server.js'
+import type { ServerDeps } from '../server-deps.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'

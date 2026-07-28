@@ -16,21 +16,25 @@ import { LoroDoc } from 'loro-crdt'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
-/** In-memory `CanvasDocStore` fake for server-core tool tests. */
+/**
+ * An in-memory CanvasDocStore fake shared across server-core tool tests.
+ * Keyed by `docRef.canvasId` so a single fake instance can back multiple
+ * canvases within one test, matching how a real store scopes storage by
+ * DocRef rather than by store instance.
+ */
 export class FakeCanvasDocStore implements CanvasDocStore {
-  private saved: SaveSnapshotInput | undefined
+  private readonly saved = new Map<string, SaveSnapshotInput>()
 
-  async loadSnapshot(_input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
-    if (this.saved === undefined) return null
-    return {
-      manifest: this.saved.manifest,
-      chunks: this.saved.chunks,
-      frontier: this.saved.frontier,
-    }
+  async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
+    if (input.docRef.kind !== 'canvas') throw new Error('fake store only supports canvas docs')
+    const entry = this.saved.get(input.docRef.canvasId)
+    if (entry === undefined) return null
+    return { manifest: entry.manifest, chunks: entry.chunks, frontier: entry.frontier }
   }
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
-    this.saved = input
+    if (input.docRef.kind !== 'canvas') throw new Error('fake store only supports canvas docs')
+    this.saved.set(input.docRef.canvasId, input)
   }
 
   async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
