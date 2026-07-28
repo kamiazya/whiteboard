@@ -25,6 +25,7 @@ function readSource(name: string): string {
 
 const profilesSrc = readSource('tool-profiles.ts')
 const registrationSrc = readSource('tool-registration.ts')
+const opencanvasSrc = readSource('opencanvas-tools.ts')
 
 function extractProfileKeys(src: string): string[] {
   const re = /^\s{2}([a-z_]+):\s*\{\s*profile:/gm
@@ -40,11 +41,20 @@ function countRegisterCalls(src: string): number {
   return (src.match(/^\s*defineTool\(\s*\{/gm) ?? []).length
 }
 
+function countOpenCanvasTools(src: string): number {
+  const zodObject = (src.match(/registerZodObjectTool\(server, tools\./g) ?? []).length
+  const direct = (
+    src.match(/registerToolWithAnnotations\(\s*\n\s*server,\s*\n\s*(?:'[a-z_]+'|bp\.name)/g) ?? []
+  ).length
+  return zodObject + direct
+}
+
 describe('MCP tool annotations coverage', () => {
-  it('matches TOOL_PROFILES entry count to defineTool registration entry count', () => {
+  it('matches TOOL_PROFILES entry count to total tool registration count', () => {
     const profileKeys = extractProfileKeys(profilesSrc)
-    const callCount = countRegisterCalls(registrationSrc)
-    expect(profileKeys.length).toBe(callCount)
+    const legacyCount = countRegisterCalls(registrationSrc)
+    const openCanvasCount = countOpenCanvasTools(opencanvasSrc)
+    expect(profileKeys.length).toBe(legacyCount + openCanvasCount)
     expect(profileKeys.length).toBeGreaterThan(20)
   })
 

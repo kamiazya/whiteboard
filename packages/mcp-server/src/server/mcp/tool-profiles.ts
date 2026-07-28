@@ -71,4 +71,18 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   version_save: { profile: MUTATING, title: 'Save labeled version' },
   version_restore: { profile: MUTATING, title: 'Restore canvas from version' },
   version_list: { profile: READ_ONLY, title: 'List versions' },
+
+  // OpenCanvas tools (server-core)
+  facet_set: { profile: MUTATING_IDEMPOTENT, title: 'Set canvas facets' },
+  node_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch spatial canvas node' },
+  edge_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch spatial canvas edge' },
+  body_patch: { profile: MUTATING, title: 'Patch canvas markdown body' },
+  canvas_render_svg: { profile: READ_ONLY, title: 'Render canvas as SVG' },
+  canvas_digest: { profile: READ_ONLY, title: 'Generate AI-facing canvas digest' },
+  canvas_export_okf: { profile: READ_ONLY, title: 'Export canvas as OKF Markdown' },
+  canvas_export_json_canvas: { profile: READ_ONLY, title: 'Export canvas as JSON Canvas' },
+  wb_canvas_create: { profile: MUTATING, title: 'Create OpenCanvas canvas' },
+  wb_canvas_list: { profile: READ_ONLY, title: 'List OpenCanvas canvases' },
+  wb_canvas_get: { profile: READ_ONLY, title: 'Get OpenCanvas canvas' },
+  wb_canvas_delete: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete OpenCanvas canvas' },
 }

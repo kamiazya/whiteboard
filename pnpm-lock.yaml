@@ -526,6 +526,9 @@ importers:
       ws:
         specifier: ^8.21.0
         version: 8.21.0
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -542,6 +545,9 @@ importers:
       '@kamiazya/whiteboard-canvas-workspace':
         specifier: workspace:*
         version: link:../canvas-workspace
+      '@kamiazya/whiteboard-server-core':
+        specifier: workspace:*
+        version: link:../server-core
       '@stryker-mutator/core':
         specifier: ^9.6.1
         version: 9.6.1(@types/node@24.12.2)

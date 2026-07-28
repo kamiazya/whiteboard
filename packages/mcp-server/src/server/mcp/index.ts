@@ -21,6 +21,11 @@ import {
 } from './standalone-help.js'
 import { listCanvasTool } from './tools/canvas.js'
 import { registerAllTools } from './tool-registration.js'
+import { registerOpenCanvasTools } from './opencanvas-tools.js'
+import { getDb } from '../store/db/index.js'
+import { LibsqlCanvasDocStore } from '../store/libsql/libsql-canvas-doc-store.js'
+import { LibsqlWorkspaceIndex } from '../store/libsql/libsql-workspace-index.js'
+import { FsBlobStore } from '../store/fs/fs-blob-store.js'
 
 export async function createExcalidrawMcpServer() {
   // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
@@ -138,6 +143,14 @@ export async function createExcalidrawMcpServer() {
 
   registerAllTools(server, workspaceId, withDaemon)
   registerMcpAppsExtension(server)
+
+  const dataDir = getDataDir()
+  const db = await getDb(dataDir)
+  registerOpenCanvasTools(server, {
+    canvasDocStore: new LibsqlCanvasDocStore(db),
+    workspaceIndex: new LibsqlWorkspaceIndex(db),
+    blobStore: new FsBlobStore(dataDir),
+  })
 
   return server
 }

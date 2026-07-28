@@ -190,12 +190,14 @@
     "pino": "^10.3.1",
     "wawoff2": "^2.0.1",
     "ws": "^8.21.0",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.4.1",
     "@kamiazya/whiteboard-canvas-ports": "workspace:*",
     "@kamiazya/whiteboard-canvas-workspace": "workspace:*",
+    "@kamiazya/whiteboard-server-core": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
