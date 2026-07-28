@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
 import { createCanvasOutputSchema, listCanvasesOutputSchema } from './tools/canvas-crud.schemas.js'
 import { createInMemoryCanvasDocStore } from './test-utils/in-memory-canvas-doc-store.js'
+import { FakeWorkspaceIndex } from './test-utils/fake-workspace-index.js'
 
 function makeApp() {
   const { app } = createServer({
     canvasDocStore: createInMemoryCanvasDocStore(),
-    workspaceIndex: {} as never,
+    workspaceIndex: new FakeWorkspaceIndex(),
     blobStore: {} as never,
   })
   return app

@@ -510,6 +510,7 @@ async function main() {
   console.log(`[e2e] wb_canvas_create → ${versionCanvas.canvasId}`)
 
   const facets = await callTool('facet_set', {
+    workspaceId,
     canvasId: versionCanvas.canvasId,
     facets: { 'e2e/1': { note: 'before-save' } },
   })
@@ -534,6 +535,7 @@ async function main() {
   console.log(`[e2e] version_save → ${saved.versionId}`)
 
   const restored = await callTool('version_restore', {
+    workspaceId,
     canvasId: versionCanvas.canvasId,
     versionId: saved.versionId,
   })

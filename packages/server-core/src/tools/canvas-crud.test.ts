@@ -2,6 +2,7 @@ import { canvasIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryCanvasDocStore } from '../test-utils/in-memory-canvas-doc-store.js'
+import { FakeWorkspaceIndex } from '../test-utils/fake-workspace-index.js'
 import {
   CanvasNotFoundError,
   CanvasParentNotFoundError,
@@ -12,7 +13,7 @@ import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './can
 function makeDeps(): ServerDeps {
   return {
     canvasDocStore: createInMemoryCanvasDocStore(),
-    workspaceIndex: {} as never,
+    workspaceIndex: new FakeWorkspaceIndex(),
     blobStore: {} as never,
   }
 }
