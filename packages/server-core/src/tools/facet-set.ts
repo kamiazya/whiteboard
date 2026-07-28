@@ -7,7 +7,7 @@ import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-p
 import { readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import type { ServerDeps } from '../create-server.js'
+import type { ServerDeps } from '../server-deps.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{domain}/{version}` key
