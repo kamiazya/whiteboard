@@ -15,9 +15,9 @@
 // module-load time.
 
 import { readdir, readFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join, resolve } from 'node:path'
 
+import { findPackageRoot } from '../../shared/package-root.js'
 import { getLogger } from '../log.js'
 
 const log = getLogger('headless-renderer')
@@ -91,14 +91,12 @@ interface ExcalidrawFile {
 // Resolve the bundled Excalifont woff2. Looked up at module init so the
 // daemon does not pay the disk hit per export call.
 export async function resolveExcalifontTtf(): Promise<Buffer | null> {
-  const here = dirname(fileURLToPath(import.meta.url))
-  // dist layout: dist/server/export/headless-renderer.js — fonts under
-  // dist/web-app/fonts/Excalifont/ (apps/web's vite config self-hosts the
-  // Excalidraw fonts flat, not under the upstream node_modules path).
+  // Fonts are self-hosted flat under dist/web-app/fonts/Excalifont (apps/web's
+  // vite config), relative to the package root in both tsx (src) and built (dist)
+  // modes. Resolved from the package root rather than a fixed offset so it stays
+  // correct even when the bundler hoists this module into a chunk. See package-root.ts.
   const candidates = [
-    join(here, '..', '..', 'web-app', 'fonts', 'Excalifont'),
-    // src layout (tsx watch mode): packages/mcp-server/src/server/export/...
-    join(here, '..', '..', '..', 'dist', 'web-app', 'fonts', 'Excalifont'),
+    resolve(findPackageRoot(import.meta.url), 'dist', 'web-app', 'fonts', 'Excalifont'),
   ]
   for (const dir of candidates) {
     try {

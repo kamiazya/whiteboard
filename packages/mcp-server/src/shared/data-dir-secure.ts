@@ -1,11 +1,12 @@
 import { accessSync, chmodSync, constants as fsConstants, mkdirSync } from 'node:fs'
 import { homedir, platform, tmpdir } from 'node:os'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
+import { findPackageRoot } from './package-root.js'
 
-// From src/shared/data-dir-secure.ts, going up two directories reaches the package root.
-// src/shared -> src -> package root. Same depth as src/server, so '../..' is unchanged.
-export const WHITEBOARD_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
+// The package root (holds package.json + dist/). Resolved by walking up to
+// package.json — not a fixed offset — so it stays correct even when the bundler
+// hoists this module's body into a chunk at a different depth. See package-root.ts.
+export const WHITEBOARD_ROOT = findPackageRoot(import.meta.url)
 
 // Force owner-only permissions for the data dir, tokens, and stored
 // canvases. On shared VMs or dev containers, a default umask like 0755 can
