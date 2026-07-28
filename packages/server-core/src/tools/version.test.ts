@@ -3,15 +3,17 @@ import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { createVersionListTool } from './version-list.js'
 import { createVersionRestoreTool } from './version-restore.js'
 import { VersionNotFoundError } from './version-restore.js'
 import { createVersionSaveTool } from './version-save.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
 }
 
 async function loadDoc(store: FakeCanvasDocStore, canvasId: string): Promise<LoroDoc> {
@@ -146,6 +148,7 @@ describe('version_restore tool', () => {
     if (beforeNode.type === 'text') expect(beforeNode.text).toBe('modified')
 
     const result = await restoreTool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       versionId: saved.versionId,
     })
@@ -160,12 +163,35 @@ describe('version_restore tool', () => {
     if (afterNode.type === 'text') expect(afterNode.text).toBe('original')
   })
 
+  test('reindexes the workspace so the restored canvas remains visible via WorkspaceIndex', async () => {
+    const store = new FakeCanvasDocStore()
+    const deps = makeDeps(store)
+    const { wbCanvasCreate } = await import('./canvas-crud.js')
+    const created = await wbCanvasCreate(deps, { workspaceId: WORKSPACE_ID, segment: 'doc-a' })
+    const saveTool = createVersionSaveTool(deps)
+    const restoreTool = createVersionRestoreTool(deps)
+
+    const saved = await saveTool.execute({ canvasId: created.canvasId, label: 'v1' })
+    await restoreTool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: created.canvasId,
+      versionId: saved.versionId,
+    })
+
+    const listed = await deps.workspaceIndex.listCanvases({ workspaceId: WORKSPACE_ID })
+    expect(listed.rows.map((row) => row.canvasId)).toEqual([created.canvasId])
+  })
+
   test('throws VersionNotFoundError for unknown versionId', async () => {
     const deps = makeDeps(new FakeCanvasDocStore())
     const restoreTool = createVersionRestoreTool(deps)
 
     await expect(
-      restoreTool.execute({ canvasId: CANVAS_ID, versionId: 'nonexistent' }),
+      restoreTool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        versionId: 'nonexistent',
+      }),
     ).rejects.toThrow(VersionNotFoundError)
   })
 
@@ -181,7 +207,11 @@ describe('version_restore tool', () => {
     })
 
     await expect(
-      restoreTool.execute({ canvasId: CANVAS_ID, versionId: 'corrupt-version' }),
+      restoreTool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        versionId: 'corrupt-version',
+      }),
     ).rejects.toThrow(VersionNotFoundError)
   })
 })

@@ -2,6 +2,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   CanvasDocStore,
+  DocRef,
   LoadDeltasInput,
   LoadDeltasResult,
   LoadSnapshotInput,
@@ -16,25 +17,30 @@ import { LoroDoc } from 'loro-crdt'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
+function docRefKey(docRef: DocRef): string {
+  return docRef.kind === 'canvas'
+    ? `canvas:${docRef.canvasId}`
+    : `workspace-tree:${docRef.workspaceId}`
+}
+
 /**
  * An in-memory CanvasDocStore fake shared across server-core tool tests.
- * Keyed by `docRef.canvasId` so a single fake instance can back multiple
- * canvases within one test, matching how a real store scopes storage by
- * DocRef rather than by store instance.
+ * Keyed by `docRef` (canvas OR workspace-tree) so a single fake instance
+ * backs both a mutation tool's canvas doc and the workspace-tree reindex
+ * reads that a mutation now triggers, matching how a real store scopes
+ * storage by DocRef rather than by store instance.
  */
 export class FakeCanvasDocStore implements CanvasDocStore {
   private readonly saved = new Map<string, SaveSnapshotInput>()
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
-    if (input.docRef.kind !== 'canvas') throw new Error('fake store only supports canvas docs')
-    const entry = this.saved.get(input.docRef.canvasId)
+    const entry = this.saved.get(docRefKey(input.docRef))
     if (entry === undefined) return null
     return { manifest: entry.manifest, chunks: entry.chunks, frontier: entry.frontier }
   }
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
-    if (input.docRef.kind !== 'canvas') throw new Error('fake store only supports canvas docs')
-    this.saved.set(input.docRef.canvasId, input)
+    this.saved.set(docRefKey(input.docRef), input)
   }
 
   async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {

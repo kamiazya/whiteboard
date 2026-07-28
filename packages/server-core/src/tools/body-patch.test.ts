@@ -4,10 +4,12 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
+import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { createBodyPatchTool } from './body-patch.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const WORKSPACE_ID = 'ws-1'
 
 async function seedCanvas(
   canvasDocStore: FakeCanvasDocStore,
@@ -25,7 +27,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
 }
 
 describe('body_patch tool', () => {
@@ -39,6 +41,7 @@ describe('body_patch tool', () => {
 
     const result = await tool.execute({
       mode: 'full',
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       nodeId: 't1',
       body: 'replaced',
@@ -67,6 +70,7 @@ describe('body_patch tool', () => {
 
     const result = await tool.execute({
       mode: 'range',
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       nodeId: 't1',
       range: { startLine: 1, endLine: 2, replacement: 'NEW' },
@@ -84,7 +88,13 @@ describe('body_patch tool', () => {
     const tool = createBodyPatchTool(makeDeps(canvasDocStore))
 
     await expect(
-      tool.execute({ mode: 'full', canvasId: CANVAS_ID, nodeId: 'g1', body: 'x' }),
+      tool.execute({
+        mode: 'full',
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        nodeId: 'g1',
+        body: 'x',
+      }),
     ).rejects.toThrow(NotATextNodeError)
   })
 
@@ -101,6 +111,7 @@ describe('body_patch tool', () => {
     await expect(
       tool.execute({
         mode: 'range',
+        workspaceId: WORKSPACE_ID,
         canvasId: CANVAS_ID,
         nodeId: 't1',
         range: { startLine: 0, endLine: 5, replacement: 'x' },
@@ -117,7 +128,13 @@ describe('body_patch tool', () => {
     const tool = createBodyPatchTool(makeDeps(canvasDocStore))
 
     await expect(
-      tool.execute({ mode: 'full', canvasId: CANVAS_ID, nodeId: 'missing', body: 'x' }),
+      tool.execute({
+        mode: 'full',
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        nodeId: 'missing',
+        body: 'x',
+      }),
     ).rejects.toThrow(NodeNotFoundError)
   })
 })

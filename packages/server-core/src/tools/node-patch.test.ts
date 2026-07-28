@@ -4,10 +4,12 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
+import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { CanvasDocNotFoundError, NodeNotFoundError } from './errors.js'
 import { createNodePatchTool, nodePatchInputSchema } from './node-patch.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const WORKSPACE_ID = 'ws-1'
 
 async function seedCanvas(
   canvasDocStore: FakeCanvasDocStore,
@@ -25,7 +27,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
 }
 
 describe('node_patch tool', () => {
@@ -38,6 +40,7 @@ describe('node_patch tool', () => {
     const tool = createNodePatchTool(makeDeps(canvasDocStore))
 
     const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       nodeId: 'n1',
       patch: { x: 42, y: 7, width: 200, height: 90, color: '2' },
@@ -69,6 +72,7 @@ describe('node_patch tool', () => {
     const tool = createNodePatchTool(makeDeps(canvasDocStore))
 
     const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       nodeId: 'g1',
       patch: { label: 'My Group' },
@@ -86,6 +90,7 @@ describe('node_patch tool', () => {
     const tool = createNodePatchTool(makeDeps(canvasDocStore))
 
     const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       nodeId: 'n1',
       patch: { label: 'ignored' },
@@ -103,7 +108,12 @@ describe('node_patch tool', () => {
     const tool = createNodePatchTool(makeDeps(canvasDocStore))
 
     await expect(
-      tool.execute({ canvasId: CANVAS_ID, nodeId: 'missing', patch: { x: 1 } }),
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        nodeId: 'missing',
+        patch: { x: 1 },
+      }),
     ).rejects.toThrow(NodeNotFoundError)
   })
 
@@ -112,12 +122,18 @@ describe('node_patch tool', () => {
     const tool = createNodePatchTool(makeDeps(canvasDocStore))
 
     await expect(
-      tool.execute({ canvasId: CANVAS_ID, nodeId: 'n1', patch: { x: 1 } }),
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        nodeId: 'n1',
+        patch: { x: 1 },
+      }),
     ).rejects.toThrow(CanvasDocNotFoundError)
   })
 
   test('rejects a negative width at the input-schema level', () => {
     const result = nodePatchInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       nodeId: 'n1',
       patch: { width: -5 },

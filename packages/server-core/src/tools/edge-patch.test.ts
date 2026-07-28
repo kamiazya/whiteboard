@@ -4,10 +4,12 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
+import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { createEdgePatchTool } from './edge-patch.js'
 import { EdgeNotFoundError, PatchValidationError } from './errors.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const WORKSPACE_ID = 'ws-1'
 
 async function seedCanvas(
   canvasDocStore: FakeCanvasDocStore,
@@ -25,7 +27,7 @@ async function seedCanvas(
 }
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+  return { canvasDocStore, workspaceIndex: createInMemoryWorkspaceIndex(), blobStore: {} as never }
 }
 
 const BASE_CANVAS: SpatialCanvas = {
@@ -43,6 +45,7 @@ describe('edge_patch tool', () => {
     const tool = createEdgePatchTool(makeDeps(canvasDocStore))
 
     const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       edgeId: 'e1',
       patch: { color: '3', label: 'connects', fromSide: 'right', toSide: 'left' },
@@ -65,7 +68,12 @@ describe('edge_patch tool', () => {
     const tool = createEdgePatchTool(makeDeps(canvasDocStore))
 
     await expect(
-      tool.execute({ canvasId: CANVAS_ID, edgeId: 'missing', patch: { color: '1' } }),
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        edgeId: 'missing',
+        patch: { color: '1' },
+      }),
     ).rejects.toThrow(EdgeNotFoundError)
   })
 
@@ -75,7 +83,12 @@ describe('edge_patch tool', () => {
     const tool = createEdgePatchTool(makeDeps(canvasDocStore))
 
     await expect(
-      tool.execute({ canvasId: CANVAS_ID, edgeId: 'e1', patch: { toNode: 'does-not-exist' } }),
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        canvasId: CANVAS_ID,
+        edgeId: 'e1',
+        patch: { toNode: 'does-not-exist' },
+      }),
     ).rejects.toThrow(PatchValidationError)
   })
 })

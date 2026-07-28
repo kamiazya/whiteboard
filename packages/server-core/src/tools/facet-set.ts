@@ -1,12 +1,14 @@
 import {
   canvasIdSchema,
   extensionFacetsSchema,
+  workspaceIdSchema,
   type ExtensionFacets,
 } from '@kamiazya/whiteboard-canvas-model'
 import { readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
+import { reindexWorkspace } from './reindex.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{domain}/{version}` key
@@ -17,6 +19,7 @@ import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
  */
 export const facetSetInputSchema = z
   .object({
+    workspaceId: workspaceIdSchema,
     canvasId: canvasIdSchema,
     facets: extensionFacetsSchema,
   })
@@ -43,6 +46,7 @@ export function createFacetSetTool(deps: ServerDeps) {
       writeFacets(doc, mergedFacets)
 
       await saveDocSnapshot(deps, input.canvasId, doc)
+      await reindexWorkspace(deps, input.workspaceId)
 
       return { canvasId: input.canvasId, facets: mergedFacets }
     },
