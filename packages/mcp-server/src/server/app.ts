@@ -10,7 +10,7 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { detectMergeBadges } from '../shared/merge-engine.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
-import { createExcalidrawMcpServer } from './mcp/index.js'
+import { createMcpServer } from './mcp/index.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createBranchesRouter } from './routes/branches.js'
@@ -586,7 +586,7 @@ export function createApp(options: AppOptions) {
     }
     // The MCP SDK throws 'Already connected' if a single Server is connected to
     // more than one transport, so build a fresh per-request server. The heavy
-    // workspace-id file IO is memoized inside createExcalidrawMcpServer to keep
+    // workspace-id file IO is memoized inside createMcpServer to keep
     // concurrent /mcp requests cheap and race-free.
     const transport = new WebStandardStreamableHTTPServerTransport({
       enableJsonResponse: true,
@@ -594,7 +594,7 @@ export function createApp(options: AppOptions) {
     let response: Response | undefined
     try {
       const constructStartedAt = debug ? Date.now() : 0
-      const server = await createExcalidrawMcpServer()
+      const server = await createMcpServer()
       if (debug) {
         httpLog.info({ durationMs: Date.now() - constructStartedAt }, 'mcp-http:construct')
       }
