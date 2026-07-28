@@ -46,7 +46,11 @@ COPY packages/canvas-workspace/package.json packages/canvas-workspace/
 COPY apps/web/package.json apps/web/
 COPY tools/arch-lint/package.json tools/arch-lint/
 COPY tools/checks/package.json tools/checks/
-RUN pnpm install --frozen-lockfile
+# GVS (enableGlobalVirtualStore) assumes a persistent global store that
+# survives across installs; inside an ephemeral Docker build layer there is
+# none, so symlinks into the store dangle and workspace deps like zod go
+# unresolved. Disable it for the build.
+RUN pnpm install --frozen-lockfile --config.enable-global-virtual-store=false
 
 # Build the self-contained canvas widget, then compile TypeScript (whose
 # build step copies the widget bundle into mcp-server/dist). canvas-ports and
