@@ -65,10 +65,50 @@ interface RuntimeTable {
   updatedAt: Timestamp
 }
 
+// Header row for a chunked CanvasDocStore snapshot. `docKey` is the
+// DocRef-derived string from ../doc-ref-key.ts. Chunk bytes themselves live
+// in CanvasDocSnapshotChunksTable; this row carries only the manifest
+// scalars plus the frontier the snapshot was taken at.
+interface CanvasDocSnapshotsTable {
+  docKey: string
+  chunkCount: number
+  totalBytes: number
+  maxChunkBytes: number
+  frontier: Uint8Array
+}
+
+interface CanvasDocSnapshotChunksTable {
+  docKey: string
+  chunkIndex: number
+  bytes: Uint8Array
+}
+
+// Append-only delta log. `frontier` is the batch's resulting frontier,
+// duplicated onto every update row of that batch since canvas-ports'
+// DeltaBatch carries one frontier per batch, not per update.
+interface CanvasDocDeltasTable {
+  docKey: string
+  seq: number
+  bytes: Uint8Array
+  frontier: Uint8Array
+}
+
+// "Latest write wins" frontier per docKey, updated by both saveSnapshot and
+// appendDeltas so readFrontier does not need to compare rows across the two
+// differently-shaped logs above.
+interface CanvasDocFrontiersTable {
+  docKey: string
+  frontier: Uint8Array
+}
+
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
   canvases: CanvasesTable
   branches: BranchesTable
   versions: VersionsTable
   runtime: RuntimeTable
+  canvasDocSnapshots: CanvasDocSnapshotsTable
+  canvasDocSnapshotChunks: CanvasDocSnapshotChunksTable
+  canvasDocDeltas: CanvasDocDeltasTable
+  canvasDocFrontiers: CanvasDocFrontiersTable
 }

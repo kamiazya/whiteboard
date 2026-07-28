@@ -13,8 +13,8 @@ import type {
   SnapshotChunk,
   SnapshotManifest,
 } from '@kamiazya/whiteboard-canvas-ports'
+import { docRefKey } from '../doc-ref-key.js'
 import { cloneBytes } from './clone-bytes.js'
-import { docRefKey } from './doc-ref-key.js'
 
 interface DocRecord {
   readonly snapshot: {
