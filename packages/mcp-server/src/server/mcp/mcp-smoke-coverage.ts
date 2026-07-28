@@ -81,11 +81,13 @@ export const COVERED_TOOLS = [
   'create_pairing_link',
   'canvas_inspect',
   'canvas_view',
+  'facet_set',
   'version_save',
   'version_restore',
   'version_list',
   'export_svg',
   'export_canvas',
+  'wb_canvas_create',
 ] as const
 
 export const ERROR_PATH_ONLY_TOOLS = ['viewport_set'] as const
@@ -114,7 +116,6 @@ export const UNIT_ONLY_TOOLS = [
   'delete_group',
   'distribute_elements',
   'edge_patch',
-  'facet_set',
   'list_groups',
   'load_image',
   'move_elements',
@@ -125,7 +126,6 @@ export const UNIT_ONLY_TOOLS = [
   'template_list',
   'update_element',
   'update_frame_members',
-  'wb_canvas_create',
   'wb_canvas_delete',
   'wb_canvas_get',
   'wb_canvas_list',

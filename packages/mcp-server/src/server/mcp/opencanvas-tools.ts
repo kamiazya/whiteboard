@@ -1,20 +1,20 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
-  createServer,
-  type ServerDeps,
   createCanvasInputSchema,
   createCanvasOutputSchema,
-  listCanvasesInputSchema,
-  listCanvasesOutputSchema,
-  getCanvasInputSchema,
-  getCanvasOutputSchema,
+  createServer,
   deleteCanvasInputSchema,
   deleteCanvasOutputSchema,
+  getCanvasInputSchema,
+  getCanvasOutputSchema,
+  listCanvasesInputSchema,
+  listCanvasesOutputSchema,
+  type ServerDeps,
   wbCanvasCreate,
-  wbCanvasList,
-  wbCanvasGet,
   wbCanvasDelete,
+  wbCanvasGet,
+  wbCanvasList,
 } from '@kamiazya/whiteboard-server-core'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { z } from 'zod'
 import {
   registerToolWithAnnotations,
@@ -53,10 +53,9 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   registerZodObjectTool(server, tools.canvasDigest)
   registerZodObjectTool(server, tools.canvasExportOkf)
   registerZodObjectTool(server, tools.canvasExportJsonCanvas)
-
-  // version_save / version_list / version_restore are already registered
-  // via the legacy Excalidraw tool path (tool-registration.ts). Skipped
-  // here to avoid double-registration.
+  registerZodObjectTool(server, tools.versionSave)
+  registerZodObjectTool(server, tools.versionList)
+  registerZodObjectTool(server, tools.versionRestore)
 
   // body_patch uses z.discriminatedUnion — flatten its options into a
   // raw shape so registerToolWithAnnotations can consume it.

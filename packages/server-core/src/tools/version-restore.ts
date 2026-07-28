@@ -7,8 +7,8 @@ import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 
 export const versionRestoreInputSchema = z
   .object({
-    canvasId: canvasIdSchema,
-    versionId: z.string().min(1),
+    canvasId: canvasIdSchema.describe('Canvas ID (ULID) to restore a version onto, in place.'),
+    versionId: z.string().min(1).describe('Version id returned by version_save or version_list.'),
   })
   .strict()
 export type VersionRestoreInput = z.infer<typeof versionRestoreInputSchema>

@@ -7,8 +7,8 @@ import { generateCanvasId } from './generate-canvas-id.js'
 
 export const versionSaveInputSchema = z
   .object({
-    canvasId: canvasIdSchema,
-    label: z.string().min(1).max(200),
+    canvasId: canvasIdSchema.describe('Canvas ID (ULID) to save a version of.'),
+    label: z.string().min(1).max(200).describe('Human-readable label for this version.'),
   })
   .strict()
 export type VersionSaveInput = z.infer<typeof versionSaveInputSchema>

@@ -14,7 +14,7 @@ const versionEntrySchema = z
 
 export const versionListInputSchema = z
   .object({
-    canvasId: canvasIdSchema,
+    canvasId: canvasIdSchema.describe('Canvas ID (ULID) to list saved versions for.'),
   })
   .strict()
 export type VersionListInput = z.infer<typeof versionListInputSchema>
@@ -51,9 +51,7 @@ export function createVersionListTool(deps: ServerDeps) {
           ) {
             entries.push({ versionId, label, timestamp, frontier })
           }
-        } catch {
-          continue
-        }
+        } catch {}
       }
 
       entries.sort((a, b) => b.timestamp.localeCompare(a.timestamp))
