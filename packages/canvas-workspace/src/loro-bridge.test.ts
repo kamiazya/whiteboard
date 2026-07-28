@@ -1,7 +1,12 @@
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import type { SpatialCanvas, SpatialNode, CanvasEdge } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
+import type {
+  SpatialCanvas,
+  SpatialNode,
+  CanvasEdge,
+  ExtensionFacets,
+} from '@kamiazya/whiteboard-canvas-model'
+import { readFacets, readSpatialCanvas, writeFacets, writeSpatialCanvas } from './loro-bridge.js'
 
 function makeDoc(): LoroDoc {
   return new LoroDoc()
@@ -243,5 +248,83 @@ describe('loro-bridge', () => {
     const result = readSpatialCanvas(doc)
 
     expect(result.edges).toEqual([minimalEdge])
+  })
+})
+
+describe('facets bridge', () => {
+  test('reads empty facets from a fresh doc', () => {
+    const doc = makeDoc()
+    expect(readFacets(doc)).toEqual({})
+  })
+
+  test('round-trips a single facet domain', () => {
+    const doc = makeDoc()
+    const facets: ExtensionFacets = { 'kanban/1': { status: 'in-progress' } }
+
+    writeFacets(doc, facets)
+
+    expect(readFacets(doc)).toEqual(facets)
+  })
+
+  test('round-trips multiple facet domains', () => {
+    const doc = makeDoc()
+    const facets: ExtensionFacets = {
+      'kanban/1': { status: 'in-progress' },
+      'priority/1': { level: 'high' },
+    }
+
+    writeFacets(doc, facets)
+
+    expect(readFacets(doc)).toEqual(facets)
+  })
+
+  test('merges new facet keys with existing ones on write', () => {
+    const doc = makeDoc()
+
+    writeFacets(doc, { 'kanban/1': { status: 'todo' } })
+    writeFacets(doc, {
+      'kanban/1': { status: 'done' },
+      'priority/1': { level: 'low' },
+    })
+
+    expect(readFacets(doc)).toEqual({
+      'kanban/1': { status: 'done' },
+      'priority/1': { level: 'low' },
+    })
+  })
+
+  test('deletes facet keys absent from a later write', () => {
+    const doc = makeDoc()
+
+    writeFacets(doc, {
+      'kanban/1': { status: 'todo' },
+      'priority/1': { level: 'low' },
+    })
+    writeFacets(doc, { 'kanban/1': { status: 'todo' } })
+
+    expect(readFacets(doc)).toEqual({ 'kanban/1': { status: 'todo' } })
+  })
+
+  test('CRDT merge: two docs add different facet domains', () => {
+    const doc1 = new LoroDoc()
+    const doc2 = new LoroDoc()
+
+    writeFacets(doc1, { 'kanban/1': { status: 'todo' } })
+    writeFacets(doc2, { 'priority/1': { level: 'high' } })
+
+    doc1.import(doc2.export({ mode: 'snapshot' }))
+
+    expect(readFacets(doc1)).toEqual({
+      'kanban/1': { status: 'todo' },
+      'priority/1': { level: 'high' },
+    })
+  })
+
+  test('ignores a malformed facet key found in the underlying map', () => {
+    const doc = makeDoc()
+    doc.getMap('facets').set('not-a-valid-key', { anything: true })
+    doc.commit()
+
+    expect(readFacets(doc)).toEqual({})
   })
 })
