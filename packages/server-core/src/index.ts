@@ -70,3 +70,22 @@ export type {
   CanvasExportJsonCanvasInput,
   CanvasExportJsonCanvasOutput,
 } from './tools/canvas-export-json-canvas.js'
+export {
+  createVersionSaveTool,
+  versionSaveInputSchema,
+  versionSaveOutputSchema,
+} from './tools/version-save.js'
+export type { VersionSaveInput, VersionSaveOutput } from './tools/version-save.js'
+export {
+  createVersionListTool,
+  versionListInputSchema,
+  versionListOutputSchema,
+} from './tools/version-list.js'
+export type { VersionListInput, VersionListOutput } from './tools/version-list.js'
+export {
+  createVersionRestoreTool,
+  versionRestoreInputSchema,
+  versionRestoreOutputSchema,
+  VersionNotFoundError,
+} from './tools/version-restore.js'
+export type { VersionRestoreInput, VersionRestoreOutput } from './tools/version-restore.js'
