@@ -167,7 +167,12 @@
     "@secretlint/secretlint-rule-preset-recommend",
     // Resolved from node_modules/.bin/cyclonedx-npm by path at runtime
     // (scripts/release/generate-npm-sbom.mjs), not imported as a module.
-    "@cyclonedx/cyclonedx-npm"
+    "@cyclonedx/cyclonedx-npm",
+    // mcp-server's build reads canvas-viewer's already-built dist/ off disk
+    // by relative path (scripts/copy-widget-into-dist.mjs), not via a JS
+    // import — the devDependency exists purely so pnpm's workspace graph
+    // builds canvas-viewer before mcp-server.
+    "@kamiazya/whiteboard-canvas-viewer"
   ],
   "ignoreBinaries": [
     // Optional local tooling probed by smoke scripts / distribution tests;

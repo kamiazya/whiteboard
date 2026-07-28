@@ -91,3 +91,10 @@ export {
   versionSaveInputSchema,
   versionSaveOutputSchema,
 } from './tools/version-save.js'
+export { reindexWorkspace } from './tools/reindex.js'
+export {
+  createReindexTool,
+  reindexInputSchema,
+  reindexOutputSchema,
+} from './tools/reindex-tool.js'
+export type { ReindexInput, ReindexOutput } from './tools/reindex-tool.js'

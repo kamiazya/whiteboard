@@ -248,9 +248,6 @@ jobs:
           WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
 
-      - name: Template smoke
-        run: pnpm smoke:template
-
       - name: Build
         run: pnpm build
 

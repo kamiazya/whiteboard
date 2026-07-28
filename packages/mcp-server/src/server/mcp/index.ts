@@ -2,35 +2,31 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { ensureDaemon } from '../../daemon/ensure-daemon.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getDataDir } from '../config.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
-import { createDaemonClient } from './daemon-client.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
 import { wireMcpLogging } from './logging.js'
 import { ensureWorkspaceId } from './session-resolver.js'
 import { installStdioLifecycle } from './stdio-lifecycle.js'
 import {
   buildDrawDiagramPrompt,
-  formatRecentCanvasesResource,
   getStandaloneHelpText,
   WHITEBOARD_DRAW_PROMPT,
   WHITEBOARD_HELP_URI,
-  WHITEBOARD_RECENT_CANVASES_URI,
 } from './standalone-help.js'
-import { listCanvasTool } from './tools/canvas.js'
-import { registerAllTools } from './tool-registration.js'
 import { registerOpenCanvasTools } from './opencanvas-tools.js'
 import { getDb } from '../store/db/index.js'
 import { LibsqlCanvasDocStore } from '../store/libsql/libsql-canvas-doc-store.js'
 import { LibsqlWorkspaceIndex } from '../store/libsql/libsql-workspace-index.js'
 import { FsBlobStore } from '../store/fs/fs-blob-store.js'
 
-export async function createExcalidrawMcpServer() {
+export async function createMcpServer() {
   // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
   // HTTP /mcp handler does not race concurrent requests on the marker file.
-  const workspaceId = await ensureWorkspaceId(getDataDir())
+  // Called for its prepareDataDir migration side effect ahead of the DB use
+  // below; the returned id itself is not needed here.
+  await ensureWorkspaceId(getDataDir())
 
   // Read `version` from package.json at runtime so release-please bumps propagate
   // without source edits.
@@ -107,41 +103,6 @@ export async function createExcalidrawMcpServer() {
     }),
   )
 
-  const withDaemon = async <T>(
-    run: (client: ReturnType<typeof createDaemonClient>) => Promise<T>,
-  ): Promise<T> => {
-    const daemon = await ensureDaemon()
-    const client = createDaemonClient(daemon)
-    await client.touch()
-    return run(client)
-  }
-
-  // Dynamic resources need tool instances for their data fetch.
-  const listTool = listCanvasTool()
-
-  server.registerResource(
-    'whiteboard-recent-canvases',
-    WHITEBOARD_RECENT_CANVASES_URI,
-    {
-      title: 'Recent canvases',
-      description: 'Dynamic summary of recently updated canvases across known workspaces.',
-      mimeType: 'text/markdown',
-    },
-    async () => {
-      const canvases = await withDaemon((client) => listTool.execute({}, client))
-      return {
-        contents: [
-          {
-            uri: WHITEBOARD_RECENT_CANVASES_URI,
-            mimeType: 'text/markdown',
-            text: formatRecentCanvasesResource(canvases.workspaces),
-          },
-        ],
-      }
-    },
-  )
-
-  registerAllTools(server, workspaceId, withDaemon)
   registerMcpAppsExtension(server)
 
   const dataDir = getDataDir()
@@ -169,7 +130,7 @@ export async function main() {
   // 'end'/'close' — a client disconnect (parent process exit, pipe close)
   // otherwise leaves this process parked on a stdin that will never
   // produce another byte. Only wired here (not in
-  // createExcalidrawMcpServer, which the HTTP /mcp handler reuses
+  // createMcpServer, which the HTTP /mcp handler reuses
   // per-request) so a stdio client's disconnect never affects the
   // long-lived HTTP daemon.
   let closeServer: () => Promise<void> = () => Promise.resolve()
@@ -199,11 +160,11 @@ export async function main() {
   await initTracing({ role: 'stdio-mcp', installSignalHandlers: false })
 
   // The HTTP daemon runs prepareDataDir in src/server/index.ts; the stdio
-  // entrypoint reaches createExcalidrawMcpServer first, so call the same
+  // entrypoint reaches createMcpServer first, so call the same
   // hook here to keep schema and v0 import bootstrapping symmetric.
   const { prepareDataDir } = await import('../store/db/prepare.js')
   await prepareDataDir(getDataDir())
-  const server = await createExcalidrawMcpServer()
+  const server = await createMcpServer()
   const transport = new StdioServerTransport()
   await server.connect(transport)
 

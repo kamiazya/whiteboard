@@ -11,20 +11,20 @@ import { z } from 'zod'
 // viewportRequestMessageSchema.
 const viewportRequestSchema = z.record(z.string(), z.unknown())
 
-export const viewportResponseSchema = z.object({
+const viewportResponseSchema = z.object({
   ok: z.literal(true),
 })
 
 // Shared error body. The route emits this for no_client (503), timeout (504),
 // and internal (500). Optional fields cover legacy payloads.
-export const viewportErrorBodySchema = z.object({
+const viewportErrorBodySchema = z.object({
   error: z.string().optional(),
   message: z.string().optional(),
   hint: z.string().optional(),
 })
 
 // ── GET /api/canvas/:workspaceId/:slug/client-count ───────────────────────
-export const clientCountResponseSchema = z.object({
+const clientCountResponseSchema = z.object({
   count: z.number().int().nonnegative(),
   readyCount: z.number().int().nonnegative(),
 })
