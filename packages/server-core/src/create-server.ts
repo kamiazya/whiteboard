@@ -1,5 +1,6 @@
 import type { BlobStore, CanvasDocStore, WorkspaceIndex } from '@kamiazya/whiteboard-canvas-ports'
 import { Hono } from 'hono'
+import { createFacetSetTool } from './tools/facet-set.js'
 
 export interface ServerDeps {
   canvasDocStore: CanvasDocStore
@@ -8,7 +9,9 @@ export interface ServerDeps {
 }
 
 export function createServer(deps: ServerDeps) {
-  void deps
   const app = new Hono()
-  return { app }
+  const tools = {
+    facetSet: createFacetSetTool(deps),
+  }
+  return { app, tools }
 }
