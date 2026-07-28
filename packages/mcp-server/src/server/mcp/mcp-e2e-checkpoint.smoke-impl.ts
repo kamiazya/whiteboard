@@ -327,6 +327,7 @@ export async function runE2eCheckpointSmoke({
     console.log(`[e2e] wb_canvas_create → ${versionCanvas.canvasId}`)
 
     const facets = await callTool('facet_set', {
+      workspaceId,
       canvasId: versionCanvas.canvasId,
       facets: { 'e2e/1': { note: 'before-save' } },
     })
@@ -361,6 +362,7 @@ export async function runE2eCheckpointSmoke({
     console.log(`[e2e] version_list → ${versionEntries.length} version(s)`)
 
     const restored = await callTool('version_restore', {
+      workspaceId,
       canvasId: versionCanvas.canvasId,
       versionId: saved.versionId,
     })
