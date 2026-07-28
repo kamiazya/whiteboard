@@ -74,12 +74,18 @@ describe('reindexWorkspace', () => {
 
     const deps = makeDeps(canvasDocStore, workspaceIndex)
     const facetSet = createFacetSetTool(deps)
-    await facetSet.execute({ canvasId: CANVAS_ID, facets: { 'kanban/1': { status: 'todo' } } })
+    await facetSet.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      facets: { 'kanban/1': { status: 'todo' } },
+    })
 
+    // facet_set already triggers its own reindex; this call is redundant but
+    // must be idempotent against unchanged state.
     await reindexWorkspace(deps, WORKSPACE_ID)
 
-    expect(workspaceIndex.calls).toHaveLength(1)
-    const applied = workspaceIndex.calls[0]
+    expect(workspaceIndex.calls).toHaveLength(2)
+    const applied = workspaceIndex.calls[1]
     expect(applied.workspaceId).toBe(WORKSPACE_ID)
     expect(applied.canvasList).toEqual([
       { canvasId: CANVAS_ID, title: 'my-canvas', updatedAtMs: expect.any(Number) },

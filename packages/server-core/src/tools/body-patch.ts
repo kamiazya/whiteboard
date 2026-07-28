@@ -3,11 +3,13 @@ import {
   nodeIdSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
+  workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
+import { reindexWorkspace } from './reindex.js'
 
 export const bodyPatchRangeSchema = z
   .object({
@@ -31,6 +33,7 @@ export const bodyPatchInputSchema = z.discriminatedUnion('mode', [
   z
     .object({
       mode: z.literal('full'),
+      workspaceId: workspaceIdSchema,
       canvasId: canvasIdSchema,
       nodeId: nodeIdSchema,
       body: z.string(),
@@ -39,6 +42,7 @@ export const bodyPatchInputSchema = z.discriminatedUnion('mode', [
   z
     .object({
       mode: z.literal('range'),
+      workspaceId: workspaceIdSchema,
       canvasId: canvasIdSchema,
       nodeId: nodeIdSchema,
       range: bodyPatchRangeSchema,
@@ -120,6 +124,7 @@ export function createBodyPatchTool(deps: ServerDeps) {
       }
 
       await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await reindexWorkspace(deps, input.workspaceId)
 
       return { canvasId: input.canvasId, node: updatedNode }
     },

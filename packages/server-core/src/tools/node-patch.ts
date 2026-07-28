@@ -4,11 +4,13 @@ import {
   nodeIdSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
+  workspaceIdSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { NodeNotFoundError, PatchValidationError } from './errors.js'
+import { reindexWorkspace } from './reindex.js'
 
 /**
  * Deliberately limited to the geometry/style fields every node type
@@ -34,6 +36,7 @@ export type NodePatchFields = z.infer<typeof nodePatchFieldsSchema>
 
 export const nodePatchInputSchema = z
   .object({
+    workspaceId: workspaceIdSchema,
     canvasId: canvasIdSchema,
     nodeId: nodeIdSchema,
     patch: nodePatchFieldsSchema,
@@ -77,6 +80,7 @@ export function createNodePatchTool(deps: ServerDeps) {
       }
 
       await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
+      await reindexWorkspace(deps, input.workspaceId)
 
       return { canvasId: input.canvasId, node: updatedNode }
     },

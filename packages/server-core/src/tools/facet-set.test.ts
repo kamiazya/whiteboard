@@ -3,12 +3,14 @@ import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
+import { FakeWorkspaceIndex } from '../test-utils/fake-workspace-index.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
+const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(canvasDocStore: FakeCanvasDocStore) {
-  return { canvasDocStore, workspaceIndex: {} as never, blobStore: {} as never }
+  return { canvasDocStore, workspaceIndex: new FakeWorkspaceIndex(), blobStore: {} as never }
 }
 
 describe('facet_set tool', () => {
@@ -16,6 +18,7 @@ describe('facet_set tool', () => {
     const tool = createFacetSetTool(makeDeps(new FakeCanvasDocStore()))
 
     const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'todo' } },
     })
@@ -30,7 +33,11 @@ describe('facet_set tool', () => {
     const store = new FakeCanvasDocStore()
     const tool = createFacetSetTool(makeDeps(store))
 
-    await tool.execute({ canvasId: CANVAS_ID, facets: { 'kanban/1': { status: 'todo' } } })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      facets: { 'kanban/1': { status: 'todo' } },
+    })
 
     const loaded = await store.loadSnapshot({
       docRef: { kind: 'canvas', canvasId: CANVAS_ID },
@@ -46,8 +53,13 @@ describe('facet_set tool', () => {
   test('merges a new facet domain with an existing one instead of replacing it', async () => {
     const tool = createFacetSetTool(makeDeps(new FakeCanvasDocStore()))
 
-    await tool.execute({ canvasId: CANVAS_ID, facets: { 'kanban/1': { status: 'todo' } } })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      facets: { 'kanban/1': { status: 'todo' } },
+    })
     const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       facets: { 'priority/1': { level: 'high' } },
     })
@@ -61,8 +73,13 @@ describe('facet_set tool', () => {
   test('overwrites an existing facet domain when the same key is set again', async () => {
     const tool = createFacetSetTool(makeDeps(new FakeCanvasDocStore()))
 
-    await tool.execute({ canvasId: CANVAS_ID, facets: { 'kanban/1': { status: 'todo' } } })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      canvasId: CANVAS_ID,
+      facets: { 'kanban/1': { status: 'todo' } },
+    })
     const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
       canvasId: CANVAS_ID,
       facets: { 'kanban/1': { status: 'done' } },
     })
