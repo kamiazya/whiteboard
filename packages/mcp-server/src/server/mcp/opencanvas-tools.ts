@@ -74,47 +74,28 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
   )
 
   // Canvas CRUD (wired as standalone MCP tools, not through createServer's Hono routes)
-  registerToolWithAnnotations(
-    server,
-    'wb_canvas_create',
-    { inputSchema: createCanvasInputSchema.shape, outputSchema: createCanvasOutputSchema },
-    async (args) => {
-      const parsed = createCanvasInputSchema.parse(args)
-      const result = await wbCanvasCreate(deps, parsed)
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    'wb_canvas_list',
-    { inputSchema: listCanvasesInputSchema.shape, outputSchema: listCanvasesOutputSchema },
-    async (args) => {
-      const parsed = listCanvasesInputSchema.parse(args)
-      const result = await wbCanvasList(deps, parsed)
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    'wb_canvas_get',
-    { inputSchema: getCanvasInputSchema.shape, outputSchema: getCanvasOutputSchema },
-    async (args) => {
-      const parsed = getCanvasInputSchema.parse(args)
-      const result = await wbCanvasGet(deps, parsed)
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    'wb_canvas_delete',
-    { inputSchema: deleteCanvasInputSchema.shape, outputSchema: deleteCanvasOutputSchema },
-    async (args) => {
-      const parsed = deleteCanvasInputSchema.parse(args)
-      const result = await wbCanvasDelete(deps, parsed)
-      return structuredJsonResult(result)
-    },
-  )
+  registerZodObjectTool(server, {
+    name: 'wb_canvas_create',
+    inputSchema: createCanvasInputSchema,
+    outputSchema: createCanvasOutputSchema,
+    execute: (input) => wbCanvasCreate(deps, input),
+  })
+  registerZodObjectTool(server, {
+    name: 'wb_canvas_list',
+    inputSchema: listCanvasesInputSchema,
+    outputSchema: listCanvasesOutputSchema,
+    execute: (input) => wbCanvasList(deps, input),
+  })
+  registerZodObjectTool(server, {
+    name: 'wb_canvas_get',
+    inputSchema: getCanvasInputSchema,
+    outputSchema: getCanvasOutputSchema,
+    execute: (input) => wbCanvasGet(deps, input),
+  })
+  registerZodObjectTool(server, {
+    name: 'wb_canvas_delete',
+    inputSchema: deleteCanvasInputSchema,
+    outputSchema: deleteCanvasOutputSchema,
+    execute: (input) => wbCanvasDelete(deps, input),
+  })
 }
