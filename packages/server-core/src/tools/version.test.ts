@@ -2,8 +2,13 @@ import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canv
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
-import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import {
+  FakeCanvasDocStore,
+  registerCanvasInWorkspace,
+  seedDoc,
+} from '../test-utils/fake-canvas-doc-store.js'
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
+import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
 import { createVersionRestoreTool } from './version-restore.js'
 import { VersionNotFoundError } from './version-restore.js'
@@ -117,6 +122,7 @@ describe('version_restore tool', () => {
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
 
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       writeSpatialCanvas(doc, {
         nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'original' }],
@@ -183,7 +189,9 @@ describe('version_restore tool', () => {
   })
 
   test('throws VersionNotFoundError for unknown versionId', async () => {
-    const deps = makeDeps(new FakeCanvasDocStore())
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
 
     await expect(
@@ -200,6 +208,7 @@ describe('version_restore tool', () => {
     const deps = makeDeps(store)
     const restoreTool = createVersionRestoreTool(deps)
 
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
     await seedDoc(store, CANVAS_ID, (doc) => {
       // frontier must be a string; this stored record predates schema validation
       // or was corrupted, and must be treated as not-found rather than crashing.
@@ -213,5 +222,22 @@ describe('version_restore tool', () => {
         versionId: 'corrupt-version',
       }),
     ).rejects.toThrow(VersionNotFoundError)
+  })
+
+  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
+    const store = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(store, WORKSPACE_ID, CANVAS_ID)
+    const deps = makeDeps(store)
+    const saveTool = createVersionSaveTool(deps)
+    const restoreTool = createVersionRestoreTool(deps)
+    const saved = await saveTool.execute({ canvasId: CANVAS_ID, label: 'v1' })
+
+    await expect(
+      restoreTool.execute({
+        workspaceId: 'ws-other',
+        canvasId: CANVAS_ID,
+        versionId: saved.versionId,
+      }),
+    ).rejects.toThrow(CanvasNotFoundError)
   })
 })

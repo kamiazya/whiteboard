@@ -6,6 +6,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
 import { reindexWorkspace } from './reindex.js'
 import { parseVersionRecord } from './version-record.js'
+import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const versionRestoreInputSchema = z
   .object({
@@ -42,6 +43,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
     async execute(input: VersionRestoreInput): Promise<VersionRestoreOutput> {
+      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
       const versions = doc.getMap('versions')

@@ -11,6 +11,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { NodeNotFoundError, PatchValidationError } from './errors.js'
 import { reindexWorkspace } from './reindex.js'
+import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 /**
  * Deliberately limited to the geometry/style fields every node type
@@ -58,6 +59,7 @@ export function createNodePatchTool(deps: ServerDeps) {
     inputSchema: nodePatchInputSchema,
     outputSchema: nodePatchOutputSchema,
     async execute(input: NodePatchInput): Promise<NodePatchOutput> {
+      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)

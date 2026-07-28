@@ -3,8 +3,12 @@ import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test, vi } from 'vitest'
-import { FakeCanvasDocStore } from '../test-utils/fake-canvas-doc-store.js'
+import {
+  FakeCanvasDocStore,
+  registerCanvasInWorkspace,
+} from '../test-utils/fake-canvas-doc-store.js'
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
+import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { CanvasDocNotFoundError, NodeNotFoundError } from './errors.js'
 import { createNodePatchTool, nodePatchInputSchema } from './node-patch.js'
 
@@ -15,6 +19,7 @@ async function seedCanvas(
   canvasDocStore: FakeCanvasDocStore,
   canvas: SpatialCanvas,
 ): Promise<void> {
+  await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
   const seedDoc = new LoroDoc()
   writeSpatialCanvas(seedDoc, canvas)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
@@ -144,6 +149,7 @@ describe('node_patch tool', () => {
 
   test('throws CanvasDocNotFoundError when no snapshot exists yet', async () => {
     const canvasDocStore = new FakeCanvasDocStore()
+    await registerCanvasInWorkspace(canvasDocStore, WORKSPACE_ID, CANVAS_ID)
     const tool = createNodePatchTool(makeDeps(canvasDocStore))
 
     await expect(
@@ -154,6 +160,24 @@ describe('node_patch tool', () => {
         patch: { x: 1 },
       }),
     ).rejects.toThrow(CanvasDocNotFoundError)
+  })
+
+  test('throws CanvasNotFoundError when workspaceId does not actually own canvasId', async () => {
+    const canvasDocStore = new FakeCanvasDocStore()
+    await seedCanvas(canvasDocStore, {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+      edges: [],
+    })
+    const tool = createNodePatchTool(makeDeps(canvasDocStore))
+
+    await expect(
+      tool.execute({
+        workspaceId: 'ws-other',
+        canvasId: CANVAS_ID,
+        nodeId: 'n1',
+        patch: { x: 1 },
+      }),
+    ).rejects.toThrow(CanvasNotFoundError)
   })
 
   test('rejects a negative width at the input-schema level', () => {
