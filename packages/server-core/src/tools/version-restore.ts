@@ -9,7 +9,9 @@ import { parseVersionRecord } from './version-record.js'
 
 export const versionRestoreInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceIdSchema.describe(
+      'Workspace ID that owns the canvas, used to reindex after restore.',
+    ),
     canvasId: canvasIdSchema.describe('Canvas ID (ULID) to restore a version onto, in place.'),
     versionId: z.string().min(1).describe('Version id returned by version_save or version_list.'),
   })
