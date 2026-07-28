@@ -101,6 +101,50 @@ interface CanvasDocFrontiersTable {
   frontier: Uint8Array
 }
 
+// Five WorkspaceIndex-backing tables (canvas-ports' WorkspaceIndex port).
+// `seq` is each row's position within the array its owning `applyRows` call
+// received for that table — every query orders by it so results stay
+// observationally identical to InMemoryWorkspaceIndex's array-order
+// `.find()`/`.filter()` semantics (see 0004-workspace-index.ts).
+
+interface WorkspaceIndexCanvasListTable {
+  workspaceId: string
+  seq: number
+  canvasId: string
+  title: string
+  updatedAtMs: number
+}
+
+interface WorkspaceIndexFacetsTable {
+  workspaceId: string
+  seq: number
+  facet: string
+  value: string
+  canvasId: string
+}
+
+interface WorkspaceIndexAliasesTable {
+  workspaceId: string
+  seq: number
+  alias: string
+  canvasId: string
+}
+
+interface WorkspaceIndexBacklinksTable {
+  workspaceId: string
+  seq: number
+  fromCanvasId: string
+  toCanvasId: string
+}
+
+interface WorkspaceIndexAliasHistoryTable {
+  workspaceId: string
+  seq: number
+  alias: string
+  canvasId: string
+  retiredAtMs: number
+}
+
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
   canvases: CanvasesTable
@@ -111,4 +155,9 @@ export interface DatabaseSchema {
   canvasDocSnapshotChunks: CanvasDocSnapshotChunksTable
   canvasDocDeltas: CanvasDocDeltasTable
   canvasDocFrontiers: CanvasDocFrontiersTable
+  workspaceIndexCanvasList: WorkspaceIndexCanvasListTable
+  workspaceIndexFacets: WorkspaceIndexFacetsTable
+  workspaceIndexAliases: WorkspaceIndexAliasesTable
+  workspaceIndexBacklinks: WorkspaceIndexBacklinksTable
+  workspaceIndexAliasHistory: WorkspaceIndexAliasHistoryTable
 }
