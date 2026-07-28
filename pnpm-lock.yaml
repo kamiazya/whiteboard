@@ -603,6 +603,34 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.12.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.10)(happy-dom@20.9.0)(jsdom@29.1.1(canvas@3.2.3))(msw@2.13.5(@types/node@24.12.2)(typescript@6.0.3))(vite@8.1.5(@types/node@24.12.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.0)(yaml@2.9.0))
 
+  packages/server-core:
+    dependencies:
+      '@kamiazya/whiteboard-canvas-model':
+        specifier: workspace:*
+        version: link:../canvas-model
+      '@kamiazya/whiteboard-canvas-ports':
+        specifier: workspace:*
+        version: link:../canvas-ports
+      '@kamiazya/whiteboard-canvas-render':
+        specifier: workspace:*
+        version: link:../canvas-render
+      '@kamiazya/whiteboard-canvas-workspace':
+        specifier: workspace:*
+        version: link:../canvas-workspace
+      hono:
+        specifier: ^4.12.27
+        version: 4.12.27
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-v8@4.1.10)(happy-dom@20.9.0)(jsdom@29.1.1(canvas@3.2.3))(msw@2.13.5(@types/node@24.13.1)(typescript@6.0.3))(vite@8.1.5(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.0)(yaml@2.9.0))
+
   tools/arch-lint:
     dependencies:
       typescript:
