@@ -7,7 +7,8 @@
 // TOOL_PROFILES lives in tool-profiles.ts.
 // Tool registrations live in tool-registration.ts as `defineTool({...})`
 // entries in a data-driven array (each one calls registerToolWithAnnotations
-// through the defineTool identity helper).
+// through the defineTool identity helper), plus opencanvas-tools.ts's direct
+// registerToolWithAnnotations(server, ...) calls.
 
 import { readFileSync, existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -42,11 +43,11 @@ function countRegisterCalls(src: string): number {
 }
 
 function countOpenCanvasTools(src: string): number {
-  const zodObject = (src.match(/registerZodObjectTool\(server, tools\./g) ?? []).length
-  const direct = (
-    src.match(/registerToolWithAnnotations\(\s*\n\s*server,\s*\n\s*(?:'[a-z_]+'|bp\.name)/g) ?? []
+  return (
+    src.match(
+      /registerToolWithAnnotations\(\s*\n\s*server,\s*\n\s*(?:'[a-z_]+'|bp\.name|tools\.\w+\.name)/g,
+    ) ?? []
   ).length
-  return zodObject + direct
 }
 
 describe('MCP tool annotations coverage', () => {

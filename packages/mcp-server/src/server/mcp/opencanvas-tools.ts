@@ -1,62 +1,164 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import {
-  createServer,
-  type ServerDeps,
   createCanvasInputSchema,
   createCanvasOutputSchema,
-  listCanvasesInputSchema,
-  listCanvasesOutputSchema,
-  getCanvasInputSchema,
-  getCanvasOutputSchema,
+  createServer,
   deleteCanvasInputSchema,
   deleteCanvasOutputSchema,
+  getCanvasInputSchema,
+  getCanvasOutputSchema,
+  listCanvasesInputSchema,
+  listCanvasesOutputSchema,
+  type ServerDeps,
   wbCanvasCreate,
-  wbCanvasList,
-  wbCanvasGet,
   wbCanvasDelete,
+  wbCanvasGet,
+  wbCanvasList,
 } from '@kamiazya/whiteboard-server-core'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { z } from 'zod'
-import {
-  registerToolWithAnnotations,
-  structuredJsonResult,
-  type ToolHandlerReturn,
-} from './tool-support.js'
-
-function registerZodObjectTool<S extends z.ZodObject<z.ZodRawShape>, O extends z.ZodTypeAny>(
-  server: McpServer,
-  tool: {
-    name: string
-    inputSchema: S
-    outputSchema: O
-    execute: (input: z.infer<S>) => Promise<z.infer<O>>
-  },
-): void {
-  registerToolWithAnnotations(
-    server,
-    tool.name,
-    { inputSchema: tool.inputSchema.shape, outputSchema: tool.outputSchema },
-    async (args) => {
-      const parsed = tool.inputSchema.parse(args)
-      const result = await tool.execute(parsed)
-      return structuredJsonResult(result as object) as unknown as ToolHandlerReturn<O>
-    },
-  )
-}
+import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
 
 export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): void {
   const { tools } = createServer(deps)
 
-  registerZodObjectTool(server, tools.facetSet)
-  registerZodObjectTool(server, tools.nodePatch)
-  registerZodObjectTool(server, tools.edgePatch)
-  registerZodObjectTool(server, tools.canvasRenderSvg)
-  registerZodObjectTool(server, tools.canvasDigest)
-  registerZodObjectTool(server, tools.canvasExportOkf)
-  registerZodObjectTool(server, tools.canvasExportJsonCanvas)
+  // Each call below is a direct registerToolWithAnnotations invocation (not
+  // routed through a shared generic wrapper) so outputSchema and O are
+  // concrete at every call site: TypeScript checks this handler's
+  // structuredJsonResult(result) return against ToolHandlerReturn<O> for
+  // real, with no cast. A shared generic helper cannot do this: inside a
+  // generic function body O stays an abstract type parameter, so the
+  // conditional ToolHandlerReturn<O> never resolves and the check silently
+  // degrades into an `as unknown as` cast.
+  registerToolWithAnnotations(
+    server,
+    tools.facetSet.name,
+    { inputSchema: tools.facetSet.inputSchema.shape, outputSchema: tools.facetSet.outputSchema },
+    async (args) => {
+      const parsed = tools.facetSet.inputSchema.parse(args)
+      const result = await tools.facetSet.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
 
-  // version_save / version_list / version_restore are already registered
-  // via the legacy Excalidraw tool path (tool-registration.ts). Skipped
-  // here to avoid double-registration.
+  registerToolWithAnnotations(
+    server,
+    tools.nodePatch.name,
+    { inputSchema: tools.nodePatch.inputSchema.shape, outputSchema: tools.nodePatch.outputSchema },
+    async (args) => {
+      const parsed = tools.nodePatch.inputSchema.parse(args)
+      const result = await tools.nodePatch.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.edgePatch.name,
+    { inputSchema: tools.edgePatch.inputSchema.shape, outputSchema: tools.edgePatch.outputSchema },
+    async (args) => {
+      const parsed = tools.edgePatch.inputSchema.parse(args)
+      const result = await tools.edgePatch.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.canvasRenderSvg.name,
+    {
+      inputSchema: tools.canvasRenderSvg.inputSchema.shape,
+      outputSchema: tools.canvasRenderSvg.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.canvasRenderSvg.inputSchema.parse(args)
+      const result = await tools.canvasRenderSvg.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.canvasDigest.name,
+    {
+      inputSchema: tools.canvasDigest.inputSchema.shape,
+      outputSchema: tools.canvasDigest.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.canvasDigest.inputSchema.parse(args)
+      const result = await tools.canvasDigest.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.canvasExportOkf.name,
+    {
+      inputSchema: tools.canvasExportOkf.inputSchema.shape,
+      outputSchema: tools.canvasExportOkf.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.canvasExportOkf.inputSchema.parse(args)
+      const result = await tools.canvasExportOkf.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.canvasExportJsonCanvas.name,
+    {
+      inputSchema: tools.canvasExportJsonCanvas.inputSchema.shape,
+      outputSchema: tools.canvasExportJsonCanvas.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.canvasExportJsonCanvas.inputSchema.parse(args)
+      const result = await tools.canvasExportJsonCanvas.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.versionSave.name,
+    {
+      inputSchema: tools.versionSave.inputSchema.shape,
+      outputSchema: tools.versionSave.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.versionSave.inputSchema.parse(args)
+      const result = await tools.versionSave.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.versionList.name,
+    {
+      inputSchema: tools.versionList.inputSchema.shape,
+      outputSchema: tools.versionList.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.versionList.inputSchema.parse(args)
+      const result = await tools.versionList.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.versionRestore.name,
+    {
+      inputSchema: tools.versionRestore.inputSchema.shape,
+      outputSchema: tools.versionRestore.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.versionRestore.inputSchema.parse(args)
+      const result = await tools.versionRestore.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
 
   // body_patch uses z.discriminatedUnion — flatten its options into a
   // raw shape so registerToolWithAnnotations can consume it.

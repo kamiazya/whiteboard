@@ -80,6 +80,32 @@ describe('version_list tool', () => {
     expect(result.versions[0].label).toBe('second')
     expect(result.versions[1].label).toBe('first')
   })
+
+  test('skips a stored record that fails schema validation', async () => {
+    const store = new FakeCanvasDocStore()
+    const deps = makeDeps(store)
+    const saveTool = createVersionSaveTool(deps)
+    const listTool = createVersionListTool(deps)
+
+    await saveTool.execute({ canvasId: CANVAS_ID, label: 'valid' })
+
+    const doc = await loadDoc(store, CANVAS_ID)
+    doc.getMap('versions').set('corrupt-version', JSON.stringify({ label: 'bad', frontier: 123 }))
+    doc.commit()
+    const { chunkSnapshot } = await import('@kamiazya/whiteboard-canvas-ports')
+    const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
+    await store.saveSnapshot({
+      docRef: { kind: 'canvas', canvasId: CANVAS_ID },
+      manifest,
+      chunks,
+      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    })
+
+    const result = await listTool.execute({ canvasId: CANVAS_ID })
+
+    expect(result.versions).toHaveLength(1)
+    expect(result.versions[0].label).toBe('valid')
+  })
 })
 
 describe('version_restore tool', () => {
@@ -140,6 +166,22 @@ describe('version_restore tool', () => {
 
     await expect(
       restoreTool.execute({ canvasId: CANVAS_ID, versionId: 'nonexistent' }),
+    ).rejects.toThrow(VersionNotFoundError)
+  })
+
+  test('throws VersionNotFoundError for a stored record that fails schema validation', async () => {
+    const store = new FakeCanvasDocStore()
+    const deps = makeDeps(store)
+    const restoreTool = createVersionRestoreTool(deps)
+
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      // frontier must be a string; this stored record predates schema validation
+      // or was corrupted, and must be treated as not-found rather than crashing.
+      doc.getMap('versions').set('corrupt-version', JSON.stringify({ label: 'v1', frontier: 123 }))
+    })
+
+    await expect(
+      restoreTool.execute({ canvasId: CANVAS_ID, versionId: 'corrupt-version' }),
     ).rejects.toThrow(VersionNotFoundError)
   })
 })

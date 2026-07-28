@@ -9,18 +9,23 @@
 // field descriptions, this test fails — it is the last line of defense
 // against the annotate_batch groupAs class of doc/schema drift.
 
+import {
+  versionListInputSchema,
+  versionRestoreInputSchema,
+  versionSaveInputSchema,
+} from '@kamiazya/whiteboard-server-core'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { annotateBatchInputShape } from './tools/annotate-batch.js'
 import { annotateInputShape } from './tools/annotate.js'
-import { canvasAutoLayoutInputShape } from './tools/canvas-auto-layout.js'
-import { canvasInspectInputShape } from './tools/canvas-inspect.js'
+import { annotateBatchInputShape } from './tools/annotate-batch.js'
 import {
   canvasCreateInputShape,
   canvasListInputShape,
   canvasOpenInputShape,
   optimizeCanvasesInputShape,
 } from './tools/canvas.js'
+import { canvasAutoLayoutInputShape } from './tools/canvas-auto-layout.js'
+import { canvasInspectInputShape } from './tools/canvas-inspect.js'
 import {
   alignInputSchema,
   assignToGroupInputShape,
@@ -44,11 +49,6 @@ import {
 import { loadImageInputShape } from './tools/load.js'
 import { createPairingLinkInputShape } from './tools/pairing-link.js'
 import { insertTemplateInputShape, listTemplatesInputShape } from './tools/template.js'
-import {
-  versionListInputShape,
-  versionRestoreInputShape,
-  versionSaveInputShape,
-} from './tools/version.js'
 import { viewportSetInputShape } from './tools/viewport.js'
 
 // name -> the same value passed as `inputSchema:` in tool-registration.ts's
@@ -80,9 +80,9 @@ const REGISTERED_INPUT_SHAPES: Record<string, z.ZodRawShape> = {
   distribute_elements: distributeInputSchema.shape,
   reorder_elements: reorderElementsInputShape,
   canvas_clear: canvasClearInputShape,
-  version_save: versionSaveInputShape,
-  version_restore: versionRestoreInputShape,
-  version_list: versionListInputShape,
+  version_save: versionSaveInputSchema.shape,
+  version_restore: versionRestoreInputSchema.shape,
+  version_list: versionListInputSchema.shape,
   create_frame: createFrameInputShape,
   update_frame_members: updateFrameMembersInputShape,
   create_embed: createEmbedInputShape,

@@ -1,33 +1,18 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { z } from 'zod'
-import { createDaemonClient } from './daemon-client.js'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { z } from 'zod'
+import type { createDaemonClient } from './daemon-client.js'
+import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import {
   registerToolWithAnnotations,
   structuredJsonResult,
   type ToolHandlerReturn,
 } from './tool-support.js'
+import { annotateInputShape, annotateOutputSchema, annotateTool } from './tools/annotate.js'
 import {
   annotateBatchInputShape,
   annotateBatchOutputSchema,
   annotateBatchTool,
 } from './tools/annotate-batch.js'
-import { annotateInputShape, annotateOutputSchema, annotateTool } from './tools/annotate.js'
-import {
-  canvasAutoLayoutInputShape,
-  canvasAutoLayoutOutputSchema,
-  canvasAutoLayoutTool,
-} from './tools/canvas-auto-layout.js'
-import {
-  canvasInspectInputShape,
-  canvasInspectOutputSchema,
-  canvasInspectTool,
-} from './tools/canvas-inspect.js'
-import {
-  canvasViewInputShape,
-  canvasViewOutputSchema,
-  canvasViewTool,
-} from './tools/canvas-view.js'
-import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import {
   canvasCreateInputShape,
   canvasCreateOutputSchema,
@@ -43,6 +28,21 @@ import {
   optimizeCanvasesTool,
 } from './tools/canvas.js'
 import {
+  canvasAutoLayoutInputShape,
+  canvasAutoLayoutOutputSchema,
+  canvasAutoLayoutTool,
+} from './tools/canvas-auto-layout.js'
+import {
+  canvasInspectInputShape,
+  canvasInspectOutputSchema,
+  canvasInspectTool,
+} from './tools/canvas-inspect.js'
+import {
+  canvasViewInputShape,
+  canvasViewOutputSchema,
+  canvasViewTool,
+} from './tools/canvas-view.js'
+import {
   alignElementsTool,
   alignInputSchema,
   alignOutputSchema,
@@ -52,8 +52,8 @@ import {
   canvasClearInputShape,
   canvasClearTool,
   clearedCountOutputSchema,
-  deleteElementInputShape,
   deletedElementsOutputSchema,
+  deleteElementInputShape,
   deleteElementsInputShape,
   deleteElementsTool,
   deleteElementTool,
@@ -81,17 +81,6 @@ import {
   exportCanvasTool,
 } from './tools/export-canvas.js'
 import { exportSvgInputShape, exportSvgOutputSchema, exportSvgTool } from './tools/export-svg.js'
-import {
-  versionListInputShape,
-  versionListOutputSchema,
-  versionListTool,
-  versionRestoreInputShape,
-  versionRestoreOutputSchema,
-  versionRestoreTool,
-  versionSaveInputShape,
-  versionSaveOutputSchema,
-  versionSaveTool,
-} from './tools/version.js'
 import {
   createEmbedInputShape,
   createEmbedOutputSchema,
@@ -206,9 +195,6 @@ export function registerAllTools(
   const frameCreate = createFrameTool()
   const frameUpdateMembers = updateFrameMembersTool()
   const embedCreate = createEmbedTool()
-  const versionSave = versionSaveTool()
-  const versionRestore = versionRestoreTool()
-  const versionList = versionListTool()
   const pairingLink = pairingLinkTool()
 
   const tools: RegisteredTool[] = [
@@ -554,43 +540,6 @@ export function registerAllTools(
       outputSchema: clearedCountOutputSchema,
       handler: async ({ canvasId }) => {
         const result = await withDaemon((client) => clearTool.execute({ canvasId }, client))
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: versionSave.name,
-      description: versionSave.description,
-      inputSchema: versionSaveInputShape,
-      outputSchema: versionSaveOutputSchema,
-      handler: async ({ canvasId, label }) => {
-        const result = await withDaemon((client) =>
-          versionSave.execute({ canvasId, label }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: versionRestore.name,
-      description: versionRestore.description,
-      inputSchema: versionRestoreInputShape,
-      outputSchema: versionRestoreOutputSchema,
-      handler: async ({ canvasId, versionId, targetSlug, overwrite }) => {
-        const result = await withDaemon((client) =>
-          versionRestore.execute({ canvasId, versionId, targetSlug, overwrite }, client),
-        )
-        return structuredJsonResult(result)
-      },
-    }),
-
-    defineTool({
-      name: versionList.name,
-      description: versionList.description,
-      inputSchema: versionListInputShape,
-      outputSchema: versionListOutputSchema,
-      handler: async ({ canvasId }) => {
-        const result = await withDaemon((client) => versionList.execute({ canvasId }, client))
         return structuredJsonResult(result)
       },
     }),

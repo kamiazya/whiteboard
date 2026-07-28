@@ -310,66 +310,71 @@ export async function runE2eCheckpointSmoke({
       throw new Error(`source canvas missing element: ${JSON.stringify(insBefore)}`)
     }
 
-    const saved = await callTool('version_save', { canvasId: created.id })
-    if (!saved.versionId) throw new Error('version_save returned no id')
-    if (saved.elementCount !== insBefore.elementCount) {
+    // version_save / version_list / version_restore are wired through
+    // server-core (createServer(deps).tools.version*), not the legacy
+    // Excalidraw daemon-client path above, so they operate on a ULID
+    // canvasId (wb_canvas_create) rather than the "{workspaceId}/{slug}"
+    // form the annotate/create_frame calls above use.
+    const versionCanvas = await callTool('wb_canvas_create', {
+      workspaceId,
+      segment: 'e2e-version-canvas',
+    })
+    if (!versionCanvas.canvasId) {
       throw new Error(
-        `element count mismatch: save=${saved.elementCount} inspect=${insBefore.elementCount}`,
+        `wb_canvas_create returned unexpected shape: ${JSON.stringify(versionCanvas)}`,
       )
     }
-    console.log(`[e2e] version_save → ${saved.versionId} (${saved.elementCount} elems)`)
+    console.log(`[e2e] wb_canvas_create → ${versionCanvas.canvasId}`)
 
-    const versions = await callTool('version_list', { canvasId: created.id })
-    if (!Array.isArray(versions.versions) || (versions.versions as unknown[]).length < 1) {
+    const facets = await callTool('facet_set', {
+      canvasId: versionCanvas.canvasId,
+      facets: { 'e2e/1': { note: 'before-save' } },
+    })
+    if (facets.canvasId !== versionCanvas.canvasId) {
+      throw new Error(`facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
+    }
+    console.log('[e2e] facet_set → seeded canvas state')
+
+    const saved = await callTool('version_save', {
+      canvasId: versionCanvas.canvasId,
+      label: 'e2e-version-1',
+    })
+    if (
+      !saved.versionId ||
+      saved.canvasId !== versionCanvas.canvasId ||
+      saved.label !== 'e2e-version-1' ||
+      !saved.timestamp ||
+      !saved.frontier
+    ) {
+      throw new Error(`version_save returned unexpected shape: ${JSON.stringify(saved)}`)
+    }
+    console.log(`[e2e] version_save → ${saved.versionId}`)
+
+    const versions = await callTool('version_list', { canvasId: versionCanvas.canvasId })
+    if (versions.canvasId !== versionCanvas.canvasId || !Array.isArray(versions.versions)) {
       throw new Error(`version_list returned unexpected shape: ${JSON.stringify(versions)}`)
     }
-    console.log(`[e2e] version_list → ${(versions.versions as unknown[]).length} versions`)
+    const versionEntries = versions.versions as Array<{ versionId: string }>
+    if (!versionEntries.some((v) => v.versionId === saved.versionId)) {
+      throw new Error(`version_list missing saved versionId: ${JSON.stringify(versions)}`)
+    }
+    console.log(`[e2e] version_list → ${versionEntries.length} version(s)`)
 
     const restored = await callTool('version_restore', {
-      canvasId: created.id,
+      canvasId: versionCanvas.canvasId,
       versionId: saved.versionId,
-      targetSlug: 'e2e-restored',
     })
-    if (!(restored.canvasId as string).endsWith('/e2e-restored')) {
-      throw new Error(`unexpected restore canvasId: ${restored.canvasId}`)
+    if (
+      restored.canvasId !== versionCanvas.canvasId ||
+      restored.restoredVersionId !== saved.versionId ||
+      restored.label !== saved.label ||
+      restored.frontier !== saved.frontier
+    ) {
+      throw new Error(`version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
     }
-    console.log(`[e2e] version_restore → ${restored.canvasId}`)
+    console.log(`[e2e] version_restore → ${restored.restoredVersionId}`)
 
-    const insAfter = await callTool('canvas_inspect', { canvasId: restored.canvasId })
-    if (insAfter.elementCount !== insBefore.elementCount) {
-      throw new Error(
-        `restored elementCount ${insAfter.elementCount} ≠ original ${insBefore.elementCount}`,
-      )
-    }
-    const types = ((insAfter.elements as Array<{ type: string }> | undefined) ?? []).map(
-      (e) => e.type,
-    )
-    if (!types.includes('rectangle')) {
-      throw new Error(`restored canvas missing rectangle: ${JSON.stringify(insAfter)}`)
-    }
-    console.log(
-      `[e2e] canvas_inspect(restored) → ${insAfter.elementCount} elems, types=${types.join(',')}`,
-    )
-
-    await expectRejected(
-      callTool('version_restore', {
-        canvasId: created.id,
-        versionId: saved.versionId,
-        targetSlug: 'e2e-restored',
-      }),
-      /already exists/,
-      'duplicate restore without overwrite',
-    )
-
-    await callTool('version_restore', {
-      canvasId: created.id,
-      versionId: saved.versionId,
-      targetSlug: 'e2e-restored',
-      overwrite: true,
-    })
-    console.log(`[e2e] version_restore overwrite=true OK`)
-
-    console.log('[e2e] version_save / version_restore / version_list all OK')
+    console.log('[e2e] version_save / version_list / version_restore (server-core wiring) all OK')
 
     await expectRejected(
       callTool('viewport_set', { canvasId: created.id, mode: 'fit' }),
