@@ -5,6 +5,16 @@ import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { resolveReferences } from './resolve.js'
 import { resolveReferencesForExport } from './resolve-for-export.js'
 
+// `]`/`|` are the wikiLink grammar's own delimiters (see findNextReference
+// in resolve.ts) — an alias containing either is an inherent encoding
+// ambiguity, not a round-trip bug, so it is excluded the same way
+// canvas-codec's markdown round-trip property excludes other
+// delimiter-collision classes.
+const wikiLinkAliasArbitrary = fc.option(
+  fc.string({ minLength: 1, maxLength: 12 }).filter((s) => !s.includes(']') && !s.includes('|')),
+  { nil: undefined },
+)
+
 function wikiLinkRoot(canvasId: string, alias: string | undefined): MdastRoot {
   return {
     type: 'root',
@@ -26,23 +36,7 @@ function firstParagraphChild(root: MdastRoot) {
 }
 
 describe('references export/import round-trip properties', () => {
-  fcTest.prop(
-    [
-      canonicalUlidArbitrary,
-      fc.option(
-        // `]`/`|` are the wikiLink grammar's own delimiters (see
-        // findNextReference in resolve.ts) — an alias containing either is
-        // an inherent encoding ambiguity, not a round-trip bug, so it is
-        // excluded the same way canvas-codec's markdown round-trip property
-        // excludes other delimiter-collision classes.
-        fc
-          .string({ minLength: 1, maxLength: 12 })
-          .filter((s) => !s.includes(']') && !s.includes('|')),
-        { nil: undefined },
-      ),
-    ],
-    withDefaults(),
-  )(
+  fcTest.prop([canonicalUlidArbitrary, wikiLinkAliasArbitrary], withDefaults())(
     'unresolved wikiLink degrades to literal text that resolveReferences re-parses into the same canvasId/alias',
     (canvasId, alias) => {
       const exported = resolveReferencesForExport(wikiLinkRoot(canvasId, alias), () => null)
@@ -140,23 +134,7 @@ describe('references export/import round-trip properties', () => {
     },
   )
 
-  fcTest.prop(
-    [
-      canonicalUlidArbitrary,
-      fc.option(
-        // `]`/`|` are the wikiLink grammar's own delimiters (see
-        // findNextReference in resolve.ts) — an alias containing either is
-        // an inherent encoding ambiguity, not a round-trip bug, so it is
-        // excluded the same way canvas-codec's markdown round-trip property
-        // excludes other delimiter-collision classes.
-        fc
-          .string({ minLength: 1, maxLength: 12 })
-          .filter((s) => !s.includes(']') && !s.includes('|')),
-        { nil: undefined },
-      ),
-    ],
-    withDefaults(),
-  )(
+  fcTest.prop([canonicalUlidArbitrary, wikiLinkAliasArbitrary], withDefaults())(
     'resolveReferencesForExport is idempotent for a resolved wikiLink: applying twice equals applying once',
     (canvasId, alias) => {
       const resolver = () => `/notes/${canvasId}.md`
