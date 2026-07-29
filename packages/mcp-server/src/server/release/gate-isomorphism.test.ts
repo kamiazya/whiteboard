@@ -10,9 +10,8 @@
 //    a specific ci.yml job, and neither the job nor the step may be gated
 //    behind an `if:` outside the pinned always-true-on-PR allowlist below.
 //  - 'aggregate': a coarser claim — the named ci.yml job exists and is
-//    PR-reachable. (Full recursive package.json-script expansion with cycle
-//    detection is a known simplification deferred to a follow-up; see the
-//    tmp/issues note filed alongside this PR.)
+//    PR-reachable, and its step `run` commands contain every substring
+//    listed in `expectedCommandSubstrings`.
 //  - 'exception': a reasoned, pinned-allowlist opt-out (docker gates only).
 
 import { readFileSync } from 'node:fs'
@@ -37,6 +36,7 @@ interface PrCoverage {
   jobId?: string
   stepName?: string
   reason?: string
+  expectedCommandSubstrings?: string[]
 }
 
 interface ReleaseGate {
@@ -187,6 +187,44 @@ describe('gate isomorphism: aggregate coverage resolves to a PR-reachable job', 
       expect(
         substantiveSteps.length,
         `gate "${gate.id}": job "${coverage.jobId}" has no steps with a run command left — an aggregate coverage claim requires the job to still do something`,
+      ).toBeGreaterThan(0)
+    }
+  })
+
+  it('every aggregate prCoverage with expectedCommandSubstrings finds each substring in a job step run command', async () => {
+    const { extractWorkflowJobs } = await loadExtractor()
+    const jobs = extractWorkflowJobs(ciYaml)
+    for (const gate of releaseOnlyGates(matrix.gates)) {
+      const coverage = gate.prCoverage
+      if (coverage?.kind !== 'aggregate') continue
+      if (!coverage.expectedCommandSubstrings || coverage.expectedCommandSubstrings.length === 0)
+        continue
+      const job = jobs.find((j) => j.id === coverage.jobId)
+      expect(job).toBeDefined()
+      const allRunCommands = job!.steps
+        .filter((s) => s.run !== null)
+        .map((s) => s.run!)
+        .join('\n')
+      for (const substring of coverage.expectedCommandSubstrings) {
+        expect(
+          allRunCommands,
+          `gate "${gate.id}": expectedCommandSubstring "${substring}" not found in any run step of job "${coverage.jobId}"`,
+        ).toContain(substring)
+      }
+    }
+  })
+
+  it('every aggregate gate declares expectedCommandSubstrings', () => {
+    for (const gate of releaseOnlyGates(matrix.gates)) {
+      const coverage = gate.prCoverage
+      if (coverage?.kind !== 'aggregate') continue
+      expect(
+        coverage.expectedCommandSubstrings,
+        `gate "${gate.id}": aggregate prCoverage must declare expectedCommandSubstrings`,
+      ).toBeDefined()
+      expect(
+        coverage.expectedCommandSubstrings!.length,
+        `gate "${gate.id}": expectedCommandSubstrings must be non-empty`,
       ).toBeGreaterThan(0)
     }
   })

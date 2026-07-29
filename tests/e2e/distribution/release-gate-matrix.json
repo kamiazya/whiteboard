@@ -12,7 +12,8 @@
       "prCoverage": {
         "kind": "aggregate",
         "workflow": "ci.yml",
-        "jobId": "test-unit"
+        "jobId": "test-unit",
+        "expectedCommandSubstrings": ["vitest run"]
       }
     },
     {
@@ -41,7 +42,8 @@
       "prCoverage": {
         "kind": "aggregate",
         "workflow": "ci.yml",
-        "jobId": "test-unit"
+        "jobId": "test-unit",
+        "expectedCommandSubstrings": ["--project=mcp-node"]
       }
     },
     {
@@ -175,7 +177,8 @@
       "prCoverage": {
         "kind": "aggregate",
         "workflow": "ci.yml",
-        "jobId": "verify"
+        "jobId": "verify",
+        "expectedCommandSubstrings": ["test:distribution:only"]
       }
     },
     {
