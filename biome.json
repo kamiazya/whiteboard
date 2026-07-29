@@ -20,7 +20,8 @@
       "!packages/mcp-server/dist/**",
       "!packages/mcp-server/coverage/**",
       "!packages/mcp-server/tmp/**",
-      "!**/pnpm-lock.yaml"
+      "!**/pnpm-lock.yaml",
+      "!.mcp.json"
     ]
   },
   "formatter": {
