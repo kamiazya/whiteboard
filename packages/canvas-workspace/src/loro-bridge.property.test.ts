@@ -74,12 +74,14 @@ describe('loro-bridge properties', () => {
   )
 
   fcTest.prop([extensionFacetsArbitrary], withDefaults())(
-    'readFacets(writeFacets(doc, facets)) deep-equals facets',
+    'readFacets(writeFacets(doc, facets)) deep-equals facets (up to -0 normalization)',
     (facets) => {
       const doc = new LoroDoc()
       writeFacets(doc, facets)
       const result = readFacets(doc)
-      expect(result).toEqual(facets)
+      // Loro normalizes -0 to 0 during storage; JSON.parse(JSON.stringify())
+      // applies the same normalization so we compare against that.
+      expect(result).toEqual(JSON.parse(JSON.stringify(facets)))
     },
   )
 })
