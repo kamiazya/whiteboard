@@ -32,11 +32,15 @@ function renderTextRun(run: TextRunNode): string {
 }
 
 function renderListItem(item: ListItemNode): string {
-  return `<g>${item.children.map(renderNode).join('')}</g>`
+  const tx = item.bbox.x
+  const transform = tx !== 0 ? ` transform="translate(${formatCoord(tx)},0)"` : ''
+  return `<g${transform}>${item.children.map(renderNode).join('')}</g>`
 }
 
 function renderTableCell(cell: TableCellSceneNode): string {
-  return `<g>${cell.runs.map(renderTextRun).join('')}</g>`
+  const tx = cell.bbox.x
+  const transform = tx !== 0 ? ` transform="translate(${formatCoord(tx)},0)"` : ''
+  return `<g${transform}>${cell.runs.map(renderTextRun).join('')}</g>`
 }
 
 function renderTableRow(row: TableRowSceneNode): string {
