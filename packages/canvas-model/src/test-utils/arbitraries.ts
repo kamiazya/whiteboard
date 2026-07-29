@@ -7,6 +7,7 @@ import type {
   MdastTableCell,
   MdastTableRow,
 } from '../mdast/index.js'
+import { RESERVED_ROOT_KEYS } from '../facets.js'
 import { fc } from './fast-check.js'
 
 const CROCKFORD_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -62,8 +63,6 @@ const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
 export const extensionFacetsArbitrary = fc.dictionary(extensionFacetKeyArbitrary, fc.jsonValue(), {
   maxKeys: 4,
 })
-
-const RESERVED_ROOT_KEYS = ['type', 'title', 'tags', 'view', 'facets'] as const
 
 const facetsRawKeyArbitrary: fc.Arbitrary<string> = fc
   .string({ minLength: 1, maxLength: 15 })
