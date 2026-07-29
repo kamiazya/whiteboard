@@ -14,9 +14,9 @@ import { getLogger } from '../log.js'
 import {
   canonicalizeOriginPatternEntry,
   matchOrigin,
+  type OriginPatternFailureReason,
   parseOriginPatternEntry,
   parseOriginPatterns,
-  type OriginPatternFailureReason,
 } from './origin-pattern.js'
 
 type WebOriginsFailureCode =

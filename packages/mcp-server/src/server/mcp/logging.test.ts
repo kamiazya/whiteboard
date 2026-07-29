@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { captureLogsForTests, getLogger, type CapturedLogsHandle } from '../log.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { type CapturedLogsHandle, captureLogsForTests, getLogger } from '../log.js'
 import { wireMcpLogging } from './logging.js'
 
 function makeServer() {

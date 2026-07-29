@@ -2,12 +2,12 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { captureLogsForTests, getLogLevel, isLogLevelEnabled, setLogLevel } from './log.js'
 import {
   applyConfigFileToEnv,
   applyConfigFileToEnvAndLogLevel,
   loadConfigFile,
 } from './config-file.js'
+import { captureLogsForTests, getLogLevel, isLogLevelEnabled, setLogLevel } from './log.js'
 
 let dir: string
 

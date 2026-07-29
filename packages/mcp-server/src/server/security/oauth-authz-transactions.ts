@@ -286,7 +286,7 @@ export function createOAuthTransactionStore(options?: {
   // pruneExpired to have run.
   function getPendingTransaction(transactionId: string): TransactionRecord | null {
     const record = transactions.get(transactionId)
-    if (!record || record.status !== 'pending' || record.expiresAt < now()) return null
+    if (record?.status !== 'pending' || record.expiresAt < now()) return null
     return record
   }
 
@@ -352,7 +352,7 @@ export function createOAuthTransactionStore(options?: {
 
   function issueAuthorizationCode(transactionId: string): { code: string } | null {
     const record = transactions.get(transactionId)
-    if (!record || record.status !== 'approved' || record.expiresAt < now()) return null
+    if (record?.status !== 'approved' || record.expiresAt < now()) return null
     const rawCode = randomBytes(32).toString('base64url')
     const codeHash = hashCode(rawCode)
     const codeExpiresAt = now() + CODE_TTL_MS

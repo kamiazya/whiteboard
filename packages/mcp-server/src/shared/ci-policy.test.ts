@@ -62,7 +62,7 @@ describe('release.yml — root permissions policy', () => {
     expect(
       preamble,
       'packages: write found at workflow root — it must be scoped to docker-publish-sign job only',
-    ).not.toMatch(/^  packages:\s+write/m)
+    ).not.toMatch(/^ {2}packages:\s+write/m)
   })
 })
 

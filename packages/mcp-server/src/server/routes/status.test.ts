@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
 import { Hono } from 'hono'
+import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./ws.js', () => ({
   getClientCount: vi.fn(),

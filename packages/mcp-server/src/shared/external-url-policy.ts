@@ -1,5 +1,4 @@
-const PRIVATE_ADDRESS_ERROR =
-  'Private or local addresses are not allowed in external URLs.'
+const PRIVATE_ADDRESS_ERROR = 'Private or local addresses are not allowed in external URLs.'
 
 function invalidUrl(message: string): Error {
   const error = new Error(message)
@@ -97,11 +96,7 @@ export function validateBrowserExternalUrl(rawUrl: string): URL {
   }
 
   const hostname = normalizeHostname(url.hostname)
-  if (
-    hostname === 'localhost' ||
-    hostname.endsWith('.localhost') ||
-    hostname.endsWith('.local')
-  ) {
+  if (hostname === 'localhost' || hostname.endsWith('.localhost') || hostname.endsWith('.local')) {
     throw invalidUrl(PRIVATE_ADDRESS_ERROR)
   }
 

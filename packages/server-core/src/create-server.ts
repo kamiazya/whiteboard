@@ -1,19 +1,19 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { ServerDeps } from './server-deps.js'
+import { createBodyPatchTool } from './tools/body-patch.js'
 import {
   CanvasNotFoundError,
   CanvasParentNotFoundError,
   CanvasSegmentConflictError,
 } from './tools/canvas-crud.errors.js'
+import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
 import {
   createCanvasInputSchema,
   deleteCanvasInputSchema,
   getCanvasInputSchema,
   listCanvasesInputSchema,
 } from './tools/canvas-crud.schemas.js'
-import { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
-import { createBodyPatchTool } from './tools/body-patch.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
 import { createCanvasExportJsonCanvasTool } from './tools/canvas-export-json-canvas.js'
 import { createCanvasExportOkfTool } from './tools/canvas-export-okf.js'

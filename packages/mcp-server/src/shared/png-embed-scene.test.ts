@@ -7,11 +7,19 @@ import { embedExcalidrawScene } from './png-embed-scene.js'
 function makeMinimalPng(): Buffer {
   const sig = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
   const ihdrData = Buffer.from([
-    0, 0, 0, 1, // width 1
-    0, 0, 0, 1, // height 1
+    0,
+    0,
+    0,
+    1, // width 1
+    0,
+    0,
+    0,
+    1, // height 1
     8, // bit depth
     2, // color type RGB
-    0, 0, 0,
+    0,
+    0,
+    0,
   ])
   const ihdrLen = Buffer.alloc(4)
   ihdrLen.writeUInt32BE(ihdrData.length, 0)
@@ -101,6 +109,7 @@ describe('embedExcalidrawScene', () => {
     // The whole reason we escape: tEXt is Latin-1, so a literal Japanese
     // codepoint above U+00FF would be silently mangled when the Excalidraw
     // import path Latin-1-decodes the chunk.
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ASCII-range check for Latin-1 safety
     expect(/^[\x00-\x7f]*$/.test(decoded.text)).toBe(true)
     expect(JSON.parse(decoded.text)).toEqual(scene)
   })

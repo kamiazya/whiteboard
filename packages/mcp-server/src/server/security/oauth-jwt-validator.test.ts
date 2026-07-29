@@ -1,16 +1,18 @@
 import { Hono } from 'hono'
 import {
+  type CryptoKey,
+  generateKeyPair,
+  type JWTHeaderParameters,
   SignJWT,
   UnsecuredJWT,
-  generateKeyPair,
-  type CryptoKey,
-  type JWTHeaderParameters,
 } from 'jose'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
-import { createAsyncAuthStrategyMiddleware } from './oauth-resource-strategy.js'
-import { createOAuthResourceServerAuthStrategy } from './oauth-resource-strategy.js'
-import { type JwtKeyResolver, createOAuthJwtValidator } from './oauth-jwt-validator.js'
+import { createOAuthJwtValidator, type JwtKeyResolver } from './oauth-jwt-validator.js'
+import {
+  createAsyncAuthStrategyMiddleware,
+  createOAuthResourceServerAuthStrategy,
+} from './oauth-resource-strategy.js'
 
 const TEST_ISSUER = 'https://idp.example.com/'
 const TEST_AUDIENCE = 'https://resource.example.com'
@@ -385,7 +387,7 @@ describe('createOAuthJwtValidator — algorithm policy', () => {
   it('tampered signature → invalid_signature', async () => {
     const token = await buildToken({ scope: 'canvas:read' })
     const parts = token.split('.')
-    parts[2] = parts[2].slice(0, -4) + 'XXXX'
+    parts[2] = `${parts[2].slice(0, -4)}XXXX`
     const tampered = parts.join('.')
     const result = await makeValidator().validate({ token: tampered, requiredScopes: [] })
 
@@ -660,7 +662,7 @@ describe('createOAuthResourceServerAuthStrategy + createOAuthJwtValidator — in
   it('invalid signature → 401 auth.required', async () => {
     const token = await buildToken({ scope: 'canvas:read' })
     const parts = token.split('.')
-    parts[2] = parts[2].slice(0, -4) + 'XXXX'
+    parts[2] = `${parts[2].slice(0, -4)}XXXX`
     const tampered = parts.join('.')
 
     const app = makeApp(['canvas:read'])
@@ -675,7 +677,7 @@ describe('createOAuthResourceServerAuthStrategy + createOAuthJwtValidator — in
   it('failure response body does not contain the raw JWT token', async () => {
     const token = await buildToken({ scope: 'canvas:read' })
     const parts = token.split('.')
-    parts[2] = parts[2].slice(0, -4) + 'XXXX'
+    parts[2] = `${parts[2].slice(0, -4)}XXXX`
     const tampered = parts.join('.')
 
     const app = makeApp(['canvas:read'])

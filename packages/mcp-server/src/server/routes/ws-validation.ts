@@ -1,6 +1,6 @@
-import { ValidationError, validateWorkspaceId, validateSlug } from '../validators.js'
-import { clientTextMessageSchema, type ClientTextMessage } from '../../shared/ws-messages.js'
+import { type ClientTextMessage, clientTextMessageSchema } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
+import { ValidationError, validateSlug, validateWorkspaceId } from '../validators.js'
 
 const log = getLogger('ws')
 

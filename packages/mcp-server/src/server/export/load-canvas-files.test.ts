@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 
@@ -57,7 +57,7 @@ describe('loadCanvasFiles selective loading', () => {
     expect(out['used-1'].mimeType).toBe('image/png')
     expect(out['used-2'].mimeType).toBe('image/jpeg')
     // The unrelated file must be entirely absent from the result.
-    expect(out['unrelated']).toBeUndefined()
+    expect(out.unrelated).toBeUndefined()
   })
 
   it('treats a non-directory at <ws>/files as gracefully as a missing dir', async () => {
@@ -128,11 +128,11 @@ describe('loadCanvasFiles selective loading', () => {
     await seedFile('ws_mime', 'f', '.svg', 1)
 
     const out = await loadCanvasFiles('ws_mime', new Set(['a', 'b', 'c', 'd', 'e', 'f']))
-    expect(out['a'].mimeType).toBe('image/png')
-    expect(out['b'].mimeType).toBe('image/jpeg')
-    expect(out['c'].mimeType).toBe('image/jpeg')
-    expect(out['d'].mimeType).toBe('image/gif')
-    expect(out['e'].mimeType).toBe('image/webp')
-    expect(out['f'].mimeType).toBe('image/svg+xml')
+    expect(out.a.mimeType).toBe('image/png')
+    expect(out.b.mimeType).toBe('image/jpeg')
+    expect(out.c.mimeType).toBe('image/jpeg')
+    expect(out.d.mimeType).toBe('image/gif')
+    expect(out.e.mimeType).toBe('image/webp')
+    expect(out.f.mimeType).toBe('image/svg+xml')
   })
 })

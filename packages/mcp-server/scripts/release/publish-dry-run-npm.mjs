@@ -1,15 +1,16 @@
 #!/usr/bin/env node
+
 // Dry-run npm tarball preparation: pnpm pack + SHA-512 checksum capture +
 // SBOM placeholder. Does NOT publish to any registry.
 // No NPM_TOKEN, no --provenance flag, no OIDC material used.
 // Output: structured JSON summary to stdout on success; generic message to
 // stderr and exit 1 on failure. Full tarball contents never reach stdout.
 
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawnSync } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
@@ -49,9 +50,7 @@ if (!rawPackOutput) {
 }
 
 const tarballName = basename(rawPackOutput)
-const tarballAbsPath = isAbsolute(rawPackOutput)
-  ? rawPackOutput
-  : resolve(OUT_DIR, tarballName)
+const tarballAbsPath = isAbsolute(rawPackOutput) ? rawPackOutput : resolve(OUT_DIR, tarballName)
 
 // Step 2: SHA-512 checksum (computed in-process to avoid subprocess output leaking)
 let tarballBytes
@@ -84,7 +83,7 @@ writeFileSync(
 // Safe stdout summary: no tarball file contents, no package internals,
 // no registry auth, no OIDC material.
 process.stdout.write(
-  JSON.stringify(
+  `${JSON.stringify(
     {
       schemaVersion: 1,
       ok: true,
@@ -98,5 +97,5 @@ process.stdout.write(
     },
     null,
     2,
-  ) + '\n',
+  )}\n`,
 )

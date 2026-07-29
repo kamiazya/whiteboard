@@ -68,7 +68,7 @@ describe('stripWasmSourceMapPlugin', () => {
     runGenerateBundle(bundle)
 
     const stripped = bundle['app.wasm']
-    if (!stripped || stripped.type !== 'asset') throw new Error('expected asset to survive')
+    if (stripped?.type !== 'asset') throw new Error('expected asset to survive')
     expect(Buffer.isBuffer(stripped.source)).toBe(true)
     expect(bytesContain(stripped.source as Buffer, 'unpkg.com')).toBe(false)
   })
@@ -88,7 +88,7 @@ describe('stripWasmSourceMapPlugin', () => {
     runGenerateBundle(bundle)
 
     const stripped = bundle['app.wasm']
-    if (!stripped || stripped.type !== 'asset') throw new Error('expected asset to survive')
+    if (stripped?.type !== 'asset') throw new Error('expected asset to survive')
     const out = stripped.source as Buffer
     // Byte-identical to the original: latin1 round-trips, UTF-8 would not.
     expect(Buffer.from(out).equals(Buffer.from(wasm))).toBe(true)
@@ -103,7 +103,7 @@ describe('stripWasmSourceMapPlugin', () => {
     runGenerateBundle(bundle)
 
     const stripped = bundle['app.wasm']
-    if (!stripped || stripped.type !== 'asset') throw new Error('expected asset to survive')
+    if (stripped?.type !== 'asset') throw new Error('expected asset to survive')
     expect(bytesContain(stripped.source as Buffer, 'unpkg.com')).toBe(false)
   })
 
@@ -116,7 +116,7 @@ describe('stripWasmSourceMapPlugin', () => {
     runGenerateBundle(bundle)
 
     const untouched = bundle['app.css']
-    if (!untouched || untouched.type !== 'asset') throw new Error('expected asset to survive')
+    if (untouched?.type !== 'asset') throw new Error('expected asset to survive')
     expect(untouched.source).toBe(originalSource)
   })
 })

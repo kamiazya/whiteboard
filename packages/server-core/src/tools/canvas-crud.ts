@@ -1,6 +1,6 @@
+import type { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
 import type { TreeID } from 'loro-crdt'
 import type { z } from 'zod'
-import type { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
 import type { ServerDeps } from '../server-deps.js'
 import {
   CanvasNotFoundError,

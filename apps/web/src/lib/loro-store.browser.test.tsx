@@ -3,10 +3,11 @@
  *
  * Real browser tests because IndexedDB requires a browser environment.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
 import { Loro } from 'loro-crdt'
-import { LoroStore, loroRecordEnvelopeSchema } from './loro-store.js'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DB_VERSION } from './browser-idb.js'
+import { LoroStore, loroRecordEnvelopeSchema } from './loro-store.js'
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {

@@ -123,7 +123,7 @@ export function scanEnvKeyPlacements(yamlText, key) {
           }
           const stIndent = indentOf(stepLine)
           if (stIndent < stepItemIndent) break
-          const dashPrefix = ' '.repeat(stepItemIndent) + '- '
+          const dashPrefix = `${' '.repeat(stepItemIndent)}- `
           if (stIndent !== stepItemIndent || !stepLine.startsWith(dashPrefix)) break
 
           let stepName = ''

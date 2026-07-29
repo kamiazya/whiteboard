@@ -420,7 +420,7 @@ describe('release.yml publish job step ordering hazards', () => {
     // Every `run:` step before checkout needs an explicit working-directory
     // override. Assert PER STEP — matching against the whole pre-checkout block
     // would let one compliant step mask another step's missing override.
-    const steps = preCheckout.split(/^      - /m).slice(1)
+    const steps = preCheckout.split(/^ {6}- /m).slice(1)
     const runSteps = steps.filter((step) => /^\s*run:/m.test(step))
     expect(runSteps.length, 'expected at least one pre-checkout run step').toBeGreaterThan(0)
     for (const step of runSteps) {

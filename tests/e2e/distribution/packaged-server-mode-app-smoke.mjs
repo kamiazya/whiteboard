@@ -146,8 +146,8 @@ function makeApp(scopes, overrides = {}) {
 
 async function req(app, method, path, opts = {}) {
   const headers = {}
-  if (opts.bearer) headers['Authorization'] = `Bearer ${opts.bearer}`
-  if (opts.origin) headers['Origin'] = opts.origin
+  if (opts.bearer) headers.Authorization = `Bearer ${opts.bearer}`
+  if (opts.origin) headers.Origin = opts.origin
   return app.request(path, { method, headers })
 }
 

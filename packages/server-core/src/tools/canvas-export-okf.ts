@@ -1,10 +1,10 @@
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-canvas-codec'
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-canvas-codec'
+import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-canvas-codec'
+import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
-import type { ServerDeps } from '../server-deps.js'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import type { ServerDeps } from '../server-deps.js'
 
 /**
  * OKF-Markdown is a single-document format (frontmatter + body); a spatial

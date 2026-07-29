@@ -73,7 +73,9 @@ export async function runCodexConfigSmoke({
   console.log(`[codex-config-smoke] plugin → ${pluginPath}`)
   console.log(`[codex-config-smoke] skills → ${skillsPath}`)
   console.log(`[codex-config-smoke] published mcp config → ${mcpConfigPath}`)
-  console.log('[codex-config-smoke] published config is wired to npx @kamiazya/whiteboard-mcp@latest')
+  console.log(
+    '[codex-config-smoke] published config is wired to npx @kamiazya/whiteboard-mcp@latest',
+  )
 
   const entry = resolve(packageRoot, 'dist/server/mcp/index.js')
   if (!existsSync(entry)) {

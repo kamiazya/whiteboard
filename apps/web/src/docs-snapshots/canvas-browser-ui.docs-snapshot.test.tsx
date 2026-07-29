@@ -1,7 +1,7 @@
-import { describe, it, beforeEach, afterEach, vi } from 'vitest'
-import { page } from 'vitest/browser'
-import { cleanup, render, waitFor } from '@testing-library/react'
 import { Excalidraw } from '@excalidraw/excalidraw'
+import { cleanup, render, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, it, vi } from 'vitest'
+import { page } from 'vitest/browser'
 import '@excalidraw/excalidraw/index.css'
 import architectureRaw from '@docs-assets/architecture.excalidraw?raw'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
@@ -54,7 +54,7 @@ beforeEach(() => {
       }
       // Catch-all for any unrelated TopBar fetches; return empty arrays so
       // they don't surface error states in the UI.
-      if (init && init.method && init.method !== 'GET') {
+      if (init?.method && init.method !== 'GET') {
         return jsonResponse({})
       }
       return jsonResponse({})

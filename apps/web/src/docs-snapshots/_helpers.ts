@@ -20,9 +20,10 @@ export function jsonResponse(body: unknown): Response {
   })
 }
 
-export interface DocFetchHandler {
-  (url: string, init?: RequestInit): Promise<Response> | undefined | Response
-}
+export type DocFetchHandler = (
+  url: string,
+  init?: RequestInit,
+) => Promise<Response> | undefined | Response
 
 // Pin the random-shaped fields on a list of Excalidraw elements to
 // values derived from their position in the array. Necessary because

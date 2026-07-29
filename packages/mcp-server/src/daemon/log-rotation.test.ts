@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { purgeOldDaemonLogs } from './log-rotation.js'
 
 let dataDir: string
@@ -36,11 +36,7 @@ describe('purgeOldDaemonLogs', () => {
     expect(result.purgedBytes).toBe(1500)
 
     const remaining = (await readdir(join(dataDir, 'logs'))).sort()
-    expect(remaining).toEqual([
-      'daemon-2026-04-19.log',
-      'daemon-2026-05-02.log',
-      'keep-this.txt',
-    ])
+    expect(remaining).toEqual(['daemon-2026-04-19.log', 'daemon-2026-05-02.log', 'keep-this.txt'])
   })
 
   it('returns zero counts when the logs directory does not exist yet', async () => {

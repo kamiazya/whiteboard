@@ -1,5 +1,5 @@
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { parseOkf } from '@kamiazya/whiteboard-canvas-codec'
+import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'

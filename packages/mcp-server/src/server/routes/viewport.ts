@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
-import {
-  type ViewportErrorBody,
-  type ViewportResponse,
+import type {
+  ViewportErrorBody,
+  ViewportResponse,
 } from '../../shared/api-contracts/canvas-runtime.js'
-import { sendViewportRequest, getClientCount } from './ws.js'
-import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
+import { validateSlug, validateWorkspaceId, validationErrorBody } from '../validators.js'
+import { getClientCount, sendViewportRequest } from './ws.js'
 
 // requestId -> { resolve, reject }
 // viewport does not return payload data, only an ACK, so it reuses the export-style pending map.

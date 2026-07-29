@@ -36,6 +36,12 @@ export {
   canvasExportJsonCanvasOutputSchema,
   createCanvasExportJsonCanvasTool,
 } from './tools/canvas-export-json-canvas.js'
+export type { CanvasExportOkfInput, CanvasExportOkfOutput } from './tools/canvas-export-okf.js'
+export {
+  canvasExportOkfInputSchema,
+  canvasExportOkfOutputSchema,
+  createCanvasExportOkfTool,
+} from './tools/canvas-export-okf.js'
 export type { CanvasImportOkfInput, CanvasImportOkfOutput } from './tools/canvas-import-okf.js'
 export {
   canvasImportOkfInputSchema,
@@ -43,12 +49,6 @@ export {
   createCanvasImportOkfTool,
   OkfParseError,
 } from './tools/canvas-import-okf.js'
-export type { CanvasExportOkfInput, CanvasExportOkfOutput } from './tools/canvas-export-okf.js'
-export {
-  canvasExportOkfInputSchema,
-  canvasExportOkfOutputSchema,
-  createCanvasExportOkfTool,
-} from './tools/canvas-export-okf.js'
 export type { CanvasRenderSvgInput, CanvasRenderSvgOutput } from './tools/canvas-render-svg.js'
 export {
   canvasRenderSvgInputSchema,
@@ -79,6 +79,13 @@ export {
   nodePatchInputSchema,
   nodePatchOutputSchema,
 } from './tools/node-patch.js'
+export { reindexWorkspace } from './tools/reindex.js'
+export type { ReindexInput, ReindexOutput } from './tools/reindex-tool.js'
+export {
+  createReindexTool,
+  reindexInputSchema,
+  reindexOutputSchema,
+} from './tools/reindex-tool.js'
 export type { VersionListInput, VersionListOutput } from './tools/version-list.js'
 export {
   createVersionListTool,
@@ -98,10 +105,3 @@ export {
   versionSaveInputSchema,
   versionSaveOutputSchema,
 } from './tools/version-save.js'
-export { reindexWorkspace } from './tools/reindex.js'
-export {
-  createReindexTool,
-  reindexInputSchema,
-  reindexOutputSchema,
-} from './tools/reindex-tool.js'
-export type { ReindexInput, ReindexOutput } from './tools/reindex-tool.js'

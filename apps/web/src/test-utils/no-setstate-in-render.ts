@@ -1,4 +1,4 @@
-import { expect, vi } from 'vitest'
+import { expect, type vi } from 'vitest'
 
 // React's warning text for an unguarded/cross-component setState-during-render
 // violation. Distinct from the sanctioned "adjust state during render for the

@@ -85,7 +85,7 @@ describe('DaemonBackend close-code policy', () => {
     const { DaemonBackend } = await import('./daemon-backend.js')
     const backend = new DaemonBackend('ws-id', 'slug', 'http://localhost/')
     let scheduledDelay: number | null = null
-    const setTimeoutSpy = ((fn: () => void, delay: number) => {
+    const setTimeoutSpy = ((_fn: () => void, delay: number) => {
       scheduledDelay = delay
       return 0 as unknown as ReturnType<typeof setTimeout>
     }) as unknown as typeof setTimeout
@@ -114,7 +114,7 @@ describe('DaemonBackend close-code policy', () => {
     const { DaemonBackend } = await import('./daemon-backend.js')
     const backend = new DaemonBackend('ws-id', 'slug', 'http://localhost/')
     let scheduledDelay: number | null = null
-    const setTimeoutSpy = ((fn: () => void, delay: number) => {
+    const setTimeoutSpy = ((_fn: () => void, delay: number) => {
       scheduledDelay = delay
       return 0 as unknown as ReturnType<typeof setTimeout>
     }) as unknown as typeof setTimeout

@@ -1,10 +1,10 @@
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BackupError } from '../server/server-mode-backup-restore.js'
-import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
+import { BackupError } from '../server/server-mode-backup-restore.js'
 import { runServerRestore } from './server-restore.js'
 
 let tmpRoot: string
@@ -66,8 +66,8 @@ describe('runServerRestore', () => {
     expect(target).toBe(join(tmpRoot, 'restored'))
 
     // allowedRoots uses dirname variants, NOT the paths themselves.
-    expect(opts.allowedRoots).toContain(tmpRoot)                       // dirname of both paths
-    expect(opts.allowedRoots).not.toContain(join(tmpRoot, 'backup'))  // NOT self
+    expect(opts.allowedRoots).toContain(tmpRoot) // dirname of both paths
+    expect(opts.allowedRoots).not.toContain(join(tmpRoot, 'backup')) // NOT self
     expect(opts.allowedRoots).not.toContain(join(tmpRoot, 'restored')) // NOT self
   })
 

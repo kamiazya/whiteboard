@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
-import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
 

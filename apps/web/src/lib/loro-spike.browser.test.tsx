@@ -5,8 +5,9 @@
  * to the persistence schema. They MUST run in a real browser context because
  * loro-crdt ships a WASM binary that jsdom cannot host.
  */
-import { describe, expect, it } from 'vitest'
+
 import { Loro } from 'loro-crdt'
+import { describe, expect, it } from 'vitest'
 
 describe('Loro snapshot round-trip', () => {
   it('exports a non-empty Uint8Array snapshot and imports it into a fresh doc', () => {
@@ -34,7 +35,10 @@ describe('Loro snapshot round-trip', () => {
 
   it('exports a non-empty delta and importing snapshot+delta into a fresh doc equals post-mutation state', () => {
     const initial = [{ id: 'a', type: 'rect', x: 1 }]
-    const postMutation = [{ id: 'a', type: 'rect', x: 1 }, { id: 'c', type: 'ellipse', x: 5 }]
+    const postMutation = [
+      { id: 'a', type: 'rect', x: 1 },
+      { id: 'c', type: 'ellipse', x: 5 },
+    ]
 
     const doc = new Loro()
     const elements = doc.getList('elements')

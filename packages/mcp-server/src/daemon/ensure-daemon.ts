@@ -2,15 +2,15 @@ import { spawn } from 'node:child_process'
 import { mkdirSync, openSync } from 'node:fs'
 import { join } from 'node:path'
 import { nanoid } from 'nanoid'
-import { WHITEBOARD_ROOT, DATA_DIR } from '../shared/data-dir-secure.js'
+import { DATA_DIR, WHITEBOARD_ROOT } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
+import { withDaemonStartupLock } from './daemon-lock.js'
 import {
-  loadDaemonRecord,
+  type DaemonRecord,
   deleteDaemonRecord,
   isPidAlive,
-  type DaemonRecord,
+  loadDaemonRecord,
 } from './daemon-registry.js'
-import { withDaemonStartupLock } from './daemon-lock.js'
 import { purgeOldDaemonLogs } from './log-rotation.js'
 
 // Send daemon stdout/stderr to a log file. Using `stdio: 'ignore'` makes

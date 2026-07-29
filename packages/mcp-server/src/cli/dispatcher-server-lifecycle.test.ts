@@ -49,10 +49,18 @@ vi.mock('./server-doctor.js', () => ({
         { id: 'server.jwks', status: 'ok', summary: 'JWKS endpoint is reachable and has keys' },
         { id: 'server.data_dir', status: 'ok', summary: 'Data directory is writable' },
         { id: 'server.record', status: 'ok', summary: 'Server record found and valid' },
-        { id: 'server.record_permissions', status: 'ok', summary: 'Server record permissions are restricted' },
+        {
+          id: 'server.record_permissions',
+          status: 'ok',
+          summary: 'Server record permissions are restricted',
+        },
         { id: 'server.identity', status: 'ok', summary: 'Server process identity confirmed' },
         { id: 'server.runtime_ping', status: 'ok', summary: 'Runtime ping responded successfully' },
-        { id: 'server.runtime_status', status: 'ok', summary: 'Runtime status endpoint responded without detected leaks' },
+        {
+          id: 'server.runtime_status',
+          status: 'ok',
+          summary: 'Runtime status endpoint responded without detected leaks',
+        },
       ],
     },
     exitCode: 0,
@@ -91,9 +99,11 @@ function captureStdio<T>(
 
 describe('CLI dispatcher: whiteboard server status', () => {
   it('running: stdout single JSON object, stderr empty, exit 0', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'status', '--json']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'status', '--json']))
     expect(exitCode).toBe(0)
     expect(stderr).toBe('')
     const parsed = JSON.parse(stdout)
@@ -103,9 +113,11 @@ describe('CLI dispatcher: whiteboard server status', () => {
   })
 
   it('missing --json → exit 64, stdout empty, stderr contains usage hint', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'status']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'status']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/--json/)
@@ -146,9 +158,11 @@ describe('CLI dispatcher: whiteboard server status', () => {
 
 describe('CLI dispatcher: whiteboard server stop', () => {
   it('stopped: stdout single JSON object, stderr empty, exit 0', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'stop', '--json']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'stop', '--json']))
     expect(exitCode).toBe(0)
     expect(stderr).toBe('')
     const parsed = JSON.parse(stdout)
@@ -158,9 +172,7 @@ describe('CLI dispatcher: whiteboard server stop', () => {
   })
 
   it('missing --json → exit 64, stdout empty, stderr contains usage hint', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'stop']),
-    )
+    const { result: exitCode, stdout, stderr } = await captureStdio(() => main(['server', 'stop']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/--json/)
@@ -203,10 +215,21 @@ describe('CLI dispatcher: whiteboard server stop', () => {
 
 describe('CLI dispatcher: whiteboard server doctor', () => {
   it('success: stdout single JSON with ok/status/checks, stderr empty, exit 0', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'doctor', '--json', '--external-url=https://whiteboard.example.com',
-        '--auth-strategy=oauth-jwt', '--jwt-issuer=https://auth.example.com',
-        '--jwt-audience=whiteboard', '--jwks-uri=https://auth.example.com/.well-known/jwks.json']),
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() =>
+      main([
+        'server',
+        'doctor',
+        '--json',
+        '--external-url=https://whiteboard.example.com',
+        '--auth-strategy=oauth-jwt',
+        '--jwt-issuer=https://auth.example.com',
+        '--jwt-audience=whiteboard',
+        '--jwks-uri=https://auth.example.com/.well-known/jwks.json',
+      ]),
     )
     expect(exitCode).toBe(0)
     expect(stderr).toBe('')
@@ -218,9 +241,11 @@ describe('CLI dispatcher: whiteboard server doctor', () => {
   })
 
   it('missing --json → exit 64, stdout empty, stderr contains usage hint', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'doctor']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'doctor']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/--json/)
@@ -232,16 +257,21 @@ describe('CLI dispatcher: whiteboard server doctor', () => {
         schemaVersion: 1,
         ok: false,
         status: 'error',
-        checks: [
-          { id: 'server.config', status: 'error', summary: 'Server config is invalid' },
-        ],
+        checks: [{ id: 'server.config', status: 'error', summary: 'Server config is invalid' }],
       },
       exitCode: 1,
     })
     const { result: exitCode, stdout } = await captureStdio(() =>
-      main(['server', 'doctor', '--json', '--external-url=https://whiteboard.example.com',
-        '--auth-strategy=oauth-jwt', '--jwt-issuer=https://auth.example.com',
-        '--jwt-audience=whiteboard', '--jwks-uri=https://auth.example.com/.well-known/jwks.json']),
+      main([
+        'server',
+        'doctor',
+        '--json',
+        '--external-url=https://whiteboard.example.com',
+        '--auth-strategy=oauth-jwt',
+        '--jwt-issuer=https://auth.example.com',
+        '--jwt-audience=whiteboard',
+        '--jwks-uri=https://auth.example.com/.well-known/jwks.json',
+      ]),
     )
     expect(exitCode).toBe(1)
     const parsed = JSON.parse(stdout)
@@ -251,9 +281,16 @@ describe('CLI dispatcher: whiteboard server doctor', () => {
 
   it('stdout is always a single JSON line with trailing newline', async () => {
     const { result: exitCode, stdout } = await captureStdio(() =>
-      main(['server', 'doctor', '--json', '--external-url=https://whiteboard.example.com',
-        '--auth-strategy=oauth-jwt', '--jwt-issuer=https://auth.example.com',
-        '--jwt-audience=whiteboard', '--jwks-uri=https://auth.example.com/.well-known/jwks.json']),
+      main([
+        'server',
+        'doctor',
+        '--json',
+        '--external-url=https://whiteboard.example.com',
+        '--auth-strategy=oauth-jwt',
+        '--jwt-issuer=https://auth.example.com',
+        '--jwt-audience=whiteboard',
+        '--jwks-uri=https://auth.example.com/.well-known/jwks.json',
+      ]),
     )
     expect(exitCode).toBe(0)
     expect(stdout.endsWith('\n')).toBe(true)

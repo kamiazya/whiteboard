@@ -4,11 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  type ServerModeRecord,
-  SERVER_MODE_RECORD_SCHEMA_VERSION,
   deleteServerModeRecord,
   getServerModeRecordPath,
   readServerModeRecord,
+  SERVER_MODE_RECORD_SCHEMA_VERSION,
+  type ServerModeRecord,
   serverModeRecordSchema,
   writeServerModeRecord,
 } from './server-mode-record.js'
@@ -91,8 +91,8 @@ describe('serverModeRecordSchema', () => {
     expect(result.success).toBe(true)
     if (!result.success) return
     // Extra fields stripped by Zod v4 default (strip mode)
-    expect((result.data as Record<string, unknown>)['jwksUri']).toBeUndefined()
-    expect((result.data as Record<string, unknown>)['token']).toBeUndefined()
+    expect((result.data as Record<string, unknown>).jwksUri).toBeUndefined()
+    expect((result.data as Record<string, unknown>).token).toBeUndefined()
   })
 })
 

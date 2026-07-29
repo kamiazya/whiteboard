@@ -1,10 +1,10 @@
 import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
 import { z } from 'zod'
-import type { ServerDeps } from '../server-deps.js'
 import { composeCanvasScene, computeCanvasDimensions } from '../render/compose-canvas-scene.js'
 import { fallbackMeasureText } from '../render/fallback-measure.js'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import type { ServerDeps } from '../server-deps.js'
 
 /**
  * `CanvasDocStore.loadSnapshot`'s `DocRef` (`{ kind: 'canvas', canvasId }`)

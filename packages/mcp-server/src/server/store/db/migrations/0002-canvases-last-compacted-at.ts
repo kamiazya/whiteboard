@@ -8,10 +8,7 @@ import type { Kysely, Migration } from 'kysely'
 
 export const migration: Migration = {
   async up(db: Kysely<unknown>): Promise<void> {
-    await db.schema
-      .alterTable('canvases')
-      .addColumn('lastCompactedAt', 'integer')
-      .execute()
+    await db.schema.alterTable('canvases').addColumn('lastCompactedAt', 'integer').execute()
   },
   async down(db: Kysely<unknown>): Promise<void> {
     await db.schema.alterTable('canvases').dropColumn('lastCompactedAt').execute()

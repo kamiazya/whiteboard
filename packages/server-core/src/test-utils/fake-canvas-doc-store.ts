@@ -1,3 +1,4 @@
+import type { CanvasId, WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
@@ -12,7 +13,6 @@ import type {
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-canvas-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import type { CanvasId, WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
 import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 

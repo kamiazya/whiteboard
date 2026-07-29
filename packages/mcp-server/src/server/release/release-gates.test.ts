@@ -98,7 +98,7 @@ describe('release gate: package.json bin + scripts contract', () => {
   }
 
   it('bin map ships only `whiteboard` (the unified CLI entrypoint)', () => {
-    expect(pkg.bin?.['whiteboard']).toBe('dist/cli/index.js')
+    expect(pkg.bin?.whiteboard).toBe('dist/cli/index.js')
     expect(Object.keys(pkg.bin ?? {})).toEqual(['whiteboard'])
   })
 

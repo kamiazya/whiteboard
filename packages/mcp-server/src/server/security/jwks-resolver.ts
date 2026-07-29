@@ -6,7 +6,7 @@
 // thrown message; this layer is defense-in-depth so IdP URLs, JWKS
 // credentials, and key IDs never propagate even if the guard changes.
 
-import { type CryptoKey, type FlattenedJWSInput, createRemoteJWKSet } from 'jose'
+import { type CryptoKey, createRemoteJWKSet, type FlattenedJWSInput } from 'jose'
 import type { JwtKeyResolver } from './oauth-jwt-validator.js'
 
 export function createJwksKeyResolver(jwksUri: string): JwtKeyResolver {

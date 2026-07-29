@@ -1,19 +1,11 @@
-import {
-  mkdir,
-  mkdtemp,
-  readFile,
-  readdir,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  buildSupportBundle,
   SupportBundleError,
   type SupportBundleInput,
-  buildSupportBundle,
 } from './support-bundle.js'
 import { writeSupportBundle } from './support-bundle-writer.js'
 
@@ -69,9 +61,12 @@ describe('writeSupportBundle', () => {
     const target = join(root, 'bundle-empty')
     await mkdir(target, { recursive: true })
     await writeSupportBundle(bundle, target, { allowedRoots: [root] })
-    expect((await readdir(target)).sort()).toEqual(
-      ['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'],
-    )
+    expect((await readdir(target)).sort()).toEqual([
+      'doctor.json',
+      'logs.jsonl',
+      'manifest.json',
+      'status.json',
+    ])
   })
 
   it('existing non-empty directory: throws SupportBundleError and preserves the canary file untouched', async () => {

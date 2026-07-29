@@ -5,12 +5,10 @@ import { z } from 'zod'
 // daemon, so a wire-format change has exactly one place to update.
 
 // ── POST /api/canvas/:workspaceId/:slug/viewport ──────────────────────────
-// The body is forwarded to the browser unchanged (mode / elementIds / padding
-// / animate / scrollX / scrollY / zoom), so we accept any record here. The
-// canonical browser-side shape lives in shared/ws-messages.ts as
+// The request body is forwarded to the browser unchanged (mode / elementIds /
+// padding / animate / scrollX / scrollY / zoom) with no server-side schema —
+// the canonical shape lives in shared/ws-messages.ts as
 // viewportRequestMessageSchema.
-const viewportRequestSchema = z.record(z.string(), z.unknown())
-
 const viewportResponseSchema = z.object({
   ok: z.literal(true),
 })
@@ -29,7 +27,6 @@ const clientCountResponseSchema = z.object({
   readyCount: z.number().int().nonnegative(),
 })
 
-type ViewportRequest = z.infer<typeof viewportRequestSchema>
 export type ViewportResponse = z.infer<typeof viewportResponseSchema>
 export type ViewportErrorBody = z.infer<typeof viewportErrorBodySchema>
 export type ClientCountResponse = z.infer<typeof clientCountResponseSchema>

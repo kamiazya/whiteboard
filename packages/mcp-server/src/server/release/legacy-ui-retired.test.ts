@@ -4,7 +4,7 @@
 // one-time manual grep: any future reintroduction of these strings outside
 // the allowlisted historical references fails the build.
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'

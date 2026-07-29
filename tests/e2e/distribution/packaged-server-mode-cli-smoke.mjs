@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Distribution smoke for `whiteboard server backup` and `whiteboard server restore` CLI.
 //
 // End-to-end contract: seed data via a local daemon, backup via CLI, restore via
@@ -30,8 +31,8 @@
 // Ports: 4292 (seed daemon), 4295 (restored server-mode), 4296 (bundle live server).
 // Run: node tests/e2e/distribution/packaged-server-mode-cli-smoke.mjs
 
+import { spawn, spawnSync } from 'node:child_process'
 import { createSign, generateKeyPairSync } from 'node:crypto'
-import { createServer as createHttpsServer } from 'node:https'
 import {
   existsSync,
   mkdirSync,
@@ -41,11 +42,11 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs'
+import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { spawn, spawnSync } from 'node:child_process'
 import { assertNoLeak, scrubDevEnv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -627,126 +628,111 @@ try {
     assertNoLeak('scenario 12 stderr', r.stderr ?? '', SMOKE_LITERALS)
     console.log('[server-cli-smoke] scenario 12 PASS: running-record restore refused')
   }
-
-  // ── Scenario 13: usage regression ────────────────────────────────────────
-
+  // backup: missing --json
   {
-    // backup: missing --json
-    {
-      const r = cli(['server', 'backup', `--output-dir=${backupDir}`])
-      if (r.status !== 64) fail(`scenario 13a: expected exit 64, got ${r.status}`)
-      if (r.stdout.trim() !== '') fail('scenario 13a: stdout not empty on usage error')
-      assertNoLeak('scenario 13a stderr', r.stderr ?? '')
-    }
-    // backup: missing --output-dir
-    {
-      const r = cli(['server', 'backup', '--json'])
-      if (r.status !== 64) fail(`scenario 13b: expected exit 64, got ${r.status}`)
-      if (r.stdout.trim() !== '') fail('scenario 13b: stdout not empty on usage error')
-    }
-    // restore: missing --json
-    {
-      const r = cli([
-        'server',
-        'restore',
-        `--backup-dir=${backupDir}`,
-        `--target-dir=${restoredDir}`,
-      ])
-      if (r.status !== 64) fail(`scenario 13c: expected exit 64, got ${r.status}`)
-    }
-    // restore: missing --target-dir
-    {
-      const r = cli(['server', 'restore', '--json', `--backup-dir=${backupDir}`])
-      if (r.status !== 64) fail(`scenario 13d: expected exit 64, got ${r.status}`)
-    }
-    // backup: unknown flag must not echo its value
-    {
-      const r = cli(['server', 'backup', '--json', '--output-dir=/o', '--unknown-flag=verysecret'])
-      if (r.status !== 64) fail(`scenario 13e: expected exit 64, got ${r.status}`)
-      if ((r.stderr ?? '').includes('verysecret')) {
-        fail('scenario 13e: unknown flag value leaked into stderr')
-      }
-    }
-    // restore: bare positional must not echo value
-    {
-      const r = cli([
-        'server',
-        'restore',
-        '--json',
-        '--backup-dir=/b',
-        '--target-dir=/t',
-        'bare-secret',
-      ])
-      if (r.status !== 64) fail(`scenario 13f: expected exit 64, got ${r.status}`)
-      if ((r.stderr ?? '').includes('bare-secret')) {
-        fail('scenario 13f: bare positional value leaked into stderr')
-      }
-    }
-    console.log('[server-cli-smoke] scenario 13 PASS: usage regression ok')
+    const r = cli(['server', 'backup', `--output-dir=${backupDir}`])
+    if (r.status !== 64) fail(`scenario 13a: expected exit 64, got ${r.status}`)
+    if (r.stdout.trim() !== '') fail('scenario 13a: stdout not empty on usage error')
+    assertNoLeak('scenario 13a stderr', r.stderr ?? '')
   }
-
-  // ── Scenario 14: dispatcher routing ──────────────────────────────────────
-
+  // backup: missing --output-dir
   {
-    // backup routes correctly (dry-run: --data-dir pointing to valid dir succeeds arg parse)
-    {
-      const r = cli([
-        'server',
-        'backup',
-        '--json',
-        `--output-dir=${join(tmpRoot, 'route-test')}`,
-        `--data-dir=${srcDataDir}`,
-      ])
-      // The backup will succeed (srcDataDir exists and outputDir is new).
-      // If routing were broken, we'd get exit 64 (usage) or a JSON from a wrong subcommand.
-      if (r.status !== 0 && r.status !== 1) {
-        fail(`scenario 14a: unexpected exit code ${r.status}`)
-      }
-      if (r.status === 0) {
-        let j
-        try {
-          j = JSON.parse(r.stdout.trim())
-        } catch {
-          fail('scenario 14a: invalid JSON')
-        }
-        if (j.operation !== 'backup') fail('scenario 14a: operation should be backup')
-      }
-    }
-    // restore routes correctly
-    {
-      const r = cli([
-        'server',
-        'restore',
-        '--json',
-        `--backup-dir=${backupDir}`,
-        `--target-dir=${join(tmpRoot, 'route-restore')}`,
-      ])
-      if (r.status !== 0 && r.status !== 1) {
-        fail(`scenario 14b: unexpected exit code ${r.status}`)
-      }
-      if (r.status === 0) {
-        let j
-        try {
-          j = JSON.parse(r.stdout.trim())
-        } catch {
-          fail('scenario 14b: invalid JSON')
-        }
-        if (j.operation !== 'restore') fail('scenario 14b: operation should be restore')
-      }
-    }
-    // unknown server subcommand still exits 64 with USAGE
-    {
-      const r = cli(['server', 'not-a-real-subcommand', '--json'])
-      if (r.status !== 64) fail(`scenario 14c: expected exit 64, got ${r.status}`)
-      if (!r.stderr?.includes('server backup')) {
-        fail('scenario 14c: USAGE does not list server backup')
-      }
-      if (!r.stderr?.includes('server restore')) {
-        fail('scenario 14c: USAGE does not list server restore')
-      }
-    }
-    console.log('[server-cli-smoke] scenario 14 PASS: dispatcher routing ok')
+    const r = cli(['server', 'backup', '--json'])
+    if (r.status !== 64) fail(`scenario 13b: expected exit 64, got ${r.status}`)
+    if (r.stdout.trim() !== '') fail('scenario 13b: stdout not empty on usage error')
   }
+  // restore: missing --json
+  {
+    const r = cli(['server', 'restore', `--backup-dir=${backupDir}`, `--target-dir=${restoredDir}`])
+    if (r.status !== 64) fail(`scenario 13c: expected exit 64, got ${r.status}`)
+  }
+  // restore: missing --target-dir
+  {
+    const r = cli(['server', 'restore', '--json', `--backup-dir=${backupDir}`])
+    if (r.status !== 64) fail(`scenario 13d: expected exit 64, got ${r.status}`)
+  }
+  // backup: unknown flag must not echo its value
+  {
+    const r = cli(['server', 'backup', '--json', '--output-dir=/o', '--unknown-flag=verysecret'])
+    if (r.status !== 64) fail(`scenario 13e: expected exit 64, got ${r.status}`)
+    if ((r.stderr ?? '').includes('verysecret')) {
+      fail('scenario 13e: unknown flag value leaked into stderr')
+    }
+  }
+  // restore: bare positional must not echo value
+  {
+    const r = cli([
+      'server',
+      'restore',
+      '--json',
+      '--backup-dir=/b',
+      '--target-dir=/t',
+      'bare-secret',
+    ])
+    if (r.status !== 64) fail(`scenario 13f: expected exit 64, got ${r.status}`)
+    if ((r.stderr ?? '').includes('bare-secret')) {
+      fail('scenario 13f: bare positional value leaked into stderr')
+    }
+  }
+  console.log('[server-cli-smoke] scenario 13 PASS: usage regression ok')
+  // backup routes correctly (dry-run: --data-dir pointing to valid dir succeeds arg parse)
+  {
+    const r = cli([
+      'server',
+      'backup',
+      '--json',
+      `--output-dir=${join(tmpRoot, 'route-test')}`,
+      `--data-dir=${srcDataDir}`,
+    ])
+    // The backup will succeed (srcDataDir exists and outputDir is new).
+    // If routing were broken, we'd get exit 64 (usage) or a JSON from a wrong subcommand.
+    if (r.status !== 0 && r.status !== 1) {
+      fail(`scenario 14a: unexpected exit code ${r.status}`)
+    }
+    if (r.status === 0) {
+      let j
+      try {
+        j = JSON.parse(r.stdout.trim())
+      } catch {
+        fail('scenario 14a: invalid JSON')
+      }
+      if (j.operation !== 'backup') fail('scenario 14a: operation should be backup')
+    }
+  }
+  // restore routes correctly
+  {
+    const r = cli([
+      'server',
+      'restore',
+      '--json',
+      `--backup-dir=${backupDir}`,
+      `--target-dir=${join(tmpRoot, 'route-restore')}`,
+    ])
+    if (r.status !== 0 && r.status !== 1) {
+      fail(`scenario 14b: unexpected exit code ${r.status}`)
+    }
+    if (r.status === 0) {
+      let j
+      try {
+        j = JSON.parse(r.stdout.trim())
+      } catch {
+        fail('scenario 14b: invalid JSON')
+      }
+      if (j.operation !== 'restore') fail('scenario 14b: operation should be restore')
+    }
+  }
+  // unknown server subcommand still exits 64 with USAGE
+  {
+    const r = cli(['server', 'not-a-real-subcommand', '--json'])
+    if (r.status !== 64) fail(`scenario 14c: expected exit 64, got ${r.status}`)
+    if (!r.stderr?.includes('server backup')) {
+      fail('scenario 14c: USAGE does not list server backup')
+    }
+    if (!r.stderr?.includes('server restore')) {
+      fail('scenario 14c: USAGE does not list server restore')
+    }
+  }
+  console.log('[server-cli-smoke] scenario 14 PASS: dispatcher routing ok')
 
   // ── Scenario 15: server support-bundle: missing record → success ────────
 
@@ -864,57 +850,47 @@ try {
     assertNoLeak('scenario 18 stderr', r.stderr ?? '', SMOKE_LITERALS)
     console.log('[server-cli-smoke] scenario 18 PASS: ancestor symlink in output path rejected')
   }
-
-  // ── Scenario 19: server support-bundle: usage regression ─────────────────
-
+  // missing --json
   {
-    // missing --json
-    {
-      const r = cli(['server', 'support-bundle', '--output-dir=/tmp/sb-out'])
-      if (r.status !== 64) fail(`scenario 19a: expected exit 64, got ${r.status}`)
-      if (r.stdout.trim() !== '') fail('scenario 19a: stdout not empty on usage error')
-      assertNoLeak('scenario 19a stderr', r.stderr ?? '')
-    }
-    // missing --output-dir
-    {
-      const r = cli(['server', 'support-bundle', '--json'])
-      if (r.status !== 64) fail(`scenario 19b: expected exit 64, got ${r.status}`)
-      if (r.stdout.trim() !== '') fail('scenario 19b: stdout not empty on usage error')
-    }
-    // unknown flag must not echo its value
-    {
-      const r = cli([
-        'server',
-        'support-bundle',
-        '--json',
-        '--output-dir=/o',
-        '--unknown-flag=verysecret',
-      ])
-      if (r.status !== 64) fail(`scenario 19c: expected exit 64, got ${r.status}`)
-      if ((r.stderr ?? '').includes('verysecret')) {
-        fail('scenario 19c: unknown flag value leaked into stderr')
-      }
-    }
-    // bare positional must not echo value
-    {
-      const r = cli(['server', 'support-bundle', '--json', '--output-dir=/o', 'bare-secret'])
-      if (r.status !== 64) fail(`scenario 19d: expected exit 64, got ${r.status}`)
-      if ((r.stderr ?? '').includes('bare-secret')) {
-        fail('scenario 19d: bare positional value leaked into stderr')
-      }
-    }
-    console.log('[server-cli-smoke] scenario 19 PASS: usage regression ok')
+    const r = cli(['server', 'support-bundle', '--output-dir=/tmp/sb-out'])
+    if (r.status !== 64) fail(`scenario 19a: expected exit 64, got ${r.status}`)
+    if (r.stdout.trim() !== '') fail('scenario 19a: stdout not empty on usage error')
+    assertNoLeak('scenario 19a stderr', r.stderr ?? '')
   }
-
-  // ── Scenario 20: stdout / stderr non-leak scan (all collected output) ─────
-
+  // missing --output-dir
   {
-    for (const { label, stdout, stderr } of leakTexts) {
-      assertNoLeak(`${label} stdout`, stdout, SMOKE_LITERALS)
-      assertNoLeak(`${label} stderr`, stderr, SMOKE_LITERALS)
-    }
-    console.log('[server-cli-smoke] scenario 20 PASS: no leaks in collected CLI output')
+    const r = cli(['server', 'support-bundle', '--json'])
+    if (r.status !== 64) fail(`scenario 19b: expected exit 64, got ${r.status}`)
+    if (r.stdout.trim() !== '') fail('scenario 19b: stdout not empty on usage error')
   }
+  // unknown flag must not echo its value
+  {
+    const r = cli([
+      'server',
+      'support-bundle',
+      '--json',
+      '--output-dir=/o',
+      '--unknown-flag=verysecret',
+    ])
+    if (r.status !== 64) fail(`scenario 19c: expected exit 64, got ${r.status}`)
+    if ((r.stderr ?? '').includes('verysecret')) {
+      fail('scenario 19c: unknown flag value leaked into stderr')
+    }
+  }
+  // bare positional must not echo value
+  {
+    const r = cli(['server', 'support-bundle', '--json', '--output-dir=/o', 'bare-secret'])
+    if (r.status !== 64) fail(`scenario 19d: expected exit 64, got ${r.status}`)
+    if ((r.stderr ?? '').includes('bare-secret')) {
+      fail('scenario 19d: bare positional value leaked into stderr')
+    }
+  }
+  console.log('[server-cli-smoke] scenario 19 PASS: usage regression ok')
+  for (const { label, stdout, stderr } of leakTexts) {
+    assertNoLeak(`${label} stdout`, stdout, SMOKE_LITERALS)
+    assertNoLeak(`${label} stderr`, stderr, SMOKE_LITERALS)
+  }
+  console.log('[server-cli-smoke] scenario 20 PASS: no leaks in collected CLI output')
 
   // ── Scenario 21: support-bundle from running server: identity-confirmed ─────
   //

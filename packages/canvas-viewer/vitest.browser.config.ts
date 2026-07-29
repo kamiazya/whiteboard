@@ -1,5 +1,5 @@
-import { playwright } from '@vitest/browser-playwright'
 import react from '@vitejs/plugin-react'
+import { playwright } from '@vitest/browser-playwright'
 import { defineProject } from 'vitest/config'
 // Import the source file directly rather than `@kamiazya/whiteboard-mcp/test-utils`:
 // that package export resolves to the built `dist/` output, which is gitignored

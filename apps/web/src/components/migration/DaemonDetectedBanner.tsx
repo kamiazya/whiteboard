@@ -213,6 +213,7 @@ export function DaemonDetectedBanner({
             target="_blank"
             rel="noreferrer"
             className="font-medium underline"
+            aria-label="Learn more about connecting to the local daemon"
           >
             Learn more
           </a>

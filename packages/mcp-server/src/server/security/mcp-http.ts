@@ -1,6 +1,4 @@
 import type { Context, MiddlewareHandler } from 'hono'
-
-import type { McpHttpAuthStrategy } from './mcp-auth.js'
 import {
   appendVary,
   getRequestHost,
@@ -8,6 +6,7 @@ import {
   normalizeHostHeader,
   normalizeOriginHostname,
 } from './cors-loopback.js'
+import type { McpHttpAuthStrategy } from './mcp-auth.js'
 import { isAllowedWebOrigin } from './web-origin-allowlist.js'
 
 function normalizeMethod(method: string): string {

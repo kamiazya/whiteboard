@@ -117,7 +117,7 @@ export function buildMcpProtectedResourceMetadata(
   }
 }
 
-function createNoAuthMcpHttpAuthStrategy(
+function _createNoAuthMcpHttpAuthStrategy(
   metadata?: McpProtectedResourceMetadataConfig,
 ): McpHttpAuthStrategy {
   return {

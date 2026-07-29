@@ -10,7 +10,7 @@
 // multi-line `run: |` blocks, so it cannot see an inline interpreter buried
 // inside one.
 
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'

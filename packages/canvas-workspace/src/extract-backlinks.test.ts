@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'vitest'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import { describe, expect, test } from 'vitest'
 import { extractBacklinks } from './extract-backlinks.js'
 
 const FROM = '01J0000000000000000000000A'

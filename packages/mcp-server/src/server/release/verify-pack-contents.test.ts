@@ -50,7 +50,13 @@ const VALID_ENTRY = {
 
 function makeSink() {
   const chunks: string[] = []
-  return { write: (chunk: string) => (chunks.push(chunk), true), chunks }
+  return {
+    write: (chunk: string) => {
+      chunks.push(chunk)
+      return true
+    },
+    chunks,
+  }
 }
 
 describe('verifyPackContents (pure core)', () => {

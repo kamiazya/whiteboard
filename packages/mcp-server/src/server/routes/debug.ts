@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
-import { LoroDoc, LoroMap } from 'loro-crdt'
-import { listWorkspaces, listCanvases, loadCanvas } from '../store/canvas-store.js'
+import { type LoroDoc, LoroMap } from 'loro-crdt'
+import { listCanvases, listWorkspaces, loadCanvas } from '../store/canvas-store.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { isAuthorized } from './auth.js'
 
@@ -34,10 +34,7 @@ function countElements(doc: LoroDoc): {
   return { totalElements: total, visibleElements: total - tombstones, tombstones }
 }
 
-async function summarizeCanvas(
-  workspaceId: string,
-  slug: string,
-): Promise<CanvasInfo> {
+async function summarizeCanvas(workspaceId: string, slug: string): Promise<CanvasInfo> {
   const cached = peekDoc(workspaceId, slug)
   const doc = cached ?? (await loadCanvas(workspaceId, slug))
   const counts = countElements(doc)

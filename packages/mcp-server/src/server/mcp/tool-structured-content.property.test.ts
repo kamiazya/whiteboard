@@ -8,7 +8,7 @@
  * (mcp-e2e-checkpoint.mjs) which calls tools/list and compares the result
  * with ALL_REGISTERED_TOOLS using set equality.
  */
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   ALL_REGISTERED_TOOLS,
   COVERED_TOOLS,
@@ -48,21 +48,33 @@ describe('mcp-smoke-coverage classification', () => {
   it('every tool in ALL_REGISTERED_TOOLS is covered by exactly one category', () => {
     const categorySet = new Set(categoryUnion)
     for (const name of ALL_REGISTERED_TOOLS) {
-      expect(categorySet.has(name), `"${name}" is in ALL_REGISTERED_TOOLS but missing from all categories`).toBe(true)
+      expect(
+        categorySet.has(name),
+        `"${name}" is in ALL_REGISTERED_TOOLS but missing from all categories`,
+      ).toBe(true)
     }
   })
 
   it('every tool in any category is present in ALL_REGISTERED_TOOLS', () => {
     const registeredSet = new Set(ALL_REGISTERED_TOOLS)
     for (const name of categoryUnion) {
-      expect(registeredSet.has(name), `"${name}" is in a category but missing from ALL_REGISTERED_TOOLS`).toBe(true)
+      expect(
+        registeredSet.has(name),
+        `"${name}" is in a category but missing from ALL_REGISTERED_TOOLS`,
+      ).toBe(true)
     }
   })
 
   it('every DEFERRED_TOOLS entry has non-empty reason and unblock', () => {
     for (const entry of DEFERRED_TOOLS) {
-      expect(entry.reason.trim().length, `DEFERRED "${entry.name}" has empty reason`).toBeGreaterThan(0)
-      expect(entry.unblock.trim().length, `DEFERRED "${entry.name}" has empty unblock`).toBeGreaterThan(0)
+      expect(
+        entry.reason.trim().length,
+        `DEFERRED "${entry.name}" has empty reason`,
+      ).toBeGreaterThan(0)
+      expect(
+        entry.unblock.trim().length,
+        `DEFERRED "${entry.name}" has empty unblock`,
+      ).toBeGreaterThan(0)
     }
   })
 

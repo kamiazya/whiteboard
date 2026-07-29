@@ -4,15 +4,15 @@
 // createOAuthJwtValidator + createOAuthResourceServerAuthStrategy
 // produce the correct AuthDecision for each JWT failure mode.
 
-import { SignJWT, exportJWK, generateKeyPair } from 'jose'
+import { exportJWK, generateKeyPair, SignJWT } from 'jose'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { AuthAuthorizeInput } from '../server/security/auth-strategy.js'
 import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
 import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
+import type { StartServerFn } from './server-run.js'
 import { runServerRun } from './server-run.js'
 import type { ServerRunArgs } from './server-run-args.js'
-import type { AuthAuthorizeInput } from '../server/security/auth-strategy.js'
-import type { StartServerFn } from './server-run.js'
 
 const ISSUER = 'https://auth.test.example'
 const AUDIENCE = 'https://whiteboard.test.example'

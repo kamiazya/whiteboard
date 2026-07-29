@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -152,7 +152,11 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
     const dataDir = join(root, 'cli-data')
     const outputDir = join(root, 'cli-out')
 
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() =>
       main([
         'daemon',
         'support-bundle',
@@ -170,16 +174,21 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
     expect(result.ok).toBe(true)
     expect(result.files).toEqual(['status.json', 'doctor.json', 'logs.jsonl', 'manifest.json'])
 
-    expect((await readdir(outputDir)).sort()).toEqual(
-      ['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'],
-    )
+    expect((await readdir(outputDir)).sort()).toEqual([
+      'doctor.json',
+      'logs.jsonl',
+      'manifest.json',
+      'status.json',
+    ])
   })
 
   it('missing --output-dir: exit 64, stdout empty, stderr usage error', async () => {
     const { main } = await import('./dispatcher.js')
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['daemon', 'support-bundle', '--json', `--data-dir=${root}`]),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'support-bundle', '--json', `--data-dir=${root}`]))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/--output-dir.*required/i)
@@ -187,9 +196,11 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
 
   it('usage block lists support-bundle for unknown subcommand', async () => {
     const { main } = await import('./dispatcher.js')
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['daemon', 'this-is-not-a-real-subcommand', '--json']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'this-is-not-a-real-subcommand', '--json']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/whiteboard daemon support-bundle\s+--json/)

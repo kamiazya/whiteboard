@@ -7,7 +7,7 @@
 // modules re-read the seam. WHITEBOARD_DATA_DIR is pinned to a scratch dir
 // BEFORE the store modules load so the frozen DATA_DIR snapshot can never
 // point at the developer's real home directory even while the test is red.
-import { mkdtempSync, rmSync, existsSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'

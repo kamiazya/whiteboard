@@ -1,12 +1,12 @@
 import { Hono } from 'hono'
-import { getDataDir } from '../config.js'
 import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
-import type { RuntimeStatus } from '../http-server.js'
 import { daemonPingResponseSchema } from '../../shared/api-contracts/runtime.js'
+import { getDataDir } from '../config.js'
+import type { RuntimeStatus } from '../http-server.js'
+import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 import { readLatestCompactedAt } from '../store/canvas-store.js'
 import { isAuthorized } from './auth.js'
 import { computeStorageReport } from './runtime-storage.js'
-import type { McpHttpAuthStrategy } from '../security/mcp-auth.js'
 
 export interface RuntimeRouterOptions {
   token?: string

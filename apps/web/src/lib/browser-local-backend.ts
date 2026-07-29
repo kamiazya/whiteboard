@@ -159,7 +159,7 @@ export class BrowserLocalBackend implements CanvasBackend {
     const handlers = this.handlers
     if (!handlers) return
 
-    let result
+    let result: Awaited<ReturnType<LoroStore['load']>>
     try {
       result = await this.store.load(this.canvasId)
     } catch {

@@ -3,13 +3,13 @@ import {
   type BranchStatsResponse,
   type CanvasBranchesState,
   type CreateBranchResponse,
+  createBranchRequestSchema,
   type DeleteBranchResponse,
   type MergeResponse,
-  type RenameBranchResponse,
-  type SetHeadResponse,
-  createBranchRequestSchema,
   mergeRequestSchema,
+  type RenameBranchResponse,
   renameBranchRequestSchema,
+  type SetHeadResponse,
   setHeadRequestSchema,
 } from '../../shared/api-contracts/branches.js'
 import {
@@ -24,9 +24,9 @@ import {
 import { corruptStoredDataBody } from '../store/corrupt-stored-data.js'
 import {
   validateBranchName,
-  validateWorkspaceId,
   validateSlug,
   validateVersionId,
+  validateWorkspaceId,
   validationErrorBody,
 } from '../validators.js'
 

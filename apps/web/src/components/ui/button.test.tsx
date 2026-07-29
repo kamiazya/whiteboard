@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import { Button, buttonVariants } from './button'
 
 describe('buttonVariants', () => {
@@ -61,9 +61,8 @@ describe('Button', () => {
   it('forwards extra props to the underlying element', () => {
     render(<Button disabled>Disabled</Button>)
     expect(screen.getByRole('button', { name: 'Disabled' })).toBeTruthy()
-    expect(
-      (screen.getByRole('button', { name: 'Disabled' }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true)
+    expect((screen.getByRole('button', { name: 'Disabled' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    )
   })
 })

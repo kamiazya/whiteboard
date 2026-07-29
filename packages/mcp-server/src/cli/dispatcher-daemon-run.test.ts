@@ -5,7 +5,12 @@ import { describe, expect, it, vi } from 'vitest'
 // are returned before the dynamic import.
 
 vi.mock('./daemon-run.js', () => ({
-  runDaemonRun: vi.fn(async () => ({ kind: 'refused', reason: 'fresh-daemon-already-running', message: 'already running', status: {} })),
+  runDaemonRun: vi.fn(async () => ({
+    kind: 'refused',
+    reason: 'fresh-daemon-already-running',
+    message: 'already running',
+    status: {},
+  })),
 }))
 
 const { main } = await import('./dispatcher.js')
@@ -42,9 +47,11 @@ function captureStdio<T>(
 describe('whiteboard daemon run — --token= rejected at dispatch boundary', () => {
   it('--token=<value> returns exit 64 and does not echo the token value in stderr', async () => {
     const SECRET = 'dispatch-secret-token-XYZXYZ'
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['daemon', 'run', '--json', `--token=${SECRET}`]),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'run', '--json', `--token=${SECRET}`]))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).not.toContain(SECRET)
@@ -53,9 +60,11 @@ describe('whiteboard daemon run — --token= rejected at dispatch boundary', () 
 
   it('--token <value> (space form) returns exit 64 and does not echo raw value in stderr', async () => {
     const SECRET = 'dispatch-space-secret-ABCABC'
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['daemon', 'run', '--json', '--token', SECRET]),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'run', '--json', '--token', SECRET]))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).not.toContain(SECRET)

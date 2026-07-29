@@ -250,6 +250,7 @@ export default function VersionTimeline({ workspaceId, slug, onRestored, refresh
               return (
                 <div key={v.id} className="flex items-stretch gap-1.5">
                   {/* Mini-graph lane. */}
+                  {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */}
                   <svg className="shrink-0" width={24} height={36} viewBox="0 0 24 36" aria-hidden>
                     {row?.connectorBefore ? (
                       <line

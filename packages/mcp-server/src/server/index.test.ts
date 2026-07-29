@@ -49,8 +49,9 @@ describe('server/index main() data dir startup log', () => {
       await main()
       const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'notice')
       expect(record).toBeDefined()
-      expect(typeof record?.data?.dataDir).toBe('string')
-      expect((record?.data?.dataDir as string).length).toBeGreaterThan(0)
+      const dataDir = record?.data?.dataDir
+      expect(typeof dataDir).toBe('string')
+      expect((dataDir as string).length).toBeGreaterThan(0)
     } finally {
       capture.restore()
       stdoutSpy.mockRestore()

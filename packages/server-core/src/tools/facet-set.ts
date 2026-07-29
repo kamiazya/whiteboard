@@ -1,8 +1,8 @@
 import {
   canvasIdSchema,
+  type ExtensionFacets,
   extensionFacetsSchema,
   workspaceIdSchema,
-  type ExtensionFacets,
 } from '@kamiazya/whiteboard-canvas-model'
 import { readFacets, writeFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'

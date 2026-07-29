@@ -1,5 +1,5 @@
-import { readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
+import { readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
@@ -7,8 +7,8 @@ import {
   registerCanvasInWorkspace,
 } from '../test-utils/fake-canvas-doc-store.js'
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
-import { wbCanvasCreate } from './canvas-crud.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
+import { wbCanvasCreate } from './canvas-crud.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'

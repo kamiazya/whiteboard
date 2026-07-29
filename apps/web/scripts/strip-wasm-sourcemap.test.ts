@@ -192,7 +192,11 @@ describe('stripWasmSourceMap', () => {
     const content = [nameBytes.length, ...nameBytes, ...payload]
     expect(content.length).toBe(24)
     const overflowingSizeSection = [0x00, 0x98, 0x80, 0x80, 0x80, 0x10, ...content]
-    const wasm = new Uint8Array([...magicAndVersion, ...typeSectionBytes, ...overflowingSizeSection])
+    const wasm = new Uint8Array([
+      ...magicAndVersion,
+      ...typeSectionBytes,
+      ...overflowingSizeSection,
+    ])
 
     const stripped = stripWasmSourceMap(wasm)
 

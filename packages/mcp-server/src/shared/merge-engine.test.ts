@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
 import { LoroDoc, LoroMap } from 'loro-crdt'
+import { describe, expect, it } from 'vitest'
 import { detectMergeBadges, type MergeBadge } from './merge-engine.js'
 
 // Helper that builds ad-hoc LoroDocs for target / source / preview. These tests
@@ -33,9 +33,7 @@ describe('detectMergeBadges', () => {
     const source = docOf([{ id: 'a', type: 'rectangle', isDeleted: false, fill: 'blue' }])
     const preview = docOf([{ id: 'a', type: 'rectangle', isDeleted: false, fill: 'blue' }])
     const badges = detectMergeBadges({ target, source, preview })
-    expect(badges).toEqual<MergeBadge[]>([
-      { type: 'resurrected', elementId: 'a' },
-    ])
+    expect(badges).toEqual<MergeBadge[]>([{ type: 'resurrected', elementId: 'a' }])
   })
 
   it('detects orphan refs when a source arrow points to a target-deleted parent', () => {
@@ -69,8 +67,12 @@ describe('detectMergeBadges', () => {
   })
 
   it('detects field-level merge when preview mixes winners across fields', () => {
-    const target = docOf([{ id: 'B', type: 'rectangle', strokeColor: '#9333ea', backgroundColor: '#e7f5ff' }])
-    const source = docOf([{ id: 'B', type: 'rectangle', strokeColor: '#1971c2', backgroundColor: '#dcfce7' }])
+    const target = docOf([
+      { id: 'B', type: 'rectangle', strokeColor: '#9333ea', backgroundColor: '#e7f5ff' },
+    ])
+    const source = docOf([
+      { id: 'B', type: 'rectangle', strokeColor: '#1971c2', backgroundColor: '#dcfce7' },
+    ])
     // preview mixes winners: strokeColor from target, backgroundColor from source.
     const preview = docOf([
       { id: 'B', type: 'rectangle', strokeColor: '#9333ea', backgroundColor: '#dcfce7' },
@@ -111,7 +113,11 @@ describe('detectMergeBadges', () => {
     ])
     const badges = detectMergeBadges({ target, source, preview })
     expect(badges).toContainEqual<MergeBadge>({ type: 'resurrected', elementId: 'a' })
-    expect(badges).toContainEqual<MergeBadge>({ type: 'orphan_ref', elementId: 'arr', missingRef: 'X' })
+    expect(badges).toContainEqual<MergeBadge>({
+      type: 'orphan_ref',
+      elementId: 'arr',
+      missingRef: 'X',
+    })
     expect(badges).toContainEqual<MergeBadge>({
       type: 'field_merge',
       elementId: 'B',

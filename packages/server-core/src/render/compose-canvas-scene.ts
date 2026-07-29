@@ -1,3 +1,4 @@
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type {
   ListItemNode,
@@ -6,7 +7,6 @@ import type {
   SceneNode,
 } from '@kamiazya/whiteboard-canvas-render'
 import { layoutMdastBlocks, routeEdge } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 
 /**
  * Recursively translates every bbox in a scene node subtree by (dx, dy).

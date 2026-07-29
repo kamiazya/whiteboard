@@ -147,15 +147,13 @@ describe('ensureDaemon', () => {
   })
 
   it('re-checks the registry after taking the startup lock and reuses a daemon started by another caller', async () => {
-    loadDaemonRecordMock
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        pid: 91,
-        port: 45100,
-        token: 'shared-token',
-        version: '0.1.0',
-        startedAt: '2026-04-23T00:06:00.000Z',
-      })
+    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      pid: 91,
+      port: 45100,
+      token: 'shared-token',
+      version: '0.1.0',
+      startedAt: '2026-04-23T00:06:00.000Z',
+    })
     isPidAliveMock.mockReturnValue(true)
     globalThis.fetch = vi.fn(
       async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),

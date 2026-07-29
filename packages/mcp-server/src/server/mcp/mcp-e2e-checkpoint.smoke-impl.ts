@@ -120,8 +120,7 @@ export async function runE2eCheckpointSmoke({
   let stdoutBuf = ''
   child.stdout!.on('data', (chunk: Buffer) => {
     stdoutBuf += chunk.toString()
-    let idx: number
-    while ((idx = stdoutBuf.indexOf('\n')) !== -1) {
+    for (let idx = stdoutBuf.indexOf('\n'); idx !== -1; idx = stdoutBuf.indexOf('\n')) {
       const line = stdoutBuf.slice(0, idx)
       stdoutBuf = stdoutBuf.slice(idx + 1)
       if (!line.trim()) continue
@@ -163,7 +162,7 @@ export async function runE2eCheckpointSmoke({
           reject(e)
         },
       })
-      child.stdin!.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n')
+      child.stdin!.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
       timer = setTimeout(() => {
         if (pending.has(id)) {
           pending.delete(id)
@@ -174,7 +173,7 @@ export async function runE2eCheckpointSmoke({
   }
 
   function notify(method: string, params: unknown): void {
-    child.stdin!.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n')
+    child.stdin!.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`)
   }
 
   async function callTool(name: string, args: unknown): Promise<Record<string, unknown>> {

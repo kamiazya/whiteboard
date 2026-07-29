@@ -8,18 +8,18 @@
 // Non-leak contract: failure results never contain raw env var values, URLs,
 // credentials, hostnames, or tokens — only codes and field names reach callers.
 
-import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
 import { createJwksKeyResolver } from '../server/security/jwks-resolver.js'
+import { createOAuthJwtValidator } from '../server/security/oauth-jwt-validator.js'
+import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { createOAuthResourceServerAuthStrategy } from '../server/security/oauth-resource-strategy.js'
 import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
 import { ENV_KEYS, parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
+import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import {
-  SERVER_MODE_RECORD_SCHEMA_VERSION,
   deleteServerModeRecord,
+  SERVER_MODE_RECORD_SCHEMA_VERSION,
   writeServerModeRecord,
 } from '../server/security/server-mode-record.js'
-import type { AsyncAuthStrategy } from '../server/security/oauth-resource-strategy.js'
-import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
 const SERVER_RUN_SCHEMA_VERSION = 1 as const

@@ -1,8 +1,8 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { z } from 'zod'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { z } from 'zod'
 import { getLogger } from '../log.js'
-import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { getTracer } from '../observability/tracing.js'
+import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
 import { MUTATING, TOOL_PROFILES } from './tool-profiles.js'
 
 // MCP tracer. Calls into the no-op API when tracing is disabled.

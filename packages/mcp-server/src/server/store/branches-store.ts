@@ -394,7 +394,7 @@ export async function updateBranchTip(
 // Update only canvases.slug. Branches and versions FK on canvasId so they do
 // not need to move; the blob path also uses canvasId so the .loro stays put.
 // Returns the canvas id whose slug just changed.
-async function renameCanvasSlug(
+async function _renameCanvasSlug(
   workspaceId: string,
   oldSlug: string,
   newSlug: string,

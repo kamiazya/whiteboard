@@ -1,11 +1,11 @@
-import { LoroDoc } from 'loro-crdt'
-import { describe, expect, test } from 'vitest'
 import type {
-  SpatialCanvas,
-  SpatialNode,
   CanvasEdge,
   ExtensionFacets,
+  SpatialCanvas,
+  SpatialNode,
 } from '@kamiazya/whiteboard-canvas-model'
+import { LoroDoc } from 'loro-crdt'
+import { describe, expect, test } from 'vitest'
 import { readFacets, readSpatialCanvas, writeFacets, writeSpatialCanvas } from './loro-bridge.js'
 
 function makeDoc(): LoroDoc {

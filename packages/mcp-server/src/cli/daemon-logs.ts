@@ -23,8 +23,8 @@ import {
 } from '../daemon/daemon-record.js'
 import {
   type DaemonLogEntryInput,
-  InvalidLogTimestampError,
   formatDaemonLogEntriesAsJsonLines,
+  InvalidLogTimestampError,
 } from '../shared/diagnostics/log-jsonl.js'
 
 export interface DaemonLogsOptions {

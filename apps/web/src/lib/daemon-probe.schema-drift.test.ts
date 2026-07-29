@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
 import { daemonPingResponseSchema as serverDaemonPingResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts-internal'
+import { describe, expect, it } from 'vitest'
 import { probeDaemon, probeFailureReasonSchema } from './daemon-probe.js'
 
 // Test-only import of the server's source of truth for the ping response

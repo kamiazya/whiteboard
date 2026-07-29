@@ -2,9 +2,9 @@ import { act, cleanup, render as rtlRender } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
+import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
 
@@ -83,7 +83,6 @@ describe('BrowserLocalCanvasPage WebMCP wiring', () => {
     cleanup()
     vi.useRealTimers()
     localStorage.clear()
-    // biome-ignore lint/performance/noDelete: test cleanup of a global test double
     delete (document as { modelContext?: unknown }).modelContext
   })
 

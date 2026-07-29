@@ -14,11 +14,11 @@ import {
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
-import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
 import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from '../server/security/web-origin-allowlist.js'
+import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 
 const DAEMON_RUN_SCHEMA_VERSION = 1 as const

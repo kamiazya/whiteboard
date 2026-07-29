@@ -8,19 +8,16 @@
 // allow-list, redaction, and ISO-timestamp validation contracts.
 
 import { dirname, resolve } from 'node:path'
+import { type DaemonLogEntryInput, daemonLogEntrySchema } from '../shared/diagnostics/log-jsonl.js'
+import {
+  buildSupportBundle,
+  SupportBundleError,
+  type SupportBundleInput,
+} from '../shared/diagnostics/support-bundle.js'
+import { writeSupportBundle } from '../shared/diagnostics/support-bundle-writer.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 import { runDaemonLogs } from './daemon-logs.js'
 import { runDaemonStatus } from './daemon-status.js'
-import {
-  type DaemonLogEntryInput,
-  daemonLogEntrySchema,
-} from '../shared/diagnostics/log-jsonl.js'
-import {
-  SupportBundleError,
-  type SupportBundleInput,
-  buildSupportBundle,
-} from '../shared/diagnostics/support-bundle.js'
-import { writeSupportBundle } from '../shared/diagnostics/support-bundle-writer.js'
 
 export interface DaemonSupportBundleOptions {
   dataDir: string
@@ -66,8 +63,7 @@ export async function runDaemonSupportBundle(
   const { dataDir, outputDir } = options
   const now = options.now ?? (() => new Date().toISOString())
   const packageVersion = options.packageVersion ?? '0.0.0'
-  const platform =
-    options.platform ?? { os: process.platform, nodeVersion: process.version }
+  const platform = options.platform ?? { os: process.platform, nodeVersion: process.version }
 
   // Source: daemon status + doctor + logs. Each upstream helper
   // already runs its own redaction gate; this wrapper takes their
@@ -133,7 +129,7 @@ export async function runDaemonSupportBundle(
     logs: logsEntries,
   }
 
-  let bundle
+  let bundle: ReturnType<typeof buildSupportBundle>
   try {
     bundle = buildSupportBundle(input)
   } catch (err) {
@@ -159,7 +155,7 @@ export async function runDaemonSupportBundle(
   const resolvedOutput = resolve(outputDir)
   const allowedRoot = dirname(resolvedOutput)
 
-  let writeResult
+  let writeResult: Awaited<ReturnType<typeof writeSupportBundle>>
   try {
     writeResult = await writeSupportBundle(bundle, resolvedOutput, {
       allowedRoots: [allowedRoot],

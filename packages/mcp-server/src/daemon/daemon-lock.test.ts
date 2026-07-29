@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { withDaemonStartupLock } from './daemon-lock.js'
 
 describe('withDaemonStartupLock', () => {
@@ -26,11 +26,10 @@ describe('withDaemonStartupLock', () => {
       void rm(join(tempDir, 'daemon.lock'), { recursive: true, force: true })
     }, 20)
 
-    const result = await withDaemonStartupLock(
-      tempDir,
-      async () => 'after-wait',
-      { retryDelayMs: 5, timeoutMs: 500 },
-    )
+    const result = await withDaemonStartupLock(tempDir, async () => 'after-wait', {
+      retryDelayMs: 5,
+      timeoutMs: 500,
+    })
 
     expect(result).toBe('after-wait')
   })
@@ -52,11 +51,10 @@ describe('withDaemonStartupLock', () => {
       JSON.stringify({ pid: 999999999, startedAt: '2026-04-23T00:00:00.000Z' }),
     )
 
-    const result = await withDaemonStartupLock(
-      tempDir,
-      async () => 'reclaimed',
-      { retryDelayMs: 5, timeoutMs: 200 },
-    )
+    const result = await withDaemonStartupLock(tempDir, async () => 'reclaimed', {
+      retryDelayMs: 5,
+      timeoutMs: 200,
+    })
 
     expect(result).toBe('reclaimed')
   })

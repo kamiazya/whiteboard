@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   type DaemonLogEntry,
   type DaemonLogEntryInput,
-  InvalidLogTimestampError,
   daemonLogEntrySchema,
   formatDaemonLogEntriesAsJsonLines,
   formatDaemonLogEntryAsJsonLine,
+  InvalidLogTimestampError,
   redactDaemonLogEntry,
 } from './log-jsonl.js'
 
@@ -139,14 +139,10 @@ describe('daemon JSONL log surface', () => {
 
     // schemaVersion=2 must not parse against today's schema — anyone
     // bumping it must update consumers in lockstep.
-    expect(() =>
-      daemonLogEntrySchema.parse({ ...out, schemaVersion: 2 } as unknown),
-    ).toThrow()
+    expect(() => daemonLogEntrySchema.parse({ ...out, schemaVersion: 2 } as unknown)).toThrow()
     // Unknown level / source rejected.
     expect(() => daemonLogEntrySchema.parse({ ...out, level: 'trace' } as unknown)).toThrow()
-    expect(() =>
-      daemonLogEntrySchema.parse({ ...out, source: 'unrelated' } as unknown),
-    ).toThrow()
+    expect(() => daemonLogEntrySchema.parse({ ...out, source: 'unrelated' } as unknown)).toThrow()
   })
 
   it('handles 1,000 entries: same number of lines, trailing newline, line-by-line parseable', () => {

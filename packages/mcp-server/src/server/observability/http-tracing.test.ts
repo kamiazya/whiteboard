@@ -1,8 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Hono } from 'hono'
 import { context, propagation, trace } from '@opentelemetry/api'
-import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base'
 import { W3CTraceContextPropagator } from '@opentelemetry/core'
+import {
+  BasicTracerProvider,
+  InMemorySpanExporter,
+  SimpleSpanProcessor,
+} from '@opentelemetry/sdk-trace-base'
+import { Hono } from 'hono'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { tracingMiddleware } from './http-tracing.js'
 
 // Spin up a real (in-memory) tracer provider so the middleware exercises
@@ -56,10 +60,9 @@ describe('tracingMiddleware http.route attribute', () => {
 
   it('captures parameterised routes verbatim (preserves :wid / :slug)', async () => {
     const app = buildApp()
-    const res = await app.request(
-      '/api/workspaces/ws_a/canvases/design%2Flogin/compact',
-      { method: 'POST' },
-    )
+    const res = await app.request('/api/workspaces/ws_a/canvases/design%2Flogin/compact', {
+      method: 'POST',
+    })
     expect(res.status).toBe(200)
     const span = exporter.getFinishedSpans()[0]
     // The whole point of low-cardinality http.route is that all

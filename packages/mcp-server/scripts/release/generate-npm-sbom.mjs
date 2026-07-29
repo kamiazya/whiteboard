@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Generates a CycloneDX SBOM for @kamiazya/whiteboard-mcp (production deps only).
 // Called from workspace root: node packages/mcp-server/scripts/release/generate-npm-sbom.mjs
 //
@@ -26,11 +27,11 @@
 // On failure: generic message to stderr + exit 1.
 //   Error context: step name, exit code, stdout/stderr byte lengths only.
 
+import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawnSync } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
@@ -168,7 +169,7 @@ try {
 
 // Safe stdout summary only — no SBOM contents, dep names, or paths.
 process.stdout.write(
-  JSON.stringify(
+  `${JSON.stringify(
     {
       schemaVersion: 1,
       ok: true,
@@ -184,5 +185,5 @@ process.stdout.write(
     },
     null,
     2,
-  ) + '\n',
+  )}\n`,
 )

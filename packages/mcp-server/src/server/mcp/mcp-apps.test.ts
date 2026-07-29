@@ -21,7 +21,6 @@ function fakeServer() {
   return {
     registerResource,
     server: { registerCapabilities },
-    // biome-ignore lint/suspicious/noExplicitAny: minimal structural fake, cast at call sites
   } as any
 }
 

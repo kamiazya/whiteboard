@@ -72,7 +72,6 @@ const oauthClientRegistryEntrySchema = z.object({
 
 export const oauthClientRegistrySchema = z.array(oauthClientRegistryEntrySchema)
 
-type OAuthClientRegistryEntry = z.infer<typeof oauthClientRegistryEntrySchema>
 export type OAuthClientRegistry = z.infer<typeof oauthClientRegistrySchema>
 
 // Byte-for-byte comparison only. Do not normalize, decode, lowercase, or

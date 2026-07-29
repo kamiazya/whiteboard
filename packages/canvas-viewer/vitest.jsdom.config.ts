@@ -1,5 +1,5 @@
-import { defineProject } from 'vitest/config'
 import react from '@vitejs/plugin-react'
+import { defineProject } from 'vitest/config'
 import { widgetFontsPlugin } from './vite.widget.config.js'
 
 export default defineProject({

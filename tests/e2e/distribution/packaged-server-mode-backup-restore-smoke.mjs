@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Docker smoke for whiteboard server-mode backup / restore.
 //
 // End-to-end contract: seed data via live server A, backup the mounted
@@ -30,14 +31,14 @@
 // This smoke is NOT part of pnpm test:e2e:distribution. Run explicitly:
 //   node tests/e2e/distribution/packaged-server-mode-backup-restore-smoke.mjs
 
+import { spawnSync } from 'node:child_process'
 import { createSign, generateKeyPairSync } from 'node:crypto'
-import { createServer as createHttpsServer } from 'node:https'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer as createHttpsServer } from 'node:https'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { spawnSync } from 'node:child_process'
 import { assertNoLeak } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -662,7 +663,7 @@ try {
   // ── Scenario 8: auth contract still enforced on restored server ───────────
 
   {
-    const jwt = makeJwt(privateKey, SEED_SCOPES)
+    const _jwt = makeJwt(privateKey, SEED_SCOPES)
 
     // No auth → 401.
     const noAuthRes = await fetch(

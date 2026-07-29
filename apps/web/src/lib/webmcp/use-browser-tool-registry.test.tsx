@@ -61,7 +61,6 @@ function TestHarness({
 
 describe('useBrowserToolRegistry', () => {
   afterEach(() => {
-    // biome-ignore lint/performance/noDelete: test cleanup of a global test double
     delete (document as { modelContext?: unknown }).modelContext
   })
 

@@ -16,7 +16,7 @@ export interface BuildSpawnArgsInput {
 }
 
 export function buildSpawnArgs(input: BuildSpawnArgsInput): SpawnArgs {
-  const { env, serverPath, port, tsxBin } = input
+  const { env, serverPath, port } = input
   const portArg = `--port=${port}`
 
   if (env.WHITEBOARD_DEV === '1') {

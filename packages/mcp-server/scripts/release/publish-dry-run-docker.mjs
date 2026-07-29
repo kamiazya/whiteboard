@@ -1,14 +1,15 @@
 #!/usr/bin/env node
+
 // Dry-run Docker image preparation: build (no push) + image ID capture +
 // SBOM/provenance/signing placeholders. Does NOT push to any registry.
 // No cosign, no OIDC material, no registry credentials used.
 // Output: structured JSON summary to stdout on success; generic message to
 // stderr and exit 1 on failure. Full build logs never reach stdout.
 
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { spawnSync } from 'node:child_process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
@@ -116,7 +117,7 @@ writeFileSync(join(OUT_DIR, 'docker-image-metadata.json'), JSON.stringify(metada
 
 // Safe stdout summary: no build logs, no registry credentials, no OIDC material.
 process.stdout.write(
-  JSON.stringify(
+  `${JSON.stringify(
     {
       schemaVersion: 1,
       ok: true,
@@ -130,5 +131,5 @@ process.stdout.write(
     },
     null,
     2,
-  ) + '\n',
+  )}\n`,
 )

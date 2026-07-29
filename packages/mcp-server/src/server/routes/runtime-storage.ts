@@ -10,7 +10,8 @@
 // Returns totals plus per-category breakdowns so the consumer can spot the
 // fastest-growing slice without writing a separate tool.
 
-import { stat, readdir } from 'node:fs/promises'
+import type { Dirent } from 'node:fs'
+import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 
 export interface StorageReport {
@@ -73,7 +74,7 @@ function categorize(relPath: string): keyof StorageReport['byCategory'] {
 }
 
 async function walk(root: string, current: string, report: StorageReport): Promise<void> {
-  let entries
+  let entries: Dirent[]
   try {
     entries = await readdir(current, { withFileTypes: true })
   } catch {
@@ -87,7 +88,7 @@ async function walk(root: string, current: string, report: StorageReport): Promi
       continue
     }
     if (!entry.isFile() && !entry.isSymbolicLink()) continue
-    let info
+    let info: Awaited<ReturnType<typeof stat>>
     try {
       info = await stat(fullPath)
     } catch {

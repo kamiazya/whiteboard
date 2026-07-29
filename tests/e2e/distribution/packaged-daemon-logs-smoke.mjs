@@ -24,7 +24,7 @@ import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CANVAS_LEAK_PATTERNS, assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, CANVAS_LEAK_PATTERNS } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -60,6 +60,7 @@ function assertJsonl(stdout, expectedLineCount) {
       return JSON.parse(line)
     } catch (err) {
       fail('JSONL line failed JSON.parse', { line, error: String(err) })
+      return undefined
     }
   })
 }
@@ -98,11 +99,7 @@ function assertSchemaShape(parsed) {
   if (!VALID_LEVELS.has(parsed.level)) fail('bad level', { parsed })
   if (!VALID_SOURCES.has(parsed.source)) fail('bad source', { parsed })
   if (typeof parsed.message !== 'string') fail('message not string', { parsed })
-  if (
-    parsed.fields === null ||
-    typeof parsed.fields !== 'object' ||
-    Array.isArray(parsed.fields)
-  ) {
+  if (parsed.fields === null || typeof parsed.fields !== 'object' || Array.isArray(parsed.fields)) {
     fail('fields not object', { parsed })
   }
 }

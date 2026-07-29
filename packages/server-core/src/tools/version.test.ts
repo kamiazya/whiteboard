@@ -1,5 +1,5 @@
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
@@ -10,8 +10,7 @@ import {
 import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
-import { createVersionRestoreTool } from './version-restore.js'
-import { VersionNotFoundError } from './version-restore.js'
+import { createVersionRestoreTool, VersionNotFoundError } from './version-restore.js'
 import { createVersionSaveTool } from './version-save.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'

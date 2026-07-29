@@ -95,7 +95,6 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
     cleanup()
     vi.clearAllMocks()
     localStorage.clear()
-    // biome-ignore lint/performance/noDelete: test cleanup of a global test double
     delete (document as { modelContext?: unknown }).modelContext
   })
 

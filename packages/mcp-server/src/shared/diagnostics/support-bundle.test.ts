@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildSupportBundle,
   SUPPORT_BUNDLE_SCHEMA_VERSION,
   SupportBundleError,
   type SupportBundleInput,
-  buildSupportBundle,
   supportBundleManifestSchema,
 } from './support-bundle.js'
 
@@ -66,9 +66,12 @@ describe('support bundle v0', () => {
         },
       ],
     })
-    expect(Object.keys(bundle.files).sort()).toEqual(
-      ['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'],
-    )
+    expect(Object.keys(bundle.files).sort()).toEqual([
+      'doctor.json',
+      'logs.jsonl',
+      'manifest.json',
+      'status.json',
+    ])
     expect(bundle.manifest.schemaVersion).toBe(SUPPORT_BUNDLE_SCHEMA_VERSION)
     expect(bundle.manifest.sections).toEqual(['status.json', 'doctor.json', 'logs.jsonl'])
     expect(bundle.manifest.platform).toEqual({ os: 'darwin', nodeVersion: 'v22.0.0' })
@@ -172,9 +175,9 @@ describe('support bundle v0', () => {
     expect(text).not.toContain('requestHeaders')
 
     // Allow-listed fields stay.
-    const parsed = JSON.parse(
-      bundle.files['logs.jsonl'].slice(0, -1).split('\n')[0]!,
-    ) as { fields: Record<string, unknown> }
+    const parsed = JSON.parse(bundle.files['logs.jsonl'].slice(0, -1).split('\n')[0]!) as {
+      fields: Record<string, unknown>
+    }
     expect(parsed.fields).toEqual({ pid: 7, port: 3099, status: 'ok' })
   })
 
@@ -199,9 +202,9 @@ describe('support bundle v0', () => {
   })
 
   it('fail-closed on offset-less ISO timestamp', () => {
-    expect(() =>
-      buildSupportBundle({ ...minimalInput, createdAt: '2026-05-10T00:00:00' }),
-    ).toThrow(SupportBundleError)
+    expect(() => buildSupportBundle({ ...minimalInput, createdAt: '2026-05-10T00:00:00' })).toThrow(
+      SupportBundleError,
+    )
   })
 
   it('fail-closed when record.startedAt is a leaky non-ISO string — stops Authorization / paths / stack frames smuggling into status.json', () => {

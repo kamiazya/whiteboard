@@ -1,9 +1,9 @@
+import { mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { join, dirname } from 'node:path'
-import { writeFile, mkdir } from 'node:fs/promises'
 import { nanoid } from 'nanoid'
-import { z } from 'zod'
+import type { z } from 'zod'
 import {
   type ExportErrorBody,
   type ExportResponse,
@@ -13,9 +13,9 @@ import { getDataDir } from '../config.js'
 import { exportCanvasHeadless } from '../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../output-path.js'
 import { canvasExists } from '../store/canvas-store.js'
-import { sendExportRequest, getClientCount } from './ws.js'
-import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
+import { validateSlug, validateWorkspaceId, validationErrorBody } from '../validators.js'
 import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
+import { getClientCount, sendExportRequest } from './ws.js'
 
 // The body is a small JSON options object (padding/scale/frameId/theme/
 // outputPath), never canvas content — the PNG is rendered from the browser

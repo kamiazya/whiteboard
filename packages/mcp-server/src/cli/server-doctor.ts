@@ -12,6 +12,14 @@
 // credentials ever appear in result fields.
 
 import { accessSync, constants as fsConstants, statSync } from 'node:fs'
+import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
+import { ENV_KEYS, parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
+import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import {
+  getServerModeRecordPath,
+  readServerModeRecord,
+} from '../server/security/server-mode-record.js'
 import {
   type DaemonDoctorCheck,
   type DaemonDoctorOverallStatus,
@@ -19,15 +27,6 @@ import {
   daemonDoctorResultSchema,
 } from '../shared/api-contracts/daemon-doctor.js'
 import { redactDiagnosticText } from '../shared/diagnostics/redact.js'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
-import { parseServerModeEnvConfig } from '../server/security/server-mode-env-config.js'
-import { planServerModeAuth } from '../server/security/server-mode-auth-plan.js'
-import {
-  getServerModeRecordPath,
-  readServerModeRecord,
-} from '../server/security/server-mode-record.js'
-import type { ServerModeRecord } from '../server/security/server-mode-record.js'
-import { ENV_KEYS } from '../server/security/server-mode-env-config.js'
 import { fetchDaemonPing, resolveConnectHost, verifyDaemonIdentity } from './daemon-ping-client.js'
 import type { ServerRunArgs } from './server-run-args.js'
 

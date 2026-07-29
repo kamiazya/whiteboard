@@ -1,4 +1,13 @@
-import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -19,7 +28,9 @@ afterEach(async () => {
 
 const FIXED_TS = '2026-05-21T00:00:00.000Z'
 
-function makeStatusOutcome(state: 'running' | 'missing' | 'stale' | 'malformed'): RunServerStatusOutcome {
+function makeStatusOutcome(
+  state: 'running' | 'missing' | 'stale' | 'malformed',
+): RunServerStatusOutcome {
   if (state === 'running') {
     return {
       result: {

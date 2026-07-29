@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { afterEach, describe, expect, it } from 'vitest'
@@ -40,10 +40,7 @@ describe('isDirectEntryPoint', () => {
 
   it('returns false for a different file path', () => {
     expect(
-      isDirectEntryPoint(
-        pathToFileURL('/tmp/real-entry.mjs').href,
-        '/tmp/different-entry.mjs',
-      ),
+      isDirectEntryPoint(pathToFileURL('/tmp/real-entry.mjs').href, '/tmp/different-entry.mjs'),
     ).toBe(false)
   })
 })

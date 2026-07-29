@@ -45,7 +45,10 @@ describe('Dockerfile.server contracts', () => {
     expect(dockerfile).toMatch(/ENTRYPOINT.*server.*run.*--json/)
     // Comments may mention "daemon run" to explain what the image does NOT support.
     // Only check non-comment lines for the forbidden pattern.
-    const nonComment = dockerfile.split('\n').filter(l => !/^\s*#/.test(l)).join('\n')
+    const nonComment = dockerfile
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n')
     expect(nonComment).not.toMatch(/daemon run/)
     expect(nonComment).not.toMatch(/daemon\s+run/)
   })
@@ -53,10 +56,13 @@ describe('Dockerfile.server contracts', () => {
   it('does not include --token, WHITEBOARD_DAEMON_TOKEN, or daemon flags', () => {
     // Comments may reference these names to document exclusions; check only
     // non-comment lines so the intent is clear without false positives.
-    const nonComment = dockerfile.split('\n').filter(l => !/^\s*#/.test(l)).join('\n')
+    const nonComment = dockerfile
+      .split('\n')
+      .filter((l) => !/^\s*#/.test(l))
+      .join('\n')
     expect(nonComment).not.toMatch(/--token[=\s]/)
     expect(nonComment).not.toMatch(/WHITEBOARD_DAEMON_TOKEN/)
-    const execLines = nonComment.split('\n').filter(l => /^\s*(CMD|ENTRYPOINT|RUN)\b/.test(l))
+    const execLines = nonComment.split('\n').filter((l) => /^\s*(CMD|ENTRYPOINT|RUN)\b/.test(l))
     for (const line of execLines) {
       expect(line).not.toMatch(/\bdaemon\b/)
     }
@@ -82,7 +88,7 @@ describe('Dockerfile.server contracts', () => {
     // These must be supplied at run time, not hardcoded in ENV directives.
     const envLines = dockerfile
       .split('\n')
-      .filter(l => /^\s*ENV\b/.test(l))
+      .filter((l) => /^\s*ENV\b/.test(l))
       .join('\n')
     expect(envLines).not.toMatch(/WHITEBOARD_SERVER_EXTERNAL_URL/)
     expect(envLines).not.toMatch(/WHITEBOARD_SERVER_AUTH_STRATEGY/)
@@ -98,17 +104,17 @@ describe('Dockerfile.server contracts', () => {
     // doctor is not the default healthcheck — only the ping endpoint
     const healthcheckLine = dockerfile
       .split('\n')
-      .filter(l => /HEALTHCHECK/.test(l))
+      .filter((l) => /HEALTHCHECK/.test(l))
       .join('\n')
     expect(healthcheckLine).not.toMatch(/server doctor/)
     expect(healthcheckLine).not.toMatch(/runtime\/status/)
   })
 
   it('uses multi-stage build (build + runtime stages)', () => {
-    const fromLines = dockerfile.split('\n').filter(l => /^FROM\b/.test(l))
+    const fromLines = dockerfile.split('\n').filter((l) => /^FROM\b/.test(l))
     expect(fromLines.length).toBeGreaterThanOrEqual(2)
-    expect(fromLines.some(l => l.includes('AS build'))).toBe(true)
-    expect(fromLines.some(l => l.includes('AS runtime'))).toBe(true)
+    expect(fromLines.some((l) => l.includes('AS build'))).toBe(true)
+    expect(fromLines.some((l) => l.includes('AS runtime'))).toBe(true)
   })
 })
 
@@ -179,7 +185,7 @@ describe('.env.server.example contracts', () => {
     // All external URL examples must use https://.
     const lines = envExample
       .split('\n')
-      .filter(l => l.startsWith('WHITEBOARD_SERVER_EXTERNAL_URL='))
+      .filter((l) => l.startsWith('WHITEBOARD_SERVER_EXTERNAL_URL='))
     for (const line of lines) {
       expect(line).not.toMatch(/=http:\/\//)
     }

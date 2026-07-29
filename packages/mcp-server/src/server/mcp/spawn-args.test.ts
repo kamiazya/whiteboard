@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { buildSpawnArgs } from './spawn-args.js'
 
 const defaults = {
@@ -11,12 +11,7 @@ describe('buildSpawnArgs - production mode (default)', () => {
   it('starts with node + tsx/esm loader when WHITEBOARD_DEV is unset', () => {
     const result = buildSpawnArgs({ env: {}, ...defaults })
     expect(result.command).toBe('node')
-    expect(result.args).toEqual([
-      '--import',
-      'tsx/esm',
-      '/abs/src/server/index.ts',
-      '--port=3099',
-    ])
+    expect(result.args).toEqual(['--import', 'tsx/esm', '/abs/src/server/index.ts', '--port=3099'])
   })
 
   it('treats WHITEBOARD_DEV="0" as production', () => {
