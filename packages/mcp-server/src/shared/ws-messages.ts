@@ -23,6 +23,7 @@ const versionCreatedPayloadSchema = z.object({
   auto: z.boolean(),
   label: z.string().optional(),
   hasThumbnail: z.boolean(),
+  branchName: z.string(),
   operator: operatorInfoSchema.optional(),
 })
 
