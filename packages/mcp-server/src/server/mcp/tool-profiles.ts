@@ -33,5 +33,4 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   version_save: { profile: MUTATING, title: 'Save labeled version' },
   version_restore: { profile: MUTATING, title: 'Restore canvas from version' },
   version_list: { profile: READ_ONLY, title: 'List versions' },
-  reindex: { profile: READ_ONLY, title: 'Rebuild workspace index' },
 }
