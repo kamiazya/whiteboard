@@ -64,6 +64,7 @@ for (const { label, pattern } of checks) {
 // sync-XHR loader ever reappears in the emitted JS (e.g. the alias is
 // dropped or loro's export map changes).
 import { readdirSync } from 'node:fs'
+
 const ASSETS_DIR = resolve(ROOT, 'dist', 'assets')
 const SYNC_XHR_MARKER = 'requires XMLHttpRequest for synchronous WASM loading'
 const offender = readdirSync(ASSETS_DIR)

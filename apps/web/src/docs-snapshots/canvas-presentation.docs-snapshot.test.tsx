@@ -1,9 +1,9 @@
-import { describe, it, afterEach } from 'vitest'
-import { page } from 'vitest/browser'
-import { cleanup, render, waitFor } from '@testing-library/react'
 import architectureRaw from '@docs-assets/architecture.excalidraw?raw'
-import { ScenePreview } from './_scene-preview.js'
+import { cleanup, render, waitFor } from '@testing-library/react'
+import { afterEach, describe, it } from 'vitest'
+import { page } from 'vitest/browser'
 import { resolveDocAssetPath } from './_helpers.js'
+import { ScenePreview } from './_scene-preview.js'
 
 // Generates docs/assets/canvas-presentation.png — the same architecture
 // scene rendered fullscreen-style (no chrome, larger viewport) so the

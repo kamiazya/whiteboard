@@ -57,9 +57,11 @@ const VALID_FLAGS = [
 
 describe('CLI dispatcher: whiteboard server run', () => {
   it('dry-run success: stdout single JSON, stderr empty, exit 0', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'run', ...VALID_FLAGS]),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'run', ...VALID_FLAGS]))
     expect(exitCode).toBe(0)
     expect(stderr).toBe('')
     const parsed = JSON.parse(stdout)
@@ -69,27 +71,29 @@ describe('CLI dispatcher: whiteboard server run', () => {
   })
 
   it('missing --json → exit 64, stdout empty, stderr contains usage hint', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'run', '--dry-run']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'run', '--dry-run']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/--json/)
   })
 
   it('unknown server subcommand → exit 64, USAGE lists whiteboard server run', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'bad-subcommand']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'bad-subcommand']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/whiteboard server run/)
   })
 
   it('server with no subcommand → exit 64', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server']),
-    )
+    const { result: exitCode, stdout, stderr } = await captureStdio(() => main(['server']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/whiteboard server run/)
@@ -101,9 +105,11 @@ describe('CLI dispatcher: whiteboard server run', () => {
       code: 'server_mode_env.external_url_required',
       field: 'WHITEBOARD_SERVER_EXTERNAL_URL',
     })
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'run', ...VALID_FLAGS]),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'run', ...VALID_FLAGS]))
     expect(exitCode).toBe(1)
     expect(stdout).toBe('')
     expect(stderr).toContain('server_mode_env.external_url_required')
@@ -117,9 +123,11 @@ describe('CLI dispatcher: whiteboard server run', () => {
       kind: 'plan-error',
       code: 'server_mode.external_url_must_be_https',
     })
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'run', ...VALID_FLAGS]),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'run', ...VALID_FLAGS]))
     expect(exitCode).toBe(1)
     expect(stdout).toBe('')
     expect(stderr).toContain('server_mode.external_url_must_be_https')
@@ -130,9 +138,11 @@ describe('CLI dispatcher: whiteboard server run', () => {
     vi.mocked(serverRunModule.runServerRun).mockResolvedValueOnce({
       kind: 'start-error',
     })
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'run', '--json']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'run', '--json']))
     expect(exitCode).toBe(1)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/server failed to start/)
@@ -160,7 +170,8 @@ describe('CLI dispatcher: whiteboard server run', () => {
 
     let capturedStdout = ''
     const writeStdout = vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
-      capturedStdout += typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8')
+      capturedStdout +=
+        typeof chunk === 'string' ? chunk : Buffer.from(chunk as Uint8Array).toString('utf8')
       return true
     })
     // main() returns a never-resolving promise for 'running'; start it but don't await
@@ -189,9 +200,7 @@ describe('CLI dispatcher: whiteboard server run', () => {
     // Smoke: daemon routing guard not broken by server namespace addition.
     // We don't run the actual daemon status (no daemon.json) — just verify
     // the routing doesn't 404 to the unknown-command 64 path.
-    const { result: exitCode } = await captureStdio(() =>
-      main(['daemon', 'status', '--json']),
-    )
+    const { result: exitCode } = await captureStdio(() => main(['daemon', 'status', '--json']))
     // 0 or non-zero is fine; 64 means routing broke
     expect(exitCode).not.toBe(64)
   })
@@ -205,9 +214,11 @@ describe('CLI dispatcher: whiteboard server run', () => {
   })
 
   it('bare positional arg: stderr does not leak raw value', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'run', '--json', 'secret-token-XYZ']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'run', '--json', 'secret-token-XYZ']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).not.toContain('secret-token-XYZ')

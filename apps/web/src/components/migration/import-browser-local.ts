@@ -1,10 +1,10 @@
-import { Loro } from 'loro-crdt'
 import {
   createCanvasRequestSchema,
   createCanvasResponseSchema,
   problemDetailsErrorSchema,
   updateCanvasResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { Loro } from 'loro-crdt'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 
 const MAX_CREATE_ATTEMPTS = 3

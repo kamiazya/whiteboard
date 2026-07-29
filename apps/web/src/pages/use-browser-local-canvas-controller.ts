@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeToSnapshot } from '../components/migration/import-browser-local.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { LoroStore } from '../lib/loro-store.js'
-import type { LoroLoadResult } from '../lib/loro-store.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
+import type { LoroLoadResult } from '../lib/loro-store.js'
+import { LoroStore } from '../lib/loro-store.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 
 // Narrow surface used by the controller to seed a new canvas's Loro doc (and,

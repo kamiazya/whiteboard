@@ -44,9 +44,7 @@ describe('Codex plugin spec contract', () => {
       category: expect.any(String),
       websiteURL: expect.any(String),
     })
-    expect(codexPlugin.interface.capabilities).toEqual(
-      expect.arrayContaining(['Read', 'Write']),
-    )
+    expect(codexPlugin.interface.capabilities).toEqual(expect.arrayContaining(['Read', 'Write']))
   })
 
   it('points Codex at a published MCP config file with a whiteboard server entry', () => {

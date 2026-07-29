@@ -42,9 +42,11 @@ describe('createJwksKeyResolver', () => {
   })
 
   it('re-throws remote key set errors as bare Error (no message)', async () => {
-    const mockFn = vi.fn().mockRejectedValue(
-      new Error('JWKSNoMatchingKey: https://auth.example.com/jwks – kid=test, alg=RS256'),
-    )
+    const mockFn = vi
+      .fn()
+      .mockRejectedValue(
+        new Error('JWKSNoMatchingKey: https://auth.example.com/jwks – kid=test, alg=RS256'),
+      )
     mockCreateRemoteJWKSet.mockReturnValue(mockFn as ReturnType<typeof createRemoteJWKSet>)
 
     const resolver = createJwksKeyResolver('https://auth.example.com/.well-known/jwks.json')
@@ -60,9 +62,11 @@ describe('createJwksKeyResolver', () => {
   })
 
   it('re-throws network errors as bare Error (no URL in message)', async () => {
-    const mockFn = vi.fn().mockRejectedValue(
-      new TypeError('fetch failed: ECONNREFUSED https://secret-auth.internal/jwks'),
-    )
+    const mockFn = vi
+      .fn()
+      .mockRejectedValue(
+        new TypeError('fetch failed: ECONNREFUSED https://secret-auth.internal/jwks'),
+      )
     mockCreateRemoteJWKSet.mockReturnValue(mockFn as ReturnType<typeof createRemoteJWKSet>)
 
     const resolver = createJwksKeyResolver('https://secret-auth.internal/jwks')

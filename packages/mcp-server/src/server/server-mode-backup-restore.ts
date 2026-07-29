@@ -1,10 +1,10 @@
 import { unlink } from 'node:fs/promises'
-import { BackupError, backupDataDir, restoreDataDir } from './backup-restore.js'
 import type { BackupRestoreOptions } from './backup-restore.js'
+import { BackupError, backupDataDir, restoreDataDir } from './backup-restore.js'
 import { getServerModeRecordPath } from './security/server-mode-record.js'
 
-export { BackupError }
 export type { BackupRestoreOptions }
+export { BackupError }
 
 // Copy srcDataDir into backupDir. server-mode.json is included so the record
 // survives in the archive, but callers must use restoreServerModeDataDir (not

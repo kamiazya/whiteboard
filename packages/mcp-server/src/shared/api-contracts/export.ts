@@ -32,6 +32,5 @@ const exportErrorBodySchema = z.object({
   hint: z.string().optional(),
 })
 
-type ExportRequest = z.infer<typeof exportRequestSchema>
 export type ExportResponse = z.infer<typeof exportResponseSchema>
 export type ExportErrorBody = z.infer<typeof exportErrorBodySchema>

@@ -200,7 +200,7 @@ function forbiddenResolvedPath(
 ): string | null {
   if (!specifier.startsWith('.')) return null
   const resolved = resolve(dirname(fromFile), specifier)
-  if (resolved.startsWith(browserAppDir + '/') || resolved === browserAppDir) return null
+  if (resolved.startsWith(`${browserAppDir}/`) || resolved === browserAppDir) return null
   const relToSrc = relative(PACKAGE_SRC_DIR, resolved)
   // Import is outside packages/mcp-server/src entirely — not a forbidden cross-import.
   if (relToSrc.startsWith('..')) return null

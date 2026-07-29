@@ -1,4 +1,4 @@
-import { context, type Context, propagation, trace, type Tracer } from '@opentelemetry/api'
+import { type Context, context, propagation, type Tracer, trace } from '@opentelemetry/api'
 import { W3CTraceContextPropagator } from '@opentelemetry/core'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getLogger } from '../log.js'
@@ -47,8 +47,9 @@ export const MCP_ATTR = {
 export class StderrSpanExporter {
   // The shape `tracing` exposes here matches @opentelemetry/sdk-trace-base.
   // We accept it as opaque to keep the dynamic import boundary clean.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // biome-ignore lint/complexity/noUselessConstructor: the param is required to match the call site's argument, even though the body is empty
   constructor(_tracing: unknown) {}
+
   export(
     spans: ReadonlyArray<{
       name: string

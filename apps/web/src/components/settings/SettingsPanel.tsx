@@ -67,6 +67,7 @@ export function SettingsPanel({
               <legend className="sr-only">Theme</legend>
               <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Theme">
                 {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+                  // biome-ignore lint/a11y/useSemanticElements: WAI-ARIA button-as-radio pattern (icon + label styling not achievable with a native radio input)
                   <button
                     key={value}
                     type="button"

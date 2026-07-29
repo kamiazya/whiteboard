@@ -17,7 +17,7 @@
 // referenced from dist/index.html, which is the number that actually
 // reflects what a fresh visitor downloads before the app can render.
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { resolve, dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
 

@@ -3,7 +3,7 @@
 // forbidden strategy absence, and cross-reference to the release gate matrix.
 // PBT: validateArtifactPolicy() catches structural violations.
 
-import { readFileSync, existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -162,12 +162,18 @@ describe('supply-chain-policy.json CI implementation status', () => {
 
   it('npm-tarball implementedNow is false (locally-runnable gate not yet wired)', () => {
     const artifact = policy.artifacts.find((a) => a.id === 'npm-tarball')
-    expect(artifact?.implementedNow, 'implementedNow:false = no locally-runnable gate in release-gate-matrix; CI implementation tracked via ciImplemented').toBe(false)
+    expect(
+      artifact?.implementedNow,
+      'implementedNow:false = no locally-runnable gate in release-gate-matrix; CI implementation tracked via ciImplemented',
+    ).toBe(false)
   })
 
   it('docker-image implementedNow is false (locally-runnable gate not yet wired)', () => {
     const artifact = policy.artifacts.find((a) => a.id === 'docker-image')
-    expect(artifact?.implementedNow, 'implementedNow:false = no locally-runnable gate in release-gate-matrix; CI implementation tracked via ciImplemented').toBe(false)
+    expect(
+      artifact?.implementedNow,
+      'implementedNow:false = no locally-runnable gate in release-gate-matrix; CI implementation tracked via ciImplemented',
+    ).toBe(false)
   })
 
   it('non-MVP artifacts do not declare ciImplemented', () => {
@@ -313,21 +319,13 @@ describe('supply-chain-policy.json cross-reference to release gate matrix', () =
   })
 
   it('releaseGateMatrixRef is the canonical gate matrix path', () => {
-    expect(policy.releaseGateMatrixRef).toBe(
-      'tests/e2e/distribution/release-gate-matrix.json',
-    )
+    expect(policy.releaseGateMatrixRef).toBe('tests/e2e/distribution/release-gate-matrix.json')
   })
 })
 
 describe('validateArtifactPolicy PBT', () => {
-  const nonEmptyStr = fc
-    .string({ minLength: 1, maxLength: 64 })
-    .filter((s) => s.trim().length > 0)
-  const allowedStrategy = fc.constantFrom(
-    'npm-provenance',
-    'keyless-cosign',
-    'deferred',
-  )
+  const nonEmptyStr = fc.string({ minLength: 1, maxLength: 64 }).filter((s) => s.trim().length > 0)
+  const allowedStrategy = fc.constantFrom('npm-provenance', 'keyless-cosign', 'deferred')
   const forbiddenStrategy = fc.constantFrom(
     'custom-crypto',
     'bespoke-signing',

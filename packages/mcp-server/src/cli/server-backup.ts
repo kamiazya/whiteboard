@@ -1,11 +1,11 @@
 import { lstat } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
-import { hasAncestorSymlink } from '../server/backup-restore.js'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
-import { BackupError, backupServerModeDataDir } from '../server/server-mode-backup-restore.js'
-import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
-import { readServerModeRecord } from '../server/security/server-mode-record.js'
+import { hasAncestorSymlink } from '../server/backup-restore.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
+import { readServerModeRecord } from '../server/security/server-mode-record.js'
+import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
+import { backupServerModeDataDir } from '../server/server-mode-backup-restore.js'
 import type { ServerBackupArgs } from './server-backup-args.js'
 
 export interface RunServerBackupOptions {

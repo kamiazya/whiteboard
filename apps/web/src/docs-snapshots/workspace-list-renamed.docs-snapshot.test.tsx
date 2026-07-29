@@ -1,6 +1,6 @@
-import { describe, it, beforeEach, afterEach, vi } from 'vitest'
-import { page } from 'vitest/browser'
 import { cleanup, render, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, it, vi } from 'vitest'
+import { page } from 'vitest/browser'
 import { DaemonIndexPage } from '../pages/DaemonIndexPage.js'
 import '../index.css'
 import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'

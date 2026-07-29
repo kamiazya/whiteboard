@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import headersContent from '../../public/_headers?raw'
 import appsWebPkgRaw from '../../package.json?raw'
+import headersContent from '../../public/_headers?raw'
 
 // Static drift guards for apps/web/public/_headers.
 // These tests fix the CSP and security-header contract so that

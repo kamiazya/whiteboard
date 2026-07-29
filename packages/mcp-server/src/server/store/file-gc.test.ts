@@ -199,7 +199,6 @@ describe('purgeDanglingFiles', () => {
     }
 
     await expect(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal VersionStore stub for the failure path
       purgeDanglingFiles('ws_brk', { versionStore: fakeStore as any }),
     ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
 
@@ -397,7 +396,6 @@ describe('purgeDanglingFiles', () => {
     }
 
     await expect(
-      // biome-ignore lint/suspicious/noExplicitAny: minimal VersionStore stub for the failure path
       purgeDanglingFiles('ws_nullver', { versionStore: fakeStore as any, graceMs: 0 }),
     ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
 

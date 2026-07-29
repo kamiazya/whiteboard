@@ -12,11 +12,11 @@
 
 import { rm } from 'node:fs/promises'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import {
   getServerModeRecordPath,
   readServerModeRecord,
 } from '../server/security/server-mode-record.js'
-import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import { verifyDaemonIdentity } from './daemon-ping-client.js'
 
 export const SERVER_STOP_SCHEMA_VERSION = 1 as const

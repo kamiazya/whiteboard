@@ -8,7 +8,6 @@ const { mountCanvasViewer } = await import('./mount.js')
 
 function resetDom() {
   document.body.innerHTML = ''
-  // biome-ignore lint/suspicious/noExplicitAny: test-only global reset
   delete (window as any).__WHITEBOARD_VIEWER_SCENE__
 }
 
@@ -54,7 +53,6 @@ describe('mountCanvasViewer', () => {
   })
 
   it('falls back to window.__WHITEBOARD_VIEWER_SCENE__ when no script tag is present', () => {
-    // biome-ignore lint/suspicious/noExplicitAny: test-only global fixture
     ;(window as any).__WHITEBOARD_VIEWER_SCENE__ = { elements: [{ id: 'window-scene' }] }
 
     const container = document.createElement('div')

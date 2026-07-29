@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  isExternalUrlPolicyError,
-  validateBrowserExternalUrl,
-} from './external-url-policy.js'
+import { isExternalUrlPolicyError, validateBrowserExternalUrl } from './external-url-policy.js'
 
 // Helper: assert that a URL string throws an ExternalUrlPolicyError
 function expectRejected(rawUrl: string) {

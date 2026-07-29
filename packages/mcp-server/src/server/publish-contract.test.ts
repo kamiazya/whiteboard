@@ -167,7 +167,9 @@ describe('publish contract', () => {
     expect(releaseWorkflow).toMatch(/node-version:\s*2[4-9]/)
     // Should not fall back to long-lived NPM_TOKEN or GitHub Packages auth.
     expect(releaseWorkflow).not.toContain('Publish to GitHub Packages')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
     expect(releaseWorkflow).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}')
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: literal GitHub Actions expression syntax, not a JS template placeholder
     expect(releaseWorkflow).not.toContain('NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}')
   })
 

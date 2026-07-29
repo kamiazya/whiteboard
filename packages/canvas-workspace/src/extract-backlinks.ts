@@ -1,9 +1,9 @@
-import type { BacklinkRow } from '@kamiazya/whiteboard-canvas-ports'
 import type {
   MdastFlowContent,
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { BacklinkRow } from '@kamiazya/whiteboard-canvas-ports'
 
 export function extractBacklinks(fromCanvasId: string, root: MdastRoot): readonly BacklinkRow[] {
   const seen = new Set<string>()

@@ -1,9 +1,10 @@
+import type { WorkspaceNames } from '../../shared/api-contracts/canvas.js'
 import { getDataDir } from '../config.js'
 import { validateSlug, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { upsertCanvasRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import type { WorkspaceNames } from '../../shared/api-contracts/canvas.js'
+
 export type { WorkspaceNames }
 
 // Workspace + canvas display names and pin order. Backed by:

@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   extractContextFromHeaders,
   getTracer,
-  injectContextIntoHeaders,
   initTracing,
+  injectContextIntoHeaders,
   MCP_ATTR,
   resetTracingForTesting,
   SERVICE_NAME,
-  shutdownTracing,
   StderrSpanExporter,
+  shutdownTracing,
   tracingEnabled,
 } from './tracing.js'
 
@@ -242,10 +242,10 @@ describe('W3C traceparent propagation', () => {
     injectContextIntoHeaders(outHeaders, inCtx)
     // The injected traceparent must conform to the W3C trace-context spec:
     // 00-<32-hex traceId>-<16-hex spanId>-<2-hex flags>
-    expect(outHeaders['traceparent']).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
+    expect(outHeaders.traceparent).toMatch(/^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$/)
     // And must carry the original traceId so the downstream service joins
     // the same trace.
-    expect(outHeaders['traceparent']).toContain(traceId)
+    expect(outHeaders.traceparent).toContain(traceId)
   })
 })
 
@@ -434,6 +434,7 @@ describe('flushOnExit — signal-handler body', () => {
     mockSdkAndEnableTracing(shutdownSpy)
 
     const { initTracing: init, resetTracingForTesting: reset } = await import(
+      // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
       './tracing.js?flush-body=' + Date.now()
     )
     reset()
@@ -462,6 +463,7 @@ describe('flushOnExit — signal-handler body', () => {
 
     try {
       const { initTracing: init, resetTracingForTesting: reset } = await import(
+        // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
         './tracing.js?flush-catch=' + Date.now()
       )
       reset()
@@ -504,6 +506,7 @@ describe('initTracing() catch path', () => {
     })
     // Re-import the module under test so it picks up the mock.
     const { initTracing: initTracingFresh, resetTracingForTesting: reset } = await import(
+      // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
       './tracing.js?bust=' + Date.now()
     )
     reset()

@@ -12,7 +12,9 @@ const entry = resolve(root, 'dist/server/mcp/index.js')
 
 beforeAll(() => {
   if (!existsSync(entry)) {
-    throw new Error(`dist artifact missing: ${entry}\nRun pnpm build before mcp-distribution tests.`)
+    throw new Error(
+      `dist artifact missing: ${entry}\nRun pnpm build before mcp-distribution tests.`,
+    )
   }
 })
 

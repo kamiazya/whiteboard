@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // @whiteboard/checks — verify-pack-contents.
 //
 // Versioned replacement for the inline `node -e` "Verify pack contents" step
@@ -9,9 +10,9 @@
 // tools/checks stays dependency-free (see release-gate-matrix-schema.mjs),
 // so JSON parsing/validation here is hand-rolled rather than Zod.
 
-import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { dirname, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const USAGE = `Usage: node tools/checks/src/verify-pack-contents.mjs [--stdin]

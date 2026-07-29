@@ -30,9 +30,7 @@ describe('MCP auth strategy', () => {
       },
     })
 
-    expect(
-      buildMcpProtectedResourceMetadata(strategy, 'https://mcp.example.com/mcp'),
-    ).toEqual({
+    expect(buildMcpProtectedResourceMetadata(strategy, 'https://mcp.example.com/mcp')).toEqual({
       resource: 'https://mcp.example.com/mcp',
       authorization_servers: ['https://auth.example.com'],
       scopes_supported: ['canvas:read', 'canvas:write'],

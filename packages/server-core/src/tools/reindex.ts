@@ -1,7 +1,7 @@
 import type { WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
-import { deriveWorkspaceIndexRows, readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import type { CanvasIndexInput } from '@kamiazya/whiteboard-canvas-workspace'
+import { deriveWorkspaceIndexRows, readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
 import type { ServerDeps } from '../server-deps.js'

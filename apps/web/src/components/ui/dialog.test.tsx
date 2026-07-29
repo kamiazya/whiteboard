@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from './dialog'
+import { describe, expect, it } from 'vitest'
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from './dialog'
 
 describe('DialogContent', () => {
   it('renders a close button by default (showCloseButton=true)', () => {

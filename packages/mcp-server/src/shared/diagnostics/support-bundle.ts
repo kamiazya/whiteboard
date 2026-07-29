@@ -67,7 +67,6 @@ const supportBundleSectionSchema = z.enum([
   'doctor.json',
   'logs.jsonl',
 ])
-type SupportBundleSection = z.infer<typeof supportBundleSectionSchema>
 
 export const supportBundleManifestSchema = z
   .object({
@@ -216,9 +215,6 @@ export interface SupportBundle {
 
 export class SupportBundleError extends Error {
   override readonly name = 'SupportBundleError'
-  constructor(message: string) {
-    super(message)
-  }
 }
 
 export function buildSupportBundle(input: SupportBundleInput): SupportBundle {

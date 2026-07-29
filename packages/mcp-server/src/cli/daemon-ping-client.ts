@@ -4,9 +4,9 @@
 // call site — means a future field change to the schema only needs to be
 // kept in sync in one place.
 
-import { daemonPingResponseSchema } from '../shared/api-contracts/runtime.js'
-import type { DaemonPingResponse } from '../shared/api-contracts/runtime.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import type { DaemonPingResponse } from '../shared/api-contracts/runtime.js'
+import { daemonPingResponseSchema } from '../shared/api-contracts/runtime.js'
 
 const DEFAULT_TIMEOUT_MS = 2000
 

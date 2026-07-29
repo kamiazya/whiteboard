@@ -1,7 +1,7 @@
-import { LoroDoc } from 'loro-crdt'
-import { describe, expect, test } from 'vitest'
 import { resolveReferences } from '@kamiazya/whiteboard-canvas-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import { LoroDoc } from 'loro-crdt'
+import { describe, expect, test } from 'vitest'
 import { createAliasResolver } from './alias-resolver.js'
 import { WorkspaceTree } from './workspace-tree.js'
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 // Docker smoke for whiteboard server-mode.
 //
 // Verifies the Dockerfile.server artifact at the container boundary:
@@ -24,14 +25,14 @@
 // available in all CI environments). Run it explicitly:
 //   node tests/e2e/distribution/packaged-server-mode-docker-smoke.mjs
 
+import { spawnSync } from 'node:child_process'
 import { createSign, generateKeyPairSync } from 'node:crypto'
-import { createServer as createHttpsServer } from 'node:https'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer as createHttpsServer } from 'node:https'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { spawnSync } from 'node:child_process'
 import { assertNoLeak } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))

@@ -52,7 +52,7 @@ export function dispatchIdentityEvent(
   identity: UseCanvasSyncOptions['identity'],
 ): void {
   if (typeof window === 'undefined') return
-  if (!identity || !identity.workspaceId || !identity.slug) return
+  if (!identity?.workspaceId || !identity.slug) return
   const detail: DirtyEventDetail = { workspaceId: identity.workspaceId, slug: identity.slug }
   window.dispatchEvent(new CustomEvent(eventName, { detail }))
 }

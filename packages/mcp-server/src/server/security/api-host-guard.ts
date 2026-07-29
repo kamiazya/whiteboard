@@ -6,8 +6,8 @@
 // local change, not a new call site.
 
 import type { MiddlewareHandler } from 'hono'
-import type { ServerModeExposureMode } from './server-mode-exposure.js'
 import { getRequestHost, isLoopbackHostname, normalizeHostHeader } from './cors-loopback.js'
+import type { ServerModeExposureMode } from './server-mode-exposure.js'
 
 export function createApiHostGuardMiddleware(mode: ServerModeExposureMode): MiddlewareHandler {
   return async (c, next) => {

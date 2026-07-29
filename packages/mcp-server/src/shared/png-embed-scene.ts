@@ -87,4 +87,4 @@ export function embedExcalidrawScene(png: Buffer, scene: unknown): Buffer {
   return Buffer.concat([png.subarray(0, iendStart), textChunk, png.subarray(iendStart)])
 }
 
-const EXCALIDRAW_PNG_METADATA_KEYWORD = EXCALIDRAW_KEYWORD
+const _EXCALIDRAW_PNG_METADATA_KEYWORD = EXCALIDRAW_KEYWORD

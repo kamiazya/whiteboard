@@ -9,9 +9,7 @@ export function redactFlagValue(arg: string): string {
   return `${arg.slice(0, eq)}=…`
 }
 
-type InlineValueResult =
-  | { kind: 'usage-error'; message: string }
-  | { value: string }
+type InlineValueResult = { kind: 'usage-error'; message: string } | { value: string }
 
 export function takeInlineValue(arg: string, prefix: string): InlineValueResult {
   const value = arg.slice(prefix.length)
@@ -99,7 +97,8 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
     }
 
     if (arg === '--token-stdin') {
-      if (tokenStdin) return { kind: 'usage-error', message: '--token-stdin specified more than once' }
+      if (tokenStdin)
+        return { kind: 'usage-error', message: '--token-stdin specified more than once' }
       tokenStdin = true
       continue
     }
@@ -115,7 +114,8 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
     if (arg === '--token' || arg.startsWith('--token=')) {
       return {
         kind: 'usage-error',
-        message: '--token is not accepted. Use --token-stdin or the WHITEBOARD_DAEMON_TOKEN env variable.',
+        message:
+          '--token is not accepted. Use --token-stdin or the WHITEBOARD_DAEMON_TOKEN env variable.',
       }
     }
 
@@ -127,8 +127,10 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
     }
     if (arg.startsWith('--host=')) {
       const value = arg.slice('--host='.length)
-      if (!value) return { kind: 'usage-error', message: '--host=<value> requires a non-empty value' }
-      if (host !== undefined) return { kind: 'usage-error', message: '--host specified more than once' }
+      if (!value)
+        return { kind: 'usage-error', message: '--host=<value> requires a non-empty value' }
+      if (host !== undefined)
+        return { kind: 'usage-error', message: '--host specified more than once' }
       host = value
       continue
     }
@@ -143,8 +145,12 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
       const value = arg.slice('--port='.length)
       const num = Number(value)
       if (!value || !Number.isInteger(num) || num <= 0 || num > 65535)
-        return { kind: 'usage-error', message: '--port=<value> requires a valid port number (1–65535)' }
-      if (port !== undefined) return { kind: 'usage-error', message: '--port specified more than once' }
+        return {
+          kind: 'usage-error',
+          message: '--port=<value> requires a valid port number (1–65535)',
+        }
+      if (port !== undefined)
+        return { kind: 'usage-error', message: '--port specified more than once' }
       port = num
       continue
     }
@@ -157,8 +163,10 @@ export function parseDaemonRunArgs(args: readonly string[]): DaemonRunArgs {
     }
     if (arg.startsWith('--data-dir=')) {
       const value = arg.slice('--data-dir='.length)
-      if (!value) return { kind: 'usage-error', message: '--data-dir=<value> requires a non-empty value' }
-      if (dataDir !== undefined) return { kind: 'usage-error', message: '--data-dir specified more than once' }
+      if (!value)
+        return { kind: 'usage-error', message: '--data-dir=<value> requires a non-empty value' }
+      if (dataDir !== undefined)
+        return { kind: 'usage-error', message: '--data-dir specified more than once' }
       dataDir = value
       continue
     }
@@ -227,7 +235,8 @@ export function parseDaemonSupportBundleArgs(args: readonly string[]): DaemonSup
   if (!json) {
     return {
       kind: 'usage-error',
-      message: 'Only --json is supported. Re-run with: whiteboard daemon support-bundle --json --output-dir=<path>',
+      message:
+        'Only --json is supported. Re-run with: whiteboard daemon support-bundle --json --output-dir=<path>',
     }
   }
 

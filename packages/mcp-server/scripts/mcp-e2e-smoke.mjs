@@ -24,7 +24,7 @@
 import { spawn } from 'node:child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve, dirname } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -61,8 +61,7 @@ const pending = new Map()
 let stdoutBuf = ''
 child.stdout.on('data', (chunk) => {
   stdoutBuf += chunk.toString()
-  let idx
-  while ((idx = stdoutBuf.indexOf('\n')) !== -1) {
+  for (let idx = stdoutBuf.indexOf('\n'); idx !== -1; idx = stdoutBuf.indexOf('\n')) {
     const line = stdoutBuf.slice(0, idx)
     stdoutBuf = stdoutBuf.slice(idx + 1)
     if (!line.trim()) continue
@@ -87,7 +86,7 @@ function rpc(method, params) {
   const req = { jsonrpc: '2.0', id, method, params }
   return new Promise((resolveRpc, reject) => {
     pending.set(id, { resolve: resolveRpc, reject })
-    child.stdin.write(JSON.stringify(req) + '\n')
+    child.stdin.write(`${JSON.stringify(req)}\n`)
     setTimeout(() => {
       if (pending.has(id)) {
         pending.delete(id)
@@ -98,7 +97,7 @@ function rpc(method, params) {
 }
 
 function notify(method, params) {
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n')
+  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`)
 }
 
 async function callTool(name, args) {
@@ -120,7 +119,7 @@ function cleanup(exitCode) {
   } catch {}
   rmSync(tmpDataDir, { recursive: true, force: true })
   if (exitCode !== 0 && stderrBuf) {
-    console.error('\n--- MCP stderr ---\n' + stderrBuf + '\n--- end ---')
+    console.error(`\n--- MCP stderr ---\n${stderrBuf}\n--- end ---`)
   }
   process.exit(exitCode)
 }
@@ -333,7 +332,7 @@ async function main() {
   // headless renderer (jsdom + @napi-rs/canvas + resvg-js). Confirm we get a
   // .excalidraw.png file path back instead of a no_client rejection.
   const exportedPng = await callTool('export_png', { canvasId: created.id })
-  if (!exportedPng.filePath || !exportedPng.filePath.endsWith('.excalidraw.png')) {
+  if (!exportedPng.filePath?.endsWith('.excalidraw.png')) {
     throw new Error(`export_png returned unexpected shape: ${JSON.stringify(exportedPng)}`)
   }
   console.log(`[e2e] export_png (headless) → ${exportedPng.filePath}`)
@@ -383,7 +382,7 @@ async function main() {
     throw new Error(`load_image returned unexpected shape: ${JSON.stringify(loaded)}`)
   }
   const exportedWithImage = await callTool('export_png', { canvasId: created.id })
-  if (!exportedWithImage.filePath || !exportedWithImage.filePath.endsWith('.excalidraw.png')) {
+  if (!exportedWithImage.filePath?.endsWith('.excalidraw.png')) {
     throw new Error(
       `export_png after load_image returned unexpected shape: ${JSON.stringify(exportedWithImage)}`,
     )
@@ -438,7 +437,7 @@ async function main() {
   // Read the JSON back and verify wrapper shape and element count directly.
   const { readFile } = await import('node:fs/promises')
   const exported = await callTool('canvas_export_json', { canvasId: created.id })
-  if (!exported.filePath || !exported.filePath.endsWith('.excalidraw')) {
+  if (!exported.filePath?.endsWith('.excalidraw')) {
     throw new Error(`canvas_export_json returned unexpected shape: ${JSON.stringify(exported)}`)
   }
   const body = JSON.parse(await readFile(exported.filePath, 'utf-8'))

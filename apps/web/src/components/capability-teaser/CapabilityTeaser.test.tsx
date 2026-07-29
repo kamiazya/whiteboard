@@ -35,6 +35,8 @@ describe('CapabilityTeaser', () => {
     // it stays inert even inside a clickable container.
     const onAncestorClick = vi.fn()
     render(
+      // biome-ignore lint/a11y/noStaticElementInteractions: test-only stand-in for a clickable ancestor container
+      // biome-ignore lint/a11y/useKeyWithClickEvents: test-only stand-in for a clickable ancestor container
       <div onClick={onAncestorClick}>
         <CapabilityTeaser label="Merge" enabled={false} />
       </div>,

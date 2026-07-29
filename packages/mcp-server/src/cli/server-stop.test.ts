@@ -7,7 +7,7 @@ vi.mock('../server/security/server-mode-record.js', () => ({
 }))
 
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
-import { SERVER_STOP_SCHEMA_VERSION, defaultVerifyIdentity, runServerStop } from './server-stop.js'
+import { defaultVerifyIdentity, runServerStop, SERVER_STOP_SCHEMA_VERSION } from './server-stop.js'
 
 const mockRead = vi.mocked(readServerModeRecord)
 

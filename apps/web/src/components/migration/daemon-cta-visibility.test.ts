@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { defaultUserSettings, type UserSettings } from '../../lib/user-settings-store.js'
 import type { DaemonProbeResult } from '../../lib/daemon-probe.js'
+import { defaultUserSettings, type UserSettings } from '../../lib/user-settings-store.js'
 import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 
 const NOW = new Date('2026-07-11T00:00:00.000Z')

@@ -1,6 +1,6 @@
 import type { z } from 'zod'
 import type { WhiteboardCommands } from '../commands/index.js'
-import {
+import type {
   getAppContextInputSchema,
   getAppContextResultSchema,
   getSceneSummaryInputSchema,

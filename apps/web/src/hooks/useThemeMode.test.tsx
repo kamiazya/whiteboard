@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  THEME_STORAGE_KEY,
   applyThemeClass,
   readPersistedTheme,
   resolveTheme,
+  THEME_STORAGE_KEY,
   useThemeMode,
 } from './useThemeMode.js'
 

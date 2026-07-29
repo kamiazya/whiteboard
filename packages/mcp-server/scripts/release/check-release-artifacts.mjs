@@ -66,9 +66,7 @@ for (const [name, expectedPath] of Object.entries(REQUIRED_BIN_MAP)) {
     continue
   }
   if (actual !== expectedPath) {
-    binFailures.push(
-      `package.json bin.${name} is "${actual}", expected "${expectedPath}"`,
-    )
+    binFailures.push(`package.json bin.${name} is "${actual}", expected "${expectedPath}"`)
   }
 }
 if (binFailures.length > 0) {

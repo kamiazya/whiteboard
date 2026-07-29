@@ -16,11 +16,20 @@
 //      block, which must still list `whiteboard daemon support-bundle`.
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { CANVAS_LEAK_PATTERNS, assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, CANVAS_LEAK_PATTERNS } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '..', '..', '..')
@@ -99,7 +108,9 @@ try {
     const onDisk = readdirSync(outputDir).sort()
     if (
       onDisk.length !== 4 ||
-      !['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'].every((n) => onDisk.includes(n))
+      !['doctor.json', 'logs.jsonl', 'manifest.json', 'status.json'].every((n) =>
+        onDisk.includes(n),
+      )
     ) {
       fail('scenario 1 unexpected file set', { onDisk })
     }

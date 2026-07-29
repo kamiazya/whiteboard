@@ -1,9 +1,9 @@
-import { describe, it, afterEach } from 'vitest'
-import { page } from 'vitest/browser'
-import { cleanup, render, waitFor } from '@testing-library/react'
 import architectureRaw from '@docs-assets/architecture.excalidraw?raw'
-import { ScenePreview } from './_scene-preview.js'
+import { cleanup, render, waitFor } from '@testing-library/react'
+import { afterEach, describe, it } from 'vitest'
+import { page } from 'vitest/browser'
 import { resolveDocAssetPath } from './_helpers.js'
+import { ScenePreview } from './_scene-preview.js'
 
 // Generates docs/assets/architecture.png by rendering the canonical
 // architecture.excalidraw scene file. The .excalidraw is the source of

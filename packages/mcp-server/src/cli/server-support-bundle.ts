@@ -19,12 +19,11 @@
 import { lstat, mkdir, readdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { hasAncestorSymlink } from '../server/backup-restore.js'
-import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
+import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import { buildDoctorSection } from '../shared/diagnostics/support-bundle.js'
-import type { RunServerStatusOutcome } from './server-status.js'
 import type { RunServerDoctorOutcome } from './server-doctor.js'
-import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import type { RunServerStatusOutcome } from './server-status.js'
 
 export interface ServerSupportBundleOptions {
   /** Resolved absolute path to server-mode data directory. */
@@ -131,8 +130,7 @@ function buildRecordSection(
   const r = readResult.record
   // Derive liveness from the identity-verified status outcome so PID reuse
   // cannot produce a false 'ok' when a different process occupies the same PID.
-  const kind =
-    statusOutcome.result.ok && statusOutcome.result.state === 'running' ? 'ok' : 'stale'
+  const kind = statusOutcome.result.ok && statusOutcome.result.state === 'running' ? 'ok' : 'stale'
   let publicBaseUrlHost: string | null = null
   try {
     publicBaseUrlHost = new URL(r.publicBaseUrl).host

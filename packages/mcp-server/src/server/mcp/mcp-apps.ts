@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { EXTENSION_ID, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server'
-import { getLogger } from '../log.js'
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { WHITEBOARD_ROOT } from '../config.js'
+import { getLogger } from '../log.js'
 
 // Re-exported so callers (tool-registration.ts, tests) share one import
 // source for the MCP Apps (SEP-1865, io.modelcontextprotocol/ui) wire

@@ -473,9 +473,9 @@ describe('DaemonCanvasPage', () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
 
-    const escape = screen.getByRole('button', { name: /continue in browser-local/i })
+    const escapeButton = screen.getByRole('button', { name: /continue in browser-local/i })
     await act(async () => {
-      escape.click()
+      escapeButton.click()
     })
     expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
   })

@@ -42,5 +42,6 @@ interface ExcalidrawUtilsSurface {
 const surface = upstream as unknown as ExcalidrawUtilsSurface
 
 export const exportToSvg = surface.exportToSvg
-const MIME_TYPES = surface.MIME_TYPES
+const _MIME_TYPES = surface.MIME_TYPES
+
 export type { ExportToSvgOpts }

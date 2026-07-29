@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/canvas.js'
-import { canvasExists, ConflictError, saveCanvas } from '../../store/canvas-store.js'
+import { ConflictError, canvasExists, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import {

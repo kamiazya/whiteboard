@@ -1,8 +1,8 @@
-import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { serializeSpatial } from '@kamiazya/whiteboard-canvas-codec'
+import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
 import { z } from 'zod'
-import type { ServerDeps } from '../server-deps.js'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
+import type { ServerDeps } from '../server-deps.js'
 
 /**
  * `CanvasDocStore.loadSnapshot`'s `DocRef` carries no `workspaceId` — this

@@ -1,4 +1,4 @@
-import { LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { loadCanvas, saveCanvas } from './canvas-store.js'
 
 // key: "workspaceId/slug"

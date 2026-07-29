@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
 import { EventEmitter } from 'node:events'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 
 // vi.mock is hoisted above imports, so mutable state shared with the mocks
@@ -24,8 +24,8 @@ const { mockServe, getLastServer } = vi.hoisted(() => {
 vi.mock('@hono/node-server', () => ({ serve: mockServe }))
 vi.mock('./app.js', () => ({ createApp: vi.fn(() => ({ fetch: vi.fn() })) }))
 
-import { startServerModeHttp } from './server-mode-http.js'
 import { createApp } from './app.js'
+import { startServerModeHttp } from './server-mode-http.js'
 
 function makeOptions() {
   return {

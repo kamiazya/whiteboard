@@ -101,7 +101,7 @@ function parseSteps(lines, startIndex, stepIndent) {
   /** @type {import('./ci-workflow-steps.mjs').WorkflowStep[]} */
   const steps = []
   let i = startIndex
-  const stepDashPrefix = ' '.repeat(stepIndent) + '- '
+  const stepDashPrefix = `${' '.repeat(stepIndent)}- `
   while (i < lines.length) {
     const line = lines[i]
     if (isBlankOrComment(line)) {

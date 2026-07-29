@@ -46,12 +46,8 @@ jobs:
       - name: Test dev scripts (node --test)
         run: pnpm test:scripts
 
-      # Staged biome adoption: enforce the AGENTS.md "no console.* in server
-      # runtime" rule in CI. Full biome check is not wired yet (the repo still
-      # carries pre-existing format/organizeImports violations); this gate stops
-      # new server-runtime console.* from landing without requiring that cleanup.
-      - name: Lint (server noConsole gate)
-        run: pnpm lint:noconsole
+      - name: Lint
+        run: pnpm lint
 
       - name: Typecheck
         run: pnpm typecheck

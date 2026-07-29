@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { closeDb, getDb, clearDbCache } from './index.js'
+import { clearDbCache, closeDb, getDb } from './index.js'
 import { createIsolatedDb } from './test-helpers.js'
 
 let scratch: string
@@ -43,8 +43,7 @@ describe('createIsolatedDb (memory)', () => {
   it('enables PRAGMA foreign_keys so application-side FKs are enforced', async () => {
     const handle = await createIsolatedDb({ dataDir: scratch, memory: true })
     try {
-      const pragma = await sql<{ foreign_keys: number }>`PRAGMA foreign_keys`
-        .execute(handle.db)
+      const pragma = await sql<{ foreign_keys: number }>`PRAGMA foreign_keys`.execute(handle.db)
       expect(pragma.rows[0]?.foreign_keys).toBe(1)
     } finally {
       await handle.dispose()

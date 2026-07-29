@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { buildMiniGraph, type MiniGraphInput } from './mini-graph.js'
 
 const branch = (name: string, color: string, baseBranch?: string, baseVersionId?: string) => ({

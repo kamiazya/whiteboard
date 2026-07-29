@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
-import { type ClientCountResponse } from '../../shared/api-contracts/canvas-runtime.js'
+import type { ClientCountResponse } from '../../shared/api-contracts/canvas-runtime.js'
+import { validateSlug, validateWorkspaceId, validationErrorBody } from '../validators.js'
 import { getClientCount, getReadyClientCount } from './ws.js'
-import { validationErrorBody, validateWorkspaceId, validateSlug } from '../validators.js'
 
 // Lightweight route for polling whether the browser connected after canvas_open.
 // It only reads the WS connection map through getClientCount, so it stays O(1).

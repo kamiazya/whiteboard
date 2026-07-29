@@ -49,7 +49,7 @@ export class InMemoryCanvasDocStore implements CanvasDocStore {
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const record = this.docs.get(docRefKey(input.docRef))
-    if (!record || !record.snapshot || !record.frontier) {
+    if (!record?.snapshot || !record.frontier) {
       return null
     }
     return {
@@ -107,7 +107,7 @@ export class InMemoryCanvasDocStore implements CanvasDocStore {
 
   async readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult> {
     const record = this.docs.get(docRefKey(input.docRef))
-    if (!record || !record.frontier) {
+    if (!record?.frontier) {
       return null
     }
     return { frontier: cloneBytes(record.frontier) }

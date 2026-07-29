@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import {
-  type ServerModeExposureDecision,
   isOriginAllowedForServerMode,
   resolveServerModeExposure,
+  type ServerModeExposureDecision,
 } from './server-mode-exposure.js'
 
 // ── local-daemon: loopback-only policy ──────────────────────────────────────

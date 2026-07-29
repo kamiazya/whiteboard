@@ -2,11 +2,11 @@ import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
 import {
   type AsyncAuthStrategy,
+  createAsyncAuthStrategyMiddleware,
+  createOAuthResourceServerAuthStrategy,
   type OAuthResourceTokenValidationInput,
   type OAuthResourceTokenValidationResult,
   type OAuthResourceTokenValidator,
-  createAsyncAuthStrategyMiddleware,
-  createOAuthResourceServerAuthStrategy,
 } from './oauth-resource-strategy.js'
 
 function makeFakeValidator(result: OAuthResourceTokenValidationResult): {

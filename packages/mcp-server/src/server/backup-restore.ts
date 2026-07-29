@@ -24,9 +24,6 @@ import { dirname, join, resolve, sep } from 'node:path'
 
 export class BackupError extends Error {
   override readonly name = 'BackupError'
-  constructor(message: string) {
-    super(message)
-  }
 }
 
 export interface BackupRestoreOptions {

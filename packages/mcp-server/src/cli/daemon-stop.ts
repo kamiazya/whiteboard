@@ -1,6 +1,6 @@
 import {
-  deleteDaemonRecord,
   isPidAlive as defaultIsPidAlive,
+  deleteDaemonRecord,
   loadDaemonRecord,
 } from '../daemon/daemon-registry.js'
 

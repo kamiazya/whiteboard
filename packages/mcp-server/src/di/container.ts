@@ -1,6 +1,6 @@
 import { TOKENS } from '@kamiazya/whiteboard-canvas-ports'
-import { Container, type ContainerModule } from 'inversify'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { Container, type ContainerModule } from 'inversify'
 import { storeMemoryModule } from './store-memory.module.js'
 
 export function createContainer(storeModule: ContainerModule = storeMemoryModule): Container {

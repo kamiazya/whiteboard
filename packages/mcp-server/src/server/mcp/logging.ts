@@ -37,9 +37,7 @@ export function wireMcpLogging(server: McpServer): WireMcpLoggingHandle {
           level: record.level,
           logger: record.scope,
           data:
-            record.data !== undefined
-              ? { msg: record.msg, ...record.data }
-              : { msg: record.msg },
+            record.data !== undefined ? { msg: record.msg, ...record.data } : { msg: record.msg },
         }
         void server.sendLoggingMessage(params).catch(() => {
           // sendLoggingMessage rejects when the transport has no peer or

@@ -1,10 +1,10 @@
 import { lstat, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BackupError } from '../server/server-mode-backup-restore.js'
-import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
+import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
+import { BackupError } from '../server/server-mode-backup-restore.js'
 import { runServerBackup } from './server-backup.js'
 
 let tmpRoot: string
@@ -38,11 +38,9 @@ describe('runServerBackup', () => {
     await mkdir(dataDir)
 
     const capturedCalls: [string, string, BackupRestoreOptions][] = []
-    const mockDoBackup = vi.fn(
-      async (src: string, dest: string, opts: BackupRestoreOptions) => {
-        capturedCalls.push([src, dest, opts])
-      },
-    )
+    const mockDoBackup = vi.fn(async (src: string, dest: string, opts: BackupRestoreOptions) => {
+      capturedCalls.push([src, dest, opts])
+    })
 
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
@@ -71,7 +69,7 @@ describe('runServerBackup', () => {
     // allowedRoots uses dirname(outputDir), NOT outputDir itself, so the
     // helper's assertWithinAllowed check is non-tautological.
     expect(opts.allowedRoots).toContain(join(tmpRoot, 'data'))
-    expect(opts.allowedRoots).toContain(tmpRoot)           // dirname of outputDir
+    expect(opts.allowedRoots).toContain(tmpRoot) // dirname of outputDir
     expect(opts.allowedRoots).not.toContain(join(tmpRoot, 'backup')) // NOT self
   })
 

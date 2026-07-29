@@ -1,9 +1,9 @@
-import { describe, it, afterEach } from 'vitest'
-import { page } from 'vitest/browser'
-import { cleanup, render, waitFor } from '@testing-library/react'
 import { convertToExcalidrawElements } from '@excalidraw/excalidraw'
-import { ScenePreview } from './_scene-preview.js'
+import { cleanup, render, waitFor } from '@testing-library/react'
+import { afterEach, describe, it } from 'vitest'
+import { page } from 'vitest/browser'
 import { pinRandomFields, resolveDocAssetPath } from './_helpers.js'
+import { ScenePreview } from './_scene-preview.js'
 
 // Generates docs/assets/canvas-auth-flow.png — a small auth-service
 // request flow diagram: Client → API Gateway → Token Service → Database,

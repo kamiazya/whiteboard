@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync, readFileSync } from 'node:fs'
 // Behavioral artifact smoke: loads the built dist/ in a real Chromium browser with
 // __WHITEBOARD_RUNTIME_CONFIG__.publicOrigin set to a preview URL and asserts that
 // App renders data-provider="invalid-config" rather than entering browser-local mode.
@@ -10,8 +11,7 @@
 // The static bundle check in smoke-artifact.mjs verifies separately that
 // window.location.origin is also wired up as a secondary defense.
 import { createServer } from 'node:http'
-import { readFileSync, existsSync } from 'node:fs'
-import { resolve, extname, dirname } from 'node:path'
+import { dirname, extname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 

@@ -209,7 +209,7 @@ function main() {
   assert(artifactFiles.length > 0, 'artifact files found to scan')
   for (const filePath of artifactFiles) {
     const content = readFileSync(filePath, 'utf-8')
-    const rel = filePath.replace(DIST + '/', '')
+    const rel = filePath.replace(`${DIST}/`, '')
     for (const pattern of SECRET_PATTERNS) {
       assert(!pattern.test(content), `${rel}: no match for ${pattern}`)
     }

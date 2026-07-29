@@ -262,9 +262,11 @@ describe('CLI dispatcher: whiteboard daemon logs --json', () => {
     const { main } = await import('./dispatcher.js')
     const dataDir = '/this/path/does/not/exist-cli-logs-test'
 
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['daemon', 'logs', '--json', `--data-dir=${dataDir}`]),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'logs', '--json', `--data-dir=${dataDir}`]))
 
     expect(exitCode).toBe(0)
     expect(stderr).toBe('')
@@ -305,9 +307,11 @@ describe('CLI dispatcher: whiteboard daemon logs --json', () => {
     // dispatcher's exit-64 path is what would catch a `logs`-removal
     // mutation.
     const { main } = await import('./dispatcher.js')
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['daemon', 'this-is-not-a-real-subcommand', '--json']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['daemon', 'this-is-not-a-real-subcommand', '--json']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/Unknown command/i)

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { StartServerFn } from './server-run.js'
 import { runServerRun } from './server-run.js'
 import type { ServerRunArgs } from './server-run-args.js'
-import type { StartServerFn } from './server-run.js'
 
 // Minimal env that satisfies all required fields for a valid server-mode config.
 const VALID_ENV: NodeJS.ProcessEnv = {

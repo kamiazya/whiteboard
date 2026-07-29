@@ -511,10 +511,11 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
-        'w1',
-        'main',
-      )
+      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        workspaceId: string,
+        slug: string,
+      ) => void
+      onOpenCanvas('w1', 'main')
     })
     await screen.findByTestId('daemon-canvas-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
@@ -533,10 +534,11 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
-        'workspace-b',
-        'main',
-      )
+      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        workspaceId: string,
+        slug: string,
+      ) => void
+      onOpenCanvas('workspace-b', 'main')
     })
     await screen.findByTestId('daemon-canvas-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
@@ -555,10 +557,11 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
-        'w1',
-        'canvas-a',
-      )
+      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        workspaceId: string,
+        slug: string,
+      ) => void
+      onOpenCanvas('w1', 'canvas-a')
     })
     await screen.findByTestId('daemon-canvas-page')
     expect(receivedDaemonPageProps?.slug).toBe('canvas-a')
@@ -570,10 +573,11 @@ describe('App local-daemon provider state', () => {
     await screen.findByTestId('daemon-index-page')
 
     act(() => {
-      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
-        'w1',
-        'canvas-b',
-      )
+      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        workspaceId: string,
+        slug: string,
+      ) => void
+      onOpenCanvas('w1', 'canvas-b')
     })
     await screen.findByTestId('daemon-canvas-page')
     expect(receivedDaemonPageProps?.slug).toBe('canvas-b')
@@ -587,10 +591,11 @@ describe('App local-daemon provider state', () => {
     )
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
-        'w1',
-        'main',
-      )
+      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        workspaceId: string,
+        slug: string,
+      ) => void
+      onOpenCanvas('w1', 'main')
     })
     await screen.findByTestId('daemon-canvas-page')
     const onContinueBrowserLocal = receivedDaemonPageProps?.onContinueBrowserLocal as () => void
@@ -619,9 +624,11 @@ describe('App local-daemon provider state', () => {
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     try {
       act(() => {
-        ;(
-          receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void
-        )('w1', 'main')
+        const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+          workspaceId: string,
+          slug: string,
+        ) => void
+        onOpenCanvas('w1', 'main')
       })
       expect(await screen.findByText('Something went wrong')).toBeTruthy()
       expect(reportSpy).toHaveBeenCalled()
@@ -740,10 +747,11 @@ describe('App URL routing', () => {
     const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/')
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
-        'w1',
-        'main',
-      )
+      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        workspaceId: string,
+        slug: string,
+      ) => void
+      onOpenCanvas('w1', 'main')
     })
     await screen.findByTestId('daemon-canvas-page')
     expect(router.state.location.pathname).toBe('/canvas/w1/main')
@@ -764,10 +772,11 @@ describe('App URL routing', () => {
     const router = renderAppWithRouter(LOCAL_DAEMON_STATE, '/')
     await screen.findByTestId('daemon-index-page')
     act(() => {
-      ;(receivedDaemonIndexPageProps?.onOpenCanvas as (workspaceId: string, slug: string) => void)(
-        'w1',
-        'main',
-      )
+      const onOpenCanvas = receivedDaemonIndexPageProps?.onOpenCanvas as (
+        workspaceId: string,
+        slug: string,
+      ) => void
+      onOpenCanvas('w1', 'main')
     })
     await screen.findByTestId('daemon-canvas-page')
 

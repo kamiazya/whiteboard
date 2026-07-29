@@ -42,8 +42,7 @@ const pending = new Map()
 let stdoutBuf = Buffer.alloc(0)
 child.stdout.on('data', (chunk) => {
   stdoutBuf = Buffer.concat([stdoutBuf, chunk])
-  let idx
-  while ((idx = stdoutBuf.indexOf(0x0a)) !== -1) {
+  for (let idx = stdoutBuf.indexOf(0x0a); idx !== -1; idx = stdoutBuf.indexOf(0x0a)) {
     const line = stdoutBuf.subarray(0, idx).toString('utf-8')
     stdoutBuf = stdoutBuf.subarray(idx + 1)
     if (!line.trim()) continue
@@ -71,7 +70,7 @@ function rpc(method, params) {
   const id = nextId++
   return new Promise((resolveRpc, reject) => {
     pending.set(id, { resolve: resolveRpc, reject })
-    child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n')
+    child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`)
     setTimeout(() => {
       if (pending.has(id)) {
         pending.delete(id)
@@ -82,7 +81,7 @@ function rpc(method, params) {
 }
 
 function notify(method, params) {
-  child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n')
+  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method, params })}\n`)
 }
 
 async function callTool(name, args) {
@@ -101,7 +100,7 @@ function cleanup(exitCode) {
   } catch {}
   rmSync(tmpDataDir, { recursive: true, force: true })
   if (exitCode !== 0 && stderrBuf) {
-    console.error('\n--- MCP stderr ---\n' + stderrBuf + '\n--- end ---')
+    console.error(`\n--- MCP stderr ---\n${stderrBuf}\n--- end ---`)
   }
   process.exit(exitCode)
 }

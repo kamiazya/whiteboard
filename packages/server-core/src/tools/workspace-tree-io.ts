@@ -1,6 +1,6 @@
 import type { WorkspaceId } from '@kamiazya/whiteboard-canvas-model'
-import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import type { CanvasDocStore } from '@kamiazya/whiteboard-canvas-ports'
+import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-canvas-ports'
 import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { CanvasNotFoundError } from './canvas-crud.errors.js'

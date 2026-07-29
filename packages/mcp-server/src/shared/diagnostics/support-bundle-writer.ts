@@ -65,9 +65,7 @@ async function canonicaliseTarget(target: string): Promise<string> {
     const stat = await lstatOrNullSync(existing)
     if (stat !== null) {
       if (stat.isSymbolicLink()) {
-        throw new SupportBundleError(
-          'Target path traverses a symlink, which is not allowed.',
-        )
+        throw new SupportBundleError('Target path traverses a symlink, which is not allowed.')
       }
       break
     }

@@ -77,8 +77,6 @@ const tokenRequestSchema = z.object({
   code_verifier: z.string().min(1),
 })
 
-type TokenRequest = z.infer<typeof tokenRequestSchema>
-
 const tokenResponseSchema = z.object({
   access_token: z.string(),
   token_type: z.literal('Bearer'),

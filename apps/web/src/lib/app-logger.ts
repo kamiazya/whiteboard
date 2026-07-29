@@ -33,7 +33,7 @@ export function getAppLogger(name: string): AppLogger {
     const importMeta = (g['import.meta'] ?? import.meta) as
       | { env?: Record<string, unknown> }
       | undefined
-    const isDev = importMeta?.['env']?.['DEV'] === true
+    const isDev = importMeta?.env?.DEV === true
     if (isDev) {
       // biome-ignore lint/suspicious/noConsole: this is the one intended sink apps/web routes diagnostics through
       console[level](`${tag} ${message}`, ...context)

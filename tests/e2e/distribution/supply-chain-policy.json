@@ -51,11 +51,7 @@
       "implementedNow": false
     }
   ],
-  "allowedSigningStrategies": [
-    "npm-provenance",
-    "keyless-cosign",
-    "deferred"
-  ],
+  "allowedSigningStrategies": ["npm-provenance", "keyless-cosign", "deferred"],
   "forbiddenSigningStrategies": [
     "custom-crypto",
     "bespoke-signing",

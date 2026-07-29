@@ -13,7 +13,7 @@ export function safeErrorCopy(err: unknown, fallback: string): string {
     const body = (err as { body?: Record<string, unknown> }).body
     if (body && typeof body === 'object') {
       // RFC 9457 §3.1: 'title' is a short, human-readable summary of the problem type.
-      if (typeof body['title'] === 'string' && body['title'].length > 0) return body['title']
+      if (typeof body.title === 'string' && body.title.length > 0) return body.title
     }
   }
   return fallback

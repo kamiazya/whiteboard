@@ -1,6 +1,6 @@
 import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
-import type { z } from 'zod'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { z } from 'zod'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
@@ -361,6 +361,8 @@ export function DaemonIndexPage({
             {visible.map((row) => {
               const hasDisplayName = row.displayName !== row.slug
               return (
+                // biome-ignore lint/a11y/noStaticElementInteractions: enlarges the click target only; the nested <button> below already provides keyboard access to the same action
+                // biome-ignore lint/a11y/useKeyWithClickEvents: enlarges the click target only; the nested <button> below already provides keyboard access to the same action
                 <div
                   key={row.slug}
                   data-testid="daemon-index-canvas-card"

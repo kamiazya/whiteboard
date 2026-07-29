@@ -27,9 +27,9 @@
 
 import type { AuthScope } from './auth-strategy.js'
 import {
+  resolveServerModeExposure,
   type ServerModeExposureFailureCode,
   type ServerModeExposureInput,
-  resolveServerModeExposure,
 } from './server-mode-exposure.js'
 
 // Stable identifiers for logical route groups that will be scope-gated.
@@ -57,7 +57,6 @@ interface RouteGroupAuthPlan {
 //   'loopback'  — local-daemon must respond to PNA preflight from browser pages
 //                 that access the loopback interface.
 //   'disabled'  — server-mode runs on a proper HTTPS origin; no PNA header needed.
-type PnaHeaderPolicy = 'loopback' | 'disabled'
 
 export type ServerModeAuthPlanDecision =
   | {

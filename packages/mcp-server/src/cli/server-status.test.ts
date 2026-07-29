@@ -8,9 +8,9 @@ vi.mock('../server/security/server-mode-record.js', () => ({
 
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import {
-  SERVER_STATUS_SCHEMA_VERSION,
   defaultVerifyIdentity,
   runServerStatus,
+  SERVER_STATUS_SCHEMA_VERSION,
 } from './server-status.js'
 
 const mockRead = vi.mocked(readServerModeRecord)

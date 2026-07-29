@@ -58,7 +58,7 @@ async function defaultExternalUrlLookup(
   return await dnsLookup(targetHostname, { all: true, verbatim: true })
 }
 
-let externalUrlLookup = defaultExternalUrlLookup
+const externalUrlLookup = defaultExternalUrlLookup
 
 function diagnoseSlugSegment(segment: string): string | null {
   if (segment === '') {

@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./server-support-bundle.js', () => ({
   runServerSupportBundle: vi.fn(async () => ({
-    stdout: '{"schemaVersion":1,"ok":true,"operation":"support-bundle","files":["status.json","doctor.json","record.json","manifest.json"]}\n',
+    stdout:
+      '{"schemaVersion":1,"ok":true,"operation":"support-bundle","files":["status.json","doctor.json","record.json","manifest.json"]}\n',
     stderr: '',
     exitCode: 0,
   })),
@@ -38,7 +39,11 @@ function captureStdio<T>(
 
 describe('CLI dispatcher: whiteboard server support-bundle', () => {
   it('success: stdout single JSON object, stderr empty, exit 0', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() =>
       main(['server', 'support-bundle', '--json', '--output-dir=/tmp/out']),
     )
     expect(exitCode).toBe(0)
@@ -57,7 +62,11 @@ describe('CLI dispatcher: whiteboard server support-bundle', () => {
       stderr: 'Could not write support bundle. The output directory must be empty.\n',
       exitCode: 1,
     })
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() =>
       main(['server', 'support-bundle', '--json', '--output-dir=/tmp/out']),
     )
     expect(exitCode).toBe(1)
@@ -66,9 +75,11 @@ describe('CLI dispatcher: whiteboard server support-bundle', () => {
   })
 
   it('missing --json → exit 64, stdout empty, stderr contains usage hint', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'support-bundle', '--output-dir=/tmp/out']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'support-bundle', '--output-dir=/tmp/out']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/--json/)
@@ -96,9 +107,11 @@ describe('CLI dispatcher: whiteboard server support-bundle', () => {
   })
 
   it('unknown server subcommand still exits 64 and USAGE lists support-bundle', async () => {
-    const { result: exitCode, stdout, stderr } = await captureStdio(() =>
-      main(['server', 'not-a-real-subcommand', '--json']),
-    )
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() => main(['server', 'not-a-real-subcommand', '--json']))
     expect(exitCode).toBe(64)
     expect(stdout).toBe('')
     expect(stderr).toMatch(/server support-bundle/)

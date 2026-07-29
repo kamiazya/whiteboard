@@ -100,7 +100,6 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // must be cleared explicitly between tests.
     const { mountCanvasViewer } = await import('./mount.js')
     vi.mocked(mountCanvasViewer).mockClear()
-    // biome-ignore lint/suspicious/noExplicitAny: jsdom test shim for a browser-only API
     ;(globalThis as any).FontFace = FakeFontFace
     if (!document.fonts) {
       Object.defineProperty(document, 'fonts', { configurable: true, value: { add() {} } })

@@ -3,6 +3,7 @@ import '@excalidraw/excalidraw/index.css'
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,7 +24,6 @@ import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'

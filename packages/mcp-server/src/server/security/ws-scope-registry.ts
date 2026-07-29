@@ -17,7 +17,7 @@
 // vs registry" guard shape used elsewhere in this codebase.
 
 import type { ClientTextMessage } from '../../shared/ws-messages.js'
-import { hasRequiredScopes, type AuthScope } from './auth-strategy.js'
+import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
 
 export { hasRequiredScopes }
 

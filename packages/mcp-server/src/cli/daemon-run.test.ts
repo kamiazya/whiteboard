@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events'
-import { afterEach, describe, expect, it, vi } from 'vitest'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../server/log.js'
 import { getDataDir, resetDataDirForTests } from '../shared/data-dir-secure.js'
 

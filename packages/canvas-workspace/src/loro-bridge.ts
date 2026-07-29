@@ -1,13 +1,13 @@
-import type { LoroDoc } from 'loro-crdt'
 import {
-  spatialNodeSchema,
+  type CanvasEdge,
   canvasEdgeSchema,
+  type ExtensionFacets,
   extensionFacetsSchema,
   type SpatialCanvas,
   type SpatialNode,
-  type CanvasEdge,
-  type ExtensionFacets,
+  spatialNodeSchema,
 } from '@kamiazya/whiteboard-canvas-model'
+import type { LoroDoc } from 'loro-crdt'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'

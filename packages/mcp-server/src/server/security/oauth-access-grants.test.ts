@@ -66,7 +66,7 @@ describe('access-grant store', () => {
   })
 
   it('enumerates only the requesting client’s live grants, and never the token', () => {
-    let clock = 1_000
+    const clock = 1_000
     const store = createOAuthTransactionStore({ now: () => clock })
     store.mintAccessToken(['canvas:read'], 'client-a')
     store.mintAccessToken(['canvas:read', 'canvas:write'], 'client-b')

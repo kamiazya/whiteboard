@@ -1,6 +1,6 @@
 import { type MigrationProvider, Migrator } from 'kysely'
-import type { Database } from './index.js'
 import { IncompatibleDatabaseError } from './incompatible-database.js'
+import type { Database } from './index.js'
 import { migrations } from './migrations/index.js'
 
 // kysely throws this phrase when the DB's migration log records a migration the

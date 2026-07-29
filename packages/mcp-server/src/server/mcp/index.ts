@@ -2,23 +2,23 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { createContainer, resolveServerDeps } from '../../di/container.js'
+import { createStoreLocalModule } from '../../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getDataDir } from '../config.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
-import { registerMcpAppsExtension } from './mcp-apps.js'
+import { getDb } from '../store/db/index.js'
 import { wireMcpLogging } from './logging.js'
+import { registerMcpAppsExtension } from './mcp-apps.js'
+import { registerOpenCanvasTools } from './opencanvas-tools.js'
 import { ensureWorkspaceId } from './session-resolver.js'
-import { installStdioLifecycle } from './stdio-lifecycle.js'
 import {
   buildDrawDiagramPrompt,
   getStandaloneHelpText,
   WHITEBOARD_DRAW_PROMPT,
   WHITEBOARD_HELP_URI,
 } from './standalone-help.js'
-import { registerOpenCanvasTools } from './opencanvas-tools.js'
-import { getDb } from '../store/db/index.js'
-import { createContainer, resolveServerDeps } from '../../di/container.js'
-import { createStoreLocalModule } from '../../di/store-local.module.js'
+import { installStdioLifecycle } from './stdio-lifecycle.js'
 
 export async function createMcpServer() {
   // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the

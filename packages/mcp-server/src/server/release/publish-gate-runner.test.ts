@@ -151,7 +151,13 @@ describe('publish-gate runner main() rejects an invalid matrix before running an
   }
   const sink = () => {
     const chunks: string[] = []
-    return { write: (s: string) => (chunks.push(s), true), chunks }
+    return {
+      write: (s: string) => {
+        chunks.push(s)
+        return true
+      },
+      chunks,
+    }
   }
 
   it('exits non-zero and never spawns a step when the matrix fails validation', async () => {
@@ -343,7 +349,13 @@ describe('pages-release runner main() rejects an invalid matrix before running a
   }
   const sink = () => {
     const chunks: string[] = []
-    return { write: (s: string) => (chunks.push(s), true), chunks }
+    return {
+      write: (s: string) => {
+        chunks.push(s)
+        return true
+      },
+      chunks,
+    }
   }
 
   it('exits non-zero and never spawns a step when the matrix fails validation', async () => {

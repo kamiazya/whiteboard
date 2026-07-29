@@ -62,26 +62,30 @@ describe('release.yml — root permissions policy', () => {
     expect(
       preamble,
       'packages: write found at workflow root — it must be scoped to docker-publish-sign job only',
-    ).not.toMatch(/^  packages:\s+write/m)
+    ).not.toMatch(/^ {2}packages:\s+write/m)
   })
 })
 
-describe('ci.yml — server noConsole lint gate', () => {
-  it('runs the server noConsole gate in the verify job', async () => {
+describe('ci.yml — biome lint gate', () => {
+  it('runs pnpm lint (full biome check) in the check job', async () => {
     const text = await readFile(join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf-8')
     expect(
       text,
-      'ci.yml must run pnpm lint:noconsole so AGENTS.md server-console discipline is enforced in CI',
-    ).toMatch(/run:\s+pnpm lint:noconsole/)
+      'ci.yml must run pnpm lint so all biome rules (including noConsole overrides) are enforced in CI',
+    ).toMatch(/run:\s+pnpm lint/)
   })
 
-  it('the lint:noconsole script targets the server tree with the noConsole rule', async () => {
-    const pkg = JSON.parse(await readFile(join(REPO_ROOT, 'package.json'), 'utf-8')) as {
-      scripts?: Record<string, string>
+  it('biome.json enforces noConsole on server runtime code via overrides', async () => {
+    const biome = JSON.parse(await readFile(join(REPO_ROOT, 'biome.json'), 'utf-8')) as {
+      overrides?: Array<{
+        includes?: string[]
+        linter?: { rules?: { suspicious?: { noConsole?: string } } }
+      }>
     }
-    const script = pkg.scripts?.['lint:noconsole'] ?? ''
-    expect(script, 'lint:noconsole script must exist').not.toBe('')
-    expect(script).toContain('lint/suspicious/noConsole')
-    expect(script).toContain('packages/mcp-server/src/server')
+    const serverOverride = biome.overrides?.find((o) =>
+      o.includes?.some((p) => p.includes('packages/mcp-server/src/server')),
+    )
+    expect(serverOverride, 'biome.json must have a server-scoped noConsole override').toBeDefined()
+    expect(serverOverride?.linter?.rules?.suspicious?.noConsole).toBe('error')
   })
 })

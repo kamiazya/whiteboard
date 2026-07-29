@@ -6,10 +6,10 @@
  * - does NOT flag the intentional non-secret dev token "whiteboard-dev"
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
 const REPO_ROOT = resolve(import.meta.dirname, '../../../')
 const SECRETLINT_BIN = join(REPO_ROOT, 'node_modules', '.bin', 'secretlint')

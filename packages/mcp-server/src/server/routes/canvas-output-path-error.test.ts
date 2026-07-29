@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { OutputPathError } from '../output-path.js'
 import { toCanvasOutputPathErrorBody } from './canvas-output-path-error.js'
 

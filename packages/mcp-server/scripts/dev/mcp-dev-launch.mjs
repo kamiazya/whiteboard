@@ -9,11 +9,15 @@ const packageRoot = resolve(scriptDir, '../..')
 const loaderPath = resolve(packageRoot, 'node_modules/tsx/dist/loader.mjs')
 const entryPath = resolve(packageRoot, 'src/server/mcp/index.ts')
 
-const child = spawn(process.execPath, ['--import', loaderPath, entryPath, ...process.argv.slice(2)], {
-  cwd: packageRoot,
-  env: process.env,
-  stdio: 'inherit',
-})
+const child = spawn(
+  process.execPath,
+  ['--import', loaderPath, entryPath, ...process.argv.slice(2)],
+  {
+    cwd: packageRoot,
+    env: process.env,
+    stdio: 'inherit',
+  },
+)
 
 child.on('error', (error) => {
   process.stderr.write(`[mcp-dev-launch] failed to spawn MCP entry: ${error.message}\n`)

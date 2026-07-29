@@ -1,11 +1,7 @@
 import { resolve, sep } from 'node:path'
 import { ValidationError } from '../validators.js'
 
-export function assertPathWithinDir(
-  filePath: string,
-  dir: string,
-  label: string,
-): string {
+export function assertPathWithinDir(filePath: string, dir: string, label: string): string {
   const resolvedDir = resolve(dir)
   const resolvedPath = resolve(filePath)
   if (resolvedPath === resolvedDir || resolvedPath.startsWith(resolvedDir + sep)) {
