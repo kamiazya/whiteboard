@@ -157,6 +157,13 @@ describe('getCanvasInputSchema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('rejects missing workspaceId', () => {
+    const result = getCanvasInputSchema.safeParse({
+      canvasId: VALID_CANVAS_ID,
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects extra keys (strict)', () => {
     const result = getCanvasInputSchema.safeParse({
       workspaceId: VALID_WORKSPACE_ID,
@@ -266,6 +273,22 @@ describe('deleteCanvasInputSchema', () => {
   it('rejects missing workspaceId', () => {
     const result = deleteCanvasInputSchema.safeParse({
       canvasId: VALID_CANVAS_ID,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects missing canvasId', () => {
+    const result = deleteCanvasInputSchema.safeParse({
+      workspaceId: VALID_WORKSPACE_ID,
+    })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects extra keys (strict)', () => {
+    const result = deleteCanvasInputSchema.safeParse({
+      workspaceId: VALID_WORKSPACE_ID,
+      canvasId: VALID_CANVAS_ID,
+      force: true,
     })
     expect(result.success).toBe(false)
   })
