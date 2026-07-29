@@ -3,6 +3,7 @@ import {
   coreFacetsSchema,
   extensionFacetsSchema,
   facetsRawSchema,
+  issueFacetPayloadSchema,
   RESERVED_ROOT_KEYS,
 } from './facets.js'
 
@@ -59,6 +60,47 @@ describe('extensionFacetsSchema', () => {
 
   it('accepts an empty record', () => {
     expect(extensionFacetsSchema.safeParse({}).success).toBe(true)
+  })
+})
+
+describe('issueFacetPayloadSchema', () => {
+  it('accepts the minimal shape with only status', () => {
+    expect(issueFacetPayloadSchema.safeParse({ status: 'open' }).success).toBe(true)
+  })
+
+  it('accepts the full shape with all optional fields populated', () => {
+    const result = issueFacetPayloadSchema.safeParse({
+      status: 'in-progress',
+      priority: 'high',
+      assignees: ['alice', 'bob'],
+      labels: ['bug', 'urgent'],
+      due: '2026-08-01T00:00:00.000Z',
+      summary: 'Fix the thing',
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a missing status', () => {
+    expect(issueFacetPayloadSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('rejects an invalid due date format', () => {
+    expect(issueFacetPayloadSchema.safeParse({ status: 'open', due: 'not-a-date' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects assignees that are not a string array', () => {
+    expect(issueFacetPayloadSchema.safeParse({ status: 'open', assignees: [1, 2] }).success).toBe(
+      false,
+    )
+    expect(issueFacetPayloadSchema.safeParse({ status: 'open', assignees: 'alice' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects extra unknown keys', () => {
+    expect(issueFacetPayloadSchema.safeParse({ status: 'open', extra: 'nope' }).success).toBe(false)
   })
 })
 
