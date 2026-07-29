@@ -84,6 +84,25 @@ export function validatePrCoverage(prCoverage) {
       if (p.kind === 'workflow-step' && !isNonEmptyString(p.stepName)) {
         return { ok: false, reason: 'prCoverage.stepName must be a non-empty string' }
       }
+      if (p.kind === 'aggregate') {
+        if ('expectedCommandSubstrings' in p) {
+          if (
+            !Array.isArray(p.expectedCommandSubstrings) ||
+            p.expectedCommandSubstrings.length === 0
+          ) {
+            return {
+              ok: false,
+              reason: 'prCoverage.expectedCommandSubstrings must be a non-empty array when present',
+            }
+          }
+          if (p.expectedCommandSubstrings.some((s) => !isNonEmptyString(s))) {
+            return {
+              ok: false,
+              reason: 'prCoverage.expectedCommandSubstrings entries must be non-empty strings',
+            }
+          }
+        }
+      }
       break
     }
     case 'exception': {
