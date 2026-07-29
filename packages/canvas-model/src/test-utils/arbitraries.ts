@@ -7,6 +7,7 @@ import type {
   MdastTableCell,
   MdastTableRow,
 } from '../mdast/index.js'
+import { RESERVED_ROOT_KEYS } from '../facets.js'
 import { fc } from './fast-check.js'
 
 const CROCKFORD_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -37,6 +38,21 @@ export const coreFacetsArbitrary = fc.record(
   { requiredKeys: ['type'] },
 )
 
+/** Valid-by-construction arbitrary for `issueFacetPayloadSchema` (issue/1 domain). */
+export const issueFacetPayloadArbitrary = fc.record(
+  {
+    status: fc.string({ minLength: 1, maxLength: 20 }),
+    priority: fc.string({ maxLength: 20 }),
+    assignees: fc.array(fc.string({ maxLength: 20 }), { maxLength: 5 }),
+    labels: fc.array(fc.string({ maxLength: 20 }), { maxLength: 5 }),
+    due: fc
+      .date({ min: new Date(0), max: new Date(4102444800000), noInvalidDate: true })
+      .map((d) => d.toISOString()),
+    summary: fc.string({ maxLength: 100 }),
+  },
+  { requiredKeys: ['status'] },
+)
+
 const domainArbitrary = fc.stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
 const versionArbitrary = fc.integer({ min: 0, max: 99 }).map((n) => String(n))
 
@@ -47,8 +63,6 @@ const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
 export const extensionFacetsArbitrary = fc.dictionary(extensionFacetKeyArbitrary, fc.jsonValue(), {
   maxKeys: 4,
 })
-
-const RESERVED_ROOT_KEYS = ['type', 'title', 'tags', 'view', 'facets'] as const
 
 const facetsRawKeyArbitrary: fc.Arbitrary<string> = fc
   .string({ minLength: 1, maxLength: 15 })

@@ -43,6 +43,19 @@ describe('deriveFacetIndexRows', () => {
   test('returns no rows for a canvas with no facets', () => {
     expect(deriveFacetIndexRows([{ canvasId: NOTES_ID, updatedAtMs: 0 }])).toEqual([])
   })
+
+  test('indexes a issue/1 extension facet payload as an existence row, same as any other domain', () => {
+    const rows = deriveFacetIndexRows([
+      {
+        canvasId: NOTES_ID,
+        updatedAtMs: 0,
+        extensionFacets: { 'issue/1': { status: 'open', assignees: ['alice'] } },
+      },
+    ])
+
+    expect(rows).toEqual([{ facet: 'facets.issue/1', value: '', canvasId: NOTES_ID }])
+    for (const row of rows) expect(() => facetIndexRowSchema.parse(row)).not.toThrow()
+  })
 })
 
 describe('deriveCanvasListRows', () => {
