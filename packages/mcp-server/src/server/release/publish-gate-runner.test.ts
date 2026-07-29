@@ -431,8 +431,8 @@ describe('publish-gate runner CLI arg parsing (parseArgs)', () => {
 })
 
 describe('smoke:distribution:packaged drift', () => {
-  it('its node distribution smoke set matches the 7 node smokes in test:e2e:distribution', () => {
-    const distScript = rootPkg.scripts['test:e2e:distribution'] ?? ''
+  it('its node distribution smoke set matches the 7 node smokes in test:e2e:distribution:only', () => {
+    const distScript = rootPkg.scripts['test:e2e:distribution:only'] ?? ''
     const packagedScript = rootPkg.scripts['smoke:distribution:packaged'] ?? ''
     const distNodeSmokes = (
       distScript.match(/node tests\/e2e\/distribution\/\S+\.mjs/g) ?? []
