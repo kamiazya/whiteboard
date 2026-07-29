@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { fallbackMeasureText } from './fallback-measure.js'
 
 describe('fallbackMeasureText', () => {
-  const font = { sizePx: 16, family: 'sans-serif', weight: 400 as const, style: 'normal' as const }
+  const font = {
+    sizePx: 16,
+    family: 'sans-serif',
+    fallbackChain: [] as readonly string[],
+    weight: 400,
+    style: 'normal' as const,
+  }
 
   it('returns advanceWidth proportional to text length and font size', () => {
     const metrics = fallbackMeasureText('hello', font)
