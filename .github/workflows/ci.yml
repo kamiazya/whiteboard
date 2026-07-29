@@ -202,6 +202,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install CJK fallback font
+        run: sudo apt-get update -qq && sudo apt-get install -yqq fonts-noto-cjk
+
       - name: Build canvas-viewer widget
         run: pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 
