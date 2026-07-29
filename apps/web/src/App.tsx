@@ -46,10 +46,7 @@ const DaemonCanvasPage = lazy(() =>
 // Excalidraw + useCanvasSync (which imports loro-crdt), and it is the
 // default render path (no daemon, no pairing fragment) — so it was the one
 // making Excalidraw/loro-crdt part of every session's initial paint even
-// though DaemonCanvasPage above was already lazy. Module-scope side effects
-// that must run before React lifecycle begins (browserLocalStore,
-// userSettingsStore, provider-state resolution just below) stay at THIS
-// file's module scope, unaffected by which page component is lazy.
+// though DaemonCanvasPage above was already lazy.
 const BrowserLocalCanvasPage = lazy(() =>
   import('./pages/BrowserLocalCanvasPage.js').then((m) => ({ default: m.BrowserLocalCanvasPage })),
 )
@@ -68,16 +65,6 @@ const DaemonIndexPage = lazy(() =>
 // DaemonRoute's shape (rather than a parallel type) since this state IS the
 // route — app-routes.ts's parse/build functions keep the two in sync.
 type DaemonView = DaemonRoute
-
-const browserLocalStore = new IndexedDBStore()
-const userSettingsStore = createUserSettingsStore()
-
-const _defaultProviderState: ProviderState = resolveHostedProviderStateFromRaw(
-  typeof window !== 'undefined'
-    ? ((window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__ ?? {})
-    : {},
-  typeof window !== 'undefined' ? window.location.origin : undefined,
-)
 
 interface AppProps {
   providerState?: ProviderState
@@ -130,6 +117,15 @@ function BackendConfigChip({ state }: BackendConfigChipProps) {
 }
 
 export function App({ providerState }: AppProps) {
+  const [browserLocalStore] = useState(() => new IndexedDBStore())
+  const [userSettingsStore] = useState(() => createUserSettingsStore())
+  const [defaultProviderState] = useState<ProviderState>(() =>
+    resolveHostedProviderStateFromRaw(
+      (window as { __WHITEBOARD_RUNTIME_CONFIG__?: unknown }).__WHITEBOARD_RUNTIME_CONFIG__ ?? {},
+      window.location.origin,
+    ),
+  )
+
   // Routed BEFORE providerState resolution: a #wb= pairing fragment always
   // wins over the runtime-config-driven provider state (which governs the
   // separate same-origin local-daemon / browser-local split). 'none' (no
@@ -432,7 +428,7 @@ export function App({ providerState }: AppProps) {
     }
   }
 
-  const state = providerState ?? _defaultProviderState
+  const state = providerState ?? defaultProviderState
 
   // The 'Continue in browser-local' escape hatch collapses a local-daemon OR
   // invalid-config state to browser-local capabilities, so every downstream
