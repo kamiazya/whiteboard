@@ -17,9 +17,8 @@ import {
 } from './standalone-help.js'
 import { registerOpenCanvasTools } from './opencanvas-tools.js'
 import { getDb } from '../store/db/index.js'
-import { LibsqlCanvasDocStore } from '../store/libsql/libsql-canvas-doc-store.js'
-import { LibsqlWorkspaceIndex } from '../store/libsql/libsql-workspace-index.js'
-import { FsBlobStore } from '../store/fs/fs-blob-store.js'
+import { createContainer, resolveServerDeps } from '../../di/container.js'
+import { createStoreLocalModule } from '../../di/store-local.module.js'
 
 export async function createMcpServer() {
   // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
@@ -107,11 +106,8 @@ export async function createMcpServer() {
 
   const dataDir = getDataDir()
   const db = await getDb(dataDir)
-  registerOpenCanvasTools(server, {
-    canvasDocStore: new LibsqlCanvasDocStore(db),
-    workspaceIndex: new LibsqlWorkspaceIndex(db),
-    blobStore: new FsBlobStore(dataDir),
-  })
+  const container = createContainer(createStoreLocalModule({ db, blobDir: dataDir }))
+  registerOpenCanvasTools(server, resolveServerDeps(container))
 
   return server
 }
