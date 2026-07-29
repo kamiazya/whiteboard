@@ -26,5 +26,9 @@ export function parseMarkdownBody(body: string): MdastRoot {
 
 export function stringifyMarkdownBody(root: MdastRoot): string {
   const remarkTree = toRemarkRoot(root)
-  return String(stringifier.stringify(remarkTree)).trimEnd()
+  // `toRemarkRoot`'s return type is this package's own narrow `RemarkNode`
+  // shape (see to-remark.ts), not remark's own `Root` type — the same
+  // untyped-boundary crossing `fromRemarkRoot(tree as never)` above makes
+  // in the opposite direction.
+  return String(stringifier.stringify(remarkTree as never)).trimEnd()
 }
