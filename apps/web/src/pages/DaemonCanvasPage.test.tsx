@@ -1620,6 +1620,7 @@ describe('DaemonCanvasPage', () => {
           elementCount: 1,
           auto: false,
           hasThumbnail: false,
+          branchName: 'main',
         })
       })
 
