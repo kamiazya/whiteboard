@@ -622,6 +622,7 @@ describe('useCanvasSync', () => {
         elementCount: 3,
         auto: false,
         hasThumbnail: false,
+        branchName: 'main',
       }
       act(() => {
         backend._ctrl.handlers!.onVersionCreated(payload)
@@ -1777,6 +1778,7 @@ describe('useCanvasSync', () => {
         elementCount: 3,
         auto: false,
         hasThumbnail: false,
+        branchName: 'main',
       }
       act(() => {
         backend._ctrl.handlers!.onVersionCreated(payload)
@@ -1809,6 +1811,7 @@ describe('useCanvasSync', () => {
           elementCount: 0,
           auto: false,
           hasThumbnail: false,
+          branchName: 'main',
         })
       })
 
@@ -1829,6 +1832,7 @@ describe('useCanvasSync', () => {
           elementCount: 0,
           auto: false,
           hasThumbnail: false,
+          branchName: 'main',
         })
       })
 
