@@ -117,6 +117,7 @@ const EXPECTED_TOOLS = [
   'canvas_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
+  'canvas_import_okf',
   'canvas_render_svg',
   'edge_patch',
   'facet_set',
@@ -222,6 +223,33 @@ async function main() {
     throw new Error(`version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
   }
   console.log(`[e2e] version_restore → ${restored.restoredVersionId}`)
+
+  // canvas_import_okf → canvas_export_okf round-trip
+  const importMarkdown =
+    '---\ntype: issue\nfacets:\n  issue/1:\n    status: open\n---\nImported body.'
+  const imported = await callTool('canvas_import_okf', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+    markdown: importMarkdown,
+  })
+  if (!imported.imported || imported.canvasId !== canvasId) {
+    throw new Error(`canvas_import_okf returned unexpected shape: ${JSON.stringify(imported)}`)
+  }
+  console.log('[e2e] canvas_import_okf → imported')
+
+  const exported = await callTool('canvas_export_okf', {
+    workspaceId: WORKSPACE_ID,
+    canvasId,
+  })
+  if (!exported.markdown.includes('Imported body.')) {
+    throw new Error(`canvas_export_okf body mismatch after import: ${exported.markdown}`)
+  }
+  if (!exported.frontmatter.facets?.['issue/1']) {
+    throw new Error(
+      `canvas_export_okf facets missing after import: ${JSON.stringify(exported.frontmatter)}`,
+    )
+  }
+  console.log('[e2e] canvas_export_okf → round-trip verified')
 
   console.log('\n[e2e] ALL OK')
 }

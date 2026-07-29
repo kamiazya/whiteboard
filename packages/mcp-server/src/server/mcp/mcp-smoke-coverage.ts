@@ -30,6 +30,7 @@ export const ALL_REGISTERED_TOOLS = [
   'canvas_digest',
   'canvas_export_json_canvas',
   'canvas_export_okf',
+  'canvas_import_okf',
   'canvas_render_svg',
   'edge_patch',
   'facet_set',
@@ -44,6 +45,7 @@ export const ALL_REGISTERED_TOOLS = [
 ] as const satisfies readonly string[]
 
 export const COVERED_TOOLS = [
+  'canvas_import_okf',
   'facet_set',
   'version_save',
   'version_restore',
