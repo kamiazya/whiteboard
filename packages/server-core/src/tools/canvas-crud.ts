@@ -18,7 +18,7 @@ import type {
   listCanvasesOutputSchema,
 } from './canvas-crud.schemas.js'
 import { generateCanvasId } from './generate-canvas-id.js'
-import { reindexWorkspace } from './reindex.js'
+import { withReindex } from './with-reindex.js'
 import { loadWorkspaceTree, saveWorkspaceTree } from './workspace-tree-io.js'
 
 /**
@@ -37,24 +37,25 @@ export async function wbCanvasCreate(
   deps: ServerDeps,
   input: z.infer<typeof createCanvasInputSchema>,
 ): Promise<z.infer<typeof createCanvasOutputSchema>> {
-  const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
+  return withReindex(deps, async (input: z.infer<typeof createCanvasInputSchema>) => {
+    const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
 
-  const parentId = input.parentId as TreeID | undefined
-  if (parentId !== undefined && tree.getNode(parentId) === undefined) {
-    throw new CanvasParentNotFoundError(input.parentId as string)
-  }
+    const parentId = input.parentId as TreeID | undefined
+    if (parentId !== undefined && tree.getNode(parentId) === undefined) {
+      throw new CanvasParentNotFoundError(input.parentId as string)
+    }
 
-  const conflict = tree.children(parentId).find((sibling) => sibling.segment === input.segment)
-  if (conflict) {
-    throw new CanvasSegmentConflictError(input.segment)
-  }
+    const conflict = tree.children(parentId).find((sibling) => sibling.segment === input.segment)
+    if (conflict) {
+      throw new CanvasSegmentConflictError(input.segment)
+    }
 
-  const canvasId = generateCanvasId()
-  tree.createNode(canvasId, input.segment, parentId)
-  await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
-  await reindexWorkspace(deps, input.workspaceId)
+    const canvasId = generateCanvasId()
+    tree.createNode(canvasId, input.segment, parentId)
+    await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
 
-  return { canvasId, segment: input.segment }
+    return { canvasId, segment: input.segment }
+  })(input)
 }
 
 export async function wbCanvasGet(
@@ -85,10 +86,16 @@ export async function wbCanvasDelete(
   deps: ServerDeps,
   input: z.infer<typeof deleteCanvasInputSchema>,
 ): Promise<z.infer<typeof deleteCanvasOutputSchema>> {
-  const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
-  const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
-  tree.delete(node.id)
-  await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
-  await reindexWorkspace(deps, input.workspaceId)
-  return { deleted: true }
+  return withReindex(
+    deps,
+    async (
+      input: z.infer<typeof deleteCanvasInputSchema>,
+    ): Promise<z.infer<typeof deleteCanvasOutputSchema>> => {
+      const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
+      const node = findNodeOrThrow(tree, input.workspaceId, input.canvasId)
+      tree.delete(node.id)
+      await saveWorkspaceTree(deps.canvasDocStore, input.workspaceId, tree)
+      return { deleted: true }
+    },
+  )(input)
 }

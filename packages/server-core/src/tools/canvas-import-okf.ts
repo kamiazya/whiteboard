@@ -4,7 +4,7 @@ import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-wor
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
-import { reindexWorkspace } from './reindex.js'
+import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 const TEXT_NODE_ID = 'okf-body'
@@ -41,41 +41,43 @@ export function createCanvasImportOkfTool(deps: ServerDeps) {
     name: 'canvas_import_okf' as const,
     inputSchema: canvasImportOkfInputSchema,
     outputSchema: canvasImportOkfOutputSchema,
-    async execute(input: CanvasImportOkfInput): Promise<CanvasImportOkfOutput> {
-      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+    execute: withReindex(
+      deps,
+      async (input: CanvasImportOkfInput): Promise<CanvasImportOkfOutput> => {
+        await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
 
-      const parsed = parseOkf(input.markdown)
-      if (!parsed.ok) {
-        throw new OkfParseError(parsed.error.stage, parsed.error.message)
-      }
+        const parsed = parseOkf(input.markdown)
+        if (!parsed.ok) {
+          throw new OkfParseError(parsed.error.stage, parsed.error.message)
+        }
 
-      const { frontmatter, body } = parsed.value
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+        const { frontmatter, body } = parsed.value
+        const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
-      if (frontmatter.facets) {
-        writeFacets(doc, frontmatter.facets)
-      }
+        if (frontmatter.facets) {
+          writeFacets(doc, frontmatter.facets)
+        }
 
-      const nodes =
-        body.length > 0
-          ? [
-              {
-                id: TEXT_NODE_ID,
-                type: 'text' as const,
-                x: 0,
-                y: 0,
-                width: 600,
-                height: 400,
-                text: body,
-              },
-            ]
-          : []
-      writeSpatialCanvas(doc, { nodes, edges: [] })
+        const nodes =
+          body.length > 0
+            ? [
+                {
+                  id: TEXT_NODE_ID,
+                  type: 'text' as const,
+                  x: 0,
+                  y: 0,
+                  width: 600,
+                  height: 400,
+                  text: body,
+                },
+              ]
+            : []
+        writeSpatialCanvas(doc, { nodes, edges: [] })
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
-      await reindexWorkspace(deps, input.workspaceId)
+        await saveDocSnapshot(deps, input.canvasId, doc)
 
-      return { canvasId: input.canvasId, imported: true }
-    },
+        return { canvasId: input.canvasId, imported: true }
+      },
+    ),
   }
 }
