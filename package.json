@@ -73,7 +73,7 @@
     "@tanstack/intent": "^0.0.40",
     "concurrently": "^9",
     "knip": "6.26.0",
-    "lefthook": "^2.1.9",
+    "lefthook": "^2.1.10",
     "secretlint": "13.0.2",
     "vitest": "catalog:"
   }
