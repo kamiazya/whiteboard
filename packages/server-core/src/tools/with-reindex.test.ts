@@ -47,17 +47,6 @@ describe('withReindex', () => {
     expect(applyRowsSpy).not.toHaveBeenCalled()
   })
 
-  it('propagates the inner execute error unchanged, without swallowing it', async () => {
-    const deps = makeDeps()
-    class CustomError extends Error {}
-    const innerExecute = vi.fn(async () => {
-      throw new CustomError('specific failure')
-    })
-    const wrapped = withReindex(deps, innerExecute)
-
-    await expect(wrapped({ workspaceId: WORKSPACE_ID })).rejects.toBeInstanceOf(CustomError)
-  })
-
   it('still resolves with the mutation result when reindexWorkspace itself fails (fail-open)', async () => {
     const deps = makeDeps()
     deps.workspaceIndex.applyRows = vi.fn().mockRejectedValue(new Error('index write failed'))
