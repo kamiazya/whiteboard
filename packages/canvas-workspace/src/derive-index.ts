@@ -1,4 +1,5 @@
 import type { CoreFacets, ExtensionFacets } from '@kamiazya/whiteboard-canvas-model'
+import { issueFacetPayloadSchema } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
 import type {
   AliasHistoryRow,
@@ -45,14 +46,55 @@ function compareStrings(a: string, b: string): number {
   return 0
 }
 
+/** Scalar `issue/1` fields deep-indexed as one row each, in a fixed emission order. */
+const ISSUE_FACET_SCALAR_FIELDS = ['status', 'priority', 'due', 'summary'] as const
+
+/** Array `issue/1` fields deep-indexed as one row per element, in a fixed emission order. */
+const ISSUE_FACET_ARRAY_FIELDS = ['assignees', 'labels'] as const
+
+/**
+ * Deep-indexes a known `issue/1` extension-facet payload into one row per
+ * present scalar field and one row per array element, in addition to the
+ * existence row every domain gets. `extensionFacetsSchema` validates the
+ * bucket key shape only (`z.unknown()` payload), so a value stored under
+ * `issue/1` is not guaranteed to match `issueFacetPayloadSchema` — a
+ * `safeParse` failure falls back to no deep rows (existence-only) rather
+ * than throwing, so one malformed payload never aborts indexing for the
+ * rest of the workspace.
+ */
+function deriveIssueFacetDeepRows(
+  domainKey: string,
+  payload: unknown,
+  canvasId: string,
+): FacetIndexRow[] {
+  const parsed = issueFacetPayloadSchema.safeParse(payload)
+  if (!parsed.success) return []
+
+  const rows: FacetIndexRow[] = []
+  for (const field of ISSUE_FACET_SCALAR_FIELDS) {
+    const value = parsed.data[field]
+    if (value !== undefined) {
+      rows.push({ facet: `facets.${domainKey}.${field}`, value, canvasId })
+    }
+  }
+  for (const field of ISSUE_FACET_ARRAY_FIELDS) {
+    for (const value of parsed.data[field] ?? []) {
+      rows.push({ facet: `facets.${domainKey}.${field}`, value, canvasId })
+    }
+  }
+  return rows
+}
+
 /**
  * Facet index rows: one row per (facet key, value, canvasId). Core `type`/
  * `view` each produce at most one row per canvas; `tags` produces one row
- * per tag. Extension domains (`facets.<domain>/<version>`) have no
- * canonical scalar value in the current row DTO (`{facet, value}` only), so
- * they index as existence rows (`value: ''`) — a canvas either has the
- * domain applied or it doesn't; path-scoped equality indexing would need
- * the row DTO to grow a path field.
+ * per tag. Extension domains (`facets.<domain>/<version>`) always index as
+ * existence rows (`value: ''`) — a canvas either has the domain applied or
+ * it doesn't. The `issue/1` domain additionally deep-indexes its known
+ * fields (`facets.issue/1.status`, `.assignees`, etc.) since its shape is
+ * schematized; other domains have no canonical scalar value in the current
+ * row DTO (`{facet, value}` only) and stay existence-only until the row DTO
+ * grows a path field.
  */
 export function deriveFacetIndexRows(canvases: readonly CanvasIndexInput[]): FacetIndexRow[] {
   const rows: FacetIndexRow[] = []
@@ -69,6 +111,9 @@ export function deriveFacetIndexRows(canvases: readonly CanvasIndexInput[]): Fac
     }
     for (const domainKey of Object.keys(extensionFacets ?? {}).sort(compareStrings)) {
       rows.push({ facet: `facets.${domainKey}`, value: '', canvasId })
+      if (domainKey === 'issue/1') {
+        rows.push(...deriveIssueFacetDeepRows(domainKey, extensionFacets?.[domainKey], canvasId))
+      }
     }
   }
   // Explicit sort (not insertion order) so shuffling the `canvases` input
