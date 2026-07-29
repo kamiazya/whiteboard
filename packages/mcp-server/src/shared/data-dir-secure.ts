@@ -56,11 +56,21 @@ export function resolveDataDir(
   return resolve(options.tmpDir ?? tmpdir(), '.whiteboard')
 }
 
+export function parentIsWritable(path: string): boolean {
+  const parent = resolve(path, '..')
+  try {
+    accessSync(parent, fsConstants.R_OK | fsConstants.W_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Deprecated: a module-load-time snapshot, frozen before a test (or a
 // future dev entrypoint) can redirect where data lives. Prefer getDataDir()
 // for any new call site — it stays lazily resolved so setDataDirForTests()
 // can retarget it before the first real read.
-export const DATA_DIR = resolveDataDir()
+export const DATA_DIR = resolveDataDir(process.env, { isWritableDir: parentIsWritable })
 
 let dataDirOverride: string | undefined
 let memoizedDataDir: string | undefined

@@ -209,6 +209,30 @@ describe('getDataDir test-injection seam', () => {
   })
 })
 
+describe('DATA_DIR does not create directories at import time', () => {
+  it('importing data-dir-secure does not mkdir the resolved path', async () => {
+    const tempHome = await mkdtemp(join(tmpdir(), 'dd-no-eager-mkdir-'))
+    try {
+      const homeWhiteboard = join(tempHome, '.whiteboard')
+
+      // resolveDataDir with the default canWriteDir DOES create the dir
+      resolveDataDir({}, { homeDir: tempHome })
+      expect(existsSync(homeWhiteboard)).toBe(true)
+
+      // Clean up to test the read-only probe
+      await rm(homeWhiteboard, { recursive: true, force: true })
+
+      // resolveDataDir with parentIsWritable (used by DATA_DIR) does NOT create the dir
+      const { parentIsWritable } = await import('./data-dir-secure.js')
+      const result = resolveDataDir({}, { homeDir: tempHome, isWritableDir: parentIsWritable })
+      expect(result).toBe(homeWhiteboard)
+      expect(existsSync(homeWhiteboard)).toBe(false)
+    } finally {
+      await rm(tempHome, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('shared/data-dir-secure.ts module boundary', () => {
   it('does not export DIST_WEB_APP_DIR — that is a server-layer concern', async () => {
     // DIST_WEB_APP_DIR (compiled web-asset directory) is meaningful only to
