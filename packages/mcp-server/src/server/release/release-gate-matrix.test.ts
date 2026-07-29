@@ -55,15 +55,12 @@ const {
   KNOWN_REQUIRED_FOR_TIERS: Set<string>
 }
 
-// Count distribution test steps from the test:e2e:distribution script.
-// The script is: `pnpm build && <step1> && <step2> && ...`
-// Subtract 1 to exclude the leading build prerequisite.
+// Count distribution test steps from the test:e2e:distribution:only script.
 function countDistributionSteps(script: string): number {
-  const parts = script
+  return script
     .split('&&')
     .map((s) => s.trim())
-    .filter(Boolean)
-  return parts.length - 1
+    .filter(Boolean).length
 }
 
 // Split a shell script by && into trimmed, non-empty segments.
@@ -192,14 +189,14 @@ describe('package.json script drift', () => {
 const COVERED_VIA_DISTRIBUTION = new Set(['smoke:tarball', 'smoke:packaged'])
 
 describe('tier aggregate completeness drift', () => {
-  it('COVERED_VIA_DISTRIBUTION gates actually appear in test:e2e:distribution as command segments', () => {
-    const distScript = rootPkg.scripts['test:e2e:distribution'] ?? ''
+  it('COVERED_VIA_DISTRIBUTION gates actually appear in test:e2e:distribution:only as command segments', () => {
+    const distScript = rootPkg.scripts['test:e2e:distribution:only'] ?? ''
     for (const id of COVERED_VIA_DISTRIBUTION) {
       const gate = matrix.gates.find((g) => g.id === id)
       expect(gate, `gate "${id}" must be in the matrix`).toBeDefined()
       expect(
         isGatePresentAsSegment(distScript, gate!),
-        `COVERED_VIA_DISTRIBUTION gate "${id}" not found as a command segment in test:e2e:distribution`,
+        `COVERED_VIA_DISTRIBUTION gate "${id}" not found as a command segment in test:e2e:distribution:only`,
       ).toBe(true)
     }
   })
@@ -269,9 +266,17 @@ describe('check:release-candidate Docker isolation drift', () => {
 })
 
 describe('test:e2e:distribution step-count drift', () => {
-  it(`distribution chain has ${EXPECTED_DISTRIBUTION_STEPS} steps`, () => {
+  it('test:e2e:distribution delegates to build + :only', () => {
     const script = rootPkg.scripts['test:e2e:distribution']
     expect(script, 'test:e2e:distribution must exist in root package.json').toBeTruthy()
+    const segs = scriptSegments(script)
+    expect(segs).toContain('pnpm build')
+    expect(segs).toContain('pnpm test:e2e:distribution:only')
+  })
+
+  it(`distribution:only chain has ${EXPECTED_DISTRIBUTION_STEPS} steps`, () => {
+    const script = rootPkg.scripts['test:e2e:distribution:only']
+    expect(script, 'test:e2e:distribution:only must exist in root package.json').toBeTruthy()
     expect(countDistributionSteps(script)).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
