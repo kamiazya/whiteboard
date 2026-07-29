@@ -1,5 +1,5 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
-import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/mdast'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import remarkParse from 'remark-parse'

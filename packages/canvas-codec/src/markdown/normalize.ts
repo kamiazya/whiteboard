@@ -1,4 +1,4 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 
 /**
  * Markdown text cannot distinguish "explicitly null" from "absent" for any

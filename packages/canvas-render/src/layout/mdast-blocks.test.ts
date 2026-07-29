@@ -1,4 +1,4 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'

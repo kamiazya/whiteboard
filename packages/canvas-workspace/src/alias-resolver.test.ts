@@ -1,5 +1,5 @@
 import { resolveReferences } from '@kamiazya/whiteboard-canvas-codec'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { createAliasResolver } from './alias-resolver.js'

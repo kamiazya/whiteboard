@@ -7,7 +7,7 @@ import type {
   MdastRoot,
   MdastTableCell,
   MdastTableRow,
-} from '@kamiazya/whiteboard-canvas-model/internal'
+} from '@kamiazya/whiteboard-canvas-model/mdast'
 
 const CANVAS_ID_PREFIX = 'canvas:'
 

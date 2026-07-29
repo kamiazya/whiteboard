@@ -7,7 +7,7 @@ paths:
 
 ## What belongs here
 
-- Zod schemas: canvas meta, core/extension/raw facets, spatial canvas (JSON Canvas 1.0 + `x-whiteboard` extension), markdown body, workspace-tree node data, and the internal mdast subset.
+- Zod schemas: canvas meta, core/extension/raw facets, spatial canvas (JSON Canvas 1.0 + `x-whiteboard` extension), markdown body, workspace-tree node data, and the versioned mdast subset (exported via the `./mdast` subpath).
 - Shared fast-check arbitraries in `src/test-utils/` (valid-by-construction; never duplicated per test file).
 
 ## What does NOT belong here
