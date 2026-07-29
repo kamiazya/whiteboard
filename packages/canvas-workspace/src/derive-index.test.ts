@@ -44,7 +44,7 @@ describe('deriveFacetIndexRows', () => {
     expect(deriveFacetIndexRows([{ canvasId: NOTES_ID, updatedAtMs: 0 }])).toEqual([])
   })
 
-  test('indexes a issue/1 extension facet payload as an existence row, same as any other domain', () => {
+  test('indexes a issue/1 extension facet payload as existence + deep per-field rows', () => {
     const rows = deriveFacetIndexRows([
       {
         canvasId: NOTES_ID,
@@ -53,8 +53,116 @@ describe('deriveFacetIndexRows', () => {
       },
     ])
 
-    expect(rows).toEqual([{ facet: 'facets.issue/1', value: '', canvasId: NOTES_ID }])
+    expect(rows).toEqual([
+      { facet: 'facets.issue/1', value: '', canvasId: NOTES_ID },
+      { facet: 'facets.issue/1.assignees', value: 'alice', canvasId: NOTES_ID },
+      { facet: 'facets.issue/1.status', value: 'open', canvasId: NOTES_ID },
+    ])
     for (const row of rows) expect(() => facetIndexRowSchema.parse(row)).not.toThrow()
+  })
+
+  test('emits one deep row per array element for assignees and labels, plus scalar fields', () => {
+    const rows = deriveFacetIndexRows([
+      {
+        canvasId: NOTES_ID,
+        updatedAtMs: 0,
+        extensionFacets: {
+          'issue/1': {
+            status: 'open',
+            priority: 'high',
+            assignees: ['alice', 'bob'],
+            labels: ['bug'],
+            due: '2026-08-01T00:00:00.000Z',
+            summary: 'fix it',
+          },
+        },
+      },
+    ])
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { facet: 'facets.issue/1', value: '', canvasId: NOTES_ID },
+        { facet: 'facets.issue/1.status', value: 'open', canvasId: NOTES_ID },
+        { facet: 'facets.issue/1.priority', value: 'high', canvasId: NOTES_ID },
+        { facet: 'facets.issue/1.assignees', value: 'alice', canvasId: NOTES_ID },
+        { facet: 'facets.issue/1.assignees', value: 'bob', canvasId: NOTES_ID },
+        { facet: 'facets.issue/1.labels', value: 'bug', canvasId: NOTES_ID },
+        { facet: 'facets.issue/1.due', value: '2026-08-01T00:00:00.000Z', canvasId: NOTES_ID },
+        { facet: 'facets.issue/1.summary', value: 'fix it', canvasId: NOTES_ID },
+      ]),
+    )
+    // existence + status + priority + due + summary (4 scalars) + 2 assignees + 1 label
+    expect(rows).toHaveLength(1 + 4 + 2 + 1)
+    for (const row of rows) expect(() => facetIndexRowSchema.parse(row)).not.toThrow()
+  })
+
+  test('emits no deep rows for absent optional fields or empty arrays', () => {
+    const rows = deriveFacetIndexRows([
+      {
+        canvasId: NOTES_ID,
+        updatedAtMs: 0,
+        extensionFacets: { 'issue/1': { status: 'open', assignees: [], labels: [] } },
+      },
+    ])
+
+    expect(rows).toEqual([
+      { facet: 'facets.issue/1', value: '', canvasId: NOTES_ID },
+      { facet: 'facets.issue/1.status', value: 'open', canvasId: NOTES_ID },
+    ])
+  })
+
+  test('treats non-issue/1 extension domains as existence-only (no regression)', () => {
+    const rows = deriveFacetIndexRows([
+      {
+        canvasId: NOTES_ID,
+        updatedAtMs: 0,
+        extensionFacets: { 'kanban/1': { columns: ['todo', 'done'] } },
+      },
+    ])
+
+    expect(rows).toEqual([{ facet: 'facets.kanban/1', value: '', canvasId: NOTES_ID }])
+  })
+
+  test('falls back to existence-only row when issue/1 payload is not an object (never throws)', () => {
+    for (const malformed of ['open', 42, null]) {
+      const rows = deriveFacetIndexRows([
+        { canvasId: NOTES_ID, updatedAtMs: 0, extensionFacets: { 'issue/1': malformed } },
+      ])
+      expect(rows).toEqual([{ facet: 'facets.issue/1', value: '', canvasId: NOTES_ID }])
+    }
+  })
+
+  test('falls back to existence-only row when issue/1 payload is missing required status (never throws)', () => {
+    const rows = deriveFacetIndexRows([
+      {
+        canvasId: NOTES_ID,
+        updatedAtMs: 0,
+        extensionFacets: { 'issue/1': { assignees: ['alice'] } },
+      },
+    ])
+    expect(rows).toEqual([{ facet: 'facets.issue/1', value: '', canvasId: NOTES_ID }])
+  })
+
+  test('falls back to existence-only row when issue/1 payload has wrong field types (never throws)', () => {
+    const rows = deriveFacetIndexRows([
+      {
+        canvasId: NOTES_ID,
+        updatedAtMs: 0,
+        extensionFacets: { 'issue/1': { status: 42, assignees: 'not-an-array' } },
+      },
+    ])
+    expect(rows).toEqual([{ facet: 'facets.issue/1', value: '', canvasId: NOTES_ID }])
+  })
+
+  test('falls back to existence-only row when issue/1 payload has extra unknown keys (strict rejection, never throws)', () => {
+    const rows = deriveFacetIndexRows([
+      {
+        canvasId: NOTES_ID,
+        updatedAtMs: 0,
+        extensionFacets: { 'issue/1': { status: 'open', extra: 'nope' } },
+      },
+    ])
+    expect(rows).toEqual([{ facet: 'facets.issue/1', value: '', canvasId: NOTES_ID }])
   })
 })
 
