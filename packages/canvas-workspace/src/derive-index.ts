@@ -109,10 +109,11 @@ export function deriveFacetIndexRows(canvases: readonly CanvasIndexInput[]): Fac
     if (coreFacets?.view !== undefined) {
       rows.push({ facet: 'view', value: coreFacets.view, canvasId })
     }
-    for (const domainKey of Object.keys(extensionFacets ?? {}).sort(compareStrings)) {
+    const extensions = extensionFacets ?? {}
+    for (const domainKey of Object.keys(extensions).sort(compareStrings)) {
       rows.push({ facet: `facets.${domainKey}`, value: '', canvasId })
       if (domainKey === 'issue/1') {
-        rows.push(...deriveIssueFacetDeepRows(domainKey, extensionFacets?.[domainKey], canvasId))
+        rows.push(...deriveIssueFacetDeepRows(domainKey, extensions[domainKey], canvasId))
       }
     }
   }
