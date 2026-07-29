@@ -102,15 +102,11 @@ function buildDaemonSpawnArgs(options: {
   ]
 
   if (env.WHITEBOARD_DEV === '1') {
+    const nodeArgs =
+      env.WHITEBOARD_NO_WATCH === '1' ? ['--import', 'tsx/esm'] : ['--watch', '--import', 'tsx/esm']
     return {
       command: 'node',
-      args: [
-        '--watch',
-        '--import',
-        'tsx/esm',
-        join(WHITEBOARD_ROOT, 'src/server/index.ts'),
-        ...baseArgs,
-      ],
+      args: [...nodeArgs, join(WHITEBOARD_ROOT, 'src/server/index.ts'), ...baseArgs],
     }
   }
 

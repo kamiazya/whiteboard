@@ -29,7 +29,7 @@ const childArgs = entry.endsWith('.ts') ? ['--import', 'tsx/esm', entry] : [entr
 
 const child = spawn('node', childArgs, {
   cwd: root,
-  env: { ...process.env, WHITEBOARD_DATA_DIR: tmpDataDir },
+  env: { ...process.env, WHITEBOARD_DATA_DIR: tmpDataDir, WHITEBOARD_NO_WATCH: '1' },
   stdio: ['pipe', 'pipe', 'pipe'],
 })
 

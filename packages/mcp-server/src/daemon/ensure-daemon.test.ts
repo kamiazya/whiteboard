@@ -146,6 +146,39 @@ describe('ensureDaemon', () => {
     expect(args).toContain('--port=45002')
   })
 
+  it('omits --watch in dev mode when WHITEBOARD_NO_WATCH is set to avoid EMFILE on fd-heavy machines', async () => {
+    loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
+      pid: 889,
+      port: 45003,
+      token: 'no-watch-token',
+      version: '0.1.0',
+      startedAt: '2026-04-23T00:05:00.000Z',
+    })
+    spawnMock.mockReturnValue({
+      pid: 889,
+      unref: vi.fn(),
+    })
+    globalThis.fetch = vi.fn(
+      async () => new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ) as typeof globalThis.fetch
+
+    await ensureDaemon({
+      dataDir: '/tmp/excalidraw-data',
+      env: { WHITEBOARD_DEV: '1', WHITEBOARD_NO_WATCH: '1' },
+      startPort: 45003,
+      startupTimeoutMs: 500,
+    })
+
+    expect(spawnMock).toHaveBeenCalledOnce()
+    const [command, args] = spawnMock.mock.calls[0]
+    expect(command).toBe('node')
+    expect(args).not.toContain('--watch')
+    expect(args).toContain('--import')
+    expect(args).toContain('tsx/esm')
+    expect(args).toContain('/repo/packages/mcp-server/src/server/index.ts')
+    expect(args).toContain('--daemon')
+  })
+
   it('re-checks the registry after taking the startup lock and reuses a daemon started by another caller', async () => {
     loadDaemonRecordMock.mockResolvedValueOnce(null).mockResolvedValueOnce({
       pid: 91,
