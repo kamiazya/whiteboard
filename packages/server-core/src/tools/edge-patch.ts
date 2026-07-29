@@ -10,7 +10,7 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadCanvasDoc, saveCanvasDoc } from './canvas-doc-io.js'
 import { EdgeNotFoundError, PatchValidationError } from './errors.js'
-import { reindexWorkspace } from './reindex.js'
+import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const edgePatchFieldsSchema = z
@@ -52,7 +52,7 @@ export function createEdgePatchTool(deps: ServerDeps) {
     name: 'edge_patch' as const,
     inputSchema: edgePatchInputSchema,
     outputSchema: edgePatchOutputSchema,
-    async execute(input: EdgePatchInput): Promise<EdgePatchOutput> {
+    execute: withReindex(deps, async (input: EdgePatchInput): Promise<EdgePatchOutput> => {
       await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
       const { doc, canvas } = await loadCanvasDoc(deps, input.canvasId)
 
@@ -80,9 +80,8 @@ export function createEdgePatchTool(deps: ServerDeps) {
       }
 
       await saveCanvasDoc(deps, input.canvasId, doc, parsed.data)
-      await reindexWorkspace(deps, input.workspaceId)
 
       return { canvasId: input.canvasId, edge: updatedEdge }
-    },
+    }),
   }
 }

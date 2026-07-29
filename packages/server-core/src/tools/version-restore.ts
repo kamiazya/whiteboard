@@ -4,8 +4,8 @@ import { decodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
-import { reindexWorkspace } from './reindex.js'
 import { parseVersionRecord } from './version-record.js'
+import { withReindex } from './with-reindex.js'
 import { assertCanvasInWorkspace } from './workspace-tree-io.js'
 
 export const versionRestoreInputSchema = z
@@ -42,43 +42,45 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     name: 'version_restore' as const,
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
-    async execute(input: VersionRestoreInput): Promise<VersionRestoreOutput> {
-      await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
-      const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
+    execute: withReindex(
+      deps,
+      async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {
+        await assertCanvasInWorkspace(deps.canvasDocStore, input.workspaceId, input.canvasId)
+        const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
-      const versions = doc.getMap('versions')
-      const raw = versions.get(input.versionId)
-      if (typeof raw !== 'string') {
-        throw new VersionNotFoundError(input.canvasId, input.versionId)
-      }
+        const versions = doc.getMap('versions')
+        const raw = versions.get(input.versionId)
+        if (typeof raw !== 'string') {
+          throw new VersionNotFoundError(input.canvasId, input.versionId)
+        }
 
-      const record = parseVersionRecord(raw)
-      if (record === null) {
-        throw new VersionNotFoundError(input.canvasId, input.versionId)
-      }
-      const { label, frontier } = record
+        const record = parseVersionRecord(raw)
+        if (record === null) {
+          throw new VersionNotFoundError(input.canvasId, input.versionId)
+        }
+        const { label, frontier } = record
 
-      const frontierBytes = new Uint8Array(
-        (frontier.match(/.{2}/g) ?? []).map((h) => Number.parseInt(h, 16)),
-      )
-      const targetFrontiers = decodeFrontiers(frontierBytes)
+        const frontierBytes = new Uint8Array(
+          (frontier.match(/.{2}/g) ?? []).map((h) => Number.parseInt(h, 16)),
+        )
+        const targetFrontiers = decodeFrontiers(frontierBytes)
 
-      doc.checkout(targetFrontiers)
-      const oldCanvas = readSpatialCanvas(doc)
-      doc.checkoutToLatest()
+        doc.checkout(targetFrontiers)
+        const oldCanvas = readSpatialCanvas(doc)
+        doc.checkoutToLatest()
 
-      writeSpatialCanvas(doc, oldCanvas)
-      doc.commit()
+        writeSpatialCanvas(doc, oldCanvas)
+        doc.commit()
 
-      await saveDocSnapshot(deps, input.canvasId, doc)
-      await reindexWorkspace(deps, input.workspaceId)
+        await saveDocSnapshot(deps, input.canvasId, doc)
 
-      return {
-        canvasId: input.canvasId,
-        restoredVersionId: input.versionId,
-        label,
-        frontier,
-      }
-    },
+        return {
+          canvasId: input.canvasId,
+          restoredVersionId: input.versionId,
+          label,
+          frontier,
+        }
+      },
+    ),
   }
 }

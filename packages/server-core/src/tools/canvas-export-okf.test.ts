@@ -1,7 +1,8 @@
 import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
-import { describe, expect, test } from 'vitest'
+import { describe, expect, test, vi } from 'vitest'
 import { CanvasNotFoundError } from '../render/load-spatial-canvas.js'
 import { FakeCanvasDocStore, seedDoc } from '../test-utils/fake-canvas-doc-store.js'
+import { createInMemoryWorkspaceIndex } from '../test-utils/in-memory-workspace-index.js'
 import { createCanvasExportOkfTool } from './canvas-export-okf.js'
 
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -51,5 +52,26 @@ describe('canvas_export_okf tool', () => {
     await expect(tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })).rejects.toThrow(
       CanvasNotFoundError,
     )
+  })
+
+  test('never triggers a WorkspaceIndex reindex -- this is a read-only tool', async () => {
+    const store = new FakeCanvasDocStore()
+    await seedDoc(store, CANVAS_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+        edges: [],
+      })
+    })
+    const workspaceIndex = createInMemoryWorkspaceIndex()
+    const applyRowsSpy = vi.spyOn(workspaceIndex, 'applyRows')
+    const tool = createCanvasExportOkfTool({
+      canvasDocStore: store,
+      workspaceIndex,
+      blobStore: {} as never,
+    })
+
+    await tool.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+
+    expect(applyRowsSpy).not.toHaveBeenCalled()
   })
 })
