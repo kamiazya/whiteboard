@@ -6,6 +6,9 @@
   "license": "Apache-2.0",
   "type": "module",
   "packageManager": "pnpm@11.12.0",
+  "engines": {
+    "node": ">=22"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/kamiazya/whiteboard.git"
