@@ -197,6 +197,20 @@ export function registerOpenCanvasTools(server: McpServer, deps: ServerDeps): vo
     },
   )
 
+  registerToolWithAnnotations(
+    server,
+    tools.canvasImportOkf.name,
+    {
+      inputSchema: tools.canvasImportOkf.inputSchema.shape,
+      outputSchema: tools.canvasImportOkf.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.canvasImportOkf.inputSchema.parse(args)
+      const result = await tools.canvasImportOkf.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
   // Canvas CRUD (wired as standalone MCP tools, not through createServer's Hono routes)
   registerToolWithAnnotations(
     server,

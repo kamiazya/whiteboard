@@ -36,6 +36,13 @@ export {
   canvasExportJsonCanvasOutputSchema,
   createCanvasExportJsonCanvasTool,
 } from './tools/canvas-export-json-canvas.js'
+export type { CanvasImportOkfInput, CanvasImportOkfOutput } from './tools/canvas-import-okf.js'
+export {
+  canvasImportOkfInputSchema,
+  canvasImportOkfOutputSchema,
+  createCanvasImportOkfTool,
+  OkfParseError,
+} from './tools/canvas-import-okf.js'
 export type { CanvasExportOkfInput, CanvasExportOkfOutput } from './tools/canvas-export-okf.js'
 export {
   canvasExportOkfInputSchema,

@@ -1,63 +1,97 @@
 ---
 name: ticketing
-description: Local-private task/ticket management for the whiteboard repo across workflows and agents, without GitHub Issues. Defines the tmp/ workspace buckets, the tmp/issues frontmatter convention, and the bridge between the native Task list (live board) and tmp/issues (durable backlog). Use when triaging findings, tracking in-flight work across dev-loop/review/dogfood-triage/reconcile/plan-initiative, or recording/resolving a follow-up.
+description: Local-private task/ticket management for the whiteboard repo. Issues and notes live in the whiteboard itself (via MCP tools) as OKF Markdown canvases with issue/1 facets. The native Task list tracks in-flight session work. Use when triaging findings, tracking work across dev-loop/review/dogfood-triage/reconcile/plan-initiative, or recording/resolving a follow-up.
 ---
 
 # Ticketing (local-private)
 
-`tmp/` is gitignored, so its contents are **local to this machine** — not committed, not on GitHub, not shared (the shared `.claude/` tooling — workflows, agents, skills, rules — is tracked in git; only `tmp/` and a few `.claude/` sub-paths like `settings.local.json` and `worktrees/` stay per-machine). We deliberately do NOT use GitHub Issues. Two layers + a bridge:
+We deliberately do NOT use GitHub Issues. Two layers + a bridge:
 
 ## Two layers
 
 | Layer | What | Lifetime |
 |---|---|---|
 | **Native Task list** (`TaskCreate`/`TaskList`/`TaskUpdate`/`TaskGet`) | the LIVE board: what is running / blocked / done across workflows this session | session/team-scoped |
-| **`tmp/issues/` markdown** | the DURABLE private backlog: findings & follow-ups that outlive a session | persists on disk |
+| **Whiteboard canvases** (MCP tools) | the DURABLE private backlog: issues & notes stored as OKF Markdown canvases in the `default` workspace | persists on disk via the daemon |
 
 The **main session (integrator / team-lead) owns Task status transitions**. Subagents may update `metadata` but not flip status to completed (mirrors the team workflow).
+
+## Whiteboard as the issue store
+
+Issues and notes are stored as canvases in the whiteboard's `default` workspace. Each canvas is an OKF Markdown document with:
+
+- **type**: `issue` or `note`
+- **title**: human-readable title
+- **facets**: structured metadata (e.g. `issue/1` with status/priority/assignees)
+- **body**: the issue description as markdown
+
+### Creating an issue
+
+```
+wb_canvas_create  → { workspaceId: "default", segment: "my-issue-slug" }
+canvas_import_okf → { workspaceId: "default", canvasId: <id>, markdown: "---\ntype: issue\ntitle: My Issue\nfacets:\n  issue/1:\n    status: open\n    priority: high\n---\n\nDescription here." }
+```
+
+### Reading issues
+
+```
+wb_canvas_list    → { workspaceId: "default" }           # list all canvases
+canvas_export_okf → { workspaceId: "default", canvasId }  # export as OKF markdown
+```
+
+### Updating an issue
+
+Re-import with updated OKF markdown (overwrites facets + body):
+
+```
+canvas_import_okf → { workspaceId: "default", canvasId, markdown: "<updated OKF>" }
+```
+
+### Updating facets only
+
+```
+facet_set → { workspaceId: "default", canvasId, facets: { "issue/1": { status: "in-progress" } } }
+```
+
+### Resolving / deleting
+
+```
+wb_canvas_delete → { workspaceId: "default", canvasId }
+```
+
+### issue/1 facet schema
+
+| Field | Type | Required | Values |
+|---|---|---|---|
+| `status` | string | yes | `open`, `in-progress` |
+| `priority` | string | no | `critical`, `high`, `medium`, `low` |
+| `assignees` | string[] | no | role/agent names |
+| `labels` | string[] | no | free-form tags |
+| `due` | string | no | `YYYY-MM-DD` |
+| `summary` | string | no | one-line summary |
 
 ## tmp/ workspace buckets
 
 Put temporary artifacts in the right bucket (never the root of `tmp/`):
-- `tmp/issues/` — open findings / follow-ups (one file per ticket; subdirs by area/role allowed)
-- `tmp/notes/` — design docs, scratch writeups, investigation summaries
+- `tmp/issues/` — legacy issue source files (migrated to whiteboard canvases)
+- `tmp/notes/` — legacy design docs (migrated to whiteboard canvases)
 - `tmp/screenshots/` — UI captures during debug/verify
 - `tmp/scripts/` — throwaway helper scripts
 
-Delete an artifact when it's no longer useful. **Delete a `tmp/issues` ticket once resolved** — the backlog holds OPEN items only.
+For **new** issues and notes, create them directly in the whiteboard via MCP tools.
 
-## tmp/issues frontmatter convention
+Delete artifacts from `tmp/` when they're no longer useful.
 
-Each ticket starts with:
+## Bridge (Task list ⇄ whiteboard canvases)
 
-```markdown
----
-id: <kebab-or-date-slug>            # stable handle, matches filename
-status: open | in-progress          # resolved tickets are deleted, not kept
-severity: HIGH | MEDIUM | LOW
-owner: <role/agent or unassigned>
-blocked-by: [<id>, ...]             # other ticket ids
-related: [<file | workflow | run-id>, ...]
-created: YYYY-MM-DD                  # absolute date
----
-
-# <title>
-
-## Context / Finding / Root cause / Suggested fix
-...
-```
-
-Keep the body actionable: what's wrong, where (file:line), and the suggested next step. No process narrative.
-
-## Bridge (Task list ⇄ tmp/issues)
-
-- **Session start**: `TaskList` to see live state; for the open `tmp/issues` you intend to work this session, `TaskCreate` a task with `metadata.ticket = "tmp/issues/<id>.md"`.
-- **In flight**: `TaskUpdate` status/owner/blockedBy as work moves. Mirror `blocked-by` from the ticket into `addBlockedBy`.
-- **New finding** (from review / dogfood-triage / reconcile): write a `tmp/issues/<id>.md` with frontmatter; `TaskCreate` only if you're acting on it now.
-- **Resolve**: `TaskUpdate status=completed`, then **delete** the `tmp/issues/<id>.md` file.
+- **Session start**: `TaskList` to see live state; for open issues you intend to work this session, `TaskCreate` a task with `metadata.canvasSegment = "<segment>"`.
+- **In flight**: `TaskUpdate` status/owner/blockedBy as work moves.
+- **New finding** (from review / dogfood-triage / reconcile): create a canvas via `wb_canvas_create` + `canvas_import_okf`; `TaskCreate` only if you're acting on it now.
+- **Resolve**: `TaskUpdate status=completed`, then `wb_canvas_delete` the canvas (or update its `issue/1` facet status).
 - Workflows can't call the Task tools or AskUserQuestion; they RETURN findings/openQuestions and the main session records them as tickets/tasks and asks the human.
 
 ## When to use which
+
 - Orchestrating several workflow runs / parallel dev-loops right now → **Task list**.
-- "Don't lose this for later" → **tmp/issues** ticket.
-- Both, for anything you're actively working from the backlog (create the task, link the ticket).
+- "Don't lose this for later" → **whiteboard canvas** (issue type with `issue/1` facet).
+- Both, for anything you're actively working from the backlog (create the task, link the canvas segment).

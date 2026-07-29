@@ -17,6 +17,7 @@ import { createBodyPatchTool } from './tools/body-patch.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
 import { createCanvasExportJsonCanvasTool } from './tools/canvas-export-json-canvas.js'
 import { createCanvasExportOkfTool } from './tools/canvas-export-okf.js'
+import { createCanvasImportOkfTool } from './tools/canvas-import-okf.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
 import { createFacetSetTool } from './tools/facet-set.js'
@@ -96,6 +97,7 @@ export function createServer(deps: ServerDeps) {
     canvasDigest: createCanvasDigestTool(deps),
     canvasExportOkf: createCanvasExportOkfTool(deps),
     canvasExportJsonCanvas: createCanvasExportJsonCanvasTool(deps),
+    canvasImportOkf: createCanvasImportOkfTool(deps),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),
