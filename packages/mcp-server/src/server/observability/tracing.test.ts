@@ -434,7 +434,8 @@ describe('flushOnExit — signal-handler body', () => {
     mockSdkAndEnableTracing(shutdownSpy)
 
     const { initTracing: init, resetTracingForTesting: reset } = await import(
-      `./tracing.js?flush-body=${Date.now()}`
+      // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
+      './tracing.js?flush-body=' + Date.now()
     )
     reset()
     flushTestHandle = await init()
@@ -462,7 +463,8 @@ describe('flushOnExit — signal-handler body', () => {
 
     try {
       const { initTracing: init, resetTracingForTesting: reset } = await import(
-        `./tracing.js?flush-catch=${Date.now()}`
+        // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
+        './tracing.js?flush-catch=' + Date.now()
       )
       reset()
       flushTestHandle = await init()
@@ -504,7 +506,8 @@ describe('initTracing() catch path', () => {
     })
     // Re-import the module under test so it picks up the mock.
     const { initTracing: initTracingFresh, resetTracingForTesting: reset } = await import(
-      `./tracing.js?bust=${Date.now()}`
+      // biome-ignore lint/style/useTemplate: string concat is intentional — Vite treats template literals in dynamic import() differently from concatenation
+      './tracing.js?bust=' + Date.now()
     )
     reset()
     const handle = await initTracingFresh()
