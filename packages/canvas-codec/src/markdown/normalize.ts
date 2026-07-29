@@ -11,18 +11,34 @@ import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
  * normalizeMdast(x)` compares semantic content, not incidental encoding
  * choices markdown has no room to preserve.
  */
+
+/**
+ * The recursive walk below touches heterogeneous field values (child node
+ * arrays, but also primitive fields like a table's `align` entries) whose
+ * shape isn't known until runtime, so it operates on `unknown` and narrows
+ * with this guard rather than trusting an untyped `any`.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 /**
  * remark-parse merges any run of adjacent plain-text tokens into a single
  * `text` node — a tree with two consecutive `text` siblings is not
  * representable after a real parse, so this canonicalizes it up front
  * rather than treating the merge as information loss.
  */
-function mergeAdjacentText(children: any[]): any[] {
-  const merged: typeof children = []
+function mergeAdjacentText(children: unknown[]): unknown[] {
+  const merged: unknown[] = []
   for (const child of children) {
     const previous = merged[merged.length - 1]
-    if (previous?.type === 'text' && child?.type === 'text') {
-      merged[merged.length - 1] = { type: 'text', value: previous.value + child.value }
+    if (
+      isPlainObject(previous) &&
+      previous.type === 'text' &&
+      isPlainObject(child) &&
+      child.type === 'text'
+    ) {
+      merged[merged.length - 1] = { type: 'text', value: `${previous.value}${child.value}` }
     } else {
       merged.push(child)
     }
@@ -30,8 +46,8 @@ function mergeAdjacentText(children: any[]): any[] {
   return merged
 }
 
-function normalizeNode(node: any): any {
-  if (node === null || typeof node !== 'object') return node
+function normalizeNode(node: unknown): unknown {
+  if (!isPlainObject(node)) return node
 
   const normalized: Record<string, unknown> = { type: node.type }
 

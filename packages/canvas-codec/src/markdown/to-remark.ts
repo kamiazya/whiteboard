@@ -16,7 +16,19 @@ import type {
  * package renders them as plain markdown text rather than teaching
  * mdast-util-to-markdown a new node kind, since resolution happens at the
  * `references.ts` layer, before stringification.
+ *
+ * `RemarkNode` is a deliberately narrow local type, not the transitive
+ * `mdast`/`@types/mdast` package types: this package does not depend on
+ * `@types/mdast` directly, and remark's own types are only reachable
+ * through `unified`'s plugin-inferred generics, not as a stable importable
+ * name. The shape below is exactly what mdast-util-to-markdown needs: a
+ * `type` discriminant plus whatever remark-shaped fields (`value`, `url`,
+ * `children`, …) each node kind carries.
  */
+type RemarkNode = {
+  type: string
+  [key: string]: unknown
+}
 
 function wikiLinkText(node: { canvasId: string; alias?: string }): string {
   return node.alias === undefined
@@ -24,7 +36,7 @@ function wikiLinkText(node: { canvasId: string; alias?: string }): string {
     : `[[canvas:${node.canvasId}|${node.alias}]]`
 }
 
-function toRemarkPhrasing(node: MdastPhrasingContent): any {
+function toRemarkPhrasing(node: MdastPhrasingContent): RemarkNode {
   switch (node.type) {
     case 'wikiLink':
       return { type: 'text', value: wikiLinkText(node) }
@@ -35,7 +47,6 @@ function toRemarkPhrasing(node: MdastPhrasingContent): any {
     case 'delete':
       return { type: node.type, children: node.children.map(toRemarkPhrasing) }
     case 'link':
-      return { ...node, children: node.children.map(toRemarkPhrasing) }
     case 'linkReference':
       return { ...node, children: node.children.map(toRemarkPhrasing) }
     default:
@@ -43,11 +54,11 @@ function toRemarkPhrasing(node: MdastPhrasingContent): any {
   }
 }
 
-function toRemarkCellPhrasing(node: MdastCellPhrasingContent): any {
+function toRemarkCellPhrasing(node: MdastCellPhrasingContent): RemarkNode {
   return toRemarkPhrasing(node as MdastPhrasingContent)
 }
 
-function toRemarkFlow(node: MdastFlowContent): any {
+function toRemarkFlow(node: MdastFlowContent): RemarkNode {
   switch (node.type) {
     case 'paragraph':
     case 'heading':
@@ -63,18 +74,18 @@ function toRemarkFlow(node: MdastFlowContent): any {
   }
 }
 
-function toRemarkListItem(node: MdastListItem): any {
+function toRemarkListItem(node: MdastListItem): RemarkNode {
   return { ...node, children: node.children.map(toRemarkFlow) }
 }
 
-function toRemarkTableRow(node: MdastTableRow): any {
+function toRemarkTableRow(node: MdastTableRow): RemarkNode {
   return { ...node, children: node.children.map(toRemarkTableCell) }
 }
 
-function toRemarkTableCell(node: MdastTableCell): any {
+function toRemarkTableCell(node: MdastTableCell): RemarkNode {
   return { ...node, children: node.children.map(toRemarkCellPhrasing) }
 }
 
-export function toRemarkRoot(root: MdastRoot): any {
+export function toRemarkRoot(root: MdastRoot): RemarkNode {
   return { type: 'root', children: root.children.map(toRemarkFlow) }
 }
