@@ -78,7 +78,7 @@ const configOverride = [
   'transport="stdio",',
   'command="node",',
   `args=["${join(root, 'scripts/dev/mcp-dev-launch.mjs')}"],`,
-  `env={WHITEBOARD_DATA_DIR="${tmpDataDir}",WHITEBOARD_DEV="1"}`,
+  `env={WHITEBOARD_DATA_DIR="${tmpDataDir}",WHITEBOARD_DEV="1",WHITEBOARD_NO_WATCH="1"}`,
   '}',
 ].join('')
 
