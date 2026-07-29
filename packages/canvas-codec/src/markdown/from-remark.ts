@@ -6,7 +6,7 @@ import type {
   MdastRoot,
   MdastTableCell,
   MdastTableRow,
-} from '@kamiazya/whiteboard-canvas-model/internal'
+} from '@kamiazya/whiteboard-canvas-model/mdast'
 
 /**
  * remark/mdast-util nodes carry `position`, and extension-specific nodes

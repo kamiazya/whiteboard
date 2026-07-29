@@ -2,10 +2,9 @@ import { z } from 'zod'
 import { canvasIdSchema } from '../ids.js'
 
 /**
- * INTERNAL, versioned mdast subset. Not part of the stable public surface
- * yet — a public release happens once the slice-2 remark pipeline has
- * exercised it against real documents. Exported via the package's
- * `./internal` subpath, not the default `.` export.
+ * Versioned mdast subset. Exported via the package's `./mdast` subpath,
+ * not the default `.` export — kept separate so the content-model
+ * hierarchy below can evolve independently of the stable public surface.
  *
  * Covers CommonMark + GFM (table/tableRow/tableCell/delete) + math
  * (math/inlineMath) + this repo's two official custom nodes: wikiLink and

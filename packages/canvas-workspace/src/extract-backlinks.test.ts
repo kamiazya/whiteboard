@@ -1,4 +1,4 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { describe, expect, test } from 'vitest'
 import { extractBacklinks } from './extract-backlinks.js'
 

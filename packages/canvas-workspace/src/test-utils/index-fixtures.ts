@@ -1,4 +1,4 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { LoroDoc } from 'loro-crdt'
 import type { CanvasIndexInput } from '../derive-index.js'
 import { WorkspaceTree } from '../workspace-tree.js'

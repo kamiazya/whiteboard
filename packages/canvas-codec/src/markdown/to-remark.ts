@@ -6,7 +6,7 @@ import type {
   MdastRoot,
   MdastTableCell,
   MdastTableRow,
-} from '@kamiazya/whiteboard-canvas-model/internal'
+} from '@kamiazya/whiteboard-canvas-model/mdast'
 
 /**
  * Inverse of from-remark.ts: expands the model subset back into plain

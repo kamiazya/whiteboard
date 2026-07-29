@@ -34,7 +34,7 @@
 ## Dependency rules
 
 - Runtime dependencies: `@kamiazya/whiteboard-canvas-model` (spatial nodes/
-  edges + the internal mdast subset) and `zod` (via `catalog:`), for
+  edges + the `./mdast` subset) and `zod` (via `catalog:`), for
   `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which

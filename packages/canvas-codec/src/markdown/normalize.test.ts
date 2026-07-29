@@ -1,4 +1,4 @@
-import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/internal'
+import { mdastRootSchema } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { mdastRootArbitrary } from '@kamiazya/whiteboard-canvas-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fcTest, withDefaults } from '../test-utils/fast-check.js'

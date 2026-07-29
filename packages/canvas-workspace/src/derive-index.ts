@@ -1,6 +1,6 @@
 import type { CoreFacets, ExtensionFacets } from '@kamiazya/whiteboard-canvas-model'
 import { issueFacetPayloadSchema } from '@kamiazya/whiteboard-canvas-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/internal'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import type {
   AliasHistoryRow,
   AliasResolutionRow,

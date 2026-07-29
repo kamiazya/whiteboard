@@ -2,7 +2,7 @@ import type {
   MdastFlowContent,
   MdastPhrasingContent,
   MdastRoot,
-} from '@kamiazya/whiteboard-canvas-model/internal'
+} from '@kamiazya/whiteboard-canvas-model/mdast'
 import type { BacklinkRow } from '@kamiazya/whiteboard-canvas-ports'
 
 export function extractBacklinks(fromCanvasId: string, root: MdastRoot): readonly BacklinkRow[] {
