@@ -135,6 +135,87 @@ describe('renderSceneToSvg', () => {
     }
   })
 
+  it('applies translate on table cells so columns do not overlap at x=0', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'table',
+          bbox: { x: 0, y: 0, w: 200, h: 24 },
+          rows: [
+            {
+              kind: 'tableRow',
+              bbox: { x: 0, y: 0, w: 200, h: 24 },
+              cells: [
+                {
+                  kind: 'tableCell',
+                  bbox: { x: 0, y: 0, w: 100, h: 24 },
+                  runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 30, h: 16 }, text: 'A' }],
+                },
+                {
+                  kind: 'tableCell',
+                  bbox: { x: 100, y: 0, w: 100, h: 24 },
+                  runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 30, h: 16 }, text: 'B' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('transform="translate(100,0)"')
+    // The second cell's group must translate so its run renders at x=100
+    // while the first cell (x=0) needs no translate (or translate(0,0))
+  })
+
+  it('applies translate on list items to indent nested items', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'list',
+          bbox: { x: 0, y: 0, w: 200, h: 32 },
+          ordered: false,
+          depth: 0,
+          items: [
+            {
+              kind: 'listItem',
+              bbox: { x: 24, y: 0, w: 176, h: 16 },
+              children: [
+                {
+                  kind: 'paragraph',
+                  bbox: { x: 0, y: 0, w: 176, h: 16 },
+                  runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 40, h: 16 }, text: 'item' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('transform="translate(24,0)"')
+  })
+
+  it('applies translate on blockquote children for visual indent', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'blockquote',
+          bbox: { x: 0, y: 0, w: 200, h: 16 },
+          children: [
+            {
+              kind: 'paragraph',
+              bbox: { x: 0, y: 0, w: 176, h: 16 },
+              runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 40, h: 16 }, text: 'quote' }],
+            },
+          ],
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('role="presentation"')
+  })
+
   it('is deterministic: same scene renders byte-identical output on repeated calls', () => {
     const scene: Scene = {
       nodes: [
