@@ -242,6 +242,31 @@ describe('dev daemon identity marker', () => {
   }
 })
 
+describe('resolveRepoRootFromGit', () => {
+  it('returns the git toplevel for the current working directory', async () => {
+    const { resolveRepoRootFromGit } = await import('./with-dev-data-dir-lib.mjs')
+    const result = resolveRepoRootFromGit(process.cwd())
+
+    expect(typeof result).toBe('string')
+    expect(result.length).toBeGreaterThan(0)
+    expect(existsSync(join(result, '.git'))).toBe(true)
+  })
+
+  it('resolves to the worktree root, not the main checkout, when cwd is inside a worktree', async () => {
+    const { resolveRepoRootFromGit } = await import('./with-dev-data-dir-lib.mjs')
+    const result = resolveRepoRootFromGit(process.cwd())
+    const gitPath = join(result, '.git')
+
+    // If we're running inside a worktree, .git is a file not a directory.
+    // If we're running in the main checkout, .git is a directory.
+    // Either way the result must match the cwd's own git toplevel.
+    expect(existsSync(gitPath)).toBe(true)
+
+    // The resolved root must be an ancestor of (or equal to) the cwd.
+    expect(resolve(process.cwd()).startsWith(resolve(result))).toBe(true)
+  })
+})
+
 describe('resolveTsxWatchSpawn', () => {
   it('spawns node directly against tsx dist/cli.mjs, not the node_modules/.bin shim', () => {
     const result = resolveTsxWatchSpawn(

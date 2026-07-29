@@ -11,8 +11,7 @@
 import { spawn } from 'node:child_process'
 import { mkdir, open } from 'node:fs/promises'
 import { createServer } from 'node:net'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   buildMcpHttpDevSpawnArgs,
@@ -21,10 +20,13 @@ import {
   verifyDevDaemonIdentity,
   waitForAuthenticatedMcp,
 } from './ensure-http-dev-daemon-lib.mjs'
-import { readDevDaemonMarker, resolveDevDataDirEnv } from './with-dev-data-dir-lib.mjs'
+import {
+  readDevDaemonMarker,
+  resolveDevDataDirEnv,
+  resolveRepoRootFromGit,
+} from './with-dev-data-dir-lib.mjs'
 
-const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const REPO_ROOT = resolve(SCRIPT_DIR, '..', '..', '..', '..')
+const REPO_ROOT = resolveRepoRootFromGit(process.cwd())
 const PORT = deriveDevPort({
   repoRoot: REPO_ROOT,
   isMainCheckout: isMainCheckout(REPO_ROOT),

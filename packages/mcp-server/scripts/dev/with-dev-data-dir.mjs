@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from 'node:child_process'
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { resolve } from 'node:path'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   ensureDevDataDirSecured,
@@ -11,7 +10,7 @@ import {
   reraiseSignalOrExit,
   resolveDevDataDirEnv,
   resolveEffectivePort,
-  resolveRepoRootFromScriptDir,
+  resolveRepoRootFromGit,
   resolveTsxWatchSpawn,
   writeDevDaemonMarker,
 } from './with-dev-data-dir-lib.mjs'
@@ -20,9 +19,8 @@ import {
 // shells out to it — mcp:debug:http, the SessionStart ensure-http-dev-daemon
 // hook) out of the real ~/.whiteboard by default. A node wrapper (not a
 // shell `VAR=x` prefix in package.json) so this stays correct on Windows.
-const scriptDir = dirname(fileURLToPath(import.meta.url))
-const packageRoot = resolve(scriptDir, '../..')
-const repoRoot = resolveRepoRootFromScriptDir(scriptDir)
+const repoRoot = resolveRepoRootFromGit(process.cwd())
+const packageRoot = resolve(repoRoot, 'packages/mcp-server')
 const hadExplicitDataDirOverride = Boolean(process.env.WHITEBOARD_DATA_DIR)
 const env = resolveDevDataDirEnv(process.env, repoRoot)
 

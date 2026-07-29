@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
@@ -34,9 +35,28 @@ export function ensureDevDataDirSecured(dir, platformName = process.platform) {
  * launched from the repo root (and wrong again from a worktree).
  *
  * dev -> scripts -> mcp-server -> packages -> repoRoot.
+ *
+ * @deprecated Use {@link resolveRepoRootFromGit} instead — this function
+ * resolves from the script's physical filesystem location, which in a pnpm
+ * workspace always points to the main checkout even when the script is
+ * invoked from a worktree (pnpm resolves through symlinked node_modules).
  */
 export function resolveRepoRootFromScriptDir(scriptDir) {
   return resolve(scriptDir, '../../../..')
+}
+
+/**
+ * Resolves the repo root via `git rev-parse --show-toplevel`, which always
+ * returns the correct worktree root when called from inside one. This is
+ * the only reliable method because pnpm resolves dev scripts through
+ * symlinked node_modules back to the main checkout, making import.meta.url-
+ * based resolution wrong for worktrees.
+ *
+ * @param {string} cwd - The working directory to resolve from.
+ * @returns {string}
+ */
+export function resolveRepoRootFromGit(cwd) {
+  return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' }).trim()
 }
 
 /**
