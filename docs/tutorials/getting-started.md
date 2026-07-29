@@ -9,9 +9,9 @@ and pnpm (run `corepack enable` if you don't already have pnpm).
 
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
-cd whiteboard/apps/web
+cd whiteboard      # pnpm workspace root — required for catalog: dependency resolution
 pnpm install
-pnpm dev          # open http://localhost:5173
+pnpm --filter @kamiazya/whiteboard-web dev   # open http://localhost:5173
 ```
 
 The page mounts a full Excalidraw canvas. Pick the rectangle tool from the
