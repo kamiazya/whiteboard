@@ -47,7 +47,6 @@ function toRemarkPhrasing(node: MdastPhrasingContent): RemarkNode {
     case 'delete':
       return { type: node.type, children: node.children.map(toRemarkPhrasing) }
     case 'link':
-      return { ...node, children: node.children.map(toRemarkPhrasing) }
     case 'linkReference':
       return { ...node, children: node.children.map(toRemarkPhrasing) }
     default:
