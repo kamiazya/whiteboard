@@ -5,7 +5,14 @@ import { checkDependencyDirection } from './direction-check.js'
 import { scanSourceForBoundaryViolations } from './scanner.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
-const SHARED_LAYER_PACKAGES = ['packages/canvas-model', 'packages/canvas-codec']
+const SHARED_LAYER_PACKAGES = [
+  'packages/canvas-model',
+  'packages/canvas-codec',
+  'packages/canvas-render',
+  'packages/canvas-ports',
+  'packages/canvas-workspace',
+  'packages/server-core',
+]
 
 function listTsFiles(dir: string): string[] {
   const files: string[] = []
@@ -24,12 +31,23 @@ function listTsFiles(dir: string): string[] {
 describe('shared-layer boundary lint (real source coverage)', () => {
   for (const packageDir of SHARED_LAYER_PACKAGES) {
     it(`${packageDir}/src has zero boundary violations`, () => {
+      const manifest = JSON.parse(
+        readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
+      )
+      // loro-crdt is a declared runtime dependency (and thus a legitimate
+      // import) for packages that own the LoroDoc<->model bridge —
+      // everywhere else it's still a boundary violation.
+      const loroCrdtIsDeclaredDependency = 'loro-crdt' in (manifest.dependencies ?? {})
+
       const srcDir = join(REPO_ROOT, packageDir, 'src')
       const files = listTsFiles(srcDir)
       expect(files.length).toBeGreaterThan(0)
 
       for (const file of files) {
-        const violations = scanSourceForBoundaryViolations(file, readFileSync(file, 'utf-8'))
+        const allViolations = scanSourceForBoundaryViolations(file, readFileSync(file, 'utf-8'))
+        const violations = loroCrdtIsDeclaredDependency
+          ? allViolations.filter((v) => v.kind !== 'loro-crdt-import')
+          : allViolations
         expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
       }
     })
