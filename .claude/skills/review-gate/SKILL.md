@@ -126,3 +126,38 @@ the safety-net default.
 - The optional `codex` lane sits outside the partition entirely: it is a
   second opinion, surfaced only via `codexUnavailable`, and never counted
   as a failed dimension.
+
+## Reject guards that cannot fail
+
+A recurring defect class in this repo: an assertion that reads as coverage
+while being satisfied by its own declaration. It is worse than no assertion,
+because it stops anyone from writing the real one. Every review must check
+new guards for this shape, and the answer must come from running the test,
+not from reading it.
+
+Observed forms, each of which shipped here at least once:
+
+- **Self-satisfying scan.** A test greps the whole file for an identifier
+  that the file's own `export const` provides. It passes no matter what the
+  guarded code does.
+- **Absence of something that never existed.** Asserting a name is not
+  registered when no such name was ever registered. It can never fail, and
+  it implies to a future reader that the thing once existed and is being
+  kept out.
+- **Unreachable exhaustiveness.** A `switch` over a hand-written array
+  already typed as the union it claims to check — the `never` branch is
+  unreachable by construction, so the test only fails when the type-level
+  pin beside it fails first.
+- **Vacuous iteration.** A `for`/`every` over a collection that can be
+  empty, with no assertion that it is non-empty. An empty scan set is a
+  green run. Build-time source scans (`import.meta.glob`) are the usual
+  offender.
+- **Proxy indicator.** Asserting a stand-in (a count, a flag, a log line)
+  that stays true when the real behavior breaks.
+
+The mechanical check is a mutation: **break the thing the guard protects
+and confirm the guard goes red.** Restore the deleted tool, reintroduce the
+banned import, empty the scanned set. A guard that stays green under its own
+mutation does not ship. When mutating, confirm the red is for the intended
+reason — a `ReferenceError` from a missing import is not a real red, and has
+been mistaken for one here.
