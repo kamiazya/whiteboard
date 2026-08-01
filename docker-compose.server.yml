@@ -9,18 +9,24 @@
 # Usage:
 #   cp .env.server.example .env
 #   # Fill in the required values in .env
-#   docker compose -f docker-compose.server.yml up -d
+#   NODE_VERSION="$(cat .node-version)" docker compose -f docker-compose.server.yml up -d --build
 #
 # Required env vars (set in .env — see .env.server.example):
 #   WHITEBOARD_SERVER_EXTERNAL_URL, WHITEBOARD_SERVER_AUTH_STRATEGY,
 #   WHITEBOARD_SERVER_JWT_ISSUER, WHITEBOARD_SERVER_JWT_AUDIENCE,
 #   WHITEBOARD_SERVER_JWKS_URI, WHITEBOARD_SERVER_ALLOWED_ORIGINS
+#
+# NODE_VERSION is required at build time (Dockerfile.server's ARG has no
+# default). `.node-version` is the single source of truth — pass it through
+# the shell as shown above rather than hardcoding it here.
 
 services:
   whiteboard:
     build:
       context: .
       dockerfile: Dockerfile.server
+      args:
+        NODE_VERSION: ${NODE_VERSION:?Set NODE_VERSION, e.g. NODE_VERSION="$(cat .node-version)"}
     image: whiteboard-server:local
     restart: unless-stopped
     # Bind to loopback only. The reverse proxy (nginx, Caddy, Traefik, …)
