@@ -14,3 +14,5 @@ export const exportSvgRequestSchema = z.object({
   overwrite: z.boolean().optional(),
   theme: z.enum(['light', 'dark']).optional(),
 })
+
+export type ExportSvgRequest = z.infer<typeof exportSvgRequestSchema>

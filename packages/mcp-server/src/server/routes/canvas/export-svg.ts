@@ -4,7 +4,10 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
 import type { ExportErrorBody } from '../../../shared/api-contracts/export.js'
-import { exportSvgRequestSchema } from '../../../shared/api-contracts/export-svg.js'
+import {
+  type ExportSvgRequest,
+  exportSvgRequestSchema,
+} from '../../../shared/api-contracts/export-svg.js'
 import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
@@ -52,7 +55,7 @@ export function createCanvasSvgExportRouter() {
       }
 
       const rawText = await c.req.text()
-      let body: ReturnType<typeof exportSvgRequestSchema.parse> = {}
+      let body: ExportSvgRequest = {}
       if (rawText.length > 0) {
         let json: unknown
         try {
