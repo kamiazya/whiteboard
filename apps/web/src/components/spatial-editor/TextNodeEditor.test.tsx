@@ -47,4 +47,28 @@ describe('TextNodeEditor', () => {
     expect(onCommit).not.toHaveBeenCalled()
     expect(onCancel).not.toHaveBeenCalled()
   })
+
+  it('a blur after Escape does not resurrect the cancelled edit as a commit', () => {
+    const onCommit = vi.fn()
+    const onCancel = vi.fn()
+    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    const textarea = screen.getByTestId('text-node-editor')
+    fireEvent.change(textarea, { target: { value: 'edited' } })
+    fireEvent.keyDown(textarea, { key: 'Escape' })
+    fireEvent.blur(textarea)
+    expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onCommit).not.toHaveBeenCalled()
+  })
+
+  it('a blur after Cmd+Enter does not duplicate the commit', () => {
+    const onCommit = vi.fn()
+    const onCancel = vi.fn()
+    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={onCommit} onCancel={onCancel} />)
+    const textarea = screen.getByTestId('text-node-editor')
+    fireEvent.change(textarea, { target: { value: 'edited' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', metaKey: true })
+    fireEvent.blur(textarea)
+    expect(onCommit).toHaveBeenCalledTimes(1)
+    expect(onCommit).toHaveBeenCalledWith('edited')
+  })
 })

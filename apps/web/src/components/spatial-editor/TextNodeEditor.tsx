@@ -8,6 +8,13 @@
  * bubble to the editor root's hit-test, resolve to the same node, and
  * hijack the gesture into a move — unmounting this component (and
  * discarding the in-progress edit) before its own blur-commit ever runs.
+ *
+ * `finishedRef` makes the commit/cancel transition terminal: once either
+ * has fired, the other becomes a no-op. Without it, Escape (cancel) then a
+ * later blur (commit) would resurrect a value the user just discarded, and
+ * Cmd/Ctrl+Enter (commit) then blur would call `onCommit` a second time —
+ * `onCancel` unmounting synchronously is not guaranteed, so `mountedRef`
+ * alone cannot prevent either.
  */
 import { useEffect, useRef, useState } from 'react'
 import type { Box } from './geometry.js'
@@ -30,6 +37,7 @@ export function TextNodeEditor({
 }: TextNodeEditorProps) {
   const [value, setValue] = useState(initialText)
   const mountedRef = useRef(true)
+  const finishedRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
@@ -41,8 +49,15 @@ export function TextNodeEditor({
   }, [])
 
   const commit = () => {
-    if (!mountedRef.current) return
+    if (!mountedRef.current || finishedRef.current) return
+    finishedRef.current = true
     onCommit(value)
+  }
+
+  const cancel = () => {
+    if (finishedRef.current) return
+    finishedRef.current = true
+    onCancel()
   }
 
   return (
@@ -68,7 +83,7 @@ export function TextNodeEditor({
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.preventDefault()
-          onCancel()
+          cancel()
         } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
           e.preventDefault()
           commit()
