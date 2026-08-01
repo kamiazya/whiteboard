@@ -7,16 +7,15 @@ const REQUIRED_UNSUPPORTED = [
   'multi-select',
   'grouping',
   'undo-redo',
+  'arrow-side-pinning',
   'snapping',
   'persistence',
   'sync',
 ]
 
 describe('SPATIAL_EDITOR_UNSUPPORTED', () => {
-  it('names every parity gap this slice deliberately does not implement', () => {
-    for (const item of REQUIRED_UNSUPPORTED) {
-      expect(SPATIAL_EDITOR_UNSUPPORTED).toContain(item)
-    }
+  it('names exactly every parity gap this slice deliberately does not implement (both directions: nothing missing, nothing undocumented)', () => {
+    expect([...SPATIAL_EDITOR_UNSUPPORTED].sort()).toEqual([...REQUIRED_UNSUPPORTED].sort())
   })
 
   it('is referenced by the SpatialEditor source doc comment (machine-checkable, not just prose)', async () => {
@@ -24,6 +23,8 @@ describe('SPATIAL_EDITOR_UNSUPPORTED', () => {
     const entry = modules['./SpatialEditor.tsx']
     expect(entry).toBeDefined()
     const source = (await entry?.()) as string
-    expect(source).toContain('SPATIAL_EDITOR_UNSUPPORTED')
+    const docComment = source.match(/^\/\*\*[\s\S]*?\*\//)?.[0]
+    expect(docComment).toBeDefined()
+    expect(docComment).toContain('SPATIAL_EDITOR_UNSUPPORTED')
   })
 })
