@@ -1,7 +1,7 @@
-import { excalidrawJsonDocSchema } from '@kamiazya/whiteboard-canvas-viewer/scene'
 import { describe, expect, it } from 'vitest'
 import { BROWSER_LOCAL_CAPABILITIES } from '../provider.js'
 import { createWhiteboardCommands } from './create-commands.js'
+import { excalidrawJsonDocSchema } from './excalidraw-json.js'
 import { CommandError, exportJsonResultSchema, type WhiteboardCommandDeps } from './types.js'
 
 // exportJsonResultSchema must be the same schema instance the serializer

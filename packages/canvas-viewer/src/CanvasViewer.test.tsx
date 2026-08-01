@@ -1,77 +1,72 @@
-import { render, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
-import type { ViewerScene } from './scene.js'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { render } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
+import { CanvasViewer } from './CanvasViewer.js'
 
-const excalidrawProps: Array<Record<string, unknown>> = []
+const fakeMeasure: MeasureText = (text) => ({
+  advanceWidth: text.length * 8,
+  ascent: 12,
+  descent: 4,
+  lineGap: 0,
+})
 
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: (props: Record<string, unknown>) => {
-    excalidrawProps.push(props)
-    return <div data-testid="excalidraw-stub" />
-  },
-}))
-
-const { CanvasViewer } = await import('./CanvasViewer.js')
-
-const scene: ViewerScene = {
-  elements: [{ id: 'a', type: 'rectangle' }] as never,
-  appState: { viewBackgroundColor: '#ffffff' },
-  files: {},
+const canvas: SpatialCanvas = {
+  nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'hello' }],
+  edges: [],
 }
 
 describe('CanvasViewer', () => {
   it('renders inside a container tagged with the given testId', () => {
-    const { getByTestId } = render(<CanvasViewer scene={scene} testId="my-viewer" />)
-
+    const { getByTestId } = render(
+      <CanvasViewer canvas={canvas} measure={fakeMeasure} testId="my-viewer" />,
+    )
     expect(getByTestId('my-viewer')).toBeTruthy()
   })
 
-  it('locks the canvas to read-only mode', () => {
-    excalidrawProps.length = 0
-    render(<CanvasViewer scene={scene} />)
-
-    const props = excalidrawProps.at(-1)
-    expect(props?.viewModeEnabled).toBe(true)
+  it('injects a real <svg> element produced by canvas-render', () => {
+    const { getByTestId } = render(<CanvasViewer canvas={canvas} measure={fakeMeasure} />)
+    const svg = getByTestId('canvas-viewer').querySelector('svg')
+    expect(svg).toBeTruthy()
+    expect(svg?.querySelector('rect')).toBeTruthy()
   })
 
-  it('disables editing canvas actions via UIOptions', () => {
-    excalidrawProps.length = 0
-    render(<CanvasViewer scene={scene} />)
-
-    const props = excalidrawProps.at(-1)
-    const uiOptions = props?.UIOptions as { canvasActions?: Record<string, boolean> }
-    expect(uiOptions.canvasActions?.export).toBe(false)
-    expect(uiOptions.canvasActions?.saveToActiveFile).toBe(false)
+  it('renders an empty canvas without throwing', () => {
+    const empty: SpatialCanvas = { nodes: [], edges: [] }
+    expect(() => render(<CanvasViewer canvas={empty} measure={fakeMeasure} />)).not.toThrow()
   })
 
-  it('forwards the scene elements, appState and files as initialData', () => {
-    excalidrawProps.length = 0
-    render(<CanvasViewer scene={scene} />)
-
-    const props = excalidrawProps.at(-1)
-    const initialData = props?.initialData as {
-      elements: unknown
-      appState: Record<string, unknown>
-      files: unknown
-    }
-    expect(initialData.elements).toEqual(scene.elements)
-    expect(initialData.appState.viewBackgroundColor).toBe('#ffffff')
-    expect(initialData.files).toEqual(scene.files)
+  // The document props are the reason canvas-render grew SvgDocumentOptions:
+  // without them the root is undimensioned and a browser sizes it arbitrarily.
+  // Forwarding them is easy to break silently, so assert they reach the root.
+  it('forwards width, height, padding and background into the rendered document', () => {
+    const { getByTestId } = render(
+      <CanvasViewer
+        canvas={canvas}
+        measure={fakeMeasure}
+        testId="document-props"
+        width={640}
+        height={480}
+        padding={10}
+        background="#eef2ff"
+      />,
+    )
+    // A distinct testId per render: renders are not cleaned up between tests
+    // here, so reusing the default id would match an earlier test's element.
+    const svg = getByTestId('document-props').querySelector('svg')
+    expect(svg?.getAttribute('width')).toBe('640')
+    expect(svg?.getAttribute('height')).toBe('480')
+    // padding expands the derived viewBox, so it must start left of the origin.
+    const [viewBoxX] = (svg?.getAttribute('viewBox') ?? '').split(' ').map(Number)
+    expect(viewBoxX).toBe(-10)
+    // background renders as the document's first child rect.
+    expect(svg?.firstElementChild?.getAttribute('fill')).toBe('#eef2ff')
   })
 
-  it('hides Excalidraw chrome when hideChrome is set', () => {
-    const { container } = render(<CanvasViewer scene={scene} testId="hidden-chrome" hideChrome />)
-
-    expect(container.querySelector('style')?.textContent).toContain('hidden-chrome')
-  })
-
-  it('falls back to the default testId when given a value outside the safe identifier charset', () => {
-    const maliciousTestId = '"}</style><script>alert(1)</script>'
-    const { container } = render(<CanvasViewer scene={scene} testId={maliciousTestId} hideChrome />)
-
-    expect(within(container).getByTestId('canvas-viewer')).toBeTruthy()
-    const styleText = container.querySelector('style')?.textContent ?? ''
-    expect(styleText).not.toContain(maliciousTestId)
-    expect(styleText).toContain('canvas-viewer')
+  it('falls back to the browser measurer when none is injected', () => {
+    // Exercises the default `measure` branch, which every other test bypasses.
+    expect(() => render(<CanvasViewer canvas={canvas} />)).not.toThrow()
+    const { getByTestId } = render(<CanvasViewer canvas={canvas} testId="default-measure" />)
+    expect(getByTestId('default-measure').querySelector('svg')).toBeTruthy()
   })
 })

@@ -1,11 +1,9 @@
 #!/usr/bin/env node
 // Runtime gate for the self-contained widget build: loads dist/widget/
 // canvas-viewer.html over file:// with full network interception and
-// asserts (a) zero http(s) requests, (b) a rendered <canvas>, and
+// asserts (a) zero http(s) requests, (b) a rendered <svg> scene, and
 // (c) the embedded font is ACTUALLY loaded (document.fonts.check +
-// FontFace status), not silently falling back to a system font. Zero
-// network alone would not catch a font that failed to register — the
-// canvas would still render, just with the wrong glyphs.
+// FontFace status), not silently falling back to a system font.
 //
 // Direct invocation requires Node's native TS support (stable since Node 24,
 // this repo's pinned version) — no build step, no tsx loader flag needed.
@@ -21,87 +19,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(__dirname, '..')
 const builtHtmlPath = join(packageRoot, 'dist', 'widget', 'canvas-viewer.html')
 
-// Plain ASCII text so the Basic-Latin subset embedded in
-// src/widget/font-assets.ts is the one exercised by document.fonts.check.
+// Plain ASCII text so the Basic-Latin glyphs in the embedded Roboto face are
+// the ones exercised by document.fonts.check.
 const SAMPLE_TEXT = 'Hello widget'
+const JP_TEXT = '日本語ラベル'
 const SAMPLE_SCENE = {
-  elements: [
-    {
-      id: 'text-1',
-      type: 'text',
-      x: 10,
-      y: 10,
-      width: 160,
-      height: 25,
-      angle: 0,
-      strokeColor: '#1e1e1e',
-      backgroundColor: 'transparent',
-      fillStyle: 'solid',
-      strokeWidth: 1,
-      strokeStyle: 'solid',
-      roughness: 1,
-      opacity: 100,
-      groupIds: [],
-      frameId: null,
-      roundness: null,
-      seed: 1,
-      versionNonce: 1,
-      isDeleted: false,
-      boundElements: null,
-      updated: 1,
-      link: null,
-      locked: false,
-      text: SAMPLE_TEXT,
-      fontSize: 20,
-      fontFamily: 5, // FONT_FAMILY.Excalifont
-      textAlign: 'left',
-      verticalAlign: 'top',
-      containerId: null,
-      originalText: SAMPLE_TEXT,
-      lineHeight: 1.25,
-    },
-    {
-      // Non-Latin text exercises the NOT-embedded glyph path: the bundle
-      // ships only the Basic-Latin subset, so this must degrade to system
-      // fallback glyphs while the fetch shim keeps the run at zero network
-      // requests (unknown font files get a synthetic 404, never a fetch).
-      id: 'text-jp',
-      type: 'text',
-      x: 10,
-      y: 50,
-      width: 200,
-      height: 25,
-      angle: 0,
-      strokeColor: '#1e1e1e',
-      backgroundColor: 'transparent',
-      fillStyle: 'solid',
-      strokeWidth: 2,
-      strokeStyle: 'solid',
-      roughness: 1,
-      opacity: 100,
-      groupIds: [],
-      frameId: null,
-      roundness: null,
-      seed: 2,
-      version: 1,
-      versionNonce: 2,
-      isDeleted: false,
-      boundElements: null,
-      updated: 1,
-      link: null,
-      locked: false,
-      text: '日本語ラベル',
-      fontSize: 20,
-      fontFamily: 5,
-      textAlign: 'left',
-      verticalAlign: 'top',
-      containerId: null,
-      originalText: '日本語ラベル',
-      lineHeight: 1.25,
-    },
+  nodes: [
+    { id: 'text-1', type: 'text', x: 10, y: 10, width: 160, height: 25, text: SAMPLE_TEXT },
+    // Non-Latin text exercises the browser-fallback glyph path (Roboto's
+    // Latin-only vendored subset does not cover CJK) while the zero-network
+    // assertion below confirms it never triggers a font fetch.
+    { id: 'text-jp', type: 'text', x: 10, y: 50, width: 200, height: 25, text: JP_TEXT },
   ],
-  appState: { viewBackgroundColor: '#ffffff' },
-  files: {},
+  edges: [],
 }
 
 function fail(message) {
@@ -159,7 +89,7 @@ async function main() {
     })
 
     await page.goto(`file://${tmpHtmlPath}`)
-    await page.waitForSelector('canvas', { timeout: 10_000 })
+    await page.waitForSelector('svg')
 
     // No embedding host peer (file:// top-level load: window.parent ===
     // window), so widget-entry's Refresh control must never be created —
@@ -188,13 +118,10 @@ async function main() {
     const fontCheck = await page.evaluate(async (text) => {
       await document.fonts.ready
       // window.__whiteboardWidgetFonts__ (see widget-entry.ts) is exactly
-      // the FontFace instances this build registered — document.fonts
-      // alone is ambiguous because Excalidraw's own font manager also adds
-      // an 'Excalifont'-family FontFace placeholder per remote variant it
-      // knows about, unrelated to whether this build embedded it.
+      // the FontFace instances this build registered.
       const ours = window.__whiteboardWidgetFonts__ ?? []
       return {
-        checked: document.fonts.check('20px Excalifont', text),
+        checked: document.fonts.check('20px Roboto', text),
         registeredCount: ours.length,
         statuses: ours.map((f) => f.status),
       }
@@ -204,7 +131,7 @@ async function main() {
       fail(`expected zero network requests, saw: ${networkRequests.join(', ')}`)
     }
     if (!fontCheck.checked) {
-      fail('document.fonts.check reported the Excalifont family/text as not available')
+      fail('document.fonts.check reported the Roboto family/text as not available')
     }
     if (fontCheck.registeredCount === 0) {
       fail('window.__whiteboardWidgetFonts__ was empty — widget-entry did not register any font')
@@ -214,57 +141,15 @@ async function main() {
       )
     }
 
-    // Non-Latin fallback actually RENDERS: load a second copy whose scene
-    // contains only the Japanese text element and assert the canvas has a
-    // meaningful number of dark pixels. Scanning the whole canvas avoids
-    // scene->canvas coordinate math (zoom/scroll/devicePixelRatio); the
-    // only dark ink possible in this scene is the JP text itself, so a
-    // blank render (glyphs silently dropped) fails deterministically.
-    const jpOnlyScene = {
-      ...SAMPLE_SCENE,
-      elements: SAMPLE_SCENE.elements.filter((el) => el.id === 'text-jp'),
-    }
-    const jpHtml = html.replace(
-      /(<script type="application\/json" data-whiteboard-scene>)(.*?)(<\/script>)/s,
-      (_match, open, _placeholder, close) =>
-        `${open}${serializeSceneForScriptTag(jpOnlyScene)}${close}`,
+    // The JP text node's content actually reaches the DOM: canvas-render
+    // emits a real <text> element (not a canvas raster), so this asserts on
+    // the SVG's text content directly rather than scanning pixels.
+    const svgContainsJpText = await page.evaluate(
+      (jpText) => (document.querySelector('svg')?.textContent ?? '').includes(jpText),
+      JP_TEXT,
     )
-    const jpHtmlPath = join(tmpDir, 'canvas-viewer-jp.html')
-    writeFileSync(jpHtmlPath, jpHtml, 'utf8')
-    const jpPage = await browser.newPage()
-    await jpPage.route('http://**', (route) => {
-      networkRequests.push(route.request().url())
-      return route.abort()
-    })
-    await jpPage.route('https://**', (route) => {
-      networkRequests.push(route.request().url())
-      return route.abort()
-    })
-    await jpPage.goto(`file://${jpHtmlPath}`)
-    await jpPage.waitForSelector('canvas', { timeout: 10_000 })
-    const jpDarkPixels = await jpPage.evaluate(async () => {
-      await document.fonts.ready
-      // Give Excalidraw one frame to paint after fonts settle.
-      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
-      let dark = 0
-      for (const canvas of document.querySelectorAll('canvas')) {
-        const ctx = canvas.getContext('2d')
-        if (!ctx || canvas.width === 0 || canvas.height === 0) continue
-        const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data
-        for (let i = 0; i < data.length; i += 4) {
-          const alpha = data[i + 3] ?? 0
-          if (alpha > 128 && (data[i] ?? 255) < 100) dark += 1
-        }
-      }
-      return dark
-    })
-    if (jpDarkPixels < 50) {
-      fail(
-        `expected the Japanese-only scene to paint fallback glyphs (>=50 dark pixels), got ${jpDarkPixels}`,
-      )
-    }
-    if (networkRequests.length > 0) {
-      fail(`expected zero network requests after the JP render, saw: ${networkRequests.join(', ')}`)
+    if (!svgContainsJpText) {
+      fail('expected the rendered SVG to contain the Japanese sample text')
     }
 
     // srcdoc hosting: MCP Apps hosts embed this widget via a sandboxed
@@ -277,11 +162,6 @@ async function main() {
     srcdocPage.on('pageerror', (err) => {
       srcdocPageErrors.push(String(err))
     })
-    // Diagnostics only, never a fail condition on their own: Excalidraw's
-    // own font manager issues CSS-level loads for font subsets this bundle
-    // does not embed (they resolve against the inert asset prefix and fail
-    // by design — the widget degrades to fallback glyphs). A real bootstrap
-    // crash surfaces as a pageerror or as no canvas appearing.
     const srcdocConsoleErrors = []
     srcdocPage.on('console', (msg) => {
       if (msg.type() === 'error') srcdocConsoleErrors.push(msg.text())
@@ -304,7 +184,7 @@ async function main() {
     // CI runners parse+execute the ~8.5 MB inline bundle noticeably slower
     // than the file:// pages above; give the sandboxed frame extra headroom.
     const srcdocDeadline = Date.now() + 30_000
-    let srcdocCanvasCount = 0
+    let srcdocSvgCount = 0
     while (Date.now() < srcdocDeadline) {
       // Any non-main frame is the widget frame — matching on
       // url() === 'about:srcdoc' is Chrome-build-dependent (chrome-stable
@@ -312,15 +192,15 @@ async function main() {
       // than bundled Chromium).
       for (const frame of srcdocPage.frames()) {
         if (frame === srcdocPage.mainFrame()) continue
-        srcdocCanvasCount = await frame
-          .evaluate(() => document.querySelectorAll('canvas').length)
+        srcdocSvgCount = await frame
+          .evaluate(() => document.querySelectorAll('svg').length)
           .catch(() => 0)
-        if (srcdocCanvasCount > 0) break
+        if (srcdocSvgCount > 0) break
       }
-      if (srcdocCanvasCount > 0) break
+      if (srcdocSvgCount > 0) break
       await new Promise((resolve) => setTimeout(resolve, 200))
     }
-    if (srcdocCanvasCount === 0) {
+    if (srcdocSvgCount === 0) {
       const frameUrls = srcdocPage
         .frames()
         .map((f) => f.url() || '(empty)')
@@ -332,7 +212,7 @@ async function main() {
       ]
         .filter(Boolean)
         .join('; ')
-      fail(`widget did not render a canvas under sandboxed srcdoc hosting (${diagnostics})`)
+      fail(`widget did not render an svg under sandboxed srcdoc hosting (${diagnostics})`)
     }
     if (srcdocPageErrors.length > 0) {
       fail(`uncaught page error(s) under srcdoc hosting: ${srcdocPageErrors.join(' | ')}`)
@@ -342,7 +222,7 @@ async function main() {
     // harness, so app.connect() loses the HOST_CONNECT_TIMEOUT_MS race —
     // Refresh and the sticky-note affordance must both stay absent here too,
     // the same as the file:// no-parent-frame load above.
-    if (srcdocCanvasCount > 0) {
+    if (srcdocSvgCount > 0) {
       const widgetFrame = srcdocPage.frames().find((frame) => frame !== srcdocPage.mainFrame())
       const controlPresence = await widgetFrame
         ?.evaluate(() => ({
@@ -360,7 +240,7 @@ async function main() {
 
     if (process.exitCode !== 1) {
       console.log(
-        '[widget-smoke] PASS: zero network requests, canvas rendered, fonts loaded, JP fallback painted, srcdoc hosting OK',
+        '[widget-smoke] PASS: zero network requests, svg rendered, fonts loaded, JP text present, srcdoc hosting OK',
       )
     }
   } finally {

@@ -1,70 +1,74 @@
-// Real-browser lock for the read-only viewer contract: jsdom mocks Excalidraw
-// away entirely (see CanvasViewer.test.tsx), so it cannot prove the actual
-// <Excalidraw> render produces a live <canvas> the user can pan/zoom/select
-// on. This is the nearest-layer real-browser test for that claim.
+// Real-browser lock for the SVG-viewer contract: jsdom has no real Canvas 2D
+// backend, so it cannot prove the actual browser MeasureText implementation
+// or a real mount produces a non-empty rendered <svg>. This is the nearest
+// real-browser layer for both claims.
+
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
-import type { ViewerScene } from './scene.js'
+import { createBrowserMeasureText } from './measure-text.js'
 
-const scene: ViewerScene = {
-  elements: [
-    {
-      id: 'rect-1',
-      type: 'rectangle',
-      x: 10,
-      y: 10,
-      width: 100,
-      height: 80,
-      angle: 0,
-      strokeColor: '#000000',
-      backgroundColor: 'transparent',
-      fillStyle: 'solid',
-      strokeWidth: 1,
-      strokeStyle: 'solid',
-      roughness: 1,
-      opacity: 100,
-      groupIds: [],
-      frameId: null,
-      roundness: null,
-      seed: 1,
-      versionNonce: 1,
-      isDeleted: false,
-      boundElements: null,
-      updated: 1,
-      link: null,
-      locked: false,
-    },
-  ] as never,
-  appState: { viewBackgroundColor: '#ffffff' },
-  files: {},
+const goldenCanvas: SpatialCanvas = {
+  nodes: [
+    { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'Hello world' },
+    { id: 'b', type: 'text', x: 200, y: 0, width: 120, height: 60, text: 'Second box' },
+  ],
+  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
 }
 
-describe('CanvasViewer (real browser)', () => {
-  it('renders a live canvas element for the scene', async () => {
-    const { container } = render(<CanvasViewer scene={scene} width={400} height={300} />)
+// Deterministic across Node and the browser: the SAME fake measurer used
+// here must be the one a future node-project golden-determinism test uses,
+// so the two produce byte-identical SVG (canvas-render already guarantees
+// that for a fixed Scene — this pins the viewer's own scene-building stage
+// adds no additional platform dependence).
+const fakeMeasure: MeasureText = (text) => ({
+  advanceWidth: text.length * 8,
+  ascent: 12,
+  descent: 4,
+  lineGap: 0,
+})
 
-    await expect.poll(() => container.querySelector('canvas'), { timeout: 5000 }).toBeTruthy()
+describe('CanvasViewer (real browser)', () => {
+  it('mounts and renders a non-empty <svg> with the expected node/edge shapes', async () => {
+    const { container } = render(<CanvasViewer canvas={goldenCanvas} measure={fakeMeasure} />)
+
+    await expect.poll(() => container.querySelector('svg')).toBeTruthy()
+    const svg = container.querySelector('svg')
+    expect(svg?.querySelectorAll('rect').length).toBe(2)
+    expect(svg?.querySelector('polyline')).toBeTruthy()
   })
 
-  it('hides the editing menu chrome and keeps the canvas visible', async () => {
-    const { container } = render(
-      <CanvasViewer scene={scene} width={400} height={300} hideChrome testId="ro-viewer" />,
-    )
+  it('real Canvas 2D MeasureText satisfies the documented contract', () => {
+    const measure = createBrowserMeasureText()
+    const font = {
+      family: 'Roboto',
+      fallbackChain: ['sans-serif'],
+      weight: 400,
+      style: 'normal' as const,
+      sizePx: 16,
+    }
 
-    await expect.poll(() => container.querySelector('canvas'), { timeout: 5000 }).toBeTruthy()
+    expect(measure('', font).advanceWidth).toBe(0)
 
-    // .App-menu is desktop-only chrome: at this test's viewport size
-    // Excalidraw renders its `excalidraw--mobile` layout instead, which
-    // never mounts .App-menu at all (regardless of hideChrome). .App-bottom-bar
-    // is the chrome node that's actually present at both breakpoints, so it's
-    // the one that can prove the hideChrome CSS contract instead of passing
-    // vacuously when the desktop-only node is absent.
-    await expect
-      .poll(() => container.querySelector('.App-bottom-bar'), { timeout: 5000 })
-      .toBeTruthy()
-    const bottomBar = container.querySelector('.App-bottom-bar')
-    expect(bottomBar).toBeTruthy()
-    expect(getComputedStyle(bottomBar as Element).display).toBe('none')
+    const small = measure('whiteboard', { ...font, sizePx: 16 })
+    const large = measure('whiteboard', { ...font, sizePx: 48 })
+    for (const metrics of [small, large]) {
+      for (const value of Object.values(metrics)) {
+        expect(Number.isFinite(value)).toBe(true)
+        expect(value).toBeGreaterThanOrEqual(0)
+      }
+    }
+    // Linear scaling in sizePx within a generous relative tolerance — a real
+    // font rasterizer's kerning/hinting means this is not exact, but a
+    // design-units-vs-CSS-px bug would be off by a large, non-proportional
+    // factor, which this still catches.
+    expect(large.advanceWidth).toBeGreaterThan(small.advanceWidth * 2)
+    expect(large.advanceWidth).toBeLessThan(small.advanceWidth * 4)
+
+    const shorter = measure('a', font).advanceWidth
+    const longer = measure('ab', font).advanceWidth
+    expect(longer).toBeGreaterThanOrEqual(shorter)
   })
 })
