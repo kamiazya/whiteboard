@@ -80,6 +80,57 @@ const TEXT_NODE: SpatialCanvas['nodes'][number] = {
   text: 'hello',
 }
 
+const TEXT_CANVAS: SpatialCanvas = { nodes: [TEXT_NODE], edges: [] }
+
+const MOVE_TEXT_NODE: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+
+function versionCreatedPayload(
+  overrides: Partial<VersionCreatedPayload> = {},
+): VersionCreatedPayload {
+  return {
+    id: 'v1',
+    slug: 'canvas-a',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    elementCount: 3,
+    auto: false,
+    hasThumbnail: false,
+    branchName: 'main',
+    ...overrides,
+  }
+}
+
+/** Delivers a snapshot through the backend and drains the import pipeline. */
+async function hydrate(
+  backend: ReturnType<typeof makeFakeBackend>,
+  canvas: SpatialCanvas = emptyCanvas(),
+): Promise<void> {
+  await act(async () => {
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(canvas))
+    await vi.runAllTimersAsync()
+  })
+}
+
+/** Applies a command through the hook's onChange and drains the commit debounce. */
+async function edit(
+  result: { current: UseCanvasSyncResult },
+  before: SpatialCanvas,
+  command: EditorCommand,
+): Promise<void> {
+  const next = applyCommand(before, command)
+  act(() => {
+    result.current.onChange(next, command)
+  })
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(400)
+  })
+}
+
+function dispatchCtrlZ(): void {
+  window.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
+  )
+}
+
 describe('useCanvasSync', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -94,13 +145,9 @@ describe('useCanvasSync', () => {
 
     expect(result.current.canvas).toEqual(emptyCanvas())
 
-    const canvas: SpatialCanvas = { nodes: [TEXT_NODE], edges: [] }
-    await act(async () => {
-      backend._ctrl.handlers!.onSnapshot(makeSnapshot(canvas))
-      await vi.runAllTimersAsync()
-    })
+    await hydrate(backend, TEXT_CANVAS)
 
-    expect(result.current.canvas).toEqual(canvas)
+    expect(result.current.canvas).toEqual(TEXT_CANVAS)
   })
 
   it('sets syncStatus to "connected" when onConnected fires', () => {
@@ -124,15 +171,11 @@ describe('useCanvasSync', () => {
     const backend = makeFakeBackend()
     const { result } = renderHook(() => useCanvasSync(backend))
 
-    await act(async () => {
-      backend._ctrl.handlers!.onSnapshot(makeSnapshot({ nodes: [TEXT_NODE], edges: [] }))
-      await vi.runAllTimersAsync()
-    })
+    await hydrate(backend, TEXT_CANVAS)
 
-    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-    const next = applyCommand({ nodes: [TEXT_NODE], edges: [] }, command)
+    const next = applyCommand(TEXT_CANVAS, MOVE_TEXT_NODE)
     act(() => {
-      result.current.onChange(next, command)
+      result.current.onChange(next, MOVE_TEXT_NODE)
     })
 
     // The hook publishes the session's forwarded value synchronously.
@@ -159,11 +202,8 @@ describe('useCanvasSync', () => {
       initialProps: { backend: backendA as CanvasBackend },
     })
 
-    await act(async () => {
-      backendA._ctrl.handlers!.onSnapshot(makeSnapshot({ nodes: [TEXT_NODE], edges: [] }))
-      await vi.runAllTimersAsync()
-    })
-    expect(result.current.canvas).toEqual({ nodes: [TEXT_NODE], edges: [] })
+    await hydrate(backendA, TEXT_CANVAS)
+    expect(result.current.canvas).toEqual(TEXT_CANVAS)
 
     rerender({ backend: backendB })
 
@@ -171,12 +211,12 @@ describe('useCanvasSync', () => {
     // Torn down and reset — the new session has not hydrated yet.
     expect(result.current.canvas).toEqual(emptyCanvas())
 
-    const otherNode: SpatialCanvas['nodes'][number] = { ...TEXT_NODE, id: 'n-b', text: 'world' }
-    await act(async () => {
-      backendB._ctrl.handlers!.onSnapshot(makeSnapshot({ nodes: [otherNode], edges: [] }))
-      await vi.runAllTimersAsync()
-    })
-    expect(result.current.canvas).toEqual({ nodes: [otherNode], edges: [] })
+    const otherCanvas: SpatialCanvas = {
+      nodes: [{ ...TEXT_NODE, id: 'n-b', text: 'world' }],
+      edges: [],
+    }
+    await hydrate(backendB, otherCanvas)
+    expect(result.current.canvas).toEqual(otherCanvas)
   })
 
   it('does not connect when backend is null, and onChange is a safe no-op', () => {
@@ -195,11 +235,7 @@ describe('useCanvasSync', () => {
       initialProps: { backend: null as CanvasBackend | null },
     })
 
-    expect(() => {
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
-      )
-    }).not.toThrow()
+    expect(dispatchCtrlZ).not.toThrow()
     expect(result.current.canvas).toEqual(emptyCanvas())
   })
 
@@ -207,26 +243,11 @@ describe('useCanvasSync', () => {
     const backend = makeFakeBackend()
     const { result } = renderHook(() => useCanvasSync(backend))
 
-    await act(async () => {
-      backend._ctrl.handlers!.onSnapshot(makeSnapshot({ nodes: [TEXT_NODE], edges: [] }))
-      await vi.runAllTimersAsync()
-    })
-
-    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-    const next = applyCommand({ nodes: [TEXT_NODE], edges: [] }, command)
-    act(() => {
-      result.current.onChange(next, command)
-    })
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(400)
-    })
+    await hydrate(backend, TEXT_CANVAS)
+    await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
     expect(result.current.canvas.nodes[0]).toMatchObject({ x: 10, y: 20 })
 
-    act(() => {
-      window.dispatchEvent(
-        new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }),
-      )
-    })
+    act(dispatchCtrlZ)
 
     expect(result.current.canvas.nodes[0]).toMatchObject({ x: 0, y: 0 })
   })
@@ -288,15 +309,7 @@ describe('useCanvasSync', () => {
       const onVersionCreated = vi.fn()
       renderHook(() => useCanvasSync(backend, { onVersionCreated }))
 
-      const payload: VersionCreatedPayload = {
-        id: 'v1',
-        slug: 'canvas-a',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        elementCount: 3,
-        auto: false,
-        hasThumbnail: false,
-        branchName: 'main',
-      }
+      const payload = versionCreatedPayload()
       act(() => {
         backend._ctrl.handlers!.onVersionCreated(payload)
       })
@@ -384,35 +397,15 @@ describe('useCanvasSync', () => {
       const backend = makeFakeBackend()
       const { result } = renderHook(() => useCanvasSync(backend))
 
-      await act(async () => {
-        backend._ctrl.handlers!.onSnapshot(makeSnapshot({ nodes: [TEXT_NODE], edges: [] }))
-        await vi.runAllTimersAsync()
-      })
-
-      const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
-      const next = applyCommand({ nodes: [TEXT_NODE], edges: [] }, command)
-      act(() => {
-        result.current.onChange(next, command)
-      })
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(400)
-      })
+      await hydrate(backend, TEXT_CANVAS)
+      await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
 
       act(() => {
         result.current.clearLocalUndo()
       })
 
       const canvasBeforeUndo = result.current.canvas
-      act(() => {
-        window.dispatchEvent(
-          new KeyboardEvent('keydown', {
-            key: 'z',
-            ctrlKey: true,
-            bubbles: true,
-            cancelable: true,
-          }),
-        )
-      })
+      act(dispatchCtrlZ)
       expect(result.current.canvas).toBe(canvasBeforeUndo)
     })
 
@@ -515,10 +508,7 @@ describe('useCanvasSync', () => {
       const docChanged = listenFor('excalidraw:doc_changed')
       renderHook(() => useCanvasSync(backend, { identity }))
 
-      await act(async () => {
-        backend._ctrl.handlers!.onSnapshot(makeSnapshot())
-        await vi.runAllTimersAsync()
-      })
+      await hydrate(backend)
 
       expect(docChanged.calls).toHaveLength(0)
     })
@@ -528,19 +518,8 @@ describe('useCanvasSync', () => {
       const docChanged = listenFor('excalidraw:doc_changed')
       const { result } = renderHook(() => useCanvasSync(backend, { identity }))
 
-      await act(async () => {
-        backend._ctrl.handlers!.onSnapshot(makeSnapshot({ nodes: [TEXT_NODE], edges: [] }))
-        await vi.runAllTimersAsync()
-      })
-
-      const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
-      const next = applyCommand({ nodes: [TEXT_NODE], edges: [] }, command)
-      act(() => {
-        result.current.onChange(next, command)
-      })
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(300)
-      })
+      await hydrate(backend, TEXT_CANVAS)
+      await edit(result, TEXT_CANVAS, MOVE_TEXT_NODE)
 
       expect(docChanged.calls.length).toBeGreaterThan(0)
       expect(docChanged.calls[docChanged.calls.length - 1].detail).toEqual(identity)
@@ -551,17 +530,8 @@ describe('useCanvasSync', () => {
       const versionSaved = listenFor('excalidraw:version_saved')
       renderHook(() => useCanvasSync(backend, { identity }))
 
-      const payload: VersionCreatedPayload = {
-        id: 'v1',
-        slug: 'canvas-a',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        elementCount: 3,
-        auto: false,
-        hasThumbnail: false,
-        branchName: 'main',
-      }
       act(() => {
-        backend._ctrl.handlers!.onVersionCreated(payload)
+        backend._ctrl.handlers!.onVersionCreated(versionCreatedPayload())
       })
 
       expect(versionSaved.calls).toHaveLength(1)
@@ -574,24 +544,13 @@ describe('useCanvasSync', () => {
       const versionSaved = listenFor('excalidraw:version_saved')
       renderHook(() => useCanvasSync(backend))
 
-      await act(async () => {
-        backend._ctrl.handlers!.onSnapshot(makeSnapshot())
-        await vi.runAllTimersAsync()
-      })
+      await hydrate(backend)
       await act(async () => {
         backend._ctrl.handlers!.onRemoteUpdate(new LoroDoc().export({ mode: 'update' }))
         await vi.runAllTimersAsync()
       })
       act(() => {
-        backend._ctrl.handlers!.onVersionCreated({
-          id: 'v1',
-          slug: 'canvas-a',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          elementCount: 0,
-          auto: false,
-          hasThumbnail: false,
-          branchName: 'main',
-        })
+        backend._ctrl.handlers!.onVersionCreated(versionCreatedPayload({ elementCount: 0 }))
       })
 
       expect(docChanged.calls).toHaveLength(0)
@@ -617,10 +576,7 @@ describe('useCanvasSync', () => {
       const backend = makeFakeBackend()
       const { result } = renderHook(() => useCanvasSync(backend))
 
-      await act(async () => {
-        backend._ctrl.handlers!.onSnapshot(makeSnapshot({ nodes: [TEXT_NODE], edges: [] }))
-        await vi.runAllTimersAsync()
-      })
+      await hydrate(backend, TEXT_CANVAS)
 
       let blob: Blob | null | undefined
       await act(async () => {

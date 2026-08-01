@@ -38,8 +38,43 @@ export interface UseCanvasSyncResult {
 const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
 
 /**
+ * Rasterizes an already-serialized SVG through an <img> + <canvas> 2D context.
+ * Returns null when no real 2D context exists (e.g. jsdom) — that is
+ * "format unavailable in this environment", not an error.
+ */
+async function rasterizeSvgToPng(svg: string, width: number, height: number): Promise<Blob | null> {
+  const canvasEl = document.createElement('canvas')
+  canvasEl.width = width
+  canvasEl.height = height
+  const ctx = canvasEl.getContext('2d')
+  if (!ctx) return null
+
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = () => reject(new Error('failed to load rasterized SVG'))
+      img.src = url
+    })
+    ctx.drawImage(image, 0, 0, width, height)
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+  return new Promise<Blob | null>((resolve) => {
+    canvasEl.toBlob(resolve, 'image/png')
+  })
+}
+
+function isEditingText(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  const tag = target.tagName.toLowerCase()
+  return tag === 'input' || tag === 'textarea' || target.isContentEditable
+}
+
+/**
  * useCanvasSync — canonical sync hook for both the browser-local backend and
- * (once slice 11 wires it up) a daemon-backed connection.
+ * a daemon-backed connection.
  *
  * This hook is React glue only: state, the connect/teardown effect, and the
  * keyboard undo-redo intercept. All per-connection state (the LoroDoc, its
@@ -181,47 +216,18 @@ export function useCanvasSync(
       if (format === 'svg') {
         return new Blob([svg], { type: 'image/svg+xml' })
       }
-      // 'png': rasterize the derived SVG through an <img> + <canvas> 2D
-      // context. Returns null when no real 2D context exists (e.g. jsdom) —
-      // documented as "format unavailable in this environment", not an error.
-      const canvasEl = document.createElement('canvas')
-      canvasEl.width = Math.max(1, Math.round(bounds.w))
-      canvasEl.height = Math.max(1, Math.round(bounds.h))
-      const ctx = canvasEl.getContext('2d')
-      if (!ctx) return null
-      const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
-      const url = URL.createObjectURL(svgBlob)
-      try {
-        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-          const img = new Image()
-          img.onload = () => resolve(img)
-          img.onerror = () => reject(new Error('failed to load rasterized SVG'))
-          img.src = url
-        })
-        ctx.drawImage(image, 0, 0, canvasEl.width, canvasEl.height)
-      } finally {
-        URL.revokeObjectURL(url)
-      }
-      return new Promise<Blob | null>((resolve) => {
-        canvasEl.toBlob((blob) => resolve(blob), 'image/png')
-      })
+      return rasterizeSvgToPng(
+        svg,
+        Math.max(1, Math.round(bounds.w)),
+        Math.max(1, Math.round(bounds.h)),
+      )
     },
     [canvas],
   )
 
-  // Keyboard intercept for undo/redo. The Excalidraw-toolbar pointerdown
-  // hijack from before the OpenCanvas cutover has nothing left to hijack —
-  // SpatialEditor has no undo/redo buttons of its own — so only the keyboard
-  // path remains.
+  // Keyboard intercept for undo/redo — SpatialEditor has no undo/redo buttons
+  // of its own, so the keyboard is the only entry point.
   useEffect(() => {
-    function isEditingText(target: EventTarget | null): boolean {
-      if (!(target instanceof HTMLElement)) return false
-      const tag = target.tagName.toLowerCase()
-      if (tag === 'input' || tag === 'textarea') return true
-      if (target.isContentEditable) return true
-      return false
-    }
-
     function onKeyDown(ev: KeyboardEvent): void {
       if (!(ev.ctrlKey || ev.metaKey)) return
       if (isEditingText(ev.target)) return
@@ -241,7 +247,7 @@ export function useCanvasSync(
 
     window.addEventListener('keydown', onKeyDown, { capture: true })
     return () => {
-      window.removeEventListener('keydown', onKeyDown, { capture: true } as EventListenerOptions)
+      window.removeEventListener('keydown', onKeyDown, { capture: true })
     }
   }, [loroUndo, loroRedo])
 
