@@ -163,7 +163,7 @@
     "@libsql/kysely-libsql": "^0.4.1",
     "@modelcontextprotocol/ext-apps": "1.7.4",
     "@modelcontextprotocol/sdk": "~1.29.0",
-    "@napi-rs/canvas": "^0.1.100",
+    "@napi-rs/canvas": "^1.0.2",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/context-zone": "^2.8.0",
     "@opentelemetry/core": "^2.8.0",
