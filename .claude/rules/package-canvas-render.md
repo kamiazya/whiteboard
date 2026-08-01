@@ -71,6 +71,34 @@
    explicit `{ unresolved: true }` entry both degrade to the same
    placeholder mechanism. The function is total: it never throws and never
    infinite-loops, on any bundle including dense cyclic ones.
+5. **Document envelope** (`sceneBounds` in `scene-bounds.ts`,
+   `SvgDocumentOptions` in `svg/backend.ts`): `renderSceneToSvg(scene)`
+   with no options, or an options object with every field `undefined`,
+   emits the legacy bodyless-root form (`<svg xmlns="...">...</svg>`)
+   byte-for-byte — this is the frozen default path guarded by
+   `DETERMINISM_GOLDEN_SVG`. Setting ANY of `width`/`height`/`viewBox`/
+   `padding`/`background` activates the full envelope (never a partial
+   one): root attributes in the fixed order `xmlns width height viewBox`,
+   derived as `viewBox = options.viewBox ?? expand(sceneBounds(scene),
+   padding)` and `width/height = options.width/height ?? viewBox.w/h`. A
+   `background` renders a `role="presentation"` `<rect>` covering the
+   viewBox as the FIRST child, ahead of every scene node — this is
+   document chrome, not a per-node visual attribute, and is the one
+   documented exemption from this package's "no visual attributes on
+   scene nodes" rule (no `<style>` block or per-node fill/stroke/font is
+   ever added). `sceneBounds` is total and never returns `NaN`/`Infinity`/
+   a zero-area box: an empty scene, or a scene whose bboxes/edge points
+   are all-zero-size or all non-finite, degrades to the documented
+   fallback `{ x: 0, y: 0, w: 1, h: 1 }`; a collapsed axis on a
+   non-empty scene is clamped to `MIN_SCENE_EXTENT_PX = 1` while `x`/`y`
+   are preserved. `sceneBounds` walks the WHOLE scene tree (every depth,
+   not just top-level) with an explicit stack (no recursion, so no
+   stack-overflow path on deep embed chains), including edge polyline
+   points; a bbox/point with any non-finite field is skipped rather than
+   clamped. Option sanitization keeps `renderSceneToSvg` total per this
+   package's never-throw rule: non-finite/negative `padding` -> `0`;
+   non-finite `width`/`height` -> the derived fallback; a `viewBox` with
+   any non-finite field -> derived instead of the caller's value.
 
 ## Conventions
 

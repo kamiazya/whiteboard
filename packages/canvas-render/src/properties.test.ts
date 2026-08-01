@@ -1,8 +1,10 @@
 import { describe, expect } from 'vitest'
 import type { ResolvedDocBundle } from './layout/embed-recursion.js'
 import { resolveEmbeds } from './layout/embed-recursion.js'
+import { sceneBounds } from './scene-bounds.js'
 import { sceneDigest } from './scene-digest.js'
-import type { Scene, SceneNode } from './scene-graph.js'
+import type { BoundingBox, Scene, SceneNode } from './scene-graph.js'
+import type { SvgDocumentOptions } from './svg/backend.js'
 import { renderSceneToSvg } from './svg/backend.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import { isWellFormedXmlFragment } from './test-utils/xml-well-formed.js'
@@ -75,6 +77,102 @@ describe('SVG serializer well-formedness (PBT)', () => {
         ],
       }
       expect(isWellFormedXmlFragment(renderSceneToSvg(scene))).toBe(true)
+    },
+  )
+})
+
+const sceneNodeArb: fc.Arbitrary<SceneNode> = fc.oneof(
+  bboxArb.map((bbox) => ({ kind: 'thematicBreak' as const, bbox })),
+  fc
+    .array(
+      fc.record({ x: fc.integer({ min: -50, max: 350 }), y: fc.integer({ min: -50, max: 350 }) }),
+      {
+        maxLength: 4,
+      },
+    )
+    .map((path) => ({
+      kind: 'edge' as const,
+      id: 'e',
+      path,
+      fromSide: 'right' as const,
+      toSide: 'left' as const,
+    })),
+)
+
+const sceneArb: fc.Arbitrary<Scene> = fc
+  .array(sceneNodeArb, { maxLength: 6 })
+  .map((nodes) => ({ nodes }))
+
+/** Includes adversarial numeric edge cases (NaN/Infinity/negative) so the totality property covers them. */
+const maybeAdversarialNumberArb = fc.oneof(
+  fc.integer({ min: -1000, max: 1000 }),
+  fc.constant(Number.NaN),
+  fc.constant(Number.POSITIVE_INFINITY),
+  fc.constant(Number.NEGATIVE_INFINITY),
+)
+
+const viewBoxArb: fc.Arbitrary<BoundingBox> = fc.record({
+  x: maybeAdversarialNumberArb,
+  y: maybeAdversarialNumberArb,
+  w: maybeAdversarialNumberArb,
+  h: maybeAdversarialNumberArb,
+})
+
+const documentOptionsArb: fc.Arbitrary<SvgDocumentOptions> = fc.record(
+  {
+    width: maybeAdversarialNumberArb,
+    height: maybeAdversarialNumberArb,
+    viewBox: viewBoxArb,
+    padding: maybeAdversarialNumberArb,
+    background: fc.string({ maxLength: 20 }),
+  },
+  { requiredKeys: [] },
+)
+
+describe('renderSceneToSvg document envelope (PBT)', () => {
+  fcTest.prop([sceneArb, documentOptionsArb], withDefaults({ numRuns: 50 }))(
+    'never throws for any scene/options pair, including non-finite numbers',
+    (scene, options) => {
+      expect(() => renderSceneToSvg(scene, options)).not.toThrow()
+      expect(() => sceneBounds(scene)).not.toThrow()
+    },
+  )
+
+  fcTest.prop([sceneArb], withDefaults({ numRuns: 50 }))(
+    'sceneBounds always has a positive-area, finite result',
+    (scene) => {
+      const bounds = sceneBounds(scene)
+      expect(Number.isFinite(bounds.x)).toBe(true)
+      expect(Number.isFinite(bounds.y)).toBe(true)
+      expect(bounds.w).toBeGreaterThan(0)
+      expect(bounds.h).toBeGreaterThan(0)
+    },
+  )
+
+  fcTest.prop([sceneArb], withDefaults({ numRuns: 50 }))(
+    'the derived viewBox contains every node bbox and every edge path point',
+    (scene) => {
+      const svg = renderSceneToSvg(scene, { padding: 0 })
+      const match = /viewBox="([^"]+)"/.exec(svg)
+      expect(match).not.toBeNull()
+      const [x, y, w, h] = match![1].split(' ').map(Number)
+      const contains = (px: number, py: number) => px >= x && px <= x + w && py >= y && py <= y + h
+
+      for (const node of scene.nodes) {
+        if (node.kind === 'edge') {
+          for (const p of node.path) expect(contains(p.x, p.y)).toBe(true)
+        } else {
+          expect(contains(node.bbox.x, node.bbox.y)).toBe(true)
+          expect(contains(node.bbox.x + node.bbox.w, node.bbox.y + node.bbox.h)).toBe(true)
+        }
+      }
+    },
+  )
+
+  fcTest.prop([sceneArb, documentOptionsArb], withDefaults({ numRuns: 50 }))(
+    'is deterministic: same (scene, options) renders byte-identical output',
+    (scene, options) => {
+      expect(renderSceneToSvg(scene, options)).toBe(renderSceneToSvg(scene, options))
     },
   )
 })

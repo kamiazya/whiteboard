@@ -4,6 +4,7 @@ export { layoutMdastBlocks } from './layout/mdast-blocks.js'
 export { routeEdge } from './layout/spatial-edges.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance } from './measure.js'
+export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
 export type {
@@ -31,5 +32,6 @@ export type {
   ThematicBreakNode,
   UnresolvedReferenceNode,
 } from './scene-graph.js'
+export type { SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
 export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
