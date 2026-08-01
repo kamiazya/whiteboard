@@ -11,5 +11,5 @@
 export * from './branches.js'
 export * from './canvas.js'
 export * from './reconnect.js'
-export { daemonPingResponseSchema } from './runtime.js'
 export type { DaemonPingResponse } from './runtime.js'
+export { daemonPingResponseSchema } from './runtime.js'
