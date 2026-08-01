@@ -25,6 +25,7 @@
     "@codemirror/view": "^6.43.6",
     "@excalidraw/excalidraw": "catalog:",
     "@kamiazya/whiteboard-canvas-codec": "workspace:*",
+    "@kamiazya/whiteboard-canvas-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-mcp": "workspace:*",

@@ -129,6 +129,9 @@ importers:
       '@kamiazya/whiteboard-canvas-codec':
         specifier: workspace:*
         version: link:../../packages/canvas-codec
+      '@kamiazya/whiteboard-canvas-model':
+        specifier: workspace:*
+        version: link:../../packages/canvas-model
       '@kamiazya/whiteboard-canvas-render':
         specifier: workspace:*
         version: link:../../packages/canvas-render
