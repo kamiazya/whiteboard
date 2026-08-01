@@ -55,7 +55,10 @@ What is shipped today (Phase 0):
 - **Feature-detected, zero-impact elsewhere.** In any browser without
   `document.modelContext` the integration is a complete no-op — no
   listeners, no registration attempts, no UI change.
-- **One read-only tool**, registered whenever a canvas is open:
+- **One read-only tool**, registered only when all three hold: a canvas is
+  open, the user's persisted `webMcpEnabled` capability is on, and
+  `document.modelContext` exists. Turning the capability off unregisters the
+  tool exactly as an absent `document.modelContext` would.
   - `whiteboard_get_app_context` — which provider mode (`daemon` or
     `browser-local`) and which canvas identity is open. Never includes
     `daemonBaseUrl`, tokens, or any other connection detail.
