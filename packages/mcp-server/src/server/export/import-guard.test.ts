@@ -24,7 +24,10 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// Both import forms per module: `from 'x'` and `import('x')`.
+// Three import forms per module: `from 'x'`, `import('x')`, and the bare
+// side-effect form `import 'x'` — a module with no bindings to pull in
+// (e.g. `happy-dom`'s ambient DOM globals) is imported this way, and would
+// satisfy neither of the first two patterns.
 const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = FORBIDDEN_MODULES.flatMap(
   (moduleName) => {
     const quoted = `['"]${escapeRegExp(moduleName)}['"]`
@@ -33,6 +36,10 @@ const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = FORBIDD
       {
         name: `${moduleName} (dynamic import)`,
         pattern: new RegExp(`import\\(\\s*${quoted}\\s*\\)`),
+      },
+      {
+        name: `${moduleName} (side-effect import)`,
+        pattern: new RegExp(`import\\s+${quoted}`),
       },
     ]
   },
@@ -51,5 +58,14 @@ describe('src/server/export import guard', () => {
     for (const { name, pattern } of FORBIDDEN_PATTERNS) {
       expect(pattern.test(contents), `${path} matched forbidden pattern: ${name}`).toBe(false)
     }
+  })
+
+  it('would catch a bare side-effect import that the other two forms miss', () => {
+    const syntheticSource = `import 'happy-dom'\n`
+    const sideEffectPattern = FORBIDDEN_PATTERNS.find(
+      (p) => p.name === 'happy-dom (side-effect import)',
+    )
+    if (!sideEffectPattern) throw new Error('expected a happy-dom side-effect pattern')
+    expect(sideEffectPattern.pattern.test(syntheticSource)).toBe(true)
   })
 })
