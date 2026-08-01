@@ -1,3 +1,4 @@
+import { sceneBounds } from '../scene-bounds.js'
 import type {
   BoundingBox,
   ListItemNode,
@@ -90,13 +91,100 @@ function renderNode(node: SceneNode): string {
 }
 
 /**
+ * Document-envelope options for `renderSceneToSvg`. Plain TS type: the
+ * scene graph and its render options never cross a process boundary, so
+ * per this package's zod-schema-discipline exemption they carry no Zod
+ * schema (`sceneDigestSchema` remains the package's only Zod surface).
+ *
+ * Activation rule: if `options` is omitted, or present but with none of
+ * these fields set, output is byte-identical to the legacy no-envelope
+ * form. Setting any field activates the full envelope (derived `viewBox`
+ * plus `width`/`height`) rather than a partial one, so there is exactly
+ * one enveloped shape.
+ */
+export interface SvgDocumentOptions {
+  readonly width?: number
+  readonly height?: number
+  readonly viewBox?: BoundingBox
+  readonly padding?: number
+  readonly background?: string
+}
+
+function hasEnvelopeOptions(
+  options: SvgDocumentOptions | undefined,
+): options is SvgDocumentOptions {
+  if (!options) return false
+  return (
+    options.width !== undefined ||
+    options.height !== undefined ||
+    options.viewBox !== undefined ||
+    options.padding !== undefined ||
+    options.background !== undefined
+  )
+}
+
+/**
+ * A negative width/height is invalid on both the root `<svg>` element and
+ * `viewBox` (SVG spec) — `x`/`y` may be negative (an offset), but `w`/`h`
+ * must not be, so this is checked separately from plain finiteness.
+ */
+function isFiniteBox(box: BoundingBox): boolean {
+  return [box.x, box.y, box.w, box.h].every(Number.isFinite) && box.w >= 0 && box.h >= 0
+}
+
+/** Non-finite or negative padding is not a valid expansion amount — treated as 0 so the function stays total. */
+function sanitizePadding(padding: number | undefined): number {
+  if (padding === undefined || !Number.isFinite(padding) || padding < 0) return 0
+  return padding
+}
+
+function expandBox(box: BoundingBox, padding: number): BoundingBox {
+  if (padding === 0) return box
+  return { x: box.x - padding, y: box.y - padding, w: box.w + padding * 2, h: box.h + padding * 2 }
+}
+
+function resolveViewBox(scene: Scene, options: SvgDocumentOptions): BoundingBox {
+  if (options.viewBox && isFiniteBox(options.viewBox)) return options.viewBox
+  return expandBox(sceneBounds(scene), sanitizePadding(options.padding))
+}
+
+/** A negative root-element width/height is invalid SVG — falls back to the derived dimension, same as a non-finite value. */
+function resolveDimension(explicit: number | undefined, fallback: number): number {
+  return explicit !== undefined && Number.isFinite(explicit) && explicit >= 0 ? explicit : fallback
+}
+
+function renderBackgroundRect(box: BoundingBox, background: string): string {
+  return `<rect ${rectAttrs(box)} fill="${escapeXmlAttr(background)}" ${PRESENTATION_ATTR}/>`
+}
+
+/**
  * Serializes a decorated scene to an SVG string. Pure, no DOM — the same
  * implementation runs on Node, in the browser, and on Workers. Output
  * follows the canonical serialization rules (fixed attribute order,
  * consistent escaping, single root `xmlns`, one number formatter) so the
  * same scene produces byte-identical SVG everywhere.
+ *
+ * With no `options` (or an options object with no fields set), the root
+ * element carries only `xmlns` — the exact string this function has always
+ * produced. Passing any `SvgDocumentOptions` field activates the document
+ * envelope: fixed root-attribute order `xmlns width height viewBox`, plus a
+ * leading `role="presentation"` background rect (document chrome, not a
+ * per-node visual attribute — the one exemption to this package's
+ * no-visual-attributes rule) when `background` is set.
  */
-export function renderSceneToSvg(scene: Scene): string {
+export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
   const body = scene.nodes.map(renderNode).join('')
-  return `<svg xmlns="http://www.w3.org/2000/svg">${body}</svg>`
+
+  if (!hasEnvelopeOptions(options)) {
+    return `<svg xmlns="http://www.w3.org/2000/svg">${body}</svg>`
+  }
+
+  const viewBox = resolveViewBox(scene, options)
+  const width = resolveDimension(options.width, viewBox.w)
+  const height = resolveDimension(options.height, viewBox.h)
+  const viewBoxAttr = `${formatCoord(viewBox.x)} ${formatCoord(viewBox.y)} ${formatCoord(viewBox.w)} ${formatCoord(viewBox.h)}`
+  const background =
+    options.background !== undefined ? renderBackgroundRect(viewBox, options.background) : ''
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${formatCoord(width)}" height="${formatCoord(height)}" viewBox="${viewBoxAttr}">${background}${body}</svg>`
 }

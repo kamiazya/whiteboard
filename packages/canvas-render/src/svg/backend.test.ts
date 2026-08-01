@@ -230,3 +230,118 @@ describe('renderSceneToSvg', () => {
     expect(renderSceneToSvg(scene)).toBe(renderSceneToSvg(scene))
   })
 })
+
+describe('renderSceneToSvg — document envelope options', () => {
+  const scene: Scene = {
+    nodes: [{ kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 100, h: 10 } }],
+  }
+
+  it('an omitted options argument matches the legacy no-envelope output', () => {
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="100" height="10" role="presentation"/></svg>',
+    )
+  })
+
+  it('an empty options object does not activate the envelope', () => {
+    expect(renderSceneToSvg(scene, {})).toBe(renderSceneToSvg(scene))
+  })
+
+  it('padding-only options derive width/height/viewBox from sceneBounds expanded by padding', () => {
+    const svg = renderSceneToSvg(scene, { padding: 5 })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="110" height="20" viewBox="-5 -5 110 20">',
+      ),
+    ).toBe(true)
+  })
+
+  it('explicit width/height are emitted verbatim while viewBox is still derived', () => {
+    const svg = renderSceneToSvg(scene, { width: 500, height: 300 })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 100 10">',
+      ),
+    ).toBe(true)
+  })
+
+  it('an explicit viewBox bypasses sceneBounds derivation entirely', () => {
+    const svg = renderSceneToSvg(scene, { viewBox: { x: 1, y: 2, w: 3, h: 4 } })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="3" height="4" viewBox="1 2 3 4">',
+      ),
+    ).toBe(true)
+  })
+
+  it('a background renders a presentation rect as the first child, before scene nodes', () => {
+    const svg = renderSceneToSvg(scene, { background: '#fff' })
+    const bodyStart = svg.indexOf('>') + 1
+    expect(svg.slice(bodyStart)).toMatch(
+      /^<rect x="0" y="0" width="100" height="10" fill="#fff" role="presentation"\/>/,
+    )
+  })
+
+  it('escapes a quote/ampersand-bearing background color string', () => {
+    const svg = renderSceneToSvg(scene, { background: '"&' })
+    expect(svg).toContain('fill="&quot;&amp;"')
+  })
+
+  it('omits the background rect entirely when background is not set', () => {
+    const svg = renderSceneToSvg(scene, { padding: 1 })
+    expect(svg).not.toContain('fill=')
+  })
+
+  it('sanitizes non-finite/negative padding to 0 rather than throwing', () => {
+    expect(() => renderSceneToSvg(scene, { padding: Number.NaN })).not.toThrow()
+    expect(() => renderSceneToSvg(scene, { padding: -5 })).not.toThrow()
+    const svg = renderSceneToSvg(scene, { padding: -5 })
+    expect(svg).toContain('viewBox="0 0 100 10"')
+  })
+
+  it('sanitizes non-finite width/height to the derived fallback rather than throwing', () => {
+    expect(() =>
+      renderSceneToSvg(scene, { width: Number.NaN, height: Number.POSITIVE_INFINITY }),
+    ).not.toThrow()
+    const svg = renderSceneToSvg(scene, { width: Number.NaN, height: Number.POSITIVE_INFINITY })
+    expect(svg).toContain('width="100" height="10"')
+  })
+
+  it('sanitizes a non-finite viewBox field to the derived fallback rather than throwing', () => {
+    expect(() =>
+      renderSceneToSvg(scene, { viewBox: { x: Number.NaN, y: 0, w: 3, h: 4 } }),
+    ).not.toThrow()
+    const svg = renderSceneToSvg(scene, { viewBox: { x: Number.NaN, y: 0, w: 3, h: 4 } })
+    expect(svg).toContain('viewBox="0 0 100 10"')
+  })
+
+  it('sanitizes a negative explicit width/height to the derived fallback rather than emitting an invalid SVG', () => {
+    expect(() => renderSceneToSvg(scene, { width: -100, height: -50 })).not.toThrow()
+    const svg = renderSceneToSvg(scene, { width: -100, height: -50 })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="10" viewBox="0 0 100 10">',
+      ),
+    ).toBe(true)
+  })
+
+  it('sanitizes a viewBox with a negative w/h to the derived fallback rather than emitting an invalid viewBox', () => {
+    expect(() => renderSceneToSvg(scene, { viewBox: { x: 1, y: 2, w: -3, h: -4 } })).not.toThrow()
+    const svg = renderSceneToSvg(scene, { viewBox: { x: 1, y: 2, w: -3, h: -4 } })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="10" viewBox="0 0 100 10">',
+      ),
+    ).toBe(true)
+  })
+
+  it('accepts a viewBox with negative x/y offset paired with non-negative w/h', () => {
+    const svg = renderSceneToSvg(scene, { viewBox: { x: -5, y: -5, w: 3, h: 4 } })
+    expect(svg).toContain('viewBox="-5 -5 3 4"')
+  })
+
+  it('produces well-formed XML including the background rect', () => {
+    expect(
+      isWellFormedXmlFragment(renderSceneToSvg(scene, { background: 'red', padding: 4 })),
+    ).toBe(true)
+  })
+})
