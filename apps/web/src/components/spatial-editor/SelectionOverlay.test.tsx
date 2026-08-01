@@ -84,4 +84,68 @@ describe('SelectionOverlay', () => {
     fireEvent.pointerDown(screen.getByTestId('connect-handle'), { button: 2 })
     expect(onConnectPointerDown).not.toHaveBeenCalled()
   })
+
+  it('exposes every resize handle and the connect handle as a focusable, labeled control', () => {
+    render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={vi.fn()}
+        onConnectPointerDown={vi.fn()}
+        onHandleKeyDown={vi.fn()}
+        onConnectKeyDown={vi.fn()}
+      />,
+    )
+    const handle = screen.getByTestId('resize-handle-se')
+    expect(handle.getAttribute('role')).toBe('button')
+    expect(handle.getAttribute('tabindex')).toBe('0')
+    expect(handle.getAttribute('aria-label')).toMatch(/resize/i)
+    const connect = screen.getByTestId('connect-handle')
+    expect(connect.getAttribute('role')).toBe('button')
+    expect(connect.getAttribute('tabindex')).toBe('0')
+    expect(connect.getAttribute('aria-label')).toMatch(/connect/i)
+  })
+
+  it('invokes onHandleKeyDown with the handle kind and box on an arrow key, ignoring other keys', () => {
+    const onHandleKeyDown = vi.fn()
+    render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={vi.fn()}
+        onConnectPointerDown={vi.fn()}
+        onHandleKeyDown={onHandleKeyDown}
+        onConnectKeyDown={vi.fn()}
+      />,
+    )
+    const handle = screen.getByTestId('resize-handle-se')
+    fireEvent.keyDown(handle, { key: 'ArrowRight' })
+    expect(onHandleKeyDown).toHaveBeenCalledTimes(1)
+    const [kind, box] = onHandleKeyDown.mock.calls[0] as [string, typeof BOX, unknown]
+    expect(kind).toBe('se')
+    expect(box).toEqual({ x: 106, y: 66, width: 8, height: 8 })
+    fireEvent.keyDown(handle, { key: 'Tab' })
+    expect(onHandleKeyDown).toHaveBeenCalledTimes(1)
+  })
+
+  it('invokes onConnectKeyDown on Enter/Space, ignoring other keys', () => {
+    const onConnectKeyDown = vi.fn()
+    render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={vi.fn()}
+        onConnectPointerDown={vi.fn()}
+        onHandleKeyDown={vi.fn()}
+        onConnectKeyDown={onConnectKeyDown}
+      />,
+    )
+    const connect = screen.getByTestId('connect-handle')
+    fireEvent.keyDown(connect, { key: 'Enter' })
+    expect(onConnectKeyDown).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(connect, { key: ' ' })
+    expect(onConnectKeyDown).toHaveBeenCalledTimes(2)
+    fireEvent.keyDown(connect, { key: 'Tab' })
+    expect(onConnectKeyDown).toHaveBeenCalledTimes(2)
+  })
 })

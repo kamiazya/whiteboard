@@ -216,6 +216,136 @@ describe('SpatialEditor (browser)', () => {
     expect(next.edges).toEqual([{ id: 'edge-1', fromNode: 'a', toNode: 'b' }])
   })
 
+  it('arrow-key nudging a focused resize handle resizes the node (keyboard equivalent of drag)', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 50,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 50 }),
+      )
+
+    const seHandle = page.getByTestId('resize-handle-se')
+    seHandle.element().focus()
+    await seHandle
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+
+    // The component is controlled and onChange is a spy here (not fed back
+    // as a new canvas prop), so this asserts a SINGLE nudge from the node's
+    // original box — the same anchor-preserving math a real controlled
+    // parent would apply on every discrete nudge.
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    // Node "a" starts at (20,20)-(120,80). ArrowRight nudges the se corner's
+    // width by RESIZE_KEYBOARD_STEP (8px), x/y (the nw corner) staying
+    // fixed — the keyboard equivalent of dragging the se handle by (8, 0).
+    expect(command).toEqual({ kind: 'resize-node', id: 'a', x: 20, y: 20, width: 108, height: 60 })
+  })
+
+  it('activating the connect handle then a target node via keyboard commits connect-nodes', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+          createId={() => 'edge-2'}
+        />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 51,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 51 }),
+      )
+
+    const connectHandle = page.getByTestId('connect-handle')
+    connectHandle.element().focus()
+    await connectHandle
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+
+    await waitFor(() => {
+      expect(page.getByTestId('connect-target-b').element()).toBeTruthy()
+    })
+    const target = page.getByTestId('connect-target-b').element()
+    ;(target as HTMLElement).focus()
+    await target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'connect-nodes', edgeId: 'edge-2', fromNode: 'a', toNode: 'b' })
+    expect(next.edges).toEqual([{ id: 'edge-2', fromNode: 'a', toNode: 'b' }])
+  })
+
+  it('pressing Escape cancels an in-flight connecting gesture started via keyboard', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 52,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 52 }),
+      )
+
+    const connectHandle = page.getByTestId('connect-handle')
+    connectHandle.element().focus()
+    await connectHandle
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    await waitFor(() => {
+      expect(page.getByTestId('connect-target-b').element()).toBeTruthy()
+    })
+
+    await editor
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+
+    await waitFor(() => {
+      expect(() => page.getByTestId('connect-target-b').element()).toThrow()
+    })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('double-clicking a text node opens the editor and commits the edited text on blur', async () => {
     const onChange = vi.fn()
     render(

@@ -6,9 +6,12 @@
  *
  * Supported: display, pan, zoom, select (click / click-empty-to-clear),
  * move (drag a selected node), resize (drag a corner/edge handle,
- * anchor-preserving), edit text (double-click a text node; commits on
- * blur/Cmd+Enter, Escape cancels), connect an edge (drag from a selected
- * node's connect handle onto another node).
+ * anchor-preserving, OR arrow-key nudge a focused resize handle), edit
+ * text (double-click a text node; commits on blur/Cmd+Enter, Escape
+ * cancels), connect an edge (drag from a selected node's connect handle
+ * onto another node, OR Enter/Space the connect handle then Tab to a
+ * target node's connect-target control and Enter/Space it; Escape cancels
+ * an in-flight gesture from the keyboard too).
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -25,7 +28,8 @@ import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
-import { hitTest, indexNodeBoxes } from './geometry.js'
+import type { Box, ResizeHandleKind } from './geometry.js'
+import { hitTest, indexNodeBoxes, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, reduceGesture } from './gestures.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
@@ -69,6 +73,15 @@ export interface SpatialEditorProps {
 
 const DEFAULT_TEST_ID = 'spatial-editor'
 const ZOOM_WHEEL_FACTOR = 1.1
+/** Canvas-space px per arrow-key nudge on a focused resize handle; Shift multiplies by 4. */
+const RESIZE_KEYBOARD_STEP = 8
+const RESIZE_KEYBOARD_STEP_LARGE = 32
+const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
+  ArrowLeft: { dx: -1, dy: 0 },
+  ArrowRight: { dx: 1, dy: 0 },
+  ArrowUp: { dx: 0, dy: -1 },
+  ArrowDown: { dx: 0, dy: 1 },
+}
 
 function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
   const rect = root.getBoundingClientRect()
@@ -225,6 +238,56 @@ export function SpatialEditor({
     applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    // Keyboard equivalent of pointercancel: discards an in-flight
+    // resize/move/connect gesture without committing it.
+    if (e.key === 'Escape' && gestureState.kind !== 'idle') {
+      e.preventDefault()
+      applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+    }
+  }
+
+  const handleResizeHandleKeyDown = (
+    handle: ResizeHandleKind,
+    _handleBox: Box,
+    e: React.KeyboardEvent,
+  ) => {
+    if (selection === undefined) return
+    // The resize anchor is the NODE's box, not the handle's own tiny
+    // hit-box `_handleBox` describes — same reasoning as
+    // onHandlePointerDown's `box: selection.box` below.
+    const box = selection.box
+    const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
+    const delta = ARROW_KEY_DELTA[e.key]
+    if (delta === undefined) return
+    e.preventDefault()
+    const nextBox = resizeBoxByDelta(box, handle, delta.dx * step, delta.dy * step)
+    if (
+      nextBox.x === box.x &&
+      nextBox.y === box.y &&
+      nextBox.width === box.width &&
+      nextBox.height === box.height
+    ) {
+      return
+    }
+    const command: EditorCommand = {
+      kind: 'resize-node',
+      id: selection.id,
+      x: nextBox.x,
+      y: nextBox.y,
+      width: nextBox.width,
+      height: nextBox.height,
+    }
+    onChange(applyCommand(canvasRef.current, command), command)
+  }
+
+  const handleConnectKeyDown = () => {
+    if (selection === undefined) return
+    applyResult(
+      reduceGesture(gestureState, canvas, { type: 'pointerdown-connect', nodeId: selection.id }),
+    )
+  }
+
   const handleWheel = (e: WheelEvent) => {
     const root = rootRef.current
     if (root === null) return
@@ -293,6 +356,7 @@ export function SpatialEditor({
       onPointerCancel={handlePointerCancel}
       onLostPointerCapture={handlePointerCancel}
       onDoubleClick={handleDoubleClick}
+      onKeyDown={handleKeyDown}
     >
       <div
         style={{
@@ -342,7 +406,62 @@ export function SpatialEditor({
                 }),
               )
             }}
+            onHandleKeyDown={handleResizeHandleKeyDown}
+            onConnectKeyDown={handleConnectKeyDown}
           />
+        )}
+        {gestureState.kind === 'connecting' && (
+          <svg
+            style={{
+              position: 'absolute',
+              overflow: 'visible',
+              left: 0,
+              top: 0,
+              pointerEvents: 'none',
+            }}
+          >
+            {/*
+             * Keyboard path for completing a connection: while `connecting`,
+             * every OTHER node gets a focusable target the pointer path
+             * already reaches by hit-testing on pointerup. Tab to one and
+             * press Enter/Space, matching `reducePointerUpConnecting`'s
+             * targetNodeId contract exactly (invalid targets are the
+             * fromNode itself, which is excluded below).
+             */}
+            {boxes
+              .filter((b) => b.id !== gestureState.fromNodeId)
+              .map((b) => (
+                <rect
+                  key={b.id}
+                  data-testid={`connect-target-${b.id}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Connect to node ${b.id}`}
+                  x={b.box.x}
+                  y={b.box.y}
+                  width={b.box.width}
+                  height={b.box.height}
+                  fill="transparent"
+                  style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter' && e.key !== ' ') return
+                    e.preventDefault()
+                    applyResult(
+                      reduceGesture(
+                        gestureState,
+                        canvas,
+                        {
+                          type: 'pointerup',
+                          point: { x: b.box.x, y: b.box.y },
+                          targetNodeId: b.id,
+                        },
+                        { createEdgeId: createId },
+                      ),
+                    )
+                  }}
+                />
+              ))}
+          </svg>
         )}
         {gestureState.kind === 'editing-text' &&
           selectedNode?.type === 'text' &&
