@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 interface CapabilityTeaserProps {
   label: string
   enabled: boolean
+  onAction?: () => void
 }
 
 // Daemon-only feature affordance shown while the capability is unavailable
@@ -14,18 +15,24 @@ interface CapabilityTeaserProps {
 // keyboard. The sr-only description is always rendered (not just while a
 // Radix tooltip happens to be open) so assistive tech gets it via
 // aria-describedby regardless of hover/focus timing.
-export function CapabilityTeaser({ label, enabled }: CapabilityTeaserProps) {
+export function CapabilityTeaser({ label, enabled, onAction }: CapabilityTeaserProps) {
   const descriptionId = useId()
-  const description = `Connect a local daemon (MCP) to enable ${label}`
+  // `enabled` alone is not enough to make this control interactive: without a
+  // wired onAction it would look clickable but do nothing, which reads as a
+  // broken control rather than a genuinely inert affordance.
+  const isInteractive = enabled && onAction !== undefined
+  const description = enabled
+    ? 'This feature is not yet available'
+    : `Connect a local daemon (MCP) to enable ${label}`
 
   const button = (
     <button
       type="button"
-      aria-disabled={enabled ? undefined : true}
-      aria-describedby={enabled ? undefined : descriptionId}
+      aria-disabled={isInteractive ? undefined : true}
+      aria-describedby={isInteractive ? undefined : descriptionId}
       tabIndex={0}
       onClick={(event) => {
-        if (!enabled) {
+        if (!isInteractive) {
           // aria-disabled (unlike native `disabled`) still dispatches and bubbles
           // click events, so stop it here to stay truly inert even inside a
           // clickable ancestor.
@@ -33,8 +40,7 @@ export function CapabilityTeaser({ label, enabled }: CapabilityTeaserProps) {
           event.stopPropagation()
           return
         }
-        // Daemon-mode wiring for this feature ships in a later slice; treat
-        // as a no-op affordance until then rather than a broken control.
+        onAction()
       }}
       className="rounded-md border px-3 py-1 text-xs font-medium transition-colors aria-disabled:cursor-not-allowed aria-disabled:opacity-50 hover:aria-disabled:bg-transparent hover:not-aria-disabled:bg-accent"
     >
@@ -42,7 +48,7 @@ export function CapabilityTeaser({ label, enabled }: CapabilityTeaserProps) {
     </button>
   )
 
-  if (enabled) {
+  if (isInteractive) {
     return button
   }
 
