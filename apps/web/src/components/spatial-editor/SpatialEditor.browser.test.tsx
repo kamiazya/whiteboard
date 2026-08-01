@@ -255,6 +255,60 @@ describe('SpatialEditor (browser)', () => {
     expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
   })
 
+  it('a pointerdown inside the open text editor does not discard the edit or start a move', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 40,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 40 }),
+      )
+    await editor.element().dispatchEvent(
+      new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+      }),
+    )
+
+    const textEditor = page.getByTestId('text-node-editor')
+    await textEditor.fill('edited')
+    // Placing the caret inside the already-open textarea must not bubble to
+    // the root's hit-test and hijack the gesture into a node move — that
+    // would unmount the editor and silently drop the in-progress edit.
+    await textEditor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 41,
+        button: 0,
+      }),
+    )
+
+    expect(page.getByTestId('text-node-editor').element()).toBeTruthy()
+    expect(onChange).not.toHaveBeenCalled()
+
+    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
+  })
+
   it('unmounting mid-drag does not throw and never calls onChange afterward', async () => {
     const onChange = vi.fn()
     const { unmount } = render(
