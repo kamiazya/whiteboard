@@ -23,9 +23,9 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
     expect(mcpPackage.scripts?.['build:app']).toBeUndefined()
   })
 
-  it('build runs build:server plus the MCP Apps widget copy step, nothing else', () => {
+  it('build runs build:server plus the MCP Apps widget and export font copy steps, nothing else', () => {
     expect(mcpPackage.scripts?.build).toBe(
-      'pnpm build:server && node scripts/copy-widget-into-dist.mjs',
+      'pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs',
     )
   })
 

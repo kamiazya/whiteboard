@@ -37,6 +37,10 @@ const REQUIRED_FILES = [
   // this file at runtime; a tarball missing it would 500 on resources/read
   // with no build-time signal otherwise.
   'dist/widget/canvas-viewer.html',
+  // The vendored export text-measurement font (export-font.ts /
+  // measure-text.ts). A tarball missing it would silently degrade every
+  // export to the constant-ratio fallback measurer with no build-time signal.
+  'dist/assets/fonts/Roboto/Roboto-Regular.ttf',
 ]
 
 // Deliberately does NOT include \.map$ — the packaged tarball legitimately
