@@ -5,7 +5,7 @@
 
 export type { CanvasViewerProps } from './CanvasViewer.js'
 export { CanvasViewer } from './CanvasViewer.js'
-export { VIEWER_FONT_FALLBACK_CHAIN, VIEWER_FONT_FAMILY } from './font.js'
+export { VIEWER_FONT_FAMILY } from './font.js'
 export { createBrowserMeasureText } from './measure-text.js'
 export type { CanvasViewerHandle, MountCanvasViewerOptions } from './mount.js'
 export { mountCanvasViewer, ViewerSceneError } from './mount.js'

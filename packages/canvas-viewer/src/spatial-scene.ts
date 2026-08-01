@@ -1,7 +1,6 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { CanvasColor, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import {
-  type Appearance,
   layoutMdastBlocks,
   type MeasureText,
   routeEdge,
@@ -40,17 +39,24 @@ function resolveFill(color: CanvasColor | undefined): string | undefined {
   return color.startsWith('#') ? color : PRESET_COLOR_HEX[color]
 }
 
-function shapeAppearance(node: SpatialNode): Appearance | undefined {
-  const fill = resolveFill(node.color)
-  return fill === undefined ? undefined : { fill }
-}
-
 function shapeRadius(node: SpatialNode): number | undefined {
   const extension = node['x-whiteboard']
   if (extension?.kind === 'shape' && extension.shape === 'ellipse') {
     return Math.min(node.width, node.height) / 2
   }
   return undefined
+}
+
+/** The box chrome of a spatial node: rect bbox plus the optional radius/fill it resolved to. */
+function buildShapeNode(node: SpatialNode): ShapeSceneNode {
+  const radius = shapeRadius(node)
+  const fill = resolveFill(node.color)
+  return {
+    kind: 'shape',
+    bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
+    ...(radius !== undefined ? { radius } : {}),
+    ...(fill !== undefined ? { appearance: { fill } } : {}),
+  }
 }
 
 interface Box {
@@ -64,17 +70,21 @@ function shiftBox(box: Box, dx: number, dy: number): Box {
   return { x: box.x + dx, y: box.y + dy, w: box.w, h: box.h }
 }
 
+function translateTextRun(run: TextRunNode, dx: number, dy: number): TextRunNode {
+  return { ...run, bbox: shiftBox(run.bbox, dx, dy) }
+}
+
 /** Recursively shifts every bbox (and edge path point) in a scene node by (dx, dy). */
 function translateSceneNode(node: SceneNode, dx: number, dy: number): SceneNode {
   switch (node.kind) {
     case 'textRun':
-      return { ...node, bbox: shiftBox(node.bbox, dx, dy) }
+      return translateTextRun(node, dx, dy)
     case 'heading':
     case 'paragraph':
       return {
         ...node,
         bbox: shiftBox(node.bbox, dx, dy),
-        runs: node.runs.map((run) => translateSceneNode(run, dx, dy) as TextRunNode),
+        runs: node.runs.map((run) => translateTextRun(run, dx, dy)),
       }
     case 'list':
       return {
@@ -104,7 +114,7 @@ function translateSceneNode(node: SceneNode, dx: number, dy: number): SceneNode 
           cells: row.cells.map((cell) => ({
             ...cell,
             bbox: shiftBox(cell.bbox, dx, dy),
-            runs: cell.runs.map((run) => translateSceneNode(run, dx, dy) as TextRunNode),
+            runs: cell.runs.map((run) => translateTextRun(run, dx, dy)),
           })),
         })),
       }
@@ -121,11 +131,17 @@ function translateSceneNode(node: SceneNode, dx: number, dy: number): SceneNode 
   }
 }
 
-/** A single text run placed at a fixed offset — used for file/link/group node labels. */
-function labelTextRun(text: string, dx: number, dy: number): TextRunNode {
+/** The padded top-left corner a node's content (label or laid-out markdown) starts at. */
+function contentOrigin(node: SpatialNode): { readonly x: number; readonly y: number } {
+  return { x: node.x + CONTENT_PADDING_PX, y: node.y + CONTENT_PADDING_PX }
+}
+
+/** A single text run at the node's content origin — used for file/link/group node labels. */
+function labelTextRun(text: string, node: SpatialNode): TextRunNode {
+  const origin = contentOrigin(node)
   return {
     kind: 'textRun',
-    bbox: { x: dx, y: dy, w: 0, h: CONTENT_FONT_SIZE_PX },
+    bbox: { x: origin.x, y: origin.y, w: 0, h: CONTENT_FONT_SIZE_PX },
     text,
     appearance: { fontFamily: VIEWER_FONT_FAMILY, fontSize: CONTENT_FONT_SIZE_PX },
   }
@@ -146,11 +162,10 @@ function buildTextNodeContent(
       measure,
       maxWidth: Math.max(node.width - CONTENT_PADDING_PX * 2, 0),
     })
-    return scene.nodes.map((n) =>
-      translateSceneNode(n, node.x + CONTENT_PADDING_PX, node.y + CONTENT_PADDING_PX),
-    )
+    const origin = contentOrigin(node)
+    return scene.nodes.map((n) => translateSceneNode(n, origin.x, origin.y))
   } catch {
-    return [labelTextRun(node.text, node.x + CONTENT_PADDING_PX, node.y + CONTENT_PADDING_PX)]
+    return [labelTextRun(node.text, node)]
   }
 }
 
@@ -159,13 +174,11 @@ function buildNodeContent(node: SpatialNode, measure: MeasureText): readonly Sce
     case 'text':
       return buildTextNodeContent(node, measure)
     case 'file':
-      return [labelTextRun(node.file, node.x + CONTENT_PADDING_PX, node.y + CONTENT_PADDING_PX)]
+      return [labelTextRun(node.file, node)]
     case 'link':
-      return [labelTextRun(node.url, node.x + CONTENT_PADDING_PX, node.y + CONTENT_PADDING_PX)]
+      return [labelTextRun(node.url, node)]
     case 'group':
-      return node.label
-        ? [labelTextRun(node.label, node.x + CONTENT_PADDING_PX, node.y + CONTENT_PADDING_PX)]
-        : []
+      return node.label ? [labelTextRun(node.label, node)] : []
   }
 }
 
@@ -181,13 +194,7 @@ export function buildViewerScene(canvas: SpatialCanvas, measure: MeasureText): S
   const nodes: SceneNode[] = []
 
   for (const node of canvas.nodes) {
-    const shape: ShapeSceneNode = {
-      kind: 'shape',
-      bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
-      ...(shapeRadius(node) !== undefined ? { radius: shapeRadius(node) } : {}),
-      ...(shapeAppearance(node) !== undefined ? { appearance: shapeAppearance(node) } : {}),
-    }
-    nodes.push(shape)
+    nodes.push(buildShapeNode(node))
     nodes.push(...buildNodeContent(node, measure))
   }
 

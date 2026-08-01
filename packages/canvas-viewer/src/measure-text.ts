@@ -12,6 +12,11 @@ function clampMetric(value: number): number {
 
 const EMPTY_METRICS: TextMetrics = { advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 }
 
+// Typical Latin ascent/descent split of the em box, used both when the Canvas
+// 2D metrics omit the bounding-box fields and by the no-context fallback.
+const ASCENT_RATIO = 0.8
+const DESCENT_RATIO = 0.2
+
 function measureWithContext(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -21,10 +26,12 @@ function measureWithContext(
   ctx.font = fontCss(font)
   const metrics = ctx.measureText(text)
   const ascent = clampMetric(
-    metrics.fontBoundingBoxAscent ?? metrics.actualBoundingBoxAscent ?? font.sizePx * 0.8,
+    metrics.fontBoundingBoxAscent ?? metrics.actualBoundingBoxAscent ?? font.sizePx * ASCENT_RATIO,
   )
   const descent = clampMetric(
-    metrics.fontBoundingBoxDescent ?? metrics.actualBoundingBoxDescent ?? font.sizePx * 0.2,
+    metrics.fontBoundingBoxDescent ??
+      metrics.actualBoundingBoxDescent ??
+      font.sizePx * DESCENT_RATIO,
   )
   return { advanceWidth: clampMetric(metrics.width), ascent, descent, lineGap: 0 }
 }
@@ -42,8 +49,8 @@ function fallbackMeasure(text: string, font: FontDescriptor): TextMetrics {
   if (text === '') return EMPTY_METRICS
   return {
     advanceWidth: text.length * font.sizePx * FALLBACK_CHAR_WIDTH_RATIO,
-    ascent: font.sizePx * 0.8,
-    descent: font.sizePx * 0.2,
+    ascent: font.sizePx * ASCENT_RATIO,
+    descent: font.sizePx * DESCENT_RATIO,
     lineGap: 0,
   }
 }

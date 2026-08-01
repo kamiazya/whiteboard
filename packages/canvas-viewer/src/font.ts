@@ -12,6 +12,3 @@
  * updating the other silently desyncs metrics rather than failing loudly.
  */
 export const VIEWER_FONT_FAMILY = 'Roboto'
-
-/** Fallback chain used when the primary family fails to load/measure. */
-export const VIEWER_FONT_FALLBACK_CHAIN: readonly string[] = ['sans-serif']
