@@ -48,7 +48,7 @@ function emptyBucket(): Bucket {
 //   blobs/<workspaceId>/canvas/<id>.loro         — canvas Loro snapshots
 //   blobs/<workspaceId>/versions/<id>.png        — version thumbnails
 //   <workspaceId>/files/<id>.png                 — user-uploaded files
-//   <workspaceId>/exports/<file>.excalidraw.png  — export artifacts
+//   <workspaceId>/exports/<file>.png             — export artifacts
 //   logs/                                        — daemon log files
 //   whiteboard.db / .db-wal / .db-shm            — metadata SQLite
 //   daemon.json                                   — port + token registry

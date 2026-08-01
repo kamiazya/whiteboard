@@ -499,6 +499,21 @@ try {
     assertNoLeak(`${daemon.label} stderr`, daemon.stderrBuf, [daemon.token])
   }
 
+  // The export font ships in the package and `prepack` verifies it is there,
+  // so in a packaged run the measurer must load it. The fallback path exists
+  // for a broken install and degrades silently by design — which is exactly
+  // why it needs an assertion here: an interop or packaging regression that
+  // makes the real font unloadable produces correct-looking exports with the
+  // wrong metrics, and nothing else would notice.
+  for (const daemon of daemons) {
+    if (daemon.stderrBuf.includes('constant-ratio text measurer')) {
+      throw new Error(
+        `[smoke] ${daemon.label} fell back to the constant-ratio text measurer; ` +
+          'the packaged export font failed to load',
+      )
+    }
+  }
+
   console.log('[packaged-daemon-backup-restore-smoke] OK')
 } catch (err) {
   process.exitCode = 1

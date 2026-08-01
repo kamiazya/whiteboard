@@ -127,7 +127,18 @@
     // by relative path (scripts/copy-widget-into-dist.mjs), not via a JS
     // import — the devDependency exists purely so pnpm's workspace graph
     // builds canvas-viewer before mcp-server.
-    "@kamiazya/whiteboard-canvas-viewer"
+    "@kamiazya/whiteboard-canvas-viewer",
+    // The headless export renderer moved to canvas-render + resvg, so
+    // mcp-server no longer imports @excalidraw/excalidraw at all. canvas-
+    // viewer dropped it too when it moved onto canvas-render SVG, leaving
+    // apps/web as the sole remaining consumer — and apps/web resolves it
+    // from its own package.json, not this one. So the pin here is now dead
+    // weight in the published package rather than a real runtime dep. It
+    // comes out with the rest of the Excalidraw removal: dropping a
+    // dependency from a published package deserves its own verification
+    // (tarball install, SBOM diff) rather than riding along with a renderer
+    // rewrite.
+    "@excalidraw/excalidraw"
   ],
   "ignoreBinaries": [
     // Optional local tooling probed by smoke scripts / distribution tests;

@@ -187,11 +187,16 @@ export async function main() {
   )
 
   // Best-effort: warm the headless renderer in the background so the first
-  // export_canvas call (when no browser is connected) does not pay the
-  // jsdom + canvas + resvg + woff2 startup cost. Errors are logged inside.
+  // export_canvas call does not pay the font-parse + resvg-import startup
+  // cost. Errors are logged inside; the catch below is the last-resort net.
   if (daemonMode) {
     const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
-    void prewarmHeadlessExporter()
+    prewarmHeadlessExporter().catch((err) => {
+      getLogger('server-index').warning(
+        { err: err instanceof Error ? err : new Error(String(err)) },
+        'headless exporter pre-warm failed',
+      )
+    })
   }
 
   const running = await startHttpServer({

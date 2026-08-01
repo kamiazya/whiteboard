@@ -296,9 +296,15 @@ describe('generated SBOM content regression', () => {
       'pkg:npm/jsdom@', // jsdom
       'pkg:npm/fast-check@', // fast-check core
       '%40fast-check/', // @fast-check/* scoped
-      // @excalidraw/* is intentionally NOT listed: @excalidraw/utils is a runtime
-      // dependency of the server-side headless export, so it (and its transitive
-      // @excalidraw/* deps) legitimately appear in the production SBOM.
+      // @excalidraw/utils is intentionally NOT listed here: the headless
+      // export renderer moved to canvas-render + resvg, dropping
+      // @excalidraw/utils, happy-dom, and @napi-rs/canvas as production
+      // deps. @excalidraw/excalidraw is still declared by this package and
+      // so still has an SBOM entry, but nothing here imports it any more —
+      // apps/web is its last consumer and carries its own dependency. It is
+      // dead weight in the published package and comes out with the rest of
+      // the Excalidraw removal; it is not dev-only, so it does not belong in
+      // this list either way.
       '%40stryker-mutator/', // @stryker-mutator/* mutation testing
       'pkg:npm/playwright@', // playwright core
       '%40playwright/', // @playwright/* scoped
@@ -310,15 +316,29 @@ describe('generated SBOM content regression', () => {
     }
   })
 
+  it.runIf(sbomExists)(
+    'generated SBOM contains none of the packages removed with the Excalidraw headless renderer',
+    () => {
+      const purls = loadSbomPurls()
+      // A transitive re-addition of any of these must fail this test even
+      // though none of them is in devOnlyPatterns above — they were
+      // production dependencies of the deleted Excalidraw-based renderer,
+      // not dev-only, so they need their own explicit regression check.
+      const removedPatterns = [
+        '%40excalidraw/utils', // @excalidraw/utils
+        'pkg:npm/happy-dom@',
+        '%40napi-rs/canvas', // @napi-rs/canvas
+      ]
+      for (const pattern of removedPatterns) {
+        const matches = purls.filter((p) => p.includes(pattern))
+        expect(matches, `removed package pattern "${pattern}" must not appear in SBOM`).toEqual([])
+      }
+    },
+  )
+
   it.runIf(sbomExists)('generated SBOM contains expected production packages', () => {
     const purls = loadSbomPurls()
-    const prodPatterns = [
-      'pkg:npm/hono@',
-      'pkg:npm/jose@',
-      'pkg:npm/zod@',
-      'pkg:npm/nanoid@',
-      '%40excalidraw/utils@', // runtime dep of server-side headless export
-    ]
+    const prodPatterns = ['pkg:npm/hono@', 'pkg:npm/jose@', 'pkg:npm/zod@', 'pkg:npm/nanoid@']
     for (const pattern of prodPatterns) {
       expect(
         purls.some((p) => p.includes(pattern)),

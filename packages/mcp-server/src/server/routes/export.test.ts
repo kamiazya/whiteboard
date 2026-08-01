@@ -57,6 +57,13 @@ vi.mock('../store/canvas-store.js', () => ({
   canvasExists: (workspaceId: string, slug: string) => mockCanvasExists(workspaceId, slug),
 }))
 
+// Spies on the real implementation so most tests exercise genuine random
+// suffixes, while the collision test below overrides specific calls.
+vi.mock('nanoid', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('nanoid')>()
+  return { ...actual, nanoid: vi.fn(actual.nanoid) }
+})
+
 const { createExportRouter } = await import('./export.js')
 
 function makeApp() {
@@ -320,6 +327,36 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
 
   // Nested canvas paths such as architecture/overview should create parent
   // directories recursively instead of failing with ENOENT.
+  it('never clobbers an existing default-path file when nanoid produces a collision', async () => {
+    // Force a nanoid collision on the first two calls to prove the write
+    // path retries with a new random suffix instead of silently
+    // overwriting an export that landed on the exact same generated name.
+    const { nanoid } = await import('nanoid')
+    vi.mocked(nanoid).mockReturnValueOnce('aaaaaa').mockReturnValueOnce('aaaaaa')
+
+    mockExportCanvasHeadless
+      .mockResolvedValueOnce({ png: Buffer.from('first-png'), width: 1, height: 1 })
+      .mockResolvedValueOnce({ png: Buffer.from('second-png'), width: 1, height: 1 })
+    const app = makeApp()
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
+    try {
+      const resA = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+      const bodyA = (await resA.json()) as { filePath: string }
+      const resB = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
+      const bodyB = (await resB.json()) as { filePath: string }
+
+      expect(resA.status).toBe(200)
+      expect(resB.status).toBe(200)
+      expect(bodyA.filePath).not.toBe(bodyB.filePath)
+      await expect(readFile(bodyA.filePath, 'utf-8')).resolves.toBe('first-png')
+      await expect(readFile(bodyB.filePath, 'utf-8')).resolves.toBe('second-png')
+    } finally {
+      vi.useRealTimers()
+      vi.mocked(nanoid).mockReset()
+    }
+  })
+
   it('writes nested slash-containing slugs without ENOENT', async () => {
     mockExportCanvasHeadless.mockResolvedValue({
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
