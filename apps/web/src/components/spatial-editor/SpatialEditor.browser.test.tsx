@@ -110,6 +110,151 @@ describe('SpatialEditor (browser)', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it('dragging the se resize handle grows the node, opposite corner fixed', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    // Select node "a" (canvas box 20,20-120,80) first — the resize handle
+    // only renders while a node is selected.
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 10,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 10 }),
+      )
+
+    const seHandle = page.getByTestId('resize-handle-se')
+    await seHandle.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 120,
+        clientY: 80,
+        pointerId: 11,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 150,
+        clientY: 100,
+        pointerId: 11,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 150, clientY: 100, pointerId: 11 }),
+      )
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    // se growth by (30, 20): width/height grow, x/y (the nw corner) stay fixed.
+    expect(command).toEqual({ kind: 'resize-node', id: 'a', x: 20, y: 20, width: 130, height: 80 })
+  })
+
+  it('dragging from the connect handle onto another node commits connect-nodes', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+          createId={() => 'edge-1'}
+        />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 20,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 20 }),
+      )
+
+    const connectHandle = page.getByTestId('connect-handle')
+    await connectHandle.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 130,
+        clientY: 50,
+        pointerId: 21,
+        button: 0,
+      }),
+    )
+    // Node "b" chrome rect sits at canvas (250,20)-(330,60); drop inside it.
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 280, clientY: 40, pointerId: 21 }),
+      )
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'connect-nodes', edgeId: 'edge-1', fromNode: 'a', toNode: 'b' })
+    expect(next.edges).toEqual([{ id: 'edge-1', fromNode: 'a', toNode: 'b' }])
+  })
+
+  it('double-clicking a text node opens the editor and commits the edited text on blur', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 30,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 30 }),
+      )
+    await editor.element().dispatchEvent(
+      new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+      }),
+    )
+
+    const textEditor = page.getByTestId('text-node-editor')
+    await textEditor.fill('edited')
+    ;(textEditor.element() as HTMLTextAreaElement).blur()
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
+  })
+
   it('unmounting mid-drag does not throw and never calls onChange afterward', async () => {
     const onChange = vi.fn()
     const { unmount } = render(

@@ -289,7 +289,7 @@ export function SpatialEditor({
           <SelectionOverlay
             box={selection.box}
             zoom={viewport.zoom}
-            onHandlePointerDown={(handle, box, e) => {
+            onHandlePointerDown={(handle, _handleBox, e) => {
               const root = beginOverlayGesture(e)
               if (root === null) return
               const point = screenToCanvas(clientPointToRootLocal(e, root), viewport)
@@ -299,7 +299,12 @@ export function SpatialEditor({
                   nodeId: selection.id,
                   handle,
                   point,
-                  box,
+                  // The resize anchor is the NODE's box, not the handle's own
+                  // tiny hit-box `_handleBox` describes — using the handle
+                  // box here would seed `reducePointerUpResizing`'s
+                  // anchor-preserving math from an 8px square instead of the
+                  // node, growing/shrinking from the wrong origin.
+                  box: selection.box,
                 }),
               )
             }}
