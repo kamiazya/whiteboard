@@ -119,10 +119,10 @@ export function createExportRouter() {
         return c.json(errBody, 500)
       }
 
-      const filePath = outputPath ?? defaultExportPath(workspaceId, slug)
-      // Slug may contain "/" or outputPath may point into a missing directory.
-      await mkdir(dirname(filePath), { recursive: true })
-      await writeFile(filePath, pngBuffer)
+      const filePath =
+        outputPath !== undefined
+          ? await writeExplicitOutput(outputPath, pngBuffer)
+          : await writeDefaultOutput(workspaceId, slug, pngBuffer)
       const response: ExportResponse = { filePath }
       return c.json(response)
     },
@@ -150,14 +150,54 @@ async function renderHeadless(
   return result.png
 }
 
+// A plain PNG: the headless renderer no longer embeds scene JSON, so a
+// `.excalidraw.png` suffix would falsely claim the file is re-importable as
+// a scene.
 function defaultExportPath(workspaceId: string, slug: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  // A plain PNG: the headless renderer no longer embeds scene JSON, so a
-  // `.excalidraw.png` suffix would falsely claim the file is re-importable
-  // as a scene. The millisecond timestamp alone is not unique: two exports
-  // issued fast enough to land in the same millisecond would collide and
-  // the second write would silently clobber the first. The random suffix
-  // guarantees uniqueness regardless of call timing.
   const fileName = `${slug}-${timestamp}-${nanoid(6)}.png`
   return join(getDataDir(), workspaceId, 'exports', fileName)
+}
+
+// The millisecond timestamp + nanoid(6) suffix is only probabilistically
+// unique, not guaranteed — two exports racing in the same millisecond could
+// still collide. `wx` makes the create fail loudly (EEXIST) instead of
+// silently clobbering an earlier export, and a bounded retry with a fresh
+// random suffix turns that rare collision into a transparent retry rather
+// than a user-visible failure.
+const MAX_DEFAULT_PATH_ATTEMPTS = 5
+
+async function writeDefaultOutput(
+  workspaceId: string,
+  slug: string,
+  pngBuffer: Buffer,
+): Promise<string> {
+  let lastFilePath: string | undefined
+  for (let attempt = 0; attempt < MAX_DEFAULT_PATH_ATTEMPTS; attempt++) {
+    const filePath = defaultExportPath(workspaceId, slug)
+    lastFilePath = filePath
+    await mkdir(dirname(filePath), { recursive: true })
+    try {
+      await writeFile(filePath, pngBuffer, { flag: 'wx' })
+      return filePath
+    } catch (err) {
+      if (!isEexist(err)) throw err
+    }
+  }
+  throw new Error(
+    `failed to generate a unique export filename after ${MAX_DEFAULT_PATH_ATTEMPTS} attempts (last tried: ${lastFilePath})`,
+  )
+}
+
+// outputPath's existence was already validated up front (validateOutputPath,
+// honoring `overwrite`), so a plain write is correct here — no `wx` retry
+// needed for a caller-chosen path.
+async function writeExplicitOutput(outputPath: string, pngBuffer: Buffer): Promise<string> {
+  await mkdir(dirname(outputPath), { recursive: true })
+  await writeFile(outputPath, pngBuffer)
+  return outputPath
+}
+
+function isEexist(err: unknown): boolean {
+  return err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'EEXIST'
 }
