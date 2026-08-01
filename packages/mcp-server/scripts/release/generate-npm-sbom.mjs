@@ -29,15 +29,17 @@
 
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdirSync, readFileSync, rmSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { buildSbomSidecar, computeSbomInputFingerprint } from './sbom-fingerprint.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
 const WORKSPACE_ROOT = resolve(PACKAGE_ROOT, '..', '..')
 const OUT_DIR = join(PACKAGE_ROOT, '_artifacts')
 const SBOM_FILE = join(OUT_DIR, 'npm-sbom.cdx.json')
+const SBOM_SIDECAR_FILE = join(OUT_DIR, 'npm-sbom.inputs.json')
 const TMP_DIR = join(OUT_DIR, 'sbom-npm-tmp')
 
 function fail(step, hint) {
@@ -153,6 +155,13 @@ if (sbomBytes.length === 0) {
 }
 
 const sha512Hex = createHash('sha512').update(sbomBytes).digest('hex')
+
+// Write the staleness sidecar alongside the SBOM. sbom-policy.test.ts compares
+// this fingerprint against a freshly computed one to tell a stale artifact
+// apart from a real dependency-policy regression.
+const inputFingerprint = computeSbomInputFingerprint(WORKSPACE_ROOT)
+const sidecar = buildSbomSidecar(inputFingerprint, sbomBytes)
+writeFileSync(SBOM_SIDECAR_FILE, `${JSON.stringify(sidecar, null, 2)}\n`)
 
 // Extract tool version from SBOM metadata — schema-level field, not dep content.
 let toolVersion = 'unknown'

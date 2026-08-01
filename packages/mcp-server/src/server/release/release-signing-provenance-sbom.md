@@ -145,6 +145,39 @@ publish or signing gate:
 - `packages/mcp-server/_artifacts/` is ignored because SBOM files are generated
   release artifacts, not source.
 
+## Generated-artifact staleness contract
+
+A generated SBOM on a developer's machine can predate a dependency change
+(e.g. a package removal), and a bare "does the file exist" guard cannot tell
+that apart from a real dependency-policy regression — it just reports the
+policy assertion as failed, which reads as a false regression. To close that
+gap, `generate:sbom:npm` writes a sidecar,
+`packages/mcp-server/_artifacts/npm-sbom.inputs.json`, alongside the SBOM:
+
+- A SHA-256 digest of each input the SBOM was derived from (`pnpm-lock.yaml`
+  and `packages/mcp-server/package.json`).
+- A SHA-512 digest of the SBOM file itself, so a hand-edited or corrupted SBOM
+  is also caught.
+
+`sbom-policy.test.ts` recomputes the current fingerprint and compares it
+against the sidecar (`sbom-artifact-state.ts`'s `evaluateSbomArtifactState`)
+before running any content-policy assertion:
+
+- **current**: fingerprints match — the content-policy assertions run.
+- **stale**: fingerprints (or the SBOM checksum) don't match — exactly one
+  test fails with an actionable message naming the fix command
+  (`pnpm --filter @kamiazya/whiteboard-mcp generate:sbom:npm`); the
+  content-policy assertions are skipped rather than reporting a false
+  dependency-policy violation.
+- **absent**: no SBOM file at all — an explicitly skipped test, never a
+  silent no-op. This is safe because the `sbom-npm` job in `.github/workflows/ci.yml`
+  regenerates the SBOM and runs this exact test file on every PR/push, so the
+  policy is still enforced in CI even when a local run skips it.
+
+Hashing (`scripts/release/sbom-fingerprint.mjs`) is subprocess-free and reads
+only the two declared input files, so the staleness check adds negligible
+cost to the pre-push gate.
+
 ## What remains before publish gates become runnable matrix entries
 
 - Operator runbook maintenance for the consolidated workflow shape: protected GitHub
