@@ -9,6 +9,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { getLogger } from '../log.js'
@@ -36,6 +37,24 @@ export type HeadlessCanvasExportOptions = Pick<
   'padding' | 'scale' | 'frameId' | 'minFontPx' | 'theme'
 >
 
+// `doc.getMovableList(name)` CREATES the root container as a side effect of
+// the call alone (even with no explicit write or commit) — it is not a
+// read-only probe. `getShallowValue()` reflects only containers that
+// already exist, so checking for the 'elements' key there — then reading
+// the existing container's length via `getContainerById` — detects legacy
+// data without ever mutating a normal (non-legacy) canvas's doc.
+function hasLegacyElements(doc: LoroDoc): boolean {
+  const containerId = doc.getShallowValue().elements
+  if (typeof containerId !== 'string') return false
+  const container = doc.getContainerById(containerId)
+  return container !== undefined && 'length' in container && container.length > 0
+}
+
+// Test-only: exercises the non-mutating probe directly against a bare
+// LoroDoc, isolated from canvas-store's own (separate, pre-existing)
+// legacy-list-migration probe on the load path.
+export const _hasLegacyElementsForTests = hasLegacyElements
+
 // Shared by both format entry points below: reads the persisted doc and
 // derives its spatial canvas. A doc whose spatial layer is empty but which
 // still carries a legacy Excalidraw `elements` list is not an error — it is
@@ -44,7 +63,7 @@ export type HeadlessCanvasExportOptions = Pick<
 async function readCanvas(workspaceId: string, slug: string): Promise<SpatialCanvas> {
   const doc = await getDoc(workspaceId, slug)
   const canvas = readSpatialCanvas(doc)
-  if (canvas.nodes.length === 0 && doc.getMovableList('elements').length > 0) {
+  if (canvas.nodes.length === 0 && hasLegacyElements(doc)) {
     log.warning(
       { workspaceId, slug },
       'canvas has no spatial nodes but carries legacy Excalidraw elements; exporting an empty canvas',
