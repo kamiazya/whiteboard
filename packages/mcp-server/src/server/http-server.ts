@@ -198,6 +198,13 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   server.on('error', (err: NodeJS.ErrnoException) => {
     const log = getLogger('http-server')
     log.error({ port: options.port, code: err.code ?? 'unknown' }, 'http listener failed to bind')
+    // A real process.exit() would terminate the process outright, making
+    // these timers moot. But `exitProcess` is an injectable seam (tests pass
+    // a no-op stub), so without an explicit stop here the 15-min idle timer
+    // and the GC sweeper's interval would keep firing in whatever process
+    // hosts this call for the seam's lifetime.
+    idleTimer.stop()
+    void fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
     ;(options.exitProcess ?? process.exit)(1)
   })
   server.on('connection', (socket) => {

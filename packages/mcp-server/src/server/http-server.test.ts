@@ -457,9 +457,17 @@ describe('startHttpServer bind-failure handling', () => {
     const exitProcess = (code: number) => {
       exitCalls.push(code)
     }
+    let fileGcSweeperStopCalls = 0
+    const fileGcSweeperFactory = () => ({
+      start: () => {},
+      tick: async () => {},
+      stop: async () => {
+        fileGcSweeperStopCalls += 1
+      },
+    })
 
     try {
-      await startHttpServer({ port, host: '127.0.0.1', exitProcess })
+      await startHttpServer({ port, host: '127.0.0.1', exitProcess, fileGcSweeperFactory })
       // Give the async bind failure's 'error' event a chance to fire.
       await new Promise((resolve) => setTimeout(resolve, 200))
 
@@ -472,6 +480,12 @@ describe('startHttpServer bind-failure handling', () => {
       expect(serialized).not.toMatch(/at .*:\d+:\d+/)
       expect(serialized).not.toContain('/Users/')
       expect(serialized).not.toContain('/home/')
+
+      // Because `exitProcess` is a test stub rather than the real
+      // process.exit(), the bind-failure handler must stop the idle timer
+      // and GC sweeper itself -- otherwise they leak as dangling timers in
+      // this test worker process for the real 15-min/24h durations.
+      expect(fileGcSweeperStopCalls).toBe(1)
     } finally {
       capture.restore()
       await new Promise<void>((resolve) => occupier.close(() => resolve()))
