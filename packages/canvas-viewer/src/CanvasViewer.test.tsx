@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { render, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ViewerScene } from './scene.js'
 
@@ -63,5 +63,15 @@ describe('CanvasViewer', () => {
     const { container } = render(<CanvasViewer scene={scene} testId="hidden-chrome" hideChrome />)
 
     expect(container.querySelector('style')?.textContent).toContain('hidden-chrome')
+  })
+
+  it('falls back to the default testId when given a value outside the safe identifier charset', () => {
+    const maliciousTestId = '"}</style><script>alert(1)</script>'
+    const { container } = render(<CanvasViewer scene={scene} testId={maliciousTestId} hideChrome />)
+
+    expect(within(container).getByTestId('canvas-viewer')).toBeTruthy()
+    const styleText = container.querySelector('style')?.textContent ?? ''
+    expect(styleText).not.toContain(maliciousTestId)
+    expect(styleText).toContain('canvas-viewer')
   })
 })
