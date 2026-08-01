@@ -7,7 +7,7 @@ Runtime environment variables and sandbox quirks.
 | Variable | Purpose | Default |
 |---|---|---|
 | `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
-| `WHITEBOARD_CHROME_PATH` | Override the Chromium binary used for browser automation and `export_canvas({ format: "png" })`. | unset (Playwright-managed Chromium) |
+| `WHITEBOARD_CHROME_PATH` | Override the Chromium binary used for browser automation (`viewport_set` and other browser-dependent operations). `export_canvas` (including `png`) is rendered headlessly and never touches this binary. | unset (Playwright-managed Chromium) |
 | `WHITEBOARD_DEV` | When set to `1`, the dev-launch wrapper enables source-tree watching so a `tsx watch` change restarts the daemon in place. | unset |
 | `WHITEBOARD_MCP_AUTHORIZATION_SERVER(S)` | Authorization Server URL exposed in MCP Protected Resource Metadata, in preparation for remote OAuth 2.1. | unset |
 | `WHITEBOARD_MCP_RESOURCE` | Canonical MCP resource URL exposed in metadata. If unset, `/mcp` is derived from the incoming request URL. | unset |
