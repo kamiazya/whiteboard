@@ -83,6 +83,17 @@ describe('headless-renderer', () => {
     }
   })
 
+  it('degrades a degenerate scale to an unscaled render instead of throwing', async () => {
+    const { renderSpatialCanvasToPng } = await importRenderer()
+    const canvas = rectCanvas()
+    const base = await renderSpatialCanvasToPng(canvas, { scale: 1 })
+    for (const scale of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const degenerate = await renderSpatialCanvasToPng(canvas, { scale })
+      expect(degenerate.width).toBe(base.width)
+      expect(degenerate.height).toBe(base.height)
+    }
+  })
+
   it('renders a canvas to real SVG markup with the document envelope', async () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const result = await renderSpatialCanvasToSvg(rectCanvas())

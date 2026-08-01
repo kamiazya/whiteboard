@@ -104,10 +104,17 @@ async function buildExporter(): Promise<HeadlessExporter> {
     async render(canvas, options) {
       const svg = buildSvg(canvas, options, measure)
       const scale = options.scale ?? 1
+      // A non-finite, zero, or negative scale is not a valid zoom factor for
+      // resvg (it throws on a zero/negative target size) — degrade to an
+      // unscaled render rather than propagating a crash from a bad request.
+      const fitTo =
+        Number.isFinite(scale) && scale > 0 && scale !== 1
+          ? ({ mode: 'zoom', value: scale } as const)
+          : ({ mode: 'original' } as const)
       const resvg = new Resvg(svg, {
         background: themeBackground(options),
         font: fontOption,
-        fitTo: scale === 1 ? { mode: 'original' } : { mode: 'zoom', value: scale },
+        fitTo,
       })
       const png = resvg.render()
       return {
