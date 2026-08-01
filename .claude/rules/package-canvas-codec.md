@@ -27,6 +27,16 @@ Runtime dependencies: `@kamiazya/whiteboard-canvas-model` (workspace), `zod`, an
 `loro-crdt`. Enforced by `tools/arch-lint` (`arch-lint-node` vitest project) — both the banned-
 construct scan and the package.json dependency-direction check run against this package's `src/`.
 
+## Consumers
+
+Besides `canvas-workspace` and `canvas-viewer`, `apps/web` depends on this package directly (its
+markdown-editor preview pane calls `parseMarkdownBody` to feed canvas-render's
+`layoutMdastBlocks`/`renderSceneToSvg`, the same parse path `canvas-viewer` and `mcp-server` use
+for spatial text nodes and export — kept as one renderer instead of a second markdown-to-HTML
+fallback). `apps/web` is a composition root, so this is an allowed forward dependency per
+`architecture-map.md`; it is not source-scanned by `tools/arch-lint` (only the reverse-direction
+guard applies to composition roots), so this note is the boundary's only documentation.
+
 ## Conventions
 
 - Every exported type is `z.infer`-derived (`OkfMarkdownDocument`, `OkfMarkdownFrontmatter`) or
