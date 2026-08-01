@@ -42,4 +42,30 @@ describe('checkDependencyDirection', () => {
     })
     expect(violations).toHaveLength(0)
   })
+
+  it('fails a shared-layer package depending on the mcp-server composition root', () => {
+    const violations = checkDependencyDirection({
+      name: '@kamiazya/whiteboard-canvas-model',
+      dependencies: { '@kamiazya/whiteboard-mcp': 'workspace:*' },
+    })
+    expect(violations).toEqual([
+      {
+        packageName: '@kamiazya/whiteboard-canvas-model',
+        dependencyName: '@kamiazya/whiteboard-mcp',
+      },
+    ])
+  })
+
+  it('passes canvas-viewer (no internal deps, only third-party UI libs)', () => {
+    const violations = checkDependencyDirection({
+      name: '@kamiazya/whiteboard-canvas-viewer',
+      dependencies: {
+        '@excalidraw/excalidraw': 'catalog:',
+        react: 'catalog:',
+        'react-dom': 'catalog:',
+        zod: 'catalog:',
+      },
+    })
+    expect(violations).toHaveLength(0)
+  })
 })

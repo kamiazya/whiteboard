@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
-import { packagesAllowedToImportLoroCrdt } from './architecture-map.js'
+import { exemptedBoundaryViolationKinds } from './architecture-map.js'
 import { checkDependencyDirection } from './direction-check.js'
 import { scanSourceForBoundaryViolations } from './scanner.js'
 
@@ -15,6 +15,11 @@ const SHARED_LAYER_PACKAGES = [
   'packages/canvas-ports',
   'packages/canvas-workspace',
   'packages/server-core',
+  // Browser-runtime UI package, not a "shared" model/codec/... layer package
+  // in the architecture-map.md sense, but scanned the same way — see its
+  // `exemptBoundaryViolationKinds` entry in architecture-map.ts for why DOM
+  // globals and one build-time `Buffer` use don't trip the scan.
+  'packages/canvas-viewer',
 ]
 
 function listTsFiles(dir: string): string[] {
@@ -37,11 +42,11 @@ describe('shared-layer boundary lint (real source coverage)', () => {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
       )
-      // loro-crdt is a legitimate import ONLY for packages architecture-map.ts
-      // explicitly lists as allowed to declare it — never an implicit "it's a
-      // dependency, so allow it" heuristic, so an unmapped package that adds
-      // loro-crdt still fails loudly via `allowed-deps-check`.
-      const loroCrdtIsExempt = packagesAllowedToImportLoroCrdt().includes(manifest.name)
+      // A violation kind is a legitimate exemption ONLY for packages
+      // architecture-map.ts explicitly lists it for — never an implicit "it's
+      // used here, so allow it" heuristic, so an unmapped package still fails
+      // loudly.
+      const exemptKinds = exemptedBoundaryViolationKinds(manifest.name)
 
       const srcDir = join(REPO_ROOT, packageDir, 'src')
       const files = listTsFiles(srcDir)
@@ -49,9 +54,7 @@ describe('shared-layer boundary lint (real source coverage)', () => {
 
       for (const file of files) {
         const allViolations = scanSourceForBoundaryViolations(file, readFileSync(file, 'utf-8'))
-        const violations = loroCrdtIsExempt
-          ? allViolations.filter((v) => v.kind !== 'loro-crdt-import')
-          : allViolations
+        const violations = allViolations.filter((v) => !exemptKinds.has(v.kind))
         expect(violations, `${file}: ${JSON.stringify(violations)}`).toHaveLength(0)
       }
     })
