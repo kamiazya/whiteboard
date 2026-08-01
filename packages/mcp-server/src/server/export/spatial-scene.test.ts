@@ -28,6 +28,7 @@ vi.mock('@kamiazya/whiteboard-canvas-codec', async (importOriginal) => {
 })
 
 const { composeSpatialScene } = await import('./spatial-scene.js')
+const { NODE_CORNER_RADIUS_PX } = await import('./spatial-scene-appearance.js')
 
 const measure = createFakeMeasure()
 
@@ -61,6 +62,9 @@ describe('composeSpatialScene', () => {
 
     const shape = scene.nodes.find((n): n is ShapeSceneNode => n.kind === 'shape')
     expect(shape?.bbox).toEqual({ x: 100, y: 50, w: 200, h: 100 })
+    // Otherwise the radius is only exercised incidentally through the SVG
+    // string, which no test greps for `rx=` — dropping it would go unnoticed.
+    expect(shape?.radius).toBe(NODE_CORNER_RADIUS_PX)
 
     const heading = scene.nodes.find((n): n is HeadingBlockNode => n.kind === 'heading')
     expect(heading).toBeDefined()
