@@ -45,6 +45,9 @@ export function SelectionOverlay({
       data-testid="selection-overlay"
       style={{ position: 'absolute', overflow: 'visible', left: 0, top: 0, pointerEvents: 'none' }}
     >
+      {/* Named rather than aria-hidden: this subtree holds the focusable resize
+          and connect controls, so hiding it would undo their keyboard path. */}
+      <title>Selection controls</title>
       {/* Purely visual chrome — the interactive controls below carry their own role/label. */}
       <rect
         aria-hidden="true"

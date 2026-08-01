@@ -420,6 +420,10 @@ export function SpatialEditor({
               pointerEvents: 'none',
             }}
           >
+            {/* Named rather than aria-hidden for the same reason as the
+                selection overlay: this subtree holds the focusable connection
+                targets, so hiding it would remove the keyboard path. */}
+            <title>Connection targets</title>
             {/*
              * Keyboard path for completing a connection: while `connecting`,
              * every OTHER node gets a focusable target the pointer path
