@@ -10,7 +10,9 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const FONT_RELATIVE_SEGMENTS = ['assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf']
+// Also consumed by verify-export-font-dist.mjs (prefixed with 'dist') so the
+// packed-asset gate and this copy step cannot drift apart on the path.
+export const FONT_RELATIVE_SEGMENTS = ['assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf']
 export const SRC_FILE = resolve(SCRIPT_DIR, '..', ...FONT_RELATIVE_SEGMENTS)
 export const DEST_FILE = resolve(SCRIPT_DIR, '..', 'dist', ...FONT_RELATIVE_SEGMENTS)
 

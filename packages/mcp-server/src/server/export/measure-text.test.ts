@@ -1,4 +1,4 @@
-import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
+import type { FontDescriptor, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import {
@@ -18,12 +18,7 @@ function font(sizePx: number, overrides: Partial<FontDescriptor> = {}): FontDesc
   }
 }
 
-function expectFiniteNonNegativeMetrics(metrics: {
-  advanceWidth: number
-  ascent: number
-  descent: number
-  lineGap: number
-}) {
+function expectFiniteNonNegativeMetrics(metrics: TextMetrics) {
   for (const value of Object.values(metrics)) {
     expect(Number.isFinite(value)).toBe(true)
     expect(value).toBeGreaterThanOrEqual(0)
@@ -68,13 +63,9 @@ describe('createOpentypeMeasureText', () => {
     const base = measure(text, font(16))
     const doubled = measure(text, font(32))
 
-    const tolerance = 0.01
     expect(doubled.advanceWidth).toBeCloseTo(base.advanceWidth * 2, 1)
     expect(doubled.ascent).toBeCloseTo(base.ascent * 2, 1)
     expect(doubled.descent).toBeCloseTo(base.descent * 2, 1)
-    expect(Math.abs(doubled.advanceWidth - base.advanceWidth * 2)).toBeLessThan(
-      tolerance * base.advanceWidth * 2 + 0.5,
-    )
   })
 
   it('scales metrics linearly at a non-integer ratio (16px -> 24px)', async () => {

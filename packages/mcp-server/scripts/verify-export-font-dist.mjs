@@ -6,12 +6,12 @@
 import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { FONT_RELATIVE_SEGMENTS } from './copy-export-font-into-dist.mjs'
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const FONT_RELATIVE_SEGMENTS = ['dist', 'assets', 'fonts', 'Roboto', 'Roboto-Regular.ttf']
 
 export function findMissingExportFont(packageRoot = PACKAGE_ROOT) {
-  const fontPath = resolve(packageRoot, ...FONT_RELATIVE_SEGMENTS)
+  const fontPath = resolve(packageRoot, 'dist', ...FONT_RELATIVE_SEGMENTS)
   return existsSync(fontPath) ? null : fontPath
 }
 
