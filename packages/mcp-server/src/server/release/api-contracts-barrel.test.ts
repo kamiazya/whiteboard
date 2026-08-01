@@ -1,12 +1,12 @@
 // Guard against scope creep on the `./api-contracts` public npm subpath.
 //
-// The barrel at src/shared/api-contracts/index.ts is deliberately narrow
-// (branches + canvas + reconnect only). web-app-boundary.test.ts scans every file under
-// src/shared/api-contracts/ for browser-safety, but it does not — and
-// structurally cannot — assert what the barrel itself re-exports. Without
-// this test, someone could add `export * from './runtime.js'` (or
-// canvas-runtime / daemon-doctor / export / libraries) to the
-// barrel and widen the public semver surface without any test noticing.
+// The barrel at src/shared/api-contracts/index.ts is deliberately narrow.
+// web-app-boundary.test.ts scans every file under src/shared/api-contracts/
+// for browser-safety, but it does not — and structurally cannot — assert
+// what the barrel itself re-exports. Without this test, someone could add
+// `export * from './canvas-runtime.js'` (or daemon-doctor / export /
+// libraries) to the barrel and widen the public semver surface without any
+// test noticing.
 
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -23,9 +23,9 @@ function reExportSpecifiers(source: string): string[] {
 }
 
 describe('api-contracts barrel scope', () => {
-  it('re-exports exactly branches, canvas, and reconnect — no other api-contracts modules', () => {
+  it('re-exports exactly the declared public surface — no other api-contracts modules', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
-    expect(specifiers).toEqual(['./branches.js', './canvas.js', './reconnect.js'])
+    expect(specifiers).toEqual(['./branches.js', './canvas.js', './reconnect.js', './runtime.js'])
   })
 })
