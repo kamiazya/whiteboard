@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest'
 import type {
   ListBlockNode,
   ListItemNode,
@@ -7,7 +8,6 @@ import type {
 } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { translateScene } from './translate-scene.js'
-import { describe, expect, it } from 'vitest'
 
 function paragraphScene(): Scene {
   return {
