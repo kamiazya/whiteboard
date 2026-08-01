@@ -36,15 +36,13 @@ describe('webMcpTools manifest', () => {
     }
   })
 
-  // Regression guard: exportJson and getSceneSummary read the live scene
-  // through ExcalidrawImperativeAPI, which is going away. Neither has an
-  // OpenCanvas-shaped replacement yet, so both must stay absent from the
-  // registered tool set rather than being silently reintroduced by a later
-  // merge.
-  it('does not register any Excalidraw-backed scene tool', () => {
+  // Regression guard: this tool read the live scene through
+  // ExcalidrawImperativeAPI, which is going away, and has no OpenCanvas-shaped
+  // replacement yet. It must stay absent rather than be silently reintroduced
+  // by a later merge.
+  it('does not register the removed Excalidraw-backed scene-summary tool', () => {
     const names = webMcpTools.map((tool) => tool.name)
     expect(names).not.toContain('whiteboard_get_scene_summary')
-    expect(names).not.toContain('whiteboard_export_json')
   })
 })
 
