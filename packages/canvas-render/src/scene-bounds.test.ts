@@ -102,6 +102,37 @@ describe('sceneBounds', () => {
     expect(bounds.h).toBeGreaterThanOrEqual(510)
   })
 
+  it('widens the bounds when a blockquote child lies outside its parent bbox', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'blockquote',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          children: [{ kind: 'thematicBreak', bbox: { x: 500, y: 500, w: 10, h: 10 } }],
+        },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+    expect(bounds.w).toBeGreaterThanOrEqual(510)
+    expect(bounds.h).toBeGreaterThanOrEqual(510)
+  })
+
+  it('widens the bounds when an embedResolved child lies outside its parent bbox', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'embedResolved',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          canvasId: 'other-canvas',
+          children: [{ kind: 'thematicBreak', bbox: { x: 500, y: 500, w: 10, h: 10 } }],
+        },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+    expect(bounds.w).toBeGreaterThanOrEqual(510)
+    expect(bounds.h).toBeGreaterThanOrEqual(510)
+  })
+
   it('does not overflow the stack on deep nesting (iterative walk)', () => {
     const DEPTH = 10000
     let node: Scene['nodes'][number] = { kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 1, h: 1 } }
