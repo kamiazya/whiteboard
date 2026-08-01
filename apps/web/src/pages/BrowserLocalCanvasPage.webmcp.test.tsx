@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MemoryStore } from '../lib/browser-local-store.js'
 import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
+import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { CanvasSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalCanvasPage } from './BrowserLocalCanvasPage.js'
@@ -86,7 +87,7 @@ describe('BrowserLocalCanvasPage WebMCP wiring', () => {
     delete (document as { modelContext?: unknown }).modelContext
   })
 
-  it('registers both read-only tools, keyed on the loaded canvas id, when document.modelContext is present', async () => {
+  it('registers every read-only tool, keyed on the loaded canvas id, when document.modelContext is present', async () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
@@ -102,10 +103,7 @@ describe('BrowserLocalCanvasPage WebMCP wiring', () => {
       await Promise.resolve()
     })
 
-    expect(fake.liveNames().sort()).toEqual([
-      'whiteboard_get_app_context',
-      'whiteboard_get_scene_summary',
-    ])
+    expect(fake.liveNames().sort()).toEqual(webMcpTools.map((tool) => tool.name).sort())
   })
 
   it('registers no tools when capabilities.webMcpEnabled is persisted as false', async () => {

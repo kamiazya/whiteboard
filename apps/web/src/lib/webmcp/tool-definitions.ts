@@ -1,15 +1,7 @@
 import type { z } from 'zod'
 import type { WhiteboardCommands } from '../commands/index.js'
-import type {
-  getAppContextInputSchema,
-  getAppContextResultSchema,
-  getSceneSummaryInputSchema,
-  getSceneSummaryResultSchema,
-} from '../commands/types.js'
+import type { getAppContextInputSchema, getAppContextResultSchema } from '../commands/types.js'
 import getAppContextJsonSchema from './tool-result-schemas/get-app-context.schema.json' with {
-  type: 'json',
-}
-import getSceneSummaryJsonSchema from './tool-result-schemas/get-scene-summary.schema.json' with {
   type: 'json',
 }
 
@@ -65,17 +57,6 @@ const whiteboardGetAppContextTool: WebMcpToolDefinition<typeof getAppContextResu
     commands.getAppContext(input as z.infer<typeof getAppContextInputSchema>),
 }
 
-const whiteboardGetSceneSummaryTool: WebMcpToolDefinition<typeof getSceneSummaryResultSchema> = {
-  name: 'whiteboard_get_scene_summary',
-  description:
-    'Read-only: reports element counts, selection count, and viewport position for the current canvas. Never returns full scene content (element geometry, text, or files).',
-  inputSchema: emptyObjectJsonSchema,
-  resultSchema: getSceneSummaryJsonSchema,
-  readOnlyHint: true,
-  execute: (commands, input) =>
-    commands.getSceneSummary(input as z.infer<typeof getSceneSummaryInputSchema>),
-}
-
 /**
  * The full set of tools `useBrowserToolRegistry` registers. Widened to the
  * default `WebMcpToolDefinition<z.ZodTypeAny>` deliberately: this array is a
@@ -84,7 +65,4 @@ const whiteboardGetSceneSummaryTool: WebMcpToolDefinition<typeof getSceneSummary
  * `z.ZodTypeAny` without an existential wrapper. Each definition above still
  * carries its own precise `Result` type at the point it is declared.
  */
-export const webMcpTools: readonly WebMcpToolDefinition[] = [
-  whiteboardGetAppContextTool,
-  whiteboardGetSceneSummaryTool,
-]
+export const webMcpTools: readonly WebMcpToolDefinition[] = [whiteboardGetAppContextTool]

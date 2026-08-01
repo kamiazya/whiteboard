@@ -6,6 +6,7 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
+import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
@@ -98,7 +99,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
     delete (document as { modelContext?: unknown }).modelContext
   })
 
-  it('registers both read-only tools, keyed on workspaceId/slug, once a daemon canvas loads', async () => {
+  it('registers every read-only tool, keyed on workspaceId/slug, once a daemon canvas loads', async () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
@@ -116,10 +117,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
       await Promise.resolve()
     })
 
-    expect(fake.liveNames().sort()).toEqual([
-      'whiteboard_get_app_context',
-      'whiteboard_get_scene_summary',
-    ])
+    expect(fake.liveNames().sort()).toEqual(webMcpTools.map((tool) => tool.name).sort())
   })
 
   it('attempts no registration while the workspace resolves to zero canvases (canvas === null)', async () => {

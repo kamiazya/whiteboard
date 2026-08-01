@@ -45,7 +45,6 @@ export type CommandErrorCode =
   | 'no-canvas'
   | 'invalid-input'
   | 'export-failed'
-  | 'summary-failed'
   | 'invalid-provider-state'
 
 // Every command failure surfaces as this typed error rather than a raw
@@ -65,32 +64,6 @@ export class CommandError extends Error {
     this.cause = options?.cause
   }
 }
-
-// getSceneSummary takes no options today; parsed anyway so it matches the
-// same "schema.parse(input) at the boundary" shape as every other command.
-export const getSceneSummaryInputSchema = z.object({}).strict()
-export type GetSceneSummaryInput = z.infer<typeof getSceneSummaryInputSchema>
-
-// Deliberately NOT the full scene: this is the exfiltration-surface boundary
-// for a WebMCP tool result — counts and viewport only, never element
-// geometry, text content, or file/image data. isDeleted elements are
-// excluded from both elementCount and typeCounts so a tombstoned element a
-// user thinks is gone never shows up in a tool-facing summary.
-export const getSceneSummaryResultSchema = z
-  .object({
-    elementCount: z.number().int().nonnegative(),
-    selectedCount: z.number().int().nonnegative(),
-    typeCounts: z.record(z.string(), z.number().int().nonnegative()),
-    viewport: z
-      .object({
-        scrollX: z.number().finite(),
-        scrollY: z.number().finite(),
-        zoom: z.number().finite(),
-      })
-      .strict(),
-  })
-  .strict()
-export type GetSceneSummaryResult = z.infer<typeof getSceneSummaryResultSchema>
 
 // getAppContext takes no options today; parsed anyway for the same reason
 // as the other command input schemas.
@@ -143,6 +116,5 @@ export type GetAppContextResult = z.infer<typeof getAppContextResultSchema>
 
 export interface WhiteboardCommands {
   exportJson(input?: ExportJsonInput): Promise<ExportJsonResult>
-  getSceneSummary(input?: GetSceneSummaryInput): Promise<GetSceneSummaryResult>
   getAppContext(input?: GetAppContextInput): Promise<GetAppContextResult>
 }
