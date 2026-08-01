@@ -12,7 +12,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | workspace, render, hono, zod, loro-crdt |
 | `packages/canvas-viewer` | Read-only OpenCanvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
-| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls | workspace, render + port impls |
+| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor | workspace, model, codec, render, canvas-viewer + port impls |
 
 Absolute rules:
 
