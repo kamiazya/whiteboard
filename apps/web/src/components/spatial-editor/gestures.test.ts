@@ -99,6 +99,18 @@ describe('gesture reducer', () => {
     expect(result.command).toEqual({ kind: 'move-node', id: 'a', x: 30, y: 25 })
   })
 
+  it('pointerdown on a missing node id is a no-op (no selection, stays idle)', () => {
+    const c = canvas()
+    const result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown',
+      nodeId: 'missing',
+      point: { x: 50, y: 30 },
+    })
+    expect(result.state.kind).toBe('idle')
+    expect(result.selectedId).toBeUndefined()
+    expect(result.command).toBeUndefined()
+  })
+
   it('is total over arbitrary pointerup/pointercancel without a prior pointerdown', () => {
     const c = canvas()
     const state = createIdleState()
@@ -203,6 +215,21 @@ describe('resize gesture', () => {
       height: 0,
     })
     expect(result.state.kind).toBe('idle')
+  })
+})
+
+describe('resize handle miss', () => {
+  it('pointerdown-handle on a missing node id is a no-op', () => {
+    const c = canvas()
+    const result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-handle',
+      nodeId: 'missing',
+      handle: 'se',
+      point: { x: 10, y: 10 },
+      box: { x: 10, y: 10, width: 100, height: 50 },
+    })
+    expect(result.state.kind).toBe('idle')
+    expect(result.command).toBeUndefined()
   })
 })
 

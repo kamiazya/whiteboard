@@ -64,6 +64,17 @@ describe('applyCommand', () => {
     expect(next.edges).toEqual([{ id: 'e1', fromNode: 'a', toNode: 'b' }])
   })
 
+  it('connect-nodes rejects a missing endpoint as a no-op', () => {
+    const canvas = baseCanvas()
+    const next = applyCommand(canvas, {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'a',
+      toNode: 'missing',
+    })
+    expect(next).toBe(canvas)
+  })
+
   it('connect-nodes rejects self-connection as a no-op', () => {
     const canvas = baseCanvas()
     const next = applyCommand(canvas, {

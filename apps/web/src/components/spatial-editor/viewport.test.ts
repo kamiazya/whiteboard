@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { canvasToScreen, clampZoom, screenToCanvas, zoomAt } from './viewport.js'
+import {
+  canvasToScreen,
+  clampZoom,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  panBy,
+  screenToCanvas,
+  viewportTransformCss,
+  zoomAt,
+} from './viewport.js'
 
 describe('screenToCanvas / canvasToScreen', () => {
   it('round-trips a screen point through an arbitrary viewport', () => {
@@ -31,5 +40,31 @@ describe('clampZoom', () => {
     expect(clampZoom(1000)).toBeLessThanOrEqual(10)
     expect(clampZoom(Number.NaN)).toBe(1)
     expect(clampZoom(Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(10)
+  })
+
+  it('clamps exactly at the documented MIN_ZOOM/MAX_ZOOM bounds', () => {
+    expect(clampZoom(MIN_ZOOM - 1)).toBe(MIN_ZOOM)
+    expect(clampZoom(MAX_ZOOM + 1)).toBe(MAX_ZOOM)
+  })
+})
+
+describe('panBy', () => {
+  it('moves the viewport origin opposite the screen-space delta, scaled by zoom', () => {
+    const vp = { x: 5, y: -3, zoom: 2 }
+    const next = panBy(vp, { x: 10, y: 20 })
+    expect(next).toEqual({ x: 0, y: -13, zoom: 2 })
+  })
+
+  it('never mutates its input viewport', () => {
+    const vp = { x: 0, y: 0, zoom: 1 }
+    const snapshot = { ...vp }
+    panBy(vp, { x: 5, y: 5 })
+    expect(vp).toEqual(snapshot)
+  })
+})
+
+describe('viewportTransformCss', () => {
+  it('renders a scale+translate CSS transform from the viewport', () => {
+    expect(viewportTransformCss({ x: 10, y: -5, zoom: 2 })).toBe('scale(2) translate(-10px, 5px)')
   })
 })
