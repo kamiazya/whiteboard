@@ -3,7 +3,7 @@
  * unmount-mid-gesture are exactly what jsdom cannot exercise faithfully.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -307,6 +307,80 @@ describe('SpatialEditor (browser)', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
     expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
+  })
+
+  it('ctrl+wheel zooms in, anchored under the cursor', async () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    const transformed = container.querySelector<HTMLDivElement>(
+      '[data-testid="spatial-editor"] > div',
+    )
+    expect(transformed).not.toBeNull()
+    expect(transformed?.style.transform).toBe('scale(1) translate(0px, 0px)')
+
+    await editor.element().dispatchEvent(
+      new WheelEvent('wheel', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+        deltaX: 0,
+        deltaY: -100,
+        ctrlKey: true,
+      }),
+    )
+
+    // deltaY < 0 -> zoom IN by ZOOM_WHEEL_FACTOR (1.1), anchored so the
+    // canvas point under the cursor stays fixed on screen. The browser
+    // re-serializes the inline `transform` string with its own float
+    // precision, so parse it instead of comparing byte-for-byte.
+    await waitFor(() => {
+      const match = transformed?.style.transform.match(
+        /^scale\(([\d.]+)\) translate\((-?[\d.]+)px, (-?[\d.]+)px\)$/,
+      )
+      expect(match).not.toBeNull()
+      const [, scale, tx, ty] = match as unknown as [string, string, string, string]
+      expect(Number(scale)).toBeCloseTo(1.1, 5)
+      expect(Number(tx)).toBeCloseTo(-9.090909090909092, 5)
+      expect(Number(ty)).toBeCloseTo(-9.090909090909092, 5)
+    })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('a plain wheel pans the content opposite to the scroll delta', async () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    const transformed = container.querySelector<HTMLDivElement>(
+      '[data-testid="spatial-editor"] > div',
+    )
+    expect(transformed).not.toBeNull()
+
+    await editor.element().dispatchEvent(
+      new WheelEvent('wheel', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+        deltaX: 20,
+        deltaY: 30,
+      }),
+    )
+
+    // A scroll wheel moves the CONTENT opposite to a drag of the same sign,
+    // so a positive delta pans the canvas-space origin in the positive
+    // direction (translate becomes more negative).
+    await waitFor(() => {
+      expect(transformed?.style.transform).toBe('scale(1) translate(-20px, -30px)')
+    })
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('unmounting mid-drag does not throw and never calls onChange afterward', async () => {
