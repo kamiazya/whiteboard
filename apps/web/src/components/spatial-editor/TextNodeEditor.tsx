@@ -17,9 +17,17 @@ export interface TextNodeEditorProps {
   readonly initialText: string
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
+  /** Fires on every keystroke so a caller can track the in-progress value (e.g. to commit it if a gesture interrupts the edit). */
+  readonly onChange?: (text: string) => void
 }
 
-export function TextNodeEditor({ box, initialText, onCommit, onCancel }: TextNodeEditorProps) {
+export function TextNodeEditor({
+  box,
+  initialText,
+  onCommit,
+  onCancel,
+  onChange,
+}: TextNodeEditorProps) {
   const [value, setValue] = useState(initialText)
   const mountedRef = useRef(true)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -51,7 +59,10 @@ export function TextNodeEditor({ box, initialText, onCommit, onCancel }: TextNod
         resize: 'none',
         boxSizing: 'border-box',
       }}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => {
+        setValue(e.target.value)
+        onChange?.(e.target.value)
+      }}
       onPointerDown={(e) => e.stopPropagation()}
       onBlur={commit}
       onKeyDown={(e) => {

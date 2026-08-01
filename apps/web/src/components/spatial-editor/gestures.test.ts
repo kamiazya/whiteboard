@@ -251,20 +251,49 @@ describe('text-edit gesture', () => {
     const result = reduceGesture(createIdleState(), c, {
       type: 'start-text-edit',
       nodeId: 'a',
+      text: 'hi',
     })
-    expect(result.state).toEqual({ kind: 'editing-text', nodeId: 'a' })
+    expect(result.state).toEqual({ kind: 'editing-text', nodeId: 'a', pendingText: 'hi' })
     expect(result.command).toBeUndefined()
   })
 
   it('commit-text-edit emits set-text and returns to idle', () => {
     const c = canvas()
-    const editing = reduceGesture(createIdleState(), c, { type: 'start-text-edit', nodeId: 'a' })
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
     const result = reduceGesture(editing.state, c, {
       type: 'commit-text-edit',
       text: 'updated',
     })
     expect(result.command).toEqual({ kind: 'set-text', id: 'a', text: 'updated' })
     expect(result.state.kind).toBe('idle')
+  })
+
+  it('a pointerdown on a different node while a text edit is open commits the pending text', () => {
+    const c: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'hi' },
+        { id: 'b', type: 'text', x: 200, y: 10, width: 100, height: 50, text: 'bye' },
+      ],
+      edges: [],
+    }
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const updated = reduceGesture(editing.state, c, { type: 'update-text-edit', text: 'edited' })
+    const result = reduceGesture(updated.state, c, {
+      type: 'pointerdown',
+      nodeId: 'b',
+      point: { x: 250, y: 30 },
+    })
+    expect(result.command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
+    expect(result.state.kind).toBe('moving')
+    expect(result.selectedId).toBe('b')
   })
 
   it('commit-text-edit outside editing-text state is a no-op', () => {
@@ -279,7 +308,11 @@ describe('text-edit gesture', () => {
 
   it('cancel-text-edit discards the edit and returns to idle with no command', () => {
     const c = canvas()
-    const editing = reduceGesture(createIdleState(), c, { type: 'start-text-edit', nodeId: 'a' })
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
     const result = reduceGesture(editing.state, c, { type: 'cancel-text-edit' })
     expect(result.state.kind).toBe('idle')
     expect(result.command).toBeUndefined()
@@ -287,7 +320,11 @@ describe('text-edit gesture', () => {
 
   it('aborts an in-flight text edit when the node type changes mid-edit (canvas-replaced)', () => {
     const c = canvas()
-    const editing = reduceGesture(createIdleState(), c, { type: 'start-text-edit', nodeId: 'a' })
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
     const replaced: SpatialCanvas = {
       nodes: [{ id: 'a', type: 'file', x: 10, y: 10, width: 100, height: 50, file: 'x.png' }],
       edges: [],

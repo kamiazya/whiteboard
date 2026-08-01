@@ -240,7 +240,13 @@ export function SpatialEditor({
 
   const handleDoubleClick = () => {
     if (selectedNode?.type !== 'text') return
-    setGestureState({ kind: 'editing-text', nodeId: selectedNode.id })
+    applyResult(
+      reduceGesture(gestureState, canvas, {
+        type: 'start-text-edit',
+        nodeId: selectedNode.id,
+        text: selectedNode.text,
+      }),
+    )
   }
 
   return (
@@ -330,6 +336,9 @@ export function SpatialEditor({
               }}
               onCancel={() => {
                 applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
+              }}
+              onChange={(text) => {
+                applyResult(reduceGesture(gestureState, canvas, { type: 'update-text-edit', text }))
               }}
             />
           )}

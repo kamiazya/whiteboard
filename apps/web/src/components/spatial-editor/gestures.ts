@@ -16,6 +16,15 @@
  * field, so "the same document, different content" and "an unrelated
  * document" are indistinguishable here — both are handled by the same
  * per-node existence/type check above.
+ *
+ * Open-text-edit-vs-other-gesture policy: `editing-text` carries the
+ * in-progress `pendingText` (kept current via `update-text-edit`, one per
+ * keystroke). A `pointerdown`/`pointerdown-handle`/`pointerdown-connect`
+ * arriving while a text edit is open COMMITS that pending text — emits
+ * `set-text` — and then transitions into the requested gesture, matching
+ * every text editor's click-away-commits behavior (and this component's
+ * own blur-commits convention in `TextNodeEditor`). Escape
+ * (`cancel-text-edit`) remains the only explicit discard.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { EditorCommand } from './commands.js'
@@ -48,6 +57,7 @@ interface ConnectSnapshot {
 interface EditTextSnapshot {
   readonly kind: 'editing-text'
   readonly nodeId: string
+  readonly pendingText: string
 }
 
 interface IdleSnapshot {
@@ -80,7 +90,8 @@ export type GestureEvent =
   | { readonly type: 'pointerup'; readonly point: Point; readonly targetNodeId?: string }
   | { readonly type: 'pointercancel' }
   | { readonly type: 'canvas-replaced'; readonly canvas: SpatialCanvas }
-  | { readonly type: 'start-text-edit'; readonly nodeId: string }
+  | { readonly type: 'start-text-edit'; readonly nodeId: string; readonly text: string }
+  | { readonly type: 'update-text-edit'; readonly text: string }
   | { readonly type: 'commit-text-edit'; readonly text: string }
   | { readonly type: 'cancel-text-edit' }
 
@@ -109,6 +120,21 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
       return findNode(canvas, state.fromNodeId) !== undefined
     case 'editing-text':
       return findNode(canvas, state.nodeId)?.type === 'text'
+  }
+}
+
+/**
+ * When `prevState` is an open text edit, folds its `pendingText` into
+ * `result` as a `set-text` command — see the open-text-edit-vs-other-gesture
+ * policy documented at the top of this file. `result.command` is always
+ * `undefined` for the three pointerdown variants this is applied to, so
+ * there is nothing to merge with, only to add.
+ */
+function withPendingTextCommit(prevState: GestureState, result: GestureResult): GestureResult {
+  if (prevState.kind !== 'editing-text') return result
+  return {
+    ...result,
+    command: { kind: 'set-text', id: prevState.nodeId, text: prevState.pendingText },
   }
 }
 
@@ -261,13 +287,18 @@ export function reduceGesture(
     case 'pointerdown-empty':
       return { state: { kind: 'idle' }, selectedId: null }
     case 'pointerdown':
-      return reducePointerDown(event, canvas)
+      return withPendingTextCommit(state, reducePointerDown(event, canvas))
     case 'pointerdown-handle':
-      return reducePointerDownHandle(event, canvas)
+      return withPendingTextCommit(state, reducePointerDownHandle(event, canvas))
     case 'pointerdown-connect':
-      return { state: { kind: 'connecting', fromNodeId: event.nodeId } }
+      return withPendingTextCommit(state, {
+        state: { kind: 'connecting', fromNodeId: event.nodeId },
+      })
     case 'start-text-edit':
-      return { state: { kind: 'editing-text', nodeId: event.nodeId } }
+      return { state: { kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text } }
+    case 'update-text-edit':
+      if (state.kind !== 'editing-text') return { state }
+      return { state: { ...state, pendingText: event.text } }
     case 'commit-text-edit':
       if (state.kind !== 'editing-text') return idle
       return {
