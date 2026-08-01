@@ -31,25 +31,19 @@ export const MIN_SCENE_EXTENT_PX = 1
  */
 const FALLBACK_BOUNDS: BoundingBox = { x: 0, y: 0, w: 1, h: 1 }
 
-interface MutableExtent {
-  minX: number
-  minY: number
-  maxX: number
-  maxY: number
+interface Extent {
+  readonly minX: number
+  readonly minY: number
+  readonly maxX: number
+  readonly maxY: number
 }
 
 function isFinitePoint(x: number, y: number): boolean {
   return Number.isFinite(x) && Number.isFinite(y)
 }
 
-/** Widens `extent` in place-conceptually — returns a new extent, never mutates the input. */
-function widen(
-  extent: MutableExtent | null,
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-): MutableExtent {
+/** Returns a new extent covering `extent` plus the given edge pair; a null extent seeds from the pair. */
+function widen(extent: Extent | null, x0: number, y0: number, x1: number, y1: number): Extent {
   if (!extent) return { minX: x0, minY: y0, maxX: x1, maxY: y1 }
   return {
     minX: Math.min(extent.minX, x0),
@@ -108,7 +102,7 @@ function childrenOf(node: WalkNode): readonly WalkNode[] | undefined {
  * FALLBACK_BOUNDS.
  */
 export function sceneBounds(scene: Scene): BoundingBox {
-  let extent: MutableExtent | null = null
+  let extent: Extent | null = null
   const stack: WalkNode[] = [...scene.nodes]
 
   while (stack.length > 0) {

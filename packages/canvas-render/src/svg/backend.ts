@@ -110,7 +110,9 @@ export interface SvgDocumentOptions {
   readonly background?: string
 }
 
-function hasEnvelopeOptions(options: SvgDocumentOptions | undefined): boolean {
+function hasEnvelopeOptions(
+  options: SvgDocumentOptions | undefined,
+): options is SvgDocumentOptions {
   if (!options) return false
   return (
     options.width !== undefined ||
@@ -171,13 +173,12 @@ export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): st
     return `<svg xmlns="http://www.w3.org/2000/svg">${body}</svg>`
   }
 
-  const opts = options!
-  const viewBox = resolveViewBox(scene, opts)
-  const width = resolveDimension(opts.width, viewBox.w)
-  const height = resolveDimension(opts.height, viewBox.h)
+  const viewBox = resolveViewBox(scene, options)
+  const width = resolveDimension(options.width, viewBox.w)
+  const height = resolveDimension(options.height, viewBox.h)
   const viewBoxAttr = `${formatCoord(viewBox.x)} ${formatCoord(viewBox.y)} ${formatCoord(viewBox.w)} ${formatCoord(viewBox.h)}`
   const background =
-    opts.background !== undefined ? renderBackgroundRect(viewBox, opts.background) : ''
+    options.background !== undefined ? renderBackgroundRect(viewBox, options.background) : ''
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${formatCoord(width)}" height="${formatCoord(height)}" viewBox="${viewBoxAttr}">${background}${body}</svg>`
 }
