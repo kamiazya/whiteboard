@@ -28,7 +28,7 @@ vi.mock('@kamiazya/whiteboard-canvas-codec', async (importOriginal) => {
 })
 
 const { composeSpatialScene } = await import('./spatial-scene.js')
-const { NODE_CORNER_RADIUS_PX } = await import('./spatial-scene-appearance.js')
+const { NODE_CORNER_RADIUS_PX, NODE_PADDING_PX } = await import('./spatial-scene-appearance.js')
 
 const measure = createFakeMeasure()
 
@@ -152,6 +152,10 @@ describe('composeSpatialScene', () => {
         (n): n is TextRunNode => n.kind === 'textRun' && n.text === '__THROW__',
       )
       expect(badLabel).toBeDefined()
+      // The fallback run must land inside its own node box. Asserting only
+      // its text would miss an offset applied twice, which puts the literal
+      // text a full node-origin away from the box it belongs to.
+      expect(badLabel?.bbox.x).toBe(400 + NODE_PADDING_PX)
       expect(capture.records.some((r) => r.level === 'warning')).toBe(true)
     } finally {
       capture.restore()
@@ -181,6 +185,10 @@ describe('composeSpatialScene', () => {
     const scene = composeSpatialScene(canvas([node]), { measure })
     const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun')
     expect(label?.text).toBe('notes/a.md#heading')
+    // Locks the other side of the placement invariant: a label run is
+    // content-origin-relative and is placed by its caller, exactly like
+    // layoutMdastBlocks output. Both paths must agree or one of them drifts.
+    expect(label?.bbox.x).toBe(node.x + NODE_PADDING_PX)
   })
 
   it('renders a link node as chrome plus a label containing the url', () => {

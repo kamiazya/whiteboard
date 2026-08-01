@@ -71,7 +71,13 @@ function chromeShape(node: SpatialNode): ShapeSceneNode {
   }
 }
 
-function labelRun(node: SpatialNode, text: string, measure: MeasureText): TextRunNode {
+/**
+ * A label run in CONTENT-ORIGIN-RELATIVE coordinates, matching what
+ * `layoutMdastBlocks` produces. Placement is always the caller's job, via
+ * `placeInNode`. An absolute-coordinate variant here would be applied
+ * twice wherever its output also flows through the translation step.
+ */
+function labelRun(text: string, measure: MeasureText): TextRunNode {
   const font = {
     family: LABEL_APPEARANCE.fontFamily ?? 'sans-serif',
     fallbackChain: [],
@@ -83,14 +89,19 @@ function labelRun(node: SpatialNode, text: string, measure: MeasureText): TextRu
   return {
     kind: 'textRun',
     bbox: {
-      x: node.x + NODE_PADDING_PX,
-      y: node.y + NODE_PADDING_PX + metrics.ascent,
+      x: 0,
+      y: metrics.ascent,
       w: metrics.advanceWidth,
       h: metrics.ascent + metrics.descent,
     },
     text,
     appearance: { ...LABEL_APPEARANCE, fontSize: LABEL_FONT_SIZE_PX },
   }
+}
+
+/** Moves a node's content from its own origin to the node's padded top-left. */
+function placeInNode(node: SpatialNode, content: Scene): readonly SceneNode[] {
+  return translateScene(content, node.x + NODE_PADDING_PX, node.y + NODE_PADDING_PX).nodes
 }
 
 /**
@@ -115,11 +126,10 @@ function composeTextNode(
       'text node body failed to parse as markdown; falling back to literal text',
     )
     body = {
-      nodes: [labelRun(node, node.text, measure)],
+      nodes: [labelRun(node.text, measure)],
     }
   }
-  const placed = translateScene(body, node.x + NODE_PADDING_PX, node.y + NODE_PADDING_PX)
-  return [chromeShape(node), ...placed.nodes]
+  return [chromeShape(node), ...placeInNode(node, body)]
 }
 
 /** The readable label of a non-text node, or `undefined` when it has none. */
@@ -145,7 +155,9 @@ function composeNode(node: SpatialNode, measure: MeasureText): readonly SceneNod
     case 'group': {
       const chrome = chromeShape(node)
       const label = labelOf(node)
-      return label === undefined ? [chrome] : [chrome, labelRun(node, label, measure)]
+      return label === undefined
+        ? [chrome]
+        : [chrome, ...placeInNode(node, { nodes: [labelRun(label, measure)] })]
     }
     default: {
       // Defensive branch: `SpatialNode` is a closed discriminated union, so
