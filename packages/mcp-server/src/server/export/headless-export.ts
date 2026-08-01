@@ -8,6 +8,8 @@
 // file loader took an explicit dataDir; tying both ends to the same
 // canonical path closes that mismatch.
 
+import type { z } from 'zod'
+import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
 import { applyMinFontPx } from '../../shared/min-font-px.js'
 import { embedExcalidrawScene } from '../../shared/png-embed-scene.js'
 import { getDoc } from '../store/doc-cache.js'
@@ -19,17 +21,16 @@ import {
 } from './headless-renderer.js'
 import { loadCanvasFiles } from './load-canvas-files.js'
 
-export interface HeadlessCanvasExportOptions {
-  padding?: number
-  scale?: number
-  frameId?: string
-  // Mirror the browser path: text elements with `fontSize < minFontPx`
-  // are cloned with their fontSize bumped before rendering, so a label
-  // that is readable in the canvas tab stays readable in a no-browser
-  // export at the same scale.
-  minFontPx?: number
-  theme?: 'light' | 'dark'
-}
+// Derived from exportRequestSchema (zod-schema-discipline) instead of
+// hand-written, so a wire-field rename/removal in the schema is caught at
+// compile time here rather than silently drifting — this is the exact
+// subset of exportRequestSchema that routes/export.ts forwards into the
+// headless renderer; outputPath/overwrite are route-level concerns, not
+// renderer options.
+export type HeadlessCanvasExportOptions = Pick<
+  z.infer<typeof exportRequestSchema>,
+  'padding' | 'scale' | 'frameId' | 'minFontPx' | 'theme'
+>
 
 // Shared by both format entry points below: reads the persisted doc, resolves
 // parent-follow custom fields into absolute x/y, drops tombstones, and loads
