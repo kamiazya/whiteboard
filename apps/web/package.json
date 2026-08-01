@@ -21,6 +21,9 @@
   },
   "dependencies": {
     "@excalidraw/excalidraw": "catalog:",
+    "@kamiazya/whiteboard-canvas-codec": "workspace:*",
+    "@kamiazya/whiteboard-canvas-model": "workspace:*",
+    "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-mcp": "workspace:*",
     "@radix-ui/react-alert-dialog": "^1.1.20",
