@@ -112,7 +112,11 @@ export function createExportRouter() {
       try {
         pngBuffer = await renderHeadless(workspaceId, slug, body)
       } catch (err) {
-        return c.json(toErrorBody(err), errorStatus(err))
+        const errBody: ExportErrorBody = {
+          error: 'headless_export_failed',
+          message: err instanceof Error ? err.message : String(err),
+        }
+        return c.json(errBody, 500)
       }
 
       const filePath = outputPath ?? defaultExportPath(workspaceId, slug)
@@ -125,31 +129,25 @@ export function createExportRouter() {
   )
 
   return app
+}
 
-  // --- helpers --------------------------------------------------------------
-
-  async function renderHeadless(
-    workspaceId: string,
-    slug: string,
-    body: z.infer<typeof exportRequestSchema>,
-  ): Promise<Buffer> {
-    try {
-      const result = await exportCanvasHeadless({
-        workspaceId,
-        slug,
-        options: {
-          padding: body.padding,
-          scale: body.scale,
-          frameId: body.frameId,
-          minFontPx: body.minFontPx,
-          theme: body.theme,
-        },
-      })
-      return result.png
-    } catch (err) {
-      throw new ExportError('headless_export_failed', err)
-    }
-  }
+async function renderHeadless(
+  workspaceId: string,
+  slug: string,
+  body: z.infer<typeof exportRequestSchema>,
+): Promise<Buffer> {
+  const result = await exportCanvasHeadless({
+    workspaceId,
+    slug,
+    options: {
+      padding: body.padding,
+      scale: body.scale,
+      frameId: body.frameId,
+      minFontPx: body.minFontPx,
+      theme: body.theme,
+    },
+  })
+  return result.png
 }
 
 function defaultExportPath(workspaceId: string, slug: string): string {
@@ -162,26 +160,4 @@ function defaultExportPath(workspaceId: string, slug: string): string {
   // uniqueness regardless of call timing.
   const fileName = `${slug}-${timestamp}-${nanoid(6)}.excalidraw.png`
   return join(getDataDir(), workspaceId, 'exports', fileName)
-}
-
-class ExportError extends Error {
-  constructor(
-    public readonly kind: 'headless_export_failed',
-    cause: unknown,
-  ) {
-    const inner = cause instanceof Error ? cause.message : String(cause)
-    super(inner)
-    this.name = 'ExportError'
-  }
-}
-
-function toErrorBody(err: unknown): ExportErrorBody {
-  if (err instanceof ExportError) {
-    return { error: err.kind, message: err.message }
-  }
-  return { error: 'internal', message: err instanceof Error ? err.message : String(err) }
-}
-
-function errorStatus(_err: unknown): 500 {
-  return 500
 }
