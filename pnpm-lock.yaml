@@ -536,6 +536,12 @@ importers:
       '@fast-check/vitest':
         specifier: ^0.4.1
         version: 0.4.1(vitest@4.1.10)
+      '@kamiazya/whiteboard-canvas-codec':
+        specifier: workspace:*
+        version: link:../canvas-codec
+      '@kamiazya/whiteboard-canvas-model':
+        specifier: workspace:*
+        version: link:../canvas-model
       '@kamiazya/whiteboard-canvas-ports':
         specifier: workspace:*
         version: link:../canvas-ports
