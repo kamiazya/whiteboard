@@ -18,30 +18,29 @@ const sourceModules = import.meta.glob('./**/*.ts', {
   import: 'default',
 }) as Record<string, string>
 
-const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
-  { name: 'happy-dom (static import)', pattern: /from\s+['"]happy-dom['"]/ },
-  { name: 'happy-dom (dynamic import)', pattern: /import\(\s*['"]happy-dom['"]\s*\)/ },
-  { name: '@excalidraw/utils (static import)', pattern: /from\s+['"]@excalidraw\/utils['"]/ },
-  {
-    name: '@excalidraw/utils (dynamic import)',
-    pattern: /import\(\s*['"]@excalidraw\/utils['"]\s*\)/,
-  },
-  { name: '@napi-rs/canvas (static import)', pattern: /from\s+['"]@napi-rs\/canvas['"]/ },
-  {
-    name: '@napi-rs/canvas (dynamic import)',
-    pattern: /import\(\s*['"]@napi-rs\/canvas['"]\s*\)/,
-  },
-  { name: 'wawoff2 (static import)', pattern: /from\s+['"]wawoff2['"]/ },
-  { name: 'wawoff2 (dynamic import)', pattern: /import\(\s*['"]wawoff2['"]\s*\)/ },
-]
+const FORBIDDEN_MODULES = ['happy-dom', '@excalidraw/utils', '@napi-rs/canvas', 'wawoff2'] as const
 
-function isProductionSource(path: string): boolean {
-  return !path.includes('.test.')
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// Both import forms per module: `from 'x'` and `import('x')`.
+const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = FORBIDDEN_MODULES.flatMap(
+  (moduleName) => {
+    const quoted = `['"]${escapeRegExp(moduleName)}['"]`
+    return [
+      { name: `${moduleName} (static import)`, pattern: new RegExp(`from\\s+${quoted}`) },
+      {
+        name: `${moduleName} (dynamic import)`,
+        pattern: new RegExp(`import\\(\\s*${quoted}\\s*\\)`),
+      },
+    ]
+  },
+)
+
 describe('src/server/export import guard', () => {
-  const productionSources = Object.entries(sourceModules).filter(([path]) =>
-    isProductionSource(path),
+  const productionSources = Object.entries(sourceModules).filter(
+    ([path]) => !path.includes('.test.'),
   )
 
   it('scans at least one production source file', () => {

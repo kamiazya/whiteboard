@@ -7,6 +7,7 @@
 // separate file loader took an explicit dataDir; tying both ends to the
 // same canonical path closes that mismatch.
 
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { readSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import type { z } from 'zod'
 import type { exportRequestSchema } from '../../shared/api-contracts/export.js'
@@ -40,7 +41,7 @@ export type HeadlessCanvasExportOptions = Pick<
 // still carries a legacy Excalidraw `elements` list is not an error — it is
 // pre-migration data — so it degrades to a valid empty export with a
 // named warning rather than rendering nothing with no explanation.
-async function readCanvas(workspaceId: string, slug: string) {
+async function readCanvas(workspaceId: string, slug: string): Promise<SpatialCanvas> {
   const doc = await getDoc(workspaceId, slug)
   const canvas = readSpatialCanvas(doc)
   if (canvas.nodes.length === 0 && doc.getMovableList('elements').length > 0) {
@@ -52,11 +53,15 @@ async function readCanvas(workspaceId: string, slug: string) {
   return canvas
 }
 
-export async function exportCanvasHeadless(args: {
+interface HeadlessCanvasExportArgs {
   workspaceId: string
   slug: string
   options?: HeadlessCanvasExportOptions
-}): Promise<HeadlessExportResult> {
+}
+
+export async function exportCanvasHeadless(
+  args: HeadlessCanvasExportArgs,
+): Promise<HeadlessExportResult> {
   const canvas = await readCanvas(args.workspaceId, args.slug)
   return renderSpatialCanvasToPng(canvas, {
     padding: args.options?.padding,
@@ -65,11 +70,9 @@ export async function exportCanvasHeadless(args: {
   })
 }
 
-export async function exportCanvasHeadlessSvg(args: {
-  workspaceId: string
-  slug: string
-  options?: HeadlessCanvasExportOptions
-}): Promise<HeadlessSvgExportResult> {
+export async function exportCanvasHeadlessSvg(
+  args: HeadlessCanvasExportArgs,
+): Promise<HeadlessSvgExportResult> {
   const canvas = await readCanvas(args.workspaceId, args.slug)
   return renderSpatialCanvasToSvg(canvas, {
     padding: args.options?.padding,

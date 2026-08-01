@@ -71,7 +71,11 @@ function themeBackground(options: HeadlessExportOptions): string {
   return options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND
 }
 
-function buildSvg(canvas: SpatialCanvas, options: HeadlessExportOptions, measure: MeasureText) {
+function buildSvg(
+  canvas: SpatialCanvas,
+  options: HeadlessExportOptions,
+  measure: MeasureText,
+): string {
   const scene = composeSpatialScene(canvas, { measure })
   return renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
@@ -99,13 +103,11 @@ async function buildExporter(): Promise<HeadlessExporter> {
   return {
     async render(canvas, options) {
       const svg = buildSvg(canvas, options, measure)
+      const scale = options.scale ?? 1
       const resvg = new Resvg(svg, {
         background: themeBackground(options),
         font: fontOption,
-        fitTo:
-          options.scale !== undefined && options.scale !== 1
-            ? { mode: 'zoom', value: options.scale }
-            : { mode: 'original' },
+        fitTo: scale === 1 ? { mode: 'original' } : { mode: 'zoom', value: scale },
       })
       const png = resvg.render()
       return {
