@@ -8,6 +8,7 @@ export interface DirectionViolation {
 export interface PackageManifest {
   readonly name: string
   readonly dependencies?: Readonly<Record<string, string>>
+  readonly devDependencies?: Readonly<Record<string, string>>
 }
 
 /**
