@@ -230,6 +230,12 @@ function reducePointerUpResizing(
   const nextHeight = startBox.height + sign.y * dy
   const nextX = sign.x === -1 ? startBox.x + dx : startBox.x
   const nextY = sign.y === -1 ? startBox.y + dy : startBox.y
+  const isUnchanged =
+    nextX === startBox.x &&
+    nextY === startBox.y &&
+    nextWidth === startBox.width &&
+    nextHeight === startBox.height
+  if (isUnchanged) return idle
   return {
     state: { kind: 'idle' },
     command: {

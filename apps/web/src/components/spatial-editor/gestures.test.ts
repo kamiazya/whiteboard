@@ -161,6 +161,23 @@ describe('resize gesture', () => {
     expect(result.state.kind).toBe('idle')
   })
 
+  it('a zero-delta resize handle drag emits no command', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-handle',
+      nodeId: 'a',
+      handle: 'se',
+      point: { x: 110, y: 60 },
+      box: { x: 10, y: 10, width: 100, height: 50 },
+    })
+    result = reduceGesture(result.state, c, {
+      type: 'pointerup',
+      point: { x: 110, y: 60 },
+    })
+    expect(result.command).toBeUndefined()
+    expect(result.state.kind).toBe('idle')
+  })
+
   it('overshooting a min-side handle past the box floor-clamps size and keeps the opposite corner fixed', () => {
     const c = canvas()
     let result = reduceGesture(createIdleState(), c, {
