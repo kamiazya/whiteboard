@@ -188,15 +188,30 @@ export async function main() {
 
   // Best-effort: warm the headless renderer in the background so the first
   // export_canvas call does not pay the font-parse + resvg-import startup
-  // cost. Errors are logged inside; the catch below is the last-resort net.
+  // cost.
+  //
+  // The dynamic import is inside the guard, not just the call. A module
+  // resolution or load failure here rejects before the daemon binds, and an
+  // unguarded `await import(...)` would take the whole process down — the
+  // opposite of best-effort, and for a warm-up the daemon does not need in
+  // order to serve. Only the failure class is logged: an ERR_MODULE_NOT_FOUND
+  // message carries absolute paths, and the distribution smoke asserts the
+  // daemon never leaks one to stderr.
   if (daemonMode) {
-    const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
-    prewarmHeadlessExporter().catch((err) => {
+    try {
+      const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
+      prewarmHeadlessExporter().catch((err) => {
+        getLogger('server-index').warning(
+          { reason: err instanceof Error ? err.name : 'unknown' },
+          'headless exporter pre-warm failed',
+        )
+      })
+    } catch (err) {
       getLogger('server-index').warning(
-        { err: err instanceof Error ? err : new Error(String(err)) },
-        'headless exporter pre-warm failed',
+        { reason: err instanceof Error ? err.name : 'unknown' },
+        'headless exporter module failed to load; export will initialize on first use',
       )
-    })
+    }
   }
 
   const running = await startHttpServer({
