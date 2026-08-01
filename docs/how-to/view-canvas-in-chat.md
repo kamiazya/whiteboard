@@ -7,13 +7,13 @@ no need to switch to a browser tab to see what the agent drew.
 
 ## What you get
 
-- A read-only, pan/zoom/select view of the current canvas scene, rendered inline.
-- The same self-contained Excalidraw viewer bundle used for
+- A read-only view of the current canvas scene, rendered inline.
+- The same self-contained viewer bundle used for
   [self-contained HTML export](../explanation/) — no daemon credentials, tokens, or
   base URLs are ever passed into the widget. The widget only ever receives a scene
-  snapshot — the canvas elements plus any embedded image binaries — nothing else.
+  snapshot — nothing else.
 - Zero external network access: the widget bundle is fully self-contained (fonts and
-  all Excalidraw assets are inlined), so the client's CSP for the view can stay at its
+  every other asset are inlined), so the client's CSP for the view can stay at its
   strictest default.
 
 ## Refreshing the view
@@ -74,7 +74,7 @@ Ask your agent to view the canvas, or call the tool directly:
 }
 ```
 
-The result's `structuredContent` is `{ canvasId, scene: { elements } }` — the same
+The result's `structuredContent` carries `{ canvasId, scene }`, where `scene` is a
 shape the canvas-viewer package's `parseViewerScene` accepts, so a supporting client
 renders it immediately. On a client without MCP Apps support, you see this JSON as
 the tool result instead of an inline view.

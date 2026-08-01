@@ -1,7 +1,7 @@
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
-import { excalidrawJsonDocSchema } from '@kamiazya/whiteboard-canvas-viewer/scene'
 import { z } from 'zod'
 import type { ProviderState } from '../provider.js'
+import { excalidrawJsonDocSchema } from './excalidraw-json.js'
 
 // exportJson takes no options today; parsed anyway so every command in this
 // layer goes through the same "schema.parse(input) at the boundary" shape,

@@ -12,5 +12,4 @@ declare module 'virtual:widget-fonts' {
   }
 
   export const WIDGET_FONTS: readonly WidgetFontDescriptor[]
-  export const FONT_FILENAME_MAP: Readonly<Record<string, string>>
 }

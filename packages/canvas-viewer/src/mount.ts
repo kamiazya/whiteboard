@@ -9,7 +9,8 @@ export interface MountCanvasViewerOptions {
   // (including the standalone widget entry) never have to import the
   // schema themselves. Falls back to the embedded-scene slot when absent.
   scene?: unknown
-  hideChrome?: boolean
+  width?: number
+  height?: number
   testId?: string
   // Hand-off seam for embedding hosts (e.g. an MCP Apps widget iframe) to
   // receive postMessage traffic without this package owning any bridge
@@ -23,6 +24,14 @@ export interface MountCanvasViewerOptions {
 
 export interface CanvasViewerHandle {
   dispose: () => void
+}
+
+/** Thrown by the imperative mount API when the scene payload fails schema validation. */
+export class ViewerSceneError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ViewerSceneError'
+  }
 }
 
 const EMBEDDED_SCENE_SCRIPT_SELECTOR = 'script[type="application/json"][data-whiteboard-scene]'
@@ -49,7 +58,15 @@ export function mountCanvasViewer(
   container: HTMLElement,
   opts: MountCanvasViewerOptions = {},
 ): CanvasViewerHandle {
-  const scene = parseViewerScene(opts.scene ?? readEmbeddedScene())
+  // mountCanvasViewer is an imperative API boundary, so it converts
+  // parseViewerScene's total-parser result into a thrown error here — the
+  // internal builder/renderer stay total, but a caller of this entrypoint
+  // gets the conventional throw-on-invalid-input shape.
+  const result = parseViewerScene(opts.scene ?? readEmbeddedScene())
+  if (!result.ok) {
+    throw new ViewerSceneError(`${result.error.stage}: ${result.error.message}`)
+  }
+  const scene = result.value
 
   const root: Root = createRoot(container)
   // mountCanvasViewer is an imperative, synchronous-feeling API (the caller
@@ -59,8 +76,9 @@ export function mountCanvasViewer(
   flushSync(() => {
     root.render(
       createElement(CanvasViewer, {
-        scene,
-        hideChrome: opts.hideChrome,
+        canvas: scene,
+        width: opts.width,
+        height: opts.height,
         testId: opts.testId,
       }),
     )

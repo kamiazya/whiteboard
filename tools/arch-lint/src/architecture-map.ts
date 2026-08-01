@@ -72,14 +72,12 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {
-    allowedInternalDeps: [],
-    allowedThirdParty: [
-      '@excalidraw/excalidraw',
-      '@modelcontextprotocol/ext-apps',
-      'react',
-      'react-dom',
-      'zod',
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-canvas-model',
+      '@kamiazya/whiteboard-canvas-codec',
+      '@kamiazya/whiteboard-canvas-render',
     ],
+    allowedThirdParty: ['@modelcontextprotocol/ext-apps', 'react', 'react-dom', 'zod'],
     exemptBoundaryViolationKinds: ['dom-global', 'node-ambient-global'],
   },
   // Composition root (Node CLI/daemon), never a runtime dependency of any

@@ -1,211 +1,148 @@
 import { describe, expect, it } from 'vitest'
-import { parseViewerScene, serializeSceneAsExcalidrawJson } from './scene.js'
+import { parseViewerScene, serializeViewerScene, type ViewerScene } from './scene.js'
 
-const el = (over: Record<string, unknown>) =>
-  ({ id: 'e', type: 'rectangle', x: 0, y: 0, ...over }) as never
+const emptyCanvas: ViewerScene = { nodes: [], edges: [] }
 
-describe('serializeSceneAsExcalidrawJson', () => {
-  it('wraps the scene in the standard .excalidraw envelope', () => {
-    const doc = serializeSceneAsExcalidrawJson(
-      [el({ id: 'a' })],
-      { gridSize: null, viewBackgroundColor: '#ffffff' },
-      {},
-    )
+describe('parseViewerScene', () => {
+  it('accepts a bare object canvas ({}) as an empty canvas', () => {
+    const result = parseViewerScene({})
+    expect(result).toEqual({ ok: true, value: emptyCanvas })
+  })
 
-    expect(doc).toMatchObject({
-      type: 'excalidraw',
-      version: 2,
-      source: '@kamiazya/whiteboard',
+  it('accepts a nodes-only canvas object', () => {
+    const canvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }],
+    }
+    const result = parseViewerScene(canvas)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.nodes).toHaveLength(1)
+    }
+  })
+
+  it('accepts a nodes+edges JSON string via the codec parser', () => {
+    const text = JSON.stringify({
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' },
+        { id: 'b', type: 'text', x: 20, y: 20, width: 10, height: 10, text: '' },
+      ],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
     })
-    expect(doc.elements).toHaveLength(1)
+    const result = parseViewerScene(text)
+    expect(result.ok).toBe(true)
   })
 
-  it('drops deleted elements from the exported payload', () => {
-    const doc = serializeSceneAsExcalidrawJson(
-      [el({ id: 'live' }), el({ id: 'gone', isDeleted: true })],
-      { gridSize: null, viewBackgroundColor: '#fff' },
-      {},
-    )
-
-    expect(doc.elements.map((e) => (e as { id: string }).id)).toEqual(['live'])
+  it('accepts an x-whiteboard freehand/shape node', () => {
+    const canvas = {
+      nodes: [
+        {
+          id: 'n1',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+          text: '',
+          'x-whiteboard': { kind: 'shape', shape: 'ellipse' },
+        },
+      ],
+    }
+    const result = parseViewerScene(canvas)
+    expect(result.ok).toBe(true)
   })
 
-  it('carries embedded files through so images survive a round trip', () => {
-    const files = {
-      'file-1': {
-        id: 'file-1',
-        mimeType: 'image/png',
-        dataURL: 'data:image/png;base64,AA',
-        created: 1,
-      },
-    } as never
-
-    const doc = serializeSceneAsExcalidrawJson(
-      [el({ id: 'img', type: 'image', fileId: 'file-1' })],
-      { gridSize: null, viewBackgroundColor: '#fff' },
-      files,
-    )
-
-    expect(doc.files).toBe(files)
+  it('rejects malformed JSON with the json-syntax stage and no raw throw', () => {
+    const result = parseViewerScene('{not json')
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.stage).toBe('json-syntax')
+    }
   })
 
-  it('falls back to a white background when viewBackgroundColor is absent', () => {
-    const doc = serializeSceneAsExcalidrawJson([], { gridSize: null } as never, {})
-
-    expect(doc.appState.viewBackgroundColor).toBe('#ffffff')
+  it('rejects a duplicate node id with the json-canvas-schema stage', () => {
+    const canvas = {
+      nodes: [
+        { id: 'dup', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' },
+        { id: 'dup', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' },
+      ],
+    }
+    const result = parseViewerScene(canvas)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.stage).toBe('json-canvas-schema')
+      expect(result.error.issues.length).toBeGreaterThan(0)
+    }
   })
 
-  it('preserves gridStep and gridModeEnabled, matching cleanAppStateForExport', () => {
-    const doc = serializeSceneAsExcalidrawJson(
-      [],
-      { gridSize: 20, viewBackgroundColor: '#fff', gridStep: 5, gridModeEnabled: true },
-      {},
-    )
-
-    expect(doc.appState).toEqual({
-      gridSize: 20,
-      viewBackgroundColor: '#fff',
-      gridStep: 5,
-      gridModeEnabled: true,
-    })
+  it('rejects an edge referencing a nonexistent node', () => {
+    const canvas = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' }],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'missing' }],
+    }
+    const result = parseViewerScene(canvas)
+    expect(result.ok).toBe(false)
   })
 
-  it('omits gridStep/gridModeEnabled when the caller did not supply them', () => {
-    const doc = serializeSceneAsExcalidrawJson(
-      [],
-      { gridSize: null, viewBackgroundColor: '#fff' },
-      {},
-    )
-
-    expect(doc.appState).toEqual({ gridSize: null, viewBackgroundColor: '#fff' })
+  it('rejects non-integer geometry', () => {
+    const canvas = {
+      nodes: [{ id: 'a', type: 'text', x: 0.5, y: 0, width: 1, height: 1, text: '' }],
+    }
+    const result = parseViewerScene(canvas)
+    expect(result.ok).toBe(false)
   })
 
-  it('round-trips through the excalidraw envelope Zod schema unchanged', () => {
-    const doc = serializeSceneAsExcalidrawJson(
-      [el({ id: 'a' })],
-      { gridSize: null, viewBackgroundColor: '#ffffff' },
-      {},
-    )
-
-    const parsed = parseViewerScene(doc)
-    expect(parsed.elements).toEqual(doc.elements)
-    expect(parsed.appState).toEqual(doc.appState)
-    expect(parsed.files).toEqual(doc.files)
+  it('never throws for non-object garbage input', () => {
+    expect(() => parseViewerScene('not json')).not.toThrow()
+    expect(() => parseViewerScene(null)).not.toThrow()
+    expect(() => parseViewerScene(42)).not.toThrow()
+    expect(parseViewerScene(null).ok).toBe(false)
+    expect(parseViewerScene(42).ok).toBe(false)
   })
 })
 
-describe('parseViewerScene', () => {
-  it('parses a valid .excalidraw v2 envelope', () => {
-    const scene = parseViewerScene({
-      type: 'excalidraw',
-      version: 2,
-      source: 'x',
-      elements: [{ id: 'a' }],
-      appState: { gridSize: null, viewBackgroundColor: '#fff' },
-      files: {},
-    })
-
-    expect(scene.elements).toEqual([{ id: 'a' }])
-    expect(scene.appState).toEqual({ gridSize: null, viewBackgroundColor: '#fff' })
+describe('serializeViewerScene', () => {
+  it('round-trips an extended-mode canvas through parseViewerScene', () => {
+    const canvas: ViewerScene = {
+      nodes: [
+        {
+          id: 'n1',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+          text: 'hi',
+          'x-whiteboard': { kind: 'shape', shape: 'rectangle' },
+        },
+      ],
+      edges: [],
+    }
+    const json = serializeViewerScene(canvas, 'extended')
+    const result = parseViewerScene(json)
+    expect(result).toEqual({ ok: true, value: canvas })
   })
 
-  it('rejects an unknown type literal', () => {
-    expect(() =>
-      parseViewerScene({
-        type: 'not-excalidraw',
-        version: 2,
-        source: 'x',
-        elements: [],
-        appState: { gridSize: null, viewBackgroundColor: '#fff' },
-        files: {},
-      }),
-    ).toThrow()
-  })
-
-  it('rejects version 1', () => {
-    expect(() =>
-      parseViewerScene({
-        type: 'excalidraw',
-        version: 1,
-        source: 'x',
-        elements: [],
-        appState: { gridSize: null, viewBackgroundColor: '#fff' },
-        files: {},
-      }),
-    ).toThrow()
-  })
-
-  it('rejects version 3', () => {
-    expect(() =>
-      parseViewerScene({
-        type: 'excalidraw',
-        version: 3,
-        source: 'x',
-        elements: [],
-        appState: { gridSize: null, viewBackgroundColor: '#fff' },
-        files: {},
-      }),
-    ).toThrow()
-  })
-
-  it('rejects an envelope missing elements/appState/files and does not fall through to the loose branch', () => {
-    expect(() =>
-      parseViewerScene({
-        type: 'excalidraw',
-        version: 2,
-        source: 'x',
-      }),
-    ).toThrow()
-  })
-
-  it('parses a standard .excalidraw envelope with grid fields and no files, matching real Excalidraw exports', () => {
-    // Mirrors @excalidraw/excalidraw's cleanAppStateForExport, which types
-    // every appState field optional and omits `files` entirely when the
-    // document has no embedded images.
-    const scene = parseViewerScene({
-      type: 'excalidraw',
-      version: 2,
-      source: 'x',
-      elements: [{ id: 'a' }],
-      appState: { gridSize: 20, gridStep: 5, gridModeEnabled: true },
-    })
-
-    expect(scene.appState).toEqual({ gridSize: 20, gridStep: 5, gridModeEnabled: true })
-    expect(scene.files).toEqual({})
-  })
-
-  it('parses a bare structuredContent payload with only elements', () => {
-    const scene = parseViewerScene({ elements: [{ id: 'a' }] })
-
-    expect(scene.elements).toEqual([{ id: 'a' }])
-    expect(scene.appState).toEqual({})
-    expect(scene.files).toEqual({})
-  })
-
-  it('parses a structuredContent payload with elements, appState and files', () => {
-    const scene = parseViewerScene({
-      elements: [{ id: 'a' }],
-      appState: { viewBackgroundColor: '#000' },
-      files: { f1: { id: 'f1' } },
-    })
-
-    expect(scene.appState).toEqual({ viewBackgroundColor: '#000' })
-    expect(scene.files).toEqual({ f1: { id: 'f1' } })
-  })
-
-  it('rejects a type-less payload smuggling envelope-marker keys', () => {
-    expect(() =>
-      parseViewerScene({
-        elements: [],
-        version: 2,
-        source: 'x',
-      }),
-    ).toThrow()
-  })
-
-  it('rejects non-object garbage input', () => {
-    expect(() => parseViewerScene('not an object')).toThrow()
-    expect(() => parseViewerScene(null)).toThrow()
-    expect(() => parseViewerScene(42)).toThrow()
+  it('strict mode drops x-whiteboard extension data', () => {
+    const canvas: ViewerScene = {
+      nodes: [
+        {
+          id: 'n1',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 10,
+          height: 10,
+          text: 'hi',
+          'x-whiteboard': { kind: 'shape', shape: 'rectangle' },
+        },
+      ],
+      edges: [],
+    }
+    const json = serializeViewerScene(canvas, 'strict')
+    const result = parseViewerScene(json)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.nodes[0]).not.toHaveProperty('x-whiteboard')
+    }
   })
 })

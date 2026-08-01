@@ -1,8 +1,8 @@
 // Characterization test for the docs-snapshot ScenePreview wrapper. Locks
 // in the externally observable contract (testId, sizing, chrome-hiding,
-// read-only lockdown, scene forwarding) so reimplementing it on top of
-// @kamiazya/whiteboard-canvas-viewer's <CanvasViewer> cannot silently
-// change what the *.docs-snapshot.test.tsx screenshot tests capture.
+// read-only lockdown, scene forwarding) of its inlined read-only Excalidraw
+// wrapper (see _scene-preview.tsx's module comment for why it is inlined
+// rather than delegating to @kamiazya/whiteboard-canvas-viewer).
 import { render } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
