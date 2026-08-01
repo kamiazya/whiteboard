@@ -81,6 +81,47 @@ describe('SVG serializer well-formedness (PBT)', () => {
   )
 })
 
+/** Includes adversarial numbers/strings so totality/well-formedness properties cover degenerate appearance. */
+const adversarialAppearanceArb = fc.record(
+  {
+    fill: fc.string({ maxLength: 20 }),
+    stroke: fc.string({ maxLength: 20 }),
+    strokeWidth: fc.oneof(
+      fc.integer({ min: -100, max: 100 }),
+      fc.constant(Number.NaN),
+      fc.constant(Number.POSITIVE_INFINITY),
+    ),
+    fontFamily: fc.string({ maxLength: 20 }),
+    fontSize: fc.oneof(
+      fc.integer({ min: -100, max: 100 }),
+      fc.constant(Number.NaN),
+      fc.constant(Number.POSITIVE_INFINITY),
+    ),
+  },
+  { requiredKeys: [] },
+)
+
+const adversarialRadiusArb = fc.oneof(
+  fc.integer({ min: -50, max: 50 }),
+  fc.constant(Number.NaN),
+  fc.constant(Number.POSITIVE_INFINITY),
+)
+
+/** A shape bbox mixing normal geometry with non-finite fields, so the "skip, don't throw" fallback is exercised. */
+const shapeBboxArb = fc.record({
+  x: fc.oneof(fc.integer({ min: -300, max: 300 }), fc.constant(Number.NaN)),
+  y: fc.integer({ min: -300, max: 300 }),
+  w: fc.integer({ min: -100, max: 100 }),
+  h: fc.integer({ min: -100, max: 100 }),
+})
+
+const shapeNodeArb: fc.Arbitrary<SceneNode> = fc
+  .record(
+    { bbox: shapeBboxArb, radius: adversarialRadiusArb, appearance: adversarialAppearanceArb },
+    { requiredKeys: ['bbox'] },
+  )
+  .map(({ bbox, radius, appearance }) => ({ kind: 'shape' as const, bbox, radius, appearance }))
+
 const sceneNodeArb: fc.Arbitrary<SceneNode> = fc.oneof(
   bboxArb.map((bbox) => ({ kind: 'thematicBreak' as const, bbox })),
   fc
@@ -97,6 +138,7 @@ const sceneNodeArb: fc.Arbitrary<SceneNode> = fc.oneof(
       fromSide: 'right' as const,
       toSide: 'left' as const,
     })),
+  shapeNodeArb,
 )
 
 const sceneArb: fc.Arbitrary<Scene> = fc
@@ -160,10 +202,17 @@ describe('renderSceneToSvg document envelope (PBT)', () => {
 
       for (const node of scene.nodes) {
         if (node.kind === 'edge') {
-          for (const p of node.path) expect(contains(p.x, p.y)).toBe(true)
+          for (const p of node.path) {
+            if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) continue
+            expect(contains(p.x, p.y)).toBe(true)
+          }
         } else {
-          expect(contains(node.bbox.x, node.bbox.y)).toBe(true)
-          expect(contains(node.bbox.x + node.bbox.w, node.bbox.y + node.bbox.h)).toBe(true)
+          // A non-finite bbox field is skipped by sceneBounds (documented
+          // degenerate fallback), so it contributes no containment claim.
+          const { x, y, w, h } = node.bbox
+          if (![x, y, w, h].every(Number.isFinite)) continue
+          expect(contains(x, y)).toBe(true)
+          expect(contains(x + w, y + h)).toBe(true)
         }
       }
     },
@@ -189,6 +238,34 @@ describe('renderSceneToSvg document envelope (PBT)', () => {
       expect(Number(height)).toBeGreaterThanOrEqual(0)
       expect(Number(w)).toBeGreaterThanOrEqual(0)
       expect(Number(h)).toBeGreaterThanOrEqual(0)
+    },
+  )
+
+  fcTest.prop([sceneArb], withDefaults({ numRuns: 50 }))(
+    'produces well-formed XML for any generated scene, including shapes with adversarial appearance',
+    (scene) => {
+      expect(isWellFormedXmlFragment(renderSceneToSvg(scene))).toBe(true)
+    },
+  )
+})
+
+/** A scene-node arbitrary with NO appearance/radius fields, for the additivity property below. */
+const appearanceFreeSceneNodeArb: fc.Arbitrary<SceneNode> = fc.oneof(
+  bboxArb.map((bbox) => ({ kind: 'thematicBreak' as const, bbox })),
+  bboxArb.map((bbox) => ({ kind: 'shape' as const, bbox })),
+)
+const appearanceFreeSceneArb: fc.Arbitrary<Scene> = fc
+  .array(appearanceFreeSceneNodeArb, { maxLength: 6 })
+  .map((nodes) => ({ nodes }))
+
+describe('renderSceneToSvg additivity (PBT)', () => {
+  fcTest.prop([appearanceFreeSceneArb], withDefaults({ numRuns: 50 }))(
+    'an appearance-free scene never emits a presentation attribute (fill/stroke/font-*)',
+    (scene) => {
+      const svg = renderSceneToSvg(scene)
+      for (const attr of ['fill=', 'stroke=', 'stroke-width=', 'font-family=', 'font-size=']) {
+        expect(svg).not.toContain(attr)
+      }
     },
   )
 })

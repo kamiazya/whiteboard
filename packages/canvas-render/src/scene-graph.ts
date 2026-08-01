@@ -28,6 +28,24 @@ export interface Dimensions {
   readonly h: number
 }
 
+/**
+ * Resolved paint attributes for a shape, text run, or edge. Optional and
+ * assigned, never invented: layout produces geometry and semantics only,
+ * and this package's own layout functions must not choose a fill, stroke,
+ * or font — that is a composition-root concern today and the exact seam
+ * the planned theme layer fills in later (a pure scene-graph ->
+ * scene-graph transform). One named type is reused across every paintable
+ * variant rather than ad-hoc per-kind fields, and every field is optional
+ * so an appearance-free scene renders exactly as it always has.
+ */
+export interface Appearance {
+  readonly fill?: string
+  readonly stroke?: string
+  readonly strokeWidth?: number
+  readonly fontFamily?: string
+  readonly fontSize?: number
+}
+
 /** A single styled run of inline text, positioned within its parent block. */
 export interface TextRunNode {
   readonly kind: 'textRun'
@@ -39,6 +57,21 @@ export interface TextRunNode {
   readonly deleted?: boolean
   /** Present when this run is (or is inside) a link/wikiLink/reference. */
   readonly link?: LinkProvenance
+  readonly appearance?: Appearance
+}
+
+/**
+ * The box chrome of a spatial canvas node: a rectangle with an optional
+ * uniform corner radius. Deliberately minimal — a rect covers every
+ * spatial node kind today, so ellipse/polygon/path are not added
+ * speculatively (see package-canvas-render.md).
+ */
+export interface ShapeSceneNode {
+  readonly kind: 'shape'
+  readonly bbox: BoundingBox
+  /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely. */
+  readonly radius?: number
+  readonly appearance?: Appearance
 }
 
 /** Semantic provenance for an inline link-like run. Never flattened away. */
@@ -172,6 +205,7 @@ export interface ResolvedEdgeNode {
   readonly path: readonly { readonly x: number; readonly y: number }[]
   readonly fromSide: 'top' | 'right' | 'bottom' | 'left'
   readonly toSide: 'top' | 'right' | 'bottom' | 'left'
+  readonly appearance?: Appearance
 }
 
 export type SceneNode =
@@ -190,6 +224,7 @@ export type SceneNode =
   | GroupSceneNode
   | TextRunNode
   | ResolvedEdgeNode
+  | ShapeSceneNode
 
 /** A fully laid-out document: ordered top-level scene nodes in paint order. */
 export interface Scene {

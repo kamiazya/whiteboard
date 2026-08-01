@@ -120,3 +120,61 @@ export const DETERMINISM_GOLDEN_DOCUMENT_SVG =
   '<g transform="translate(100,0)"><text x="0" y="120">Col2</text></g></g></g>' +
   '<g><g transform="translate(24,0)"><g><text x="0" y="152">Item</text></g></g></g>' +
   '</svg>'
+
+/**
+ * A second, separate fixed scene covering the `shape` node kind and the
+ * optional `appearance` field on shape/textRun/edge — kept apart from
+ * `buildDeterminismGoldenScene` so the original golden never has to be
+ * regenerated as this surface grows.
+ */
+export function buildShapeAppearanceGoldenScene(): Scene {
+  return {
+    nodes: [
+      { kind: 'shape', bbox: { x: 0, y: 0, w: 100, h: 60 }, radius: 8 },
+      { kind: 'shape', bbox: { x: 120, y: 0, w: 100, h: 60 } },
+      {
+        kind: 'shape',
+        bbox: { x: 240, y: 0, w: 100, h: 60 },
+        radius: 4,
+        appearance: { fill: '#fff', stroke: '#000', strokeWidth: 2 },
+      },
+      {
+        kind: 'paragraph',
+        bbox: { x: 0, y: 80, w: 200, h: 16 },
+        runs: [
+          {
+            kind: 'textRun',
+            bbox: { x: 0, y: 80, w: 80, h: 16 },
+            text: 'Styled',
+            appearance: { fill: '#111', fontFamily: 'Inter', fontSize: 14 },
+          },
+        ],
+      },
+      {
+        kind: 'edge',
+        id: 'e1',
+        path: [
+          { x: 0, y: 120 },
+          { x: 100, y: 120 },
+        ],
+        fromSide: 'right',
+        toSide: 'left',
+        appearance: { stroke: '#888', strokeWidth: 1.5 },
+      },
+    ],
+  }
+}
+
+/**
+ * Committed golden SVG string for `buildShapeAppearanceGoldenScene`.
+ * Regenerate only as a deliberate, separately-reviewed serializer-format
+ * change — same discipline as the two goldens above.
+ */
+export const SHAPE_APPEARANCE_GOLDEN_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg">' +
+  '<rect x="0" y="0" width="100" height="60" rx="8"/>' +
+  '<rect x="120" y="0" width="100" height="60"/>' +
+  '<rect x="240" y="0" width="100" height="60" rx="4" fill="#fff" stroke="#000" stroke-width="2"/>' +
+  '<g><text x="0" y="80" fill="#111" font-family="Inter" font-size="14">Styled</text></g>' +
+  '<polyline points="0,120 100,120" stroke="#888" stroke-width="1.5" role="presentation"/>' +
+  '</svg>'

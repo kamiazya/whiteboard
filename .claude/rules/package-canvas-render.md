@@ -112,6 +112,36 @@
    a negative width/height on `viewBox`, unlike `x`/`y` which may be a
    negative offset), -> derived instead of the caller's value.
 
+6. **The `shape` node and optional resolved `Appearance`** (`scene-graph.ts`):
+   `ShapeSceneNode` (`kind: 'shape'`, `bbox`, optional `radius`) is the box
+   chrome of a spatial canvas node — a rect with an optional uniform corner
+   radius. Deliberately minimal: a rect covers every spatial node kind
+   today, so ellipse/polygon/path are NOT added speculatively. `Appearance`
+   (`fill?`, `stroke?`, `strokeWidth?`, `fontFamily?`, `fontSize?`, all
+   optional) is ONE named type reused as an optional `appearance?` field on
+   exactly three variants — `ShapeSceneNode`, `TextRunNode`,
+   `ResolvedEdgeNode` — never a per-kind ad-hoc field. Appearance is
+   **assigned, not invented**: this package's own layout functions never
+   choose a color, font, or stroke width — that is a composition-root
+   concern today and the exact seam the later theme layer fills in (a pure
+   scene-graph -> scene-graph transform). The SVG backend emits presence-only
+   attributes in the FIXED order `fill stroke stroke-width font-family
+   font-size`, appended after geometry; an absent or unusable field is
+   OMITTED, never defaulted, which is what keeps a scene built without
+   appearance byte-identical to the pre-existing output (the additivity
+   guarantee both `DETERMINISM_GOLDEN_SVG` and `DETERMINISM_GOLDEN_DOCUMENT_SVG`
+   depend on — a new, separate golden covers shape/appearance instead of
+   regenerating those two). Degenerate-value fallbacks, all "omit, never
+   throw": a color/font-family that is not a non-empty string -> omitted; a
+   non-finite or negative `strokeWidth`/`fontSize` -> omitted (zero is a
+   legitimate value and is kept); `radius` emits `rx` only when finite and
+   `> 0` (SVG rejects a negative `rx`, and `rx="0"` is pure noise); a shape
+   whose `bbox` has any non-finite field renders as the empty string rather
+   than reaching `formatCoord` (which throws by contract) — zero-size and
+   negative-w/h boxes DO render (valid, invisible SVG), only non-finite is
+   dropped. `shape` emits no `transform`, so it needs no entry in
+   `subtreeOffsetX` and the two-renderer tripwire above is unaffected.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,

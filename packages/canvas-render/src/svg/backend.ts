@@ -1,9 +1,11 @@
 import { sceneBounds } from '../scene-bounds.js'
 import type {
+  Appearance,
   BoundingBox,
   ListItemNode,
   Scene,
   SceneNode,
+  ShapeSceneNode,
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
@@ -23,13 +25,73 @@ function rectAttrs(bbox: BoundingBox): string {
   return `x="${formatCoord(bbox.x)}" y="${formatCoord(bbox.y)}" width="${formatCoord(bbox.w)}" height="${formatCoord(bbox.h)}"`
 }
 
+function isFiniteBbox(bbox: BoundingBox): boolean {
+  return [bbox.x, bbox.y, bbox.w, bbox.h].every(Number.isFinite)
+}
+
+function isUsableColor(value: string | undefined): value is string {
+  return typeof value === 'string' && value.length > 0
+}
+
+/** Non-finite or negative is dropped; zero is a legitimate stroke-width/font-size. */
+function isUsableNonNegativeNumber(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+function withLeadingSpace(attrs: string): string {
+  return attrs === '' ? '' : ` ${attrs}`
+}
+
+/**
+ * Presence-only presentation attributes for a shape/text-run/edge, in the
+ * fixed order `fill stroke stroke-width font-family font-size`. An absent
+ * or unusable field is omitted rather than defaulted — see the
+ * `Appearance` doc comment for why the backend never invents a value.
+ */
+function appearanceAttrs(appearance?: Appearance): string {
+  if (!appearance) return ''
+  const parts: string[] = []
+  if (isUsableColor(appearance.fill)) parts.push(`fill="${escapeXmlAttr(appearance.fill)}"`)
+  if (isUsableColor(appearance.stroke)) parts.push(`stroke="${escapeXmlAttr(appearance.stroke)}"`)
+  if (isUsableNonNegativeNumber(appearance.strokeWidth)) {
+    parts.push(`stroke-width="${formatCoord(appearance.strokeWidth)}"`)
+  }
+  if (isUsableColor(appearance.fontFamily)) {
+    parts.push(`font-family="${escapeXmlAttr(appearance.fontFamily)}"`)
+  }
+  if (isUsableNonNegativeNumber(appearance.fontSize)) {
+    parts.push(`font-size="${formatCoord(appearance.fontSize)}"`)
+  }
+  return parts.join(' ')
+}
+
 function renderTextRun(run: TextRunNode): string {
   const attrs = [`x="${formatCoord(run.bbox.x)}"`, `y="${formatCoord(run.bbox.y)}"`]
+  const appearance = appearanceAttrs(run.appearance)
+  if (appearance) attrs.push(appearance)
+  const attrStr = attrs.join(' ')
   if (run.link) {
     const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.canvasId
-    return `<a href="${escapeXmlAttr(href)}"><text ${attrs.join(' ')}>${escapeXmlText(run.text)}</text></a>`
+    return `<a href="${escapeXmlAttr(href)}"><text ${attrStr}>${escapeXmlText(run.text)}</text></a>`
   }
-  return `<text ${attrs.join(' ')}>${escapeXmlText(run.text)}</text>`
+  return `<text ${attrStr}>${escapeXmlText(run.text)}</text>`
+}
+
+/**
+ * The box chrome of a spatial canvas node. A non-finite bbox field is a
+ * layout bug this package must not crash on — it renders as the empty
+ * string rather than reaching `formatCoord`, which throws by contract.
+ * `radius` emits `rx` only when finite and > 0: SVG treats a negative
+ * `rx` as an error and `rx="0"` is noise, so both are omitted.
+ */
+function renderShape(node: ShapeSceneNode): string {
+  if (!isFiniteBbox(node.bbox)) return ''
+  const rx =
+    node.radius !== undefined && Number.isFinite(node.radius) && node.radius > 0
+      ? ` rx="${formatCoord(node.radius)}"`
+      : ''
+  const appearance = withLeadingSpace(appearanceAttrs(node.appearance))
+  return `<rect ${rectAttrs(node.bbox)}${rx}${appearance}/>`
 }
 
 function renderListItem(item: ListItemNode): string {
@@ -85,8 +147,11 @@ function renderNode(node: SceneNode): string {
       return `<g>${node.children.map(renderNode).join('')}</g>`
     case 'edge': {
       const points = node.path.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
-      return `<polyline points="${points}" ${PRESENTATION_ATTR}/>`
+      const appearance = withLeadingSpace(appearanceAttrs(node.appearance))
+      return `<polyline points="${points}"${appearance} ${PRESENTATION_ATTR}/>`
     }
+    case 'shape':
+      return renderShape(node)
   }
 }
 
