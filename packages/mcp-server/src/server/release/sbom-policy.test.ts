@@ -6,12 +6,14 @@
 //   - Runbook (docs/contributing/releasing.md) covers required keywords.
 // PBT: validateSbomSummary() catches malformed safe-stdout summary shapes.
 
-import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { computeSbomInputFingerprint } from '../../../scripts/release/sbom-fingerprint.mjs'
+import {
+  computeSbomInputFingerprint,
+  sha512Hex,
+} from '../../../scripts/release/sbom-fingerprint.mjs'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import {
   evaluateSbomArtifactState,
@@ -329,28 +331,20 @@ describe('ci.yml sbom-npm job wiring (drift guard for the absent-artifact skip)'
 // manifest (one explicit 'stale artifact' failure, never a false policy
 // violation — see the module doc comment on sbom-artifact-state.ts).
 
+const SBOM_PATH = join(ROOT, SBOM_ARTIFACT_REL_PATH)
+const SIDECAR_PATH = join(ROOT, SBOM_SIDECAR_REL_PATH)
+const sbomExists = existsSync(SBOM_PATH)
+
+// Evaluated once and shared by both describes below — reading and hashing the
+// artifact twice would only give the two blocks a way to disagree.
+const sbomArtifactState = evaluateSbomArtifactState({
+  sbomExists,
+  rawSidecarText: existsSync(SIDECAR_PATH) ? readFileSync(SIDECAR_PATH, 'utf-8') : undefined,
+  expectedInputs: computeSbomInputFingerprint(ROOT),
+  actualSbomSha512: sbomExists ? sha512Hex(readFileSync(SBOM_PATH)) : '',
+})
+
 describe('generated SBOM artifact currency', () => {
-  const SBOM_PATH = join(ROOT, SBOM_ARTIFACT_REL_PATH)
-  const SIDECAR_PATH = join(ROOT, SBOM_SIDECAR_REL_PATH)
-  const sbomExists = existsSync(SBOM_PATH)
-
-  function artifactState() {
-    const rawSidecarText = existsSync(SIDECAR_PATH)
-      ? readFileSync(SIDECAR_PATH, 'utf-8')
-      : undefined
-    const actualSbomSha512 = sbomExists
-      ? createHash('sha512').update(readFileSync(SBOM_PATH)).digest('hex')
-      : ''
-    return evaluateSbomArtifactState({
-      sbomExists,
-      rawSidecarText,
-      expectedInputs: computeSbomInputFingerprint(ROOT),
-      actualSbomSha512,
-    })
-  }
-
-  const state = sbomExists ? artifactState() : { status: 'absent' as const }
-
   it.skipIf(!sbomExists)(
     'absent artifact: skipped — ci.yml sbom-npm job regenerates and runs this file on every PR/push',
     () => {
@@ -360,29 +354,19 @@ describe('generated SBOM artifact currency', () => {
     },
   )
 
-  it.runIf(sbomExists)(`artifact is current or fails as stale, never silently passes`, () => {
-    if (state.status === 'stale') {
-      expect(state.message, 'stale message must name the exact fix command').toContain(
+  it.runIf(sbomExists)('artifact is current or fails as stale, never silently passes', () => {
+    if (sbomArtifactState.status === 'stale') {
+      expect(sbomArtifactState.message, 'stale message must name the exact fix command').toContain(
         SBOM_REGENERATE_COMMAND,
       )
-      expect.fail(state.message)
+      expect.fail(sbomArtifactState.message)
     }
-    expect(state.status).toBe('current')
+    expect(sbomArtifactState.status).toBe('current')
   })
 })
 
 describe('generated SBOM content regression', () => {
-  const SBOM_PATH = join(ROOT, SBOM_ARTIFACT_REL_PATH)
-  const SIDECAR_PATH = join(ROOT, SBOM_SIDECAR_REL_PATH)
-  const sbomExists = existsSync(SBOM_PATH)
-  const isCurrent =
-    sbomExists &&
-    evaluateSbomArtifactState({
-      sbomExists,
-      rawSidecarText: existsSync(SIDECAR_PATH) ? readFileSync(SIDECAR_PATH, 'utf-8') : undefined,
-      expectedInputs: computeSbomInputFingerprint(ROOT),
-      actualSbomSha512: createHash('sha512').update(readFileSync(SBOM_PATH)).digest('hex'),
-    }).status === 'current'
+  const isCurrent = sbomArtifactState.status === 'current'
 
   type CdxComponent = { name: string; group?: string; purl?: string }
 
