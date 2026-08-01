@@ -57,6 +57,9 @@ export const viewportRequestMessageSchema = z.object({
   zoom: z.number().finite().optional(),
 })
 
+// The daemon no longer sends this message — canvas export is headless-only
+// (see server/routes/export.ts). Kept for apps/web's typechecking until the
+// phase that replaces the browser editor removes the last sender.
 export const exportRequestMessageSchema = z.object({
   type: z.literal('export_request'),
   requestId: z.string(),
@@ -98,6 +101,10 @@ export const clientReadyMessageSchema = z.object({
   type: z.literal('client_ready'),
 })
 
+// The daemon no longer awaits this message — canvas export is headless-only
+// (see server/routes/export.ts and routes/ws.ts, which treats an incoming
+// export_response frame as inert). Kept for apps/web's typechecking until the
+// phase that replaces the browser editor removes the last sender.
 export const exportResponseMessageSchema = z.object({
   type: z.literal('export_response'),
   requestId: z.string(),

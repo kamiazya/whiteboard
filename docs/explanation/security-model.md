@@ -37,9 +37,8 @@ This page describes the **local daemon** in detail first, then server mode.
 Some operations require a connected browser client.
 
 - `viewport_set`
-- `export_canvas({ format: "png" })`
 
-These actions are routed through the daemon to the browser and fail fast when no browser client is connected.
+This action is routed through the daemon to the browser and fails fast when no browser client is connected. `export_canvas` (all formats, including `png`) is rendered headlessly from the persisted document and does not require a connected browser client.
 
 ## WebMCP (experimental, browser-only, read-only)
 

@@ -6,7 +6,7 @@ callers that only need SVG.
 
 | `format` | Output | Rendering |
 | --- | --- | --- |
-| `png` | Raster image | Prefers the connected browser client; falls back to headless rendering when no client is connected |
+| `png` | Raster image | Always rendered headlessly from the persisted document |
 | `svg` | Vector image (`.svg`) | Always rendered headlessly from the persisted document — no browser connection required |
 | `json` | Standard `.excalidraw` JSON | Always rendered headlessly from the persisted document |
 
@@ -15,8 +15,9 @@ inside the workspace's `exports/` directory) and `overwrite`. `png` and `svg` ad
 accept `padding`, `frameId`, and `theme`; `png` alone accepts `scale` and `minFontPx`; `json`
 alone accepts `includeCustomFields`.
 
-Because `svg` and `json` never depend on a live browser connection, they are the reliable
-choice for automated export pipelines (CI, scripted diagram linting, doc generation) where no
-whiteboard client may be attached to the canvas.
+All three formats are rendered headlessly from the persisted document and never depend on a
+live browser connection, so they all work equally well for automated export pipelines (CI,
+scripted diagram linting, doc generation) where no whiteboard client may be attached to the
+canvas.
 
 ← Back to [reference](README.md)

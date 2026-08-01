@@ -79,12 +79,6 @@ export function broadcastLoroUpdate(
 // Set the broadcastFn used by canvas.ts.
 setBroadcastFn(broadcastLoroUpdate)
 
-// Injected from export.ts: handles export_response messages.
-let resolveExportFn: ((requestId: string, data: string) => void) | null = null
-export function setResolveExportFn(fn: (requestId: string, data: string) => void): void {
-  resolveExportFn = fn
-}
-
 // Injected from canvas.ts: auto-version trigger with built-in throttling.
 // Called after WS binary messages; creates a new version and pushes it to the browser when the interval has elapsed.
 type AutoVersionTrigger = (
@@ -134,25 +128,6 @@ export function sendHeadChanged(workspaceId: string, slug: string, head: string)
 let resolveViewportFn: ((requestId: string) => void) | null = null
 export function setResolveViewportFn(fn: (requestId: string) => void): void {
   resolveViewportFn = fn
-}
-
-export function sendExportRequest(
-  workspaceId: string,
-  slug: string,
-  requestId: string,
-  options: {
-    padding?: number
-    scale?: number
-    minFontPx?: number
-    frameId?: string
-    theme?: 'light' | 'dark'
-  } = {},
-): void {
-  broadcastTextMessage(workspaceId, slug, {
-    type: 'export_request',
-    requestId,
-    ...omitUndefined(options),
-  })
 }
 
 export function sendViewportRequest(
@@ -278,7 +253,10 @@ export async function handleWsUpgrade(
     if (isClosing) return
     runtimeTouch()
     if (!isBinary) {
-      // text frame = JSON（export_response / viewport_response / ws_trace）
+      // text frame = JSON（viewport_response / ws_trace / client_ready）. An
+      // export_response frame still parses and passes scope checks, but is
+      // otherwise inert — the daemon stopped sending export_request in the
+      // headless-only export slice (see shared/ws-messages.ts).
       const text = Buffer.isBuffer(data) ? data.toString() : String(data)
       const msg = parseWsClientTextMessage(text)
       if (msg === null) return
@@ -314,9 +292,7 @@ export async function handleWsUpgrade(
         })
         return
       }
-      if (msg.type === 'export_response') {
-        resolveExportFn?.(msg.requestId, msg.data)
-      } else if (msg.type === 'viewport_response') {
+      if (msg.type === 'viewport_response') {
         resolveViewportFn?.(msg.requestId)
       }
       return

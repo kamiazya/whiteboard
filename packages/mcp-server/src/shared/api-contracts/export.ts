@@ -22,8 +22,9 @@ export const exportResponseSchema = z.object({
   filePath: z.string(),
 })
 
-// Shared error body. The route emits this for no_client (503), timeout (504),
-// invalid_output_path / output_exists (400 / 409), and internal (500).
+// Shared error body. The route emits this for invalid_request /
+// invalid_output_path (400), canvas_not_found (404), output_exists (409),
+// payload_too_large (413), and headless_export_failed (500).
 // All fields are optional since some 5xx bodies come from proxies that
 // strip `error` without crashing the parser.
 export const exportErrorBodySchema = z.object({

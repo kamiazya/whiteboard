@@ -15,33 +15,19 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Mock ws.ts so each test can control getClientCount and sendExportRequest.
-type MockedExportOptions = {
-  padding?: number
-  scale?: number
-  minFontPx?: number
-  frameId?: string
-  theme?: 'light' | 'dark'
-}
+// Mock ws.ts purely to observe that export never talks to it. getClientCount
+// is kept as a spy so the metamorphic test can vary it; it must have no
+// effect on export behavior post-headless-only.
 const mockGetClientCount = vi.fn<(workspaceId: string, slug: string) => number>()
-const mockSendExportRequest =
-  vi.fn<
-    (workspaceId: string, slug: string, requestId: string, options?: MockedExportOptions) => void
-  >()
+const mockSendExportRequest = vi.fn<(...args: unknown[]) => void>()
 
 vi.mock('./ws.js', () => ({
   getClientCount: (workspaceId: string, slug: string) => mockGetClientCount(workspaceId, slug),
-  sendExportRequest: (
-    workspaceId: string,
-    slug: string,
-    requestId: string,
-    options?: MockedExportOptions,
-  ) => mockSendExportRequest(workspaceId, slug, requestId, options),
+  sendExportRequest: (...args: unknown[]) => mockSendExportRequest(...args),
 }))
 
 // Stub the headless renderer so route tests do not pull jsdom/canvas/resvg in
-// every run. The fallback path just needs to return a valid PNG buffer for the
-// route to write to disk.
+// every run.
 type MockHeadlessArgs = {
   workspaceId: string
   slug: string
@@ -71,13 +57,16 @@ vi.mock('../store/canvas-store.js', () => ({
   canvasExists: (workspaceId: string, slug: string) => mockCanvasExists(workspaceId, slug),
 }))
 
-const { createExportRouter, resolveExportRequest } = await import('./export.js')
+const { createExportRouter } = await import('./export.js')
 
-function makeApp(options: { timeoutMs?: number } = {}) {
+function makeApp() {
   const app = new Hono()
-  app.route('/', createExportRouter(options))
+  app.route('/', createExportRouter())
   return app
 }
+
+const SAMPLE_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
 describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   beforeEach(async () => {
@@ -85,14 +74,20 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     mockGetClientCount.mockReset()
     mockSendExportRequest.mockReset()
     mockExportCanvasHeadless.mockReset()
+    mockCanvasExists.mockReset()
+    mockCanvasExists.mockResolvedValue(true)
   })
 
   afterEach(async () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('falls back to headless rendering when no WS clients are connected', async () => {
-    mockGetClientCount.mockReturnValue(0)
+  // Load-bearing regression test: with a WS client connected, export must
+  // still be served by the headless renderer, and nothing may be pushed to
+  // the socket. Against the pre-change dual-path code this would take the
+  // browser path (sendExportRequest called, no headless call) and fail.
+  it('is served by the headless renderer even when a WS client is connected', async () => {
+    mockGetClientCount.mockReturnValue(2)
     const fakePng = Buffer.from('fake-png-bytes')
     mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
     const app = makeApp()
@@ -101,7 +96,6 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
-    expect(body.filePath).toMatch(/canvas-a-.*\.excalidraw\.png$/)
     expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
       expect.objectContaining({ workspaceId: 's1', slug: 'canvas-a' }),
     )
@@ -111,11 +105,34 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     expect(written.equals(fakePng)).toBe(true)
   })
 
-  it('generates distinct default filePaths for two headless exports in the same millisecond', async () => {
-    // The default path used to be slug + millisecond timestamp only, so two
-    // exports issued fast enough to land in the same millisecond would
-    // collide and the second write would silently clobber the first.
+  // Metamorphic: client count must not be an input to export behavior at all.
+  it('produces identical status/body/headless-args regardless of WS client count', async () => {
+    const fakePng = Buffer.from('fake-png-bytes')
+    mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
+
     mockGetClientCount.mockReturnValue(0)
+    const resNoClient = await makeApp().request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 20 }),
+    })
+    const argsNoClient = mockExportCanvasHeadless.mock.calls[0][0]
+
+    mockExportCanvasHeadless.mockClear()
+    mockGetClientCount.mockReturnValue(3)
+    const resWithClients = await makeApp().request('/api/canvas/s1/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ padding: 20 }),
+    })
+    const argsWithClients = mockExportCanvasHeadless.mock.calls[0][0]
+
+    expect(resWithClients.status).toBe(resNoClient.status)
+    expect(argsWithClients).toEqual(argsNoClient)
+    expect(mockSendExportRequest).not.toHaveBeenCalled()
+  })
+
+  it('generates distinct default filePaths for two headless exports in the same millisecond', async () => {
     mockExportCanvasHeadless.mockResolvedValue({
       png: Buffer.from('fake-png-bytes'),
       width: 100,
@@ -137,11 +154,11 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     }
   })
 
-  it('returns 404 with canvas_not_found when no browser is connected and the canvas does not exist', async () => {
-    // Headless fallback used to silently succeed for unknown canvasIds:
-    // getDoc + loadCanvas hand back an empty LoroDoc on cache miss, so a
-    // typo would happily produce a blank PNG. Surface it as a 404 instead.
-    mockGetClientCount.mockReturnValue(0)
+  it('returns 404 with canvas_not_found when the canvas does not exist', async () => {
+    // Headless rendering does NOT verify the canvas exists: getDoc / loadCanvas
+    // return an empty LoroDoc on cache miss, so a typo would otherwise
+    // silently produce a blank PNG. Surfaced as 404 unconditionally now that
+    // there is only one rendering path.
     mockCanvasExists.mockResolvedValueOnce(false)
     const app = makeApp()
 
@@ -155,7 +172,6 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   })
 
   it('returns 500 with headless_export_failed when headless rendering throws', async () => {
-    mockGetClientCount.mockReturnValue(0)
     mockExportCanvasHeadless.mockRejectedValue(new Error('boom'))
     const app = makeApp()
     const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
@@ -165,52 +181,26 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     expect(body.message).toBe('boom')
   })
 
-  it('returns 504 and a timeout error when a WS client does not respond', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    // Use a short real timeout instead of fake timers because
-    // vi.advanceTimersByTimeAsync cannot advance setTimeout inside Hono async context.
-    const app = makeApp({ timeoutMs: 50 })
-
+  // No timeout-driven failure mode exists any longer. The headless render
+  // resolving slowly (well past the old 10s browser-round-trip default) must
+  // still succeed, never 504.
+  it('resolves 200 even when headless rendering is slow, with no 504 timeout path', async () => {
+    mockExportCanvasHeadless.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ png: Buffer.from('slow-png'), width: 10, height: 10 }), 50)
+        }),
+    )
+    const app = makeApp()
     const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
-
-    expect(res.status).toBe(504)
-    const body = (await res.json()) as { error: string; message: string }
-    expect(body.error).toBe('timeout')
-    expect(body.message).toMatch(/0s|timed out/i)
+    expect(res.status).toBe(200)
   })
 
-  it('clears the timeout timer once the WS client resolves early', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
-    })
-    const app = makeApp({ timeoutMs: 5_000 })
-
-    vi.useFakeTimers()
-    try {
-      const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
-      expect(res.status).toBe(200)
-      // A leaked timer would still be pending here, ticking until timeoutMs.
-      expect(vi.getTimerCount()).toBe(0)
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('passes padding through to sendExportRequest options', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+  it('passes padding through to exportCanvasHeadless options', async () => {
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from('fake-png-bytes'),
+      width: 100,
+      height: 50,
     })
     const app = makeApp()
 
@@ -220,44 +210,16 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       body: JSON.stringify({ padding: 48 }),
     })
     expect(res.status).toBe(200)
-    expect(mockSendExportRequest).toHaveBeenCalledWith('s1', 'canvas-a', expect.any(String), {
-      padding: 48,
-    })
+    expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
+      expect.objectContaining({ options: expect.objectContaining({ padding: 48 }) }),
+    )
   })
 
-  it('leaves options undefined when the body is missing or padding is omitted', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
-    })
-    const app = makeApp()
-
-    const res = await app.request('/api/canvas/s1/canvas-a/export', { method: 'POST' })
-    expect(res.status).toBe(200)
-    // options should remain undefined here.
-    const call = mockSendExportRequest.mock.calls[0]
-    expect(call[0]).toBe('s1')
-    expect(call[1]).toBe('canvas-a')
-    expect(call[3]?.padding).toBeUndefined()
-  })
-
-  // Route-level responsibility here is just to extract scale / minFontPx from
-  // the body and forward them to sendExportRequest. Browser-side
-  // useWhiteboardSync handles exportScale injection and minFontPx adjustment.
-  it('passes scale and minFontPx through to sendExportRequest options', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+  it('passes scale and minFontPx through to exportCanvasHeadless options', async () => {
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from('fake-png-bytes'),
+      width: 100,
+      height: 50,
     })
     const app = makeApp()
 
@@ -267,37 +229,16 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       body: JSON.stringify({ padding: 32, scale: 2, minFontPx: 14 }),
     })
     expect(res.status).toBe(200)
-    expect(mockSendExportRequest).toHaveBeenCalledWith('s1', 'canvas-a', expect.any(String), {
-      padding: 32,
-      scale: 2,
-      minFontPx: 14,
-    })
+    expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ padding: 32, scale: 2, minFontPx: 14 }),
+      }),
+    )
   })
 
-  it('forwards theme to sendExportRequest options when a WS client is connected', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
-    })
-    const app = makeApp()
-
-    const res = await app.request('/api/canvas/s1/canvas-a/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ theme: 'dark' }),
-    })
-    expect(res.status).toBe(200)
-    const call = mockSendExportRequest.mock.calls[0]
-    expect(call[3]).toEqual({ theme: 'dark' })
-  })
-
-  it('forwards theme to the headless export when no WS client is connected', async () => {
-    mockGetClientCount.mockReturnValue(0)
+  // Client-count independence is covered once by the metamorphic test above,
+  // so this only needs to assert the forwarding itself.
+  it('forwards theme to the headless export', async () => {
     const fakePng = Buffer.from('fake-dark-png')
     mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
     const app = makeApp()
@@ -318,7 +259,6 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   })
 
   it('rejects invalid theme values with 400 invalid_request', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     const res = await app.request('/api/canvas/s1/canvas-a/export', {
       method: 'POST',
@@ -327,11 +267,10 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({ error: 'invalid_request' })
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
   it('rejects an oversized request body with 413 payload_too_large', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     const oversized = 'x'.repeat(1024 * 1024 + 1)
     const res = await app.request('/api/canvas/s1/canvas-a/export', {
@@ -344,15 +283,11 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     expect(body).toMatchObject({ error: 'payload_too_large' })
   })
 
-  it('passes frameId through to sendExportRequest options', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+  it('passes frameId through to exportCanvasHeadless options', async () => {
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from('fake-png-bytes'),
+      width: 100,
+      height: 50,
     })
     const app = makeApp()
 
@@ -362,70 +297,18 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       body: JSON.stringify({ frameId: 'frame-abc', padding: 24 }),
     })
     expect(res.status).toBe(200)
-    expect(mockSendExportRequest).toHaveBeenCalledWith('s1', 'canvas-a', expect.any(String), {
-      frameId: 'frame-abc',
-      padding: 24,
-    })
+    expect(mockExportCanvasHeadless).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({ frameId: 'frame-abc', padding: 24 }),
+      }),
+    )
   })
 
-  it('leaves the other options undefined when only frameId is provided', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
-    })
-    const app = makeApp()
-
-    await app.request('/api/canvas/s1/canvas-a/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ frameId: 'frame-xyz' }),
-    })
-    const call = mockSendExportRequest.mock.calls[0]
-    expect(call[3]).toEqual({ frameId: 'frame-xyz' })
-    expect(call[3]?.padding).toBeUndefined()
-    expect(call[3]?.scale).toBeUndefined()
-    expect(call[3]?.minFontPx).toBeUndefined()
-  })
-
-  it('does not include padding in options when only scale is provided', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
-    })
-    const app = makeApp()
-
-    await app.request('/api/canvas/s1/canvas-a/export', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scale: 3 }),
-    })
-    const call = mockSendExportRequest.mock.calls[0]
-    expect(call[3]).toEqual({ scale: 3 })
-    expect(call[3]?.padding).toBeUndefined()
-    expect(call[3]?.minFontPx).toBeUndefined()
-  })
-
-  it('returns 200 and filePath when a WS client sends export_response', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    // Capture requestId from sendExportRequest and resolve it through resolveExportRequest.
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      // 1x1 transparent PNG base64
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+  it('returns 200 and filePath for a plain export request', async () => {
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      width: 1,
+      height: 1,
     })
     const app = makeApp()
 
@@ -438,14 +321,10 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   // Nested canvas paths such as architecture/overview should create parent
   // directories recursively instead of failing with ENOENT.
   it('writes nested slash-containing slugs without ENOENT', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      width: 1,
+      height: 1,
     })
     const app = makeApp()
 
@@ -458,8 +337,7 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     expect(body.filePath).toMatch(/exports\/architecture\/overview-.*\.png$/)
   })
 
-  it('returns 400 for invalid workspaceId or slug without reaching WS', async () => {
-    mockGetClientCount.mockReturnValue(1)
+  it('returns 400 for invalid workspaceId or slug without reaching the headless renderer', async () => {
     const app = makeApp()
 
     const badSession = await app.request('/api/canvas/bad.sid/canvas-a/export', {
@@ -471,18 +349,14 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
       method: 'POST',
     })
     expect(badSlug.status).toBe(400)
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
   it('writes the PNG to an explicit absolute outputPath when provided', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      width: 1,
+      height: 1,
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'subdir', 'custom.excalidraw.png')
@@ -501,7 +375,6 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   })
 
   it('rejects outputPath outside the workspace exports dir even if inside DATA_DIR', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     // ${DATA_DIR}/daemon.json is inside DATA_DIR but not inside ${DATA_DIR}/s1/exports
     const daemonFile = join(tempDir, 'daemon.json')
@@ -512,11 +385,10 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
   it('rejects outputPath outside workspace exports dir (different workspace checkpoints)', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     // ${DATA_DIR}/s1/.checkpoints is inside DATA_DIR/s1 but not in ${DATA_DIR}/s1/exports
     const checkpointFile = join(tempDir, 's1', '.checkpoints', 'v1.json')
@@ -527,11 +399,10 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
   it('rejects outputPath fully outside DATA_DIR', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     const res = await app.request('/api/canvas/s1/canvas-a/export', {
       method: 'POST',
@@ -540,11 +411,10 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
   it('does not leak internal paths in invalid_output_path error response', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     const res = await app.request('/api/canvas/s1/canvas-a/export', {
       method: 'POST',
@@ -559,7 +429,6 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   })
 
   it('does not leak internal paths in output_exists error response', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'exists.png')
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
@@ -577,7 +446,6 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   })
 
   it('rejects a relative PNG outputPath with 400 invalid_output_path', async () => {
-    mockGetClientCount.mockReturnValue(1)
     const app = makeApp()
     const res = await app.request('/api/canvas/s1/canvas-a/export', {
       method: 'POST',
@@ -586,18 +454,14 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
     })
     expect(res.status).toBe(400)
     await expect(res.json()).resolves.toMatchObject({ error: 'invalid_output_path' })
-    expect(mockSendExportRequest).not.toHaveBeenCalled()
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
   it('refuses to overwrite an existing PNG by default and returns 409', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      width: 1,
+      height: 1,
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'pre-existing.png')
@@ -616,14 +480,10 @@ describe('POST /api/canvas/:workspaceId/:slug/export - error handling', () => {
   })
 
   it('overwrites an existing PNG when overwrite=true', async () => {
-    mockGetClientCount.mockReturnValue(1)
-    mockSendExportRequest.mockImplementation((_sid, _slug, requestId) => {
-      queueMicrotask(() => {
-        resolveExportRequest(
-          requestId,
-          'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
-        )
-      })
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      width: 1,
+      height: 1,
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'replace.png')
