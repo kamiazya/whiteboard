@@ -34,38 +34,26 @@ const EDGES_KEY = 'edges'
 // stuck commitChain cannot leave a disconnect() call pending forever.
 const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
 
-// Small debounce helper with no external dependency.
-function debounce<T extends (...args: Parameters<T>) => void>(
-  fn: T,
-  ms: number,
-): T & { cancel: () => void; flush: () => void } {
-  let timer: ReturnType<typeof setTimeout> | null = null
-  // Retained as a thunk (rather than the raw args tuple) because TS cannot
-  // re-spread a `Parameters<T>` read back out of a variable — it only accepts
-  // the tuple at the call site where it is directly bound to `...args`.
-  let pending: (() => void) | null = null
-  const debounced = (...args: Parameters<T>) => {
-    if (timer) clearTimeout(timer)
-    pending = () => fn(...args)
-    // The trailing edge is just a flush fired by the timer.
-    timer = setTimeout(() => debounced.flush(), ms)
+/**
+ * Stable key identifying the single node/edge a command targets, so a
+ * debounce window can dedupe repeat edits to the SAME target down to one
+ * write while still keeping edits to DIFFERENT targets separate. Commands
+ * with no mapped target (see `writeCommandTarget`'s `default` case) get a
+ * fresh key per call — each one already falls back to a full
+ * `writeSpatialCanvas` resync, so there is nothing to dedupe.
+ */
+let unmappedCommandCounter = 0
+function commandTargetKey(command: EditorCommand): string {
+  switch (command.kind) {
+    case 'move-node':
+    case 'resize-node':
+    case 'set-text':
+      return `node:${command.id}`
+    case 'connect-nodes':
+      return `edge:${command.edgeId}`
+    default:
+      return `unmapped:${++unmappedCommandCounter}`
   }
-  debounced.cancel = () => {
-    if (timer) clearTimeout(timer)
-    timer = null
-    pending = null
-  }
-  // Runs the pending call (if any) synchronously right now and clears the
-  // timer, instead of waiting for the trailing edge. Used on teardown so a
-  // debounced write in flight is persisted rather than cancelled/lost.
-  debounced.flush = () => {
-    if (timer) clearTimeout(timer)
-    timer = null
-    const run = pending
-    pending = null
-    run?.()
-  }
-  return debounced as T & { cancel: () => void; flush: () => void }
 }
 
 /**
@@ -294,25 +282,47 @@ export function createCanvasSyncSession(
     }
   }
 
-  // Debounced canvas change -> commit to Loro -> pushLocalUpdate via
-  // subscribeLocalUpdates. `doc`/`backend` are fixed for this session's
-  // entire lifetime (a session is torn down and replaced wholesale on a
-  // backend swap, never mutated in place), so this closure reading them at
-  // fire time already keeps a pending change scoped to the connection it was
-  // made against. Only the LAST (next, command) pair per debounce window
-  // survives — the debounce helper's `pending` thunk already implements that.
-  const onCanvasChange = debounce((next: SpatialCanvas, command: EditorCommand) => {
-    if (!doc) return
+  // Debounce window (ms): edits fired within this window of each other
+  // coalesce into a single commit firing.
+  const DEBOUNCE_MS = 300
+
+  // Every DISTINCT target (see commandTargetKey) touched since the last
+  // commit, keyed so a repeat edit to the SAME target within the window
+  // overwrites its own entry (only the latest command per target survives),
+  // while edits to DIFFERENT targets accumulate side by side instead of the
+  // earlier ones being discarded. `latestNext` is the most recent full
+  // SpatialCanvas value across ALL queued commands — safe to reuse for every
+  // queued command's write because the SpatialEditor reducer builds `next`
+  // cumulatively (each firing's `next` already includes every earlier
+  // firing's edit), so the last-seen canvas already carries the correct
+  // final state for every target in the queue.
+  const pendingTargets = new Map<string, EditorCommand>()
+  let latestNext: SpatialCanvas | null = null
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  function commitPendingTargets(): void {
+    if (!doc || pendingTargets.size === 0 || latestNext === null) {
+      pendingTargets.clear()
+      latestNext = null
+      return
+    }
     const targetDoc = doc
+    const next = latestNext
+    const commands = [...pendingTargets.values()]
+    pendingTargets.clear()
+    latestNext = null
 
     // A commit that throws (unexpected shape, Loro internal error) must fail
-    // only its own firing: an unguarded throw would reject the chain and
-    // silently skip every later firing's commit for the rest of the session.
+    // only its own target, not the whole firing or the commit chain — an
+    // unguarded throw would reject the chain and silently skip every later
+    // firing's commit for the rest of the session.
     const guardedCommit = (): void => {
-      try {
-        commitToDoc(targetDoc, next, command)
-      } catch (err) {
-        log.error('scene commit failed; skipping this firing', err)
+      for (const command of commands) {
+        try {
+          commitToDoc(targetDoc, next, command)
+        } catch (err) {
+          log.error('scene commit failed; skipping this target', err)
+        }
       }
     }
     // Chained with a resolved-only continuation (never `.catch`) because
@@ -323,7 +333,22 @@ export function createCanvasSyncSession(
     commitChain = previousChain.then(guardedCommit).finally(() => {
       pendingCommitCount--
     })
-  }, 300)
+  }
+
+  function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
+    pendingTargets.set(commandTargetKey(command), command)
+    latestNext = next
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null
+      commitPendingTargets()
+    }, DEBOUNCE_MS)
+  }
+  onCanvasChange.flush = (): void => {
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = null
+    commitPendingTargets()
+  }
 
   function connect(): void {
     backend.connect({

@@ -317,6 +317,40 @@ describe('createCanvasSyncSession', () => {
     expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 3, y: 3 })
   })
 
+  it('debounce coalescing across DIFFERENT targets: edits to two different nodes within one window are both committed', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const cA: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 10 }
+    const afterA = applyCommand(twoNodeCanvas(), cA)
+    session.onChange(afterA, cA)
+
+    const cB: EditorCommand = {
+      kind: 'resize-node',
+      id: 'n-b',
+      x: 200,
+      y: 0,
+      width: 150,
+      height: 60,
+    }
+    const afterB = applyCommand(afterA, cB)
+    session.onChange(afterB, cB)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    const result = readSpatialCanvas(doc)
+    // Both edits must survive: node A's move must not be dropped just
+    // because node B's edit was the last command in the debounce window.
+    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 10, y: 10 })
+    expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ width: 150, height: 60 })
+  })
+
   it('dispose() flushes a pending debounced edit into this session before disconnecting', async () => {
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())
