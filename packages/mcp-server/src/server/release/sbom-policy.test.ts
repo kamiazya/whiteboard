@@ -299,9 +299,12 @@ describe('generated SBOM content regression', () => {
       // @excalidraw/utils is intentionally NOT listed here: the headless
       // export renderer moved to canvas-render + resvg, dropping
       // @excalidraw/utils, happy-dom, and @napi-rs/canvas as production
-      // deps. @excalidraw/excalidraw itself stays a legitimate runtime dep
-      // (canvas-viewer / apps/web still use it), so its own SBOM entry is
-      // expected and not flagged as dev-only here.
+      // deps. @excalidraw/excalidraw is still declared by this package and
+      // so still has an SBOM entry, but nothing here imports it any more —
+      // apps/web is its last consumer and carries its own dependency. It is
+      // dead weight in the published package and comes out with the rest of
+      // the Excalidraw removal; it is not dev-only, so it does not belong in
+      // this list either way.
       '%40stryker-mutator/', // @stryker-mutator/* mutation testing
       'pkg:npm/playwright@', // playwright core
       '%40playwright/', // @playwright/* scoped
