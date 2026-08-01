@@ -67,6 +67,20 @@ function bboxEdges(bbox: BoundingBox): { x0: number; y0: number; x1: number; y1:
   }
 }
 
+/**
+ * The x-shift a node applies to its own subtree. `renderListItem` and
+ * `renderTableCell` are the only renderers that emit a transform, and both
+ * translate by their own `bbox.x` on the x axis only — so their descendants
+ * are stored in wrapper-relative coordinates and must be re-offset here to
+ * land where they are actually drawn. Every other wrapper emits a plain
+ * `<g>`, leaving its children absolute. A non-finite `bbox.x` contributes no
+ * shift rather than poisoning the whole subtree with NaN.
+ */
+function subtreeOffsetX(node: WalkNode): number {
+  if (node.kind !== 'listItem' && node.kind !== 'tableCell') return 0
+  return Number.isFinite(node.bbox.x) ? node.bbox.x : 0
+}
+
 /** Children arrays present per node variant, used by the iterative walk. */
 function childrenOf(node: WalkNode): readonly WalkNode[] | undefined {
   switch (node.kind) {
@@ -103,26 +117,35 @@ function childrenOf(node: WalkNode): readonly WalkNode[] | undefined {
  */
 export function sceneBounds(scene: Scene): BoundingBox {
   let extent: Extent | null = null
-  const stack: WalkNode[] = [...scene.nodes]
+  // Each frame carries the accumulated x-shift of its ancestors' transforms,
+  // so nested wrappers compose exactly as nested `<g transform>` elements do.
+  const stack: { node: WalkNode; offsetX: number }[] = scene.nodes.map((node) => ({
+    node,
+    offsetX: 0,
+  }))
 
   while (stack.length > 0) {
-    const node = stack.pop()!
+    const { node, offsetX } = stack.pop()!
 
     if (node.kind === 'edge') {
       for (const p of node.path) {
         if (isFinitePoint(p.x, p.y)) {
-          extent = widen(extent, p.x, p.y, p.x, p.y)
+          const x = p.x + offsetX
+          extent = widen(extent, x, p.y, x, p.y)
         }
       }
     } else {
       const edges = bboxEdges(node.bbox)
       if (edges) {
-        extent = widen(extent, edges.x0, edges.y0, edges.x1, edges.y1)
+        extent = widen(extent, edges.x0 + offsetX, edges.y0, edges.x1 + offsetX, edges.y1)
       }
     }
 
     const children = childrenOf(node)
-    if (children) stack.push(...children)
+    if (children) {
+      const childOffsetX = offsetX + subtreeOffsetX(node)
+      for (const child of children) stack.push({ node: child, offsetX: childOffsetX })
+    }
   }
 
   if (!extent) return FALLBACK_BOUNDS

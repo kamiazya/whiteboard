@@ -205,6 +205,125 @@ describe('sceneBounds', () => {
     expect(bounds.h).toBeGreaterThanOrEqual(510)
   })
 
+  // `renderTableCell` and `renderListItem` are the only two renderers that
+  // emit a transform, translating their subtree by the wrapper's own bbox.x.
+  // Their descendants are therefore stored in wrapper-relative coordinates,
+  // and bounds computed without re-applying that offset can place the
+  // viewBox short of what actually gets drawn — clipping the overflow.
+  it('applies the table-cell offset to its runs, which are cell-relative', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'table',
+          bbox: { x: 0, y: 0, w: 20, h: 10 },
+          rows: [
+            {
+              kind: 'tableRow',
+              bbox: { x: 0, y: 0, w: 20, h: 10 },
+              cells: [
+                {
+                  kind: 'tableCell',
+                  bbox: { x: 100, y: 0, w: 20, h: 10 },
+                  runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 200, h: 10 }, text: 'wide' }],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    // The run is drawn at 100..300, not 0..200.
+    const bounds = sceneBounds(scene)
+    expect(bounds.x).toBe(0)
+    expect(bounds.x + bounds.w).toBe(300)
+  })
+
+  it('applies the list-item offset to its children, which are item-relative', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'list',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          ordered: false,
+          depth: 0,
+          items: [
+            {
+              kind: 'listItem',
+              bbox: { x: 40, y: 0, w: 10, h: 10 },
+              children: [{ kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 100, h: 10 } }],
+            },
+          ],
+        },
+      ],
+    }
+    // The child is drawn at 40..140, not 0..100.
+    const bounds = sceneBounds(scene)
+    expect(bounds.x).toBe(0)
+    expect(bounds.x + bounds.w).toBe(140)
+  })
+
+  it('accumulates nested list-item offsets the way the renderer nests transforms', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'list',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          ordered: false,
+          depth: 0,
+          items: [
+            {
+              kind: 'listItem',
+              bbox: { x: 40, y: 0, w: 10, h: 10 },
+              children: [
+                {
+                  kind: 'list',
+                  bbox: { x: 0, y: 0, w: 10, h: 10 },
+                  ordered: false,
+                  depth: 1,
+                  items: [
+                    {
+                      kind: 'listItem',
+                      bbox: { x: 80, y: 0, w: 10, h: 10 },
+                      // Wider than the item box, so the assertion turns on the
+                      // leaf's accumulated offset rather than the wrapper's.
+                      children: [{ kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 60, h: 10 } }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    // Nested <g transform> elements compose: 40 + 80 + 60 = 180.
+    const bounds = sceneBounds(scene)
+    expect(bounds.x + bounds.w).toBe(180)
+  })
+
+  // `sceneBounds` mirrors a rule that lives in the SVG backend: which node
+  // kinds translate their subtree. Nothing links the two, so a third
+  // translating renderer would silently make these bounds wrong again — the
+  // containment property walks only top-level nodes and cannot see it. This
+  // tripwire fails the moment that set changes, pointing at subtreeOffsetX.
+  it('is kept in sync with the only two renderers that emit a transform', () => {
+    const backendSource = (
+      import.meta.glob('./svg/backend.ts', {
+        query: '?raw',
+        eager: true,
+        import: 'default',
+      }) as Record<string, string>
+    )['./svg/backend.ts']
+
+    const translating = [
+      ...backendSource.matchAll(/function (render\w+)\([^)]*\)[^{]*\{([^}]*)\}/g),
+    ]
+      .filter(([, , body]) => body.includes('transform="translate('))
+      .map(([, name]) => name)
+
+    expect(new Set(translating)).toEqual(new Set(['renderListItem', 'renderTableCell']))
+  })
+
   it('does not overflow the stack on deep nesting (iterative walk)', () => {
     const DEPTH = 10000
     let node: Scene['nodes'][number] = { kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 1, h: 1 } }

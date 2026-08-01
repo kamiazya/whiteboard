@@ -95,7 +95,17 @@
    not just top-level) with an explicit stack (no recursion, so no
    stack-overflow path on deep embed chains), including edge polyline
    points; a bbox/point with any non-finite field is skipped rather than
-   clamped. Option sanitization keeps `renderSceneToSvg` total per this
+   clamped. **The walk carries an accumulated x-offset**, because the scene
+   graph is NOT uniformly absolute: `renderListItem` and `renderTableCell`
+   are the only renderers that emit a `transform`, each translating its
+   subtree by its own `bbox.x` on the x axis, so a list item's children and
+   a table cell's runs are stored wrapper-RELATIVE and nested wrappers
+   compose. Bounds taken without re-applying those offsets sit short of what
+   is actually drawn and the derived `viewBox` clips the overflow. A third
+   translating renderer must therefore teach `subtreeOffsetX` about itself;
+   a tripwire test in `scene-bounds.test.ts` fails if that set ever changes.
+   Note the top-level-only containment property cannot see this class of bug.
+   Option sanitization keeps `renderSceneToSvg` total per this
    package's never-throw rule: non-finite/negative `padding` -> `0`;
    non-finite or negative `width`/`height` -> the derived fallback; a
    `viewBox` with any non-finite field, or a negative `w`/`h` (SVG forbids
