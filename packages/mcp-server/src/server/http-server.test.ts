@@ -443,11 +443,10 @@ describe('startHttpServer file-gc sweeper wiring', () => {
   })
 })
 
-// Regression: a concurrent dev-daemon bootstrap losing a port-bind race used
-// to surface as a raw, unhandled 'error' event -- a Node stack trace dumped
-// straight to tmp/logs/mcp-http-dev.log (40+ occurrences observed in the
-// wild). The loser must log one classified, sanitized record and exit
-// instead of crashing with a stack trace that could leak filesystem paths.
+// Regression: a losing port-bind race used to surface as a raw, unhandled
+// 'error' event -- a Node stack trace dumped to the process's stdio. The
+// loser must log one classified, sanitized record and exit instead of
+// crashing with a stack trace that could leak filesystem paths.
 describe('startHttpServer bind-failure handling', () => {
   it('logs a classified EADDRINUSE record with no stack trace and exits instead of throwing', async () => {
     const port = await findAvailablePort(4600)

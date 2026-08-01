@@ -189,14 +189,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   fileGcSweeper.start()
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
-  // `serve()` returns before the underlying bind resolves, so a losing
-  // concurrent bootstrap's EADDRINUSE (or a permission failure's EACCES)
-  // otherwise surfaces as Node's default 'error' behavior: an unhandled
-  // throw with a raw stack trace straight to whatever this process's
-  // stdio is piped to (the dev-daemon bootstrap log, in practice — see
-  // scripts/dev/ensure-http-dev-daemon.mjs). Log one classified, path-free
-  // record instead and exit, matching this package's no-console /
-  // no-leaked-path logging discipline.
+  // `serve()` returns before the underlying bind resolves, so a bind failure
+  // (EADDRINUSE from a losing concurrent bootstrap, EACCES from a privileged
+  // port) would otherwise hit Node's default 'error' behavior: an unhandled
+  // throw dumping a raw stack trace to this process's stdio. Log one
+  // classified, path-free record instead and exit, per this package's
+  // no-console / no-leaked-path logging discipline.
   server.on('error', (err: NodeJS.ErrnoException) => {
     const log = getLogger('http-server')
     log.error({ port: options.port, code: err.code ?? 'unknown' }, 'http listener failed to bind')
