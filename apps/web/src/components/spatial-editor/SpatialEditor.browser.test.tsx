@@ -323,6 +323,17 @@ describe('SpatialEditor (browser)', () => {
     expect(transformed).not.toBeNull()
     expect(transformed?.style.transform).toBe('scale(1) translate(0px, 0px)')
 
+    // Derive the expected translate from the root's OWN measured rect
+    // rather than assuming it sits at client (0, 0) — handleWheel converts
+    // clientX/clientY via clientPointToRootLocal, which subtracts
+    // getBoundingClientRect(), so a body margin or test-harness wrapper
+    // padding must not change the expected math here.
+    const ZOOM_WHEEL_FACTOR = 1.1 // must track SpatialEditor.tsx's own constant
+    const rect = editor.element().getBoundingClientRect()
+    const anchorX = 100 - rect.left
+    const anchorY = 100 - rect.top
+    const expectedTranslate = (anchor: number) => anchor / ZOOM_WHEEL_FACTOR - anchor
+
     await editor.element().dispatchEvent(
       new WheelEvent('wheel', {
         bubbles: true,
@@ -344,9 +355,9 @@ describe('SpatialEditor (browser)', () => {
       )
       expect(match).not.toBeNull()
       const [, scale, tx, ty] = match as unknown as [string, string, string, string]
-      expect(Number(scale)).toBeCloseTo(1.1, 5)
-      expect(Number(tx)).toBeCloseTo(-9.090909090909092, 5)
-      expect(Number(ty)).toBeCloseTo(-9.090909090909092, 5)
+      expect(Number(scale)).toBeCloseTo(ZOOM_WHEEL_FACTOR, 5)
+      expect(Number(tx)).toBeCloseTo(expectedTranslate(anchorX), 5)
+      expect(Number(ty)).toBeCloseTo(expectedTranslate(anchorY), 5)
     })
     expect(onChange).not.toHaveBeenCalled()
   })
