@@ -123,8 +123,13 @@ function hasEnvelopeOptions(
   )
 }
 
+/**
+ * A negative width/height is invalid on both the root `<svg>` element and
+ * `viewBox` (SVG spec) — `x`/`y` may be negative (an offset), but `w`/`h`
+ * must not be, so this is checked separately from plain finiteness.
+ */
 function isFiniteBox(box: BoundingBox): boolean {
-  return [box.x, box.y, box.w, box.h].every(Number.isFinite)
+  return [box.x, box.y, box.w, box.h].every(Number.isFinite) && box.w >= 0 && box.h >= 0
 }
 
 /** Non-finite or negative padding is not a valid expansion amount — treated as 0 so the function stays total. */
@@ -143,8 +148,9 @@ function resolveViewBox(scene: Scene, options: SvgDocumentOptions): BoundingBox 
   return expandBox(sceneBounds(scene), sanitizePadding(options.padding))
 }
 
+/** A negative root-element width/height is invalid SVG — falls back to the derived dimension, same as a non-finite value. */
 function resolveDimension(explicit: number | undefined, fallback: number): number {
-  return explicit !== undefined && Number.isFinite(explicit) ? explicit : fallback
+  return explicit !== undefined && Number.isFinite(explicit) && explicit >= 0 ? explicit : fallback
 }
 
 function renderBackgroundRect(box: BoundingBox, background: string): string {

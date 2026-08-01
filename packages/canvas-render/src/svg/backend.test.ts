@@ -314,6 +314,31 @@ describe('renderSceneToSvg — document envelope options', () => {
     expect(svg).toContain('viewBox="0 0 100 10"')
   })
 
+  it('sanitizes a negative explicit width/height to the derived fallback rather than emitting an invalid SVG', () => {
+    expect(() => renderSceneToSvg(scene, { width: -100, height: -50 })).not.toThrow()
+    const svg = renderSceneToSvg(scene, { width: -100, height: -50 })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="10" viewBox="0 0 100 10">',
+      ),
+    ).toBe(true)
+  })
+
+  it('sanitizes a viewBox with a negative w/h to the derived fallback rather than emitting an invalid viewBox', () => {
+    expect(() => renderSceneToSvg(scene, { viewBox: { x: 1, y: 2, w: -3, h: -4 } })).not.toThrow()
+    const svg = renderSceneToSvg(scene, { viewBox: { x: 1, y: 2, w: -3, h: -4 } })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="10" viewBox="0 0 100 10">',
+      ),
+    ).toBe(true)
+  })
+
+  it('accepts a viewBox with negative x/y offset paired with non-negative w/h', () => {
+    const svg = renderSceneToSvg(scene, { viewBox: { x: -5, y: -5, w: 3, h: 4 } })
+    expect(svg).toContain('viewBox="-5 -5 3 4"')
+  })
+
   it('produces well-formed XML including the background rect', () => {
     expect(
       isWellFormedXmlFragment(renderSceneToSvg(scene, { background: 'red', padding: 4 })),

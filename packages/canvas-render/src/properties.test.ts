@@ -175,4 +175,20 @@ describe('renderSceneToSvg document envelope (PBT)', () => {
       expect(renderSceneToSvg(scene, options)).toBe(renderSceneToSvg(scene, options))
     },
   )
+
+  fcTest.prop([sceneArb, documentOptionsArb], withDefaults({ numRuns: 50 }))(
+    'never emits a negative root width/height or viewBox w/h, for any adversarial option including negative numbers',
+    (scene, options) => {
+      const svg = renderSceneToSvg(scene, options)
+      const rootMatch =
+        /^<svg xmlns="[^"]*" width="(-?[\d.]+)" height="(-?[\d.]+)" viewBox="([^"]+)"/.exec(svg)
+      if (!rootMatch) return // envelope not activated (no options fields set) — nothing to check
+      const [, width, height, viewBox] = rootMatch
+      const [, , w, h] = viewBox.split(' ')
+      expect(Number(width)).toBeGreaterThanOrEqual(0)
+      expect(Number(height)).toBeGreaterThanOrEqual(0)
+      expect(Number(w)).toBeGreaterThanOrEqual(0)
+      expect(Number(h)).toBeGreaterThanOrEqual(0)
+    },
+  )
 })

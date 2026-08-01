@@ -97,8 +97,10 @@
    points; a bbox/point with any non-finite field is skipped rather than
    clamped. Option sanitization keeps `renderSceneToSvg` total per this
    package's never-throw rule: non-finite/negative `padding` -> `0`;
-   non-finite `width`/`height` -> the derived fallback; a `viewBox` with
-   any non-finite field -> derived instead of the caller's value.
+   non-finite or negative `width`/`height` -> the derived fallback; a
+   `viewBox` with any non-finite field, or a negative `w`/`h` (SVG forbids
+   a negative width/height on `viewBox`, unlike `x`/`y` which may be a
+   negative offset), -> derived instead of the caller's value.
 
 ## Conventions
 
