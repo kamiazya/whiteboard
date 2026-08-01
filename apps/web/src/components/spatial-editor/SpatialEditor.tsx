@@ -225,9 +225,15 @@ export function SpatialEditor({
     applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
   }
 
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheel = (e: WheelEvent) => {
     const root = rootRef.current
     if (root === null) return
+    // React registers onWheel as a PASSIVE listener (matching the browser's
+    // own default for scroll-affecting events), so e.preventDefault() from a
+    // React handler is silently ignored. Ctrl/Cmd+wheel zoom needs to
+    // suppress the browser's own page-zoom/scroll, which only a
+    // { passive: false } NATIVE listener can do — see the effect below that
+    // wires this function up that way.
     e.preventDefault()
     const screenPoint = clientPointToRootLocal(e, root)
     if (e.ctrlKey || e.metaKey) {
@@ -239,6 +245,17 @@ export function SpatialEditor({
     // hence the negated delta.
     setViewport((vp) => panBy(vp, { x: -e.deltaX, y: -e.deltaY }))
   }
+
+  const handleWheelRef = useRef(handleWheel)
+  handleWheelRef.current = handleWheel
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (root === null) return
+    const onWheel = (e: WheelEvent) => handleWheelRef.current(e)
+    root.addEventListener('wheel', onWheel, { passive: false })
+    return () => root.removeEventListener('wheel', onWheel)
+  }, [])
 
   const handleDoubleClick = () => {
     if (selectedNode?.type !== 'text') return
@@ -275,7 +292,6 @@ export function SpatialEditor({
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
       onLostPointerCapture={handlePointerCancel}
-      onWheel={handleWheel}
       onDoubleClick={handleDoubleClick}
     >
       <div

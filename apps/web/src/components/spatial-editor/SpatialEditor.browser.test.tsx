@@ -362,6 +362,31 @@ describe('SpatialEditor (browser)', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  it('a wheel event actually gets its default (page scroll/zoom) suppressed', async () => {
+    // React's onWheel is registered as a PASSIVE native listener, so
+    // e.preventDefault() called from a React handler is a silent no-op —
+    // handleWheel must reach the browser through a non-passive native
+    // listener for this to have any effect at all.
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    const event = new WheelEvent('wheel', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 100,
+      clientY: 100,
+      deltaX: 0,
+      deltaY: -100,
+      ctrlKey: true,
+    })
+    editor.element().dispatchEvent(event)
+    expect(event.defaultPrevented).toBe(true)
+  })
+
   it('a plain wheel pans the content opposite to the scroll delta', async () => {
     const onChange = vi.fn()
     const { container } = render(
