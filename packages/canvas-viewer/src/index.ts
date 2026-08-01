@@ -5,13 +5,11 @@
 
 export type { CanvasViewerProps } from './CanvasViewer.js'
 export { CanvasViewer } from './CanvasViewer.js'
+export { VIEWER_FONT_FALLBACK_CHAIN, VIEWER_FONT_FAMILY } from './font.js'
+export { createBrowserMeasureText } from './measure-text.js'
 export type { CanvasViewerHandle, MountCanvasViewerOptions } from './mount.js'
-export { mountCanvasViewer } from './mount.js'
-export type { ExcalidrawJsonDoc, ViewerScene } from './scene.js'
-export {
-  excalidrawJsonDocSchema,
-  parseViewerScene,
-  serializeSceneAsExcalidrawJson,
-  viewerSceneSchema,
-} from './scene.js'
+export { mountCanvasViewer, ViewerSceneError } from './mount.js'
+export type { ViewerScene } from './scene.js'
+export { parseViewerScene, serializeViewerScene, viewerSceneSchema } from './scene.js'
+export { buildViewerScene } from './spatial-scene.js'
 export { serializeSceneForScriptTag } from './widget/embed-scene.js'

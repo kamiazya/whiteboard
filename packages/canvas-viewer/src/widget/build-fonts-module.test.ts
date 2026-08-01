@@ -59,17 +59,4 @@ describe('buildWidgetFontsModuleSource', () => {
     expect(source).toContain('"unicodeRange": "U+20-7e"')
     expect(source).toContain('data:font/woff2;base64,AQIDBA==')
   })
-
-  it('emits FONT_FILENAME_MAP keyed by the basename of each asset file', () => {
-    const source = buildWidgetFontsModuleSource([
-      {
-        family: 'Excalifont',
-        file: 'Excalifont/Excalifont-Regular-abc.woff2',
-        dataUri: 'data:font/woff2;base64,AQIDBA==',
-      },
-    ])
-
-    expect(source).toContain('export const FONT_FILENAME_MAP')
-    expect(source).toContain('"Excalifont-Regular-abc.woff2": "data:font/woff2;base64,AQIDBA=="')
-  })
 })

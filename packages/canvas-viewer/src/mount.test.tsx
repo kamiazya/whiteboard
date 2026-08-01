@@ -1,14 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: () => <div data-testid="excalidraw-stub" />,
-}))
-
-const { mountCanvasViewer } = await import('./mount.js')
+import { mountCanvasViewer } from './mount.js'
 
 function resetDom() {
   document.body.innerHTML = ''
-  delete (window as any).__WHITEBOARD_VIEWER_SCENE__
+  document.head.querySelectorAll('script[data-whiteboard-scene]').forEach((el) => {
+    el.remove()
+  })
+  delete (window as { __WHITEBOARD_VIEWER_SCENE__?: unknown }).__WHITEBOARD_VIEWER_SCENE__
 }
 
 afterEach(() => {
@@ -21,25 +19,27 @@ describe('mountCanvasViewer', () => {
     document.body.appendChild(container)
 
     const handle = mountCanvasViewer(container, {
-      scene: { elements: [{ id: 'a' }] },
+      scene: { nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }] },
     })
 
     expect(container.querySelector('[data-testid="canvas-viewer"]')).toBeTruthy()
     handle.dispose()
   })
 
-  it('throws when the scene option fails schema validation', () => {
+  it('throws a ViewerSceneError when the scene option fails schema validation', () => {
     const container = document.createElement('div')
     document.body.appendChild(container)
 
-    expect(() => mountCanvasViewer(container, { scene: { not: 'a scene' } })).toThrow()
+    expect(() => mountCanvasViewer(container, { scene: { nodes: 'not an array' } })).toThrow(
+      /json-canvas-schema/,
+    )
   })
 
   it('falls back to the embedded <script data-whiteboard-scene> when no scene option is given', () => {
     const script = document.createElement('script')
     script.type = 'application/json'
     script.setAttribute('data-whiteboard-scene', '')
-    script.textContent = JSON.stringify({ elements: [{ id: 'embedded' }] })
+    script.textContent = JSON.stringify({ nodes: [] })
     document.head.appendChild(script)
 
     const container = document.createElement('div')
@@ -53,7 +53,9 @@ describe('mountCanvasViewer', () => {
   })
 
   it('falls back to window.__WHITEBOARD_VIEWER_SCENE__ when no script tag is present', () => {
-    ;(window as any).__WHITEBOARD_VIEWER_SCENE__ = { elements: [{ id: 'window-scene' }] }
+    ;(window as { __WHITEBOARD_VIEWER_SCENE__?: unknown }).__WHITEBOARD_VIEWER_SCENE__ = {
+      nodes: [],
+    }
 
     const container = document.createElement('div')
     document.body.appendChild(container)
@@ -70,7 +72,7 @@ describe('mountCanvasViewer', () => {
     const messageHandler = vi.fn()
 
     const handle = mountCanvasViewer(container, {
-      scene: { elements: [] },
+      scene: { nodes: [] },
       messageHandler,
     })
 
@@ -91,7 +93,7 @@ describe('mountCanvasViewer', () => {
     const messageHandler = vi.fn()
 
     const handle = mountCanvasViewer(container, {
-      scene: { elements: [] },
+      scene: { nodes: [] },
       messageHandler,
     })
     handle.dispose()
