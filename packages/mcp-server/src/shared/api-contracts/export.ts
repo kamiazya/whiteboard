@@ -18,7 +18,7 @@ export const exportRequestSchema = z.object({
   theme: z.enum(['light', 'dark']).optional(),
 })
 
-const exportResponseSchema = z.object({
+export const exportResponseSchema = z.object({
   filePath: z.string(),
 })
 
@@ -26,7 +26,7 @@ const exportResponseSchema = z.object({
 // invalid_output_path / output_exists (400 / 409), and internal (500).
 // All fields are optional since some 5xx bodies come from proxies that
 // strip `error` without crashing the parser.
-const exportErrorBodySchema = z.object({
+export const exportErrorBodySchema = z.object({
   error: z.string().optional(),
   message: z.string().optional(),
   hint: z.string().optional(),
