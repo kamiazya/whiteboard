@@ -1,8 +1,9 @@
-import { exportToBlob, exportToSvg } from '@excalidraw/excalidraw'
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
-import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { EditorCommand } from '../components/spatial-editor/commands.js'
+import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import {
   type CanvasSyncSession,
   createCanvasSyncSession,
@@ -17,48 +18,54 @@ export type { UseCanvasSyncOptions }
 // alongside the session module that also needs it.
 export { dispatchIdentityEvent }
 
-// Raster/vector are the only formats the underlying @excalidraw/excalidraw
-// export utilities support; there is no PDF export anywhere in the library.
+// canvas-render's SVG backend + this hook's own Canvas-2D raster path are the
+// only export routes now that Excalidraw's exportToBlob/exportToSvg are gone.
 export type SceneExportFormat = 'png' | 'svg' | 'json'
 
 export interface UseCanvasSyncResult {
   syncStatus: SyncStatus
-  setExcalidrawAPI: (api: ExcalidrawImperativeAPI) => void
-  onChange: (elements: readonly ExcalidrawElement[], appState: AppState, files: BinaryFiles) => void
+  canvas: SpatialCanvas
+  onChange: (next: SpatialCanvas, command: EditorCommand) => void
   restoreInProgress: boolean
   restoreLabel: string | null
   clearLocalUndo: () => void
-  // null when no ExcalidrawImperativeAPI is registered yet (mount race) —
-  // callers treat that the same as "export unavailable right now" rather
-  // than throwing.
+  // null when the requested format is unavailable in this environment (e.g.
+  // 'png' with no real Canvas 2D context, such as jsdom) — callers treat
+  // that the same as "export unavailable right now" rather than throwing.
   exportScene: (format: SceneExportFormat) => Promise<Blob | null>
 }
+
+const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
 
 /**
  * useCanvasSync — canonical sync hook for both the browser-local backend and
  * (once slice 11 wires it up) a daemon-backed connection.
  *
  * This hook is React glue only: state, the connect/teardown effect, and the
- * keyboard/pointer undo-redo intercept. All per-connection state (the
- * LoroDoc, its UndoManager, the file cache, the debounced commit pipeline,
- * queued export requests, and the CanvasBackendHandlers wiring) lives in a
- * `CanvasSyncSession` from `../lib/canvas-sync-session.js` — a plain
- * non-React module constructed fresh for every backend identity.
+ * keyboard undo-redo intercept. All per-connection state (the LoroDoc, its
+ * UndoManager, the debounced commit pipeline, queued export requests, and
+ * the CanvasBackendHandlers wiring) lives in a `CanvasSyncSession` from
+ * `../lib/canvas-sync-session.js` — a plain non-React module constructed
+ * fresh for every backend identity. This hook mirrors the session's
+ * published canvas value into React state via `session.subscribe`, and
+ * forwards `onChange(next, command)` — structurally the same signature as
+ * `SpatialEditorProps['onChange']` — straight through to the session.
  *
  * Accepts a CanvasBackend (e.g. BrowserLocalBackend) or null when no backend
  * is available yet (e.g. the initial snapshot is still loading). A null
- * backend never connects: syncStatus stays 'idle' and onChange is a no-op.
- * When the backend identity changes — including null-to-backend and
- * backend-to-backend — the previous session is fully disposed before the
- * new one connects. This is the mechanism a browser-local → daemon in-place
- * migration rides on: swapping the CanvasBackend prop is the whole contract.
+ * backend never connects: syncStatus stays 'idle', canvas stays the empty
+ * canvas, and onChange is a no-op. When the backend identity changes —
+ * including null-to-backend and backend-to-backend — the previous session
+ * is fully disposed before the new one connects. This is the mechanism a
+ * browser-local -> daemon in-place migration rides on: swapping the
+ * CanvasBackend prop is the whole contract.
  *
  * `options` wires the daemon-only capability receptors (onVersionCreated,
- * onHeadChanged, onFileUploadFailed/Succeeded) plus the restore-overlay
- * state and onViewportRequest/onExportRequest/onAuthError handling that a
- * daemon backend can drive. A browser-local backend never fires any of
- * these events, so passing no `options` behaves exactly as before this seam
- * was added.
+ * onHeadChanged) plus the restore-overlay state and
+ * onViewportRequest/onExportRequest/onAuthError handling that a daemon
+ * backend can drive. A browser-local backend never fires any of these
+ * events, so passing no `options` behaves exactly as before this seam was
+ * added.
  *
  * Ref discipline: every ref below is intentionally mutable per-hook-instance
  * state that is never shared across components. The generation counters
@@ -72,11 +79,6 @@ export function useCanvasSync(
   backend: CanvasBackend | null,
   options?: UseCanvasSyncOptions,
 ): UseCanvasSyncResult {
-  // Imperative handle set outside React's render cycle by Excalidraw's own
-  // ref callback (via setExcalidrawAPI below), so it cannot be plain state
-  // without forcing an extra render on every mount.
-  const excalidrawAPIRef = useRef<ExcalidrawImperativeAPI | null>(null)
-
   // Latest-prop mirrors deliberately excluded from the connect effect's
   // dependency array below: reading `backend`/`options` through these refs
   // (rather than as effect deps) means a fresh inline object passed on every
@@ -96,7 +98,7 @@ export function useCanvasSync(
   const generationsRef = useRef(createGenerationCounters())
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
-  const [apiReady, setApiReady] = useState(false)
+  const [canvas, setCanvas] = useState<SpatialCanvas>(EMPTY_CANVAS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
 
@@ -112,23 +114,21 @@ export function useCanvasSync(
     // even though the new session (or no session) is not restoring anything.
     setRestoreInProgress(false)
     setRestoreLabel(null)
+    setCanvas(EMPTY_CANVAS)
 
     if (backend === null) {
       sessionRef.current = null
       setSyncStatus('idle')
       // Bumps the connection generation even though no new session is
       // created, mirroring the pre-extraction hook's unconditional bump on
-      // every effect run. Without this, a settling putFile() from the
+      // every effect run. Without this, a settling async op from the
       // just-disposed session would still match its own myGeneration (no
-      // successor session ever advances the counter for a switch-to-null)
-      // and would wrongly fire onFileUploadSucceeded/onFileUploadFailed for
-      // a backend that is no longer attached.
+      // successor session ever advances the counter for a switch-to-null).
       generationsRef.current.nextConnectionGeneration()
       return
     }
 
     const session = createCanvasSyncSession(backend, {
-      getExcalidrawAPI: () => excalidrawAPIRef.current,
       getOptions: () => optionsRef.current,
       onStatusChange: setSyncStatus,
       onRestoreChange: (inProgress, label) => {
@@ -139,26 +139,15 @@ export function useCanvasSync(
       generations: generationsRef.current,
     })
     sessionRef.current = session
+    const unsubscribe = session.subscribe(setCanvas)
     session.connect()
+    session.onEditorReady()
 
     return () => {
+      unsubscribe()
       session.dispose()
     }
   }, [backend])
-
-  // Reapply the current doc, re-send clientReady, and flush any export
-  // request queued before the API existed, once the Excalidraw API becomes
-  // ready. Fires independently of whether a snapshot has landed yet (session
-  // methods no-op safely when there is no doc).
-  useEffect(() => {
-    if (!apiReady) return
-    sessionRef.current?.onApiReady()
-  }, [apiReady])
-
-  const setExcalidrawAPI = useCallback((api: ExcalidrawImperativeAPI) => {
-    excalidrawAPIRef.current = api
-    setApiReady(true)
-  }, [])
 
   const loroUndo = useCallback(() => {
     return sessionRef.current?.undo() ?? false
@@ -172,34 +161,58 @@ export function useCanvasSync(
     sessionRef.current?.clearUndo()
   }, [])
 
-  // Renders the live scene through the same exportToBlob/exportToSvg utilities
-  // Excalidraw's own (harder-to-discover) hamburger-menu export dialog uses,
-  // so a header-driven "Export" affordance produces byte-identical output
-  // without duplicating export logic.
-  const exportScene = useCallback(async (format: SceneExportFormat): Promise<Blob | null> => {
-    const api = excalidrawAPIRef.current
-    if (!api) return null
-    const elements = api.getSceneElements()
-    const appState = api.getAppState()
-    const files = api.getFiles()
-    if (format === 'png') {
-      return exportToBlob({ elements, appState, files, exportPadding: 10 })
-    }
-    // Callers are expected to route through createSceneExportHandler, which
-    // intercepts 'json' and delegates to commands.exportJson before this
-    // function is ever invoked. Guard defensively rather than silently
-    // falling through to exportToSvg and mislabeling the blob's content type.
-    if (format === 'json') {
-      throw new Error(
-        "exportScene does not support 'json' directly; route through createSceneExportHandler",
-      )
-    }
-    const svg = await exportToSvg({ elements, appState, files, exportPadding: 10 })
-    const serialized = new XMLSerializer().serializeToString(svg)
-    return new Blob([serialized], { type: 'image/svg+xml' })
-  }, [])
+  // Derives the export blob from the hook-owned canvas value — no imperative
+  // editor handle involved, so exportScene works identically whether or not
+  // a SpatialEditor is currently mounted.
+  const exportScene = useCallback(
+    async (format: SceneExportFormat): Promise<Blob | null> => {
+      // Callers are expected to route through createSceneExportHandler, which
+      // intercepts 'json' and delegates to commands.exportJson before this
+      // function is ever invoked. Guard defensively rather than silently
+      // falling through and mislabeling the blob's content type.
+      if (format === 'json') {
+        throw new Error(
+          "exportScene does not support 'json' directly; route through createSceneExportHandler",
+        )
+      }
+      const { svg, bounds } = renderCanvasToSvg(sessionRef.current?.getCanvas() ?? canvas, {
+        measure: createBrowserMeasureText(),
+      })
+      if (format === 'svg') {
+        return new Blob([svg], { type: 'image/svg+xml' })
+      }
+      // 'png': rasterize the derived SVG through an <img> + <canvas> 2D
+      // context. Returns null when no real 2D context exists (e.g. jsdom) —
+      // documented as "format unavailable in this environment", not an error.
+      const canvasEl = document.createElement('canvas')
+      canvasEl.width = Math.max(1, Math.round(bounds.w))
+      canvasEl.height = Math.max(1, Math.round(bounds.h))
+      const ctx = canvasEl.getContext('2d')
+      if (!ctx) return null
+      const svgBlob = new Blob([svg], { type: 'image/svg+xml' })
+      const url = URL.createObjectURL(svgBlob)
+      try {
+        const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+          const img = new Image()
+          img.onload = () => resolve(img)
+          img.onerror = () => reject(new Error('failed to load rasterized SVG'))
+          img.src = url
+        })
+        ctx.drawImage(image, 0, 0, canvasEl.width, canvasEl.height)
+      } finally {
+        URL.revokeObjectURL(url)
+      }
+      return new Promise<Blob | null>((resolve) => {
+        canvasEl.toBlob((blob) => resolve(blob), 'image/png')
+      })
+    },
+    [canvas],
+  )
 
-  // Keyboard and pointer intercept for undo/redo.
+  // Keyboard intercept for undo/redo. The Excalidraw-toolbar pointerdown
+  // hijack from before the OpenCanvas cutover has nothing left to hijack —
+  // SpatialEditor has no undo/redo buttons of its own — so only the keyboard
+  // path remains.
   useEffect(() => {
     function isEditingText(target: EventTarget | null): boolean {
       if (!(target instanceof HTMLElement)) return false
@@ -226,44 +239,19 @@ export function useCanvasSync(
       }
     }
 
-    function onPointerDown(ev: PointerEvent): void {
-      if (!(ev.target instanceof Element)) return
-      const btn = ev.target.closest('[data-testid="button-undo"], [data-testid="button-redo"]')
-      if (!btn) return
-      const testid = btn.getAttribute('data-testid')
-      if (testid === 'button-undo') {
-        if (loroUndo()) {
-          ev.preventDefault()
-          ev.stopPropagation()
-        }
-      } else if (testid === 'button-redo') {
-        if (loroRedo()) {
-          ev.preventDefault()
-          ev.stopPropagation()
-        }
-      }
-    }
-
     window.addEventListener('keydown', onKeyDown, { capture: true })
-    window.addEventListener('pointerdown', onPointerDown, { capture: true })
     return () => {
       window.removeEventListener('keydown', onKeyDown, { capture: true } as EventListenerOptions)
-      window.removeEventListener('pointerdown', onPointerDown, {
-        capture: true,
-      } as EventListenerOptions)
     }
   }, [loroUndo, loroRedo])
 
-  const onChange = useCallback(
-    (elements: readonly ExcalidrawElement[], _appState: AppState, files: BinaryFiles) => {
-      sessionRef.current?.onChange(elements, files)
-    },
-    [],
-  )
+  const onChange = useCallback((next: SpatialCanvas, command: EditorCommand) => {
+    sessionRef.current?.onChange(next, command)
+  }, [])
 
   return {
     syncStatus,
-    setExcalidrawAPI,
+    canvas,
     onChange,
     restoreInProgress,
     restoreLabel,

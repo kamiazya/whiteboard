@@ -6,12 +6,12 @@
  * OpenCanvas-shaped surface this session now owns.
  */
 
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
