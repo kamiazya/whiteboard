@@ -11,29 +11,4 @@ describe('CommandErrorCode', () => {
       'no-api' | 'no-canvas' | 'invalid-input' | 'export-failed' | 'invalid-provider-state'
     >()
   })
-
-  it('is exhaustively handled by every code path (never-asserted switch)', () => {
-    const ALL_CODES: readonly CommandErrorCode[] = [
-      'no-api',
-      'no-canvas',
-      'invalid-input',
-      'export-failed',
-      'invalid-provider-state',
-    ]
-
-    for (const code of ALL_CODES) {
-      switch (code) {
-        case 'no-api':
-        case 'no-canvas':
-        case 'invalid-input':
-        case 'export-failed':
-        case 'invalid-provider-state':
-          break
-        default: {
-          const exhaustive: never = code
-          throw new Error(`unhandled CommandErrorCode: ${String(exhaustive)}`)
-        }
-      }
-    }
-  })
 })
