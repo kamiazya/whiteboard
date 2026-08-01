@@ -316,6 +316,26 @@ describe('generated SBOM content regression', () => {
     }
   })
 
+  it.runIf(sbomExists)(
+    'generated SBOM contains none of the packages removed with the Excalidraw headless renderer',
+    () => {
+      const purls = loadSbomPurls()
+      // A transitive re-addition of any of these must fail this test even
+      // though none of them is in devOnlyPatterns above — they were
+      // production dependencies of the deleted Excalidraw-based renderer,
+      // not dev-only, so they need their own explicit regression check.
+      const removedPatterns = [
+        '%40excalidraw/utils', // @excalidraw/utils
+        'pkg:npm/happy-dom@',
+        '%40napi-rs/canvas', // @napi-rs/canvas
+      ]
+      for (const pattern of removedPatterns) {
+        const matches = purls.filter((p) => p.includes(pattern))
+        expect(matches, `removed package pattern "${pattern}" must not appear in SBOM`).toEqual([])
+      }
+    },
+  )
+
   it.runIf(sbomExists)('generated SBOM contains expected production packages', () => {
     const purls = loadSbomPurls()
     const prodPatterns = ['pkg:npm/hono@', 'pkg:npm/jose@', 'pkg:npm/zod@', 'pkg:npm/nanoid@']
