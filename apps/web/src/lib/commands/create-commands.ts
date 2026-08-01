@@ -8,12 +8,8 @@ import {
   exportJsonResultSchema,
   type GetAppContextInput,
   type GetAppContextResult,
-  type GetSceneSummaryInput,
-  type GetSceneSummaryResult,
   getAppContextInputSchema,
   getAppContextResultSchema,
-  getSceneSummaryInputSchema,
-  getSceneSummaryResultSchema,
   type WhiteboardCommandDeps,
   type WhiteboardCommands,
 } from './types.js'
@@ -150,54 +146,6 @@ export function createWhiteboardCommands(depsRef: {
     }
   }
 
-  async function getSceneSummary(input: GetSceneSummaryInput = {}): Promise<GetSceneSummaryResult> {
-    assertValidInput(getSceneSummaryInputSchema, input, 'getSceneSummary')
-
-    const deps = depsRef.current
-    if (!deps.canvas) {
-      throw new CommandError('no-canvas', 'No canvas is selected to summarize.')
-    }
-    const api = deps.getExcalidrawApi()
-    if (!api) {
-      throw new CommandError('no-api', 'No Excalidraw canvas is mounted to summarize.')
-    }
-
-    try {
-      const elements = api.getSceneElements()
-      const appState = api.getAppState()
-      // Deleted elements are tombstones, not live content — excluded from
-      // every count so a tool-facing summary never reports elements the user
-      // believes they removed.
-      const liveElements = elements.filter((element) => !element.isDeleted)
-      const typeCounts: Record<string, number> = {}
-      for (const element of liveElements) {
-        typeCounts[element.type] = (typeCounts[element.type] ?? 0) + 1
-      }
-
-      return getSceneSummaryResultSchema.parse({
-        elementCount: liveElements.length,
-        // selectedElementIds can be absent in mock/degraded appState — a
-        // missing selection means zero selected, not a crash.
-        selectedCount: Object.keys(appState.selectedElementIds ?? {}).length,
-        typeCounts,
-        viewport: {
-          scrollX: appState.scrollX,
-          scrollY: appState.scrollY,
-          zoom: appState.zoom.value,
-        },
-      })
-    } catch (err) {
-      // Same contract as exportJson: every documented failure mode of this
-      // command — an imperative-API throw, malformed app state during
-      // teardown, or an output-schema ZodError — surfaces as this typed
-      // error so consumers (WebMCP adapter, debug panel) can branch on
-      // `.code` instead of a raw thrown error/ZodError.
-      throw new CommandError('summary-failed', 'Failed to read or summarize the live scene.', {
-        cause: err,
-      })
-    }
-  }
-
   async function getAppContext(input: GetAppContextInput = {}): Promise<GetAppContextResult> {
     assertValidInput(getAppContextInputSchema, input, 'getAppContext')
 
@@ -226,5 +174,5 @@ export function createWhiteboardCommands(depsRef: {
     return getAppContextResultSchema.parse({ provider, canvas })
   }
 
-  return { exportJson, getSceneSummary, getAppContext }
+  return { exportJson, getAppContext }
 }

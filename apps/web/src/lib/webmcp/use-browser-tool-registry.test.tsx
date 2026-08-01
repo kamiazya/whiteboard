@@ -1,6 +1,7 @@
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { WhiteboardCommands } from '../commands/index.js'
+import { webMcpTools } from './tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from './use-browser-tool-registry.js'
 import { useBrowserToolRegistry } from './use-browser-tool-registry.js'
 
@@ -9,12 +10,6 @@ function fakeCommands(): WhiteboardCommands {
     exportJson: async () => {
       throw new Error('not used in this test')
     },
-    getSceneSummary: async () => ({
-      elementCount: 1,
-      selectedCount: 0,
-      typeCounts: { rectangle: 1 },
-      viewport: { scrollX: 0, scrollY: 0, zoom: 1 },
-    }),
     getAppContext: async () => ({
       provider: { mode: 'browser-local' },
       canvas: { kind: 'browser-local', canvasId: 'c1' },
@@ -72,7 +67,8 @@ describe('useBrowserToolRegistry', () => {
     unmount()
   })
 
-  it('registers both read-only tools on mount, re-registers on canvas key change, and cancels on unmount', async () => {
+  it('registers every read-only tool on mount, re-registers on canvas key change, and cancels on unmount', async () => {
+    const expectedNames = webMcpTools.map((tool) => tool.name).sort()
     const fake = createFakeModelContext()
     document.modelContext = fake
 
@@ -81,18 +77,12 @@ describe('useBrowserToolRegistry', () => {
     )
     await Promise.resolve()
     await Promise.resolve()
-    expect(fake.liveNames().sort()).toEqual([
-      'whiteboard_get_app_context',
-      'whiteboard_get_scene_summary',
-    ])
+    expect(fake.liveNames().sort()).toEqual(expectedNames)
 
     rerender(<TestHarness commands={fakeCommands()} canvasKey="canvas-b" />)
     await Promise.resolve()
     await Promise.resolve()
-    expect(fake.liveNames().sort()).toEqual([
-      'whiteboard_get_app_context',
-      'whiteboard_get_scene_summary',
-    ])
+    expect(fake.liveNames().sort()).toEqual(expectedNames)
 
     unmount()
     expect(fake.liveNames()).toEqual([])

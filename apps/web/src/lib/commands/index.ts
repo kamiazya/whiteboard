@@ -10,8 +10,9 @@
  * with a single line — `commands.exportJson(...)` — with no business logic
  * duplicated at the call site.
  *
- * Today this exposes one command, `exportJson`; see create-commands.ts's
- * doc comment for the extension recipe for the next one.
+ * Today this exposes `exportJson` and `getAppContext`; see
+ * create-commands.ts's doc comment for the extension recipe for the next
+ * one.
  */
 export { createWhiteboardCommands } from './create-commands.js'
 export { createSceneExportHandler } from './create-export-handler.js'
@@ -25,12 +26,8 @@ export {
   exportJsonResultSchema,
   type GetAppContextInput,
   type GetAppContextResult,
-  type GetSceneSummaryInput,
-  type GetSceneSummaryResult,
   getAppContextInputSchema,
   getAppContextResultSchema,
-  getSceneSummaryInputSchema,
-  getSceneSummaryResultSchema,
   type WhiteboardCommandCanvasIdentity,
   type WhiteboardCommandDeps,
   type WhiteboardCommands,

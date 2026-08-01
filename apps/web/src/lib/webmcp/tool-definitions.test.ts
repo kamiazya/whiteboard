@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
-import { getAppContextResultSchema, getSceneSummaryResultSchema } from '../commands/types.js'
+import { getAppContextResultSchema } from '../commands/types.js'
 import { webMcpTools } from './tool-definitions.js'
 
 describe('webMcpTools manifest', () => {
@@ -27,16 +27,6 @@ describe('webMcpTools manifest', () => {
           type: 'object',
         },
       },
-      {
-        name: 'whiteboard_get_scene_summary',
-        description:
-          'Read-only: reports element counts, selection count, and viewport position for the current canvas. Never returns full scene content (element geometry, text, or files).',
-        inputSchema: {
-          additionalProperties: false,
-          properties: {},
-          type: 'object',
-        },
-      },
     ])
   })
 
@@ -44,6 +34,17 @@ describe('webMcpTools manifest', () => {
     for (const tool of webMcpTools) {
       expect(tool.name.startsWith('whiteboard_')).toBe(true)
     }
+  })
+
+  // Regression guard: exportJson and getSceneSummary read the live scene
+  // through ExcalidrawImperativeAPI, which is going away. Neither has an
+  // OpenCanvas-shaped replacement yet, so both must stay absent from the
+  // registered tool set rather than being silently reintroduced by a later
+  // merge.
+  it('does not register any Excalidraw-backed scene tool', () => {
+    const names = webMcpTools.map((tool) => tool.name)
+    expect(names).not.toContain('whiteboard_get_scene_summary')
+    expect(names).not.toContain('whiteboard_export_json')
   })
 })
 
@@ -108,22 +109,6 @@ function matchesMinimum(s: Record<string, unknown>, value: number): boolean {
 }
 
 describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => {
-  it('get-scene-summary: accepts a valid fixture and rejects an extra-key fixture, in both directions', () => {
-    const valid = {
-      elementCount: 2,
-      selectedCount: 1,
-      typeCounts: { rectangle: 2 },
-      viewport: { scrollX: 0, scrollY: 0, zoom: 1 },
-    }
-    const withExtraKey = { ...valid, secret: 'leak' }
-
-    expect(getSceneSummaryResultSchema.safeParse(valid).success).toBe(true)
-    expect(matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), valid)).toBe(true)
-
-    expect(getSceneSummaryResultSchema.safeParse(withExtraKey).success).toBe(false)
-    expect(matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), withExtraKey)).toBe(false)
-  })
-
   it('get-app-context: accepts a valid fixture and rejects an extra-key fixture, in both directions', () => {
     const valid = {
       provider: { mode: 'daemon' },
@@ -160,30 +145,6 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
     expect(getAppContextResultSchema.safeParse(wrongConst).success).toBe(false)
     expect(matchesJsonSchema(whiteboardGetAppContextJsonSchema(), wrongConst)).toBe(false)
   })
-
-  it('get-scene-summary: rejects a negative count that violates minimum: 0, in both directions', () => {
-    const negativeCount = {
-      elementCount: -1,
-      selectedCount: 0,
-      typeCounts: {},
-      viewport: { scrollX: 0, scrollY: 0, zoom: 1 },
-    }
-
-    expect(getSceneSummaryResultSchema.safeParse(negativeCount).success).toBe(false)
-    expect(matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), negativeCount)).toBe(false)
-  })
-
-  it('get-scene-summary: rejects a non-finite viewport value that the Zod schema requires .finite() for', () => {
-    const nonFiniteViewport = {
-      elementCount: 0,
-      selectedCount: 0,
-      typeCounts: {},
-      viewport: { scrollX: Number.POSITIVE_INFINITY, scrollY: 0, zoom: 1 },
-    }
-
-    expect(getSceneSummaryResultSchema.safeParse(nonFiniteViewport).success).toBe(false)
-    expect(matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), nonFiniteViewport)).toBe(false)
-  })
 })
 
 // Fuzzed cross-check, in addition to the fixed fixtures above: hand-picked
@@ -195,88 +156,28 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
 // valid, negative, non-integer, non-finite, and wrong-typed — and requiring
 // both validators to agree on every one closes that gap without adding a
 // zod-to-json-schema dependency.
-const validNonNegativeInt = fc.integer({ min: 0, max: 1_000 })
-const negativeInt = fc.integer({ min: -1_000, max: -1 })
-const fractionalNumber = fc
-  .tuple(fc.integer({ min: -1_000, max: 1_000 }), fc.integer({ min: 1, max: 1_000 }))
-  .map(([a, b]) => a / b)
-const nonFiniteNumber = fc.constantFrom(
-  Number.NaN,
-  Number.POSITIVE_INFINITY,
-  Number.NEGATIVE_INFINITY,
-)
-const wrongTypeValue = fc.oneof(fc.string(), fc.boolean(), fc.constant(null))
-
-// A value that should satisfy an `integer, minimum: 0` field about half the
-// time, and violate it (negative / non-integer / non-finite / wrong type)
-// the rest — every generated value is checked against both validators.
-const countLikeArb = fc.oneof(
-  validNonNegativeInt,
-  negativeInt,
-  fractionalNumber,
-  nonFiniteNumber,
-  wrongTypeValue,
+const daemonCanvasArb = fc.record(
+  {
+    kind: fc.constantFrom('daemon', 'browser-local', 'other'),
+    workspaceId: fc.oneof(fc.string(), fc.constant(undefined)),
+    slug: fc.oneof(fc.string(), fc.constant(undefined)),
+    canvasId: fc.oneof(fc.string(), fc.constant(undefined)),
+  },
+  { requiredKeys: [] },
 )
 
-// A value that should satisfy a bare `number` (viewport) field about half
-// the time, and violate its implicit `.finite()` requirement otherwise.
-const finiteNumberLikeArb = fc.oneof(
-  fractionalNumber,
-  validNonNegativeInt,
-  nonFiniteNumber,
-  wrongTypeValue,
+const appContextPayloadArb = fc.record(
+  {
+    provider: fc.record(
+      { mode: fc.constantFrom('daemon', 'browser-local', 'other') },
+      { requiredKeys: [] },
+    ),
+    canvas: fc.oneof(fc.constant(null), daemonCanvasArb),
+  },
+  { requiredKeys: [] },
 )
 
 describe('WebMCP result JSON-Schema literals agree with the Zod schemas (fuzzed)', () => {
-  const sceneSummaryPayloadArb = fc.record(
-    {
-      elementCount: countLikeArb,
-      selectedCount: countLikeArb,
-      typeCounts: fc.dictionary(fc.string({ minLength: 1, maxLength: 8 }), countLikeArb, {
-        maxKeys: 3,
-      }),
-      viewport: fc.record(
-        {
-          scrollX: finiteNumberLikeArb,
-          scrollY: finiteNumberLikeArb,
-          zoom: finiteNumberLikeArb,
-        },
-        { requiredKeys: [] },
-      ),
-    },
-    { requiredKeys: [] },
-  )
-
-  fcTest.prop([sceneSummaryPayloadArb], withDefaults())(
-    'get-scene-summary: the JSON Schema literal and the Zod schema always agree on validity',
-    (payload) => {
-      const zodAccepts = getSceneSummaryResultSchema.safeParse(payload).success
-      const jsonSchemaAccepts = matchesJsonSchema(whiteboardGetSceneSummaryJsonSchema(), payload)
-      expect(jsonSchemaAccepts).toBe(zodAccepts)
-    },
-  )
-
-  const daemonCanvasArb = fc.record(
-    {
-      kind: fc.constantFrom('daemon', 'browser-local', 'other'),
-      workspaceId: fc.oneof(fc.string(), fc.constant(undefined)),
-      slug: fc.oneof(fc.string(), fc.constant(undefined)),
-      canvasId: fc.oneof(fc.string(), fc.constant(undefined)),
-    },
-    { requiredKeys: [] },
-  )
-
-  const appContextPayloadArb = fc.record(
-    {
-      provider: fc.record(
-        { mode: fc.constantFrom('daemon', 'browser-local', 'other') },
-        { requiredKeys: [] },
-      ),
-      canvas: fc.oneof(fc.constant(null), daemonCanvasArb),
-    },
-    { requiredKeys: [] },
-  )
-
   fcTest.prop([appContextPayloadArb], withDefaults())(
     'get-app-context: the JSON Schema literal and the Zod schema always agree on validity',
     (payload) => {
@@ -286,10 +187,6 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas (fuzzed)
     },
   )
 })
-
-function whiteboardGetSceneSummaryJsonSchema(): Record<string, unknown> {
-  return webMcpTools.find((t) => t.name === 'whiteboard_get_scene_summary')!.resultSchema
-}
 
 function whiteboardGetAppContextJsonSchema(): Record<string, unknown> {
   return webMcpTools.find((t) => t.name === 'whiteboard_get_app_context')!.resultSchema

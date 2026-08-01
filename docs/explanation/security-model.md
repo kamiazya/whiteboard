@@ -55,15 +55,12 @@ What is shipped today (Phase 0):
 - **Feature-detected, zero-impact elsewhere.** In any browser without
   `document.modelContext` the integration is a complete no-op — no
   listeners, no registration attempts, no UI change.
-- **Two read-only tools**, registered whenever a canvas is open:
+- **One read-only tool**, registered whenever a canvas is open:
   - `whiteboard_get_app_context` — which provider mode (`daemon` or
     `browser-local`) and which canvas identity is open. Never includes
     `daemonBaseUrl`, tokens, or any other connection detail.
-  - `whiteboard_get_scene_summary` — element/selection counts, a
-    per-type breakdown, and the current viewport position. Never returns
-    full scene content (element geometry, text, or embedded files).
 - **No write tools.** Nothing registered today can mutate a canvas.
-- Both tools' result shapes are pinned by an automated JSON Schema
+- The tool's result shape is pinned by an automated JSON Schema
   agreement test, and the whole tool list by an automated manifest
   snapshot test, so a future change to either surfaces as a reviewable
   diff.
