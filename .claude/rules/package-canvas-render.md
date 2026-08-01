@@ -9,6 +9,13 @@
   embed recursion over a resolved doc bundle (`layout/embed-recursion.ts`),
   and mdast block layout (`layout/mdast-blocks.ts`) — the single mdast ->
   scene-graph render path shared by preview / spatial text node / export.
+- `layoutSpatialCanvas` (`layout/spatial-canvas.ts`): the single
+  `SpatialCanvas` -> `Scene` builder shared by every consumer (Node export,
+  the browser viewer) — see the resolved decision below.
+- `translateScene` (`layout/translate-scene.ts`): the pure scene -> scene
+  translation used to place a node's laid-out content at its absolute
+  position, alongside the renderers whose x-transform-boundary convention
+  it must agree with (see decision #6 and `svg/backend.ts`).
 - The injected text-measurement seam (`measure.ts`: `FontDescriptor`,
   `TextMetrics`, `MeasureText`) — layout never imports a font or measurer.
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
@@ -142,6 +149,39 @@
    dropped. `shape` emits no `transform`, so it needs no entry in
    `subtreeOffsetX` and the two-renderer tripwire above is unaffected.
 
+7. **`layoutSpatialCanvas` is the single SpatialCanvas -> Scene builder**
+   (`layout/spatial-canvas.ts`), replacing two independently-grown builders
+   in mcp-server and canvas-viewer. A markdown parser is an injection seam,
+   the same class as `measure`/`renderMath`: this package never depends on
+   canvas-codec, so `parseBody: (text: string) => MdastRoot` is supplied by
+   the caller (both current consumers pass canvas-codec's
+   `parseMarkdownBody`). Appearance is likewise injected via a
+   `SpatialAppearanceResolver` (`layout/spatial-appearance.ts`) — a set of
+   FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`) plus geometry
+   constants (`paddingPx`, `labelFontSizePx`, `minContentWidthPx`), not a
+   static per-kind record, because the two consumers key appearance
+   differently (export: fixed per-`node.type` chrome; viewer: derived from
+   `node.color` and an `x-whiteboard` ellipse hint) and a resolver subsumes
+   both without a union type. No default resolver is exported — appearance
+   stays assigned, not invented, per decision #6. Emission order is
+   DOCUMENT order (nodes in array order, shape then content per node, then
+   all edges), never sorted by position: z-order is authored, not derived,
+   so a position sort would silently reorder authored z-order. Export
+   reproducibility does not need a sort to hold — document order is
+   already a total function of a deterministic canvas. Because this
+   package has no logger (a shared layer has no ambient platform API), a
+   degradation (a body-parse failure, an unrecognized node kind) is
+   reported only through an optional `onDegrade` callback; mcp-server wires
+   it to `getLogger`, canvas-viewer omits it and degrades silently by
+   choice — an omitted callback must never change the returned `Scene`, only
+   whether the caller is told. `translateScene` (`layout/translate-scene.ts`)
+   moved here verbatim from mcp-server's former `scene-transform.ts`: it
+   encodes the same x-transform-boundary rule as `sceneBounds`'s
+   `subtreeOffsetX` (decision #5), so both must keep agreeing on which
+   renderers (`listItem`, `tableCell`) emit their own SVG `transform` — the
+   tripwire test asserting that exact set now lives in
+   `translate-scene.test.ts` alongside the function it guards.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,
@@ -169,6 +209,13 @@
   such.
 - `src/test-utils/fake-measure.ts` is the shared deterministic measurer for
   layout tests — never a real font/platform text API.
+- `layout/spatial-canvas.test.ts`: the union of both former per-consumer
+  suites (chrome shape, content placement, degenerate inputs, degradation
+  reporting via `onDegrade`, document-order emission, appearance-independent
+  geometry) against the single `layoutSpatialCanvas`.
+- `layout/translate-scene.test.ts`: identity/additivity, the wrapper-relative
+  x rule, and the tripwire asserting exactly `listItem`/`tableCell` emit an
+  SVG transform.
 
 ## Common mistakes (append as review finds them)
 

@@ -1,7 +1,14 @@
 export * from './layout/embed-recursion.js'
 export type { MdastLayoutOptions } from './layout/mdast-blocks.js'
 export { layoutMdastBlocks } from './layout/mdast-blocks.js'
+export type {
+  SpatialAppearanceResolver,
+  SpatialNodeAppearance,
+} from './layout/spatial-appearance.js'
+export type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout/spatial-canvas.js'
+export { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 export { routeEdge } from './layout/spatial-edges.js'
+export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance } from './measure.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'

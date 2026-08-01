@@ -1,9 +1,12 @@
 // Render a `SpatialCanvas` to PNG/SVG without an attached browser client.
 //
 // Pipeline:
-//   1. `composeSpatialScene` (spatial-scene.ts) turns the persisted canvas
+//   1. canvas-render's `layoutSpatialCanvas` turns the persisted canvas
 //      into a canvas-render `Scene`, using the vendored opentype.js
-//      measurer (measure-text.ts) as the injected text-measurement seam.
+//      measurer (measure-text.ts) as the injected text-measurement seam,
+//      canvas-codec's `parseMarkdownBody` as the injected body parser, and
+//      this module's `EXPORT_APPEARANCE` (spatial-scene-appearance.ts) as
+//      the injected appearance resolver.
 //   2. `renderSceneToSvg` (canvas-render) serializes the scene to an SVG
 //      string, with document options (padding/background) so the root
 //      carries a real `width`/`height`/`viewBox` envelope — canvas-render
@@ -17,14 +20,18 @@
 // getHeadlessExporter() — warms the font measurer and resvg's module
 // import once per process; every render call after that reuses the result.
 
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import { renderSceneToSvg as renderSceneToSvgString } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, SpatialLayoutDegradation } from '@kamiazya/whiteboard-canvas-render'
+import {
+  layoutSpatialCanvas,
+  renderSceneToSvg as renderSceneToSvgString,
+} from '@kamiazya/whiteboard-canvas-render'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFile } from './export-font.js'
 import { createOpentypeMeasureText } from './measure-text.js'
-import { composeSpatialScene } from './spatial-scene.js'
+import { EXPORT_APPEARANCE } from './spatial-scene-appearance.js'
 
 const log = getLogger('headless-renderer')
 
@@ -71,12 +78,32 @@ function themeBackground(options: HeadlessExportOptions): string {
   return options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND
 }
 
+/** Reports a layout degradation via `getLogger`, since canvas-render itself cannot log. */
+function onDegrade(event: SpatialLayoutDegradation): void {
+  if (event.kind === 'body-parse-failed') {
+    log.warning(
+      { nodeId: event.nodeId, err: event.err },
+      'text node body failed to parse as markdown; falling back to literal text',
+    )
+    return
+  }
+  log.warning(
+    { nodeId: event.nodeId, type: event.type },
+    'unrecognized spatial node kind; emitting chrome only',
+  )
+}
+
 function buildSvg(
   canvas: SpatialCanvas,
   options: HeadlessExportOptions,
   measure: MeasureText,
 ): string {
-  const scene = composeSpatialScene(canvas, { measure })
+  const scene = layoutSpatialCanvas(canvas, {
+    measure,
+    parseBody: parseMarkdownBody,
+    appearance: EXPORT_APPEARANCE,
+    onDegrade,
+  })
   return renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
     background: themeBackground(options),

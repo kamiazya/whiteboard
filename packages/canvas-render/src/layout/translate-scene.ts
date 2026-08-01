@@ -1,23 +1,22 @@
-// Pure scene -> scene translation. `layoutMdastBlocks` (canvas-render)
-// always lays out a block tree relative to its own origin (its top-level
-// nodes start at y = 0, `x` = 0 or a list-depth offset) — placing that
-// output at a spatial node's absolute position requires shifting the whole
-// tree by the node's (x, y).
+// Pure scene -> scene translation. `layoutMdastBlocks` always lays out a
+// block tree relative to its own origin (its top-level nodes start at y = 0,
+// `x` = 0 or a list-depth offset) — placing that output at a spatial node's
+// absolute position requires shifting the whole tree by the node's (x, y).
 //
-// The x axis needs special care. `renderListItem`/`renderTableCell` (the
-// SVG backend, canvas-render's svg/backend.ts) are the only renderers that
-// emit `transform="translate(bbox.x,0)"` — everything below such a wrapper
-// is stored **wrapper-relative** on x. Shifting every bbox.x by the same
-// dx would double-shift that subtree: once via the wrapper's own bbox.x
-// (which feeds directly into its transform), and again via each
-// descendant's already-relative bbox.x. So x is only shifted down to (and
-// including) the nearest such wrapper; everything further nested keeps its
-// stored x untouched. y carries no such wrapper transform anywhere in the
-// backend, so it is always shifted unconditionally, at every depth.
+// The x axis needs special care. `renderListItem`/`renderTableCell` (the SVG
+// backend, `svg/backend.ts`) are the only renderers that emit
+// `transform="translate(bbox.x,0)"` — everything below such a wrapper is
+// stored **wrapper-relative** on x. Shifting every bbox.x by the same dx
+// would double-shift that subtree: once via the wrapper's own bbox.x (which
+// feeds directly into its transform), and again via each descendant's
+// already-relative bbox.x. So x is only shifted down to (and including) the
+// nearest such wrapper; everything further nested keeps its stored x
+// untouched. y carries no such wrapper transform anywhere in the backend, so
+// it is always shifted unconditionally, at every depth.
 //
-// This mirrors scene-bounds.ts's `subtreeOffsetX`/`childrenOf` walk
+// This mirrors `scene-bounds.ts`'s `subtreeOffsetX`/`childrenOf` walk
 // exactly, because both functions must agree on which nodes are
-// x-transform boundaries — see the tripwire test in spatial-scene.test.ts.
+// x-transform boundaries — see the tripwire test in translate-scene.test.ts.
 import type {
   BoundingBox,
   ListItemNode,
@@ -26,7 +25,7 @@ import type {
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
-} from '@kamiazya/whiteboard-canvas-render'
+} from '../scene-graph.js'
 
 type TranslatableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
 
