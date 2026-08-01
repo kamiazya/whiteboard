@@ -200,10 +200,13 @@ export async function main() {
   if (daemonMode) {
     try {
       const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
+      // prewarmHeadlessExporter resolves on failure by contract — it logs its
+      // own sanitized warning — so this catch is a net for a future contract
+      // change, not the handler for a build error.
       prewarmHeadlessExporter().catch((err) => {
         getLogger('server-index').warning(
           { reason: err instanceof Error ? err.name : 'unknown' },
-          'headless exporter pre-warm failed',
+          'headless exporter pre-warm rejected unexpectedly',
         )
       })
     } catch (err) {

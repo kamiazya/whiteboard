@@ -160,11 +160,19 @@ async function buildExporter(): Promise<HeadlessExporter> {
 // `export_canvas` call does not pay the font-parse + resvg-import cost.
 // Errors are swallowed because pre-warming is best-effort: the actual
 // export path will still surface a descriptive failure.
+//
+// This function therefore RESOLVES on failure — a caller's `.catch` never
+// runs for a build error, so sanitizing the failure is this function's own
+// responsibility. Only the failure class is logged: a module-resolution or
+// font-read error carries absolute paths in its message and stack, and the
+// distribution smoke asserts the daemon never leaks one to stderr.
 export async function prewarmHeadlessExporter(): Promise<void> {
   try {
     await getHeadlessExporter()
   } catch (err) {
-    log.warning({ err: err instanceof Error ? err : new Error(String(err)) }, 'pre-warm failed')
+    const code = err instanceof Error ? (err as NodeJS.ErrnoException).code : undefined
+    const name = err instanceof Error ? err.name : 'unknown'
+    log.warning({ reason: code ? `${name}(${code})` : name }, 'pre-warm failed')
   }
 }
 

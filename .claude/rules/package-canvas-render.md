@@ -15,7 +15,7 @@
 - `translateScene` (`layout/translate-scene.ts`): the pure scene -> scene
   translation used to place a node's laid-out content at its absolute
   position, alongside the renderers whose x-transform-boundary convention
-  it must agree with (see decision #6 and `svg/backend.ts`).
+  it must agree with (see decision #5 and `svg/backend.ts`).
 - The injected text-measurement seam (`measure.ts`: `FontDescriptor`,
   `TextMetrics`, `MeasureText`) — layout never imports a font or measurer.
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
