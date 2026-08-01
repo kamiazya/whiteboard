@@ -1,6 +1,6 @@
 import { expectTypeOf, it } from 'vitest'
 import type { z } from 'zod'
-import type { exportSvgRequestSchema, ExportSvgRequest } from './export-svg.js'
+import type { ExportSvgRequest, exportSvgRequestSchema } from './export-svg.js'
 
 // Compile-time only: proves ExportSvgRequest is exactly the z.infer of
 // exportSvgRequestSchema, so a future hand-written edit to the type cannot

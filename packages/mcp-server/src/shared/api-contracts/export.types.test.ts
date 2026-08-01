@@ -1,10 +1,10 @@
 import { expectTypeOf, it } from 'vitest'
 import type { z } from 'zod'
 import type {
-  exportErrorBodySchema,
-  exportResponseSchema,
   ExportErrorBody,
   ExportResponse,
+  exportErrorBodySchema,
+  exportResponseSchema,
 } from './export.js'
 
 // Compile-time only: proves ExportResponse/ExportErrorBody are exactly the
