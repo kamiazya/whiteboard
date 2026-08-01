@@ -5,7 +5,16 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { _resetExportMeasureTextCacheForTests } from './measure-text.js'
+
+// Resolved AFTER vi.resetModules(), never statically imported at the top of
+// this file: `resetModules()` makes every subsequent `import('./x.js')`
+// resolve a fresh module instance, so a reset helper bound before the reset
+// would clear the PREVIOUS instance's cache while the code under test (via
+// `importRenderer()`, itself resolved post-reset) reads from a new one.
+async function resetMeasureTextCache(): Promise<void> {
+  const { _resetExportMeasureTextCacheForTests } = await import('./measure-text.js')
+  _resetExportMeasureTextCacheForTests()
+}
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
@@ -32,9 +41,9 @@ async function importRenderer() {
 }
 
 describe('headless-renderer', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.resetModules()
-    _resetExportMeasureTextCacheForTests()
+    await resetMeasureTextCache()
   })
 
   it('renders a rectangle canvas to a real PNG with the expected magic header', async () => {
@@ -112,7 +121,7 @@ describe('headless-renderer', () => {
     expect(second.svg).toBe(first.svg)
 
     vi.resetModules()
-    _resetExportMeasureTextCacheForTests()
+    await resetMeasureTextCache()
     const { renderSpatialCanvasToSvg: renderAfterReset } = await importRenderer()
     const third = await renderAfterReset(canvas)
     expect(third.svg).toBe(first.svg)
