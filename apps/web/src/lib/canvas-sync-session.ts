@@ -17,7 +17,12 @@ import {
   flushPendingExportRequests,
   handleIncomingExportRequest,
 } from './canvas-sync-export.js'
-import type { SyncStatus, UseCanvasSyncOptions } from './canvas-sync-types.js'
+import {
+  CANVAS_SYNC_DOC_CHANGED_EVENT,
+  CANVAS_SYNC_VERSION_SAVED_EVENT,
+  type SyncStatus,
+  type UseCanvasSyncOptions,
+} from './canvas-sync-types.js'
 
 const log = getAppLogger('canvas-sync')
 
@@ -430,7 +435,7 @@ export function createCanvasSyncSession(
           // what counts as "the doc changed" — but never for the initial
           // snapshot import above, since that happens before this listener
           // is registered.
-          deps.dispatchIdentityEvent('excalidraw:doc_changed', deps.getOptions().identity)
+          deps.dispatchIdentityEvent(CANVAS_SYNC_DOC_CHANGED_EVENT, deps.getOptions().identity)
           if (e.by === 'import') {
             void applyLoroToExcalidraw(newDoc)
           }
@@ -446,7 +451,7 @@ export function createCanvasSyncSession(
 
       onVersionCreated(payload) {
         if (isStale()) return
-        deps.dispatchIdentityEvent('excalidraw:version_saved', deps.getOptions().identity)
+        deps.dispatchIdentityEvent(CANVAS_SYNC_VERSION_SAVED_EVENT, deps.getOptions().identity)
         try {
           deps.getOptions().onVersionCreated?.(payload)
         } catch (err) {

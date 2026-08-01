@@ -18,6 +18,15 @@ export interface DirtyEventDetail {
 
 export type SyncStatus = 'idle' | 'connected' | 'error'
 
+// Named constants for the window-event contract dispatched by
+// dispatchIdentityEvent below. The literal values are pinned — several other
+// modules (useDirtyState, HeaderBranchBanner, useBranches,
+// merge-committed-event) still match on the raw string and are out of this
+// slice's scope, so changing the constant's NAME here must never change its
+// VALUE.
+export const CANVAS_SYNC_DOC_CHANGED_EVENT = 'excalidraw:doc_changed'
+export const CANVAS_SYNC_VERSION_SAVED_EVENT = 'excalidraw:version_saved'
+
 // Daemon-only callback seam. Every member is read via optionsRef in
 // useCanvasSync (see there) so passing a fresh inline object on every render
 // never forces a backend reconnect. A browser-local backend never fires any
