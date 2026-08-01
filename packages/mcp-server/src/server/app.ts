@@ -29,7 +29,7 @@ import { createDaemonAuthMiddleware } from './routes/auth.js'
 import { createBranchesRouter } from './routes/branches.js'
 import { createCanvasRouter } from './routes/canvas.js'
 import { createDebugRouter } from './routes/debug.js'
-import { createExportRouter, resolveExportRequest } from './routes/export.js'
+import { createExportRouter } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
 import {
   createOAuthAuthzRouter,
@@ -40,12 +40,7 @@ import { createReconnectRouter } from './routes/reconnect.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
-import {
-  broadcastLoroUpdate,
-  sendHeadChanged,
-  setResolveExportFn,
-  setResolveViewportFn,
-} from './routes/ws.js'
+import { broadcastLoroUpdate, sendHeadChanged, setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
@@ -95,7 +90,6 @@ if (shouldLogMcpHttpDebug()) {
   }
 }
 
-setResolveExportFn(resolveExportRequest)
 setResolveViewportFn(resolveViewportRequest)
 
 export function createApp(options: AppOptions) {
