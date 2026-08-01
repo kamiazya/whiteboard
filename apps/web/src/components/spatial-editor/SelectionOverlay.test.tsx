@@ -56,4 +56,32 @@ describe('SelectionOverlay', () => {
     fireEvent.pointerDown(screen.getByTestId('connect-handle'))
     expect(onConnectPointerDown).toHaveBeenCalledTimes(1)
   })
+
+  it('ignores a non-left-button pointerdown on a resize handle', () => {
+    const onHandlePointerDown = vi.fn()
+    render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={onHandlePointerDown}
+        onConnectPointerDown={vi.fn()}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('resize-handle-se'), { button: 2 })
+    expect(onHandlePointerDown).not.toHaveBeenCalled()
+  })
+
+  it('ignores a non-left-button pointerdown on the connect handle', () => {
+    const onConnectPointerDown = vi.fn()
+    render(
+      <SelectionOverlay
+        box={BOX}
+        zoom={1}
+        onHandlePointerDown={vi.fn()}
+        onConnectPointerDown={onConnectPointerDown}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByTestId('connect-handle'), { button: 2 })
+    expect(onConnectPointerDown).not.toHaveBeenCalled()
+  })
 })

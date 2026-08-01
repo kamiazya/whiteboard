@@ -54,6 +54,7 @@ export function SelectionOverlay({
           strokeWidth={1 / zoom}
           style={{ pointerEvents: 'auto', cursor: `${handle.kind}-resize` }}
           onPointerDown={(e) => {
+            if (e.button !== 0) return
             e.stopPropagation()
             onHandlePointerDown(handle.kind, handle.box, e)
           }}
@@ -67,6 +68,7 @@ export function SelectionOverlay({
         fill={SELECTION_STROKE}
         style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
         onPointerDown={(e) => {
+          if (e.button !== 0) return
           e.stopPropagation()
           onConnectPointerDown(e)
         }}
