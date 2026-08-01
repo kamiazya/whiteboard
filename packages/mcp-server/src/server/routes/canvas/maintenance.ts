@@ -3,7 +3,7 @@ import { compactCanvas, listCanvases } from '../../store/canvas-store.js'
 import { evictDoc } from '../../store/doc-cache.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
-import { handleCorruptStoredData } from './shared.js'
+import { handleCorruptStoredData } from './_shared.js'
 
 export interface MaintenanceRouterOptions {
   versionStore: VersionStore
