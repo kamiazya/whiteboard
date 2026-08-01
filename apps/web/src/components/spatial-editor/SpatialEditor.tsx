@@ -79,8 +79,10 @@ function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: H
  * Pointer capture is best-effort chrome, not a correctness requirement: a
  * browser can reject it (e.g. `NotFoundError` for a pointerId the platform
  * has no active record of, which synthetic/programmatic pointer dispatch
- * can trigger). Swallowing this keeps the gesture usable via window-level
- * move/up delivery instead of aborting the whole interaction.
+ * can trigger). This component registers no window-level fallback
+ * listeners, so a rejected/lost capture is instead recovered via
+ * `onLostPointerCapture`, which cancels whatever gesture is in flight —
+ * see its handler below.
  */
 function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
   try {
@@ -272,6 +274,7 @@ export function SpatialEditor({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onLostPointerCapture={handlePointerCancel}
       onWheel={handleWheel}
       onDoubleClick={handleDoubleClick}
     >

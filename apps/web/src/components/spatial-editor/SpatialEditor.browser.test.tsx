@@ -419,4 +419,41 @@ describe('SpatialEditor (browser)', () => {
     expect(() => unmount()).not.toThrow()
     expect(onChange).not.toHaveBeenCalled()
   })
+
+  it('losing pointer capture mid-gesture cancels it, so a later pointerup commits nothing', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 4,
+        button: 0,
+      }),
+    )
+    // Simulates the platform revoking capture (e.g. the setPointerCapture
+    // rejection this component's trySetPointerCapture swallows) rather than
+    // a normal pointerup/pointercancel.
+    await editor
+      .element()
+      .dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, pointerId: 4 }))
+    // Give React a frame to commit the cancellation before the next event —
+    // lostpointercapture and pointerup are dispatched back-to-back here in a
+    // way no real gesture ever would be, so nothing later in this test
+    // depends on this tick's exact timing.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 70, clientY: 55, pointerId: 4 }),
+      )
+
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })
