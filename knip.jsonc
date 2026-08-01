@@ -14,8 +14,6 @@
     },
     "tools/checks": {
       "entry": [
-        "src/pages-release.mjs",
-        "src/publish-gate.mjs",
         // CI/test-invoked standalone scripts: run via `node tools/checks/...`
         // (release.yml) or loaded with a dynamically-built path
         // (`join(ROOT, 'tools/checks/src/...')`) from mcp-server's release
@@ -29,22 +27,9 @@
     },
     "packages/mcp-server": {
       "entry": [
-        "src/server/mcp/index.ts",
-        "src/cli/index.ts",
-        "src/server/index.ts",
-        // Published package.json subpath exports (browser-contract,
-        // browser-shared, daemon-backend, api-client,
-        // api-contracts) — their exported symbols are the npm package's
-        // public surface, not dead code, even where nothing inside this
-        // repo currently imports a given member.
-        "src/shared/canvas-backend-contract.ts",
-        "src/shared/browser-shared-index.ts",
-        "src/shared/daemon-backend.ts",
-        "src/shared/api-client.ts",
-        "src/shared/api-contracts/index.ts",
-        // browser-shared-index.ts (its own entry above) re-exports specific
-        // members from these two — but apps/web's stricter tsconfig
-        // (noUnusedLocals) type-checks these source files wholesale via the
+        // browser-shared-index.ts re-exports specific members from these
+        // two — but apps/web's stricter tsconfig (noUnusedLocals)
+        // type-checks these source files wholesale via the
         // "./browser-shared" subpath's "types" resolution, so every local
         // declaration in them must stay `export`ed even when unused
         // elsewhere, or apps/web's typecheck fails on "declared but never
@@ -65,19 +50,9 @@
       }
     },
     "packages/canvas-model": {
-      // Public surface for opencanvas slices 2/3 (serializer, scene/layout);
-      // intentionally unreferenced from any existing package until those
-      // land. "./mdast" is the mdast subset's deliberately-separate
-      // subpath. "./test-utils" is a test-only subpath
-      // (arbitraries + fast-check wrapper) consumed by canvas-codec's tests.
-      "entry": ["src/index.ts", "src/mdast/index.ts", "src/test-utils/index.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-codec": {
-      // Public surface for the opencanvas migration's later slices
-      // (canvas-workspace, server-core); intentionally unreferenced from any
-      // existing package until those land.
-      "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]
     },
     "tools/arch-lint": {
@@ -87,39 +62,22 @@
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-ports": {
-      // Contracts-only package; consumed by future canvas-workspace /
-      // server-core / composition-root slices, not yet by anything in this
-      // repo. Deliberately unreferenced until those land.
-      "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-workspace": {
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-render": {
-      // Public surface for opencanvas slices 5/7/8 (canvas-workspace,
-      // server-core, apps/web composition roots); intentionally
-      // unreferenced from any existing package until those land.
-      "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-viewer": {
-      // widget-entry.ts and widget/refresh-control.ts are owned by a
-      // concurrent in-flight lane — deliberately left unconfigured here so
-      // this knip.jsonc doesn't need reconciling against that lane's changes;
-      // the integrator re-runs knip at fold time to confirm green.
       "entry": [
-        "src/index.ts",
-        // Public subpath export (package.json "./scene") consumed by
-        // apps/web; not reachable from src/index.ts alone.
-        "src/scene.ts",
         "scripts/*.mjs"
       ],
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]
     },
     "apps/web": {
       "entry": [
-        "src/main.tsx",
         // Compile-time-only regression guard (tsc --noEmit fails/passes
         // around it); intentionally never imported at runtime.
         "src/_type-probe.ts",
@@ -139,9 +97,6 @@
     }
   },
   "ignoreDependencies": [
-    // Vite virtual module id — knip cannot resolve "virtual:" specifiers
-    // to a real dependency.
-    "virtual:widget-fonts",
     // docs-snapshots `@docs-assets/*` alias resolves through Vite's
     // `resolve.alias` (vitest.docs-snapshots.config.ts) to files under
     // docs/assets-src/, not an npm package.
@@ -178,8 +133,6 @@
     // Optional local tooling probed by smoke scripts / distribution tests;
     // present in CI and on release-builder machines but not a project
     // dependency knip can resolve.
-    "docker",
-    "cosign",
     "claude",
     "codex",
     "openssl",
