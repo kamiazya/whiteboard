@@ -11,6 +11,7 @@ import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
+import { getLogger } from './log.js'
 import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
@@ -39,6 +40,10 @@ export interface StartHttpServerOptions {
   /** Test-only seam: overrides the real createFileGcSweeper so wiring tests
    *  can observe start/stop without waiting on a real 24h interval. */
   fileGcSweeperFactory?: typeof createFileGcSweeper
+  /** Test-only seam: overrides `process.exit` for the fatal-bind-error path
+   *  below, so a test can observe the exit call instead of actually killing
+   *  the test process. */
+  exitProcess?: (code: number) => void
 }
 
 export interface RunningServer {
@@ -184,6 +189,19 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   fileGcSweeper.start()
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
+  // `serve()` returns before the underlying bind resolves, so a losing
+  // concurrent bootstrap's EADDRINUSE (or a permission failure's EACCES)
+  // otherwise surfaces as Node's default 'error' behavior: an unhandled
+  // throw with a raw stack trace straight to whatever this process's
+  // stdio is piped to (the dev-daemon bootstrap log, in practice — see
+  // scripts/dev/ensure-http-dev-daemon.mjs). Log one classified, path-free
+  // record instead and exit, matching this package's no-console /
+  // no-leaked-path logging discipline.
+  server.on('error', (err: NodeJS.ErrnoException) => {
+    const log = getLogger('http-server')
+    log.error({ port: options.port, code: err.code ?? 'unknown' }, 'http listener failed to bind')
+    ;(options.exitProcess ?? process.exit)(1)
+  })
   server.on('connection', (socket) => {
     sockets.add(socket)
     socket.on('close', () => {

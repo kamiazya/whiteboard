@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { request } from 'node:http'
+import { createServer } from 'node:net'
 import { afterEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
 import {
@@ -7,6 +8,7 @@ import {
   WHITEBOARD_WS_PROTOCOL,
 } from '../shared/ws-protocol.js'
 import { type RunningServer, startHttpServer } from './http-server.js'
+import { captureLogsForTests } from './log.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
 
@@ -438,5 +440,42 @@ describe('startHttpServer file-gc sweeper wiring', () => {
     expect(firstResolved).toBe(true)
     expect(secondResolved).toBe(true)
     expect(stopCalls).toBe(1)
+  })
+})
+
+// Regression: a concurrent dev-daemon bootstrap losing a port-bind race used
+// to surface as a raw, unhandled 'error' event -- a Node stack trace dumped
+// straight to tmp/logs/mcp-http-dev.log (40+ occurrences observed in the
+// wild). The loser must log one classified, sanitized record and exit
+// instead of crashing with a stack trace that could leak filesystem paths.
+describe('startHttpServer bind-failure handling', () => {
+  it('logs a classified EADDRINUSE record with no stack trace and exits instead of throwing', async () => {
+    const port = await findAvailablePort(4600)
+    const occupier = createServer()
+    await new Promise<void>((resolve) => occupier.listen(port, '127.0.0.1', resolve))
+    const capture = captureLogsForTests()
+    const exitCalls: number[] = []
+    const exitProcess = (code: number) => {
+      exitCalls.push(code)
+    }
+
+    try {
+      await startHttpServer({ port, host: '127.0.0.1', exitProcess })
+      // Give the async bind failure's 'error' event a chance to fire.
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
+      expect(exitCalls).toEqual([1])
+      const errorRecord = capture.records.find((r) => r.level === 'error')
+      expect(errorRecord).toBeDefined()
+      expect(errorRecord?.data?.code).toBe('EADDRINUSE')
+      expect(errorRecord?.data?.port).toBe(port)
+      const serialized = JSON.stringify(errorRecord)
+      expect(serialized).not.toMatch(/at .*:\d+:\d+/)
+      expect(serialized).not.toContain('/Users/')
+      expect(serialized).not.toContain('/home/')
+    } finally {
+      capture.restore()
+      await new Promise<void>((resolve) => occupier.close(() => resolve()))
+    }
   })
 })

@@ -189,3 +189,13 @@ The repo-local `SessionStart` hook (`packages/mcp-server/scripts/dev/ensure-http
 probes this checkout's derived dev port (3099 on the main checkout) and auto-spawns the daemon
 when a session opens, so in normal use this situation should not arise. If the hook is disabled
 or the project is not yet trusted, start the daemon manually before opening the session.
+
+If MCP tools go missing mid-session with no error, check whether the daemon is still listening
+(`curl -I http://127.0.0.1:<port>/api/status`) before assuming a client bug — `mcp:http:dev` passes
+`--idle-timeout-ms=0` specifically so the dev daemon never self-terminates on idle, but a daemon
+started without that flag (a stale build, a hand-run `pnpm --filter @kamiazya/whiteboard-mcp exec
+node dist/server/index.js --daemon`) still inherits the packaged 15-minute idle-shutdown default and
+can vanish silently, since the `SessionStart` hook only fires once per session and never re-spawns
+mid-session. If two processes race to bind the same port, the loser now logs one classified
+`{ port, code: 'EADDRINUSE' }` record via `getLogger('http-server')` and exits, instead of the raw
+unhandled-`'error'`-event stack trace `tmp/logs/mcp-http-dev.log` used to accumulate.
