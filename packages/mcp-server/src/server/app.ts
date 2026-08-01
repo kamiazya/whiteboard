@@ -431,11 +431,6 @@ export function createApp(options: AppOptions) {
   // tracer is a no-op so the wrapping cost is negligible.
   app.use('*', tracingMiddleware())
 
-  // Tracing middleware first so the request span wraps every other
-  // middleware (auth, headers, route handler). When OTel is disabled the
-  // tracer is a no-op so the wrapping cost is negligible.
-  app.use('*', tracingMiddleware())
-
   app.use('*', async (_c, next) => {
     options.touch()
     await next()
