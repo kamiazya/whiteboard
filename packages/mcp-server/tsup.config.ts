@@ -8,7 +8,7 @@ import { defineConfig } from 'tsup'
 // assume their canonical dist location:
 //   - shared/data-dir-secure.ts  (WHITEBOARD_ROOT = dist/.. → package root)
 //   - shared/package-version.ts  (require('../../package.json'))
-//   - server/export/headless-renderer.ts (bundled-font lookup under dist/web-app)
+//   - server/export/headless-renderer.ts (bundled-font lookup under dist/assets/fonts/Roboto)
 // With splitting off, esbuild would inline them into deeper entries (e.g.
 // dist/server/mcp/index.js) where the relative offsets resolve wrong and break
 // widget/web-app/font resolution at runtime. Declaring them as entries + code

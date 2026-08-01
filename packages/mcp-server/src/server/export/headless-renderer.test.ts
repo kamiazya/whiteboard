@@ -1,242 +1,221 @@
-// Smoke test for the actual jsdom/canvas/resvg pipeline. Other route tests
-// mock the renderer to keep them fast; this file exists so a regression
-// inside `headless-renderer.ts` itself surfaces in the unit-test suite.
+// Smoke test for the actual measure-text/canvas-render/resvg pipeline.
+// Other route tests mock the renderer to keep them fast; this file exists
+// so a regression inside `headless-renderer.ts` itself surfaces in the unit
+// test suite.
 
-import { describe, expect, it } from 'vitest'
-import { renderSceneToPng, renderSceneToSvg } from './headless-renderer.js'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { _resetExportMeasureTextCacheForTests } from './measure-text.js'
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
-// Sample the brightness of a 1x1 px corner using @napi-rs/canvas. Corner pixels
-// are normally outside any element so they reflect the theme background.
-async function cornerLuminance(png: Buffer): Promise<number> {
-  const { createCanvas, loadImage } = (await import('@napi-rs/canvas')) as unknown as {
-    createCanvas(
-      w: number,
-      h: number,
-    ): {
-      getContext(kind: '2d'): {
-        drawImage(img: unknown, x: number, y: number): void
-        getImageData(x: number, y: number, w: number, h: number): { data: Uint8ClampedArray }
-      }
-    }
-    loadImage(buf: Buffer): Promise<{ width: number; height: number }>
+function rectCanvas(over: Partial<SpatialCanvas['nodes'][number]> = {}): SpatialCanvas {
+  return {
+    nodes: [
+      {
+        id: 'rect-1',
+        type: 'text',
+        x: 50,
+        y: 50,
+        width: 200,
+        height: 100,
+        text: 'hello world',
+        ...over,
+      },
+    ],
+    edges: [],
   }
-  const img = await loadImage(png)
-  const canvas = createCanvas(img.width, img.height)
-  const ctx = canvas.getContext('2d')
-  ctx.drawImage(img, 0, 0)
-  const { data } = ctx.getImageData(2, 2, 1, 1)
-  // Rec. 709 luma. 0 = black, 255 = white.
-  return 0.2126 * data[0] + 0.7152 * data[1] + 0.0722 * data[2]
 }
 
-const baseEl = (over: Record<string, unknown>) => ({
-  angle: 0,
-  strokeColor: '#1971c2',
-  backgroundColor: 'transparent',
-  fillStyle: 'solid',
-  strokeWidth: 2,
-  strokeStyle: 'solid',
-  roughness: 1,
-  opacity: 100,
-  groupIds: [],
-  frameId: null,
-  roundness: null,
-  seed: 1,
-  version: 1,
-  versionNonce: 1,
-  isDeleted: false,
-  boundElements: null,
-  updated: 1,
-  link: null,
-  locked: false,
-  ...over,
-})
+async function importRenderer() {
+  return import('./headless-renderer.js')
+}
 
 describe('headless-renderer', () => {
-  it('renders a rectangle scene to a real PNG with the expected magic header', async () => {
-    const scene = {
-      type: 'excalidraw' as const,
-      version: 2,
-      source: '@kamiazya/whiteboard-test',
-      appState: { viewBackgroundColor: '#ffffff' },
-      elements: [
-        baseEl({
-          id: 'rect-1',
-          type: 'rectangle',
-          x: 50,
-          y: 50,
-          width: 200,
-          height: 100,
-          backgroundColor: '#a5d8ff',
-          roundness: { type: 3 },
-        }),
-      ],
-    }
-    const result = await renderSceneToPng(scene)
+  beforeEach(() => {
+    vi.resetModules()
+    _resetExportMeasureTextCacheForTests()
+  })
+
+  it('renders a rectangle canvas to a real PNG with the expected magic header', async () => {
+    const { renderSpatialCanvasToPng } = await importRenderer()
+    const result = await renderSpatialCanvasToPng(rectCanvas())
     expect(result.width).toBeGreaterThan(0)
     expect(result.height).toBeGreaterThan(0)
     // Real PNG output, not just a stub buffer.
     expect(result.png.subarray(0, 8).equals(PNG_MAGIC)).toBe(true)
-    // Sanity-check the byte size: a single rounded rect should produce more
-    // than a few hundred bytes but well under 1 MB.
-    expect(result.png.length).toBeGreaterThan(500)
+    expect(result.png.length).toBeGreaterThan(200)
     expect(result.png.length).toBeLessThan(1_000_000)
   })
 
-  it('honours frameId by clipping out elements that do not belong to the frame', async () => {
-    const frameId = 'frame-1'
-    const scene = {
-      type: 'excalidraw' as const,
-      version: 2,
-      source: '@kamiazya/whiteboard-test',
-      appState: { viewBackgroundColor: '#ffffff' },
-      elements: [
-        baseEl({ id: frameId, type: 'frame', x: 100, y: 100, width: 300, height: 200, name: 'In' }),
-        baseEl({
-          id: 'inside',
-          type: 'rectangle',
-          x: 130,
-          y: 140,
-          width: 240,
-          height: 80,
-          backgroundColor: '#a5d8ff',
-          fillStyle: 'solid',
-          frameId,
-          roundness: { type: 3 },
-        }),
-        baseEl({
-          id: 'outside',
-          type: 'rectangle',
-          x: 800,
-          y: 800,
-          width: 200,
-          height: 200,
-          backgroundColor: '#fecaca',
-          fillStyle: 'solid',
-        }),
-      ],
-    }
-    const wholeScene = await renderSceneToPng(scene)
-    const onlyFrame = await renderSceneToPng(scene, { frameId })
-    // The clipped render should be smaller than the full render because the
-    // outside element extends to (1000, 1000); the rect is at (100, 100)-
-    // (400, 300).
-    expect(onlyFrame.width).toBeLessThan(wholeScene.width)
-    expect(onlyFrame.height).toBeLessThan(wholeScene.height)
+  it('renders an empty canvas to a valid, non-degenerate PNG', async () => {
+    const { renderSpatialCanvasToPng } = await importRenderer()
+    const result = await renderSpatialCanvasToPng({ nodes: [], edges: [] })
+    expect(result.png.subarray(0, 8).equals(PNG_MAGIC)).toBe(true)
+    expect(result.width).toBeGreaterThan(0)
+    expect(result.height).toBeGreaterThan(0)
   })
 
   it('renders a dark canvas background when theme="dark"', async () => {
-    const scene = {
-      type: 'excalidraw' as const,
-      version: 2,
-      source: '@kamiazya/whiteboard-test',
-      // Pick a viewBackgroundColor that the theme override should beat.
-      appState: { viewBackgroundColor: '#ffffff' },
-      elements: [
-        baseEl({
-          id: 'rect-light',
-          type: 'rectangle',
-          x: 50,
-          y: 50,
-          width: 200,
-          height: 100,
-          backgroundColor: '#a5d8ff',
-          roundness: { type: 3 },
-        }),
-      ],
-    }
-    const light = await renderSceneToPng(scene, { theme: 'light' })
-    const dark = await renderSceneToPng(scene, { theme: 'dark' })
-    // Same scene rendered with two themes must not produce byte-identical PNGs.
+    const { renderSpatialCanvasToPng, renderSpatialCanvasToSvg } = await importRenderer()
+    const canvas = rectCanvas()
+    const light = await renderSpatialCanvasToPng(canvas, { theme: 'light' })
+    const dark = await renderSpatialCanvasToPng(canvas, { theme: 'dark' })
+    // Same canvas rendered with two themes must not produce byte-identical PNGs.
     expect(dark.png.equals(light.png)).toBe(false)
-    const lightLuma = await cornerLuminance(light.png)
-    const darkLuma = await cornerLuminance(dark.png)
-    expect(lightLuma).toBeGreaterThan(200)
-    expect(darkLuma).toBeLessThan(80)
+
+    // The background reaches the SVG as a leading background rect — assert
+    // the fill color directly rather than decoding rendered PNG pixels.
+    const lightSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
+    const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
+    expect(lightSvg.svg).toContain('fill="#ffffff"')
+    expect(darkSvg.svg).toContain('fill="#121212"')
   })
 
-  it('renders a rectangle scene to real SVG markup with an <svg> root', async () => {
-    const scene = {
-      type: 'excalidraw' as const,
-      version: 2,
-      source: '@kamiazya/whiteboard-test',
-      appState: { viewBackgroundColor: '#ffffff' },
-      elements: [
-        baseEl({
-          id: 'rect-1',
-          type: 'rectangle',
-          x: 50,
-          y: 50,
-          width: 200,
-          height: 100,
-          backgroundColor: '#a5d8ff',
-          roundness: { type: 3 },
-        }),
-      ],
+  it('produces PNG dimensions proportional to scale', async () => {
+    const { renderSpatialCanvasToPng } = await importRenderer()
+    const canvas = rectCanvas()
+    const base = await renderSpatialCanvasToPng(canvas, { scale: 1 })
+    for (const scale of [2, 3]) {
+      const scaled = await renderSpatialCanvasToPng(canvas, { scale })
+      expect(Math.abs(scaled.width - Math.round(base.width * scale))).toBeLessThanOrEqual(1)
+      expect(Math.abs(scaled.height - Math.round(base.height * scale))).toBeLessThanOrEqual(1)
     }
-    const result = await renderSceneToSvg(scene)
+  })
+
+  it('renders a canvas to real SVG markup with the document envelope', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const result = await renderSpatialCanvasToSvg(rectCanvas())
     expect(result.svg.trim().startsWith('<svg')).toBe(true)
     expect(result.svg).toContain('</svg>')
+    expect(result.svg).toMatch(/width="[\d.]+"/)
+    expect(result.svg).toMatch(/height="[\d.]+"/)
+    expect(result.svg).toMatch(/viewBox="[^"]+"/)
   })
 
-  it('honours frameId when rendering to SVG by excluding elements outside the frame', async () => {
-    const frameId = 'frame-1'
-    const scene = {
-      type: 'excalidraw' as const,
-      version: 2,
-      source: '@kamiazya/whiteboard-test',
-      appState: { viewBackgroundColor: '#ffffff' },
-      elements: [
-        baseEl({ id: frameId, type: 'frame', x: 100, y: 100, width: 300, height: 200, name: 'In' }),
-        baseEl({
-          id: 'inside',
-          type: 'rectangle',
-          x: 130,
-          y: 140,
-          width: 240,
-          height: 80,
-          backgroundColor: '#a5d8ff',
-          fillStyle: 'solid',
-          frameId,
-          roundness: { type: 3 },
-        }),
-        baseEl({
-          id: 'outside',
-          type: 'rectangle',
-          x: 800,
-          y: 800,
-          width: 200,
-          height: 200,
-          backgroundColor: '#fecaca',
-          fillStyle: 'solid',
-        }),
-      ],
+  it('renders the same canvas to byte-identical SVG twice, in-process and after a singleton reset', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const canvas = rectCanvas()
+    const first = await renderSpatialCanvasToSvg(canvas)
+    const second = await renderSpatialCanvasToSvg(canvas)
+    expect(second.svg).toBe(first.svg)
+
+    vi.resetModules()
+    _resetExportMeasureTextCacheForTests()
+    const { renderSpatialCanvasToSvg: renderAfterReset } = await importRenderer()
+    const third = await renderAfterReset(canvas)
+    expect(third.svg).toBe(first.svg)
+  })
+
+  it('increasing padding does not shrink the resulting viewBox', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const canvas = rectCanvas()
+    const small = await renderSpatialCanvasToSvg(canvas, { padding: 0 })
+    const large = await renderSpatialCanvasToSvg(canvas, { padding: 50 })
+    const extractViewBox = (svg: string) => {
+      const match = svg.match(/viewBox="([^"]+)"/)
+      if (!match) throw new Error('expected a viewBox attribute')
+      const [, , w, h] = match[1].split(' ').map(Number)
+      return { w, h }
     }
-    const wholeSceneSvg = await renderSceneToSvg(scene)
-    const onlyFrameSvg = await renderSceneToSvg(scene, { frameId })
-    expect(onlyFrameSvg.svg.length).toBeLessThan(wholeSceneSvg.svg.length)
+    const smallBox = extractViewBox(small.svg)
+    const largeBox = extractViewBox(large.svg)
+    expect(largeBox.w).toBeGreaterThanOrEqual(smallBox.w)
+    expect(largeBox.h).toBeGreaterThanOrEqual(smallBox.h)
   })
 
-  it('does not replace globalThis.fetch (would break DaemonClient.request, ensureDaemon ping)', async () => {
-    // Pin the original Node fetch BEFORE forcing renderer init — anything
-    // touching the renderer must not flip this reference, otherwise
-    // process-wide HTTP calls start throwing "fetch is disabled".
-    const originalFetch = globalThis.fetch
-    expect(typeof originalFetch).toBe('function')
+  it('shares one underlying build across concurrent first calls', async () => {
+    // Spy on the build seam (the font measurer factory) to prove the
+    // singleton's in-flight promise is shared, not raced: N concurrent
+    // first callers must invoke it exactly once, not N times.
+    const buildSpy = vi.fn(async () => () => ({
+      advanceWidth: 0,
+      ascent: 0,
+      descent: 0,
+      lineGap: 0,
+    }))
+    vi.doMock('./measure-text.js', () => ({
+      createOpentypeMeasureText: buildSpy,
+      _resetExportMeasureTextCacheForTests: vi.fn(),
+    }))
+    try {
+      const { renderSpatialCanvasToSvg } = await importRenderer()
+      const canvas = rectCanvas()
+      const [a, b, c] = await Promise.all([
+        renderSpatialCanvasToSvg(canvas),
+        renderSpatialCanvasToSvg(canvas),
+        renderSpatialCanvasToSvg(canvas),
+      ])
+      expect(a.svg).toBe(b.svg)
+      expect(b.svg).toBe(c.svg)
+      expect(buildSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.doUnmock('./measure-text.js')
+    }
+  })
 
-    // Force renderer init via the existing public entry. We do not need to
-    // render anything for the bug surface; constructing the exporter is
-    // enough to exercise the polyfill block.
-    const { prewarmHeadlessExporter } = await import('./headless-renderer.js')
-    await prewarmHeadlessExporter()
+  it('rebuilds after a failed first build instead of permanently replaying the rejection', async () => {
+    vi.doMock('./measure-text.js', () => ({
+      createOpentypeMeasureText: vi
+        .fn()
+        .mockRejectedValueOnce(new Error('boom'))
+        .mockResolvedValue(() => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })),
+      _resetExportMeasureTextCacheForTests: vi.fn(),
+    }))
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    await expect(renderSpatialCanvasToSvg(rectCanvas())).rejects.toThrow('boom')
+    // A second call retries the build from scratch rather than replaying
+    // the same rejected promise forever.
+    await expect(renderSpatialCanvasToSvg(rectCanvas())).resolves.toBeDefined()
+    vi.doUnmock('./measure-text.js')
+  })
 
-    expect(globalThis.fetch).toBe(originalFetch)
-    // And the original is still callable as a real fetch (in particular
-    // it does not throw the headless-renderer guard).
-    await expect(
-      globalThis.fetch('http://127.0.0.1:1/__never__').catch((e) => String(e)),
-    ).resolves.not.toMatch(/fetch is disabled in headless-renderer/)
+  it('prewarmHeadlessExporter never rejects, even when the underlying build throws', async () => {
+    vi.doMock('./measure-text.js', () => ({
+      createOpentypeMeasureText: vi.fn().mockRejectedValue(new Error('font load failed')),
+      _resetExportMeasureTextCacheForTests: vi.fn(),
+    }))
+    // `captureLogsForTests` must come from the SAME fresh module instance
+    // `headless-renderer.js` resolves its own `getLogger` through — both
+    // imported after `vi.resetModules()` — otherwise the capture attaches
+    // to a stale `log.js` instance's destination set and never observes
+    // the fresh instance's writes.
+    const { captureLogsForTests } = await import('../log.js')
+    const capture = captureLogsForTests('debug')
+    try {
+      const { prewarmHeadlessExporter } = await importRenderer()
+      await expect(prewarmHeadlessExporter()).resolves.toBeUndefined()
+      const warnings = capture.records.filter(
+        (r) => r.level === 'warning' && r.msg.includes('pre-warm failed'),
+      )
+      expect(warnings).toHaveLength(1)
+    } finally {
+      capture.restore()
+      vi.doUnmock('./measure-text.js')
+    }
+  })
+
+  it('degrades to system fonts with a single warning when the font asset is missing', async () => {
+    vi.doMock('./export-font.js', () => ({
+      EXPORT_FONT_FAMILY: 'Roboto',
+      resolveExportFontFile: vi.fn(async () => null),
+    }))
+    const { captureLogsForTests } = await import('../log.js')
+    const capture = captureLogsForTests('debug')
+    try {
+      const { renderSpatialCanvasToPng } = await importRenderer()
+      const result = await renderSpatialCanvasToPng(rectCanvas())
+      expect(result.png.subarray(0, 8).equals(PNG_MAGIC)).toBe(true)
+      const fontWarnings = capture.records.filter((r) => r.msg.includes('Roboto TTF not found'))
+      expect(fontWarnings).toHaveLength(1)
+    } finally {
+      capture.restore()
+      vi.doUnmock('./export-font.js')
+    }
+  })
+
+  afterEach(() => {
+    vi.doUnmock('./measure-text.js')
+    vi.doUnmock('./export-font.js')
   })
 })

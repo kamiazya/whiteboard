@@ -296,9 +296,12 @@ describe('generated SBOM content regression', () => {
       'pkg:npm/jsdom@', // jsdom
       'pkg:npm/fast-check@', // fast-check core
       '%40fast-check/', // @fast-check/* scoped
-      // @excalidraw/* is intentionally NOT listed: @excalidraw/utils is a runtime
-      // dependency of the server-side headless export, so it (and its transitive
-      // @excalidraw/* deps) legitimately appear in the production SBOM.
+      // @excalidraw/utils is intentionally NOT listed here: the headless
+      // export renderer moved to canvas-render + resvg, dropping
+      // @excalidraw/utils, happy-dom, and @napi-rs/canvas as production
+      // deps. @excalidraw/excalidraw itself stays a legitimate runtime dep
+      // (canvas-viewer / apps/web still use it), so its own SBOM entry is
+      // expected and not flagged as dev-only here.
       '%40stryker-mutator/', // @stryker-mutator/* mutation testing
       'pkg:npm/playwright@', // playwright core
       '%40playwright/', // @playwright/* scoped
@@ -312,13 +315,7 @@ describe('generated SBOM content regression', () => {
 
   it.runIf(sbomExists)('generated SBOM contains expected production packages', () => {
     const purls = loadSbomPurls()
-    const prodPatterns = [
-      'pkg:npm/hono@',
-      'pkg:npm/jose@',
-      'pkg:npm/zod@',
-      'pkg:npm/nanoid@',
-      '%40excalidraw/utils@', // runtime dep of server-side headless export
-    ]
+    const prodPatterns = ['pkg:npm/hono@', 'pkg:npm/jose@', 'pkg:npm/zod@', 'pkg:npm/nanoid@']
     for (const pattern of prodPatterns) {
       expect(
         purls.some((p) => p.includes(pattern)),

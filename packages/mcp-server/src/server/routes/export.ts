@@ -152,12 +152,12 @@ async function renderHeadless(
 
 function defaultExportPath(workspaceId: string, slug: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  // .excalidraw.png is a PNG with embedded scene JSON. Normal image viewers
-  // treat it as a PNG, and dropping it into Excalidraw restores the scene.
-  // The millisecond timestamp alone is not unique: two exports issued fast
-  // enough to land in the same millisecond would collide and the second
-  // write would silently clobber the first. The random suffix guarantees
-  // uniqueness regardless of call timing.
-  const fileName = `${slug}-${timestamp}-${nanoid(6)}.excalidraw.png`
+  // A plain PNG: the headless renderer no longer embeds scene JSON, so a
+  // `.excalidraw.png` suffix would falsely claim the file is re-importable
+  // as a scene. The millisecond timestamp alone is not unique: two exports
+  // issued fast enough to land in the same millisecond would collide and
+  // the second write would silently clobber the first. The random suffix
+  // guarantees uniqueness regardless of call timing.
+  const fileName = `${slug}-${timestamp}-${nanoid(6)}.png`
   return join(getDataDir(), workspaceId, 'exports', fileName)
 }

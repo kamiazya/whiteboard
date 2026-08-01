@@ -127,7 +127,17 @@
     // by relative path (scripts/copy-widget-into-dist.mjs), not via a JS
     // import — the devDependency exists purely so pnpm's workspace graph
     // builds canvas-viewer before mcp-server.
-    "@kamiazya/whiteboard-canvas-viewer"
+    "@kamiazya/whiteboard-canvas-viewer",
+    // The headless export renderer moved to canvas-render + resvg, so
+    // mcp-server no longer imports @excalidraw/excalidraw directly (canvas-
+    // viewer and apps/web each declare their own dependency on it). Kept
+    // here deliberately rather than dropped from package.json: this
+    // package's `whiteboard` keyword/description and its MCP Apps widget
+    // still serve an Excalidraw-authored canvas-viewer UI, and the two
+    // packages that actually import it resolve it from their own
+    // package.json, not this one — removing the pin here is a distinct,
+    // independently-reviewable decision from the headless-renderer rewrite.
+    "@excalidraw/excalidraw"
   ],
   "ignoreBinaries": [
     // Optional local tooling probed by smoke scripts / distribution tests;

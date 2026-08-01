@@ -1,50 +1,55 @@
-// Render an Excalidraw scene to PNG without an attached browser client.
+// Render a `SpatialCanvas` to PNG/SVG without an attached browser client.
 //
 // Pipeline:
-//   1. happy-dom provides window / document / SVGElement so @excalidraw/utils
-//      can build an SVG DOM tree at module load time.
-//   2. @napi-rs/canvas backs HTMLCanvasElement.getContext('2d').measureText()
-//      so Excalidraw's truncateText() and getCanvasSize() compute correctly.
-//   3. @excalidraw/utils.exportToSvg(scene) returns the SVG element.
-//   4. @resvg/resvg-js rasterises the SVG to PNG, with Excalifont woff2
-//      decompressed to TTF and passed via fontBuffers.
+//   1. `composeSpatialScene` (spatial-scene.ts) turns the persisted canvas
+//      into a canvas-render `Scene`, using the vendored opentype.js
+//      measurer (measure-text.ts) as the injected text-measurement seam.
+//   2. `renderSceneToSvg` (canvas-render) serializes the scene to an SVG
+//      string, with document options (padding/background) so the root
+//      carries a real `width`/`height`/`viewBox` envelope — canvas-render
+//      emits the bare, undimensioned root when no document option is set,
+//      which would hand resvg a degenerate raster.
+//   3. `@resvg/resvg-js` rasterises that SVG to PNG, with the vendored
+//      Roboto TTF registered directly and system-font loading disabled, so
+//      the same canvas rasterises identically on any machine.
 //
 // This module is process-singleton: buildExporter() — invoked lazily by
-// getHeadlessExporter() — must run exactly once before @excalidraw/utils
-// is imported, because the bundle reads `window.navigator.platform` at
-// module-load time.
+// getHeadlessExporter() — warms the font measurer and resvg's module
+// import once per process; every render call after that reuses the result.
 
-import { readdir, readFile } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { renderSceneToSvg as renderSceneToSvgString } from '@kamiazya/whiteboard-canvas-render'
 
-import { findPackageRoot } from '../../shared/package-root.js'
 import { getLogger } from '../log.js'
+import { EXPORT_FONT_FAMILY, resolveExportFontFile } from './export-font.js'
+import { createOpentypeMeasureText } from './measure-text.js'
+import { composeSpatialScene } from './spatial-scene.js'
 
 const log = getLogger('headless-renderer')
-
-import type { ExportToSvgOpts } from '../excalidraw-utils/src/export.js'
 
 let setupPromise: Promise<HeadlessExporter> | null = null
 
 export interface HeadlessExportOptions {
-  // exportingFrame: scene id of a frame element. When set, only the frame and
-  // its children are rendered (other elements are filtered out).
-  frameId?: string
-  // padding: extra px around the bounds. Default mirrors browser export (10).
+  // padding: extra px around the content bounds. Default mirrors the
+  // previous browser export (10).
   padding?: number
   // scale: pixel scale factor. 1 = 100%, 2 = retina-equivalent. Default 1.
   scale?: number
-  // background: CSS color or 'transparent'. Default '#ffffff' (or dark default
-  // when `theme` is 'dark' and no explicit background is supplied).
+  // background: CSS color or 'transparent'. Default '#ffffff' (or dark
+  // default when `theme` is 'dark' and no explicit background is supplied).
   background?: string
-  // theme: forces light/dark theme on the rendered scene. Sets appState.theme
-  // (which Excalidraw uses to pick its dark-mode SVG filter) and supplies a
-  // matching default background so dashed/dotted/low-opacity elements survive.
+  // theme: forces light/dark background on the rendered scene. `frameId`
+  // and `minFontPx` are accepted upstream (exportRequestSchema) for wire
+  // compatibility but are Excalidraw-era concepts with no SpatialCanvas
+  // equivalent (no frame grouping, no per-element fontSize to clamp) — this
+  // renderer never reads them.
   theme?: 'light' | 'dark'
 }
 
 const DARK_DEFAULT_BACKGROUND = '#121212'
 const LIGHT_DEFAULT_BACKGROUND = '#ffffff'
+const DEFAULT_PADDING_PX = 10
 
 export interface HeadlessExportResult {
   png: Buffer
@@ -57,178 +62,48 @@ export interface HeadlessSvgExportResult {
 }
 
 interface HeadlessExporter {
-  render(scene: ExcalidrawScene, options: HeadlessExportOptions): Promise<HeadlessExportResult>
-  renderSvg(
-    scene: ExcalidrawScene,
-    options: HeadlessExportOptions,
-  ): Promise<HeadlessSvgExportResult>
+  render(canvas: SpatialCanvas, options: HeadlessExportOptions): Promise<HeadlessExportResult>
+  renderSvg(canvas: SpatialCanvas, options: HeadlessExportOptions): Promise<HeadlessSvgExportResult>
 }
 
-interface ExcalidrawScene {
-  type: 'excalidraw'
-  version: number
-  source: string
-  elements: readonly ExcalidrawElement[]
-  appState?: Record<string, unknown>
-  files?: Record<string, ExcalidrawFile>
+function themeBackground(options: HeadlessExportOptions): string {
+  if (options.background) return options.background
+  return options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND
 }
 
-interface ExcalidrawElement {
-  id: string
-  type: string
-  frameId?: string | null
-  isDeleted?: boolean
-  [key: string]: unknown
-}
-
-interface ExcalidrawFile {
-  mimeType: string
-  id: string
-  dataURL: string
-  created: number
-}
-
-// Resolve the bundled Excalifont woff2. Looked up at module init so the
-// daemon does not pay the disk hit per export call.
-export async function resolveExcalifontTtf(): Promise<Buffer | null> {
-  // Fonts are self-hosted flat under dist/web-app/fonts/Excalifont (apps/web's
-  // vite config), relative to the package root in both tsx (src) and built (dist)
-  // modes. Resolved from the package root rather than a fixed offset so it stays
-  // correct even when the bundler hoists this module into a chunk. See package-root.ts.
-  const candidates = [
-    resolve(findPackageRoot(import.meta.url), 'dist', 'web-app', 'fonts', 'Excalifont'),
-  ]
-  for (const dir of candidates) {
-    try {
-      const entries = await readdir(dir)
-      const woff2 = entries.find((f) => f.endsWith('.woff2'))
-      if (!woff2) continue
-      const woff2Buf = await readFile(join(dir, woff2))
-      const wawoff2 = (await import('wawoff2')).default
-      const ttf = await wawoff2.decompress(woff2Buf)
-      return Buffer.from(ttf)
-    } catch {}
-  }
-  return null
+function buildSvg(canvas: SpatialCanvas, options: HeadlessExportOptions, measure: MeasureText) {
+  const scene = composeSpatialScene(canvas, { measure })
+  return renderSceneToSvgString(scene, {
+    padding: options.padding ?? DEFAULT_PADDING_PX,
+    background: themeBackground(options),
+  })
 }
 
 async function buildExporter(): Promise<HeadlessExporter> {
-  // Polyfill globals BEFORE @excalidraw/utils is imported. Node 24+ exposes
-  // navigator as a read-only getter, so use defineProperty.
-  const { Window } = await import('happy-dom')
-  const win = new Window({ url: 'http://localhost/' })
-  const define = (k: string, v: unknown) =>
-    Object.defineProperty(globalThis, k, { value: v, writable: true, configurable: true })
-  define('window', win)
-  define('document', win.document)
-  define('navigator', win.navigator)
-  define('HTMLElement', win.HTMLElement)
-  define('HTMLCanvasElement', win.HTMLCanvasElement)
-  define('SVGElement', win.SVGElement)
-  define('Image', win.Image)
-  // Disable fetch *only* on the happy-dom window so any Excalidraw code
-  // that reaches for `window.fetch` to load remote fonts / assets at
-  // render time fails fast. Crucially we do NOT touch `globalThis.fetch`
-  // — that is the same fetch used by DaemonClient.request and
-  // ensureDaemon's ping, and overwriting it would break every HTTP call
-  // across the daemon after the first headless export.
-  Object.defineProperty(win, 'fetch', {
-    value: async () => {
-      throw new Error('fetch is disabled in headless-renderer')
-    },
-    writable: true,
-    configurable: true,
-  })
-  define('devicePixelRatio', 1)
-  define('location', win.location)
-  define('crypto', win.crypto ?? globalThis.crypto)
-  define(
-    'FontFace',
-    class {
-      load() {
-        return Promise.resolve(this)
-      }
-    },
-  )
-
-  // Node-canvas-shaped polyfill: enough for ctx.measureText() which is what
-  // Excalidraw's truncateText() and getCanvasSize() need. happy-dom's
-  // HTMLCanvasElement type expects a richer return shape than @napi-rs/canvas
-  // exposes; treat the napi backing canvas as opaque to skirt that mismatch.
-  const napiModule = (await import('@napi-rs/canvas')) as unknown as {
-    createCanvas(width: number, height: number): { getContext(kind: '2d'): unknown }
-  }
-  type PolyfillThis = {
-    width?: number
-    height?: number
-    __nc?: { getContext(kind: '2d'): unknown }
-  }
-  const proto = (
-    globalThis as unknown as { HTMLCanvasElement: { prototype: Record<string, unknown> } }
-  ).HTMLCanvasElement.prototype
-  proto.getContext = function (this: PolyfillThis, type: string): unknown {
-    if (type !== '2d') return null
-    if (!this.__nc) this.__nc = napiModule.createCanvas(this.width || 300, this.height || 150)
-    return this.__nc.getContext('2d')
-  }
-
-  // Vendored facade for @excalidraw/utils. See ../excalidraw-utils/README.md
-  // for the provenance story (we own this thin re-export so callers can swap
-  // the dep in one place when upstream stabilises).
-  const { exportToSvg } = await import('../excalidraw-utils/src/export.js')
+  const measure = await createOpentypeMeasureText()
   const { Resvg } = await import('@resvg/resvg-js')
-  const excalifontTtf = await resolveExcalifontTtf()
-  if (!excalifontTtf) {
+  const fontPath = await resolveExportFontFile()
+  if (!fontPath) {
     // Silent system-font fallback would mask a regression that diverges
-    // visually from the browser export, so log it once when the singleton
-    // is built. Production daemons typically run with the bundled woff2.
-    log.warning('Excalifont woff2 not found; rendering will fall back to system fonts.')
+    // visually across machines, so log it once when the singleton is
+    // built. Production daemons typically run with the bundled TTF.
+    log.warning('Roboto TTF not found; rendering will fall back to system fonts.')
   }
-  // Skip resvg's system-font scan when we have Excalifont in hand. The scan
-  // dominates first-call latency (~1s+) and we never need any other family
-  // in the SVGs Excalidraw produces.
-  const fontOption = excalifontTtf
-    ? { fontBuffers: [excalifontTtf], loadSystemFonts: false, defaultFontFamily: 'Excalifont' }
+  // Skip resvg's system-font scan when we have the vendored font in hand.
+  // The scan dominates first-call latency (~1s+) and no other family
+  // appears in the SVG canvas-render produces.
+  const fontOption = fontPath
+    ? { fontFiles: [fontPath], loadSystemFonts: false, defaultFontFamily: EXPORT_FONT_FAMILY }
     : { loadSystemFonts: true }
 
-  // Shared by render() and renderSvg(): filters elements to a frame and
-  // builds the SVGSVGElement Excalidraw's own export utility produces. The
-  // PNG path rasterises this via resvg; the SVG path serialises it directly.
-  async function buildSvgElement(scene: ExcalidrawScene, options: HeadlessExportOptions) {
-    const frameId = options.frameId
-    const elements = frameId
-      ? scene.elements.filter((e) => e.id === frameId || e.frameId === frameId)
-      : scene.elements
-    // Compose the appState passed to Excalidraw. When the caller forces a
-    // theme we override the scene's recorded theme/background so the same
-    // canvas can be exported under both light and dark for comparison.
-    const themedAppState =
-      options.theme !== undefined
-        ? {
-            ...(scene.appState ?? {}),
-            theme: options.theme,
-            viewBackgroundColor:
-              options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND,
-          }
-        : scene.appState
-    return exportToSvg({
-      elements: elements as unknown as ExportToSvgOpts['elements'],
-      appState: themedAppState as ExportToSvgOpts['appState'],
-      files: (scene.files ?? null) as ExportToSvgOpts['files'],
-      exportPadding: options.padding,
-    })
-  }
-
   return {
-    async render(scene, options) {
-      const svg = await buildSvgElement(scene, options)
-      const themeBackground =
-        options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND
-      const resvg = new Resvg(svg.outerHTML, {
-        background: options.background ?? themeBackground,
+    async render(canvas, options) {
+      const svg = buildSvg(canvas, options, measure)
+      const resvg = new Resvg(svg, {
+        background: themeBackground(options),
         font: fontOption,
         fitTo:
-          options.scale && options.scale !== 1
+          options.scale !== undefined && options.scale !== 1
             ? { mode: 'zoom', value: options.scale }
             : { mode: 'original' },
       })
@@ -239,19 +114,16 @@ async function buildExporter(): Promise<HeadlessExporter> {
         height: png.height,
       }
     },
-    async renderSvg(scene, options) {
-      // Vector output is resolution-independent, so `scale`/`background`
-      // (raster-only concerns handled by resvg above) do not apply here.
-      const svg = await buildSvgElement(scene, options)
-      return { svg: svg.outerHTML }
+    async renderSvg(canvas, options) {
+      return { svg: buildSvg(canvas, options, measure) }
     },
   }
 }
 
 // Pre-warm the singleton during daemon startup so the first user-facing
-// `export_canvas` (format:png) call does not pay the jsdom + canvas + resvg + woff2 cost.
-// Errors are swallowed because pre-warming is best-effort: the actual export
-// path will still surface a descriptive failure.
+// `export_canvas` call does not pay the font-parse + resvg-import cost.
+// Errors are swallowed because pre-warming is best-effort: the actual
+// export path will still surface a descriptive failure.
 export async function prewarmHeadlessExporter(): Promise<void> {
   try {
     await getHeadlessExporter()
@@ -260,13 +132,15 @@ export async function prewarmHeadlessExporter(): Promise<void> {
   }
 }
 
-// Public entry — idempotent. The first call sets up DOM + canvas globals and
-// resolves a singleton exporter; subsequent calls reuse it.
+// Public entry — idempotent. The first call resolves a singleton exporter;
+// subsequent calls reuse it.
 //
-// Failure recovery: if buildExporter() rejects (e.g. an Excalifont read
-// error during prewarm) we drop the cached promise so the next call
-// retries from scratch — replaying a rejected promise forever would
-// brick every export until the daemon restarts.
+// Failure recovery: if buildExporter() rejects (e.g. a font read error
+// during prewarm) we drop the cached promise so the next call retries from
+// scratch — replaying a rejected promise forever would brick every export
+// until the daemon restarts. Storing the in-flight promise (not just the
+// resolved value) is what makes concurrent first-callers share one build
+// instead of racing separate ones.
 function getHeadlessExporter(): Promise<HeadlessExporter> {
   if (!setupPromise) {
     const pending = buildExporter().catch((err) => {
@@ -278,18 +152,20 @@ function getHeadlessExporter(): Promise<HeadlessExporter> {
   return setupPromise
 }
 
-export async function renderSceneToPng(
-  scene: ExcalidrawScene,
+// Named `renderSpatialCanvasTo*` (not `renderSceneTo*`) so a call site never
+// reads as, or shadows, canvas-render's own `renderSceneToSvg` export.
+export async function renderSpatialCanvasToPng(
+  canvas: SpatialCanvas,
   options: HeadlessExportOptions = {},
 ): Promise<HeadlessExportResult> {
   const exporter = await getHeadlessExporter()
-  return exporter.render(scene, options)
+  return exporter.render(canvas, options)
 }
 
-export async function renderSceneToSvg(
-  scene: ExcalidrawScene,
+export async function renderSpatialCanvasToSvg(
+  canvas: SpatialCanvas,
   options: HeadlessExportOptions = {},
 ): Promise<HeadlessSvgExportResult> {
   const exporter = await getHeadlessExporter()
-  return exporter.renderSvg(scene, options)
+  return exporter.renderSvg(canvas, options)
 }

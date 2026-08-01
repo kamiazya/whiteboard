@@ -191,7 +191,12 @@ export async function main() {
   // jsdom + canvas + resvg + woff2 startup cost. Errors are logged inside.
   if (daemonMode) {
     const { prewarmHeadlessExporter } = await import('./export/headless-renderer.js')
-    void prewarmHeadlessExporter()
+    prewarmHeadlessExporter().catch((err) => {
+      getLogger('server-index').warning(
+        { err: err instanceof Error ? err : new Error(String(err)) },
+        'headless exporter pre-warm failed',
+      )
+    })
   }
 
   const running = await startHttpServer({
