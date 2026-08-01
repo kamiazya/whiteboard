@@ -8,6 +8,7 @@ export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
 export type {
+  Appearance,
   BlockquoteNode,
   BoundingBox,
   CodeBlockNode,
@@ -24,6 +25,7 @@ export type {
   ResolvedEdgeNode,
   Scene,
   SceneNode,
+  ShapeSceneNode,
   SvgFragmentNode,
   TableBlockNode,
   TableCellSceneNode,

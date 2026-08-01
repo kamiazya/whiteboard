@@ -231,6 +231,197 @@ describe('renderSceneToSvg', () => {
   })
 })
 
+describe('renderSceneToSvg — shape node', () => {
+  it('emits a rect with rx when radius is set', () => {
+    const scene: Scene = {
+      nodes: [{ kind: 'shape', bbox: { x: 0, y: 0, w: 100, h: 60 }, radius: 8 }],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="100" height="60" rx="8"/></svg>',
+    )
+  })
+
+  it('omits rx entirely when radius is absent', () => {
+    const scene: Scene = { nodes: [{ kind: 'shape', bbox: { x: 0, y: 0, w: 100, h: 60 } }] }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="100" height="60"/></svg>',
+    )
+  })
+
+  it.each([
+    0,
+    -4,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+  ])('omits rx for a degenerate radius (%s), never emitting rx="0" or throwing', (radius) => {
+    const scene: Scene = {
+      nodes: [{ kind: 'shape', bbox: { x: 0, y: 0, w: 10, h: 10 }, radius }],
+    }
+    let svg = ''
+    expect(() => {
+      svg = renderSceneToSvg(scene)
+    }).not.toThrow()
+    expect(svg).not.toContain('rx=')
+  })
+
+  it('emits appearance attributes in fixed order: fill stroke stroke-width', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'shape',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          appearance: { fill: '#fff', stroke: '#000', strokeWidth: 2 },
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toContain('fill="#fff" stroke="#000" stroke-width="2"')
+  })
+
+  it('an empty appearance object and an absent appearance both render byte-identically', () => {
+    const withEmpty: Scene = {
+      nodes: [{ kind: 'shape', bbox: { x: 0, y: 0, w: 10, h: 10 }, appearance: {} }],
+    }
+    const withoutAppearance: Scene = {
+      nodes: [{ kind: 'shape', bbox: { x: 0, y: 0, w: 10, h: 10 } }],
+    }
+    expect(renderSceneToSvg(withEmpty)).toBe(renderSceneToSvg(withoutAppearance))
+  })
+
+  it('renders as the empty string (contributes no output) for a non-finite bbox field, never throwing', () => {
+    const scene: Scene = {
+      nodes: [{ kind: 'shape', bbox: { x: Number.NaN, y: 0, w: 10, h: 10 } }],
+    }
+    expect(() => renderSceneToSvg(scene)).not.toThrow()
+    expect(renderSceneToSvg(scene)).toBe('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+  })
+
+  it('renders a zero-size or negative w/h shape without throwing (valid, invisible SVG)', () => {
+    const zeroSize: Scene = { nodes: [{ kind: 'shape', bbox: { x: 0, y: 0, w: 0, h: 0 } }] }
+    const negative: Scene = { nodes: [{ kind: 'shape', bbox: { x: 0, y: 0, w: -5, h: -5 } }] }
+    expect(() => renderSceneToSvg(zeroSize)).not.toThrow()
+    expect(() => renderSceneToSvg(negative)).not.toThrow()
+  })
+
+  it('omits a degenerate strokeWidth/fontSize (NaN/Infinity/negative) rather than emitting or throwing', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'shape',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          appearance: { strokeWidth: Number.NaN },
+        },
+      ],
+    }
+    expect(() => renderSceneToSvg(scene)).not.toThrow()
+    expect(renderSceneToSvg(scene)).not.toContain('stroke-width=')
+  })
+
+  it('omits an empty-string color/font-family rather than emitting fill="" etc.', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'shape',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          appearance: { fill: '', fontFamily: '' },
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).not.toContain('fill=')
+    expect(svg).not.toContain('font-family=')
+  })
+})
+
+describe('renderSceneToSvg — appearance on textRun and edge', () => {
+  it('emits appearance attributes on a text run, keeping the link wrapper unchanged', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'paragraph',
+          bbox: { x: 0, y: 0, w: 100, h: 16 },
+          runs: [
+            {
+              kind: 'textRun',
+              bbox: { x: 0, y: 0, w: 40, h: 16 },
+              text: 'styled link',
+              link: { kind: 'link', href: 'https://example.com' },
+              appearance: { fill: '#111', fontFamily: 'Inter', fontSize: 14 },
+            },
+          ],
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain(
+      '<a href="https://example.com"><text x="0" y="0" fill="#111" font-family="Inter" font-size="14">styled link</text></a>',
+    )
+  })
+
+  it('an appearance-free text run is byte-identical to before', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'paragraph',
+          bbox: { x: 0, y: 0, w: 100, h: 16 },
+          runs: [{ kind: 'textRun', bbox: { x: 0, y: 0, w: 40, h: 16 }, text: 'plain' }],
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><g><text x="0" y="0">plain</text></g></svg>',
+    )
+  })
+
+  it('emits appearance attributes on an edge polyline before role=presentation', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 10, y: 10 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          appearance: { stroke: '#888', strokeWidth: 1.5 },
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 10,10" stroke="#888" stroke-width="1.5" role="presentation"/></svg>',
+    )
+  })
+
+  it('an appearance-free edge is byte-identical to before', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [{ x: 0, y: 0 }],
+          fromSide: 'right',
+          toSide: 'left',
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0" role="presentation"/></svg>',
+    )
+  })
+
+  it('produces well-formed XML for quote/ampersand-bearing appearance strings', () => {
+    const scene: Scene = {
+      nodes: [
+        { kind: 'shape', bbox: { x: 0, y: 0, w: 10, h: 10 }, appearance: { fill: 'a"b<c&d' } },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('fill="a&quot;b&lt;c&amp;d"')
+    expect(isWellFormedXmlFragment(svg)).toBe(true)
+  })
+})
+
 describe('renderSceneToSvg — document envelope options', () => {
   const scene: Scene = {
     nodes: [{ kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 100, h: 10 } }],

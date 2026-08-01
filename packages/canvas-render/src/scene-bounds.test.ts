@@ -324,6 +324,42 @@ describe('sceneBounds', () => {
     expect(new Set(translating)).toEqual(new Set(['renderListItem', 'renderTableCell']))
   })
 
+  it('includes a top-level shape bbox', () => {
+    const scene: Scene = {
+      nodes: [
+        { kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 10, h: 10 } },
+        { kind: 'shape', bbox: { x: 500, y: 500, w: 10, h: 10 } },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+    expect(bounds.w).toBeGreaterThanOrEqual(510)
+    expect(bounds.h).toBeGreaterThanOrEqual(510)
+  })
+
+  it('applies the list-item offset to a nested shape, which is item-relative', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'list',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          ordered: false,
+          depth: 0,
+          items: [
+            {
+              kind: 'listItem',
+              bbox: { x: 40, y: 0, w: 10, h: 10 },
+              children: [{ kind: 'shape', bbox: { x: 0, y: 0, w: 100, h: 10 } }],
+            },
+          ],
+        },
+      ],
+    }
+    // The shape is drawn at 40..140, not 0..100.
+    const bounds = sceneBounds(scene)
+    expect(bounds.x).toBe(0)
+    expect(bounds.x + bounds.w).toBe(140)
+  })
+
   it('does not overflow the stack on deep nesting (iterative walk)', () => {
     const DEPTH = 10000
     let node: Scene['nodes'][number] = { kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 1, h: 1 } }
