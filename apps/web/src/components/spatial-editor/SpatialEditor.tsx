@@ -32,11 +32,12 @@ import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import {
-  clampZoom,
   IDENTITY_VIEWPORT,
+  panBy,
   screenToCanvas,
   type Viewport,
   viewportTransformCss,
+  zoomAt,
 } from './viewport.js'
 
 /**
@@ -137,6 +138,11 @@ export function SpatialEditor({
     () => (selectedId === null ? undefined : canvas.nodes.find((n) => n.id === selectedId)),
     [canvas, selectedId],
   )
+  /** Narrowed pair so the overlay never has to assert a non-null `selectedId`. */
+  const selection =
+    selectedId !== null && selectedBox !== undefined
+      ? { id: selectedId, box: selectedBox }
+      : undefined
 
   const applyResult = (result: ReturnType<typeof reduceGesture>) => {
     setGestureState(result.state)
@@ -144,6 +150,17 @@ export function SpatialEditor({
     if (result.command !== undefined) {
       onChange(applyCommand(canvasRef.current, result.command), result.command)
     }
+  }
+
+  /**
+   * Shared prologue for the overlay's pointer handlers: take pointer capture
+   * on the root and hand it back, or `null` when the root is not mounted.
+   * (The overlay itself already stops propagation to the root's hit-test.)
+   */
+  const beginOverlayGesture = (e: React.PointerEvent): HTMLDivElement | null => {
+    const root = rootRef.current
+    if (root !== null) trySetPointerCapture(root, e.pointerId)
+    return root
   }
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -168,10 +185,12 @@ export function SpatialEditor({
     if (root === null) return
     const screenPoint = clientPointToRootLocal(e, root)
     if (isPanningRef.current) {
-      const dx = screenPoint.x - lastPanPointRef.current.x
-      const dy = screenPoint.y - lastPanPointRef.current.y
+      const screenDelta = {
+        x: screenPoint.x - lastPanPointRef.current.x,
+        y: screenPoint.y - lastPanPointRef.current.y,
+      }
       lastPanPointRef.current = screenPoint
-      setViewport((vp) => ({ ...vp, x: vp.x - dx / vp.zoom, y: vp.y - dy / vp.zoom }))
+      setViewport((vp) => panBy(vp, screenDelta))
       return
     }
     if (gestureState.kind === 'idle') return
@@ -211,18 +230,12 @@ export function SpatialEditor({
     const screenPoint = clientPointToRootLocal(e, root)
     if (e.ctrlKey || e.metaKey) {
       const factor = e.deltaY < 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR
-      setViewport((vp) => {
-        const anchorCanvasPoint = screenToCanvas(screenPoint, vp)
-        const nextZoom = clampZoom(vp.zoom * factor)
-        return {
-          zoom: nextZoom,
-          x: anchorCanvasPoint.x - screenPoint.x / nextZoom,
-          y: anchorCanvasPoint.y - screenPoint.y / nextZoom,
-        }
-      })
-    } else {
-      setViewport((vp) => ({ ...vp, x: vp.x + e.deltaX / vp.zoom, y: vp.y + e.deltaY / vp.zoom }))
+      setViewport((vp) => zoomAt(vp, screenPoint, factor))
+      return
     }
+    // A scroll wheel moves the CONTENT opposite to a drag of the same sign,
+    // hence the negated delta.
+    setViewport((vp) => panBy(vp, { x: -e.deltaX, y: -e.deltaY }))
   }
 
   const handleDoubleClick = () => {
@@ -272,20 +285,18 @@ export function SpatialEditor({
           // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
           dangerouslySetInnerHTML={{ __html: svg }}
         />
-        {selectedBox !== undefined && (
+        {selection !== undefined && (
           <SelectionOverlay
-            box={selectedBox}
+            box={selection.box}
             zoom={viewport.zoom}
             onHandlePointerDown={(handle, box, e) => {
-              e.stopPropagation()
-              const root = rootRef.current
+              const root = beginOverlayGesture(e)
               if (root === null) return
-              trySetPointerCapture(root, e.pointerId)
               const point = screenToCanvas(clientPointToRootLocal(e, root), viewport)
               applyResult(
                 reduceGesture(gestureState, canvas, {
                   type: 'pointerdown-handle',
-                  nodeId: selectedId as string,
+                  nodeId: selection.id,
                   handle,
                   point,
                   box,
@@ -293,14 +304,11 @@ export function SpatialEditor({
               )
             }}
             onConnectPointerDown={(e) => {
-              e.stopPropagation()
-              const root = rootRef.current
-              if (root === null) return
-              trySetPointerCapture(root, e.pointerId)
+              if (beginOverlayGesture(e) === null) return
               applyResult(
                 reduceGesture(gestureState, canvas, {
                   type: 'pointerdown-connect',
-                  nodeId: selectedId as string,
+                  nodeId: selection.id,
                 }),
               )
             }}
@@ -308,9 +316,9 @@ export function SpatialEditor({
         )}
         {gestureState.kind === 'editing-text' &&
           selectedNode?.type === 'text' &&
-          selectedBox !== undefined && (
+          selection !== undefined && (
             <TextNodeEditor
-              box={selectedBox}
+              box={selection.box}
               initialText={selectedNode.text}
               onCommit={(text) => {
                 applyResult(reduceGesture(gestureState, canvas, { type: 'commit-text-edit', text }))

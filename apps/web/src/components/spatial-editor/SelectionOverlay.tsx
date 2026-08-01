@@ -5,6 +5,10 @@ import { resizeHandleBoxes } from './geometry.js'
 export interface SelectionOverlayProps {
   readonly box: Box
   readonly zoom: number
+  /**
+   * Handle/connect pointerdowns stop propagation before these fire, so the
+   * root's own empty-space hit-test never also sees them.
+   */
   readonly onHandlePointerDown: (handle: ResizeHandleKind, box: Box, e: React.PointerEvent) => void
   readonly onConnectPointerDown: (e: React.PointerEvent) => void
 }

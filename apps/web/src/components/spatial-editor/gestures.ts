@@ -103,7 +103,6 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
     case 'idle':
       return true
     case 'moving':
-      return findNode(canvas, state.nodeId)?.type === state.startType
     case 'resizing':
       return findNode(canvas, state.nodeId)?.type === state.startType
     case 'connecting':
@@ -246,38 +245,45 @@ export function reduceGesture(
 ): GestureResult {
   const createEdgeId = options.createEdgeId ?? defaultCreateEdgeId
 
-  if (event.type === 'canvas-replaced') return reduceCanvasReplaced(state, event.canvas)
-  if (event.type === 'pointercancel') return idle
-  if (event.type === 'pointerdown-empty') return { state: { kind: 'idle' }, selectedId: null }
-  if (event.type === 'pointerdown') return reducePointerDown(event, canvas)
-  if (event.type === 'pointerdown-handle') return reducePointerDownHandle(event, canvas)
-  if (event.type === 'pointerdown-connect') {
-    return { state: { kind: 'connecting', fromNodeId: event.nodeId } }
+  switch (event.type) {
+    case 'canvas-replaced':
+      return reduceCanvasReplaced(state, event.canvas)
+    case 'pointercancel':
+    case 'cancel-text-edit':
+      return idle
+    case 'pointerdown-empty':
+      return { state: { kind: 'idle' }, selectedId: null }
+    case 'pointerdown':
+      return reducePointerDown(event, canvas)
+    case 'pointerdown-handle':
+      return reducePointerDownHandle(event, canvas)
+    case 'pointerdown-connect':
+      return { state: { kind: 'connecting', fromNodeId: event.nodeId } }
+    case 'start-text-edit':
+      return { state: { kind: 'editing-text', nodeId: event.nodeId } }
+    case 'commit-text-edit':
+      if (state.kind !== 'editing-text') return idle
+      return {
+        state: { kind: 'idle' },
+        command: { kind: 'set-text', id: state.nodeId, text: event.text },
+      }
+    case 'pointermove':
+      // Pure state passthrough: the reducer recomputes the commit from
+      // startPoint/current point at pointerup, so no intermediate point needs
+      // to be stored on the state for move/resize. Connecting has no other
+      // state to update either (the in-flight line is component-rendered from
+      // the raw pointer position, not reducer state).
+      return { state }
+    case 'pointerup':
+      switch (state.kind) {
+        case 'moving':
+          return reducePointerUpMoving(state, event)
+        case 'resizing':
+          return reducePointerUpResizing(state, event)
+        case 'connecting':
+          return reducePointerUpConnecting(state, event, createEdgeId)
+        default:
+          return idle
+      }
   }
-  if (event.type === 'start-text-edit') {
-    return { state: { kind: 'editing-text', nodeId: event.nodeId } }
-  }
-  if (event.type === 'cancel-text-edit') return idle
-  if (event.type === 'commit-text-edit') {
-    if (state.kind !== 'editing-text') return idle
-    return {
-      state: { kind: 'idle' },
-      command: { kind: 'set-text', id: state.nodeId, text: event.text },
-    }
-  }
-  if (event.type === 'pointermove') {
-    // Pure state passthrough: the reducer recomputes the commit from
-    // startPoint/current point at pointerup, so no intermediate point needs
-    // to be stored on the state for move/resize. Connecting has no other
-    // state to update either (the in-flight line is component-rendered from
-    // the raw pointer position, not reducer state).
-    return { state }
-  }
-  if (event.type === 'pointerup') {
-    if (state.kind === 'moving') return reducePointerUpMoving(state, event)
-    if (state.kind === 'resizing') return reducePointerUpResizing(state, event)
-    if (state.kind === 'connecting') return reducePointerUpConnecting(state, event, createEdgeId)
-    return idle
-  }
-  return idle
 }

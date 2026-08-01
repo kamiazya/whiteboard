@@ -42,15 +42,28 @@ function toSize(value: number): number {
   return Math.max(0, Math.round(value))
 }
 
-function moveNode(canvas: SpatialCanvas, id: string, x: number, y: number): SpatialCanvas {
+/**
+ * Replaces the node with `id` by `update(node)`. Returns the input canvas
+ * unchanged when the node is missing or `update` declines it (returns
+ * undefined) — the totality guarantee documented above.
+ */
+function updateNode(
+  canvas: SpatialCanvas,
+  id: string,
+  update: (node: SpatialNode) => SpatialNode | undefined,
+): SpatialCanvas {
   const index = canvas.nodes.findIndex((node) => node.id === id)
-  if (index === -1) return canvas
-  const target = canvas.nodes[index]
+  const target = index === -1 ? undefined : canvas.nodes[index]
   if (target === undefined) return canvas
-  const updated: SpatialNode = { ...target, x: toPosition(x), y: toPosition(y) }
+  const updated = update(target)
+  if (updated === undefined) return canvas
   const nodes = canvas.nodes.slice()
   nodes[index] = updated
   return { ...canvas, nodes }
+}
+
+function moveNode(canvas: SpatialCanvas, id: string, x: number, y: number): SpatialCanvas {
+  return updateNode(canvas, id, (node) => ({ ...node, x: toPosition(x), y: toPosition(y) }))
 }
 
 function resizeNode(
@@ -61,31 +74,17 @@ function resizeNode(
   width: number,
   height: number,
 ): SpatialCanvas {
-  const index = canvas.nodes.findIndex((node) => node.id === id)
-  if (index === -1) return canvas
-  const target = canvas.nodes[index]
-  if (target === undefined) return canvas
-  const updated: SpatialNode = {
-    ...target,
+  return updateNode(canvas, id, (node) => ({
+    ...node,
     x: toPosition(x),
     y: toPosition(y),
     width: toSize(width),
     height: toSize(height),
-  }
-  const nodes = canvas.nodes.slice()
-  nodes[index] = updated
-  return { ...canvas, nodes }
+  }))
 }
 
 function setText(canvas: SpatialCanvas, id: string, text: string): SpatialCanvas {
-  const index = canvas.nodes.findIndex((node) => node.id === id)
-  if (index === -1) return canvas
-  const target = canvas.nodes[index]
-  if (target === undefined || target.type !== 'text') return canvas
-  const updated: SpatialNode = { ...target, text }
-  const nodes = canvas.nodes.slice()
-  nodes[index] = updated
-  return { ...canvas, nodes }
+  return updateNode(canvas, id, (node) => (node.type === 'text' ? { ...node, text } : undefined))
 }
 
 function connectNodes(
