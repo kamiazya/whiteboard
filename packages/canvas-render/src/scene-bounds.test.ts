@@ -133,6 +133,78 @@ describe('sceneBounds', () => {
     expect(bounds.h).toBeGreaterThanOrEqual(510)
   })
 
+  it('widens the bounds when a listItem child lies outside its parent bbox', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'list',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          ordered: false,
+          depth: 0,
+          items: [
+            {
+              kind: 'listItem',
+              bbox: { x: 0, y: 0, w: 10, h: 10 },
+              children: [{ kind: 'thematicBreak', bbox: { x: 500, y: 500, w: 10, h: 10 } }],
+            },
+          ],
+        },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+    expect(bounds.w).toBeGreaterThanOrEqual(510)
+    expect(bounds.h).toBeGreaterThanOrEqual(510)
+  })
+
+  it('widens the bounds when a table cell run lies outside its row/cell bbox', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'table',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          rows: [
+            {
+              kind: 'tableRow',
+              bbox: { x: 0, y: 0, w: 10, h: 10 },
+              cells: [
+                {
+                  kind: 'tableCell',
+                  bbox: { x: 0, y: 0, w: 10, h: 10 },
+                  runs: [
+                    {
+                      kind: 'textRun',
+                      bbox: { x: 500, y: 500, w: 10, h: 10 },
+                      text: 'wide',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+    expect(bounds.w).toBeGreaterThanOrEqual(510)
+    expect(bounds.h).toBeGreaterThanOrEqual(510)
+  })
+
+  it('widens the bounds when a heading run lies outside its parent bbox', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'heading',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          level: 1,
+          runs: [{ kind: 'textRun', bbox: { x: 500, y: 500, w: 10, h: 10 }, text: 'wide' }],
+        },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+    expect(bounds.w).toBeGreaterThanOrEqual(510)
+    expect(bounds.h).toBeGreaterThanOrEqual(510)
+  })
+
   it('does not overflow the stack on deep nesting (iterative walk)', () => {
     const DEPTH = 10000
     let node: Scene['nodes'][number] = { kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 1, h: 1 } }
