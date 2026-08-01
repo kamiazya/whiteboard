@@ -12,7 +12,7 @@ const MEMO_KEY_PREFIX = 'whiteboard:daemon-probe:'
 // Single source of truth for the probe's failure classification, shared by
 // the in-memory result type and the persisted sessionStorage memo (see
 // readMemo below) so the two can never drift apart.
-export const probeFailureReasonSchema = z.enum([
+const probeFailureReasonSchema = z.enum([
   'timeout',
   'http-error',
   'malformed',
