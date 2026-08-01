@@ -25,17 +25,22 @@ function rectAttrs(bbox: BoundingBox): string {
   return `x="${formatCoord(bbox.x)}" y="${formatCoord(bbox.y)}" width="${formatCoord(bbox.w)}" height="${formatCoord(bbox.h)}"`
 }
 
-function isFiniteBbox(bbox: BoundingBox): boolean {
-  return [bbox.x, bbox.y, bbox.w, bbox.h].every(Number.isFinite)
+function isFiniteBox(box: BoundingBox): boolean {
+  return [box.x, box.y, box.w, box.h].every(Number.isFinite)
 }
 
-function isUsableColor(value: string | undefined): value is string {
+function isNonEmptyString(value: string | undefined): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
 /** Non-finite or negative is dropped; zero is a legitimate stroke-width/font-size. */
-function isUsableNonNegativeNumber(value: number | undefined): value is number {
+function isNonNegativeLength(value: number | undefined): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0
+}
+
+/** SVG treats a negative `rx` as an error and `rx="0"` is noise, so both are omitted. */
+function isPositiveLength(value: number | undefined): value is number {
+  return isNonNegativeLength(value) && value > 0
 }
 
 function withLeadingSpace(attrs: string): string {
@@ -51,45 +56,38 @@ function withLeadingSpace(attrs: string): string {
 function appearanceAttrs(appearance?: Appearance): string {
   if (!appearance) return ''
   const parts: string[] = []
-  if (isUsableColor(appearance.fill)) parts.push(`fill="${escapeXmlAttr(appearance.fill)}"`)
-  if (isUsableColor(appearance.stroke)) parts.push(`stroke="${escapeXmlAttr(appearance.stroke)}"`)
-  if (isUsableNonNegativeNumber(appearance.strokeWidth)) {
+  if (isNonEmptyString(appearance.fill)) parts.push(`fill="${escapeXmlAttr(appearance.fill)}"`)
+  if (isNonEmptyString(appearance.stroke)) {
+    parts.push(`stroke="${escapeXmlAttr(appearance.stroke)}"`)
+  }
+  if (isNonNegativeLength(appearance.strokeWidth)) {
     parts.push(`stroke-width="${formatCoord(appearance.strokeWidth)}"`)
   }
-  if (isUsableColor(appearance.fontFamily)) {
+  if (isNonEmptyString(appearance.fontFamily)) {
     parts.push(`font-family="${escapeXmlAttr(appearance.fontFamily)}"`)
   }
-  if (isUsableNonNegativeNumber(appearance.fontSize)) {
+  if (isNonNegativeLength(appearance.fontSize)) {
     parts.push(`font-size="${formatCoord(appearance.fontSize)}"`)
   }
   return parts.join(' ')
 }
 
 function renderTextRun(run: TextRunNode): string {
-  const attrs = [`x="${formatCoord(run.bbox.x)}"`, `y="${formatCoord(run.bbox.y)}"`]
-  const appearance = appearanceAttrs(run.appearance)
-  if (appearance) attrs.push(appearance)
-  const attrStr = attrs.join(' ')
-  if (run.link) {
-    const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.canvasId
-    return `<a href="${escapeXmlAttr(href)}"><text ${attrStr}>${escapeXmlText(run.text)}</text></a>`
-  }
-  return `<text ${attrStr}>${escapeXmlText(run.text)}</text>`
+  const appearance = withLeadingSpace(appearanceAttrs(run.appearance))
+  const text = `<text x="${formatCoord(run.bbox.x)}" y="${formatCoord(run.bbox.y)}"${appearance}>${escapeXmlText(run.text)}</text>`
+  if (!run.link) return text
+  const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.canvasId
+  return `<a href="${escapeXmlAttr(href)}">${text}</a>`
 }
 
 /**
  * The box chrome of a spatial canvas node. A non-finite bbox field is a
  * layout bug this package must not crash on — it renders as the empty
  * string rather than reaching `formatCoord`, which throws by contract.
- * `radius` emits `rx` only when finite and > 0: SVG treats a negative
- * `rx` as an error and `rx="0"` is noise, so both are omitted.
  */
 function renderShape(node: ShapeSceneNode): string {
-  if (!isFiniteBbox(node.bbox)) return ''
-  const rx =
-    node.radius !== undefined && Number.isFinite(node.radius) && node.radius > 0
-      ? ` rx="${formatCoord(node.radius)}"`
-      : ''
+  if (!isFiniteBox(node.bbox)) return ''
+  const rx = isPositiveLength(node.radius) ? ` rx="${formatCoord(node.radius)}"` : ''
   const appearance = withLeadingSpace(appearanceAttrs(node.appearance))
   return `<rect ${rectAttrs(node.bbox)}${rx}${appearance}/>`
 }
@@ -191,10 +189,10 @@ function hasEnvelopeOptions(
 /**
  * A negative width/height is invalid on both the root `<svg>` element and
  * `viewBox` (SVG spec) — `x`/`y` may be negative (an offset), but `w`/`h`
- * must not be, so this is checked separately from plain finiteness.
+ * must not be, so this is checked on top of plain finiteness.
  */
-function isFiniteBox(box: BoundingBox): boolean {
-  return [box.x, box.y, box.w, box.h].every(Number.isFinite) && box.w >= 0 && box.h >= 0
+function isUsableViewBox(box: BoundingBox): boolean {
+  return isFiniteBox(box) && box.w >= 0 && box.h >= 0
 }
 
 /** Non-finite or negative padding is not a valid expansion amount — treated as 0 so the function stays total. */
@@ -209,7 +207,7 @@ function expandBox(box: BoundingBox, padding: number): BoundingBox {
 }
 
 function resolveViewBox(scene: Scene, options: SvgDocumentOptions): BoundingBox {
-  if (options.viewBox && isFiniteBox(options.viewBox)) return options.viewBox
+  if (options.viewBox && isUsableViewBox(options.viewBox)) return options.viewBox
   return expandBox(sceneBounds(scene), sanitizePadding(options.padding))
 }
 
