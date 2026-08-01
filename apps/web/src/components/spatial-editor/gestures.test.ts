@@ -108,3 +108,192 @@ describe('gesture reducer', () => {
     expect(() => reduceGesture(state, c, { type: 'pointercancel' })).not.toThrow()
   })
 })
+
+describe('resize gesture', () => {
+  it('dragging the se (max-side) handle grows width/height, opposite corner fixed', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-handle',
+      nodeId: 'a',
+      handle: 'se',
+      point: { x: 110, y: 60 },
+      box: { x: 10, y: 10, width: 100, height: 50 },
+    })
+    result = reduceGesture(result.state, c, {
+      type: 'pointerup',
+      point: { x: 130, y: 90 },
+    })
+    // se: width/height grow by the delta, x/y (the nw corner) stay fixed.
+    expect(result.command).toEqual({
+      kind: 'resize-node',
+      id: 'a',
+      x: 10,
+      y: 10,
+      width: 120,
+      height: 80,
+    })
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('dragging the nw (min-side) handle shrinks the box and shifts x/y, opposite corner fixed', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-handle',
+      nodeId: 'a',
+      handle: 'nw',
+      point: { x: 10, y: 10 },
+      box: { x: 10, y: 10, width: 100, height: 50 },
+    })
+    result = reduceGesture(result.state, c, {
+      type: 'pointerup',
+      point: { x: 30, y: 20 },
+    })
+    // nw: dragging inward shrinks width/height and moves x/y by the same
+    // delta, so the se corner (x + width, y + height) stays fixed at (110, 60).
+    expect(result.command).toEqual({
+      kind: 'resize-node',
+      id: 'a',
+      x: 30,
+      y: 20,
+      width: 80,
+      height: 40,
+    })
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('overshooting a min-side handle past the box floor-clamps size and keeps the opposite corner fixed', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-handle',
+      nodeId: 'a',
+      handle: 'nw',
+      point: { x: 10, y: 10 },
+      box: { x: 10, y: 10, width: 100, height: 50 },
+    })
+    // Drag the nw handle 200px right/down — far past the box's own 100x50
+    // size. Naively unclamped, x/y would land at 210/210, dragging the
+    // opposite (se) corner along with it instead of leaving it fixed.
+    result = reduceGesture(result.state, c, {
+      type: 'pointerup',
+      point: { x: 210, y: 210 },
+    })
+    expect(result.command).toEqual({
+      kind: 'resize-node',
+      id: 'a',
+      x: 110,
+      y: 60,
+      width: 0,
+      height: 0,
+    })
+    expect(result.state.kind).toBe('idle')
+  })
+})
+
+describe('connect gesture', () => {
+  it('dragging from the connect handle onto another node emits connect-nodes', () => {
+    const c: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'hi' },
+        { id: 'b', type: 'text', x: 200, y: 10, width: 100, height: 50, text: 'bye' },
+      ],
+      edges: [],
+    }
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-connect',
+      nodeId: 'a',
+    })
+    expect(result.state).toEqual({ kind: 'connecting', fromNodeId: 'a' })
+    result = reduceGesture(
+      result.state,
+      c,
+      { type: 'pointerup', point: { x: 250, y: 30 }, targetNodeId: 'b' },
+      { createEdgeId: () => 'edge-1' },
+    )
+    expect(result.command).toEqual({
+      kind: 'connect-nodes',
+      edgeId: 'edge-1',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('dropping a connect drag with no target under the pointer emits no command', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-connect',
+      nodeId: 'a',
+    })
+    result = reduceGesture(result.state, c, { type: 'pointerup', point: { x: 500, y: 500 } })
+    expect(result.command).toBeUndefined()
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('dropping a connect drag back onto its own source node is a no-op (self-connection guard)', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown-connect',
+      nodeId: 'a',
+    })
+    result = reduceGesture(result.state, c, {
+      type: 'pointerup',
+      point: { x: 50, y: 30 },
+      targetNodeId: 'a',
+    })
+    expect(result.command).toBeUndefined()
+    expect(result.state.kind).toBe('idle')
+  })
+})
+
+describe('text-edit gesture', () => {
+  it('start-text-edit enters editing-text state for the given node', () => {
+    const c = canvas()
+    const result = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+    })
+    expect(result.state).toEqual({ kind: 'editing-text', nodeId: 'a' })
+    expect(result.command).toBeUndefined()
+  })
+
+  it('commit-text-edit emits set-text and returns to idle', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, { type: 'start-text-edit', nodeId: 'a' })
+    const result = reduceGesture(editing.state, c, {
+      type: 'commit-text-edit',
+      text: 'updated',
+    })
+    expect(result.command).toEqual({ kind: 'set-text', id: 'a', text: 'updated' })
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('commit-text-edit outside editing-text state is a no-op', () => {
+    const c = canvas()
+    const result = reduceGesture(createIdleState(), c, {
+      type: 'commit-text-edit',
+      text: 'updated',
+    })
+    expect(result.command).toBeUndefined()
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('cancel-text-edit discards the edit and returns to idle with no command', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, { type: 'start-text-edit', nodeId: 'a' })
+    const result = reduceGesture(editing.state, c, { type: 'cancel-text-edit' })
+    expect(result.state.kind).toBe('idle')
+    expect(result.command).toBeUndefined()
+  })
+
+  it('aborts an in-flight text edit when the node type changes mid-edit (canvas-replaced)', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, { type: 'start-text-edit', nodeId: 'a' })
+    const replaced: SpatialCanvas = {
+      nodes: [{ id: 'a', type: 'file', x: 10, y: 10, width: 100, height: 50, file: 'x.png' }],
+      edges: [],
+    }
+    const result = reduceGesture(editing.state, c, { type: 'canvas-replaced', canvas: replaced })
+    expect(result.state.kind).toBe('idle')
+    expect(result.command).toBeUndefined()
+  })
+})

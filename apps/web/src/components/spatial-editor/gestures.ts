@@ -186,13 +186,20 @@ function reducePointerUpResizing(
   state: ResizeSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
 ): GestureResult {
-  const dx = event.point.x - state.startPoint.x
-  const dy = event.point.y - state.startPoint.y
+  const rawDx = event.point.x - state.startPoint.x
+  const rawDy = event.point.y - state.startPoint.y
   const sign = HANDLE_SIGN[state.handle]
   const { startBox } = state
   // Moving an edge/corner changes width/height by the signed delta and, for
   // the min-side handles (x=-1/y=-1), also shifts the origin so the OPPOSITE
-  // corner stays fixed.
+  // corner stays fixed. Clamp the delta to the box's own size BEFORE
+  // deriving x/y from it: `commands.ts`'s `toSize` floors the emitted
+  // width/height at 0, and if x/y were derived from the raw, unclamped
+  // delta instead of this same floor, an overshoot drag would keep sliding
+  // the origin past the size clamp — moving the opposite corner instead of
+  // leaving it fixed.
+  const dx = sign.x === -1 ? Math.min(rawDx, startBox.width) : Math.max(rawDx, -startBox.width)
+  const dy = sign.y === -1 ? Math.min(rawDy, startBox.height) : Math.max(rawDy, -startBox.height)
   const nextWidth = startBox.width + sign.x * dx
   const nextHeight = startBox.height + sign.y * dy
   const nextX = sign.x === -1 ? startBox.x + dx : startBox.x
