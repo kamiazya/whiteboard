@@ -12,6 +12,15 @@ import { EXPORT_FONT_FAMILY, resolveExportFontFile } from './export-font.js'
 
 const log = getLogger('export-measure-text')
 
+// opentype.js is CommonJS. Running from source (tsx) its exports land on the
+// namespace root, but tsup's ESM interop nests them under `default` in the
+// bundled dist. Reading only one of the two shapes throws
+// "opentype.parse is not a function" in exactly one environment — the
+// published package — where the fallback measurer then silently absorbs it
+// and every export loses the real font metrics. Resolve whichever object
+// actually carries the API.
+const opentypeApi = (opentype as unknown as { default?: typeof opentype }).default ?? opentype
+
 // Every glyph advance/vertical metric below is a rough Latin-sans-serif
 // average expressed as a fraction of sizePx. This measurer is used only
 // when the real vendored font cannot be loaded, so its output is NOT
@@ -72,11 +81,23 @@ function buildOpentypeMeasurer(font: opentype.Font): MeasureText {
 let cachedMeasurerPromise: Promise<MeasureText> | null = null
 let hasLoggedFallback = false
 
-function logFallbackOnce(err: unknown): void {
+/**
+ * A path-free description of why the font failed to load. The raw error is
+ * deliberately NOT logged: its `stack` (and an `ENOENT` message) carry
+ * absolute filesystem paths, and the packaged-distribution smoke asserts the
+ * daemon never leaks a home-directory path to stderr.
+ */
+function describeLoadFailure(err: unknown): string {
+  if (!(err instanceof Error)) return 'unknown'
+  const code = (err as NodeJS.ErrnoException).code
+  return code ? `${err.name}(${code})` : err.name
+}
+
+function logFallbackOnce(reason: string): void {
   if (hasLoggedFallback) return
   hasLoggedFallback = true
   log.warning(
-    { err },
+    { family: EXPORT_FONT_FAMILY, reason },
     'export font asset unavailable; falling back to a constant-ratio text measurer. ' +
       'Output on this path is NOT byte-reproducible with the real font.',
   )
@@ -88,13 +109,14 @@ async function loadRealMeasurer(
   try {
     const fontPath = await resolveFontFile()
     if (!fontPath) {
-      throw new Error(`export font asset "${EXPORT_FONT_FAMILY}" not found`)
+      logFallbackOnce('asset-not-found')
+      return createConstantRatioMeasureText()
     }
     const buffer = await readFile(fontPath)
-    const font = opentype.parse(buffer)
+    const font = opentypeApi.parse(buffer)
     return buildOpentypeMeasurer(font)
   } catch (err) {
-    logFallbackOnce(err)
+    logFallbackOnce(describeLoadFailure(err))
     return createConstantRatioMeasureText()
   }
 }
