@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import {
   CANVAS_SYNC_DOC_CHANGED_EVENT,
   CANVAS_SYNC_VERSION_SAVED_EVENT,
   dispatchIdentityEvent,
+  type UseCanvasSyncOptions,
 } from './canvas-sync-types.js'
 
 describe('canvas-sync event name constants', () => {
@@ -26,5 +27,13 @@ describe('canvas-sync event name constants', () => {
     })
     window.removeEventListener(CANVAS_SYNC_DOC_CHANGED_EVENT, handler)
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops the file-upload callbacks from UseCanvasSyncOptions', () => {
+    // File uploads had no analog left once the files cache was dropped from
+    // the session (fine-grained Loro writes replaced the whole-document
+    // Excalidraw-elements commit that used to carry them).
+    expectTypeOf<UseCanvasSyncOptions>().not.toHaveProperty('onFileUploadFailed')
+    expectTypeOf<UseCanvasSyncOptions>().not.toHaveProperty('onFileUploadSucceeded')
   })
 })

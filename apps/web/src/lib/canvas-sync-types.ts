@@ -35,8 +35,6 @@ export const CANVAS_SYNC_VERSION_SAVED_EVENT = 'excalidraw:version_saved'
 export interface UseCanvasSyncOptions {
   onVersionCreated?: (payload: VersionCreatedPayload) => void
   onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
-  onFileUploadFailed?: () => void
-  onFileUploadSucceeded?: () => void
   // Fired in addition to (not instead of) the hook's own syncStatus:'error'
   // transition on a WS auth failure (close 1008), so a daemon-backed page
   // can surface a dedicated banner instead of the generic error state.
