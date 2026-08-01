@@ -1,3 +1,4 @@
+import { daemonPingResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { z } from 'zod'
 
 // Default loopback origin for the local daemon (matches
@@ -7,17 +8,6 @@ export const DEFAULT_DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 const DEFAULT_TIMEOUT_MS = 2000
 const MEMO_KEY_PREFIX = 'whiteboard:daemon-probe:'
-
-// Mirrors daemonPingResponseSchema in
-// packages/mcp-server/src/shared/api-contracts/runtime.ts. That module is
-// deliberately excluded from the published ./api-contracts barrel (it's
-// server-runtime-only), so apps/web keeps its own copy rather than reaching
-// into mcp-server internals at build time. A dedicated test cross-parses
-// fixtures through both schemas to catch field-level drift.
-const daemonPingResponseSchema = z.object({
-  ok: z.literal(true),
-  instanceId: z.string(),
-})
 
 // Single source of truth for the probe's failure classification, shared by
 // the in-memory result type and the persisted sessionStorage memo (see
