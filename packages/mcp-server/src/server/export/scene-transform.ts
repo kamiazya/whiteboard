@@ -19,17 +19,13 @@
 // exactly, because both functions must agree on which nodes are
 // x-transform boundaries — see the tripwire test in spatial-scene.test.ts.
 import type {
-  BlockquoteNode,
   BoundingBox,
-  EmbedResolvedNode,
-  GroupSceneNode,
-  ListBlockNode,
   ListItemNode,
   Scene,
   SceneNode,
-  TableBlockNode,
   TableCellSceneNode,
   TableRowSceneNode,
+  TextRunNode,
 } from '@kamiazya/whiteboard-canvas-render'
 
 type TranslatableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
@@ -70,92 +66,31 @@ function translateNode(
   }
 
   const bbox = translateBbox(node.bbox, appliedDx, dy)
+  const translateChild = (child: TranslatableNode): TranslatableNode =>
+    translateNode(child, dx, dy, childShiftX)
 
   switch (node.kind) {
-    case 'blockquote': {
-      const blockquote = node as BlockquoteNode
-      return {
-        ...blockquote,
-        bbox,
-        children: blockquote.children.map((child) =>
-          translateNode(child, dx, dy, childShiftX),
-        ) as readonly SceneNode[],
-      }
-    }
-    case 'group': {
-      const group = node as GroupSceneNode
-      return {
-        ...group,
-        bbox,
-        children: group.children.map((child) =>
-          translateNode(child, dx, dy, childShiftX),
-        ) as readonly SceneNode[],
-      }
-    }
-    case 'embedResolved': {
-      const embed = node as EmbedResolvedNode
-      return {
-        ...embed,
-        bbox,
-        children: embed.children.map((child) =>
-          translateNode(child, dx, dy, childShiftX),
-        ) as readonly SceneNode[],
-      }
-    }
-    case 'listItem': {
-      const listItem = node as ListItemNode
-      return {
-        ...listItem,
-        bbox,
-        children: listItem.children.map((child) =>
-          translateNode(child, dx, dy, childShiftX),
-        ) as readonly SceneNode[],
-      }
-    }
-    case 'list': {
-      const list = node as ListBlockNode
-      return {
-        ...list,
-        bbox,
-        items: list.items.map((item) => translateNode(item, dx, dy, childShiftX) as ListItemNode),
-      }
-    }
-    case 'table': {
-      const table = node as TableBlockNode
-      return {
-        ...table,
-        bbox,
-        rows: table.rows.map((row) => translateNode(row, dx, dy, childShiftX) as TableRowSceneNode),
-      }
-    }
-    case 'tableRow': {
-      const row = node as TableRowSceneNode
-      return {
-        ...row,
-        bbox,
-        cells: row.cells.map(
-          (cell) => translateNode(cell, dx, dy, childShiftX) as TableCellSceneNode,
-        ),
-      }
-    }
-    case 'tableCell': {
-      const cell = node as TableCellSceneNode
-      return {
-        ...cell,
-        bbox,
-        runs: cell.runs.map((run) => translateNode(run, dx, dy, childShiftX)),
-      } as TableCellSceneNode
-    }
+    case 'blockquote':
+    case 'group':
+    case 'embedResolved':
+    case 'listItem':
+      return { ...node, bbox, children: node.children.map(translateChild) as readonly SceneNode[] }
     case 'heading':
-    case 'paragraph': {
+    case 'paragraph':
+    case 'tableCell':
+      return { ...node, bbox, runs: node.runs.map(translateChild) as readonly TextRunNode[] }
+    case 'list':
+      return { ...node, bbox, items: node.items.map(translateChild) as readonly ListItemNode[] }
+    case 'table':
+      return { ...node, bbox, rows: node.rows.map(translateChild) as readonly TableRowSceneNode[] }
+    case 'tableRow':
       return {
         ...node,
         bbox,
-        runs: node.runs.map((run) => translateNode(run, dx, dy, childShiftX)),
-      } as SceneNode
-    }
+        cells: node.cells.map(translateChild) as readonly TableCellSceneNode[],
+      }
     default:
-      return { ...node, bbox } as TranslatableNode
+      return { ...node, bbox }
   }
 }
 

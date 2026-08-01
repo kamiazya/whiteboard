@@ -40,15 +40,21 @@ export interface ComposeSpatialSceneOptions {
   readonly measure: MeasureText
 }
 
+function compareIds(a: string, b: string): number {
+  if (a < b) return -1
+  if (a > b) return 1
+  return 0
+}
+
 /** Deterministic total order over spatial nodes: position first, id as the tie-breaker. */
 function compareNodesByPosition(a: SpatialNode, b: SpatialNode): number {
   if (a.y !== b.y) return a.y - b.y
   if (a.x !== b.x) return a.x - b.x
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  return compareIds(a.id, b.id)
 }
 
 function compareEdgesById(a: CanvasEdge, b: CanvasEdge): number {
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+  return compareIds(a.id, b.id)
 }
 
 function contentWidth(nodeWidth: number): number {
@@ -116,28 +122,18 @@ function composeTextNode(
   return [chromeShape(node), ...placed.nodes]
 }
 
-function composeFileNode(
-  node: Extract<SpatialNode, { type: 'file' }>,
-  measure: MeasureText,
-): readonly SceneNode[] {
-  const label = node.subpath ? `${node.file}${node.subpath}` : node.file
-  return [chromeShape(node), labelRun(node, label, measure)]
-}
-
-function composeLinkNode(
-  node: Extract<SpatialNode, { type: 'link' }>,
-  measure: MeasureText,
-): readonly SceneNode[] {
-  return [chromeShape(node), labelRun(node, node.url, measure)]
-}
-
-function composeGroupNode(
-  node: Extract<SpatialNode, { type: 'group' }>,
-  measure: MeasureText,
-): readonly SceneNode[] {
-  const chrome = chromeShape(node)
-  if (!node.label || node.label.length === 0) return [chrome]
-  return [chrome, labelRun(node, node.label, measure)]
+/** The readable label of a non-text node, or `undefined` when it has none. */
+function labelOf(
+  node: Extract<SpatialNode, { type: 'file' | 'link' | 'group' }>,
+): string | undefined {
+  switch (node.type) {
+    case 'file':
+      return node.subpath ? `${node.file}${node.subpath}` : node.file
+    case 'link':
+      return node.url
+    case 'group':
+      return node.label && node.label.length > 0 ? node.label : undefined
+  }
 }
 
 function composeNode(node: SpatialNode, measure: MeasureText): readonly SceneNode[] {
@@ -145,11 +141,12 @@ function composeNode(node: SpatialNode, measure: MeasureText): readonly SceneNod
     case 'text':
       return composeTextNode(node, measure)
     case 'file':
-      return composeFileNode(node, measure)
     case 'link':
-      return composeLinkNode(node, measure)
-    case 'group':
-      return composeGroupNode(node, measure)
+    case 'group': {
+      const chrome = chromeShape(node)
+      const label = labelOf(node)
+      return label === undefined ? [chrome] : [chrome, labelRun(node, label, measure)]
+    }
     default: {
       // Defensive branch: `SpatialNode` is a closed discriminated union, so
       // this is unreachable for schema-valid input. Kept so an unrecognized
