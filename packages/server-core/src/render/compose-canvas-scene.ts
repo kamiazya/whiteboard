@@ -14,7 +14,7 @@ import { layoutMdastBlocks, routeEdge } from '@kamiazya/whiteboard-canvas-render
  * canvas's text node lives at its own (x, y), so its laid-out scene must be
  * shifted into place before joining the rest of the canvas's scene graph.
  */
-function translateNode(node: SceneNode, dx: number, dy: number): SceneNode {
+export function translateNode(node: SceneNode, dx: number, dy: number): SceneNode {
   if (node.kind === 'edge') {
     // Edges are already resolved in absolute canvas coordinates by
     // routeEdge — translating them here would double-shift them.
@@ -31,6 +31,7 @@ function translateNode(node: SceneNode, dx: number, dy: number): SceneNode {
     case 'unresolvedReference':
     case 'svgFragment':
     case 'embedPlaceholder':
+    case 'shape':
       return { ...node, bbox }
     case 'heading':
     case 'paragraph':

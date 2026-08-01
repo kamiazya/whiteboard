@@ -1,8 +1,24 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { routeEdge } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, test } from 'vitest'
-import { composeCanvasScene, computeCanvasDimensions } from './compose-canvas-scene.js'
+import {
+  composeCanvasScene,
+  computeCanvasDimensions,
+  translateNode,
+} from './compose-canvas-scene.js'
 import { fallbackMeasureText } from './fallback-measure.js'
+
+describe('translateNode', () => {
+  test('translates a shape node bbox like other leaf scene nodes', () => {
+    const translated = translateNode(
+      { kind: 'shape', bbox: { x: 5, y: 6, w: 40, h: 30 }, radius: 4 },
+      10,
+      20,
+    )
+
+    expect(translated).toEqual({ kind: 'shape', bbox: { x: 15, y: 26, w: 40, h: 30 }, radius: 4 })
+  })
+})
 
 describe('composeCanvasScene', () => {
   test('translates a text node body by its own (x, y)', () => {
