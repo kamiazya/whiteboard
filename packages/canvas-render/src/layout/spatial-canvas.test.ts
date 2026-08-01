@@ -1,11 +1,12 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
+import { describe, expect, it, vi } from 'vitest'
+import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
-import { describe, expect, it, vi } from 'vitest'
+import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
-import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 
 const NODE_PADDING_PX = 8
 const NODE_CORNER_RADIUS_PX = 4
@@ -27,9 +28,7 @@ const fakeAppearance: SpatialAppearanceResolver = {
 function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayoutOptions {
   return {
     measure,
-    parseBody: (text) => {
-      throw new Error(`no real parser in this test; use a stub — got: ${text}`)
-    },
+    parseBody: fakeParseBody,
     appearance: fakeAppearance,
     ...overrides,
   }
@@ -38,8 +37,9 @@ function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayo
 // A tiny fake mdast parser: '#'-prefixed text becomes a heading, everything
 // else becomes a single paragraph — enough to exercise layoutMdastBlocks
 // without depending on canvas-codec (a cross-package dependency this
-// package must not take).
-function fakeParseBody(text: string): import('@kamiazya/whiteboard-canvas-model/mdast').MdastRoot {
+// package must not take). `__THROW__` simulates a construct outside the
+// caller's accepted subset.
+function fakeParseBody(text: string): MdastRoot {
   if (text === '__THROW__') throw new Error('simulated unsupported mdast construct')
   if (text.startsWith('# ')) {
     return {
@@ -85,7 +85,7 @@ function shapesOf(scene: Scene): ShapeSceneNode[] {
 describe('layoutSpatialCanvas', () => {
   it('emits a chrome shape matching the node box plus its laid-out content', () => {
     const node = textNode()
-    const scene = layoutSpatialCanvas(canvas([node]), baseOptions({ parseBody: fakeParseBody }))
+    const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
 
     const shape = scene.nodes.find((n): n is ShapeSceneNode => n.kind === 'shape')
     expect(shape?.bbox).toEqual({ x: 100, y: 50, w: 200, h: 100 })
@@ -99,7 +99,7 @@ describe('layoutSpatialCanvas', () => {
 
   it('positions a laid-out block at the node coordinates plus padding', () => {
     const node = textNode({ x: 300, y: 150, text: 'plain body' })
-    const scene = layoutSpatialCanvas(canvas([node]), baseOptions({ parseBody: fakeParseBody }))
+    const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
     const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
     expect(paragraph?.bbox.y).toBe(150 + NODE_PADDING_PX)
     expect(paragraph?.bbox.x).toBe(300 + NODE_PADDING_PX)
@@ -107,7 +107,7 @@ describe('layoutSpatialCanvas', () => {
 
   it('clamps content width so it never goes negative for a narrow node', () => {
     const node = textNode({ width: 4, text: 'x' })
-    const scene = layoutSpatialCanvas(canvas([node]), baseOptions({ parseBody: fakeParseBody }))
+    const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
     for (const n of scene.nodes) {
       if ('bbox' in n) expect(n.bbox.w).toBeGreaterThanOrEqual(0)
     }
@@ -117,7 +117,7 @@ describe('layoutSpatialCanvas', () => {
     const a = textNode({ id: 'a', x: 0, y: 0, text: 'a' })
     const b = textNode({ id: 'b', x: 10, y: 0, text: 'b' })
     const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
-    const options = baseOptions({ parseBody: fakeParseBody })
+    const options = baseOptions()
 
     const forward = layoutSpatialCanvas(canvas([a, b], [edge]), options)
     const reversed = layoutSpatialCanvas(canvas([b, a], [edge]), options)
@@ -133,10 +133,7 @@ describe('layoutSpatialCanvas', () => {
     const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
     const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
     const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
-    const scene = layoutSpatialCanvas(
-      canvas([a, b], [edge]),
-      baseOptions({ parseBody: fakeParseBody }),
-    )
+    const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
 
     const edgeIndex = scene.nodes.findIndex((n) => n.kind === 'edge')
     expect(edgeIndex).toBeGreaterThan(-1)
@@ -153,25 +150,22 @@ describe('layoutSpatialCanvas', () => {
   it('degrades a missing edge endpoint instead of throwing, keeping all nodes', () => {
     const a = textNode({ id: 'a' })
     const edge = { id: 'e1', fromNode: 'a', toNode: 'ghost' }
-    const options = baseOptions({ parseBody: fakeParseBody })
-    expect(() => layoutSpatialCanvas(canvas([a], [edge]), options)).not.toThrow()
-    const scene = layoutSpatialCanvas(canvas([a], [edge]), options)
+    // A throw here fails the test — the assertion below is on the degraded result.
+    const scene = layoutSpatialCanvas(canvas([a], [edge]), baseOptions())
     expect(shapesOf(scene)).toHaveLength(1)
   })
 
   it('degrades an unrecognized node kind to chrome only, without throwing or dropping siblings', () => {
     const good = textNode({ id: 'good' })
     const bogus = { ...textNode({ id: 'bogus' }), type: 'bogus' } as unknown as SpatialNode
-    const options = baseOptions({ parseBody: fakeParseBody })
-    expect(() => layoutSpatialCanvas(canvas([good, bogus]), options)).not.toThrow()
-    const scene = layoutSpatialCanvas(canvas([good, bogus]), options)
+    const scene = layoutSpatialCanvas(canvas([good, bogus]), baseOptions())
     expect(shapesOf(scene)).toHaveLength(2)
   })
 
   it('reports an unrecognized node kind via onDegrade when supplied', () => {
     const bogus = { ...textNode({ id: 'bogus' }), type: 'bogus' } as unknown as SpatialNode
     const onDegrade = vi.fn<(event: SpatialLayoutDegradation) => void>()
-    layoutSpatialCanvas(canvas([bogus]), baseOptions({ parseBody: fakeParseBody, onDegrade }))
+    layoutSpatialCanvas(canvas([bogus]), baseOptions({ onDegrade }))
     expect(onDegrade).toHaveBeenCalledWith({
       kind: 'unknown-node-kind',
       nodeId: 'bogus',
@@ -182,8 +176,7 @@ describe('layoutSpatialCanvas', () => {
   it('degrades a malformed markdown body to a literal text run, leaving other nodes intact', () => {
     const good = textNode({ id: 'good', text: 'fine' })
     const bad = textNode({ id: 'bad', x: 400, text: '__THROW__' })
-    const options = baseOptions({ parseBody: fakeParseBody })
-    const scene = layoutSpatialCanvas(canvas([good, bad]), options)
+    const scene = layoutSpatialCanvas(canvas([good, bad]), baseOptions())
     expect(shapesOf(scene)).toHaveLength(2)
     const badLabel = scene.nodes.find(
       (n): n is TextRunNode => n.kind === 'textRun' && n.text === '__THROW__',
@@ -197,7 +190,7 @@ describe('layoutSpatialCanvas', () => {
   it('reports a body-parse failure via onDegrade when supplied', () => {
     const bad = textNode({ id: 'bad', text: '__THROW__' })
     const onDegrade = vi.fn<(event: SpatialLayoutDegradation) => void>()
-    layoutSpatialCanvas(canvas([bad]), baseOptions({ parseBody: fakeParseBody, onDegrade }))
+    layoutSpatialCanvas(canvas([bad]), baseOptions({ onDegrade }))
     expect(onDegrade).toHaveBeenCalledTimes(1)
     const [event] = onDegrade.mock.calls[0]!
     expect(event.kind).toBe('body-parse-failed')
@@ -206,16 +199,12 @@ describe('layoutSpatialCanvas', () => {
 
   it('degrades silently (no throw) when onDegrade is omitted', () => {
     const bad = textNode({ id: 'bad', text: '__THROW__' })
-    expect(() =>
-      layoutSpatialCanvas(canvas([bad]), baseOptions({ parseBody: fakeParseBody })),
-    ).not.toThrow()
+    expect(() => layoutSpatialCanvas(canvas([bad]), baseOptions())).not.toThrow()
   })
 
   it('composes a zero-size node without throwing, emitting a zero-area shape', () => {
     const node = textNode({ width: 0, height: 0 })
-    const options = baseOptions({ parseBody: fakeParseBody })
-    expect(() => layoutSpatialCanvas(canvas([node]), options)).not.toThrow()
-    const scene = layoutSpatialCanvas(canvas([node]), options)
+    const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
     const shape = shapesOf(scene)[0]
     expect(shape?.bbox.w).toBe(0)
     expect(shape?.bbox.h).toBe(0)
@@ -277,13 +266,12 @@ describe('layoutSpatialCanvas', () => {
   })
 
   it('renders an empty canvas as an empty scene without throwing', () => {
-    expect(() => layoutSpatialCanvas(canvas([]), baseOptions())).not.toThrow()
     expect(layoutSpatialCanvas(canvas([]), baseOptions())).toEqual({ nodes: [] })
   })
 
   it('renders a text node with empty text without throwing', () => {
     const node = textNode({ text: '' })
-    const options = baseOptions({ parseBody: fakeParseBody })
+    const options = baseOptions()
     expect(() => layoutSpatialCanvas(canvas([node]), options)).not.toThrow()
   })
 
@@ -298,7 +286,7 @@ describe('layoutSpatialCanvas', () => {
       height: 50,
       file: 'x.md',
     }
-    const scene = layoutSpatialCanvas(canvas([a, b]), baseOptions({ parseBody: fakeParseBody }))
+    const scene = layoutSpatialCanvas(canvas([a, b]), baseOptions())
     const svg = renderSceneToSvg(scene, { padding: 16 })
 
     const match = svg.match(/viewBox="([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+)"/)
@@ -315,7 +303,7 @@ describe('layoutSpatialCanvas', () => {
 
   it('composing the same canvas twice yields byte-identical SVG (determinism)', () => {
     const a = textNode({ id: 'a', text: 'hello' })
-    const options = baseOptions({ parseBody: fakeParseBody })
+    const options = baseOptions()
     const svgA = renderSceneToSvg(layoutSpatialCanvas(canvas([a]), options), { padding: 4 })
     const svgB = renderSceneToSvg(layoutSpatialCanvas(canvas([a]), options), { padding: 4 })
     expect(svgA).toBe(svgB)
@@ -330,8 +318,8 @@ describe('layoutSpatialCanvas', () => {
     const a = textNode({ id: 'a', text: 'hello world' })
     const b = textNode({ id: 'b', x: 500, text: 'file' })
     const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
-    const options1 = baseOptions({ parseBody: fakeParseBody, appearance: fakeAppearance })
-    const options2 = baseOptions({ parseBody: fakeParseBody, appearance: colorfulResolver })
+    const options1 = baseOptions({ appearance: fakeAppearance })
+    const options2 = baseOptions({ appearance: colorfulResolver })
     const scene1 = layoutSpatialCanvas(canvas([a, b], [edge]), options1)
     const scene2 = layoutSpatialCanvas(canvas([a, b], [edge]), options2)
 

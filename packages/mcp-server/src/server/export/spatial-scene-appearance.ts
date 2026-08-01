@@ -27,16 +27,16 @@ const EDGE_APPEARANCE: Appearance = { stroke: '#606060', strokeWidth: 1.5 }
 const LABEL_APPEARANCE: Appearance = { fill: '#303030', fontFamily: 'sans-serif' }
 
 /** Uniform padding (px) between a node's box edge and its laid-out content. */
-export const NODE_PADDING_PX = 8
+const NODE_PADDING_PX = 8
 
 /** Uniform corner radius (px) applied to every node's chrome shape. */
-export const NODE_CORNER_RADIUS_PX = 4
+const NODE_CORNER_RADIUS_PX = 4
 
 /** Font size (px) used for the `file`/`link`/`group` label run. */
-export const LABEL_FONT_SIZE_PX = 14
+const LABEL_FONT_SIZE_PX = 14
 
 /** Floor for a node's derived content width, so padding never drives it negative. */
-export const MIN_CONTENT_WIDTH_PX = 1
+const MIN_CONTENT_WIDTH_PX = 1
 
 export const EXPORT_APPEARANCE: SpatialAppearanceResolver = {
   resolveNode: (node: SpatialNode) => ({
