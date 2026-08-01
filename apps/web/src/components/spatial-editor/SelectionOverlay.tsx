@@ -45,12 +45,16 @@ export function SelectionOverlay({
       data-testid="selection-overlay"
       style={{ position: 'absolute', overflow: 'visible', left: 0, top: 0, pointerEvents: 'none' }}
     >
+      <title>Selection controls</title>
       {/* Named rather than aria-hidden: this subtree holds the focusable resize
           and connect controls, so hiding it would undo their keyboard path. */}
-      <title>Selection controls</title>
       {/* Purely visual chrome — the interactive controls below carry their own role/label. */}
       <rect
         aria-hidden="true"
+        // SVG shape elements can be natively focusable in some browsers even
+        // without an explicit tabIndex; tabIndex={-1} keeps this decorative
+        // outline out of the tab order to match its aria-hidden intent.
+        tabIndex={-1}
         x={box.x}
         y={box.y}
         width={box.width}
@@ -61,6 +65,7 @@ export function SelectionOverlay({
         pointerEvents="none"
       />
       {handles.map((handle) => (
+        // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this handle's canvas-space box under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
         <rect
           key={handle.kind}
           data-testid={`resize-handle-${handle.kind}`}
@@ -86,6 +91,7 @@ export function SelectionOverlay({
           }}
         />
       ))}
+      {/* biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand. */}
       <circle
         data-testid="connect-handle"
         role="button"

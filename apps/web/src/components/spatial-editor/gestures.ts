@@ -28,7 +28,7 @@
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { EditorCommand } from './commands.js'
-import { resizeBoxByDelta, type ResizeHandleKind } from './geometry.js'
+import { type ResizeHandleKind, resizeBoxByDelta } from './geometry.js'
 import type { Point } from './viewport.js'
 
 interface MoveSnapshot {

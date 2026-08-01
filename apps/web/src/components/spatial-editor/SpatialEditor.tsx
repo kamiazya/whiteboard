@@ -420,10 +420,10 @@ export function SpatialEditor({
               pointerEvents: 'none',
             }}
           >
+            <title>Connection targets</title>
             {/* Named rather than aria-hidden for the same reason as the
                 selection overlay: this subtree holds the focusable connection
                 targets, so hiding it would remove the keyboard path. */}
-            <title>Connection targets</title>
             {/*
              * Keyboard path for completing a connection: while `connecting`,
              * every OTHER node gets a focusable target the pointer path
@@ -435,6 +435,7 @@ export function SpatialEditor({
             {boxes
               .filter((b) => b.id !== gestureState.fromNodeId)
               .map((b) => (
+                // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to hit-test at this node's canvas-space box under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
                 <rect
                   key={b.id}
                   data-testid={`connect-target-${b.id}`}
