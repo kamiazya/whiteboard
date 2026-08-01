@@ -70,6 +70,27 @@ describe('buildViewerScene', () => {
     expect(label && 'text' in label ? label.text : undefined).toBe('Section A')
   })
 
+  it('renders a colorless node as fill:none rather than an invented default fill', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+      edges: [],
+    }
+    const scene = buildViewerScene(canvas, fakeMeasure)
+    const shape = scene.nodes[0]
+    expect(shape?.kind).toBe('shape')
+    expect(shape && 'appearance' in shape ? shape.appearance?.fill : undefined).toBe('none')
+  })
+
+  it('resolves an explicit preset color to its fill instead of none', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '', color: '1' }],
+      edges: [],
+    }
+    const scene = buildViewerScene(canvas, fakeMeasure)
+    const shape = scene.nodes[0]
+    expect(shape && 'appearance' in shape ? shape.appearance?.fill : undefined).toBe('#e03131')
+  })
+
   it('honors x-whiteboard ellipse shape as a radius on the shape node', () => {
     const canvas: SpatialCanvas = {
       nodes: [
@@ -90,6 +111,32 @@ describe('buildViewerScene', () => {
     const shape = scene.nodes[0]
     expect(shape?.kind).toBe('shape')
     expect(shape && 'radius' in shape ? shape.radius : undefined).toBe(10)
+  })
+
+  it('approximates a non-square ellipse as a pill shape (known limitation, not a true ellipse)', () => {
+    // canvas-render's ShapeSceneNode has no ellipse primitive (deliberately
+    // minimal, see package-canvas-render.md decision #6) — mapping ellipse to
+    // `radius` is a documented rect-with-corner-radius approximation, exact
+    // only for a near-square node. Pinning this so a future radius-formula
+    // change doesn't silently alter the approximation without review.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'n1',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 60,
+          text: '',
+          'x-whiteboard': { kind: 'shape', shape: 'ellipse' },
+        },
+      ],
+      edges: [],
+    }
+    const scene = buildViewerScene(canvas, fakeMeasure)
+    const shape = scene.nodes[0]
+    expect(shape && 'radius' in shape ? shape.radius : undefined).toBe(30)
   })
 
   it('routes an edge between two nodes', () => {

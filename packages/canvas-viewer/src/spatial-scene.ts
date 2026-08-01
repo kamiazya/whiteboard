@@ -34,9 +34,23 @@ const PRESET_COLOR_HEX: Readonly<Record<string, string>> = {
   '6': '#9c36b5',
 }
 
-function resolveFill(color: CanvasColor | undefined): string | undefined {
+function resolvePresetOrHex(color: CanvasColor | undefined): string | undefined {
   if (color === undefined) return undefined
   return color.startsWith('#') ? color : PRESET_COLOR_HEX[color]
+}
+
+// SVG's own default fill for an unstyled <rect> is solid black, and
+// canvas-render's SVG backend never invents an appearance default (see
+// package-canvas-render.md decision #6: omit, never default). A colorless
+// spatial node therefore needs an explicit transparent fill here, or every
+// node without an authored `color` would render as an opaque black box.
+// This default is shape-only: an edge with no authored color keeps
+// `resolvePresetOrHex`'s `undefined` so it falls through to the SVG
+// backend's own (visible, black) default line stroke.
+const NO_FILL = 'none'
+
+function resolveShapeFill(color: CanvasColor | undefined): string {
+  return resolvePresetOrHex(color) ?? NO_FILL
 }
 
 function shapeRadius(node: SpatialNode): number | undefined {
@@ -50,12 +64,12 @@ function shapeRadius(node: SpatialNode): number | undefined {
 /** The box chrome of a spatial node: rect bbox plus the optional radius/fill it resolved to. */
 function buildShapeNode(node: SpatialNode): ShapeSceneNode {
   const radius = shapeRadius(node)
-  const fill = resolveFill(node.color)
+  const fill = resolveShapeFill(node.color)
   return {
     kind: 'shape',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
     ...(radius !== undefined ? { radius } : {}),
-    ...(fill !== undefined ? { appearance: { fill } } : {}),
+    appearance: { fill },
   }
 }
 
@@ -200,8 +214,8 @@ export function buildViewerScene(canvas: SpatialCanvas, measure: MeasureText): S
 
   for (const edge of canvas.edges) {
     const resolved = routeEdge(canvas.nodes, edge)
-    const fill = resolveFill(edge.color)
-    nodes.push(fill === undefined ? resolved : { ...resolved, appearance: { stroke: fill } })
+    const stroke = resolvePresetOrHex(edge.color)
+    nodes.push(stroke === undefined ? resolved : { ...resolved, appearance: { stroke } })
   }
 
   return { nodes }
