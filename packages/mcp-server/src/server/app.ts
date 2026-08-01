@@ -3,11 +3,24 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
-import { Hono, type MiddlewareHandler } from 'hono'
+import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { detectMergeBadges } from '../shared/merge-engine.js'
+import {
+  checkoutCloneOrThrow,
+  decodeBranchTipOrThrow,
+  errorMessage,
+  extractInitializeDebugPayload,
+  isJsonObject,
+  isReservedUiPath,
+  SERVER_MODE_PLACEHOLDER_HTML,
+  setBaselineSecurityHeaders,
+  shouldLogMcpHttpDebug,
+  toInlineScriptJson,
+} from './app-helpers.js'
+import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/index.js'
@@ -35,29 +48,23 @@ import {
 } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
-import type { AuthScope } from './security/auth-strategy.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
 import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
-  type McpHttpAuthStrategy,
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
-import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
-import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
-import { matchOrigin, parseOriginPatterns } from './security/origin-pattern.js'
-import {
-  createReconnectChallengeStore,
-  type ReconnectChallengeStore,
-} from './security/reconnect-challenge-store.js'
-import { resolveApiRouteScope } from './security/route-scope-registry.js'
+import { createReconnectChallengeStore } from './security/reconnect-challenge-store.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
-  createWebOriginTrustStore,
-  type WebOriginTrustStore,
-} from './security/web-origin-trust-store.js'
-import { createWsTicketStore, type WsTicketStore } from './security/ws-ticket-store.js'
+  createServerModeApiAuthMiddleware,
+  createServerModeAsyncAuthMiddleware,
+  createServerModeOriginMiddleware,
+  sanitizeServerModeStatus,
+} from './security/server-mode-middleware.js'
+import { createWebOriginTrustStore } from './security/web-origin-trust-store.js'
+import { createWsTicketStore } from './security/ws-ticket-store.js'
 import {
   BranchNotFoundError,
   deleteBranch,
@@ -66,17 +73,11 @@ import {
   updateBranchTip,
 } from './store/branches-store.js'
 import { canvasExists, saveCanvas } from './store/canvas-store.js'
-import { corruptStoredData, isCorruptStoredDataError } from './store/corrupt-stored-data.js'
+import { isCorruptStoredDataError } from './store/corrupt-stored-data.js'
 import { getDoc, peekDoc } from './store/doc-cache.js'
 import { FileVersionStore } from './store/version-store.js'
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
-}
-
-function shouldLogMcpHttpDebug(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.MCP_HTTP_DEBUG === '1'
-}
+export type { AppOptions, ServerModeAppOptions } from './app-types.js'
 
 const httpLog = getLogger('mcp-http')
 
@@ -91,309 +92,6 @@ if (shouldLogMcpHttpDebug()) {
   const currentLogLevel = getLogLevel()
   if (currentLogLevel !== 'debug' && currentLogLevel !== 'info') {
     setLogLevel('info')
-  }
-}
-
-function isJsonObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-// A floor, not a ceiling. This runs after every route, so `set`ting a header a
-// route already chose would silently *downgrade* it — the OAuth approval page
-// ships a `default-src 'none'` CSP that this baseline would otherwise replace
-// with the far weaker frame-ancestors-only policy. Every header below is
-// applied unconditionally except CSP, whose value is route-specific by nature.
-function setBaselineSecurityHeaders(headers: Headers): void {
-  if (!headers.has('Content-Security-Policy')) {
-    headers.set('Content-Security-Policy', "frame-ancestors 'none'")
-  }
-  headers.set('X-Frame-Options', 'DENY')
-  headers.set('X-Content-Type-Options', 'nosniff')
-  headers.set('Referrer-Policy', 'no-referrer')
-  headers.set('Cross-Origin-Opener-Policy', 'same-origin')
-  headers.set('Cross-Origin-Resource-Policy', 'same-origin')
-}
-
-// Serialize a value for inlining into a `<script>` body, escaping `<` so a
-// value such as `</script>` cannot terminate the tag and inject markup. Tokens
-// today are nanoid-generated (safe), but this keeps the path safe if
-// user-controlled values are ever inlined here.
-// https://html.spec.whatwg.org/multipage/scripting.html#restrictions-for-contents-of-script-elements
-function toInlineScriptJson(value: unknown): string {
-  return JSON.stringify(value).replace(/</g, '\\u003c')
-}
-
-// Paths reserved for /api, /mcp, /ws, and .well-known routes must never
-// fall through to the SPA catch-all: an unmatched request under one of
-// these prefixes means "route not found", not "serve index.html".
-function isReservedUiPath(path: string): boolean {
-  return (
-    path === '/api' ||
-    path.startsWith('/api/') ||
-    path === '/mcp' ||
-    path.startsWith('/mcp/') ||
-    path === '/ws' ||
-    path.startsWith('/ws/') ||
-    path.startsWith('/.well-known/') ||
-    path === '/token'
-  )
-}
-
-// Minimal, honest placeholder served at server-mode's root. Server-mode has
-// its own OAuth/JWT auth (see AsyncAuthStrategy) and no local-daemon bearer
-// token; apps/web's provider model only knows browser-local and
-// local-daemon-token auth, so injecting it here without a real token would
-// serve a UI whose every request 401s. Point operators at the API/MCP
-// surface instead until apps/web grows a server-mode-aware auth flow.
-const SERVER_MODE_PLACEHOLDER_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<title>Whiteboard (server mode)</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body>
-<h1>Whiteboard server</h1>
-<p>This daemon is running in server mode, which does not serve the browser UI.</p>
-<p>Use the HTTP API under <code>/api</code> or connect an MCP client to <code>/mcp</code>.</p>
-</body>
-</html>
-`
-
-function extractInitializeDebugPayload(parsedBody: unknown) {
-  if (!isJsonObject(parsedBody) || parsedBody.method !== 'initialize') {
-    return null
-  }
-  const params = isJsonObject(parsedBody.params) ? parsedBody.params : {}
-  const capabilities = isJsonObject(params.capabilities) ? params.capabilities : {}
-  const clientInfo = isJsonObject(params.clientInfo) ? params.clientInfo : {}
-  return {
-    requestId: parsedBody.id ?? null,
-    protocolVersion: params.protocolVersion ?? null,
-    clientInfo: {
-      name: clientInfo.name ?? null,
-      version: clientInfo.version ?? null,
-    },
-    capabilities,
-  }
-}
-
-function decodeBranchTipOrThrow(
-  workspaceId: string,
-  slug: string,
-  branchName: string,
-  tipFrontiersBase64: string,
-) {
-  try {
-    return decodeFrontiers(new Uint8Array(Buffer.from(tipFrontiersBase64, 'base64')))
-  } catch (error) {
-    throw corruptStoredData(
-      `${workspaceId}/branches/${slug}.json#${branchName}.tipFrontiers`,
-      `tipFrontiers could not be decoded (${errorMessage(error)})`,
-    )
-  }
-}
-
-function checkoutCloneOrThrow(
-  doc: LoroDoc,
-  target: ReturnType<typeof decodeFrontiers>,
-  location: string,
-  detail: string,
-): LoroDoc {
-  const clone = LoroDoc.fromSnapshot(doc.export({ mode: 'snapshot' }))
-  try {
-    clone.checkout(target)
-  } catch (error) {
-    throw corruptStoredData(location, `${detail} (${errorMessage(error)})`)
-  }
-  return clone
-}
-
-interface LocalDaemonAppOptions {
-  authMode: 'local-daemon'
-  token?: string
-  mcpAuth?: McpHttpAuthStrategy
-  /** Per-process-start identifier for /api/runtime/ping. Falls back to a
-   *  fresh crypto.randomUUID() when omitted (tests, ad-hoc callers). */
-  instanceId?: string
-  touch: () => void
-  getStatus: () => RuntimeStatusResponse
-  shutdown: () => Promise<void>
-  /** Exact-match hosted origins admitted alongside the fixed loopback set
-   *  (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default — current loopback-only
-   *  behavior is unchanged unless an operator opts in. Local-daemon only;
-   *  server-mode governs its origins solely via allowedOrigins below. */
-  allowedWebOrigins?: readonly string[]
-  /** Exact-URI redirect_uri registry for the hosted-origin OAuth 2.1
-   *  authorization-server surface (ADR-0005): /.well-known/oauth-protected-
-   *  resource/api, /.well-known/oauth-authorization-server, and /token.
-   *  Empty by default — the whole surface stays unmounted until an operator
-   *  configures at least one client. See oauth-authz-registry.ts for why
-   *  this is never derived from allowedWebOrigins. */
-  oauthClientRegistry?: OAuthClientRegistry
-  /** Backing store for POST /api/ws-ticket (ADR-0005). Owned by
-   *  http-server.ts, which is the only other place that needs this exact
-   *  instance — the raw WS `upgrade` handler redeems the ticket the route
-   *  below mints. Defaults to a private, unshared store when omitted (tests
-   *  exercising this app in isolation), which still makes the route work,
-   *  just not reachable from a real WS upgrade outside this process. */
-  wsTicketStore?: WsTicketStore
-  /** Backing store for the silent-reconnect surface (POST /api/reconnect-
-   *  credential, POST /api/reconnect-session). Defaults to a store rooted at
-   *  the real data dir when omitted; tests inject one rooted at a scratch
-   *  dir the same way wsTicketStore is injected above. */
-  webOriginTrustStore?: WebOriginTrustStore
-  /** Backing store for POST /api/reconnect-challenge's one-time nonce mint.
-   *  Defaults to a private in-memory store when omitted; tests inject a
-   *  shared instance the same way webOriginTrustStore is injected above so
-   *  a test can drive challenge mint and redemption through the same
-   *  store the route actually uses. */
-  reconnectChallengeStore?: ReconnectChallengeStore
-}
-
-export interface ServerModeAppOptions {
-  authMode: 'server-mode'
-  publicBaseUrl: string
-  allowedOrigins: readonly string[]
-  authStrategy: AsyncAuthStrategy
-  /** Per-process-start identifier for /api/runtime/ping. Falls back to a
-   *  fresh crypto.randomUUID() when omitted (tests, ad-hoc callers). */
-  instanceId?: string
-  touch: () => void
-  getStatus: () => RuntimeStatusResponse
-  shutdown: () => Promise<void>
-}
-
-export type AppOptions = LocalDaemonAppOptions | ServerModeAppOptions
-
-function buildServerModeAuthFailResponse(decision: {
-  status: 401 | 403
-  code: string
-  wwwAuthenticate?: string
-}): Response {
-  const headers = new Headers({ 'content-type': 'application/json' })
-  if (decision.status === 401 && decision.wwwAuthenticate) {
-    headers.set('WWW-Authenticate', decision.wwwAuthenticate)
-  }
-  return new Response(JSON.stringify({ error: decision.code }), {
-    status: decision.status,
-    headers,
-  })
-}
-
-function createServerModeApiAuthMiddleware(authStrategy: AsyncAuthStrategy): MiddlewareHandler {
-  return async (c, next) => {
-    const method = c.req.method.toUpperCase()
-    const routeScope = resolveApiRouteScope(method, c.req.path)
-    // No declared decision at all: fail closed rather than silently applying
-    // a guessed scope. Reaching this branch means a route was mounted under
-    // /api/* without an entry in route-scope-registry.ts — the registry-wide
-    // test (route-scope-registry.test.ts) is meant to catch this before it
-    // ships, so a live 500 here means that guard was bypassed or the route
-    // was added after the registry without updating both.
-    if (routeScope === null) {
-      return c.json({ error: 'auth.route-undeclared' }, 500)
-    }
-    // The `public` decision is a deliberate, documented carve-out (currently
-    // only GET /api/runtime/ping — a liveness probe) — never an omission.
-    if (routeScope.kind === 'public') return next()
-    // `daemon-token-only` routes (e.g. /api/reconnect-credential) exist only
-    // in local-daemon mode, which has no AsyncAuthStrategy — server-mode has
-    // no daemon token to compare against, so any request that resolves here
-    // is refused outright rather than guessed at.
-    if (routeScope.kind === 'daemon-token-only') {
-      return c.json({ error: 'forbidden' }, 403)
-    }
-    const decision = await authStrategy.authorize({
-      method,
-      path: c.req.path,
-      authorizationHeader: c.req.header('authorization'),
-      requiredScopes: routeScope.scopes,
-    })
-    if (decision.ok) return next()
-    return buildServerModeAuthFailResponse(decision)
-  }
-}
-
-function createServerModeAsyncAuthMiddleware(
-  authStrategy: AsyncAuthStrategy,
-  requiredScopes: readonly AuthScope[],
-): MiddlewareHandler {
-  return async (c, next) => {
-    const decision = await authStrategy.authorize({
-      method: c.req.method,
-      path: c.req.path,
-      authorizationHeader: c.req.header('authorization'),
-      requiredScopes,
-    })
-    if (decision.ok) return next()
-    return buildServerModeAuthFailResponse(decision)
-  }
-}
-
-// Pattern-aware: allowedOrigins may contain exact origins or leftmost-label
-// wildcard subdomain patterns (see origin-pattern.ts). Deliberately does NOT
-// build a Set of `new URL(o).origin` strings for exact-match lookup — that
-// call does not throw on a wildcard entry (it parses '*' as a literal
-// hostname character), so an exact-Set lookup would silently never admit a
-// real subdomain rather than fail loudly.
-function createServerModeOriginMiddleware(allowedOrigins: readonly string[]): MiddlewareHandler {
-  const patterns = parseOriginPatterns(allowedOrigins)
-  return async (c, next) => {
-    const origin = c.req.header('origin')
-    if (!origin) {
-      if (c.req.method.toUpperCase() === 'OPTIONS') return new Response(null, { status: 204 })
-      return next()
-    }
-    if (!matchOrigin(patterns, origin)) {
-      return Response.json(
-        { jsonrpc: '2.0', error: { code: -32000, message: 'forbidden origin' }, id: null },
-        { status: 403 },
-      )
-    }
-    c.res.headers.set('Access-Control-Allow-Origin', origin)
-    c.res.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-    )
-    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-    c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-    c.res.headers.set('Access-Control-Max-Age', '86400')
-    if (c.req.method.toUpperCase() === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: c.res.headers })
-    }
-    await next()
-    c.res.headers.set('Access-Control-Allow-Origin', origin)
-    c.res.headers.set(
-      'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version',
-    )
-    c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-    c.res.headers.set('Access-Control-Expose-Headers', 'Mcp-Session-Id')
-    c.res.headers.set('Access-Control-Max-Age', '86400')
-  }
-}
-
-function sanitizeServerModeStatus(
-  getStatus: () => RuntimeStatusResponse,
-  publicBaseUrl: string,
-): () => RuntimeStatusResponse {
-  const parsedUrl = new URL(publicBaseUrl)
-  const derivedPort = parsedUrl.port
-    ? parseInt(parsedUrl.port, 10)
-    : parsedUrl.protocol === 'https:'
-      ? 443
-      : 80
-  return () => {
-    const raw = getStatus()
-    return {
-      ...raw,
-      host: '[server-managed]',
-      port: derivedPort,
-      baseUrl: publicBaseUrl,
-      storage: { ...raw.storage, dataDir: '[server-managed]' },
-      mcp: { ...raw.mcp, endpoint: `${publicBaseUrl}/mcp` },
-    }
   }
 }
 
