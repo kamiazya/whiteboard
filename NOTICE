@@ -3,3 +3,9 @@ Copyright 2026 Yuki Yamazaki
 
 This product includes software developed at
 https://github.com/kamiazya/whiteboard
+
+This product includes the Roboto font family, developed by Google and
+Christian Robertson, licensed under the Apache License, Version 2.0.
+https://github.com/googlefonts/roboto-2
+See packages/mcp-server/assets/fonts/Roboto/LICENSE.txt for the full license
+text.

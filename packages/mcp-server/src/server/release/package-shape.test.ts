@@ -16,16 +16,25 @@ const PACKAGE_ROOT = resolve(__dirname, '../../..')
 const mcpPackage = JSON.parse(readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8')) as {
   scripts?: Record<string, string>
   sideEffects?: string[]
+  dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
 }
+
+const WORKSPACE_SCOPE = '@kamiazya/whiteboard-'
+
+// canvas-viewer is consumed as a built widget artifact copied off disk by
+// scripts/copy-widget-into-dist.mjs, never imported from source — so it is
+// the one workspace package that legitimately has no noExternal entry.
+const NOT_BUNDLED = new Set([`${WORKSPACE_SCOPE}canvas-viewer`])
 
 describe('packages/mcp-server package shape (legacy build pipeline retired)', () => {
   it('has no build:app script', () => {
     expect(mcpPackage.scripts?.['build:app']).toBeUndefined()
   })
 
-  it('build runs build:server plus the MCP Apps widget copy step, nothing else', () => {
+  it('build runs build:server plus the MCP Apps widget and export font copy steps, nothing else', () => {
     expect(mcpPackage.scripts?.build).toBe(
-      'pnpm build:server && node scripts/copy-widget-into-dist.mjs',
+      'pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs',
     )
   })
 
@@ -39,5 +48,34 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
 
   it('vite.config.ts does not exist', () => {
     expect(existsSync(resolve(PACKAGE_ROOT, 'vite.config.ts'))).toBe(false)
+  })
+})
+
+// The @kamiazya/whiteboard-* workspace packages are private and never
+// published, so a published `dependencies` entry for one is unresolvable:
+// `pnpm add <tarball>` fails with ERR_PNPM_FETCH_404 for every consumer.
+// tsup inlines them into dist instead (packaging decision B, see
+// tsup.config.ts). Without these two assertions the only thing that catches
+// the mistake is the packed-tarball smoke, which needs a full build plus a
+// real install — these fail in milliseconds instead.
+describe('private workspace packages are bundled, never published as deps', () => {
+  const workspaceDeps = (record: Record<string, string> | undefined): string[] =>
+    Object.keys(record ?? {}).filter((name) => name.startsWith(WORKSPACE_SCOPE))
+
+  it('declares no workspace package in dependencies', () => {
+    expect(workspaceDeps(mcpPackage.dependencies)).toEqual([])
+  })
+
+  it('lists every source-imported workspace devDependency in tsup noExternal', () => {
+    const tsupConfig = readFileSync(resolve(PACKAGE_ROOT, 'tsup.config.ts'), 'utf-8')
+    const expected = workspaceDeps(mcpPackage.devDependencies).filter(
+      (name) => !NOT_BUNDLED.has(name),
+    )
+    // Guards the mirror failure of the case above: a workspace dep that tsup
+    // does not inline leaves dist importing a specifier nothing can resolve.
+    expect(expected.length).toBeGreaterThan(0)
+    for (const name of expected) {
+      expect(tsupConfig).toContain(`'${name}'`)
+    }
   })
 })

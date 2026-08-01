@@ -45,6 +45,7 @@ const VALID_ENTRY = {
     { path: 'package.json' },
     { path: 'dist/server/mcp/index.js' },
     { path: 'dist/widget/canvas-viewer.html' },
+    { path: 'dist/assets/fonts/Roboto/Roboto-Regular.ttf' },
   ],
 }
 
@@ -66,7 +67,7 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.ok).toBe(true)
     expect(result.missing).toEqual([])
     expect(result.forbidden).toEqual([])
-    expect(result.fileCount).toBe(5)
+    expect(result.fileCount).toBe(6)
     expect(result.sizeBytes).toBe(1024)
   })
 
@@ -76,6 +77,7 @@ describe('verifyPackContents (pure core)', () => {
     'package.json',
     'dist/server/mcp/index.js',
     'dist/widget/canvas-viewer.html',
+    'dist/assets/fonts/Roboto/Roboto-Regular.ttf',
   ]) {
     it(`flags ${required} as missing when it is absent`, async () => {
       const { verifyPackContents } = await importModule()
