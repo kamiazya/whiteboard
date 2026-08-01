@@ -1,6 +1,12 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
-import { boxContains, hitTest, indexNodeBoxes, resizeHandleBoxes } from './geometry.js'
+import {
+  boxContains,
+  hitTest,
+  indexNodeBoxes,
+  resizeBoxByDelta,
+  resizeHandleBoxes,
+} from './geometry.js'
 
 function canvas(nodes: SpatialCanvas['nodes']): SpatialCanvas {
   return { nodes, edges: [] }
@@ -63,5 +69,30 @@ describe('resizeHandleBoxes', () => {
     for (const h of handles) {
       expect(h.box.width).toBeCloseTo(8 / 2)
     }
+  })
+})
+
+describe('resizeBoxByDelta', () => {
+  const box = { x: 0, y: 0, width: 100, height: 100 }
+
+  it('grows the se corner, leaving the opposite (nw) corner fixed', () => {
+    expect(resizeBoxByDelta(box, 'se', 10, 20)).toEqual({ x: 0, y: 0, width: 110, height: 120 })
+  })
+
+  it('growing the nw corner shifts the origin so the opposite (se) corner stays fixed', () => {
+    expect(resizeBoxByDelta(box, 'nw', -10, -20)).toEqual({
+      x: -10,
+      y: -20,
+      width: 110,
+      height: 120,
+    })
+  })
+
+  it('clamps a shrink so width/height never go negative', () => {
+    expect(resizeBoxByDelta(box, 'se', -500, -500)).toEqual({ x: 0, y: 0, width: 0, height: 0 })
+  })
+
+  it('e only affects width, not y/height', () => {
+    expect(resizeBoxByDelta(box, 'e', 15, 999)).toEqual({ x: 0, y: 0, width: 115, height: 100 })
   })
 })

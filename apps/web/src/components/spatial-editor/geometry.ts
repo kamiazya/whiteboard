@@ -86,3 +86,42 @@ export function resizeHandleBoxes(box: Box, zoom: number): readonly ResizeHandle
     box: { x: x - half, y: y - half, width: size, height: size },
   }))
 }
+
+/** Which axes a given handle moves, and in which direction, as a corner/edge is dragged. */
+export const HANDLE_SIGN: Record<ResizeHandleKind, { x: -1 | 0 | 1; y: -1 | 0 | 1 }> = {
+  nw: { x: -1, y: -1 },
+  n: { x: 0, y: -1 },
+  ne: { x: 1, y: -1 },
+  e: { x: 1, y: 0 },
+  se: { x: 1, y: 1 },
+  s: { x: 0, y: 1 },
+  sw: { x: -1, y: 1 },
+  w: { x: -1, y: 0 },
+}
+
+/**
+ * Resizes `startBox` by a raw screen-space delta, anchor-preserving: moving
+ * a min-side handle (x=-1/y=-1) shifts the origin so the OPPOSITE corner
+ * stays fixed; the max-side handles only grow/shrink from the origin.
+ * Shared by pointer-drag (gestures.ts) and keyboard-nudge (SpatialEditor)
+ * resize paths so both compute the identical result.
+ */
+export function resizeBoxByDelta(
+  startBox: Box,
+  handle: ResizeHandleKind,
+  rawDx: number,
+  rawDy: number,
+): Box {
+  const sign = HANDLE_SIGN[handle]
+  // Clamp the delta to the box's own size BEFORE deriving x/y from it: an
+  // overshoot must floor width/height at 0 without sliding the origin past
+  // where the opposite corner was meant to stay fixed.
+  const dx = sign.x === -1 ? Math.min(rawDx, startBox.width) : Math.max(rawDx, -startBox.width)
+  const dy = sign.y === -1 ? Math.min(rawDy, startBox.height) : Math.max(rawDy, -startBox.height)
+  return {
+    x: sign.x === -1 ? startBox.x + dx : startBox.x,
+    y: sign.y === -1 ? startBox.y + dy : startBox.y,
+    width: startBox.width + sign.x * dx,
+    height: startBox.height + sign.y * dy,
+  }
+}

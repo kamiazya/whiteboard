@@ -28,7 +28,7 @@
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { EditorCommand } from './commands.js'
-import type { ResizeHandleKind } from './geometry.js'
+import { resizeBoxByDelta, type ResizeHandleKind } from './geometry.js'
 import type { Point } from './viewport.js'
 
 interface MoveSnapshot {
@@ -197,54 +197,29 @@ function reducePointerUpMoving(
   }
 }
 
-const HANDLE_SIGN: Record<ResizeHandleKind, { x: -1 | 0 | 1; y: -1 | 0 | 1 }> = {
-  nw: { x: -1, y: -1 },
-  n: { x: 0, y: -1 },
-  ne: { x: 1, y: -1 },
-  e: { x: 1, y: 0 },
-  se: { x: 1, y: 1 },
-  s: { x: 0, y: 1 },
-  sw: { x: -1, y: 1 },
-  w: { x: -1, y: 0 },
-}
-
 function reducePointerUpResizing(
   state: ResizeSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
 ): GestureResult {
   const rawDx = event.point.x - state.startPoint.x
   const rawDy = event.point.y - state.startPoint.y
-  const sign = HANDLE_SIGN[state.handle]
   const { startBox } = state
-  // Moving an edge/corner changes width/height by the signed delta and, for
-  // the min-side handles (x=-1/y=-1), also shifts the origin so the OPPOSITE
-  // corner stays fixed. Clamp the delta to the box's own size BEFORE
-  // deriving x/y from it: `commands.ts`'s `toSize` floors the emitted
-  // width/height at 0, and if x/y were derived from the raw, unclamped
-  // delta instead of this same floor, an overshoot drag would keep sliding
-  // the origin past the size clamp — moving the opposite corner instead of
-  // leaving it fixed.
-  const dx = sign.x === -1 ? Math.min(rawDx, startBox.width) : Math.max(rawDx, -startBox.width)
-  const dy = sign.y === -1 ? Math.min(rawDy, startBox.height) : Math.max(rawDy, -startBox.height)
-  const nextWidth = startBox.width + sign.x * dx
-  const nextHeight = startBox.height + sign.y * dy
-  const nextX = sign.x === -1 ? startBox.x + dx : startBox.x
-  const nextY = sign.y === -1 ? startBox.y + dy : startBox.y
+  const nextBox = resizeBoxByDelta(startBox, state.handle, rawDx, rawDy)
   const isUnchanged =
-    nextX === startBox.x &&
-    nextY === startBox.y &&
-    nextWidth === startBox.width &&
-    nextHeight === startBox.height
+    nextBox.x === startBox.x &&
+    nextBox.y === startBox.y &&
+    nextBox.width === startBox.width &&
+    nextBox.height === startBox.height
   if (isUnchanged) return idle
   return {
     state: { kind: 'idle' },
     command: {
       kind: 'resize-node',
       id: state.nodeId,
-      x: nextX,
-      y: nextY,
-      width: nextWidth,
-      height: nextHeight,
+      x: nextBox.x,
+      y: nextBox.y,
+      width: nextBox.width,
+      height: nextBox.height,
     },
   }
 }
