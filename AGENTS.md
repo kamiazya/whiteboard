@@ -62,7 +62,7 @@ After the targeted test passes, run the broader suite that covers the touched ar
 - Prefer Chrome DevTools MCP or Playwright MCP when available to inspect DOM, console, network, and visible behavior.
 - If the changed flow is represented by a project skill under `./skills/*`, read the relevant `SKILL.md` and dogfood the real MCP/skill flow instead of verifying only through mocks.
 - While dogfooding, collect friction, awkward prompts, missing affordances, and ideas for follow-up improvements.
-- Record every still-open dogfooding finding as a small issue note under `./tmp/issues/`. Remove the note once the issue is fixed.
+- Record every still-open dogfooding finding as a whiteboard canvas issue (see the `ticketing` skill). Delete the canvas once the issue is fixed.
 - If runtime behavior disagrees with the test, treat runtime as the source of truth and fix the test or implementation.
 
 Passing tests alone are not sufficient.
@@ -178,13 +178,14 @@ If a contract is so loose that Zod would always be `z.unknown()` or `z.any()`, m
 
 Store temporary working artifacts under top-level `./tmp/`, grouped by type instead of dropping files in the root of `tmp/`.
 
-- `tmp/issues/`: open dogfooding findings or follow-up issues discovered during manual verification
 - `tmp/screenshots/`: screenshots captured while debugging or verifying UI behavior
 - `tmp/scripts/`: throwaway helper scripts used only for local debugging or migration assistance
 - `tmp/notes/`: temporary handoff notes, scratch writeups, or investigation summaries
 
+Issues and follow-up findings go into whiteboard canvases, not `tmp/` (see the
+`ticketing` skill). `tmp/` is for short-lived artifacts only.
+
 When adding a new temporary artifact, put it in the right bucket immediately.
-When an issue is resolved, delete its file from `tmp/issues/`.
 When a temporary screenshot, script, or note is no longer useful, delete it instead of leaving stale debris behind.
 
 ## Logging
