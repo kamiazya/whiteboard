@@ -1,3 +1,5 @@
+import type { BoundaryViolationKind } from './scanner.js'
+
 /**
  * Data-driven mirror of the "May depend on" column in
  * .claude/rules/architecture-map.md, extended with each package's allowed
@@ -6,10 +8,20 @@
  * feeds `allowed-deps-check.ts` (everything else a `dependencies` entry
  * could name). `devDependencies` are exempt from both — tooling, not
  * runtime coupling — per the same doc.
+ *
+ * `exemptBoundaryViolationKinds` opts a package OUT of specific
+ * `scanner.ts` violation kinds it legitimately needs — e.g. canvas-viewer
+ * is a browser-runtime UI package (DOM globals are its whole job) with one
+ * embedded Node-side build-time module (`widget/build-fonts-module.ts`
+ * uses `Buffer` to base64-encode font bytes at build time), so it is
+ * exempted from `dom-global`/`node-ambient-global` while still banned from
+ * `node-builtin-import`/`inversify-import` like every other shared-layer
+ * package.
  */
 export interface PackageArchEntry {
   readonly allowedInternalDeps: readonly string[]
   readonly allowedThirdParty: readonly string[]
+  readonly exemptBoundaryViolationKinds?: readonly BoundaryViolationKind[]
 }
 
 export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
@@ -59,6 +71,27 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
+  '@kamiazya/whiteboard-canvas-viewer': {
+    allowedInternalDeps: [],
+    allowedThirdParty: [
+      '@excalidraw/excalidraw',
+      '@modelcontextprotocol/ext-apps',
+      'react',
+      'react-dom',
+      'zod',
+    ],
+    exemptBoundaryViolationKinds: ['dom-global', 'node-ambient-global'],
+  },
+  // Composition root (Node CLI/daemon), never a runtime dependency of any
+  // shared-layer package. Registered here with an empty allowedInternalDeps
+  // so direction-check.ts flags the reverse import if a shared package ever
+  // adds it as a dependency; its own source is NOT scanned by
+  // repo-coverage.test.ts (it is allowed node:*/inversify — see
+  // architecture-map.md rule 2).
+  '@kamiazya/whiteboard-mcp': {
+    allowedInternalDeps: [],
+    allowedThirdParty: [],
+  },
 }
 
 export function allowedDependencies(packageName: string): readonly string[] {
@@ -79,4 +112,22 @@ export function packagesAllowedToImportLoroCrdt(): readonly string[] {
   return Object.entries(ARCHITECTURE_MAP)
     .filter(([, entry]) => entry.allowedThirdParty.includes('loro-crdt'))
     .map(([packageName]) => packageName)
+}
+
+/**
+ * Every `BoundaryViolationKind` a package's own source is exempt from,
+ * combining the automatic loro-crdt exemption above with each package's
+ * explicit `exemptBoundaryViolationKinds`. `repo-coverage.test.ts` filters
+ * `scanSourceForBoundaryViolations` output through this before asserting
+ * zero violations.
+ */
+export function exemptedBoundaryViolationKinds(
+  packageName: string,
+): ReadonlySet<BoundaryViolationKind> {
+  const entry = ARCHITECTURE_MAP[packageName]
+  const kinds = new Set<BoundaryViolationKind>(entry?.exemptBoundaryViolationKinds ?? [])
+  if (entry?.allowedThirdParty.includes('loro-crdt')) {
+    kinds.add('loro-crdt-import')
+  }
+  return kinds
 }
