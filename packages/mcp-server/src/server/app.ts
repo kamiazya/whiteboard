@@ -20,7 +20,7 @@ import {
   shouldLogMcpHttpDebug,
   toInlineScriptJson,
 } from './app-helpers.js'
-import type { AppOptions, ServerModeAppOptions } from './app-types.js'
+import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/index.js'
@@ -55,6 +55,7 @@ import {
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
+import { createReconnectChallengeStore } from './security/reconnect-challenge-store.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   createServerModeApiAuthMiddleware,
@@ -63,7 +64,6 @@ import {
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
 import { createWebOriginTrustStore } from './security/web-origin-trust-store.js'
-import { createReconnectChallengeStore } from './security/reconnect-challenge-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import {
   BranchNotFoundError,
