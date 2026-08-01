@@ -1,13 +1,13 @@
+import { describe, expect, it } from 'vitest'
 import type {
   ListBlockNode,
   ListItemNode,
+  ParagraphBlockNode,
   Scene,
   TableBlockNode,
-} from '@kamiazya/whiteboard-canvas-render'
-import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
-import { describe, expect, it } from 'vitest'
-
-import { translateScene } from './scene-transform.js'
+} from '../scene-graph.js'
+import { renderSceneToSvg } from '../svg/backend.js'
+import { translateScene } from './translate-scene.js'
 
 function paragraphScene(): Scene {
   return {
@@ -52,7 +52,7 @@ describe('translateScene', () => {
   it('shifts a flat scene bbox by (dx, dy)', () => {
     const scene = paragraphScene()
     const shifted = translateScene(scene, 5, 7)
-    expect(shifted.nodes[0]?.bbox).toEqual({ x: 5, y: 7, w: 100, h: 20 })
+    expect((shifted.nodes[0] as ParagraphBlockNode).bbox).toEqual({ x: 5, y: 7, w: 100, h: 20 })
   })
 
   it('shifts a listItem wrapper on x but leaves its descendants wrapper-relative x untouched', () => {
@@ -61,7 +61,7 @@ describe('translateScene', () => {
     const list = shifted.nodes[0] as ListBlockNode
     const item = list.items[0]!
     expect(item.bbox.x).toBe(24 + 10)
-    const paragraph = item.children[0]!
+    const paragraph = item.children[0]! as ParagraphBlockNode
     expect(paragraph.bbox.x).toBe(0) // unchanged: relative to the item's own transform
   })
 

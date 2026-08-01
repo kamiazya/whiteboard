@@ -7,7 +7,13 @@ widget, HTML export). Private workspace package — never published to npm.
 ## Public API
 
 - `<CanvasViewer>` — renders a `SpatialCanvas` (JSON Canvas 1.0 +
-  `x-whiteboard`) to an inline SVG via canvas-render's `renderSceneToSvg`.
+  `x-whiteboard`) to an inline SVG via canvas-render's
+  `layoutSpatialCanvas` (the shared SpatialCanvas -> `Scene` builder, also
+  used by mcp-server's Node export) followed by `renderSceneToSvg`. This
+  package supplies `parseMarkdownBody`, its own `VIEWER_APPEARANCE`
+  resolver (`./viewer-appearance`, deriving fill from `node.color` and
+  radius from an `x-whiteboard` ellipse hint), and no `onDegrade` callback
+  — a malformed body or unrecognized node kind still renders, silently.
   Pan/zoom/select are the browser's native SVG behavior; there is no
   editing affordance.
 - `mountCanvasViewer(container, options)` — imperative mount with a
@@ -18,9 +24,6 @@ widget, HTML export). Private workspace package — never published to npm.
   parser/serializer pair delegating to canvas-codec's
   `parseSpatial`/`serializeSpatial`; `parseViewerScene` never throws, it
   returns a discriminated `{ ok, value | error }` result.
-- `buildViewerScene` (from `./spatial-scene`) — the SpatialCanvas ->
-  canvas-render `Scene` builder this package uses internally; exported so a
-  future consumer (e.g. an SVG-based export path) can reuse it.
 - `createBrowserMeasureText` (from `./measure-text`) — the browser
   implementation of canvas-render's injected `MeasureText` seam (Canvas 2D
   `measureText`, with a ratio-based fallback for environments with no real

@@ -1,9 +1,14 @@
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import { renderSceneToSvg, type SvgDocumentOptions } from '@kamiazya/whiteboard-canvas-render'
+import {
+  layoutSpatialCanvas,
+  renderSceneToSvg,
+  type SvgDocumentOptions,
+} from '@kamiazya/whiteboard-canvas-render'
 import { useMemo } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
-import { buildViewerScene } from './spatial-scene.js'
+import { VIEWER_APPEARANCE } from './viewer-appearance.js'
 
 export interface CanvasViewerProps {
   canvas: SpatialCanvas
@@ -27,12 +32,19 @@ export function CanvasViewer({
   measure,
   testId = DEFAULT_TEST_ID,
 }: CanvasViewerProps) {
-  // Stable across re-renders of the same component instance so buildViewerScene
+  // Stable across re-renders of the same component instance so layoutSpatialCanvas
   // doesn't recreate the (lazily-created) Canvas 2D context on every render.
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
 
   const svg = useMemo(() => {
-    const scene = buildViewerScene(canvas, resolvedMeasure)
+    const scene = layoutSpatialCanvas(canvas, {
+      measure: resolvedMeasure,
+      parseBody: parseMarkdownBody,
+      appearance: VIEWER_APPEARANCE,
+      // No onDegrade: the viewer degrades silently by choice — it has no
+      // logger to report through, and a malformed body/unrecognized node
+      // still renders (chrome-only or a literal fallback run).
+    })
     return renderSceneToSvg(scene, { width, height, padding, background })
   }, [canvas, resolvedMeasure, width, height, padding, background])
 
