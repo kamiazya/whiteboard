@@ -86,6 +86,24 @@ describe('applyCommand', () => {
     expect(next).toBe(canvas)
   })
 
+  it('connect-nodes rejects a duplicate edge id as a no-op, keeping the canvas schema-valid', () => {
+    const canvas = applyCommand(baseCanvas(), {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+    const next = applyCommand(canvas, {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'b',
+      toNode: 'a',
+    })
+    expect(next).toBe(canvas)
+    expect(next.edges).toEqual([{ id: 'e1', fromNode: 'a', toNode: 'b' }])
+    expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
+  })
+
   it('is total: a command targeting a missing id returns the input unchanged', () => {
     const canvas = baseCanvas()
     const next = applyCommand(canvas, { kind: 'move-node', id: 'missing', x: 1, y: 1 })

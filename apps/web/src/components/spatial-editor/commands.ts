@@ -97,6 +97,11 @@ function connectNodes(
   const fromExists = canvas.nodes.some((node) => node.id === fromNode)
   const toExists = canvas.nodes.some((node) => node.id === toNode)
   if (!fromExists || !toExists) return canvas
+  // spatialCanvasSchema rejects duplicate edges[].id, so a colliding
+  // generated id must be rejected here too, or the resulting canvas would
+  // fail validation downstream.
+  const edgeIdExists = canvas.edges.some((edge) => edge.id === edgeId)
+  if (edgeIdExists) return canvas
   const edge: CanvasEdge = { id: edgeId, fromNode, toNode }
   return { ...canvas, edges: [...canvas.edges, edge] }
 }
