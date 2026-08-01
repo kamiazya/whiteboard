@@ -21,12 +21,9 @@ import {
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { formatBytes } from '../lib/format-bytes.js'
 
-// Mirrors userLibrarySummarySchema / listUserLibrariesResponseSchema in
-// packages/mcp-server/src/shared/api-contracts/libraries.ts. That module is
-// deliberately kept off the public `./api-contracts` npm subpath (see the
-// barrel comment there and api-contracts-barrel.test.ts), so this schema is
-// duplicated here rather than imported, pending a decision to widen the
-// published surface.
+// Schema for the daemon's /api/v1/user-libraries response.
+// This is the sole definition — the former api-contracts/libraries.ts was
+// removed during the OpenCanvas migration.
 const userLibraryRowSchema = z.object({
   name: z.string(),
   path: z.string(),
