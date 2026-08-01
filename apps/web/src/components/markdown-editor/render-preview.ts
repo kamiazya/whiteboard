@@ -1,14 +1,12 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { MdastLayoutOptions } from '@kamiazya/whiteboard-canvas-render'
-import { layoutMdastBlocks, renderSceneToSvg, type Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import { layoutMdastBlocks, renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
 
 export interface RenderMarkdownPreviewOptions {
-  readonly measure: MdastLayoutOptions['measure']
+  readonly measure: MeasureText
   readonly maxWidth: number
   readonly background?: string
 }
-
-const EMPTY_SCENE: Scene = { nodes: [] }
 
 /**
  * Pure parse -> layout -> serialize helper backing the preview pane. This is
@@ -32,19 +30,13 @@ export function renderMarkdownPreviewSvg(
   value: string,
   { measure, maxWidth, background }: RenderMarkdownPreviewOptions,
 ): string {
-  const scene = layoutScene(value, measure, maxWidth)
-  return renderSceneToSvg(scene, { padding: 8, background })
+  return renderSceneToSvg(layoutScene(value, measure, maxWidth), { padding: 8, background })
 }
 
-function layoutScene(
-  value: string,
-  measure: MdastLayoutOptions['measure'],
-  maxWidth: number,
-): Scene {
+function layoutScene(value: string, measure: MeasureText, maxWidth: number): Scene {
   try {
-    const root = parseMarkdownBody(value)
-    return layoutMdastBlocks(root, { measure, maxWidth })
+    return layoutMdastBlocks(parseMarkdownBody(value), { measure, maxWidth })
   } catch {
-    return EMPTY_SCENE
+    return { nodes: [] }
   }
 }
