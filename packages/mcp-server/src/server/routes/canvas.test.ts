@@ -27,7 +27,7 @@ vi.mock('../store/doc-cache.js', async () => {
 const { clearCache, peekDoc, getDoc } = await import('../store/doc-cache.js')
 const { saveCanvas } = await import('../store/canvas-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
-const { setBroadcastFn } = await import('./canvas/shared.js')
+const { setBroadcastFn } = await import('./canvas/_shared.js')
 
 // Dynamically import the Hono app.
 const { createCanvasRouter, createAutoVersionTrigger } = await import('./canvas.js')

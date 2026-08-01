@@ -10,7 +10,7 @@ import {
   setWorkspaceName,
 } from '../../store/names-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
-import { handleCorruptStoredData } from './shared.js'
+import { handleCorruptStoredData } from './_shared.js'
 
 // User-facing workspace / canvas names.
 // When unnamed, the UI falls back to session id / slug, so the API only returns stored values.

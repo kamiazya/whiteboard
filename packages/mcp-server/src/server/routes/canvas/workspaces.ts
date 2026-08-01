@@ -14,7 +14,7 @@ import {
   saveCanvas,
 } from '../../store/canvas-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
-import { handleCorruptStoredData } from './shared.js'
+import { handleCorruptStoredData } from './_shared.js'
 
 // GET /api/workspaces
 // GET /api/workspaces/:workspaceId/canvases

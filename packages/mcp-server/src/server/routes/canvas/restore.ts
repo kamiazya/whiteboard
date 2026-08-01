@@ -10,7 +10,7 @@ import {
   validateWorkspaceId,
   validationErrorBody,
 } from '../../validators.js'
-import { getBroadcastFn, handleCorruptStoredData } from './shared.js'
+import { getBroadcastFn, handleCorruptStoredData } from './_shared.js'
 
 export interface RestoreRouterOptions {
   versionStore: VersionStore

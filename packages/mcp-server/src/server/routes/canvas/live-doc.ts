@@ -10,7 +10,7 @@ import { canvasExists, saveCanvas } from '../../store/canvas-store.js'
 import { evictDoc, getDoc } from '../../store/doc-cache.js'
 import type { VersionEntry } from '../../store/version-store.js'
 import { validateSlug, validateWorkspaceId, validationErrorBody } from '../../validators.js'
-import { getBroadcastFn } from './shared.js'
+import { getBroadcastFn } from './_shared.js'
 
 // A Loro update embeds any attachment-affecting deltas since the client's
 // last sync, so it can approach the file-upload ceiling in the worst case.

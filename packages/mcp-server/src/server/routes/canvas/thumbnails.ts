@@ -8,7 +8,7 @@ import {
   validationErrorBody,
 } from '../../validators.js'
 import { isValidPngSignature } from '../canvas-thumbnail.js'
-import { handleCorruptStoredData } from './shared.js'
+import { handleCorruptStoredData } from './_shared.js'
 
 // Thumbnails are PNG blobs exported from the browser canvas. Match
 // files.ts's MAX_FILE_UPLOAD_BYTES rather than inventing a separate number.
