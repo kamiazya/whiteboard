@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { buildSbomSidecar } from '../../../scripts/release/sbom-fingerprint.mjs'
+import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
 import { evaluateSbomArtifactState, SBOM_REGENERATE_COMMAND } from './sbom-artifact-state.js'
 
 const EXPECTED_INPUTS = {

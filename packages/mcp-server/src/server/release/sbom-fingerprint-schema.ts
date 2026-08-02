@@ -26,8 +26,3 @@ export const sbomFingerprintSidecarSchema = z
     sbomSha512: hexDigestSchema(128),
   })
   .strict()
-
-// z.infer type kept internal — evaluateSbomArtifactState (sbom-artifact-state.ts)
-// is the only consumer today and reads through sbomFingerprintSidecarSchema.parse
-// directly, so a named exported type would be unused surface per knip.
-type SbomFingerprintSidecar = z.infer<typeof sbomFingerprintSidecarSchema>
