@@ -150,10 +150,14 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
  * When `prevState` is an open text edit, PREPENDS a `set-text` command
  * carrying its `pendingText` ahead of `result`'s own commands — see the
  * open-text-edit-vs-other-gesture policy documented at the top of this
- * file. Prepending (never overwriting) is the fix for a real regression:
- * `dblclick-empty` already carries its own `create-node` command, and an
- * overwrite silently dropped it, leaving a node referenced by the new
- * gesture state that was never added to the canvas.
+ * file.
+ *
+ * It must PREPEND rather than overwrite, because the arms this wraps can
+ * already carry a command of their own — `dblclick-empty` carries
+ * `create-node`. Overwriting drops that one, leaving the returned gesture
+ * state referencing a node the canvas never received. Prepending also fixes
+ * the order: the text belongs to the node being left, so it has to commit
+ * before whatever the new gesture does.
  */
 function withPendingTextCommit(prevState: GestureState, result: GestureResult): GestureResult {
   if (prevState.kind !== 'editing-text') return result

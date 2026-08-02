@@ -316,7 +316,7 @@ describe('loro-bridge', () => {
     expect(result.edges).toEqual([])
   })
 
-  test('deleteSpatialNode leaves unrelated nodes/edges untouched', () => {
+  test('deleteSpatialNode keeps the other nodes and cascades only the incident edge', () => {
     const doc = makeDoc()
     writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
 
@@ -327,6 +327,27 @@ describe('loro-bridge', () => {
     // EDGE references node-1/node-2; node-2 (FILE_NODE) was removed so its
     // incident edge must cascade too.
     expect(result.edges).toEqual([])
+  })
+
+  test('deleteSpatialNode leaves an edge between two surviving nodes alone', () => {
+    // Every other edge in this suite joins node-1 and node-2, so every other
+    // deletion removes one of its endpoints. Without a third node, an
+    // implementation that simply cleared the whole edges map would satisfy
+    // the entire cascade suite — this is the case that separates "cascade
+    // the incident edges" from "drop them all".
+    const doc = makeDoc()
+    const thirdNode = { ...TEXT_NODE, id: 'node-3', x: 500 }
+    const survivingEdge: CanvasEdge = { id: 'edge-keep', fromNode: 'node-1', toNode: 'node-3' }
+    writeSpatialCanvas(doc, {
+      nodes: [TEXT_NODE, FILE_NODE, thirdNode],
+      edges: [EDGE, survivingEdge],
+    })
+
+    deleteSpatialNode(doc, FILE_NODE.id)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes.map((n) => n.id).sort()).toEqual(['node-1', 'node-3'])
+    expect(result.edges).toEqual([survivingEdge])
   })
 
   test('deleteSpatialNode is idempotent and a no-op for a missing id', () => {

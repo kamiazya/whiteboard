@@ -6,7 +6,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 // Real app styles — needed so the Add-note-button affordance test's
 // getComputedStyle assertions reflect the actual shipped CSS, not
 // unstyled-DOM defaults.
@@ -688,15 +688,11 @@ describe('SpatialEditor (browser)', () => {
     const button = page.getByTestId('add-node-button')
     ;(button.element() as HTMLButtonElement).focus()
     expect(document.activeElement).toBe(button.element())
-    await button
-      .element()
-      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
-    // A native <button> fires 'click' on Enter keyup, not keydown; simulate
-    // the browser's own follow-through since dispatching a synthetic keydown
-    // alone does not trigger it.
-    await button
-      .element()
-      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    // A real key press through the browser, not a synthetic keydown followed
+    // by a synthetic click: dispatching the click ourselves would exercise
+    // the mouse path and prove nothing about keyboard reachability, which is
+    // the whole point of this case.
+    await userEvent.keyboard('{Enter}')
 
     expect(onChange).toHaveBeenCalledTimes(1)
   })
