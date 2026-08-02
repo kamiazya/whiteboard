@@ -612,3 +612,129 @@ describe('SpatialEditor (browser)', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 })
+
+/**
+ * Regression coverage for four spatial-text-layout defects fixed together:
+ * a clipped first heading line, a markdown list flattening to inline text,
+ * unwrapped text overflowing its node's right edge, and an undrawn edge
+ * label. Uses the real Canvas 2D measurer (no `measure` override) so the
+ * geometry reflects an actual browser render, not a fake fixed-width one.
+ */
+function fourDefectCanvas(): SpatialCanvas {
+  return {
+    nodes: [
+      {
+        id: 'heading-node',
+        type: 'text',
+        x: 20,
+        y: 20,
+        width: 220,
+        height: 110,
+        text: '# Heading\n\nSome body text.',
+      },
+      {
+        id: 'list-node',
+        type: 'text',
+        x: 280,
+        y: 20,
+        width: 220,
+        height: 110,
+        text: 'Second node\n\n- list item\n- another',
+      },
+      {
+        id: 'overflow-node',
+        type: 'text',
+        x: 20,
+        y: 170,
+        width: 160,
+        height: 90,
+        text: 'This is a long line of text that should wrap inside its node instead of overflowing the right edge',
+      },
+    ],
+    edges: [{ id: 'e1', fromNode: 'heading-node', toNode: 'list-node', label: 'edge label' }],
+  }
+}
+
+describe('SpatialEditor (browser) — spatial text layout defects', () => {
+  it('renders a heading, a list, wrapped overflow text, and an edge label without the four defects', async () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <div style={{ width: 900, height: 600 }}>
+        <SpatialEditor canvas={fourDefectCanvas()} onChange={onChange} />
+      </div>,
+    )
+
+    await waitFor(() => {
+      expect(container.querySelectorAll('svg text').length).toBeGreaterThan(0)
+    })
+
+    await page.screenshot({
+      // Resolved relative to this test file's own directory by vitest's
+      // browser screenshot API — walk up to the repo-root tmp/ bucket
+      // rather than nesting a tmp/ under this source directory.
+      path: '../../../../../tmp/screenshots/spatial-editor-four-defects-after.png',
+    })
+
+    const svg = container.querySelector('svg')
+    expect(svg).not.toBeNull()
+
+    // Defect 1: the heading's first line must sit below the node chrome's
+    // top edge (not straddle it) — compare the heading run's rendered
+    // client rect against the node's own chrome rect.
+    const nodeRects = Array.from(container.querySelectorAll('svg rect'))
+    const headingRect = nodeRects[0]
+    expect(headingRect).toBeTruthy()
+    const headingTexts = Array.from(container.querySelectorAll('svg text'))
+    const headingRun = headingTexts.find((t) => t.textContent === 'Heading')
+    expect(headingRun).toBeTruthy()
+    if (headingRect && headingRun) {
+      const chromeBox = headingRect.getBoundingClientRect()
+      const runBox = headingRun.getBoundingClientRect()
+      expect(runBox.top).toBeGreaterThanOrEqual(chromeBox.top)
+    }
+
+    // Defect 2: the list body renders each list item as its own run on its
+    // own line, not flattened into a single inline line with the preceding
+    // paragraph (the pre-fix output was the single merged line
+    // "Second node - list item - another").
+    const secondNodeRun = headingTexts.find((t) => t.textContent === 'Second node')
+    const listItemRun = headingTexts.find((t) => t.textContent === 'list item')
+    const anotherRun = headingTexts.find((t) => t.textContent === 'another')
+    expect(secondNodeRun).toBeTruthy()
+    expect(listItemRun).toBeTruthy()
+    expect(anotherRun).toBeTruthy()
+    const flattenedRun = headingTexts.find((t) =>
+      t.textContent?.includes('Second node - list item - another'),
+    )
+    expect(flattenedRun).toBeUndefined()
+    if (secondNodeRun && listItemRun && anotherRun) {
+      const secondNodeY = secondNodeRun.getBoundingClientRect().top
+      const listItemY = listItemRun.getBoundingClientRect().top
+      const anotherY = anotherRun.getBoundingClientRect().top
+      expect(listItemY).toBeGreaterThan(secondNodeY)
+      expect(anotherY).toBeGreaterThan(listItemY)
+    }
+
+    // Defect 3: no run's right edge should extend past its node's chrome
+    // rect (allowing the single-unbreakable-token fallback is not exercised
+    // by this body, since every word here is shorter than the node width).
+    const overflowChrome = nodeRects[2]
+    expect(overflowChrome).toBeTruthy()
+    if (overflowChrome) {
+      const chromeBox = overflowChrome.getBoundingClientRect()
+      const overflowRuns = headingTexts.filter(
+        (t) => t.textContent && chromeBox.left <= t.getBoundingClientRect().left,
+      )
+      for (const run of overflowRuns) {
+        const runBox = run.getBoundingClientRect()
+        if (runBox.top >= chromeBox.top && runBox.bottom <= chromeBox.bottom + 1) {
+          expect(runBox.right).toBeLessThanOrEqual(chromeBox.right + 1)
+        }
+      }
+    }
+
+    // Defect 4: the edge label text is present in the rendered SVG.
+    const edgeLabel = headingTexts.find((t) => t.textContent === 'edge label')
+    expect(edgeLabel).toBeTruthy()
+  })
+})
