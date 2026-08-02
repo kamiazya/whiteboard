@@ -18,6 +18,42 @@ This page describes the **local daemon** in detail first, then server mode.
 - The `/mcp` HTTP transport applies token checks and restricts the `Origin` header to loopback addresses (`127.0.0.1`, `::1`, or `localhost`).
 - The packaged `stdio` MCP path does not use OAuth. Trust comes from the local process that launches the server.
 
+## Loopback origin squatting (browser-local storage)
+
+A browser origin is defined by scheme + host + port, not by which process
+currently answers on that port. On `http://localhost:<port>` (Vite's dev
+port 5173 in particular is among the most commonly contended ports on a
+developer machine), whatever process later binds that port inherits the
+full origin — including everything IndexedDB and localStorage hold for it,
+with no additional prompt or permission check. This is ordinary browser
+origin semantics, not a Whiteboard-specific bug, and it is not something
+this project can fix by itself.
+
+The practical consequence: **pairing with a local daemon now requires a
+fresh `#wb=` link every session.** An earlier "silent reconnect" feature
+stored a possession credential (a WebCrypto keypair, with a plaintext
+localStorage secret as a fallback for older daemons) in this origin's own
+browser storage specifically so a reload would not require re-pairing. That
+credential is exactly what a port-squatting process could read or invoke —
+a non-extractable `CryptoKey` does not need to be exfiltrated to be abused;
+same-origin script can call `crypto.subtle.sign()` with it directly, and a
+plaintext secret needs no cryptography at all. The feature has been
+**removed entirely** rather than hardened, because eliminating the
+credential is the only fix that does not depend on trusting the origin —
+see [Connect to a local daemon → Pairing is required every
+session](../how-to/connect-to-local-daemon.md#pairing-is-required-every-session)
+for what this means day-to-day.
+
+**This does not extend to canvas data itself.** Browser-local mode's
+canvases, files, and CRDT history in IndexedDB remain readable by whatever
+later owns the origin — the same squatting scenario applies to your actual
+canvas content, not only to daemon credentials, and there is no equivalent
+fix available: the data has to live somewhere addressable by that origin
+for the browser-local runtime to work at all. Treat a shared or
+frequently-reused development port accordingly, and prefer the local
+daemon (loopback-bound, its own token) over browser-local storage for
+anything you would not want a future occupant of that port to read.
+
 ## HTTP protections
 
 - **Bearer token**: local HTTP clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the stdio MCP server can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.

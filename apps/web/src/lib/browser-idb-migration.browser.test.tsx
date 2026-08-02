@@ -151,6 +151,130 @@ async function seedV4Fixture(canvasId: string, loroSnapshot: Uint8Array): Promis
   })
 }
 
+/** Seed a pre-v6 ("v5 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
+async function seedV5Fixture(canvasId: string, loroSnapshot: Uint8Array): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open('whiteboard', 5)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
+      if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
+      if (!db.objectStoreNames.contains('canvasFiles')) db.createObjectStore('canvasFiles')
+      if (!db.objectStoreNames.contains('reconnectKeypairs')) {
+        db.createObjectStore('reconnectKeypairs', { keyPath: 'origin' })
+      }
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      const tx = db.transaction(
+        ['meta', 'canvases', 'loroCanvases', 'canvasFiles', 'reconnectKeypairs'],
+        'readwrite',
+      )
+      tx.objectStore('meta').put(canvasId, 'defaultCanvasId')
+      tx.objectStore('canvases').put(
+        { id: canvasId, name: 'Pre-v6 canvas', updatedAt: '2026-01-01T00:00:00.000Z' },
+        canvasId,
+      )
+      tx.objectStore('loroCanvases').put(
+        { v: 1, snapshot: loroSnapshot, updatedAt: '2026-01-01T00:00:00.000Z' },
+        canvasId,
+      )
+      tx.objectStore('canvasFiles').put(new Blob(['file-bytes']), 'file-1')
+      // A real (non-extractable) CryptoKey cannot be structured-cloned into a
+      // fixture reliably across browsers, so a plain placeholder record is
+      // enough to prove the STORE itself — not any particular key shape — is
+      // gone after the upgrade.
+      tx.objectStore('reconnectKeypairs').put({ origin: 'http://localhost:3099', fake: true })
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+describe('whiteboard IndexedDB v5 -> v6 upgrade (removes reconnectKeypairs)', () => {
+  const LEGACY_RECONNECT_SECRET_KEY = 'whiteboard.reconnect-secret.v1'
+
+  beforeEach(clearDb)
+  afterEach(() => {
+    localStorage.removeItem(LEGACY_RECONNECT_SECRET_KEY)
+    return clearDb()
+  })
+
+  it('current DB_VERSION is 6 or higher (guards against reverting the bump alone)', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(6)
+  })
+
+  it('removes the reconnectKeypairs store and the legacy localStorage secret while preserving canvases/loroCanvases/canvasFiles/meta', async () => {
+    const canvasId = 'canvas-migrate-v6'
+    const doc = new Loro()
+    doc.getList('elements').push({ id: 'canonical-el' })
+    const loroSnapshot = doc.export({ mode: 'snapshot' })
+    await seedV5Fixture(canvasId, loroSnapshot)
+    localStorage.setItem(
+      LEGACY_RECONNECT_SECRET_KEY,
+      JSON.stringify({ origin: 'http://localhost:3099', secret: 'stale-secret' }),
+    )
+
+    const db = await openWhiteboardDb()
+    // Erasure invariant: the credential surface is gone by construction —
+    // no reader can reach it because there is no longer anywhere to read it
+    // from.
+    expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
+
+    const fileCount = await new Promise<number>((resolve, reject) => {
+      const tx = db.transaction('canvasFiles', 'readonly')
+      const req = tx.objectStore('canvasFiles').count()
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+      tx.oncomplete = () => db.close()
+    })
+    expect(fileCount).toBe(1)
+
+    const loroStore = new LoroStore()
+    const loroResult = await loroStore.load(canvasId)
+    expect(loroResult.kind).toBe('ok')
+
+    const metaStore = new IndexedDBStore()
+    expect(await metaStore.getDefaultCanvasId()).toBe(canvasId)
+    const loadResult = await metaStore.load(canvasId)
+    expect(loadResult.kind).toBe('ok')
+    if (loadResult.kind === 'ok') {
+      expect(loadResult.snapshot.name).toBe('Pre-v6 canvas')
+    }
+
+    // purgeLegacyReconnectCredentials() is exercised directly here (rather
+    // than via a full App/router boot harness) — it is called unconditionally
+    // at app boot in main.tsx; this test verifies the IndexedDB-side and
+    // localStorage-side erasure are BOTH complete once a real app boot would
+    // have run.
+    const { purgeLegacyReconnectCredentials } = await import(
+      './purge-legacy-reconnect-credentials.js'
+    )
+    purgeLegacyReconnectCredentials()
+    expect(localStorage.getItem(LEGACY_RECONNECT_SECRET_KEY)).toBeNull()
+  })
+
+  it('a fresh install at the current version never creates reconnectKeypairs', async () => {
+    const db = await openWhiteboardDb()
+    expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
+    expect([...db.objectStoreNames].sort()).toEqual([
+      'canvasFiles',
+      'canvases',
+      'loroCanvases',
+      'meta',
+    ])
+    db.close()
+  })
+})
+
 describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
   beforeEach(clearDb)
   afterEach(clearDb)
@@ -159,7 +283,7 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(5)
   })
 
-  it('opening a v4 database at v5 creates reconnectKeypairs and preserves existing canvasFiles/loroCanvases/canvases/meta contents', async () => {
+  it('opening a v4 database at the current version never leaves reconnectKeypairs behind and preserves existing canvasFiles/loroCanvases/canvases/meta contents', async () => {
     const canvasId = 'canvas-migrate-v5'
     const doc = new Loro()
     doc.getList('elements').push({ id: 'canonical-el' })
@@ -167,7 +291,11 @@ describe('whiteboard IndexedDB v4 -> v5 upgrade', () => {
     await seedV4Fixture(canvasId, loroSnapshot)
 
     const db = await openWhiteboardDb()
-    expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(true)
+    // v4 -> current spans the v4->v5 store creation AND the v5->v6 removal
+    // in one upgrade transaction (a multi-version jump fires
+    // onupgradeneeded once, not once per intermediate version), so the net
+    // effect for a v4 database opened today is: never created.
+    expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
 
     const fileCount = await new Promise<number>((resolve, reject) => {
       const tx = db.transaction('canvasFiles', 'readonly')
