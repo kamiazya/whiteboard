@@ -111,18 +111,22 @@ export function findFreeSpot(
   size: { readonly width: number; readonly height: number },
   occupied: readonly Box[],
 ): Point {
+  const candidateAt = (step: number): Point => ({
+    x: preferred.x + step * CASCADE_STEP_PX,
+    y: preferred.y + step * CASCADE_STEP_PX,
+  })
   const boxAt = (center: Point): Box => ({
     x: Math.round(center.x - size.width / 2),
     y: Math.round(center.y - size.height / 2),
     width: size.width,
     height: size.height,
   })
-  let candidate = preferred
-  for (let step = 0; step <= MAX_CASCADE_STEPS; step += 1) {
-    candidate = { x: preferred.x + step * CASCADE_STEP_PX, y: preferred.y + step * CASCADE_STEP_PX }
-    if (!occupied.some((box) => boxesIntersect(boxAt(candidate), box))) return candidate
+  for (let step = 0; step < MAX_CASCADE_STEPS; step += 1) {
+    const candidate = candidateAt(step)
+    const box = boxAt(candidate)
+    if (!occupied.some((other) => boxesIntersect(box, other))) return candidate
   }
-  return candidate
+  return candidateAt(MAX_CASCADE_STEPS)
 }
 
 /** Which axes a given handle moves, and in which direction, as a corner/edge is dragged. */

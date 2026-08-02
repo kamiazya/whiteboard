@@ -122,6 +122,11 @@ export interface GestureResult {
 
 const idle: GestureResult = { state: { kind: 'idle' }, commands: [] }
 
+/** A result that only advances the gesture state: no canvas mutation, no selection change. */
+function stateOnly(state: GestureState): GestureResult {
+  return { state, commands: [] }
+}
+
 function findNode(canvas: SpatialCanvas, id: string) {
   return canvas.nodes.find((node) => node.id === id)
 }
@@ -169,7 +174,7 @@ function reduceCanvasReplaced(
   if (targetsStillValid(state, replacement)) {
     // Continue the gesture unchanged — the commit still uses the start
     // snapshot captured in `state`, never the replacement's coordinates.
-    return { state, commands: [] }
+    return stateOnly(state)
   }
   return idle
 }
@@ -200,17 +205,14 @@ function reducePointerDownHandle(
 ): GestureResult {
   const node = findNode(canvas, event.nodeId)
   if (node === undefined) return idle
-  return {
-    state: {
-      kind: 'resizing',
-      nodeId: event.nodeId,
-      startType: node.type,
-      handle: event.handle,
-      startPoint: event.point,
-      startBox: event.box,
-    },
-    commands: [],
-  }
+  return stateOnly({
+    kind: 'resizing',
+    nodeId: event.nodeId,
+    startType: node.type,
+    handle: event.handle,
+    startPoint: event.point,
+    startBox: event.box,
+  })
 }
 
 function reducePointerUpMoving(
@@ -335,7 +337,7 @@ export function reduceGesture(
     case 'dblclick-empty':
       return withPendingTextCommit(state, reduceCreateTextNodeAt(event.point, createId))
     case 'delete-selection':
-      if (state.kind === 'editing-text') return { state, commands: [] }
+      if (state.kind === 'editing-text') return stateOnly(state)
       return {
         state: { kind: 'idle' },
         commands: [{ kind: 'delete-node', id: event.nodeId }],
@@ -346,18 +348,15 @@ export function reduceGesture(
     case 'pointerdown-handle':
       return withPendingTextCommit(state, reducePointerDownHandle(event, canvas))
     case 'pointerdown-connect':
-      return withPendingTextCommit(state, {
-        state: { kind: 'connecting', fromNodeId: event.nodeId },
-        commands: [],
-      })
+      return withPendingTextCommit(
+        state,
+        stateOnly({ kind: 'connecting', fromNodeId: event.nodeId }),
+      )
     case 'start-text-edit':
-      return {
-        state: { kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text },
-        commands: [],
-      }
+      return stateOnly({ kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text })
     case 'update-text-edit':
-      if (state.kind !== 'editing-text') return { state, commands: [] }
-      return { state: { ...state, pendingText: event.text }, commands: [] }
+      if (state.kind !== 'editing-text') return stateOnly(state)
+      return stateOnly({ ...state, pendingText: event.text })
     case 'commit-text-edit':
       if (state.kind !== 'editing-text') return idle
       return {
@@ -370,7 +369,7 @@ export function reduceGesture(
       // to be stored on the state for move/resize. Connecting has no other
       // state to update either (the in-flight line is component-rendered from
       // the raw pointer position, not reducer state).
-      return { state, commands: [] }
+      return stateOnly(state)
     case 'pointerup':
       switch (state.kind) {
         case 'moving':
