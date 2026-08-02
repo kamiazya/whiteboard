@@ -5,14 +5,13 @@
 - `scene.ts`: `ViewerScene` (canvas-model's `SpatialCanvas`, re-exported —
   never redeclared), the total `parseViewerScene`/`serializeViewerScene`
   pair delegating to canvas-codec's `parseSpatial`/`serializeSpatial`.
-- `viewer-appearance.ts`: `VIEWER_APPEARANCE`, this package's
-  `SpatialAppearanceResolver` for canvas-render's shared
-  `layoutSpatialCanvas` builder — derives shape fill from `node.color`
-  (JSON Canvas presets approximated as hex) and radius from an
-  `x-whiteboard` ellipse hint, unlike mcp-server's fixed per-node-kind
-  export chrome. `CanvasViewer.tsx` calls `layoutSpatialCanvas` directly
-  with this resolver, canvas-codec's `parseMarkdownBody`, and no
-  `onDegrade` (this package degrades silently by choice).
+- This package no longer owns its own `SpatialAppearanceResolver`.
+  `viewer-appearance.ts` was deleted by the theme-layer slice
+  (package-canvas-render.md decision #8): `CanvasViewer.tsx` now calls
+  canvas-render's `createSpatialTheme({ mode: 'light' })` directly (the
+  viewer is read-only with no theme switch of its own), alongside
+  canvas-codec's `parseMarkdownBody` and no `onDegrade` (this package
+  degrades silently by choice).
 - `measure-text.ts`: `createBrowserMeasureText()` — the browser half of
   canvas-render's injected `MeasureText` seam (Canvas 2D `measureText`,
   with a fallback ratio-measurer for environments with no real 2D context
@@ -77,11 +76,14 @@
   `test:browser`).
 - `scene.test.ts` / `scene.property.test.ts`: accept/reject example tests
   per parse stage, plus round-trip and totality fast-check properties.
-- `viewer-appearance.test.ts`: `VIEWER_APPEARANCE`'s color/preset/ellipse-
-  radius/edge-stroke resolution — the appearance behavior specific to this
-  package. Per-node-type content emission and degenerate-input totality now
-  live in canvas-render's `layoutSpatialCanvas` suite, since that behavior
-  is shared, not viewer-specific.
+- Color/preset/ellipse-radius/edge-stroke appearance resolution now lives
+  in canvas-render's `theme/spatial-theme.ts` tests, since
+  `createSpatialTheme` is shared, not viewer-specific.
+  `canvas-viewer-geometry-conformance.test.ts` is this package's tier-2
+  conformance test for the theme-layer slice (package-canvas-render.md
+  decision #8): asserts `CanvasViewer.tsx` calls `layoutSpatialCanvas` with
+  no `geometry` override, so it always resolves to the shared
+  `SPATIAL_THEME_GEOMETRY` default.
 - `measure-text.ts` has a jsdom-project fallback-measurer test and a
   `.browser.test.tsx` real-Canvas2D contract test (linear scaling with
   `sizePx`, `advanceWidth('') === 0`).

@@ -29,5 +29,15 @@
  * browser and Node export metrics to agree. A future font swap on either
  * side without updating the other silently desyncs metrics rather than
  * failing loudly.
+ *
+ * This value MUST stay in sync with canvas-render's own
+ * `SPATIAL_THEME_FONT_FAMILY` (the family name every spatial-theme label
+ * run declares). It is a plain string literal rather than a re-export on
+ * purpose: this constant is imported (via widget/font-assets.ts) from
+ * `vite.widget.config.ts`, which Node's plain config-loading ESM resolver
+ * reads directly — pulling in `@kamiazya/whiteboard-canvas-render`'s
+ * package export map there fails, since that package ships TS source with
+ * `.js`-suffixed relative imports meant for a bundler/type-checker, not
+ * Node's native loader.
  */
 export const VIEWER_FONT_FAMILY = 'Roboto'

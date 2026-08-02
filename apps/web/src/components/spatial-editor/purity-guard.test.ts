@@ -27,14 +27,13 @@ describe('theme resolver purity (no ambient DOM read)', () => {
     })
   }
 
-  it('editor-appearance.ts carries no bare color literal outside the palette record', async () => {
+  it('editor-appearance.ts carries no bare color literal (it is a thin adapter, no palette of its own)', async () => {
+    // Since the theme-layer slice, every color literal lives in
+    // canvas-render's shared palette (theme/spatial-palette.ts) — this file
+    // only re-projects that shared palette's values, so it should carry NO
+    // hex literal at all, not even inside a palette record of its own.
     const loader = modules['./editor-appearance.ts']
     const source = (await loader?.()) as string
-    const paletteBlockStart = source.indexOf('export const EDITOR_LIGHT_PALETTE')
-    const paletteBlockEnd = source.indexOf('function buildResolver')
-    expect(paletteBlockStart).toBeGreaterThan(-1)
-    expect(paletteBlockEnd).toBeGreaterThan(paletteBlockStart)
-    const outsidePalette = source.slice(0, paletteBlockStart) + source.slice(paletteBlockEnd)
-    expect(outsidePalette).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
+    expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
   })
 })

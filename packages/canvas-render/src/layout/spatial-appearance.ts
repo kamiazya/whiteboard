@@ -1,14 +1,20 @@
 // The appearance seam for `layoutSpatialCanvas` (spatial-canvas.ts).
 // canvas-render's layout functions deliberately never invent a fill/stroke/
 // font (see `Appearance` in scene-graph.ts) — that decision belongs to the
-// composition root until the theme layer (Phase 4) lands. A resolver is a
-// set of FUNCTIONS rather than a static per-kind record because the two
-// current consumers key appearance differently: mcp-server's export chrome
-// keys off `node.type` alone, while canvas-viewer derives fill from
-// `node.color` (JSON Canvas presets) and radius from
-// `node['x-whiteboard'].shape === 'ellipse'`. Functions subsume both without
-// a union type and without losing either consumer's behavior. No default
-// resolver is exported here — appearance stays assigned, not invented.
+// theme layer (`../theme/spatial-theme.ts`'s `createSpatialTheme`, the ONE
+// producer of this interface; see package-canvas-render.md decision #8). A
+// resolver is a set of FUNCTIONS rather than a static per-kind record
+// because appearance keys off both `node.type` and an authored
+// `node.color`/`x-whiteboard` hint. No default resolver is exported here —
+// appearance stays assigned, not invented.
+//
+// This interface is APPEARANCE-ONLY. It deliberately has no
+// paddingPx/labelFontSizePx/minContentWidthPx: those are geometry, not
+// appearance, and geometry must not vary by which resolver a surface
+// happens to use (see `../theme/spatial-geometry.ts` and the
+// `spatial-geometry-parity.test.ts` guard). A caller that wants a
+// non-default geometry passes `SpatialLayoutOptions.geometry` explicitly at
+// the call site, never through this resolver.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { Appearance } from '../scene-graph.js'
 
@@ -24,10 +30,4 @@ export interface SpatialAppearanceResolver {
   resolveEdge(edge: CanvasEdge): Appearance | undefined
   /** Appearance for a `file`/`link`/`group` label run or a degraded body fallback run. */
   resolveLabel(): Appearance
-  /** Uniform padding (px) between a node's box edge and its laid-out content. */
-  readonly paddingPx: number
-  /** Font size (px) used for label runs. */
-  readonly labelFontSizePx: number
-  /** Floor for a node's derived content width, so padding never drives it negative. */
-  readonly minContentWidthPx: number
 }

@@ -157,13 +157,15 @@
    the caller (both current consumers pass canvas-codec's
    `parseMarkdownBody`). Appearance is likewise injected via a
    `SpatialAppearanceResolver` (`layout/spatial-appearance.ts`) — a set of
-   FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`) plus geometry
-   constants (`paddingPx`, `labelFontSizePx`, `minContentWidthPx`), not a
-   static per-kind record, because the two consumers key appearance
-   differently (export: fixed per-`node.type` chrome; viewer: derived from
-   `node.color` and an `x-whiteboard` ellipse hint) and a resolver subsumes
-   both without a union type. No default resolver is exported — appearance
-   stays assigned, not invented, per decision #6. Emission order is
+   FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`), not a static
+   per-kind record, because appearance keys off both `node.type` and an
+   authored `node.color`/`x-whiteboard` hint. (Geometry constants —
+   `paddingPx`/`labelFontSizePx`/`minContentWidthPx` — used to live on this
+   same interface; decision #8 below moved them out into
+   `SpatialLayoutOptions.geometry`, since a surface being free to pick its
+   own geometry is exactly the bug decision #8 exists to prevent.) No
+   default resolver is exported — appearance stays assigned, not invented,
+   per decision #6. Emission order is
    DOCUMENT order (nodes in array order, shape then content per node, then
    all edges), never sorted by position: z-order is authored, not derived,
    so a position sort would silently reorder authored z-order. Export
@@ -181,6 +183,56 @@
    renderers (`listItem`, `tableCell`) emit their own SVG `transform` — the
    tripwire test asserting that exact set now lives in
    `translate-scene.test.ts` alongside the function it guards.
+
+8. **The theme layer** (`theme/spatial-geometry.ts`, `theme/spatial-palette.ts`,
+   `theme/spatial-theme.ts`, `theme/font-family.ts`): ONE `SpatialAppearanceResolver`
+   producer, `createSpatialTheme({ mode })`, replacing three independently-grown
+   per-surface resolvers (apps/web's `editor-appearance.ts`, canvas-viewer's
+   deleted `viewer-appearance.ts`, mcp-server's deleted
+   `spatial-scene-appearance.ts`). This was triggered by a real defect: the
+   three resolvers disagreed on `minContentWidthPx`/`labelFontSizePx`
+   (GEOMETRY, not appearance), so the same canvas laid out for the editor and
+   for export did not agree on wrapped-line counts or content width.
+   `SpatialAppearanceResolver` (decision #7) is narrowed to drop those three
+   fields entirely — a resolver can no longer smuggle in its own geometry.
+   `SpatialLayoutOptions.geometry` (optional, defaulting to the shared
+   `SPATIAL_THEME_GEOMETRY` constant) is now the ONLY place geometry can be
+   overridden, so a divergence is a reviewable one-line diff at a call site
+   rather than a silent per-file constant. `spatial-geometry-parity.test.ts`
+   is the executable guard: three resolvers that disagree on nothing but
+   color must still produce identical geometry (bbox/baseline/path,
+   recursively) from the same canvas.
+   Dark mode is a PARAMETER of this one theme
+   (`createSpatialTheme({ mode: 'light' | 'dark' })`), not a second
+   appearance authority layered on top — a scene->scene dark transform would
+   still need the same per-type semantic knowledge this theme already has,
+   so it would be strictly more machinery for the same result while
+   reintroducing exactly the multi-producer divergence this decision exists
+   to delete. The editor's dark palette (contrast-tested against the WCAG
+   1.4.11/1.4.3 floors) is the shared theme's dark palette; viewer and export
+   both pin `mode: 'light'` at their call sites, preserving the invariant
+   that a user's UI theme can never change exported bytes. NOT fixed by this
+   decision: `mcp-server`'s `headless-renderer`'s `theme: 'dark'` export
+   option still only changes the document background, not node chrome —
+   giving export a real dark chrome variant is a behavior decision (export
+   gaining new visual output as a function of a request option), not a
+   convergence one, and is deliberately out of scope here.
+   This decision also fixed a verified, separate defect: export's label
+   appearance used to declare `fontFamily: 'sans-serif'` while its measurer
+   (`measure-text.ts`) actually measured a vendored Roboto face, so the
+   emitted SVG's `font-family` attribute named a different font than the one
+   its coordinates were computed from. `theme/font-family.ts`'s
+   `SPATIAL_THEME_FONT_FAMILY` ('Roboto') is now what every
+   `resolveLabel()` declares. `VIEWER_FONT_FAMILY` (canvas-viewer) and
+   `EXPORT_FONT_FAMILY` (mcp-server) still each carry their own literal
+   `'Roboto'` string rather than importing this constant — canvas-viewer's
+   `font.ts` is reached from `vite.widget.config.ts`, which Node's plain
+   config-loading ESM resolver reads directly, and pulling in
+   `@kamiazya/whiteboard-canvas-render`'s package export map there fails
+   (that package ships TS source with `.js`-suffixed relative imports meant
+   for a bundler/type-checker, not Node's native loader). All three
+   constants naming the same string remains a deliberate, documented
+   duplication rather than a shared import.
 
 ## Conventions
 

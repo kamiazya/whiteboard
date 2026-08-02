@@ -13,9 +13,6 @@ const appearance: SpatialAppearanceResolver = {
   resolveNode: () => ({ radius: 4 }),
   resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
   resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-  paddingPx: 8,
-  labelFontSizePx: 14,
-  minContentWidthPx: 1,
 }
 
 /**

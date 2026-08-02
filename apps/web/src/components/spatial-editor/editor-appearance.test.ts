@@ -18,9 +18,16 @@ const textNode: SpatialNode = {
 const edge = { id: 'e', fromNode: 'a', toNode: 'b' }
 
 describe('createEditorAppearance', () => {
-  it('resolves the pre-existing light chrome so light mode stays byte-identical', () => {
+  it('resolves the light theme with the shared per-type fill and the accessible stroke', () => {
+    // The stroke value stays byte-identical to the pre-theme-layer editor
+    // (`#333333`); node FILL now differentiates per type (canvas-render's
+    // shared palette), which is the theme layer's intended convergence with
+    // the viewer/export surfaces — see package-canvas-render.md decision #8.
     const appearance = createEditorAppearance('light')
-    expect(appearance.resolveNode(textNode).appearance).toEqual({ fill: 'none', stroke: '#333333' })
+    expect(appearance.resolveNode(textNode).appearance).toEqual({
+      fill: '#ffffff',
+      stroke: '#333333',
+    })
     expect(appearance.resolveEdge(edge as never)).toEqual({ stroke: '#333333' })
   })
 
@@ -40,17 +47,9 @@ describe('createEditorAppearance', () => {
   it('themes the label fill, not just chrome stroke, in both modes', () => {
     const light = createEditorAppearance('light')
     const dark = createEditorAppearance('dark')
-    expect(light.resolveLabel()).toEqual({ fill: EDITOR_LIGHT_PALETTE.textFill })
-    expect(dark.resolveLabel()).toEqual({ fill: EDITOR_DARK_PALETTE.textFill })
+    expect(light.resolveLabel().fill).toBe(EDITOR_LIGHT_PALETTE.textFill)
+    expect(dark.resolveLabel().fill).toBe(EDITOR_DARK_PALETTE.textFill)
     expect(dark.resolveLabel().fill).not.toBe(light.resolveLabel().fill)
-  })
-
-  it('keeps geometry constants theme-independent', () => {
-    const light = createEditorAppearance('light')
-    const dark = createEditorAppearance('dark')
-    expect(dark.paddingPx).toBe(light.paddingPx)
-    expect(dark.labelFontSizePx).toBe(light.labelFontSizePx)
-    expect(dark.minContentWidthPx).toBe(light.minContentWidthPx)
   })
 
   it('returns a referentially stable resolver per theme', () => {

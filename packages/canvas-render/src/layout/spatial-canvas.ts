@@ -34,6 +34,7 @@ import type {
   ShapeSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
+import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import { routeEdge } from './spatial-edges.js'
@@ -54,16 +55,57 @@ export interface SpatialLayoutOptions {
   readonly measure: MeasureText
   readonly parseBody: (text: string) => MdastRoot
   readonly appearance: SpatialAppearanceResolver
+  /**
+   * Geometry constants (padding/label font size/min content width).
+   * Defaults to `SPATIAL_THEME_GEOMETRY` — the shared constant every
+   * surface must agree on (package-canvas-render.md decision #8). Omit
+   * this in every ordinary call site; a caller that must diverge has to
+   * pass an explicit override here, never inside `appearance`, so a
+   * divergence is a reviewable one-line diff instead of a silent per-file
+   * constant.
+   */
+  readonly geometry?: SpatialGeometry
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
 }
 
-function contentWidth(nodeWidth: number, options: SpatialLayoutOptions): number {
-  const width = nodeWidth - 2 * options.appearance.paddingPx
-  const floor = options.appearance.minContentWidthPx
+/** Internal: options with geometry resolved exactly once per layout call. */
+interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  readonly geometry: SpatialGeometry
+}
+
+/**
+ * Resolves the effective geometry for one `layoutSpatialCanvas` call.
+ * A non-finite or out-of-range override degrades to the shared default
+ * field-by-field, keeping this function total rather than letting a bad
+ * override propagate NaN/negative values into node/text geometry.
+ */
+function nonNegativeOr(value: number, fallback: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
+function positiveOr(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function resolveGeometry(geometry: SpatialGeometry | undefined): SpatialGeometry {
+  if (!geometry) return SPATIAL_THEME_GEOMETRY
+  return {
+    paddingPx: nonNegativeOr(geometry.paddingPx, SPATIAL_THEME_GEOMETRY.paddingPx),
+    labelFontSizePx: positiveOr(geometry.labelFontSizePx, SPATIAL_THEME_GEOMETRY.labelFontSizePx),
+    minContentWidthPx: nonNegativeOr(
+      geometry.minContentWidthPx,
+      SPATIAL_THEME_GEOMETRY.minContentWidthPx,
+    ),
+  }
+}
+
+function contentWidth(nodeWidth: number, options: ResolvedLayoutOptions): number {
+  const width = nodeWidth - 2 * options.geometry.paddingPx
+  const floor = options.geometry.minContentWidthPx
   return Number.isFinite(width) && width > floor ? width : floor
 }
 
-function chromeShape(node: SpatialNode, options: SpatialLayoutOptions): ShapeSceneNode {
+function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSceneNode {
   const resolved = options.appearance.resolveNode(node)
   return {
     kind: 'shape',
@@ -79,14 +121,14 @@ function chromeShape(node: SpatialNode, options: SpatialLayoutOptions): ShapeSce
  * `placeInNode`. An absolute-coordinate variant here would be applied
  * twice wherever its output also flows through the translation step.
  */
-function labelRun(text: string, options: SpatialLayoutOptions): TextRunNode {
+function labelRun(text: string, options: ResolvedLayoutOptions): TextRunNode {
   const labelAppearance = options.appearance.resolveLabel()
   const font = {
     family: labelAppearance.fontFamily ?? 'sans-serif',
     fallbackChain: [],
     weight: 400,
     style: 'normal' as const,
-    sizePx: options.appearance.labelFontSizePx,
+    sizePx: options.geometry.labelFontSizePx,
   }
   const metrics = options.measure(text, font)
   return {
@@ -98,7 +140,7 @@ function labelRun(text: string, options: SpatialLayoutOptions): TextRunNode {
       h: metrics.ascent + metrics.descent,
     },
     text,
-    appearance: { ...labelAppearance, fontSize: options.appearance.labelFontSizePx },
+    appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
   }
 }
 
@@ -106,9 +148,9 @@ function labelRun(text: string, options: SpatialLayoutOptions): TextRunNode {
 function placeInNode(
   node: SpatialNode,
   content: Scene,
-  options: SpatialLayoutOptions,
+  options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  const padding = options.appearance.paddingPx
+  const padding = options.geometry.paddingPx
   return translateScene(content, node.x + padding, node.y + padding).nodes
 }
 
@@ -121,7 +163,7 @@ function placeInNode(
  */
 function composeTextNode(
   node: Extract<SpatialNode, { type: 'text' }>,
-  options: SpatialLayoutOptions,
+  options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
   const maxWidth = contentWidth(node.width, options)
   let body: Scene
@@ -149,7 +191,7 @@ function labelOf(
   }
 }
 
-function composeNode(node: SpatialNode, options: SpatialLayoutOptions): readonly SceneNode[] {
+function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
   switch (node.type) {
     case 'text':
       return composeTextNode(node, options)
@@ -181,7 +223,7 @@ function composeNode(node: SpatialNode, options: SpatialLayoutOptions): readonly
 function composeEdge(
   canvas: SpatialCanvas,
   edge: CanvasEdge,
-  options: SpatialLayoutOptions,
+  options: ResolvedLayoutOptions,
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
   // documented contract — nothing further to catch here.
@@ -224,7 +266,7 @@ function edgeMidpoint(
 function composeEdgeLabel(
   edge: CanvasEdge,
   routed: ResolvedEdgeNode,
-  options: SpatialLayoutOptions,
+  options: ResolvedLayoutOptions,
 ): TextRunNode | undefined {
   if (edge.label === undefined || edge.label.trim().length === 0) return undefined
   const center = edgeMidpoint(routed.path)
@@ -236,7 +278,7 @@ function composeEdgeLabel(
     fallbackChain: [],
     weight: 400,
     style: 'normal' as const,
-    sizePx: options.appearance.labelFontSizePx,
+    sizePx: options.geometry.labelFontSizePx,
   }
   const metrics = options.measure(edge.label, font)
   const width = metrics.advanceWidth
@@ -246,20 +288,25 @@ function composeEdgeLabel(
     bbox: { x: center.x - width / 2, y: center.y - height / 2, w: width, h: height },
     baseline: metrics.ascent,
     text: edge.label,
-    appearance: { ...labelAppearance, fontSize: options.appearance.labelFontSizePx },
+    appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
   }
 }
 
 /**
  * Composes a canvas-render `Scene` from a `SpatialCanvas`. Pure: takes the
  * already-read canvas plus injected measurer/body-parser/appearance, and
- * performs no I/O.
+ * performs no I/O. Geometry is resolved exactly once here (see
+ * `resolveGeometry`) and threaded to every helper as `ResolvedLayoutOptions`.
  */
 export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayoutOptions): Scene {
-  const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, options))
-  const edgeContent = canvas.edges.map((edge) => composeEdge(canvas, edge, options))
+  const resolved: ResolvedLayoutOptions = {
+    ...options,
+    geometry: resolveGeometry(options.geometry),
+  }
+  const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, resolved))
+  const edgeContent = canvas.edges.map((edge) => composeEdge(canvas, edge, resolved))
   const labelContent = canvas.edges
-    .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, options))
+    .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved))
     .filter((label): label is TextRunNode => label !== undefined)
   return { nodes: [...nodeContent, ...edgeContent, ...labelContent] }
 }

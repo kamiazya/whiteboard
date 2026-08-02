@@ -20,6 +20,9 @@ const fakeAppearance: SpatialAppearanceResolver = {
   resolveNode: () => ({ radius: NODE_CORNER_RADIUS_PX }),
   resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
   resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
+}
+
+const fakeGeometry = {
   paddingPx: NODE_PADDING_PX,
   labelFontSizePx: LABEL_FONT_SIZE_PX,
   minContentWidthPx: MIN_CONTENT_WIDTH_PX,
@@ -30,6 +33,7 @@ function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayo
     measure,
     parseBody: fakeParseBody,
     appearance: fakeAppearance,
+    geometry: fakeGeometry,
     ...overrides,
   }
 }
@@ -374,5 +378,27 @@ describe('layoutSpatialCanvas', () => {
         return rest
       })
     expect(stripAppearance(scene1)).toEqual(stripAppearance(scene2))
+  })
+
+  it('falls back to the shared default geometry field-by-field when an override is degenerate', () => {
+    const a = textNode({ id: 'a', text: 'hello world' })
+    const b = textNode({ id: 'b', x: 500, text: 'file' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b', label: 'link' }
+    const built = canvas([a, b], [edge])
+
+    // Omitting `geometry` entirely resolves to the shared
+    // `SPATIAL_THEME_GEOMETRY` default — the same target a fully degenerate
+    // override must fall back to, field-by-field.
+    const baseline = layoutSpatialCanvas(built, baseOptions({ geometry: undefined }))
+    const degenerate = layoutSpatialCanvas(
+      built,
+      baseOptions({
+        // NaN paddingPx, zero labelFontSizePx (must be > 0), negative
+        // minContentWidthPx — every field individually degenerate.
+        geometry: { paddingPx: Number.NaN, labelFontSizePx: 0, minContentWidthPx: -10 },
+      }),
+    )
+
+    expect(degenerate).toEqual(baseline)
   })
 })
