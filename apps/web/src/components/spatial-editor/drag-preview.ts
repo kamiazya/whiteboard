@@ -30,12 +30,10 @@ export type DragPreview =
  * `boxes` — e.g. deleted mid-drag by a canvas-replaced event). Total: never
  * throws, never returns non-finite geometry for finite inputs.
  *
- * The resize branch calls `resizeBoxByDelta` — the SAME function
- * `reducePointerUpResizing` (gestures.ts) commits with at pointerup — so the
- * preview and the eventual commit cannot drift apart. If this function is
- * ever restructured, keep calling that shared helper rather than
- * reimplementing the resize arithmetic inline: a parallel implementation is
- * exactly the class of bug this comment exists to prevent.
+ * The resize branch must keep calling `resizeBoxByDelta` — the SAME function
+ * `reducePointerUpResizing` (gestures.ts) commits with at pointerup — rather
+ * than reimplementing the arithmetic inline, so the preview and the eventual
+ * commit cannot drift apart.
  */
 export function computeDragPreview(
   gestureState: GestureState,
@@ -43,39 +41,41 @@ export function computeDragPreview(
   livePoint: Point | null,
 ): DragPreview | undefined {
   if (livePoint === null) return undefined
-  if (gestureState.kind === 'moving') {
-    const box = boxes.find((b) => b.id === gestureState.nodeId)?.box
-    if (box === undefined) return undefined
-    return {
-      kind: 'box',
-      box: {
-        ...box,
-        x: gestureState.startX + (livePoint.x - gestureState.startPoint.x),
-        y: gestureState.startY + (livePoint.y - gestureState.startPoint.y),
-      },
+  switch (gestureState.kind) {
+    case 'moving': {
+      const box = boxes.find((b) => b.id === gestureState.nodeId)?.box
+      if (box === undefined) return undefined
+      return {
+        kind: 'box',
+        box: {
+          ...box,
+          x: gestureState.startX + (livePoint.x - gestureState.startPoint.x),
+          y: gestureState.startY + (livePoint.y - gestureState.startPoint.y),
+        },
+      }
     }
-  }
-  if (gestureState.kind === 'resizing') {
-    return {
-      kind: 'box',
-      box: resizeBoxByDelta(
-        gestureState.startBox,
-        gestureState.handle,
-        livePoint.x - gestureState.startPoint.x,
-        livePoint.y - gestureState.startPoint.y,
-      ),
+    case 'resizing':
+      return {
+        kind: 'box',
+        box: resizeBoxByDelta(
+          gestureState.startBox,
+          gestureState.handle,
+          livePoint.x - gestureState.startPoint.x,
+          livePoint.y - gestureState.startPoint.y,
+        ),
+      }
+    case 'connecting': {
+      const box = boxes.find((b) => b.id === gestureState.fromNodeId)?.box
+      if (box === undefined) return undefined
+      return {
+        kind: 'line',
+        from: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+        to: livePoint,
+      }
     }
+    default:
+      return undefined
   }
-  if (gestureState.kind === 'connecting') {
-    const box = boxes.find((b) => b.id === gestureState.fromNodeId)?.box
-    if (box === undefined) return undefined
-    return {
-      kind: 'line',
-      from: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-      to: livePoint,
-    }
-  }
-  return undefined
 }
 
 /**

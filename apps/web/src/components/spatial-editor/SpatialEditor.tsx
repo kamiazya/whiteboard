@@ -266,10 +266,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         : undefined
 
     /**
-     * The in-flight preview geometry, derived purely from the gesture's own
-     * start snapshot plus the live pointer — never from `canvas`, so it costs
-     * nothing beyond a few arithmetic ops per frame. See drag-preview.ts for
-     * why this is pulled out of this component and the single-source
+     * The in-flight preview geometry, derived per frame from the gesture's own
+     * start snapshot plus the live pointer — never from `canvas`. See
+     * drag-preview.ts for why that matters and for the single-source
      * `resizeBoxByDelta` guarantee it documents.
      */
     const dragPreview = useMemo(
@@ -301,16 +300,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
+     * Takes pointer capture and records which pointer we hold it for, as one
+     * step: the ref is what the unmount teardown effect releases from, so it
+     * must never be updated independently of the capture itself.
+     */
+    const capturePointer = (root: HTMLElement, pointerId: number): void => {
+      trySetPointerCapture(root, pointerId)
+      activePointerIdRef.current = pointerId
+    }
+
+    /**
      * Shared prologue for the overlay's pointer handlers: take pointer capture
      * on the root and hand it back, or `null` when the root is not mounted.
      * (The overlay itself already stops propagation to the root's hit-test.)
      */
     const beginOverlayGesture = (e: React.PointerEvent): HTMLDivElement | null => {
       const root = rootRef.current
-      if (root !== null) {
-        trySetPointerCapture(root, e.pointerId)
-        activePointerIdRef.current = e.pointerId
-      }
+      if (root !== null) capturePointer(root, e.pointerId)
       return root
     }
 
@@ -318,8 +324,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (e.button !== 0) return
       const root = rootRef.current
       if (root === null) return
-      trySetPointerCapture(root, e.pointerId)
-      activePointerIdRef.current = e.pointerId
+      capturePointer(root, e.pointerId)
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const hitId = hitTest(boxes, point)
