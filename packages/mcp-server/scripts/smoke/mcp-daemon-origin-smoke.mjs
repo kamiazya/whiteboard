@@ -160,22 +160,22 @@ try {
   }
 
   // Opening the seeded canvas must actually render it, not just list it.
-  // DaemonCanvasPage mounts the `Excalidraw` component directly (no
-  // wrapping `data-testid` of its own — that convention only exists on
-  // BrowserLocalCanvasPage), so the library's own root `.excalidraw` class
-  // is the stable, page-agnostic signal that the canvas actually rendered.
+  // Match the editor's OWN root (its `role="application"` + accessible name)
+  // rather than the page's wrapping `data-testid`: a wrapper can mount while
+  // the editor inside it fails, which is exactly the case this check exists
+  // to catch. Page-agnostic, so both canvas pages are covered by one signal.
   if (seededVisible) {
     await seededSlug.click()
-    const excalidrawVisible = await page
-      .locator('.excalidraw')
+    const editorVisible = await page
+      .locator('[role="application"][aria-label="Spatial canvas editor"]')
       .first()
       .waitFor({ state: 'visible', timeout: 20_000 })
       .then(() => true)
       .catch(() => false)
-    if (excalidrawVisible) {
-      console.log('  pass  opening the seeded canvas renders the Excalidraw surface')
+    if (editorVisible) {
+      console.log('  pass  opening the seeded canvas renders the spatial editor surface')
     } else {
-      console.error('  FAIL  opening the seeded canvas did not render the Excalidraw surface')
+      console.error('  FAIL  opening the seeded canvas did not render the spatial editor surface')
       failed = true
     }
   }
