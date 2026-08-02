@@ -6,7 +6,13 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.js'
 import { applyThemeClass, readPersistedTheme, resolveTheme } from './hooks/useThemeMode.js'
 import './index.css'
+import { purgeLegacyReconnectCredentials } from './lib/purge-legacy-reconnect-credentials.js'
 import './pwa/bootstrap.js'
+
+// Unconditional, ahead of anything else: removes a credential a pre-removal
+// build may have left in localStorage, independent of whether this tab ever
+// opens the IndexedDB store (see purge-legacy-reconnect-credentials.ts).
+purgeLegacyReconnectCredentials()
 
 // Apply the persisted theme class before React mounts so the first paint
 // matches the user's saved preference (avoids a light→dark flash on reload).
