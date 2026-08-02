@@ -22,13 +22,24 @@ async function clearDb(): Promise<void> {
 // the real payload instead of only the downloaded filename — a regression
 // that bypasses commands.exportJson (e.g. falling through to exportScene for
 // the 'json' format) would still produce *a* download, but not this content.
+//
+// Delegates to the real createObjectURL/revokeObjectURL rather than faking
+// the returned URL: the PNG export path (rasterizeSvgToPng) creates its own
+// internal object URL to bridge the rendered SVG into a real <img>, and a
+// fake URL there breaks that Image load with no relation to the download
+// blob under test. So a PNG export produces two captured blobs (the
+// intermediate SVG, then the final PNG) — assert on the last one.
 function captureExportedBlobs(): { blobs: Blob[] } {
   const captured: Blob[] = []
+  const realCreateObjectURL = URL.createObjectURL.bind(URL)
+  const realRevokeObjectURL = URL.revokeObjectURL.bind(URL)
   vi.spyOn(URL, 'createObjectURL').mockImplementation((obj: Blob | MediaSource) => {
     captured.push(obj as Blob)
-    return 'blob:mock-url'
+    return realCreateObjectURL(obj)
   })
-  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url: string) => {
+    realRevokeObjectURL(url)
+  })
   return { blobs: captured }
 }
 
@@ -91,6 +102,23 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     expect(blob.type).toBe('image/svg+xml')
     const text = await blob.text()
     expect(text).toContain('<svg')
+  })
+
+  it('rasterizes PNG through a real Canvas 2D context and <img> load', async () => {
+    await renderLoaded()
+    const { blobs } = captureExportedBlobs()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    const pngItem = await openExportMenuItem('Export as PNG')
+    fireEvent.pointerUp(pngItem)
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+    // rasterizeSvgToPng creates its own intermediate object URL (the
+    // rendered SVG fed into a real <img>) ahead of the final downloaded
+    // blob, so the last captured blob is the one under test here.
+    const blob = blobs[blobs.length - 1]!
+    expect(blob.type).toBe('image/png')
+    expect(blob.size).toBeGreaterThan(0)
   })
 
   // SpatialEditor exposes no Excalidraw-shaped imperative API, so
