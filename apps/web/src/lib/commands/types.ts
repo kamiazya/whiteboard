@@ -18,9 +18,8 @@ export interface WhiteboardCommandDeps {
 export type CommandErrorCode = 'invalid-input' | 'invalid-provider-state'
 
 // Every command failure surfaces as this typed error rather than a raw
-// TypeError from an undefined access (e.g. a null Excalidraw API), so every
-// consumer (WebMCP adapter, debug panel) can branch on `.code` instead of
-// parsing a message string.
+// TypeError from an undefined access, so every consumer (WebMCP adapter,
+// debug panel) can branch on `.code` instead of parsing a message string.
 export class CommandError extends Error {
   readonly code: CommandErrorCode
   // Declared explicitly: this repo's apps/web tsconfig targets ES2020, whose

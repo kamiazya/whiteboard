@@ -615,9 +615,9 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     vi.unstubAllGlobals()
   })
 
-  // RED FIRST — regression guard for the removed exportJson command chain:
-  // the export menu must never offer an entry a click on which always throws
-  // (SpatialEditor has no Excalidraw-shaped imperative API to export from).
+  // The menu must only offer formats `onExport` (SceneExportFormat) can
+  // actually produce — an entry outside that union is an affordance whose
+  // every click fails.
   it('never renders a JSON/Excalidraw export menu item', async () => {
     const onExport = vi.fn().mockResolvedValue(new Blob())
 

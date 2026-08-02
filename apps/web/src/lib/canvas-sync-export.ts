@@ -7,13 +7,13 @@ import type { ExportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-cont
 //
 // canvas-sync-session.ts wires `api: null` permanently (SpatialEditor has no
 // Excalidraw-shaped imperative API), so `sendExportResponse` below is
-// currently unreachable and only the queueing path in
-// handleIncomingExportRequest/flushPendingExportRequests ever runs. The
-// element/files shapes are declared locally (structurally identical to the
-// slice of Excalidraw's types this module used to import) rather than kept
-// as an `@excalidraw/excalidraw` dependency, since only `id`/`type`/
-// `fontSize`/`frameId` are actually read and `files` is passed through
-// opaquely.
+// unreachable today and only the queueing path in
+// handleIncomingExportRequest/flushPendingExportRequests ever runs.
+//
+// The element/files shapes are declared locally rather than imported from
+// `@excalidraw/excalidraw`: only `id`/`type`/`fontSize`/`frameId` are read
+// and `files` is passed through opaquely, so the structural declaration
+// carries the whole contract without the dependency.
 type ExportElement = {
   id: string
   type: string

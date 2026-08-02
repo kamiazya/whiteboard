@@ -8,10 +8,9 @@ import { describe, expect, it } from 'vitest'
  * does (see that file's doc comment) — covering static, side-effect, and
  * dynamic (`import(...)`) import forms in one regex pass.
  *
- * The dependency itself, `excalidraw-asset-path.ts` (+ its test), `main.tsx`,
- * and `docs-snapshots/*` are the intended end state for this dependency —
- * see `tmp/notes/opencanvas-cutover-design.md`'s D4/slice-D notes. No other
- * source file should import `@excalidraw/excalidraw`.
+ * `excalidraw-asset-path.ts` (+ its test), `main.tsx`, and
+ * `docs-snapshots/*` are the intended end state for this dependency; no
+ * other source file should import `@excalidraw/excalidraw`.
  */
 const sourceModules = import.meta.glob('./**/*.{ts,tsx}', {
   query: '?raw',

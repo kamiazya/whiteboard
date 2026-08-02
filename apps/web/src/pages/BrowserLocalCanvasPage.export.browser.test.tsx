@@ -119,9 +119,9 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     expect(blob.size).toBeGreaterThan(0)
   })
 
-  // Regression guard for the removed exportJson command chain: the export
-  // menu must never offer a JSON/Excalidraw entry whose only outcome is a
-  // thrown CommandError.
+  // The menu must only offer formats `exportScene` (SceneExportFormat) can
+  // actually produce — an entry outside that union is an affordance whose
+  // every click fails.
   it('never renders a JSON/Excalidraw export menu item', async () => {
     await renderLoaded()
     fireEvent.pointerDown(screen.getByLabelText('Canvas actions'), {
