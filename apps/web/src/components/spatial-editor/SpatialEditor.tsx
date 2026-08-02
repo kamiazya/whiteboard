@@ -50,6 +50,7 @@ import { TextNodeEditor } from './TextNodeEditor.js'
 import {
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
+  type Point,
   panBy,
   screenToCanvas,
   type Viewport,
@@ -399,6 +400,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return () => root.removeEventListener('wheel', onWheel)
     }, [])
 
+    /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
+    const createNodeAt = (point: Point) => {
+      applyResult(
+        reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
+      )
+    }
+
     const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
@@ -423,19 +431,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }
         return
       }
-      applyResult(
-        reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
-      )
+      createNodeAt(point)
     }
 
     const createNodeAtViewportCenter = () => {
       const root = rootRef.current
       const centerScreen =
         root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const point = screenToCanvas(centerScreen, viewport)
-      applyResult(
-        reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
-      )
+      createNodeAt(screenToCanvas(centerScreen, viewport))
     }
 
     return (

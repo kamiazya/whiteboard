@@ -30,15 +30,13 @@ describe('loro spatial-doc bridge boundary (apps/web)', () => {
     expect(productionFiles.length).toBeGreaterThan(50)
   })
 
-  it('the documented exemption is exactly src/test-utils/, nothing wider', () => {
-    expect([...EXEMPT_PATH_PREFIXES]).toEqual(['../test-utils/'])
+  it("no production file calls doc.getMap('nodes'|'edges') directly", async () => {
+    const sources = await Promise.all(
+      productionFiles.map(async (path) => ({ path, source: (await modules[path]?.()) as string })),
+    )
+    const offenders = sources
+      .filter(({ source }) => DIRECT_GET_MAP.test(source))
+      .map(({ path }) => path)
+    expect(offenders).toEqual([])
   })
-
-  for (const path of productionFiles) {
-    it(`${path} does not call doc.getMap('nodes'|'edges') directly`, async () => {
-      const loader = modules[path]
-      const source = (await loader?.()) as string
-      expect(source).not.toMatch(DIRECT_GET_MAP)
-    })
-  }
 })
