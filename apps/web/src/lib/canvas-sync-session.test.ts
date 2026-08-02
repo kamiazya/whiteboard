@@ -153,7 +153,7 @@ describe('createCanvasSyncSession', () => {
     writeSpatialCanvas(doc, patched)
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
-    expect(listener).toHaveBeenCalledWith(patched)
+    expect(listener).toHaveBeenCalledWith(patched, 'external')
     unsubscribe()
   })
 

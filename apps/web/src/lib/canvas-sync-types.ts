@@ -1,6 +1,7 @@
 import type {
   HeadChangedPayload,
   VersionCreatedPayload,
+  ViewportRequestPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 
 // Shared contract types/helpers for the canvas sync stack. These are plain,
@@ -35,6 +36,11 @@ export const CANVAS_SYNC_VERSION_SAVED_EVENT = 'excalidraw:version_saved'
 export interface UseCanvasSyncOptions {
   onVersionCreated?: (payload: VersionCreatedPayload) => void
   onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
+  // Daemon-driven viewport control (e.g. an MCP tool call asking the
+  // connected browser to fit/move its view). The page holds a
+  // SpatialEditorHandle ref and maps this payload onto it — see
+  // canvas-sync-session.ts's onViewportRequest forward.
+  onViewportRequest?: (payload: Omit<ViewportRequestPayload, 'type'>) => void
   // Fired in addition to (not instead of) the hook's own syncStatus:'error'
   // transition on a WS auth failure (close 1008), so a daemon-backed page
   // can surface a dedicated banner instead of the generic error state.

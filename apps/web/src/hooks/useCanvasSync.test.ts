@@ -465,7 +465,18 @@ describe('useCanvasSync', () => {
   })
 
   describe('onViewportRequest', () => {
-    it('is a stale-guarded no-op — viewport is owned by a SpatialEditorHandle the page holds, not this session', () => {
+    it('forwards the payload to the page-supplied onViewportRequest option', () => {
+      const backend = makeFakeBackend()
+      const onViewportRequest = vi.fn()
+      renderHook(() => useCanvasSync(backend, { onViewportRequest }))
+
+      const payload = { mode: 'fit' as const, requestId: 'req-1' }
+      backend._ctrl.handlers!.onViewportRequest(payload)
+
+      expect(onViewportRequest).toHaveBeenCalledWith(payload)
+    })
+
+    it('is a no-op (never throws) with no onViewportRequest option supplied', () => {
       const backend = makeFakeBackend()
       renderHook(() => useCanvasSync(backend))
 

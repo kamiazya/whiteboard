@@ -26,6 +26,12 @@ export interface UseCanvasSyncResult {
   syncStatus: SyncStatus
   canvas: SpatialCanvas
   onChange: (next: SpatialCanvas, command: EditorCommand) => void
+  // Bumps only on an externally-originated canvas publish (initial hydrate,
+  // remote import, undo, redo) — never on this hook's own `onChange`. Passed
+  // to SpatialEditor so it can tell "my own controlled re-render" apart from
+  // "the canvas was replaced out from under an in-flight gesture" and cancel
+  // the gesture only in the latter case.
+  externalVersion: number
   restoreInProgress: boolean
   restoreLabel: string | null
   clearLocalUndo: () => void
@@ -134,6 +140,7 @@ export function useCanvasSync(
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   const [canvas, setCanvas] = useState<SpatialCanvas>(EMPTY_CANVAS)
+  const [externalVersion, setExternalVersion] = useState(0)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
 
@@ -174,7 +181,10 @@ export function useCanvasSync(
       generations: generationsRef.current,
     })
     sessionRef.current = session
-    const unsubscribe = session.subscribe(setCanvas)
+    const unsubscribe = session.subscribe((next, origin) => {
+      setCanvas(next)
+      if (origin === 'external') setExternalVersion((v) => v + 1)
+    })
     session.connect()
     session.onEditorReady()
 
@@ -259,6 +269,7 @@ export function useCanvasSync(
     syncStatus,
     canvas,
     onChange,
+    externalVersion,
     restoreInProgress,
     restoreLabel,
     clearLocalUndo,

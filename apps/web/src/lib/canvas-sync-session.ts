@@ -119,9 +119,12 @@ export interface CanvasSyncSession {
   redo(): boolean
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
-  // Registers a listener for every published canvas value (initial hydrate,
-  // remote import, undo/redo). Returns an unsubscribe function.
-  subscribe(listener: (canvas: SpatialCanvas) => void): () => void
+  // Registers a listener for every published canvas value. `origin` tags
+  // whether the publish came from this session's own `onChange` ('local') or
+  // from initial hydrate / a remote import / undo / redo ('external') — a
+  // controlled SpatialEditor needs this to tell apart its own re-render from
+  // a replacement mid-gesture. Returns an unsubscribe function.
+  subscribe(listener: (canvas: SpatialCanvas, origin: 'local' | 'external') => void): () => void
 }
 
 function toPlainSpatialValue<T>(value: T): Record<string, unknown> {
@@ -202,7 +205,7 @@ export function createCanvasSyncSession(
   let doc: LoroDoc | null = null
   let undoManager: UndoManager | null = null
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
-  const listeners = new Set<(canvas: SpatialCanvas) => void>()
+  const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
   const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
   // Chains every onChange firing's commit so firings apply to the Loro doc
   // strictly in schedule order, never in async-settle order.
@@ -218,15 +221,17 @@ export function createCanvasSyncSession(
     return disposed || deps.generations.currentConnectionGeneration() !== myGeneration
   }
 
-  function notify(canvas: SpatialCanvas): void {
-    for (const listener of listeners) listener(canvas)
+  function notify(canvas: SpatialCanvas, origin: 'local' | 'external'): void {
+    for (const listener of listeners) listener(canvas, origin)
   }
 
   function getCanvas(): SpatialCanvas {
     return currentCanvas
   }
 
-  function subscribe(listener: (canvas: SpatialCanvas) => void): () => void {
+  function subscribe(
+    listener: (canvas: SpatialCanvas, origin: 'local' | 'external') => void,
+  ): () => void {
     listeners.add(listener)
     return () => {
       listeners.delete(listener)
@@ -247,7 +252,7 @@ export function createCanvasSyncSession(
     if (isStale()) return
     const canvas = readSpatialCanvas(targetDoc)
     currentCanvas = canvas
-    notify(canvas)
+    notify(canvas, 'external')
   }
 
   // Bridges flushPendingExportRequests'/handleIncomingExportRequest's
@@ -442,13 +447,13 @@ export function createCanvasSyncSession(
         }
       },
 
-      onViewportRequest(_payload) {
+      onViewportRequest(payload) {
         if (isStale()) return
-        // SpatialEditor owns viewport as local state with no imperative
-        // surface exposed to this session. Driving a daemon-requested
-        // viewport change is deferred to slice D of the OpenCanvas cutover,
-        // which adds a SpatialEditorHandle ref the page can hold and pass
-        // through here.
+        try {
+          deps.getOptions().onViewportRequest?.(payload)
+        } catch (err) {
+          log.error('onViewportRequest callback threw', err)
+        }
       },
 
       async onExportRequest(payload) {
@@ -544,7 +549,7 @@ export function createCanvasSyncSession(
     // own re-render reflects the edit right away; only the Loro write is
     // debounced in the background.
     currentCanvas = next
-    notify(next)
+    notify(next, 'local')
     if (!doc) return
     onCanvasChange(next, command)
   }
