@@ -3,7 +3,7 @@
 <p align="center">
   <img src="../assets/architecture.png" alt="Agent and user both draw on the same Excalidraw canvas via the Whiteboard MCP server" width="780" />
   <br />
-  <sub><i>Source: <a href="../assets/architecture.excalidraw">architecture.excalidraw</a> — open in Excalidraw to remix.</i></sub>
+  <sub><i>Source: <a href="../assets/architecture.canvas">architecture.canvas</a> — open as a JSON Canvas document to remix.</i></sub>
 </p>
 
 This project is split into three main runtime layers:
@@ -65,7 +65,7 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | `annotate` / `annotate_batch` | Add elements, single-shot or batched with grid layout. |
 | `update_element` / `delete_element` / `move_elements` / `canvas_clear` | Edit elements. |
 | `viewport_set` | Control browser pan and zoom (`mode: "fit"` / `"move"`). |
-| `export_canvas` | Export the canvas as `format: "png" \| "svg" \| "json"`. PNG on success also returns `imageBase64` as MCP `ImageContent` to the LLM; JSON is standard `.excalidraw` format for round-tripping with Excalidraw desktop or excalidraw.com. |
+| `export_canvas` | Export the canvas as `format: "png" \| "svg" \| "json"`. PNG on success also returns `imageBase64` as MCP `ImageContent` to the LLM; JSON is JSON Canvas 1.0 format (with the `x-whiteboard` extension) for round-tripping with other JSON Canvas-compatible tools. |
 | `version_save` / `version_restore` / `version_list` | Save and restore labeled canvas versions. `version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
 | `load_image` | Import an external image into the canvas. |
 
