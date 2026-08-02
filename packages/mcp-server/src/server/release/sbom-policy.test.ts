@@ -391,16 +391,11 @@ describe('generated SBOM content regression', () => {
       'pkg:npm/jsdom@', // jsdom
       'pkg:npm/fast-check@', // fast-check core
       '%40fast-check/', // @fast-check/* scoped
-      // @excalidraw/utils is intentionally NOT listed here: the headless
-      // export renderer moved to canvas-render + resvg, dropping
-      // @excalidraw/utils, happy-dom, and @napi-rs/canvas as production
-      // deps. @excalidraw/excalidraw itself was also removed from this
-      // package's dependencies (it was unused dead weight — apps/web is
-      // the sole remaining consumer and carries its own declaration), so it
-      // no longer has an SBOM entry either. It is covered by the
-      // `published-dependencies.test.ts` manifest guard instead of a
-      // pattern here; it is not dev-only, so it does not belong in this
-      // list either way.
+      // No @excalidraw/* pattern belongs here: those were production deps of
+      // the headless export renderer that moved to canvas-render + resvg, so
+      // they are not dev-only. They get their own explicit regression check
+      // in the removed-packages test below, plus a manifest-level guard in
+      // published-dependencies.test.ts.
       '%40stryker-mutator/', // @stryker-mutator/* mutation testing
       'pkg:npm/playwright@', // playwright core
       '%40playwright/', // @playwright/* scoped

@@ -13,39 +13,35 @@
 // assertion is deterministic and install-independent.
 
 import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PACKAGE_JSON_PATH = join(__dirname, '../../../package.json')
+// __dirname → packages/mcp-server/src/server/release
+const PACKAGE_ROOT = resolve(__dirname, '../../..')
 
-function readPackageJson(): Record<string, unknown> {
-  return JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8'))
-}
+const RUNTIME_DEPENDENCY_FIELDS = [
+  'dependencies',
+  'peerDependencies',
+  'optionalDependencies',
+] as const
 
-const DEPENDENCY_FIELDS = ['dependencies', 'peerDependencies', 'optionalDependencies'] as const
+const mcpPackage = JSON.parse(
+  readFileSync(resolve(PACKAGE_ROOT, 'package.json'), 'utf-8'),
+) as Partial<Record<(typeof RUNTIME_DEPENDENCY_FIELDS)[number], Record<string, string>>>
 
 describe('published mcp-server dependency set', () => {
   it('parses a non-empty dependencies block (sanity check for the guard itself)', () => {
-    const pkg = readPackageJson()
-    const dependencies = pkg.dependencies as Record<string, string> | undefined
-    expect(dependencies).toBeDefined()
-    expect(Object.keys(dependencies ?? {}).length).toBeGreaterThan(0)
+    expect(Object.keys(mcpPackage.dependencies ?? {})).not.toHaveLength(0)
   })
 
   it('never declares an @excalidraw/* package as a runtime dependency', () => {
-    const pkg = readPackageJson()
-    const offenders: string[] = []
-    for (const field of DEPENDENCY_FIELDS) {
-      const block = pkg[field] as Record<string, string> | undefined
-      if (!block) continue
-      for (const name of Object.keys(block)) {
-        if (name.startsWith('@excalidraw/')) {
-          offenders.push(`${field}.${name}`)
-        }
-      }
-    }
+    const offenders = RUNTIME_DEPENDENCY_FIELDS.flatMap((field) =>
+      Object.keys(mcpPackage[field] ?? {})
+        .filter((name) => name.startsWith('@excalidraw/'))
+        .map((name) => `${field}.${name}`),
+    )
     expect(offenders, `unexpected @excalidraw/* entries: ${offenders.join(', ')}`).toEqual([])
   })
 })
