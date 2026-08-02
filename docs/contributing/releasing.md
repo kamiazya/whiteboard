@@ -184,6 +184,16 @@ lockfile-pinned at v4.x):
   ensures the SBOM content regression tests in `sbom-policy.test.ts` always execute on
   the release path.
 
+- **Staleness guard**: `generate-npm-sbom.mjs` also writes a sidecar fingerprint file,
+  `packages/mcp-server/_artifacts/npm-sbom.inputs.json` (SHA-256 of `pnpm-lock.yaml`
+  and `packages/mcp-server/package.json`, plus a SHA-512 of the SBOM file itself).
+  `sbom-policy.test.ts` recomputes the current fingerprint before running its
+  content-policy assertions, so a locally generated SBOM that predates a dependency
+  change fails with an actionable "stale, run `pnpm --filter @kamiazya/whiteboard-mcp
+  generate:sbom:npm`" message instead of reading as a false dependency-policy
+  regression. See `packages/mcp-server/src/server/release/release-signing-provenance-sbom.md`
+  for the full contract (current/stale/absent states).
+
 ---
 
 ## Docker SBOM and Provenance
