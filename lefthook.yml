@@ -27,3 +27,5 @@ pre-push:
       run: pnpm test --project mcp-node
     noconsole:
       run: pnpm lint:noconsole
+    lint:
+      run: pnpm lint
