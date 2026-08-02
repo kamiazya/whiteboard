@@ -10,24 +10,6 @@ import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: ({ excalidrawAPI }: { excalidrawAPI?: (api: unknown) => void }) => {
-    if (excalidrawAPI) {
-      excalidrawAPI({
-        updateScene: vi.fn(),
-        addFiles: vi.fn(),
-        getSceneElements: () => [],
-        getAppState: () => ({}),
-        getFiles: () => ({}),
-      })
-    }
-    return <div data-testid="excalidraw-container" />
-  },
-  restoreElements: (els: unknown[]) => els,
-  CaptureUpdateAction: { NEVER: 'NEVER' },
-  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
-}))
-
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
   return {
@@ -110,7 +92,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
       )
     })
     await waitFor(() =>
-      expect(document.querySelector('[data-testid="excalidraw-container"]')).toBeTruthy(),
+      expect(document.querySelector('[data-testid="spatial-editor-container"]')).toBeTruthy(),
     )
     await act(async () => {
       await Promise.resolve()
@@ -157,7 +139,7 @@ describe('DaemonCanvasPage WebMCP wiring', () => {
       )
     })
     await waitFor(() =>
-      expect(document.querySelector('[data-testid="excalidraw-container"]')).toBeTruthy(),
+      expect(document.querySelector('[data-testid="spatial-editor-container"]')).toBeTruthy(),
     )
     await act(async () => {
       await Promise.resolve()

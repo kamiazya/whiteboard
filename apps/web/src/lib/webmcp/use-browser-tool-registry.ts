@@ -10,8 +10,20 @@ const log = getAppLogger('use-browser-tool-registry')
  * file so a future CG Draft rename only requires editing here. Per
  * developer.chrome.com/docs/ai/webmcp/imperative-api (checked at
  * implementation time) the surface hangs off `document`, not `navigator`.
- * `registerTool` is async (registration is not synchronous) and takes an
- * `AbortSignal` for cancellation instead of returning an unregister handle.
+ * `registerTool` takes an `AbortSignal` for cancellation instead of returning
+ * an unregister handle.
+ *
+ * It is **synchronous and returns `undefined`** — verified against the shipping
+ * implementation, not inferred from the draft's prose. Treating it as a promise
+ * throws `TypeError: Cannot read properties of undefined` inside the effect,
+ * which React escalates to the error boundary: the whole canvas page dies, and
+ * only in browsers that actually have WebMCP. A duplicate tool name likewise
+ * throws (`InvalidStateError`) synchronously rather than rejecting, so the one
+ * call site needs try/catch and not a rejection handler.
+ *
+ * `registerTool.length` reports 1 because WebIDL counts only required
+ * arguments; the optional options bag is still honoured, and aborting its
+ * signal really does unregister the tool.
  */
 export interface WebMcpToolDescriptor {
   readonly name: string
@@ -22,7 +34,7 @@ export interface WebMcpToolDescriptor {
 }
 
 export interface ModelContext {
-  registerTool(descriptor: WebMcpToolDescriptor, options: { signal: AbortSignal }): Promise<void>
+  registerTool(descriptor: WebMcpToolDescriptor, options?: { signal: AbortSignal }): void
 }
 
 // document.modelContext is not yet in lib.dom.d.ts; declared narrowly here
@@ -77,21 +89,21 @@ export function useBrowserToolRegistry(
         annotations: { readOnlyHint: tool.readOnlyHint },
         execute: (args) => tool.execute(commands, args),
       }
-      // A rejected registration (e.g. aborted before the browser finishes
-      // registering, a duplicate-name refusal, or a draft-API incompatibility)
-      // must not become an unhandled promise rejection — there is no UI
-      // surface to report it to. It is still logged (dev-only, via
-      // getAppLogger) so a silently-missing tool is at least visible during
-      // development instead of only inferable from its absence. The catch
-      // runs even after an abort-triggered rejection since `.catch` always
-      // attaches regardless of ordering against `controller.abort()` below.
-      modelContext.registerTool(descriptor, { signal: controller.signal }).catch((err: unknown) => {
+      // A failed registration (a duplicate-name refusal, a draft-API
+      // incompatibility) must not escape this effect: React escalates a throw
+      // here to the error boundary, so one refused tool would take down the
+      // whole canvas page. It is still logged (dev-only, via getAppLogger) so a
+      // silently-missing tool is visible during development rather than only
+      // inferable from its absence.
+      try {
+        modelContext.registerTool(descriptor, { signal: controller.signal })
+      } catch (err: unknown) {
         // An abort is the normal unmount/canvas-switch/StrictMode path, not a
         // failure — logging it would fill the console with false positives on
         // every teardown. Only genuine registration failures are surfaced.
-        if (controller.signal.aborted) return
+        if (controller.signal.aborted) continue
         log.warn(`registerTool(${tool.name}) failed`, err)
-      })
+      }
     }
 
     return () => {

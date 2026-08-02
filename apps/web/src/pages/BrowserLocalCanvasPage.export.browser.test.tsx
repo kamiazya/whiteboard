@@ -19,22 +19,31 @@ async function clearDb(): Promise<void> {
 }
 
 // Captures every Blob handed to URL.createObjectURL so assertions can inspect
-// the real payload instead of only the downloaded filename — a regression
-// that bypasses commands.exportJson (e.g. falling through to exportScene for
-// the 'json' format) would still produce *a* download, but not this content.
+// the real payload instead of only the downloaded filename.
+//
+// Delegates to the real createObjectURL/revokeObjectURL rather than faking
+// the returned URL: the PNG export path (rasterizeSvgToPng) creates its own
+// internal object URL to bridge the rendered SVG into a real <img>, and a
+// fake URL there breaks that Image load with no relation to the download
+// blob under test. So a PNG export produces two captured blobs (the
+// intermediate SVG, then the final PNG) — assert on the last one.
 function captureExportedBlobs(): { blobs: Blob[] } {
   const captured: Blob[] = []
+  const realCreateObjectURL = URL.createObjectURL.bind(URL)
+  const realRevokeObjectURL = URL.revokeObjectURL.bind(URL)
   vi.spyOn(URL, 'createObjectURL').mockImplementation((obj: Blob | MediaSource) => {
     captured.push(obj as Blob)
-    return 'blob:mock-url'
+    return realCreateObjectURL(obj)
   })
-  vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  vi.spyOn(URL, 'revokeObjectURL').mockImplementation((url: string) => {
+    realRevokeObjectURL(url)
+  })
   return { blobs: captured }
 }
 
 async function renderLoaded(): Promise<void> {
   render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-  await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
 }
@@ -67,7 +76,7 @@ async function openExportMenuItem(label: string): Promise<HTMLElement> {
   return item
 }
 
-describe('BrowserLocalCanvasPage export (browser — real Excalidraw)', () => {
+describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Excalidraw)', () => {
   beforeEach(async () => {
     await clearDb()
   })
@@ -77,24 +86,50 @@ describe('BrowserLocalCanvasPage export (browser — real Excalidraw)', () => {
     vi.restoreAllMocks()
   })
 
-  it('exports JSON through commands.exportJson as a real .excalidraw envelope, not exportScene', async () => {
+  it('exports SVG through the imperative-API-free exportScene path', async () => {
     await renderLoaded()
     const { blobs } = captureExportedBlobs()
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
-    const jsonItem = await openExportMenuItem('Export as JSON')
-    fireEvent.pointerUp(jsonItem)
+    const svgItem = await openExportMenuItem('Export as SVG')
+    fireEvent.pointerUp(svgItem)
 
     await waitFor(() => expect(clickSpy).toHaveBeenCalled())
     expect(blobs).toHaveLength(1)
     const blob = blobs[0]
-    expect(blob.type).toBe('application/json')
-
+    expect(blob.type).toBe('image/svg+xml')
     const text = await blob.text()
-    const parsed = JSON.parse(text)
-    // The commands-layer envelope (serializeSceneAsExcalidrawJson) — a
-    // exportScene('svg'|'png') fallback would never produce this shape.
-    expect(parsed).toMatchObject({ type: 'excalidraw', version: 2 })
-    expect(Array.isArray(parsed.elements)).toBe(true)
+    expect(text).toContain('<svg')
+  })
+
+  it('rasterizes PNG through a real Canvas 2D context and <img> load', async () => {
+    await renderLoaded()
+    const { blobs } = captureExportedBlobs()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    const pngItem = await openExportMenuItem('Export as PNG')
+    fireEvent.pointerUp(pngItem)
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+    // rasterizeSvgToPng creates its own intermediate object URL (the
+    // rendered SVG fed into a real <img>) ahead of the final downloaded
+    // blob, so the last captured blob is the one under test here.
+    const blob = blobs[blobs.length - 1]!
+    expect(blob.type).toBe('image/png')
+    expect(blob.size).toBeGreaterThan(0)
+  })
+
+  // The menu must only offer formats `exportScene` (SceneExportFormat) can
+  // actually produce — an entry outside that union is an affordance whose
+  // every click fails.
+  it('never renders a JSON/Excalidraw export menu item', async () => {
+    await renderLoaded()
+    fireEvent.pointerDown(screen.getByLabelText('Canvas actions'), {
+      button: 0,
+      ctrlKey: false,
+    })
+    await waitFor(() => expect(screen.getByText('Export as PNG')).toBeInTheDocument())
+
+    expect(screen.queryByText(/json|excalidraw/i)).toBeNull()
   })
 })

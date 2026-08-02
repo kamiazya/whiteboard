@@ -2,14 +2,11 @@ import { useCallback, useState } from 'react'
 import type { SceneExportFormat } from '@/hooks/useCanvasSync'
 import type { AppLogger } from '@/lib/app-logger'
 
-// JSON exports carry the standard .excalidraw extension (the file format
-// Excalidraw and the daemon's canvas_export_json both use); png/svg map to
-// their own extension. Keyed by SceneExportFormat so a new format must add
-// its own entry rather than silently inheriting a default.
+// Keyed by SceneExportFormat so a new format must add its own entry rather
+// than silently inheriting a default.
 const EXPORT_CONFIG: Record<SceneExportFormat, { extension: string; label: string }> = {
   png: { extension: 'png', label: 'PNG' },
   svg: { extension: 'svg', label: 'SVG' },
-  json: { extension: 'excalidraw', label: 'Excalidraw JSON' },
 }
 
 interface UseSceneExportOptions {

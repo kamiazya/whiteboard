@@ -1,6 +1,3 @@
-import { Excalidraw } from '@excalidraw/excalidraw'
-import '@excalidraw/excalidraw/index.css'
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
@@ -10,16 +7,19 @@ import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
+import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
+import { SpatialEditor } from '../components/spatial-editor/index.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
+import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { useDaemonCanvasController } from './use-daemon-canvas-controller.js'
 
@@ -96,7 +96,7 @@ export function DaemonCanvasPage({
   // current capabilities.webMcpEnabled value is needed.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
-  const { theme, resolvedTheme, setTheme } = useThemeMode()
+  const { theme, setTheme } = useThemeMode()
 
   // The selected (workspaceId, slug) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
@@ -144,21 +144,26 @@ export function DaemonCanvasPage({
     if (backend) setAuthError(false)
   }, [backend])
 
-  const { setExcalidrawAPI, onChange, clearLocalUndo, exportScene } = useCanvasSync(backend, {
+  // Holds the mounted SpatialEditor's imperative handle so a daemon-driven
+  // viewport_request (see onViewportRequest below) can reach it without
+  // useCanvasSync/canvas-sync-session owning a DOM-facing ref themselves.
+  const spatialEditorRef = useRef<SpatialEditorHandle | null>(null)
+
+  const {
+    canvas: canvasValue,
+    onChange,
+    externalVersion,
+    clearLocalUndo,
+    exportScene,
+  } = useCanvasSync(backend, {
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
+    onViewportRequest: (payload) => applyViewportRequest(payload, spatialEditorRef.current),
     identity: canvas ?? undefined,
   })
 
-  // Fans out to both useCanvasSync's own imperative-API ref (via
-  // setExcalidrawAPI below) and this page-local ref, so the commands layer
-  // can read the live Excalidraw API without useCanvasSync needing to expose
-  // its internal ref.
-  const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null)
-
   const commands = useWhiteboardCommands({
-    getExcalidrawApi: () => excalidrawApiRef.current,
     provider: { kind: 'local-daemon', daemonBaseUrl, capabilities },
     // The daemon canvas summary carries no display name yet (only
     // slug/updatedAt) — the slug doubles as `name` until that changes.
@@ -167,8 +172,6 @@ export function DaemonCanvasPage({
         ? { workspaceId: canvas.workspaceId, canvasId: canvas.slug, name: canvas.slug }
         : null,
   })
-
-  const handleExport = createSceneExportHandler(commands, exportScene)
 
   // Identity key = workspaceId+slug, matching this page's own canvas
   // Reactive: toggling in the SettingsPanel updates this state, which causes
@@ -340,7 +343,7 @@ export function DaemonCanvasPage({
             onRestored={clearLocalUndo}
             versionPanelExtra={versionPanelExtra}
             onNavigateBack={onNavigateBack}
-            onExport={handleExport}
+            onExport={exportScene}
             onOpenSettings={handleOpenSettings}
           />
         )}
@@ -455,14 +458,21 @@ export function DaemonCanvasPage({
             </form>
           </div>
         ) : (
-          <div className="min-h-0 flex-1">
-            <Excalidraw
-              excalidrawAPI={(api) => {
-                excalidrawApiRef.current = api
-                setExcalidrawAPI(api)
-              }}
+          // Spatial is the only view this slice supports; markdown-view
+          // persistence is deferred (canvas-workspace has no markdown-body
+          // container to write to yet).
+          <div data-testid="spatial-editor-container" className="min-h-0 flex-1">
+            {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
+                gesture and open text editor all describe ONE canvas, and
+                `SpatialCanvas` carries no id for the editor to notice a switch
+                by. Without the key, switching canvases silently inherits the
+                previous canvas's viewport. */}
+            <SpatialEditor
+              key={canvas ? `${canvas.workspaceId}/${canvas.slug}` : 'no-canvas'}
+              ref={spatialEditorRef}
+              canvas={canvasValue}
               onChange={onChange}
-              theme={resolvedTheme}
+              externalVersion={externalVersion}
             />
           </div>
         )}

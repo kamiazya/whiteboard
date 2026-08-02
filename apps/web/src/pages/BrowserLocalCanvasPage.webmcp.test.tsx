@@ -13,30 +13,6 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-// Excalidraw requires a real browser (roughjs native bindings). Mock it in jsdom.
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: ({ excalidrawAPI }: { excalidrawAPI?: (api: unknown) => void }) => {
-    if (excalidrawAPI) {
-      excalidrawAPI({
-        updateScene: vi.fn(),
-        addFiles: vi.fn(),
-        getSceneElements: () => [],
-        getAppState: () => ({
-          scrollX: 0,
-          scrollY: 0,
-          zoom: { value: 1 },
-          selectedElementIds: {},
-        }),
-        getFiles: () => ({}),
-      })
-    }
-    return <div data-testid="excalidraw-mock" />
-  },
-  restoreElements: (els: unknown[]) => els,
-  CaptureUpdateAction: { NEVER: 'NEVER' },
-  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
-}))
-
 vi.mock('../lib/browser-local-backend.js', () => ({
   BrowserLocalBackend: class {
     connect(handlers: { onConnected: () => void; onSnapshot: (b: Uint8Array) => void }) {

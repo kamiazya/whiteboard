@@ -138,6 +138,9 @@ importers:
       '@kamiazya/whiteboard-canvas-viewer':
         specifier: workspace:*
         version: link:../../packages/canvas-viewer
+      '@kamiazya/whiteboard-canvas-workspace':
+        specifier: workspace:*
+        version: link:../../packages/canvas-workspace
       '@kamiazya/whiteboard-mcp':
         specifier: workspace:*
         version: link:../../packages/mcp-server

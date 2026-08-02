@@ -65,6 +65,44 @@ describe('gesture reducer', () => {
     expect(result.command).toBeUndefined()
   })
 
+  it('an externally-originated canvas-replaced (e.g. undo) cancels an in-flight move even when the target node still exists unchanged', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown',
+      nodeId: 'a',
+      point: { x: 50, y: 30 },
+    })
+    result = reduceGesture(result.state, c, { type: 'pointermove', point: { x: 70, y: 45 } })
+    // Same canvas contents as the start snapshot (the undo shape: node still
+    // exists, coordinates reverted) — targetsStillValid would say "continue",
+    // but an external replacement must cancel regardless.
+    result = reduceGesture(result.state, c, {
+      type: 'canvas-replaced',
+      canvas: c,
+      origin: 'external',
+    })
+    expect(result.state.kind).toBe('idle')
+    expect(result.command).toBeUndefined()
+  })
+
+  it('a locally-originated canvas-replaced leaves a valid in-flight move gesture unaffected', () => {
+    const c = canvas()
+    let result = reduceGesture(createIdleState(), c, {
+      type: 'pointerdown',
+      nodeId: 'a',
+      point: { x: 50, y: 30 },
+    })
+    result = reduceGesture(result.state, c, { type: 'pointermove', point: { x: 70, y: 45 } })
+    result = reduceGesture(result.state, c, {
+      type: 'canvas-replaced',
+      canvas: c,
+      origin: 'local',
+    })
+    expect(result.state.kind).toBe('moving')
+    result = reduceGesture(result.state, c, { type: 'pointerup', point: { x: 70, y: 45 } })
+    expect(result.command).toEqual({ kind: 'move-node', id: 'a', x: 30, y: 25 })
+  })
+
   it('aborts cleanly when the target node type changes mid-drag', () => {
     const c = canvas()
     let result = reduceGesture(createIdleState(), c, {
@@ -358,6 +396,23 @@ describe('text-edit gesture', () => {
       text: 'hi',
     })
     const result = reduceGesture(editing.state, c, { type: 'cancel-text-edit' })
+    expect(result.state.kind).toBe('idle')
+    expect(result.command).toBeUndefined()
+  })
+
+  it('an externally-originated canvas-replaced closes an open text edit without committing its pending text', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const updated = reduceGesture(editing.state, c, { type: 'update-text-edit', text: 'edited' })
+    const result = reduceGesture(updated.state, c, {
+      type: 'canvas-replaced',
+      canvas: c,
+      origin: 'external',
+    })
     expect(result.state.kind).toBe('idle')
     expect(result.command).toBeUndefined()
   })

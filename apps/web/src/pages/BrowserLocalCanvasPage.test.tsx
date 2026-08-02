@@ -45,35 +45,6 @@ class FakeLoroStore implements LoroStoreLike {
   }
 }
 
-// Excalidraw requires a real browser (roughjs native bindings). Mock it in jsdom.
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: ({
-    excalidrawAPI,
-    theme,
-  }: {
-    excalidrawAPI?: (api: unknown) => void
-    theme?: string
-  }) => {
-    if (excalidrawAPI) {
-      excalidrawAPI({
-        updateScene: vi.fn(),
-        addFiles: vi.fn(),
-        getSceneElements: () => [],
-        getAppState: () => ({}),
-        getFiles: () => ({}),
-      })
-    }
-    // Surfaces the received theme so tests can assert the page actually
-    // wires resolvedTheme through to the editor, not just the button label.
-    // Distinct testid: the page's own wrapper already claims
-    // "excalidraw-container".
-    return <div data-testid="excalidraw-mock" data-theme={theme ?? ''} />
-  },
-  restoreElements: (els: unknown[]) => els,
-  CaptureUpdateAction: { NEVER: 'NEVER' },
-  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
-}))
-
 // BrowserLocalBackend uses LoroDoc; mock it to avoid WASM in jsdom.
 vi.mock('../lib/browser-local-backend.js', () => ({
   BrowserLocalBackend: class {
@@ -354,8 +325,9 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       render(<BrowserLocalCanvasPage store={failingSaveStore} />)
     })
-    // Trigger a save failure via the Excalidraw onChange callback — since Excalidraw is mocked,
-    // we cannot click "add rectangle" anymore. Instead verify the persistence state starts as Saved.
+    // A real save-failure round trip through SpatialEditor's onChange needs a
+    // pointer gesture this suite does not drive; verify the persistence
+    // state at least starts as Saved rather than immediately degraded.
     expect(screen.getByText('Saved')).toBeTruthy()
   })
 
@@ -448,7 +420,7 @@ describe('BrowserLocalCanvasPage', () => {
     }
   })
 
-  it('does not render an "Add rectangle" button — scene writes flow through Excalidraw onChange', async () => {
+  it('does not render an "Add rectangle" button — scene writes flow through SpatialEditor gestures', async () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
@@ -772,14 +744,11 @@ describe('BrowserLocalCanvasPage', () => {
         toggle.click()
       })
       expect(screen.getByRole('button', { name: /theme: light/i })).toBeTruthy()
-      // The resolved theme must reach the editor, not just the button label.
-      expect(screen.getByTestId('excalidraw-mock').getAttribute('data-theme')).toBe('light')
       const lightToggle = screen.getByRole('button', { name: /theme: light/i })
       await act(async () => {
         lightToggle.click()
       })
       expect(screen.getByRole('button', { name: /theme: dark/i })).toBeTruthy()
-      expect(screen.getByTestId('excalidraw-mock').getAttribute('data-theme')).toBe('dark')
     })
   })
 
@@ -798,37 +767,6 @@ describe('BrowserLocalCanvasPage', () => {
       await screen.findByText('Other canvas')
       expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)
       expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
-    })
-  })
-
-  describe('Export → JSON routes through the commands layer', () => {
-    it('downloads a .excalidraw envelope produced by commands.exportJson', async () => {
-      vi.useRealTimers()
-      const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
-      await store.save(snap)
-      vi.stubGlobal('URL', {
-        ...URL,
-        createObjectURL: vi.fn(() => 'blob:mock-url'),
-        revokeObjectURL: vi.fn(),
-      })
-      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-      await act(async () => {
-        render(<BrowserLocalCanvasPage store={store} />)
-      })
-      const canvasActions = await screen.findByLabelText('Canvas actions')
-      fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-      const jsonItem = await screen.findByText('Export as JSON')
-      await act(async () => {
-        fireEvent.pointerUp(jsonItem)
-      })
-
-      await waitFor(() => expect(clickSpy).toHaveBeenCalled())
-      const anchor = clickSpy.mock.instances[0] as HTMLAnchorElement
-      expect(anchor.download).toBe('untitled.excalidraw')
-
-      vi.unstubAllGlobals()
     })
   })
 })

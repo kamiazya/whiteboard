@@ -615,15 +615,11 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('invokes onExport with "json" and downloads it under a .excalidraw filename', async () => {
-    const blob = new Blob(['{"type":"excalidraw"}'], { type: 'application/json' })
-    const onExport = vi.fn().mockResolvedValue(blob)
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL: vi.fn(() => 'blob:mock-url'),
-      revokeObjectURL: vi.fn(),
-    })
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  // The menu must only offer formats `onExport` (SceneExportFormat) can
+  // actually produce — an entry outside that union is an affordance whose
+  // every click fails.
+  it('never renders a JSON/Excalidraw export menu item', async () => {
+    const onExport = vi.fn().mockResolvedValue(new Blob())
 
     render(
       <WorkspaceTopBar
@@ -639,17 +635,9 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     )
 
     await openCanvasActions()
-    const jsonItem = await screen.findByText('Export as JSON')
-    fireEvent.pointerUp(jsonItem)
-
-    await waitFor(() => expect(onExport).toHaveBeenCalledWith('json'))
-    // The download must carry the standard .excalidraw extension, not .json.
-    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
-    const anchor = clickSpy.mock.instances[0] as HTMLAnchorElement
-    expect(anchor.download).toBe('canvas-a.excalidraw')
-
-    clickSpy.mockRestore()
-    vi.unstubAllGlobals()
+    expect(screen.getByText('Export as PNG')).toBeTruthy()
+    expect(screen.getByText('Export as SVG')).toBeTruthy()
+    expect(screen.queryByText(/json|excalidraw/i)).toBeNull()
   })
 
   it('does not throw when onExport resolves null (export unavailable)', async () => {

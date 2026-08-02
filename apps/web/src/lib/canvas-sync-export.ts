@@ -1,16 +1,32 @@
-import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types'
-import type { BinaryFiles } from '@excalidraw/excalidraw/types'
 import type { ExportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-contract'
 
 // Ported verbatim from the original daemon-served UI's useWhiteboardSync
 // helpers (since retired; buildWhiteboardWsProtocols/buildWhiteboardWsUrl and
 // applyRestoreComplete/RestoreCompleteDeps were intentionally excluded —
 // daemon-only / trivially inlined at the call site instead).
+//
+// canvas-sync-session.ts wires `api: null` permanently (SpatialEditor has no
+// Excalidraw-shaped imperative API), so `sendExportResponse` below is
+// unreachable today and only the queueing path in
+// handleIncomingExportRequest/flushPendingExportRequests ever runs.
+//
+// The element/files shapes are declared locally rather than imported from
+// `@excalidraw/excalidraw`: only `id`/`type`/`fontSize`/`frameId` are read
+// and `files` is passed through opaquely, so the structural declaration
+// carries the whole contract without the dependency.
+type ExportElement = {
+  id: string
+  type: string
+  fontSize: number
+  frameId?: string | null
+}
+
+type ExportFiles = Record<string, unknown>
 
 type ExportApi = {
-  getSceneElements: () => readonly ExcalidrawElement[]
+  getSceneElements: () => readonly ExportElement[]
   getAppState: () => Record<string, unknown>
-  getFiles: () => BinaryFiles
+  getFiles: () => ExportFiles
 }
 
 type ExportRequestPayloadNoType = Omit<ExportRequestPayload, 'type'>
@@ -20,9 +36,9 @@ export interface ExportRequestHandlerDeps {
   pending: ExportRequestPayloadNoType[]
   send: (message: string) => void
   exportToBlobFn: (args: {
-    elements: readonly ExcalidrawElement[]
+    elements: readonly ExportElement[]
     appState: Record<string, unknown>
-    files: BinaryFiles
+    files: ExportFiles
     exportPadding: number
   }) => Promise<Blob>
   blobToBase64Fn: (blob: Blob) => Promise<string>
@@ -37,18 +53,18 @@ async function sendExportResponse(
   // If frameId is set, keep only that frame's children (el.frameId === target) and the frame itself.
   // A missing frameId resolves to an empty list.
   const frameId = msg.frameId
-  const scoped: readonly ExcalidrawElement[] =
+  const scoped: readonly ExportElement[] =
     frameId !== undefined
       ? rawElements.filter((el) => el.id === frameId || el.frameId === frameId)
       : rawElements
   const minFontPx = msg.minFontPx
-  const elements: readonly ExcalidrawElement[] =
+  const elements: readonly ExportElement[] =
     minFontPx !== undefined
       ? scoped.map((el) => {
           if (el.type !== 'text' || el.fontSize >= minFontPx) {
             return el
           }
-          return { ...el, fontSize: minFontPx } as ExcalidrawElement
+          return { ...el, fontSize: minFontPx }
         })
       : scoped
   const rawAppState = api.getAppState()

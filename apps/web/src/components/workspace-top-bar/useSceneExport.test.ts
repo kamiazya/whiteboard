@@ -30,7 +30,7 @@ describe('useSceneExport', () => {
       useSceneExport({ onExport: undefined, filenameBase: 'my-canvas' }),
     )
     await act(async () => {
-      await result.current.handleExport('json')
+      await result.current.handleExport('png')
     })
     expect(result.current.exportError).toBeNull()
   })

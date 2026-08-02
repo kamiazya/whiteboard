@@ -87,10 +87,6 @@ export function CanvasActionsMenu({
                 <Download className="size-3.5" />
                 Export as SVG
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onExport('json')} className="gap-2">
-                <Download className="size-3.5" />
-                Export as JSON
-              </DropdownMenuItem>
             </>
           )}
         </DropdownMenuContent>

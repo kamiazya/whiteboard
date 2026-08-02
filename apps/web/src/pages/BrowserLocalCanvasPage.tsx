@@ -1,9 +1,7 @@
-import { Excalidraw } from '@excalidraw/excalidraw'
-import '@excalidraw/excalidraw/index.css'
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
+import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,7 +19,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
+import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -136,7 +134,7 @@ export function BrowserLocalCanvasPage({
   // Owned locally rather than threaded down from App.tsx: useThemeMode already
   // persists to localStorage and applies the <html class="dark"> toggle
   // itself, so there is no App-level state this page needs to share.
-  const { theme, resolvedTheme, setTheme } = useThemeMode()
+  const { theme, setTheme } = useThemeMode()
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
@@ -154,12 +152,6 @@ export function BrowserLocalCanvasPage({
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
-
-  // Fans out to both useCanvasSync's own imperative-API ref (via
-  // setExcalidrawAPI below) and this page-local ref, so the commands layer
-  // can read the live Excalidraw API without useCanvasSync needing to expose
-  // its internal ref.
-  const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null)
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
@@ -233,38 +225,15 @@ export function BrowserLocalCanvasPage({
     [canvasId],
   )
 
-  // Surfaced when the backend's putFile rejects (IDB write/quota failure),
-  // so a failed image upload is never silent — see useCanvasSync's own
-  // no-silent-success contract for putFile. Cleared on the next successful
-  // upload so a transient failure doesn't stick around forever.
-  const [fileUploadError, setFileUploadError] = useState<string | null>(null)
-
-  // This banner is page-level state, not scoped per backend connection, so a
-  // failure seen on canvas A would otherwise keep showing after switching to
-  // canvas B (which never fired the failure). Reset whenever the loaded
-  // canvas identity changes so a stale error never follows the user across
-  // canvases.
-  useEffect(() => {
-    setFileUploadError(null)
-  }, [canvasId])
-
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
-  const { setExcalidrawAPI, onChange, exportScene } = useCanvasSync(backend, {
-    onFileUploadFailed: () => {
-      setFileUploadError('Could not save an image to this browser. It may not survive a reload.')
-    },
-    onFileUploadSucceeded: () => setFileUploadError(null),
-  })
+  const { canvas, onChange, externalVersion, exportScene } = useCanvasSync(backend)
 
   const commands = useWhiteboardCommands({
-    getExcalidrawApi: () => excalidrawApiRef.current,
     provider: { kind: 'browser-local', capabilities },
     canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
   })
-
-  const handleExport = createSceneExportHandler(commands, exportScene)
 
   // Reactive: toggling in the SettingsPanel updates this state, which causes
   // useBrowserToolRegistry to re-run (ON→OFF triggers abort via the hook's
@@ -373,7 +342,7 @@ export function BrowserLocalCanvasPage({
             branches: capabilities.branches,
             merge: capabilities.merge,
           }}
-          onExport={handleExport}
+          onExport={exportScene}
           onOpenSettings={handleOpenSettings}
         />
       </Suspense>
@@ -394,11 +363,6 @@ export function BrowserLocalCanvasPage({
         {duplicateError && (
           <div role="alert" aria-live="assertive" className="text-destructive">
             {duplicateError}
-          </div>
-        )}
-        {fileUploadError && (
-          <div role="alert" aria-live="assertive" className="text-destructive">
-            {fileUploadError}
           </div>
         )}
         <span className="ml-auto text-muted-foreground">
@@ -444,14 +408,20 @@ export function BrowserLocalCanvasPage({
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      <div data-testid="excalidraw-container" className="min-h-0 flex-1">
-        <Excalidraw
-          excalidrawAPI={(api) => {
-            excalidrawApiRef.current = api
-            setExcalidrawAPI(api)
-          }}
+      {/* Spatial is the only view this slice supports; markdown-view
+          persistence is deferred (canvas-workspace has no markdown-body
+          container to write to yet). */}
+      <div data-testid="spatial-editor-container" className="min-h-0 flex-1">
+        {/* Keyed on canvas identity: the editor's pan/zoom, in-flight gesture
+            and open text editor all describe ONE canvas, and `SpatialCanvas`
+            carries no id for the editor to notice a switch by. Without the
+            key, switching canvases silently inherits the previous canvas's
+            viewport. */}
+        <SpatialEditor
+          key={canvasId ?? 'no-canvas'}
+          canvas={canvas}
           onChange={onChange}
-          theme={resolvedTheme}
+          externalVersion={externalVersion}
         />
       </div>
       <SettingsPanel

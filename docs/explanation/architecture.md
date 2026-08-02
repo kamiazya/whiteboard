@@ -10,7 +10,7 @@ This project is split into three main runtime layers:
 
 1. A `stdio` MCP server that tools like Claude Code and Codex connect to.
 2. A local daemon that serves HTTP and WebSocket endpoints on loopback.
-3. A browser canvas built with React, Excalidraw, and Loro-backed synchronization.
+3. A browser canvas built with React, a spatial OpenCanvas editor, and Loro-backed synchronization.
 
 ## Main components
 
@@ -27,8 +27,10 @@ This project is split into three main runtime layers:
     [ADR-0001](../contributing/adr/0001-apps-web-canonical-frontend.md));
     server-mode serves a minimal static placeholder at its root instead
 - **browser canvas**
-  - React + Excalidraw app in `apps/web`, deployable standalone or served
-    same-origin by the daemon
+  - React app in `apps/web` rendering OpenCanvas content through the
+    `SpatialEditor` component (select, move, resize, connect, and edit
+    existing nodes), deployable standalone or served same-origin by the
+    daemon
   - Connects to a daemon over WebSocket (same-origin when daemon-served, or
     paired via a `#wb=` bootstrap link when hosted separately)
   - Applies remote updates and emits local edits

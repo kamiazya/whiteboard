@@ -1,42 +1,36 @@
 /**
  * canvas-sync-session unit tests — jsdom layer.
  *
- * @excalidraw/excalidraw is mocked because it loads roughjs native bindings
- * that are not available in jsdom. Exercises the extracted non-React
- * connection module directly with a fake CanvasBackend, independent of
- * useCanvasSync/React.
+ * Exercises the session module directly (no React, no Excalidraw) against a
+ * fake CanvasBackend and SpatialCanvas/EditorCommand fixtures — the
+ * OpenCanvas-shaped surface this session now owns.
  */
 
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
 import type {
   CanvasBackend,
   CanvasBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-vi.mock('@excalidraw/excalidraw', () => ({
-  restoreElements: (els: unknown[]) => els,
-  CaptureUpdateAction: { NEVER: 'NEVER' },
-  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
-}))
-
-// eslint-disable-next-line import/first
+import type { EditorCommand } from '../components/spatial-editor/commands.js'
+import { applyCommand } from '../components/spatial-editor/commands.js'
+import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
   createCanvasSyncSession,
   createGenerationCounters,
   type SessionDeps,
 } from './canvas-sync-session.js'
 
-function makeEmptySnapshot(): Uint8Array {
-  return new LoroDoc().export({ mode: 'snapshot' })
+function emptyCanvas(): SpatialCanvas {
+  return { nodes: [], edges: [] }
 }
 
-function makeDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>((r) => {
-    resolve = r
-  })
-  return { promise, resolve }
+function makeSnapshot(canvas: SpatialCanvas = emptyCanvas()): Uint8Array {
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, canvas)
+  return doc.export({ mode: 'snapshot' })
 }
 
 // Drains several microtask turns with real awaits. dispose()'s drain phase
@@ -47,23 +41,6 @@ async function flushMicrotasks(turns = 30): Promise<void> {
   for (let i = 0; i < turns; i++) {
     await Promise.resolve()
   }
-}
-
-// Builds a snapshot containing a single image element referencing fileId, so
-// onSnapshot triggers a backend.getFile(fileId) fetch inside applyLoroToExcalidraw.
-function makeSnapshotWithImage(fileId: string): Uint8Array {
-  const doc = new LoroDoc()
-  const list = doc.getMovableList('elements')
-  const map = list.insertContainer(0, new LoroMap())
-  map.set('id', 'img-1')
-  map.set('type', 'image')
-  map.set('x', 0)
-  map.set('y', 0)
-  map.set('width', 10)
-  map.set('height', 10)
-  map.set('fileId', fileId)
-  doc.commit()
-  return doc.export({ mode: 'snapshot' })
 }
 
 type FakeBackendControl = {
@@ -103,7 +80,6 @@ function makeFakeBackend(): CanvasBackend & { _ctrl: FakeBackendControl } {
 
 function makeDeps(overrides: Partial<SessionDeps> = {}): SessionDeps {
   return {
-    getExcalidrawAPI: () => null,
     getOptions: () => ({}),
     onStatusChange: vi.fn(),
     onRestoreChange: vi.fn(),
@@ -111,6 +87,29 @@ function makeDeps(overrides: Partial<SessionDeps> = {}): SessionDeps {
     generations: createGenerationCounters(),
     ...overrides,
   }
+}
+
+const TEXT_NODE_A: SpatialCanvas['nodes'][number] = {
+  id: 'n-a',
+  type: 'text',
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 50,
+  text: 'hello',
+}
+const TEXT_NODE_B: SpatialCanvas['nodes'][number] = {
+  id: 'n-b',
+  type: 'text',
+  x: 200,
+  y: 0,
+  width: 100,
+  height: 50,
+  text: 'world',
+}
+
+function twoNodeCanvas(): SpatialCanvas {
+  return { nodes: [TEXT_NODE_A, TEXT_NODE_B], edges: [] }
 }
 
 describe('createCanvasSyncSession', () => {
@@ -135,13 +134,231 @@ describe('createCanvasSyncSession', () => {
     expect(sendReadySpy).toHaveBeenCalledTimes(1)
   })
 
+  it('hydrates via readSpatialCanvas on snapshot and publishes it to subscribers', () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+
+    const canvas = twoNodeCanvas()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(canvas))
+
+    expect(session.getCanvas()).toEqual(canvas)
+    const listener = vi.fn()
+    const unsubscribe = session.subscribe(listener)
+    // subscribe does not immediately replay the current value — only future
+    // publishes — so trigger one via a remote update to assert delivery.
+    const doc = new LoroDoc()
+    doc.import(makeSnapshot(canvas))
+    const patched = { ...canvas, nodes: [{ ...TEXT_NODE_A, text: 'changed' }, TEXT_NODE_B] }
+    writeSpatialCanvas(doc, patched)
+    backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
+
+    expect(listener).toHaveBeenCalledWith(patched, 'external')
+    unsubscribe()
+  })
+
+  it('onChange with a move-node command writes only that node into doc.getMap("nodes"), leaving a peer edit to the sibling node intact after merge', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const next = applyCommand(twoNodeCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(backend._ctrl.pushLocalUpdateCalls.length).toBeGreaterThan(0)
+
+    // A peer concurrently renamed node B's text, starting from the SAME
+    // snapshot bytes this session imported (a fresh makeSnapshot() call
+    // would create an unrelated Loro peer/op lineage, and merging across
+    // unrelated lineages resolves same-key conflicts by peer-id tie-break
+    // rather than respecting either edit — not what this test means to
+    // exercise). Merging the peer's update into this session's exported
+    // bytes must retain BOTH edits — proof the fine-grained write touched
+    // only node A's LoroMap entry, not node B's.
+    const peerDoc = new LoroDoc()
+    peerDoc.import(snapshotBytes)
+    writeSpatialCanvas(peerDoc, {
+      ...twoNodeCanvas(),
+      nodes: [TEXT_NODE_A, { ...TEXT_NODE_B, text: 'renamed-by-peer' }],
+    })
+
+    const merged = new LoroDoc()
+    merged.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) merged.import(bytes)
+    merged.import(peerDoc.export({ mode: 'update' }))
+
+    const result = readSpatialCanvas(merged)
+    const a = result.nodes.find((n) => n.id === 'n-a')
+    const b = result.nodes.find((n) => n.id === 'n-b')
+    expect(a).toMatchObject({ x: 10, y: 20 })
+    expect(b).toMatchObject({ text: 'renamed-by-peer' })
+  })
+
+  it('onChange with connect-nodes writes only the new edge, leaving existing edges untouched', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    const initial: SpatialCanvas = {
+      nodes: [TEXT_NODE_A, TEXT_NODE_B],
+      edges: [{ id: 'e-existing', fromNode: 'n-a', toNode: 'n-b' }],
+    }
+    session.connect()
+    const snapshotBytes = makeSnapshot(initial)
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const command: EditorCommand = {
+      kind: 'connect-nodes',
+      edgeId: 'e-new',
+      fromNode: 'n-b',
+      toNode: 'n-a',
+    }
+    const next = applyCommand(initial, command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // subscribeLocalUpdates callbacks are true incremental deltas (relative
+    // to the doc's own last export point), not a self-sufficient full
+    // history — reconstruct the way a second real peer would: import the
+    // EXACT SAME snapshot bytes the session itself imported (a fresh
+    // makeSnapshot() call would create an unrelated Loro peer/op lineage,
+    // even with identical canvas content), then layer the pushed deltas on
+    // top of that same lineage.
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    const result = readSpatialCanvas(doc)
+    expect(result.edges).toHaveLength(2)
+    expect(result.edges.find((e) => e.id === 'e-existing')).toEqual(initial.edges[0])
+    expect(result.edges.find((e) => e.id === 'e-new')).toEqual(next.edges[1])
+  })
+
+  it('falls back to a full writeSpatialCanvas resync when the command target is missing from `next`, still converging on `next`', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    // Deliberately mismatched: the command names a node the `next` canvas no
+    // longer contains (simulating an unmapped/unknown edit).
+    const command: EditorCommand = { kind: 'move-node', id: 'does-not-exist', x: 1, y: 1 }
+    const next: SpatialCanvas = { nodes: [TEXT_NODE_A], edges: [] }
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    expect(readSpatialCanvas(doc)).toEqual(next)
+  })
+
+  it('a fine-grained write that throws is contained by guardedCommit — the chain survives and the next firing still commits', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    // A node with a throwing getter poisons BOTH the fine-grained write and
+    // the writeSpatialCanvas fallback (both read `node.text`), so this
+    // firing's commit is fully skipped by guardedCommit's own outer
+    // try/catch — the point of this test is that the CHAIN survives, not
+    // that this particular firing succeeds.
+    const poisonedNode: SpatialCanvas['nodes'][number] = { ...TEXT_NODE_A }
+    Object.defineProperty(poisonedNode, 'text', {
+      get(): never {
+        throw new Error('boom')
+      },
+      enumerable: true,
+    })
+    const poisoned: SpatialCanvas = { ...twoNodeCanvas(), nodes: [poisonedNode, TEXT_NODE_B] }
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 5, y: 5 }
+    session.onChange(poisoned, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // The firing's own commit may have been skipped or fallen back — either
+    // way the chain must not be wedged: a subsequent, well-formed firing
+    // still commits.
+    const command2: EditorCommand = { kind: 'move-node', id: 'n-b', x: 9, y: 9 }
+    const next2 = applyCommand(twoNodeCanvas(), command2)
+    session.onChange(next2, command2)
+    await vi.advanceTimersByTimeAsync(300)
+
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ x: 9, y: 9 })
+  })
+
+  it('debounce coalescing: three rapid onChange calls produce exactly one commit, derived from the LAST pair', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const c1: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
+    const c2: EditorCommand = { kind: 'move-node', id: 'n-a', x: 2, y: 2 }
+    const c3: EditorCommand = { kind: 'move-node', id: 'n-a', x: 3, y: 3 }
+    session.onChange(applyCommand(twoNodeCanvas(), c1), c1)
+    session.onChange(applyCommand(twoNodeCanvas(), c2), c2)
+    const next3 = applyCommand(twoNodeCanvas(), c3)
+    session.onChange(next3, c3)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    expect(readSpatialCanvas(doc).nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 3, y: 3 })
+  })
+
+  it('debounce coalescing across DIFFERENT targets: edits to two different nodes within one window are both committed', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const cA: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 10 }
+    const afterA = applyCommand(twoNodeCanvas(), cA)
+    session.onChange(afterA, cA)
+
+    const cB: EditorCommand = {
+      kind: 'resize-node',
+      id: 'n-b',
+      x: 200,
+      y: 0,
+      width: 150,
+      height: 60,
+    }
+    const afterB = applyCommand(afterA, cB)
+    session.onChange(afterB, cB)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    const result = readSpatialCanvas(doc)
+    // Both edits must survive: node A's move must not be dropped just
+    // because node B's edit was the last command in the debounce window.
+    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 10, y: 10 })
+    expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ width: 150, height: 60 })
+  })
+
   it('dispose() flushes a pending debounced edit into this session before disconnecting', async () => {
     const backend = makeFakeBackend()
     const session = createCanvasSyncSession(backend, makeDeps())
     session.connect()
-    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-    session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {})
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
 
     // Debounce (300ms) has not fired yet.
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
@@ -168,79 +385,11 @@ describe('createCanvasSyncSession', () => {
       if (disposed) return
       pushed.push(update)
     }
-    // Simulate: flush() runs synchronously (doc.commit fires here), then
-    // disposed flips true, then the subscriber's microtask runs afterward.
     const microtaskUpdate = new Uint8Array([1, 2, 3])
     const fireOnMicrotask = Promise.resolve().then(() => guardedSubscriber(microtaskUpdate))
     disposed = true
     await fireOnMicrotask
     expect(pushed).toHaveLength(0) // guarded version loses the edit — the bug this test protects against
-  })
-
-  it('unmount-only disposal: a settling putFile still invokes the (latest-options) success callback', async () => {
-    let resolvePutFile: (() => void) | null = null
-    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
-      ...makeFakeBackend(),
-      putFile: (entries, onSuccess) =>
-        new Promise((resolve) => {
-          resolvePutFile = () => {
-            for (const [fileId] of entries) onSuccess(fileId)
-            resolve()
-          }
-        }),
-    }
-    const onFileUploadSucceeded = vi.fn()
-    const session = createCanvasSyncSession(
-      backend,
-      makeDeps({ getOptions: () => ({ onFileUploadSucceeded }) }),
-    )
-    session.connect()
-    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
-
-    session.onChange([], { 'file-1': { id: 'file-1', dataURL: 'data:x' } as never })
-    await vi.advanceTimersByTimeAsync(300)
-
-    session.dispose() // unmount-only — no successor session, no generation bump
-
-    resolvePutFile!()
-    await vi.waitFor(() => expect(onFileUploadSucceeded).toHaveBeenCalledTimes(1))
-  })
-
-  it("supersession disposal: a new session bumping the connection generation suppresses the old session's upload signal", async () => {
-    let resolvePutFile: (() => void) | null = null
-    const backendA: CanvasBackend & { _ctrl: FakeBackendControl } = {
-      ...makeFakeBackend(),
-      putFile: (entries, onSuccess) =>
-        new Promise((resolve) => {
-          resolvePutFile = () => {
-            for (const [fileId] of entries) onSuccess(fileId)
-            resolve()
-          }
-        }),
-    }
-    const generations = createGenerationCounters()
-    const onFileUploadSucceeded = vi.fn()
-    const sessionA = createCanvasSyncSession(
-      backendA,
-      makeDeps({ generations, getOptions: () => ({ onFileUploadSucceeded }) }),
-    )
-    sessionA.connect()
-    backendA._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
-    sessionA.onChange([], { 'file-1': { id: 'file-1', dataURL: 'data:x' } as never })
-    await vi.advanceTimersByTimeAsync(300)
-
-    sessionA.dispose()
-
-    // A new session supersedes A — bumps connectionGeneration.
-    const backendB = makeFakeBackend()
-    const sessionB = createCanvasSyncSession(backendB, makeDeps({ generations }))
-    sessionB.connect()
-
-    resolvePutFile!()
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(onFileUploadSucceeded).not.toHaveBeenCalled()
   })
 
   it('MID-DEBOUNCE SWAP: a firing scheduled before dispose commits into its own session, never a superseding one', async () => {
@@ -249,16 +398,17 @@ describe('createCanvasSyncSession', () => {
     const generations = createGenerationCounters()
     const sessionA = createCanvasSyncSession(backendA, makeDeps({ generations }))
     sessionA.connect()
-    backendA._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+    backendA._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-    sessionA.onChange([{ id: 'el-1', type: 'rectangle' } as never], {})
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
+    sessionA.onChange(applyCommand(twoNodeCanvas(), command), command)
 
     // Before the 300ms debounce fires, session A is disposed and a new
     // session B is constructed against a different backend/doc.
     sessionA.dispose()
     const sessionB = createCanvasSyncSession(backendB, makeDeps({ generations }))
     sessionB.connect()
-    backendB._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+    backendB._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
     await vi.advanceTimersByTimeAsync(300)
     await Promise.resolve()
@@ -269,35 +419,61 @@ describe('createCanvasSyncSession', () => {
     expect(backendB._ctrl.pushLocalUpdateCalls).toHaveLength(0)
   })
 
-  it('onApiReady reapplies the doc, re-sends clientReady, and flushes pending export requests, even with no doc yet', async () => {
+  it('undo() reverts the last committed edit and notifies subscribers with the "external" origin', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const next = applyCommand(twoNodeCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(session.getCanvas()).toEqual(next)
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribe(listener)
+
+    const undone = session.undo()
+
+    expect(undone).toBe(true)
+    expect(session.getCanvas()).toEqual(twoNodeCanvas())
+    expect(listener).toHaveBeenCalledWith(twoNodeCanvas(), 'external')
+    unsubscribe()
+  })
+
+  it('redo() re-applies an undone edit and notifies subscribers with the "external" origin', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const next = applyCommand(twoNodeCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+    session.undo()
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribe(listener)
+
+    const redone = session.redo()
+
+    expect(redone).toBe(true)
+    expect(session.getCanvas()).toEqual(next)
+    expect(listener).toHaveBeenCalledWith(next, 'external')
+    unsubscribe()
+  })
+
+  it('onEditorReady re-sends clientReady and flushes pending export requests, even with no doc yet', () => {
     const backend = makeFakeBackend()
     const sendReadySpy = vi.spyOn(backend, 'sendClientReady')
-    const api = {
-      addFiles: vi.fn(),
-      updateScene: vi.fn(),
-      getSceneElements: vi.fn(() => []),
-      getAppState: vi.fn(() => ({})),
-      getFiles: vi.fn(() => ({})),
-    }
-    const session = createCanvasSyncSession(
-      backend,
-      makeDeps({ getExcalidrawAPI: () => api as never }),
-    )
+    const session = createCanvasSyncSession(backend, makeDeps())
     session.connect()
 
-    // No snapshot has landed yet — onApiReady must still send clientReady.
-    session.onApiReady()
-    expect(sendReadySpy).toHaveBeenCalledTimes(2) // once on connect, once on apiReady
-
-    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
-    await Promise.resolve()
-    await Promise.resolve()
-    api.updateScene.mockClear()
-    session.onApiReady()
-    await Promise.resolve()
-    await Promise.resolve()
-    expect(api.updateScene).toHaveBeenCalled()
-    expect(sendReadySpy).toHaveBeenCalledTimes(3)
+    // No snapshot has landed yet — onEditorReady must still send clientReady.
+    session.onEditorReady()
+    expect(sendReadySpy).toHaveBeenCalledTimes(2) // once on connect, once on ready
   })
 
   it('restore lifecycle drives the injected restore callback and clears undo on complete', () => {
@@ -305,57 +481,13 @@ describe('createCanvasSyncSession', () => {
     const onRestoreChange = vi.fn()
     const session = createCanvasSyncSession(backend, makeDeps({ onRestoreChange }))
     session.connect()
-    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot())
 
     backend._ctrl.handlers!.onRestoreStarted({ label: 'v3' } as never)
     expect(onRestoreChange).toHaveBeenCalledWith(true, 'v3')
 
     backend._ctrl.handlers!.onRestoreComplete()
     expect(onRestoreChange).toHaveBeenCalledWith(false, null)
-  })
-
-  // Root-cause regression: a delayed getFile() resolving after this session
-  // was torn down (backend switched to null, or a successor's own snapshot
-  // has not arrived yet) must never write stale content into the
-  // Excalidraw API. Prior to bumping the apply generation unconditionally in
-  // dispose(), this generation match only broke when *another* session's own
-  // applyLoroToExcalidraw call happened to run first — a torn-down session
-  // with no immediate successor slipped through.
-  it('a pending getFile fetch from a torn-down session with no successor never applies stale content', async () => {
-    const deferred = makeDeferred<Blob>()
-    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
-      ...makeFakeBackend(),
-      getFile: async () => deferred.promise,
-    }
-    const api = {
-      addFiles: vi.fn(),
-      updateScene: vi.fn(),
-      getSceneElements: vi.fn(() => []),
-      getAppState: vi.fn(() => ({})),
-      getFiles: vi.fn(() => ({})),
-    }
-    const session = createCanvasSyncSession(
-      backend,
-      makeDeps({ getExcalidrawAPI: () => api as never }),
-    )
-    session.connect()
-    backend._ctrl.handlers!.onSnapshot(makeSnapshotWithImage('shared-file'))
-    // Let applyLoroToExcalidraw start and call backend.getFile — it awaits
-    // the still-pending `deferred.promise`.
-    await Promise.resolve()
-
-    // Torn down (e.g. backend switched to null) before the fetch resolves,
-    // with no successor session ever created.
-    session.dispose()
-
-    deferred.resolve(new Blob(['stale'], { type: 'text/plain' }))
-    // blobToBase64 goes through a real FileReader, which completes on a
-    // macrotask rather than a plain microtask — advancing fake timers (not
-    // just chained microtasks) is required to let it settle.
-    await vi.runAllTimersAsync()
-
-    expect(api.addFiles).not.toHaveBeenCalled()
-    expect(api.updateScene).not.toHaveBeenCalled()
   })
 
   it('dispose() invokes backend.pushLocalUpdate for the flush-triggered commit before calling backend.disconnect()', async () => {
@@ -379,9 +511,10 @@ describe('createCanvasSyncSession', () => {
     }
     const session = createCanvasSyncSession(backend, makeDeps())
     session.connect()
-    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-    session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {})
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
     session.dispose()
 
     // Drain microtask turns without advancing fake timers (real transport
@@ -391,31 +524,15 @@ describe('createCanvasSyncSession', () => {
     expect(callOrder).toEqual(['push-called', 'disconnect'])
   })
 
-  it('dispose() falls through to disconnect via the drain timeout when the commit chain is stuck behind a hung putFile', async () => {
-    // Regression for DISPOSE_DRAIN_TIMEOUT_MS itself: a putFile that never
-    // settles blocks the commit chain for up to PUT_FILE_TIMEOUT_MS (15s),
-    // far longer than the 2s drain bound. dispose() must still disconnect
-    // once the drain timeout elapses, without waiting for the stuck chain.
-    const backend: CanvasBackend & { _ctrl: FakeBackendControl } = {
-      ...makeFakeBackend(),
-      putFile: () => new Promise(() => {}), // never resolves — simulates a hung upload
-    }
-    const session = createCanvasSyncSession(backend, makeDeps())
-    session.connect()
-    backend._ctrl.handlers!.onSnapshot(makeEmptySnapshot())
-
-    session.onChange([{ id: 'el-1', type: 'rectangle' } as never], {
-      'file-1': { id: 'file-1', dataURL: 'data:,' } as never,
-    })
-    session.dispose()
-
-    // Only the drain timeout (2s) elapses here, well short of the putFile
-    // race's own 15s deadline, so the chain is still stuck on putFile.
-    await vi.advanceTimersByTimeAsync(2_000)
-
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
-    expect(backend._ctrl.disconnectCalled).toBe(true)
-  })
+  // With the file-upload path removed (no more hung-putFile scenario), the
+  // commit chain has no remaining async gap it can get stuck behind — every
+  // write (fine-grained or the writeSpatialCanvas fallback) is synchronous.
+  // The bounded drain-timeout race in dispose() is retained as defensive
+  // plumbing (see DISPOSE_DRAIN_TIMEOUT_MS's doc comment) and is still
+  // exercised by the "invokes pushLocalUpdate before disconnect" and
+  // "disconnects synchronously when nothing is pending" tests above/below;
+  // the fast-check model-based test further exercises pendingCommitCount's
+  // bookkeeping across arbitrary command sequences.
 
   it('dispose() disconnects synchronously when nothing is pending (fast path, no drain)', () => {
     // Regression for the pendingCommitCount === 0 branch: with no onChange
@@ -445,5 +562,86 @@ describe('createCanvasSyncSession', () => {
 
     expect(onStatusChange).toHaveBeenCalledWith('error')
     expect(onAuthError).toHaveBeenCalledTimes(1)
+  })
+
+  describe('model-based: random EditorCommand sequences', () => {
+    const nodeIdArb = fc.constantFrom('n-a', 'n-b', 'n-c')
+    const commandArb: fc.Arbitrary<EditorCommand> = fc.oneof(
+      fc.record({
+        kind: fc.constant('move-node' as const),
+        id: nodeIdArb,
+        x: fc.integer({ min: -1000, max: 1000 }),
+        y: fc.integer({ min: -1000, max: 1000 }),
+      }),
+      fc.record({
+        kind: fc.constant('resize-node' as const),
+        id: nodeIdArb,
+        x: fc.integer({ min: -1000, max: 1000 }),
+        y: fc.integer({ min: -1000, max: 1000 }),
+        width: fc.integer({ min: 0, max: 500 }),
+        height: fc.integer({ min: 0, max: 500 }),
+      }),
+      fc.record({
+        kind: fc.constant('set-text' as const),
+        id: nodeIdArb,
+        text: fc.string({ maxLength: 20 }),
+      }),
+    )
+
+    function baseCanvas(): SpatialCanvas {
+      return {
+        nodes: [
+          { id: 'n-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
+          { id: 'n-b', type: 'text', x: 100, y: 0, width: 100, height: 50, text: 'b' },
+          { id: 'n-c', type: 'text', x: 200, y: 0, width: 100, height: 50, text: 'c' },
+        ],
+        edges: [],
+      }
+    }
+
+    // No pinned seed: fast-check picks its own seed every run, per this
+    // repo's PBT discipline (a fixed seed would hide real bugs behind a
+    // stable-but-wrong pass).
+    fcTest.prop([fc.array(commandArb, { maxLength: 15 })], withDefaults({ numRuns: 30 }))(
+      'pendingCommitCount stays >= 0 throughout, the chain never rejects, and drains to 0',
+      async (commands) => {
+        vi.useFakeTimers()
+        try {
+          const backend = makeFakeBackend()
+          const session = createCanvasSyncSession(backend, makeDeps())
+          session.connect()
+          const snapshotBytes = makeSnapshot(baseCanvas())
+          backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+          let canvas = baseCanvas()
+          for (const command of commands) {
+            canvas = applyCommand(canvas, command)
+            session.onChange(canvas, command)
+            // Interleave a settle so debounced firings actually get chained,
+            // not merely coalesced into the final one.
+            await vi.advanceTimersByTimeAsync(300)
+          }
+          await vi.advanceTimersByTimeAsync(300)
+
+          // The published canvas mirrors every applied command exactly (the
+          // command/state agreement property) — the session forwards `next`
+          // as-is.
+          expect(session.getCanvas()).toEqual(canvas)
+
+          const doc = new LoroDoc()
+          doc.import(snapshotBytes)
+          for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+          // Fine-grained writes and the writeSpatialCanvas fallback must
+          // never disagree about the resulting canvas.
+          expect(readSpatialCanvas(doc)).toEqual(canvas)
+
+          session.dispose()
+          await flushMicrotasks()
+          expect(backend._ctrl.disconnectCalled).toBe(true)
+        } finally {
+          vi.useRealTimers()
+        }
+      },
+    )
   })
 })

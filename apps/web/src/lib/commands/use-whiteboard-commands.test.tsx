@@ -6,7 +6,6 @@ import { useWhiteboardCommands } from './use-whiteboard-commands.js'
 
 function deps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
-    getExcalidrawApi: () => null,
     provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
     canvas: { canvasId: 'c1', name: 'Canvas 1' },
     ...overrides,
@@ -35,46 +34,5 @@ describe('useWhiteboardCommands', () => {
     )
 
     expect(result.current).toBe(first)
-  })
-
-  it('a call after a rerender sees the latest canvas identity via the live Excalidraw API', async () => {
-    const apiA = {
-      getSceneElements: () => [{ id: 'a', type: 'rectangle', x: 0, y: 0 } as never],
-      getAppState: () => ({ gridSize: null, viewBackgroundColor: '#fff' }),
-      getFiles: () => ({}),
-    }
-    const apiB = {
-      getSceneElements: () => [{ id: 'b', type: 'rectangle', x: 0, y: 0 } as never],
-      getAppState: () => ({ gridSize: null, viewBackgroundColor: '#000' }),
-      getFiles: () => ({}),
-    }
-    const { result, rerender } = renderHook(
-      (d: WhiteboardCommandDeps) => useWhiteboardCommands(d),
-      {
-        initialProps: deps({ getExcalidrawApi: () => apiA as never }),
-      },
-    )
-
-    const firstResult = await result.current.exportJson()
-    expect(firstResult.elements.map((e) => (e as { id: string }).id)).toEqual(['a'])
-
-    rerender(deps({ getExcalidrawApi: () => apiB as never }))
-    const secondResult = await result.current.exportJson()
-    expect(secondResult.elements.map((e) => (e as { id: string }).id)).toEqual(['b'])
-  })
-
-  it('a call issued after unmount resolves without a stale-state React warning', async () => {
-    const api = {
-      getSceneElements: () => [{ id: 'a', type: 'rectangle', x: 0, y: 0 } as never],
-      getAppState: () => ({ gridSize: null, viewBackgroundColor: '#fff' }),
-      getFiles: () => ({}),
-    }
-    const { result, unmount } = renderHook((d: WhiteboardCommandDeps) => useWhiteboardCommands(d), {
-      initialProps: deps({ getExcalidrawApi: () => api as never }),
-    })
-    const commands = result.current
-    unmount()
-
-    await expect(commands.exportJson()).resolves.toMatchObject({ type: 'excalidraw' })
   })
 })

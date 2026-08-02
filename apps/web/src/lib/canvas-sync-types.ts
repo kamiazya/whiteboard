@@ -1,6 +1,7 @@
 import type {
   HeadChangedPayload,
   VersionCreatedPayload,
+  ViewportRequestPayload,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 
 // Shared contract types/helpers for the canvas sync stack. These are plain,
@@ -18,6 +19,15 @@ export interface DirtyEventDetail {
 
 export type SyncStatus = 'idle' | 'connected' | 'error'
 
+// Named constants for the window-event contract dispatched by
+// dispatchIdentityEvent below. The literal values are pinned — several other
+// modules (useDirtyState, HeaderBranchBanner, useBranches,
+// merge-committed-event) still match on the raw string and are out of this
+// slice's scope, so changing the constant's NAME here must never change its
+// VALUE.
+export const CANVAS_SYNC_DOC_CHANGED_EVENT = 'excalidraw:doc_changed'
+export const CANVAS_SYNC_VERSION_SAVED_EVENT = 'excalidraw:version_saved'
+
 // Daemon-only callback seam. Every member is read via optionsRef in
 // useCanvasSync (see there) so passing a fresh inline object on every render
 // never forces a backend reconnect. A browser-local backend never fires any
@@ -26,8 +36,11 @@ export type SyncStatus = 'idle' | 'connected' | 'error'
 export interface UseCanvasSyncOptions {
   onVersionCreated?: (payload: VersionCreatedPayload) => void
   onHeadChanged?: (payload: Omit<HeadChangedPayload, 'type'>) => void
-  onFileUploadFailed?: () => void
-  onFileUploadSucceeded?: () => void
+  // Daemon-driven viewport control (e.g. an MCP tool call asking the
+  // connected browser to fit/move its view). The page holds a
+  // SpatialEditorHandle ref and maps this payload onto it — see
+  // canvas-sync-session.ts's onViewportRequest forward.
+  onViewportRequest?: (payload: Omit<ViewportRequestPayload, 'type'>) => void
   // Fired in addition to (not instead of) the hook's own syncStatus:'error'
   // transition on a WS auth failure (close 1008), so a daemon-backed page
   // can surface a dedicated banner instead of the generic error state.

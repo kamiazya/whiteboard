@@ -67,6 +67,31 @@ export function panBy(viewport: Viewport, screenDelta: Point): Viewport {
   }
 }
 
+interface BBoxLike {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * Viewport whose top-left shows the union of the given boxes, at identity
+ * zoom (no container size is known here, so this fits POSITION only, not
+ * scale). Total: an empty list, or a list whose boxes are all non-finite,
+ * degrades to `IDENTITY_VIEWPORT` rather than producing NaN/Infinity.
+ */
+export function fitViewportToBoxes(boxes: readonly BBoxLike[]): Viewport {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  for (const box of boxes) {
+    if (!Number.isFinite(box.x) || !Number.isFinite(box.y)) continue
+    minX = Math.min(minX, box.x)
+    minY = Math.min(minY, box.y)
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return IDENTITY_VIEWPORT
+  return { x: minX, y: minY, zoom: 1 }
+}
+
 /** CSS `transform` value placing canvas-space content into screen space. */
 export function viewportTransformCss(viewport: Viewport): string {
   return `scale(${viewport.zoom}) translate(${-viewport.x}px, ${-viewport.y}px)`
