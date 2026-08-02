@@ -5,8 +5,10 @@
 //      into a canvas-render `Scene`, using the vendored opentype.js
 //      measurer (measure-text.ts) as the injected text-measurement seam,
 //      canvas-codec's `parseMarkdownBody` as the injected body parser, and
-//      this module's `EXPORT_APPEARANCE` (spatial-scene-appearance.ts) as
-//      the injected appearance resolver.
+//      canvas-render's shared `createSpatialTheme({ mode: 'light' })` as
+//      the injected appearance resolver — export is deliberately pinned to
+//      light (package-canvas-render.md decision #8) so a user's UI theme
+//      can never change exported bytes.
 //   2. `renderSceneToSvg` (canvas-render) serializes the scene to an SVG
 //      string, with document options (padding/background) so the root
 //      carries a real `width`/`height`/`viewBox` envelope — canvas-render
@@ -22,8 +24,13 @@
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MeasureText, SpatialLayoutDegradation } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  MeasureText,
+  Scene,
+  SpatialLayoutDegradation,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
+  createSpatialTheme,
   layoutSpatialCanvas,
   renderSceneToSvg as renderSceneToSvgString,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -31,7 +38,11 @@ import {
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFile } from './export-font.js'
 import { createOpentypeMeasureText } from './measure-text.js'
-import { EXPORT_APPEARANCE } from './spatial-scene-appearance.js'
+
+// Export never has its own theme switch (the composition root always
+// exports light, see package-canvas-render.md decision #8), so this
+// singleton is built once and reused across renders.
+const EXPORT_APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 const log = getLogger('headless-renderer')
 
@@ -93,17 +104,29 @@ function onDegrade(event: SpatialLayoutDegradation): void {
   )
 }
 
-function buildSvg(
-  canvas: SpatialCanvas,
-  options: HeadlessExportOptions,
-  measure: MeasureText,
-): string {
-  const scene = layoutSpatialCanvas(canvas, {
+/**
+ * Composes the export `Scene` from a `SpatialCanvas`, using canvas-render's
+ * shared theme and geometry with no override. Exported (not `_forTests`)
+ * specifically so a conformance test can lay out a fixture through this
+ * exact call site with an injected fake measurer, instead of a real
+ * opentype.js font load — see
+ * `headless-renderer-geometry-conformance.test.ts`.
+ */
+export function buildSpatialScene(canvas: SpatialCanvas, measure: MeasureText): Scene {
+  return layoutSpatialCanvas(canvas, {
     measure,
     parseBody: parseMarkdownBody,
     appearance: EXPORT_APPEARANCE,
     onDegrade,
   })
+}
+
+function buildSvg(
+  canvas: SpatialCanvas,
+  options: HeadlessExportOptions,
+  measure: MeasureText,
+): string {
+  const scene = buildSpatialScene(canvas, measure)
   return renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
     background: themeBackground(options),

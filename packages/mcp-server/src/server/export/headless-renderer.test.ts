@@ -113,6 +113,34 @@ describe('headless-renderer', () => {
     expect(result.svg).toMatch(/viewBox="[^"]+"/)
   })
 
+  it('declares font-family="Roboto" on a label run, never "sans-serif"', async () => {
+    // Regression guard for the verified export defect: `LABEL_APPEARANCE`
+    // used to emit `fontFamily: 'sans-serif'` while the export measurer
+    // (measure-text.ts) measured Roboto, so the SVG's coordinates were
+    // computed from one font's metrics while its `font-family` attribute
+    // named another. A `link` node's label run is the shape that exercises
+    // `resolveLabel()` (a markdown body run carries no fontFamily at all —
+    // a separate, documented gap).
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'link-1',
+          type: 'link',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 40,
+          url: 'https://example.com',
+        },
+      ],
+      edges: [],
+    }
+    const { svg } = await renderSpatialCanvasToSvg(canvas)
+    expect(svg).toContain('font-family="Roboto"')
+    expect(svg).not.toContain('sans-serif')
+  })
+
   it('renders the same canvas to byte-identical SVG twice, in-process and after a singleton reset', async () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const canvas = rectCanvas()

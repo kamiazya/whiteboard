@@ -2,6 +2,7 @@ import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
+  createSpatialTheme,
   layoutSpatialCanvas,
   renderSceneToSvg,
   type SvgDocumentOptions,
@@ -9,7 +10,12 @@ import {
 import { useMemo } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'
-import { VIEWER_APPEARANCE } from './viewer-appearance.js'
+
+// This viewer is read-only and has no theme switch of its own, so it always
+// renders through canvas-render's shared light theme
+// (`@kamiazya/whiteboard-canvas-render`'s `createSpatialTheme`) — see
+// package-canvas-render.md decision #8.
+const VIEWER_APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 export interface CanvasViewerProps {
   canvas: SpatialCanvas
