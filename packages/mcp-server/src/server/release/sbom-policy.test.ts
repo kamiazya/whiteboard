@@ -10,7 +10,17 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import {
+  computeSbomInputFingerprint,
+  sha512Hex,
+} from '../../../scripts/release/sbom-fingerprint.mjs'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
+import {
+  evaluateSbomArtifactState,
+  SBOM_ARTIFACT_REL_PATH,
+  SBOM_REGENERATE_COMMAND,
+  SBOM_SIDECAR_REL_PATH,
+} from './sbom-artifact-state.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -193,6 +203,29 @@ describe('runbook (docs/contributing/releasing.md) keyword drift', () => {
   })
 })
 
+// ── SBOM design-note keyword drift ────────────────────────────────────────────
+
+describe('release-signing-provenance-sbom.md keyword drift', () => {
+  const designNote = () =>
+    readFile('packages/mcp-server/src/server/release/release-signing-provenance-sbom.md')
+
+  it('design note mentions the staleness sidecar filename', () => {
+    expect(designNote()).toContain('npm-sbom.inputs.json')
+  })
+
+  it('design note explains the staleness contract', () => {
+    expect(designNote().toLowerCase()).toContain('stale')
+  })
+
+  it('design note names the exact fix command', () => {
+    expect(designNote()).toContain('generate:sbom:npm')
+  })
+
+  it('design note mentions the absent-artifact CI backstop', () => {
+    expect(designNote()).toContain('sbom-npm')
+  })
+})
+
 // ── generate-npm-sbom.mjs non-leak contract ───────────────────────────────────
 
 describe('generate-npm-sbom.mjs non-leak contract', () => {
@@ -268,14 +301,72 @@ describe('ci.yml dry-run SBOM regression safety', () => {
   })
 })
 
+// ── ci.yml sbom-npm wiring (backs the absent-artifact skip) ──────────────────
+// This is what makes the 'absent artifact' skip above honest rather than a
+// silent hole: it must always run, so deleting the CI job that regenerates
+// and validates the SBOM turns the local skip from honest into a failing
+// test here.
+
+describe('ci.yml sbom-npm job wiring (drift guard for the absent-artifact skip)', () => {
+  const CI_WORKFLOW = '.github/workflows/ci.yml'
+
+  const sbomNpmSection = () => jobSection(readFile(CI_WORKFLOW), 'sbom-npm', 'packaged-smoke')
+
+  it('sbom-npm job generates the npm SBOM', () => {
+    expect(sbomNpmSection()).toContain('generate:sbom:npm')
+  })
+
+  it('sbom-npm job runs this exact sbom-policy.test.ts file', () => {
+    expect(sbomNpmSection()).toContain('packages/mcp-server/src/server/release/sbom-policy.test.ts')
+  })
+})
+
 // ── Generated SBOM content regression ────────────────────────────────────────
 // `pnpm check:release-candidate` runs `pnpm generate:sbom:npm` before
-// `pnpm test`, so these tests always run in the release-candidate path.
-// In isolation (`pnpm test` only), they skip if the artifact is absent.
+// `pnpm test`, so these tests always run in the release-candidate path, and
+// the ci.yml `sbom-npm` job (see the drift guard below) regenerates and runs
+// this exact file on every PR/push. In isolation (`pnpm test` only, no fresh
+// generation), the artifact may be absent (skip, visibly — see the 'absent
+// artifact' describe below) or stale relative to the current lockfile/
+// manifest (one explicit 'stale artifact' failure, never a false policy
+// violation — see the module doc comment on sbom-artifact-state.ts).
+
+const SBOM_PATH = join(ROOT, SBOM_ARTIFACT_REL_PATH)
+const SIDECAR_PATH = join(ROOT, SBOM_SIDECAR_REL_PATH)
+const sbomExists = existsSync(SBOM_PATH)
+
+// Evaluated once and shared by both describes below — reading and hashing the
+// artifact twice would only give the two blocks a way to disagree.
+const sbomArtifactState = evaluateSbomArtifactState({
+  sbomExists,
+  rawSidecarText: existsSync(SIDECAR_PATH) ? readFileSync(SIDECAR_PATH, 'utf-8') : undefined,
+  expectedInputs: computeSbomInputFingerprint(ROOT),
+  actualSbomSha512: sbomExists ? sha512Hex(readFileSync(SBOM_PATH)) : '',
+})
+
+describe('generated SBOM artifact currency', () => {
+  it.skipIf(!sbomExists)(
+    'marker: when this reports SKIPPED the artifact is absent — ci.yml sbom-npm regenerates and runs this file on every PR/push',
+    () => {
+      // Intentionally empty: this test's role is to make the skip visible in
+      // run output (see it.skipIf above), never a silent no-op inside a
+      // passing assertion body.
+    },
+  )
+
+  it.runIf(sbomExists)('artifact is current or fails as stale, never silently passes', () => {
+    if (sbomArtifactState.status === 'stale') {
+      expect(sbomArtifactState.message, 'stale message must name the exact fix command').toContain(
+        SBOM_REGENERATE_COMMAND,
+      )
+      expect.fail(sbomArtifactState.message)
+    }
+    expect(sbomArtifactState.status).toBe('current')
+  })
+})
 
 describe('generated SBOM content regression', () => {
-  const SBOM_PATH = join(ROOT, 'packages/mcp-server/_artifacts/npm-sbom.cdx.json')
-  const sbomExists = existsSync(SBOM_PATH)
+  const isCurrent = sbomArtifactState.status === 'current'
 
   type CdxComponent = { name: string; group?: string; purl?: string }
 
@@ -287,8 +378,12 @@ describe('generated SBOM content regression', () => {
   // CycloneDX puts the unscoped name in `name` and scope in `group`.
   // Matching against `purl` (e.g. "pkg:npm/%40vitest/ui@...") is more reliable.
   // Scope separator: `@` → `%40`, `/` is NOT encoded in the purl.
+  //
+  // Guarded by isCurrent (not just sbomExists): a stale artifact must not be
+  // able to produce one of these policy-violation failures — that class of
+  // false regression is reported once, distinctly, by the describe above.
 
-  it.runIf(sbomExists)('generated SBOM contains no known dev-only packages', () => {
+  it.runIf(isCurrent)('generated SBOM contains no known dev-only packages', () => {
     const purls = loadSbomPurls()
     const devOnlyPatterns = [
       'pkg:npm/vitest@', // vitest core
@@ -316,7 +411,7 @@ describe('generated SBOM content regression', () => {
     }
   })
 
-  it.runIf(sbomExists)(
+  it.runIf(isCurrent)(
     'generated SBOM contains none of the packages removed with the Excalidraw headless renderer',
     () => {
       const purls = loadSbomPurls()
@@ -336,7 +431,7 @@ describe('generated SBOM content regression', () => {
     },
   )
 
-  it.runIf(sbomExists)('generated SBOM contains expected production packages', () => {
+  it.runIf(isCurrent)('generated SBOM contains expected production packages', () => {
     const purls = loadSbomPurls()
     const prodPatterns = ['pkg:npm/hono@', 'pkg:npm/jose@', 'pkg:npm/zod@', 'pkg:npm/nanoid@']
     for (const pattern of prodPatterns) {
