@@ -96,9 +96,13 @@ function toFlow(node: RemarkNode): MdastFlowContent {
     case 'list':
       return {
         type: 'list',
-        ordered: node.ordered as boolean | undefined,
-        start: node.start as number | undefined,
-        spread: node.spread as boolean | undefined,
+        // remark represents an absent value as `null` (e.g. `start` on an
+        // unordered list), not `undefined` — `mdastRootSchema`'s `.optional()`
+        // fields reject `null`, so this must be coerced at the boundary
+        // rather than cast straight through.
+        ordered: (node.ordered as boolean | null | undefined) ?? undefined,
+        start: (node.start as number | null | undefined) ?? undefined,
+        spread: (node.spread as boolean | null | undefined) ?? undefined,
         children: (node.children ?? []).map(toListItem),
       }
     case 'code':
@@ -141,7 +145,7 @@ function toListItem(node: RemarkNode): MdastListItem {
   return {
     type: 'listItem',
     checked: node.checked as boolean | null | undefined,
-    spread: node.spread as boolean | undefined,
+    spread: (node.spread as boolean | null | undefined) ?? undefined,
     children: (node.children ?? []).map(toFlow),
   }
 }

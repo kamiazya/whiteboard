@@ -147,6 +147,47 @@ describe('layoutSpatialCanvas', () => {
     }
   })
 
+  it('emits a label run for an edge that carries one, centered on the routed path midpoint', () => {
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b', label: 'edge label' }
+    const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
+
+    const label = scene.nodes.find(
+      (n): n is TextRunNode => n.kind === 'textRun' && n.text === 'edge label',
+    )
+    expect(label).toBeDefined()
+    expect(label?.appearance?.fill).toBe('#303030')
+  })
+
+  it('emits no label run for an edge with no label', () => {
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
+    expect(scene.nodes.some((n) => n.kind === 'textRun' && n.text === 'edge label')).toBe(false)
+  })
+
+  it('emits no label run for an edge with an empty-string label', () => {
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 200, y: 0, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b', label: '' }
+    const scene = layoutSpatialCanvas(canvas([a, b], [edge]), baseOptions())
+    expect(scene.nodes.some((n) => n.kind === 'textRun' && n.bbox.w === 0)).toBe(false)
+  })
+
+  it('drops the label of an edge whose endpoint is missing, rather than floating it', () => {
+    const a = textNode({ id: 'a' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'ghost', label: 'edge label' }
+    let scene!: ReturnType<typeof layoutSpatialCanvas>
+    expect(() => {
+      scene = layoutSpatialCanvas(canvas([a], [edge]), baseOptions())
+    }).not.toThrow()
+    // Not-throwing alone would still pass with the label drawn on the
+    // unrouted edge's lone fallback point — text with no line attached.
+    expect(scene.nodes.some((n) => n.kind === 'textRun' && n.text === 'edge label')).toBe(false)
+  })
+
   it('degrades a missing edge endpoint instead of throwing, keeping all nodes', () => {
     const a = textNode({ id: 'a' })
     const edge = { id: 'e1', fromNode: 'a', toNode: 'ghost' }

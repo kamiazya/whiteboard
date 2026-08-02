@@ -191,6 +191,66 @@ function composeEdge(
 }
 
 /**
+ * The point along `path` used to center an edge's label. Not an exact
+ * arc-length midpoint — the midpoint of the two vertices straddling the
+ * path's index midpoint — which is exact for the common 2-point straight
+ * edge and a stable, deterministic approximation for a multi-point routed
+ * path (e.g. a self-edge loop).
+ *
+ * Returns `undefined` when the path draws no line — fewer than two points,
+ * or every point at the same place. `routeEdge`'s missing-endpoint fallback
+ * is that second case specifically: it degrades to `[origin, origin]`, a
+ * two-point path of zero length. A point-count check alone would miss it and
+ * center the label on the canvas origin, leaving text floating with nothing
+ * attached to it.
+ */
+function edgeMidpoint(
+  path: readonly { readonly x: number; readonly y: number }[],
+): { readonly x: number; readonly y: number } | undefined {
+  const first = path[0]
+  if (path.length < 2 || first === undefined) return undefined
+  if (path.every((p) => p.x === first.x && p.y === first.y)) return undefined
+  const mid = (path.length - 1) / 2
+  const lower = path[Math.floor(mid)]!
+  const upper = path[Math.ceil(mid)]!
+  return { x: (lower.x + upper.x) / 2, y: (lower.y + upper.y) / 2 }
+}
+
+/**
+ * Composes a centered label run for an edge that carries one. Returns
+ * `undefined` for no label, an empty/whitespace-only label, or a
+ * degenerate path — `layoutSpatialCanvas` stays total either way.
+ */
+function composeEdgeLabel(
+  edge: CanvasEdge,
+  routed: ResolvedEdgeNode,
+  options: SpatialLayoutOptions,
+): TextRunNode | undefined {
+  if (edge.label === undefined || edge.label.trim().length === 0) return undefined
+  const center = edgeMidpoint(routed.path)
+  if (!center) return undefined
+
+  const labelAppearance = options.appearance.resolveLabel()
+  const font = {
+    family: labelAppearance.fontFamily ?? 'sans-serif',
+    fallbackChain: [],
+    weight: 400,
+    style: 'normal' as const,
+    sizePx: options.appearance.labelFontSizePx,
+  }
+  const metrics = options.measure(edge.label, font)
+  const width = metrics.advanceWidth
+  const height = metrics.ascent + metrics.descent
+  return {
+    kind: 'textRun',
+    bbox: { x: center.x - width / 2, y: center.y - height / 2, w: width, h: height },
+    baseline: metrics.ascent,
+    text: edge.label,
+    appearance: { ...labelAppearance, fontSize: options.appearance.labelFontSizePx },
+  }
+}
+
+/**
  * Composes a canvas-render `Scene` from a `SpatialCanvas`. Pure: takes the
  * already-read canvas plus injected measurer/body-parser/appearance, and
  * performs no I/O.
@@ -198,5 +258,8 @@ function composeEdge(
 export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayoutOptions): Scene {
   const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, options))
   const edgeContent = canvas.edges.map((edge) => composeEdge(canvas, edge, options))
-  return { nodes: [...nodeContent, ...edgeContent] }
+  const labelContent = canvas.edges
+    .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, options))
+    .filter((label): label is TextRunNode => label !== undefined)
+  return { nodes: [...nodeContent, ...edgeContent, ...labelContent] }
 }

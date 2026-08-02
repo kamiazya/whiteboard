@@ -318,6 +318,211 @@ describe('layoutMdastBlocks — inline cursor', () => {
   })
 })
 
+describe('layoutMdastBlocks — text run baseline', () => {
+  it('carries a measured ascent baseline while leaving bbox.y as the line top', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'heading', depth: 1, children: [{ type: 'text', value: 'Heading' }] }],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const heading = scene.nodes.find((n) => n.kind === 'heading')
+    expect(heading?.kind).toBe('heading')
+    if (heading?.kind !== 'heading') throw new Error('unreachable')
+    const [run] = heading.runs
+    // fake measure: ascent = fontSizePx * 0.8
+    expect(run.baseline).toBe(32 * 0.8)
+    // bbox.y must stay the line TOP (unaffected by baseline) so sceneBounds
+    // keeps measuring a true top-left box.
+    expect(run.bbox.y).toBe(0)
+  })
+})
+
+describe('layoutMdastBlocks — word wrap', () => {
+  it('wraps a paragraph whose text overflows maxWidth onto multiple lines, each run contained', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three four' }] }],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.length).toBeGreaterThan(1)
+    for (const run of paragraph.runs) {
+      expect(run.bbox.x).toBeGreaterThanOrEqual(0)
+      expect(run.bbox.x + run.bbox.w).toBeLessThanOrEqual(narrow.maxWidth)
+    }
+    // block height grows with the number of lines produced.
+    const lineHeight = paragraph.runs[0].bbox.h
+    const lineCount = new Set(paragraph.runs.map((r) => r.bbox.y)).size
+    expect(lineCount).toBeGreaterThan(1)
+    expect(paragraph.bbox.h).toBe(lineCount * lineHeight)
+  })
+
+  it('keeps a single unbreakable token wider than maxWidth as one overflowing run', () => {
+    const narrow = { measure, maxWidth: 10 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'unbreakabletoken' }] }],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].bbox.w).toBeGreaterThan(narrow.maxWidth)
+  })
+
+  it('does not throw and produces no wrap for a non-finite or non-positive maxWidth', () => {
+    for (const badWidth of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const bad = { measure, maxWidth: badWidth }
+      const root: MdastRoot = {
+        type: 'root',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three' }] }],
+      }
+      expect(() => layoutMdastBlocks(root, bad)).not.toThrow()
+    }
+  })
+
+  it('keeps an overflowing inline code span whole instead of splitting it at whitespace', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'inlineCode', value: 'function call with spaces()' }],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].text).toBe('function call with spaces()')
+  })
+
+  it('keeps an overflowing raw html run whole instead of splitting it at whitespace', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'html', value: '<span class="a b c" data-x="y">' }],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].text).toBe('<span class="a b c" data-x="y">')
+  })
+
+  it('preserves a space between a wrapped chunk and the next inline sibling', () => {
+    // mdast represents "long line " + strong("word") as two adjacent
+    // phrasing children: a text node ending in a space, then a styled run.
+    // The trailing space belongs to the wrapped chunk, not the sibling, so
+    // it must still separate them even when the chunk wraps mid-word.
+    const narrow = { measure, maxWidth: 50 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'long line ' },
+            { type: 'strong', children: [{ type: 'text', value: 'word' }] },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    const lastWrappedRun = paragraph.runs.find((r) => r.text === 'line')
+    const siblingRun = paragraph.runs.find((r) => r.text === 'word')
+    expect(lastWrappedRun).toBeDefined()
+    expect(siblingRun).toBeDefined()
+    if (!lastWrappedRun || !siblingRun) throw new Error('unreachable')
+    // Same line, so a real gap (a space's width) must separate them.
+    expect(siblingRun.bbox.y).toBe(lastWrappedRun.bbox.y)
+    const spaceWidth = measure(' ', {
+      family: 'test',
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal',
+      sizePx: 16,
+    }).advanceWidth
+    expect(siblingRun.bbox.x).toBeGreaterThanOrEqual(
+      lastWrappedRun.bbox.x + lastWrappedRun.bbox.w + spaceWidth,
+    )
+  })
+
+  it('adds exactly one separator space before the first word of a wrapped chunk with leading whitespace', () => {
+    // A chunk whose own text begins with whitespace (e.g. the second of two
+    // adjacent phrasing children "prose" + " word rest...") overflows as a
+    // whole even though its first word alone still fits on the current
+    // line. The leading-whitespace pre-add in `wrapAndPush` must not stack
+    // with the per-word loop's own separator-add on that first iteration —
+    // the gap before the first word must be exactly one space, not two.
+    const narrow = { measure, maxWidth: 100 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'aaaaa' },
+            { type: 'strong', children: [{ type: 'text', value: ` bb ${'c'.repeat(21)}` }] },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    const firstRun = paragraph.runs.find((r) => r.text === 'aaaaa')
+    const bbRun = paragraph.runs.find((r) => r.text === 'bb')
+    expect(firstRun).toBeDefined()
+    expect(bbRun).toBeDefined()
+    if (!firstRun || !bbRun) throw new Error('unreachable')
+    const spaceWidth = measure(' ', {
+      family: 'test',
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal',
+      sizePx: 16,
+    }).advanceWidth
+    expect(bbRun.bbox.x).toBeCloseTo(firstRun.bbox.x + firstRun.bbox.w + spaceWidth, 5)
+  })
+
+  it('keeps an overflowing inline math run whole instead of splitting it at whitespace', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'inlineMath', value: 'a + b + c + d + e' }],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].text).toBe('a + b + c + d + e')
+  })
+})
+
 describe('layoutMdastBlocks — single render path', () => {
   it('produces a deep-equal scene for preview, spatial-text-node, and export callers', () => {
     const root: MdastRoot = {

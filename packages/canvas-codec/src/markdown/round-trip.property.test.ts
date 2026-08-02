@@ -1,6 +1,6 @@
 import { mdastFlowContentArbitrary } from '@kamiazya/whiteboard-canvas-model/test-utils'
 import { describe, expect } from 'vitest'
-import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { fc, fcTest, hasNoEmptyContainer, withDefaults } from '../test-utils/fast-check.js'
 import { normalizeMdast } from './normalize.js'
 import { parseMarkdownBody, stringifyMarkdownBody } from './pipeline.js'
 
@@ -22,19 +22,6 @@ const EXCLUDED_ROUND_TRIP_TYPES = new Set([
   'linkReference',
   'imageReference',
 ])
-
-function hasNoEmptyContainer(node: any): boolean {
-  if (node === null || typeof node !== 'object') return true
-  if (Array.isArray(node.children)) {
-    // An empty container (e.g. a paragraph/blockquote with zero children)
-    // stringifies to nothing and a re-parse simply omits it — real
-    // information loss for a genuinely contentless node, not a normalization
-    // gap. Excluded from this property rather than special-cased away.
-    if (node.children.length === 0) return false
-    return node.children.every(hasNoEmptyContainer)
-  }
-  return true
-}
 
 function hasNoExcludedDescendant(node: any): boolean {
   if (node === null || typeof node !== 'object') return true

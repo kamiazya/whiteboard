@@ -38,6 +38,37 @@ describe('renderSceneToSvg', () => {
     expect(svg).toContain('a &amp; b &lt; c &gt; d')
   })
 
+  it('emits a text run with no baseline exactly as before (byte-identical additivity)', () => {
+    const scene: Scene = {
+      nodes: [{ kind: 'textRun', bbox: { x: 0, y: 10, w: 20, h: 16 }, text: 'hi' }],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('<text x="0" y="10">hi</text>')
+  })
+
+  it('shifts a text run down by its baseline offset when present', () => {
+    const scene: Scene = {
+      nodes: [{ kind: 'textRun', bbox: { x: 0, y: 10, w: 20, h: 16 }, text: 'hi', baseline: 12.8 }],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('<text x="0" y="22.8">hi</text>')
+  })
+
+  it('omits a non-finite baseline rather than reaching formatCoord', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'textRun',
+          bbox: { x: 0, y: 10, w: 20, h: 16 },
+          text: 'hi',
+          baseline: Number.NaN,
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg).toContain('<text x="0" y="10">hi</text>')
+  })
+
   it('emits an already-validated SVG fragment verbatim, wrapped in a group', () => {
     const scene: Scene = {
       nodes: [

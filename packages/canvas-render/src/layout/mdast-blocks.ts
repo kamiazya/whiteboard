@@ -96,12 +96,23 @@ interface PhrasingLayout {
  * Flattens phrasing content into an ordered list of styled text runs,
  * starting at the block's top-left corner (`cursor.y`, x = 0).
  *
- * This is a minimal non-wrapping inline cursor: within one line, each run's
- * `bbox.x` is the running horizontal cursor (previous runs' widths summed),
- * so sibling runs never overlap. Word-wrap at `options.maxWidth` is still
- * deferred to the future theme/line-layout slice — a single line can exceed
- * `maxWidth` — but a hard break (mdast `break`) always resets the cursor to
- * the block's left edge and advances to a new line one `fontSizePx` down.
+ * Within one line, each run's `bbox.x` is the running horizontal cursor
+ * (previous runs' widths summed), so sibling runs never overlap. A hard
+ * break (mdast `break`) always resets the cursor to the block's left edge
+ * and advances to a new line one `fontSizePx` down.
+ *
+ * Word-wrap: a chunk of text that would exceed `options.maxWidth` on its
+ * current line splits into per-word runs at whitespace boundaries, packed
+ * greedily onto successive lines. A chunk that already fits (the common
+ * case) stays a single run, unchanged from before wrapping existed — this
+ * keeps wrapping's blast radius limited to the cases that actually overflow.
+ * A single word wider than `maxWidth` on its own line is a deliberate
+ * exception: it is left as one overflowing run rather than broken mid-word.
+ * Wrapping is skipped entirely when `maxWidth` is non-finite or <= 0 (no
+ * meaningful width to wrap against). Inline code, raw HTML, and inline math
+ * runs are atomic — their source text may contain whitespace that is not a
+ * word boundary (a code span's argument list, an HTML tag's attributes),
+ * so they are always emitted as one run even when they overflow.
  */
 function layoutPhrasing(
   children: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
@@ -112,21 +123,79 @@ function layoutPhrasing(
 ): PhrasingLayout {
   const runs: TextRunNode[] = []
   const line = { x: 0, index: 0 }
+  const canWrap = Number.isFinite(options.maxWidth) && options.maxWidth > 0
 
-  const emit = (
+  const pushRun = (
     text: string,
-    extra: Partial<TextRunNode> = {},
-    runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean } = style,
+    extra: Partial<TextRunNode>,
+    runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
   ) => {
-    const width = measureRunWidth(options.measure, text, fontSizePx)
+    const metrics = options.measure(text, bodyFont(fontSizePx))
+    const width = clampAdvance(metrics.advanceWidth)
+    const baseline = clampAdvance(metrics.ascent)
     runs.push({
       kind: 'textRun',
       bbox: { x: line.x, y: cursor.y + line.index * fontSizePx, w: width, h: fontSizePx },
+      baseline,
       text,
       ...runStyle,
       ...extra,
     })
     line.x += width
+  }
+
+  const wrapAndPush = (
+    text: string,
+    extra: Partial<TextRunNode>,
+    runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+  ) => {
+    const words = text.split(/\s+/).filter((word) => word.length > 0)
+    const spaceWidth = measureRunWidth(options.measure, ' ', fontSizePx)
+    // `split(/\s+/)` discards this chunk's own leading/trailing whitespace.
+    // mdast represents "prose " + strong("word") as two adjacent phrasing
+    // children, so a trailing space stripped here would otherwise vanish
+    // between this chunk's last word and the next sibling's first run — a
+    // separator is due before the loop's first word in that case exactly
+    // like it is due before every subsequent word in this chunk, so both
+    // cases share the same separator-add-or-wrap logic below (a chunk's
+    // interior words are always whitespace-separated by construction).
+    const chunkHasLeadingSpace = /^\s/.test(text)
+    words.forEach((word, index) => {
+      const width = measureRunWidth(options.measure, word, fontSizePx)
+      const needsSeparator = index === 0 ? chunkHasLeadingSpace : true
+      if (needsSeparator && line.x > 0) {
+        if (line.x + spaceWidth + width > options.maxWidth) {
+          line.x = 0
+          line.index += 1
+        } else {
+          line.x += spaceWidth
+        }
+      }
+      pushRun(word, extra, runStyle)
+    })
+    if (words.length > 0 && /\s$/.test(text)) {
+      line.x += spaceWidth
+    }
+  }
+
+  const emit = (
+    text: string,
+    extra: Partial<TextRunNode> = {},
+    runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean } = style,
+    // Atomic runs (inline code, raw HTML, inline math) must never be split
+    // mid-token at a whitespace boundary — unlike prose, an internal space
+    // in their source text is not a word boundary.
+    wrappable = true,
+  ) => {
+    if (canWrap && wrappable) {
+      const fullWidth = measureRunWidth(options.measure, text, fontSizePx)
+      const overflows = line.x + fullWidth > options.maxWidth
+      if (overflows && /\s/.test(text)) {
+        wrapAndPush(text, extra, runStyle)
+        return
+      }
+    }
+    pushRun(text, extra, runStyle)
   }
 
   /** Walk `nodes`, then stamp `link` provenance onto every run they produced. */
@@ -152,14 +221,14 @@ function layoutPhrasing(
           emit(child.value, {}, currentStyle)
           break
         case 'inlineCode':
-          emit(child.value, { code: true }, currentStyle)
+          emit(child.value, { code: true }, currentStyle, false)
           break
         case 'break':
           line.x = 0
           line.index += 1
           break
         case 'html':
-          emit(child.value, {}, currentStyle)
+          emit(child.value, {}, currentStyle, false)
           break
         case 'emphasis':
           walk(child.children, { ...currentStyle, emphasis: true })
@@ -195,7 +264,7 @@ function layoutPhrasing(
           emit(child.alt ?? child.identifier, {}, currentStyle)
           break
         case 'inlineMath':
-          emit(child.value, {}, currentStyle)
+          emit(child.value, {}, currentStyle, false)
           break
         case 'wikiLink':
           emit(

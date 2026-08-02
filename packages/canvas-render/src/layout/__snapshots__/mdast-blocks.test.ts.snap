@@ -14,6 +14,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
       "level": 1,
       "runs": [
         {
+          "baseline": 25.6,
           "bbox": {
             "h": 32,
             "w": 57.599999999999994,
@@ -35,6 +36,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
       "kind": "paragraph",
       "runs": [
         {
+          "baseline": 12.8,
           "bbox": {
             "h": 16,
             "w": 153.6,
@@ -73,6 +75,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
               "kind": "paragraph",
               "runs": [
                 {
+                  "baseline": 12.8,
                   "bbox": {
                     "h": 16,
                     "w": 48,
@@ -111,6 +114,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
                       "kind": "paragraph",
                       "runs": [
                         {
+                          "baseline": 12.8,
                           "bbox": {
                             "h": 16,
                             "w": 57.599999999999994,
@@ -164,6 +168,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
               "kind": "tableCell",
               "runs": [
                 {
+                  "baseline": 12.8,
                   "bbox": {
                     "h": 16,
                     "w": 9.6,
@@ -185,6 +190,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
               "kind": "tableCell",
               "runs": [
                 {
+                  "baseline": 12.8,
                   "bbox": {
                     "h": 16,
                     "w": 9.6,
@@ -230,6 +236,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
           "kind": "paragraph",
           "runs": [
             {
+              "baseline": 12.8,
               "bbox": {
                 "h": 16,
                 "w": 57.599999999999994,
