@@ -16,7 +16,7 @@
       "!**/dist/**",
       "!**/node_modules/**",
       "!**/.playwright-mcp/**",
-      "!**/.claude/**",
+      "!.claude/**",
       "!packages/mcp-server/dist/**",
       "!packages/mcp-server/coverage/**",
       "!packages/mcp-server/tmp/**",
