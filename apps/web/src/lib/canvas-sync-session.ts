@@ -1,5 +1,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  readSpatialCanvas,
+  writeSpatialCanvas,
+  writeSpatialEdge,
+  writeSpatialNode,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import type { CanvasBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
 import { LoroDoc, UndoManager } from 'loro-crdt'
@@ -19,15 +24,6 @@ import {
 } from './canvas-sync-types.js'
 
 const log = getAppLogger('canvas-sync')
-
-// canvas-workspace's LoroDoc spatial layout convention (see
-// package-canvas-workspace.md): doc.getMap('nodes') / doc.getMap('edges'),
-// each a plain-object-valued LoroMap keyed by id. Mirrored here (rather than
-// imported — canvas-workspace does not export the key constants) so a
-// fine-grained write lands in the exact same container writeSpatialCanvas /
-// readSpatialCanvas already agree on.
-const NODES_KEY = 'nodes'
-const EDGES_KEY = 'edges'
 
 // Upper bound on dispose()'s drain phase (see `dispose()` below). Bounds the
 // wait for the flush-triggered commit's pushLocalUpdate invocation so a
@@ -127,21 +123,14 @@ export interface CanvasSyncSession {
   subscribe(listener: (canvas: SpatialCanvas, origin: 'local' | 'external') => void): () => void
 }
 
-function toPlainSpatialValue<T>(value: T): Record<string, unknown> {
-  // A round-trip through JSON strips `undefined`-valued keys the same way
-  // canvas-workspace's own nodeToFields/edgeToFields do by construction —
-  // Loro's LoroMap rejects an `undefined` value, and readSpatialCanvas's
-  // per-entry safeParse expects the key to be absent, not `undefined`.
-  return JSON.parse(JSON.stringify(value)) as Record<string, unknown>
-}
-
 /**
  * Writes exactly the node/edge the command targets into its own LoroMap
- * entry, and returns whether it could — false when the command's target id
- * is missing from `next` (see commitToDoc's fallback rule). This is what
- * preserves the node-level CRDT merge granularity a whole-document rewrite
- * would discard: a concurrent peer edit to a different node survives a
- * merge against this write.
+ * entry (via canvas-workspace's `writeSpatialNode`/`writeSpatialEdge`, the
+ * same field-projection `writeSpatialCanvas` uses), and returns whether it
+ * could — false when the command's target id is missing from `next` (see
+ * commitToDoc's fallback rule). This is what preserves the node-level CRDT
+ * merge granularity a whole-document rewrite would discard: a concurrent
+ * peer edit to a different node survives a merge against this write.
  */
 function writeCommandTarget(doc: LoroDoc, next: SpatialCanvas, command: EditorCommand): boolean {
   switch (command.kind) {
@@ -150,15 +139,13 @@ function writeCommandTarget(doc: LoroDoc, next: SpatialCanvas, command: EditorCo
     case 'set-text': {
       const node = next.nodes.find((n) => n.id === command.id)
       if (!node) return false
-      doc.getMap(NODES_KEY).set(node.id, toPlainSpatialValue(node))
-      doc.commit()
+      writeSpatialNode(doc, node)
       return true
     }
     case 'connect-nodes': {
       const edge = next.edges.find((e) => e.id === command.edgeId)
       if (!edge) return false
-      doc.getMap(EDGES_KEY).set(edge.id, toPlainSpatialValue(edge))
-      doc.commit()
+      writeSpatialEdge(doc, edge)
       return true
     }
     default:

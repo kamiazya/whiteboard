@@ -9,6 +9,13 @@ export {
   deriveWorkspaceIndexRows,
 } from './derive-index.js'
 export { extractBacklinks } from './extract-backlinks.js'
-export { readFacets, readSpatialCanvas, writeFacets, writeSpatialCanvas } from './loro-bridge.js'
+export {
+  readFacets,
+  readSpatialCanvas,
+  writeFacets,
+  writeSpatialCanvas,
+  writeSpatialEdge,
+  writeSpatialNode,
+} from './loro-bridge.js'
 export type { WorkspaceNode, WorkspaceTreeSnapshot } from './workspace-tree.js'
 export { WorkspaceTree } from './workspace-tree.js'

@@ -6,7 +6,14 @@ import type {
 } from '@kamiazya/whiteboard-canvas-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { readFacets, readSpatialCanvas, writeFacets, writeSpatialCanvas } from './loro-bridge.js'
+import {
+  readFacets,
+  readSpatialCanvas,
+  writeFacets,
+  writeSpatialCanvas,
+  writeSpatialEdge,
+  writeSpatialNode,
+} from './loro-bridge.js'
 
 function makeDoc(): LoroDoc {
   return new LoroDoc()
@@ -248,6 +255,48 @@ describe('loro-bridge', () => {
     const result = readSpatialCanvas(doc)
 
     expect(result.edges).toEqual([minimalEdge])
+  })
+
+  test('writeSpatialNode writes exactly one node without touching others', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [] })
+
+    const updated: SpatialNode = { ...TEXT_NODE, text: 'fine-grained update' }
+    writeSpatialNode(doc, updated)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes).toHaveLength(2)
+    const node0 = result.nodes.find((n) => n.id === TEXT_NODE.id)
+    expect(node0?.type).toBe('text')
+    if (node0?.type === 'text') expect(node0.text).toBe('fine-grained update')
+    expect(result.nodes.find((n) => n.id === FILE_NODE.id)).toEqual(FILE_NODE)
+  })
+
+  test('writeSpatialEdge writes exactly one edge without touching others', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+
+    const otherEdge: CanvasEdge = { id: 'edge-2', fromNode: 'node-2', toNode: 'node-1' }
+    writeSpatialEdge(doc, otherEdge)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.edges).toHaveLength(2)
+    expect(result.edges.find((e) => e.id === EDGE.id)).toEqual(EDGE)
+    expect(result.edges.find((e) => e.id === otherEdge.id)).toEqual(otherEdge)
+  })
+
+  test('writeSpatialNode preserves an unrelated node added by a concurrent CRDT merge', () => {
+    const doc1 = new LoroDoc()
+    const doc2 = new LoroDoc()
+    writeSpatialCanvas(doc1, { nodes: [TEXT_NODE], edges: [] })
+    doc2.import(doc1.export({ mode: 'snapshot' }))
+
+    writeSpatialNode(doc2, LINK_NODE)
+    doc1.import(doc2.export({ mode: 'snapshot' }))
+
+    const result = readSpatialCanvas(doc1)
+    const ids = result.nodes.map((n) => n.id).sort()
+    expect(ids).toEqual([TEXT_NODE.id, LINK_NODE.id].sort())
   })
 })
 

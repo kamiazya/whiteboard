@@ -91,6 +91,28 @@ export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
   doc.commit()
 }
 
+/**
+ * Writes exactly one node's LoroMap entry, leaving every other node/edge in
+ * the doc untouched. This is the node-level CRDT merge granularity a full
+ * `writeSpatialCanvas` resync would discard: a concurrent peer edit to a
+ * different node survives a merge against this write. Reuses the same
+ * `nodeToFields` field-projection `writeSpatialCanvas` uses, so a
+ * fine-grained caller (e.g. a debounced editor commit) can never drift from
+ * the full-resync encoding.
+ */
+export function writeSpatialNode(doc: LoroDoc, node: SpatialNode): void {
+  doc.getMap(NODES_KEY).set(node.id, nodeToFields(node))
+  doc.commit()
+}
+
+/**
+ * Edge counterpart to `writeSpatialNode` — see its doc comment.
+ */
+export function writeSpatialEdge(doc: LoroDoc, edge: CanvasEdge): void {
+  doc.getMap(EDGES_KEY).set(edge.id, edgeToFields(edge))
+  doc.commit()
+}
+
 export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
