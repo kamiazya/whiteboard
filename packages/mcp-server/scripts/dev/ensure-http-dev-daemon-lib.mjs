@@ -16,9 +16,9 @@ export const DEFAULT_READY_TIMEOUT_MS = 30_000
  * @returns {number}
  */
 export function resolveReadyTimeoutMs(env) {
-  const raw = env.WHITEBOARD_DEV_READY_TIMEOUT_MS
-  if (raw === undefined || raw === '') return DEFAULT_READY_TIMEOUT_MS
-  const parsed = Number(raw)
+  // Number(undefined) is NaN and Number('') is 0, so an absent or empty
+  // override falls through the same guard as a malformed one.
+  const parsed = Number(env.WHITEBOARD_DEV_READY_TIMEOUT_MS)
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_READY_TIMEOUT_MS
   return parsed
 }
