@@ -55,8 +55,12 @@ describe('docs layout contract', () => {
     )
   })
 
-  it('docs/reference/templates.md exists at the new path', () => {
-    expect(existsSync(resolve(repoRoot, 'docs/reference/templates.md'))).toBe(true)
+  // The only one of the moved pages that is now gone rather than relocated: it
+  // documented `template_insert`, `annotate_batch` and `box_with_label`, none of
+  // which are registered tools any more. Asserting its absence keeps the
+  // deletion deliberate — a page describing removed tools must not reappear.
+  it('docs/reference/templates.md does not exist (its tools were removed)', () => {
+    expect(existsSync(resolve(repoRoot, 'docs/reference/templates.md'))).toBe(false)
   })
 
   it('docs/contributing/review-checklist.md exists', () => {
