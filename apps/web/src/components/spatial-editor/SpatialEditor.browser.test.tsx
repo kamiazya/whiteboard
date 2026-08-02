@@ -1141,6 +1141,9 @@ describe('SpatialEditor (browser) — spatial text layout defects', () => {
     // Defect 4: the edge label text is present in the rendered SVG.
     const edgeLabel = headingTexts.find((t) => t.textContent === 'edge label')
     expect(edgeLabel).toBeTruthy()
+  })
+})
+
 function boxesOverlap(
   a: { x: number; y: number; width: number; height: number },
   b: { x: number; y: number; width: number; height: number },
