@@ -111,6 +111,30 @@ describe('ensureViewerFontLoaded', () => {
     expect(notifications).toHaveLength(1)
   })
 
+  it('does not tick the readiness subscriber when the late load fails after a timeout-degraded settle', async () => {
+    vi.useFakeTimers()
+    const { added } = installFakeFontApis()
+    const { ensureViewerFontLoaded, subscribeViewerFontReady, VIEWER_FONT_LOAD_TIMEOUT_MS } =
+      await importFreshFontLoading()
+
+    let notifications = 0
+    subscribeViewerFontReady(() => {
+      notifications += 1
+    })
+
+    const pending = ensureViewerFontLoaded()
+    await vi.advanceTimersByTimeAsync(VIEWER_FONT_LOAD_TIMEOUT_MS)
+    await expect(pending).resolves.toBe('degraded')
+
+    added[0]?.loadDeferred.reject(new Error('late failure'))
+    await vi.advanceTimersByTimeAsync(1000)
+
+    // A tick means "the real face is available now". The load failed, so
+    // the face is still absent — ticking would tell subscribers to
+    // re-measure against metrics that did not change.
+    expect(notifications).toBe(0)
+  })
+
   it('clears the pending timeout when the load wins the race before the bound', async () => {
     vi.useFakeTimers()
     const { added } = installFakeFontApis()

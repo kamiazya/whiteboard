@@ -68,8 +68,12 @@ async function loadViewerFont(): Promise<ViewerFontStatus> {
     // The face may still finish loading after this function already
     // resolved 'degraded' for first paint. This is the ONE additional tick
     // the readiness signal ever fires — never more, and never again once
-    // loadResult itself settles.
-    void loadResult.then(() => notifyReady())
+    // loadResult itself settles. A late load that *fails* must not tick:
+    // subscribers re-measure on a tick, and a tick that does not mean
+    // "the real face is now available" is a signal that lies.
+    void loadResult.then((status) => {
+      if (status === 'loaded') notifyReady()
+    })
     return 'degraded'
   }
   return settled
