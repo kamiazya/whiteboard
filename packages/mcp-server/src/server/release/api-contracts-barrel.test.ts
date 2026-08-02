@@ -26,6 +26,6 @@ describe('api-contracts barrel scope', () => {
   it('re-exports exactly the declared public surface — no other api-contracts modules', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
-    expect(specifiers).toEqual(['./branches.js', './canvas.js', './reconnect.js', './runtime.js'])
+    expect(specifiers).toEqual(['./branches.js', './canvas.js', './runtime.js'])
   })
 })

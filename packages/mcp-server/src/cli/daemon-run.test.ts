@@ -207,6 +207,53 @@ describe('runDaemonRun --data-dir storage redirection', () => {
   })
 })
 
+describe('runDaemonRun legacy reconnect trust-file purge', () => {
+  afterEach(() => {
+    resetDataDirForTests()
+    startHttpServerMock.mockClear()
+  })
+
+  it('removes a planted trusted-web-origins.json from the data dir on startup', async () => {
+    const fs = await import('node:fs/promises')
+    const dir = join(tmpdir(), `daemon-run-purge-${Date.now()}`)
+    await fs.mkdir(dir, { recursive: true })
+    const trustFile = join(dir, 'trusted-web-origins.json')
+    await fs.writeFile(trustFile, '{"schemaVersion":2,"origins":[]}')
+
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      port: 3099,
+      dataDir: dir,
+      env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+    })
+
+    expect(outcome.kind).toBe('running')
+    await expect(fs.readFile(trustFile, 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
+  it('returns its normal running outcome even when the purge itself rejects unexpectedly', async () => {
+    const purgeModule = await import('../daemon/purge-legacy-trust-file.js')
+    const spy = vi
+      .spyOn(purgeModule, 'purgeLegacyWebOriginTrustFile')
+      .mockRejectedValueOnce(new Error('purge exploded'))
+    try {
+      const dir = join(tmpdir(), `daemon-run-purge-fail-${Date.now()}`)
+      // Startup-totality property: an unexpected purge rejection (beyond the
+      // ENOENT/permission cases the function already swallows internally)
+      // must not change runDaemonRun's outcome — it can only add a log line.
+      const outcome = await runDaemonRun({
+        host: '127.0.0.1',
+        port: 3099,
+        dataDir: dir,
+        env: { WHITEBOARD_DAEMON_TOKEN: 'seam-test-token' },
+      })
+      expect(outcome.kind).toBe('running')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
 describe('runDaemonRun token source conflict', () => {
   afterEach(() => vi.clearAllMocks())
 
@@ -244,16 +291,24 @@ describe('runDaemonRun token source conflict', () => {
     const originalStdin = process.stdin
     Object.defineProperty(process, 'stdin', { value: fakeStdin, configurable: true })
     try {
+      // Wait for the real 'data' listener to attach before emitting: the
+      // startup path now awaits an async purge step ahead of the stdin
+      // read, so a fire-immediately queueMicrotask() can race ahead of
+      // readTokenFromStdin()'s listener registration and drop the event.
+      const listenerAttached = new Promise<void>((resolve) => {
+        fakeStdin.once('newListener', (event) => {
+          if (event === 'data') resolve()
+        })
+      })
       const outcomePromise = runDaemonRun({
         host: '127.0.0.1',
         tokenStdin: true,
         dataDir: '/tmp/whiteboard-test',
         env: {},
       })
-      queueMicrotask(() => {
-        fakeStdin.emit('data', 'stdin-only-token\n')
-        fakeStdin.emit('end')
-      })
+      await listenerAttached
+      fakeStdin.emit('data', 'stdin-only-token\n')
+      fakeStdin.emit('end')
       const outcome = await outcomePromise
       expect(outcome.kind).toBe('running')
       expect(startHttpServerMock).toHaveBeenCalledWith(
