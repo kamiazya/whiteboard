@@ -51,7 +51,7 @@ export function isLockStale({ meta, lockMtimeMs, nowMs, staleAfterMs, isPidAlive
   return nowMs - lockMtimeMs > staleAfterMs
 }
 
-function createLockFileExclusive(lockPath, content, fsOpen, fsWrite, fsClose) {
+function createLockFileExclusive(lockPath, content, { fsOpen, fsWrite, fsClose }) {
   const fd = fsOpen(lockPath, 'wx')
   try {
     fsWrite(fd, content)
@@ -90,9 +90,10 @@ export function acquireSpawnLock({
   fsUnlink = unlinkSync,
 }) {
   const content = JSON.stringify(meta)
+  const writers = { fsOpen, fsWrite, fsClose }
 
   try {
-    createLockFileExclusive(lockPath, content, fsOpen, fsWrite, fsClose)
+    createLockFileExclusive(lockPath, content, writers)
     return 'acquired'
   } catch (err) {
     if (/** @type {NodeJS.ErrnoException} */ (err)?.code !== 'EEXIST') {
@@ -104,7 +105,7 @@ export function acquireSpawnLock({
   try {
     existingMeta = JSON.parse(fsReadFile(lockPath, 'utf8'))
   } catch {
-    existingMeta = null
+    /* Absent or unparsable metadata — fall through to the age check. */
   }
 
   let lockMtimeMs
@@ -114,17 +115,13 @@ export function acquireSpawnLock({
     return 'held-by-other'
   }
 
-  const stale = isLockStale({ meta: existingMeta, lockMtimeMs, nowMs, staleAfterMs, isPidAlive })
-  if (!stale) return 'held-by-other'
-
-  try {
-    fsUnlink(lockPath)
-  } catch {
+  if (!isLockStale({ meta: existingMeta, lockMtimeMs, nowMs, staleAfterMs, isPidAlive })) {
     return 'held-by-other'
   }
 
   try {
-    createLockFileExclusive(lockPath, content, fsOpen, fsWrite, fsClose)
+    fsUnlink(lockPath)
+    createLockFileExclusive(lockPath, content, writers)
     return 'acquired'
   } catch {
     return 'held-by-other'

@@ -228,17 +228,34 @@ const lockMeta = {
   repoRoot: REPO_ROOT,
 }
 
-// Best-effort net: releases our lock on ANY exit path we didn't explicitly
-// release on already (release is idempotent — it only unlinks a lock that
-// still records our own pid). Correctness never depends on this actually
-// running; the staleness window in acquireSpawnLock is the real backstop
-// for a process that dies without reaching it (e.g. SIGKILL).
+// Single release path: every exit below goes through process.exit(), so
+// releasing here covers them all (release only unlinks a lock that still
+// records our own pid, so it can never clobber a successor). Correctness
+// never depends on this running; the staleness window in acquireSpawnLock
+// is the backstop for a process that dies without reaching it (SIGKILL).
 process.on('exit', () => {
   releaseSpawnLock({ lockPath: LOCK_PATH, ownerPid: process.pid })
 })
 
-function release() {
-  releaseSpawnLock({ lockPath: LOCK_PATH, ownerPid: process.pid })
+function tryAcquireLock() {
+  return acquireSpawnLock({
+    lockPath: LOCK_PATH,
+    meta: lockMeta,
+    staleAfterMs: SPAWN_LOCK_STALE_MS,
+    isPidAlive,
+  })
+}
+
+function sleep(ms) {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
+}
+
+function failReadyTimeout(detail = '') {
+  console.error(
+    `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}. ` +
+      'MCP tools will be unavailable for this session.',
+  )
+  process.exit(1)
 }
 
 // WINNER: acquired the spawn lock. Re-run the assessment now that we hold
@@ -248,12 +265,10 @@ async function runAsWinner() {
   const assessment = await assessDaemon()
   if (assessment.kind === 'healthy') {
     info(`[ensure-http-dev-daemon] ${assessment.message}`)
-    release()
     process.exit(0)
   }
   if (assessment.kind === 'conflict') {
     console.error(`[ensure-http-dev-daemon] ${assessment.message}`)
-    release()
     process.exit(1)
   }
 
@@ -269,7 +284,6 @@ async function runAsWinner() {
   })
   child.on('error', (err) => {
     console.error(`[ensure-http-dev-daemon] failed to spawn ${pnpmCmd}: ${err.message}`)
-    release()
     process.exit(1)
   })
   await logFile.close()
@@ -286,18 +300,12 @@ async function runAsWinner() {
   })
   const ready = await waitForAuthenticatedMcp({
     probe: probeAuthenticatedMcpDaemon,
-    sleep: (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
+    sleep,
     timeoutMs: READY_TIMEOUT_MS,
     pollIntervalMs: READY_POLL_INTERVAL_MS,
   })
   if (!ready) {
-    const detail = exitedEarly ? `; spawned process exited with code ${exitCode}` : ''
-    console.error(
-      `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}. ` +
-        'MCP tools will be unavailable for this session.',
-    )
-    release()
-    process.exit(1)
+    failReadyTimeout(exitedEarly ? `; spawned process exited with code ${exitCode}` : '')
   }
 
   // The initial assessment saw the port free, but another worktree's hook
@@ -320,11 +328,9 @@ async function runAsWinner() {
         'first. Rerun this hook; if it keeps happening, set WHITEBOARD_DEV_PORT to a distinct value ' +
         'for one of the worktrees.',
     )
-    release()
     process.exit(1)
   }
 
-  release()
   // Detach now that we know the daemon is up — keeps the parent shell free
   // to disconnect without taking the child down with it.
   child.unref()
@@ -344,7 +350,6 @@ async function runAsWinner() {
 // staying stuck behind a corpse.
 async function runAsLoser() {
   const startedAt = Date.now()
-  const sleep = (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
   while (Date.now() - startedAt < READY_TIMEOUT_MS) {
     if ((await probeAuthenticatedMcpDaemon()) === 'ours') {
       info(
@@ -352,32 +357,16 @@ async function runAsLoser() {
       )
       process.exit(0)
     }
-    const acquireResult = acquireSpawnLock({
-      lockPath: LOCK_PATH,
-      meta: lockMeta,
-      staleAfterMs: SPAWN_LOCK_STALE_MS,
-      isPidAlive,
-    })
-    if (acquireResult === 'acquired') {
+    if (tryAcquireLock() === 'acquired') {
       await runAsWinner()
       return
     }
     await sleep(READY_POLL_INTERVAL_MS)
   }
-  console.error(
-    `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms — see ${LOG_PATH}. ` +
-      'MCP tools will be unavailable for this session.',
-  )
-  process.exit(1)
+  failReadyTimeout()
 }
 
-const acquireResult = acquireSpawnLock({
-  lockPath: LOCK_PATH,
-  meta: lockMeta,
-  staleAfterMs: SPAWN_LOCK_STALE_MS,
-  isPidAlive,
-})
-if (acquireResult === 'acquired') {
+if (tryAcquireLock() === 'acquired') {
   await runAsWinner()
 } else {
   await runAsLoser()
