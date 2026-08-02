@@ -195,14 +195,21 @@ function composeEdge(
  * arc-length midpoint — the midpoint of the two vertices straddling the
  * path's index midpoint — which is exact for the common 2-point straight
  * edge and a stable, deterministic approximation for a multi-point routed
- * path (e.g. a self-edge loop). A degenerate 0/1-point path (the missing-
- * endpoint fallback) degrades to that lone point rather than throwing.
+ * path (e.g. a self-edge loop).
+ *
+ * Returns `undefined` when the path draws no line — fewer than two points,
+ * or every point at the same place. `routeEdge`'s missing-endpoint fallback
+ * is that second case specifically: it degrades to `[origin, origin]`, a
+ * two-point path of zero length. A point-count check alone would miss it and
+ * center the label on the canvas origin, leaving text floating with nothing
+ * attached to it.
  */
 function edgeMidpoint(
   path: readonly { readonly x: number; readonly y: number }[],
 ): { readonly x: number; readonly y: number } | undefined {
-  if (path.length === 0) return undefined
-  if (path.length === 1) return path[0]
+  const first = path[0]
+  if (path.length < 2 || first === undefined) return undefined
+  if (path.every((p) => p.x === first.x && p.y === first.y)) return undefined
   const mid = (path.length - 1) / 2
   const lower = path[Math.floor(mid)]!
   const upper = path[Math.ceil(mid)]!

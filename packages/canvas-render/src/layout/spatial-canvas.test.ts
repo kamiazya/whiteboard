@@ -176,10 +176,16 @@ describe('layoutSpatialCanvas', () => {
     expect(scene.nodes.some((n) => n.kind === 'textRun' && n.bbox.w === 0)).toBe(false)
   })
 
-  it('degrades a labelled edge with a missing endpoint instead of throwing', () => {
+  it('drops the label of an edge whose endpoint is missing, rather than floating it', () => {
     const a = textNode({ id: 'a' })
     const edge = { id: 'e1', fromNode: 'a', toNode: 'ghost', label: 'edge label' }
-    expect(() => layoutSpatialCanvas(canvas([a], [edge]), baseOptions())).not.toThrow()
+    let scene!: ReturnType<typeof layoutSpatialCanvas>
+    expect(() => {
+      scene = layoutSpatialCanvas(canvas([a], [edge]), baseOptions())
+    }).not.toThrow()
+    // Not-throwing alone would still pass with the label drawn on the
+    // unrouted edge's lone fallback point — text with no line attached.
+    expect(scene.nodes.some((n) => n.kind === 'textRun' && n.text === 'edge label')).toBe(false)
   })
 
   it('degrades a missing edge endpoint instead of throwing, keeping all nodes', () => {
