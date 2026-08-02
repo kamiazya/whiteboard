@@ -7,6 +7,10 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+// Real app styles — needed so the Add-note-button affordance test's
+// getComputedStyle assertions reflect the actual shipped CSS, not
+// unstyled-DOM defaults.
+import '../../index.css'
 import type { EditorCommand } from './commands.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -1137,5 +1141,130 @@ describe('SpatialEditor (browser) — spatial text layout defects', () => {
     // Defect 4: the edge label text is present in the rendered SVG.
     const edgeLabel = headingTexts.find((t) => t.textContent === 'edge label')
     expect(edgeLabel).toBeTruthy()
+function boxesOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+describe('node placement and affordances', () => {
+  it('two consecutive Add note clicks with no other interaction do not overlap', async () => {
+    const onChange = vi.fn()
+    let ids = 0
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <ControlledEditor
+          initial={{ nodes: [], edges: [] }}
+          onChange={onChange}
+          createId={() => `add-note-${++ids}`}
+        />
+      </div>,
+    )
+    const button = page.getByTestId('add-node-button')
+    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await waitFor(() => {
+      const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+      expect(canvas.nodes).toHaveLength(1)
+    })
+    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await waitFor(() => {
+      const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+      expect(canvas.nodes).toHaveLength(2)
+    })
+    const finalCanvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+    const [first, second] = finalCanvas.nodes
+    expect(first).toBeDefined()
+    expect(second).toBeDefined()
+    expect(boxesOverlap(first!, second!)).toBe(false)
+  })
+
+  it('clicking empty canvas commits typed text instead of losing it (click-away commits)', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <ControlledEditor
+          initial={{ nodes: [], edges: [] }}
+          onChange={onChange}
+          createId={() => 'note-1'}
+        />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    const button = page.getByTestId('add-node-button')
+    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    const textEditor = page.getByTestId('text-node-editor')
+    await textEditor.fill('typed before clicking away')
+
+    // Click far-away empty canvas space rather than blurring the textarea
+    // directly — this is the pointerdown-empty path the reducer must commit
+    // through, not commit-text-edit dispatched directly.
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 580,
+        clientY: 380,
+        pointerId: 90,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: 580,
+        clientY: 380,
+        pointerId: 90,
+      }),
+    )
+
+    await waitFor(() => {
+      const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+      const node = canvas.nodes.find((n) => n.id === 'note-1')
+      expect(node?.type === 'text' ? node.text : undefined).toBe('typed before clicking away')
+    })
+  })
+
+  it('pressing Escape still discards typed text (the one documented discard path)', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <ControlledEditor
+          initial={{ nodes: [], edges: [] }}
+          onChange={onChange}
+          createId={() => 'note-2'}
+        />
+      </div>,
+    )
+    const button = page.getByTestId('add-node-button')
+    await button.element().dispatchEvent(new MouseEvent('click', { bubbles: true }))
+
+    const textEditor = page.getByTestId('text-node-editor')
+    await textEditor.fill('should be discarded')
+    await textEditor
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+
+    const canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+    const node = canvas.nodes.find((n) => n.id === 'note-2')
+    expect(node?.type === 'text' ? node.text : undefined).toBe('')
+  })
+
+  it('the Add note button has real, visible button affordance (not a bare, transparent element)', async () => {
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={{ nodes: [], edges: [] }} onChange={vi.fn()} measure={fakeMeasure} />
+      </div>,
+    )
+    const button = page.getByTestId('add-node-button').element() as HTMLButtonElement
+    const style = getComputedStyle(button)
+    const hasVisibleBackground = style.backgroundColor !== 'rgba(0, 0, 0, 0)'
+    const hasVisibleBorder = Number.parseFloat(style.borderWidth) > 0
+    expect(hasVisibleBackground || hasVisibleBorder).toBe(true)
+    expect(
+      Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingLeft),
+    ).toBeGreaterThan(0)
+    button.focus()
+    expect(document.activeElement).toBe(button)
   })
 })

@@ -2,6 +2,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
 import {
   boxContains,
+  findFreeSpot,
   hitTest,
   indexNodeBoxes,
   resizeBoxByDelta,
@@ -94,5 +95,45 @@ describe('resizeBoxByDelta', () => {
 
   it('e only affects width, not y/height', () => {
     expect(resizeBoxByDelta(box, 'e', 15, 999)).toEqual({ x: 0, y: 0, width: 115, height: 100 })
+  })
+})
+
+describe('findFreeSpot', () => {
+  const size = { width: 200, height: 100 }
+
+  it('returns the preferred point when nothing is occupied', () => {
+    expect(findFreeSpot({ x: 500, y: 300 }, size, [])).toEqual({ x: 500, y: 300 })
+  })
+
+  it('cascades to a non-overlapping point when the preferred box collides', () => {
+    const occupied = [{ x: 400, y: 250, width: 200, height: 100 }]
+    const spot = findFreeSpot({ x: 500, y: 300 }, size, occupied)
+    const box = { x: spot.x - size.width / 2, y: spot.y - size.height / 2, ...size }
+    const overlaps =
+      box.x < occupied[0].x + occupied[0].width &&
+      box.x + box.width > occupied[0].x &&
+      box.y < occupied[0].y + occupied[0].height &&
+      box.y + box.height > occupied[0].y
+    expect(overlaps).toBe(false)
+    expect(spot).not.toEqual({ x: 500, y: 300 })
+  })
+
+  it('is deterministic: same inputs produce the same output', () => {
+    const occupied = [{ x: 400, y: 250, width: 200, height: 100 }]
+    expect(findFreeSpot({ x: 500, y: 300 }, size, occupied)).toEqual(
+      findFreeSpot({ x: 500, y: 300 }, size, occupied),
+    )
+  })
+
+  it('is total: terminates and returns a finite point on a densely packed field', () => {
+    const occupied = Array.from({ length: 200 }, (_, i) => ({
+      x: i * 4,
+      y: i * 4,
+      width: 200,
+      height: 100,
+    }))
+    const spot = findFreeSpot({ x: 500, y: 300 }, size, occupied)
+    expect(Number.isFinite(spot.x)).toBe(true)
+    expect(Number.isFinite(spot.y)).toBe(true)
   })
 })
