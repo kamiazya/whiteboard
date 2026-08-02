@@ -89,7 +89,21 @@ export type GestureEvent =
   | { readonly type: 'pointermove'; readonly point: Point }
   | { readonly type: 'pointerup'; readonly point: Point; readonly targetNodeId?: string }
   | { readonly type: 'pointercancel' }
-  | { readonly type: 'canvas-replaced'; readonly canvas: SpatialCanvas }
+  | {
+      readonly type: 'canvas-replaced'
+      readonly canvas: SpatialCanvas
+      /**
+       * 'external' (undo, redo, remote import, hydrate) always cancels an
+       * in-flight gesture — the editor's derived state must never describe a
+       * canvas that no longer exists, even when the gesture's target node
+       * happens to still be present (the undo shape: reverted, not removed).
+       * 'local' (the controlled re-render from the editor's own onChange)
+       * defaults to the pre-existing continue-if-valid behavior, which in
+       * practice is a no-op since a local commit only ever lands once a
+       * gesture has already resolved to idle.
+       */
+      readonly origin?: 'local' | 'external'
+    }
   | { readonly type: 'start-text-edit'; readonly nodeId: string; readonly text: string }
   | { readonly type: 'update-text-edit'; readonly text: string }
   | { readonly type: 'commit-text-edit'; readonly text: string }
@@ -138,7 +152,12 @@ function withPendingTextCommit(prevState: GestureState, result: GestureResult): 
   }
 }
 
-function reduceCanvasReplaced(state: GestureState, replacement: SpatialCanvas): GestureResult {
+function reduceCanvasReplaced(
+  state: GestureState,
+  replacement: SpatialCanvas,
+  origin: 'local' | 'external',
+): GestureResult {
+  if (origin === 'external') return idle
   if (targetsStillValid(state, replacement)) {
     // Continue the gesture unchanged — the commit still uses the start
     // snapshot captured in `state`, never the replacement's coordinates.
@@ -261,7 +280,7 @@ export function reduceGesture(
 
   switch (event.type) {
     case 'canvas-replaced':
-      return reduceCanvasReplaced(state, event.canvas)
+      return reduceCanvasReplaced(state, event.canvas, event.origin ?? 'local')
     case 'pointercancel':
     case 'cancel-text-edit':
       return idle
