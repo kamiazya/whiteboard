@@ -14,25 +14,38 @@ function fakeCommands(): WhiteboardCommands {
   }
 }
 
-/** A minimal async fake of document.modelContext for lifecycle assertions. */
+/**
+ * Fake of `document.modelContext` shaped to Chrome's ACTUAL behaviour, verified
+ * against the shipping implementation:
+ *
+ * - `registerTool` is **synchronous and returns `undefined`** — not a promise.
+ *   An earlier fake returned one, which let the production code call `.catch()`
+ *   on the result and crash the whole page in any browser that really has
+ *   WebMCP, while every test stayed green.
+ * - The optional `{ signal }` bag IS honoured: aborting unregisters the tool.
+ *   (`registerTool.length` is 1 because WebIDL counts only required arguments.)
+ * - Registering a name that is already live throws `InvalidStateError`
+ *   synchronously.
+ */
 function createFakeModelContext(): ModelContext & {
   liveNames(): string[]
-  rejectNextRegistration: boolean
+  throwNextRegistration: boolean
 } {
-  const live = new Map<string, AbortSignal>()
+  const live = new Set<string>()
   const fake = {
-    rejectNextRegistration: false,
-    liveNames: () => [...live.keys()],
-    registerTool: async (descriptor: WebMcpToolDescriptor, options: { signal: AbortSignal }) => {
-      if (fake.rejectNextRegistration) {
-        fake.rejectNextRegistration = false
+    throwNextRegistration: false,
+    liveNames: () => [...live],
+    registerTool: (descriptor: WebMcpToolDescriptor, options?: { signal: AbortSignal }): void => {
+      if (fake.throwNextRegistration) {
+        fake.throwNextRegistration = false
         throw new Error('registration refused')
       }
-      // Simulate an async registration hop.
-      await Promise.resolve()
-      if (options.signal.aborted) return
-      live.set(descriptor.name, options.signal)
-      options.signal.addEventListener('abort', () => live.delete(descriptor.name))
+      if (live.has(descriptor.name)) {
+        throw new DOMException('Duplicate tool name', 'InvalidStateError')
+      }
+      if (options?.signal.aborted) return
+      live.add(descriptor.name)
+      options?.signal.addEventListener('abort', () => live.delete(descriptor.name))
     },
   }
   return fake
@@ -108,23 +121,52 @@ describe('useBrowserToolRegistry', () => {
     })
   })
 
-  it('an abort fired before registerTool resolves leaves no live tool registered', async () => {
+  it('unmounting aborts the signal, which unregisters every tool', async () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
     const { unmount } = render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)
-    // Unmount (which aborts) before the microtask queue lets the fake's
-    // `await Promise.resolve()` inside registerTool settle.
+    expect(fake.liveNames().length).toBeGreaterThan(0)
+
     unmount()
-    await Promise.resolve()
     await Promise.resolve()
 
     expect(fake.liveNames()).toEqual([])
   })
 
-  it('a rejected registration is caught and never becomes an unhandled rejection', async () => {
+  it('registration returning undefined does not crash the effect', () => {
+    // The regression that took down the whole canvas page in every browser
+    // with a real WebMCP implementation: the effect treated registerTool's
+    // return value as a promise. Nothing here may throw.
+    const live: string[] = []
+    document.modelContext = {
+      registerTool: (descriptor) => {
+        live.push(descriptor.name)
+        // Deliberately no return — this is what Chrome does.
+      },
+    }
+
+    expect(() => render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)).not.toThrow()
+    expect(live).toEqual(webMcpTools.map((tool) => tool.name))
+  })
+
+  it('a duplicate-name refusal is caught instead of taking down the page', () => {
+    // Chrome throws InvalidStateError synchronously for an already-live name.
     const fake = createFakeModelContext()
-    fake.rejectNextRegistration = true
+    document.modelContext = fake
+    fake.registerTool({
+      name: webMcpTools[0]!.name,
+      description: 'squatter',
+      inputSchema: {},
+      execute: async () => ({}),
+    })
+
+    expect(() => render(<TestHarness commands={fakeCommands()} canvasKey="c1" />)).not.toThrow()
+  })
+
+  it('a synchronous registration failure is caught and never escapes the effect', async () => {
+    const fake = createFakeModelContext()
+    fake.throwNextRegistration = true
     document.modelContext = fake
 
     const onUnhandledRejection = () => {
