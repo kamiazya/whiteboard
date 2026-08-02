@@ -30,4 +30,35 @@ describe('markdown pipeline pinned examples', () => {
     expect(text).toContain('Hello')
     expect(text).toContain('world')
   })
+
+  it('parses an unordered list without throwing, keeping ordered false and start absent', () => {
+    const root = parseMarkdownBody('- a\n- b\n')
+    const list = root.children[0]
+    expect(list.type).toBe('list')
+    if (list.type === 'list') {
+      expect(list.ordered).toBe(false)
+      expect(list.start).toBeUndefined()
+      expect(list.children).toHaveLength(2)
+    }
+  })
+
+  it('parses an ordered list keeping its start value', () => {
+    const root = parseMarkdownBody('1. a\n2. b\n')
+    const list = root.children[0]
+    expect(list.type).toBe('list')
+    if (list.type === 'list') {
+      expect(list.ordered).toBe(true)
+      expect(list.start).toBe(1)
+    }
+  })
+
+  it('parses a task list item keeping checked false', () => {
+    const root = parseMarkdownBody('- [ ] a\n')
+    const list = root.children[0]
+    expect(list.type).toBe('list')
+    if (list.type === 'list') {
+      const [item] = list.children
+      expect(item.checked).toBe(false)
+    }
+  })
 })
