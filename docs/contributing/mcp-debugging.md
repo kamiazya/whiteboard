@@ -199,3 +199,12 @@ can vanish silently, since the `SessionStart` hook only fires once per session a
 mid-session. If two processes race to bind the same port, the loser now logs one classified
 `{ port, code: 'EADDRINUSE' }` record via `getLogger('http-server')` and exits, instead of the raw
 unhandled-`'error'`-event stack trace `tmp/logs/mcp-http-dev.log` used to accumulate.
+
+If the hook itself times out waiting for the spawned daemon to answer an authenticated `/mcp`
+probe, it prints `MCP tools will be unavailable for this session` and exits non-zero — the session
+starts anyway, just without whiteboard MCP tools; check `tmp/logs/mcp-http-dev.log` for what the
+daemon was doing, then start it manually (`pnpm mcp:http:dev`) and reconnect. The wait bound
+defaults to 30s (cold `tsx` + `happy-dom` + canvas + resvg startup) and is overridable via
+`WHITEBOARD_DEV_READY_TIMEOUT_MS` (milliseconds; a non-numeric, non-integer, zero, or negative
+value falls back to the 30s default) — mainly useful for shortening the wait when scripting or
+testing the hook itself, not something a normal dev session needs to set.

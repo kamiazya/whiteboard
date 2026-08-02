@@ -126,90 +126,46 @@ that covers it (see
 verify it yourself before sharing a hosted pairing link. Loopback origins
 need no allowlist entry.
 
-## Silent reconnect after a reload
+## Pairing is required every session
 
-After pairing once via a `#wb=` link, reloading the hosted web app (or
-opening it again in a fresh tab, same browser, same origin) silently
-reconnects to the same daemon and reopens the canvas you were last on — no
-pairing link, no confirmation prompt. If that fails for any reason, the app
-falls back to the existing one-click `DaemonDetectedBanner` reconnect.
+Earlier versions of the web app offered a "silent reconnect" that skipped
+re-pairing on a reload by minting a possession credential (a WebCrypto
+keypair, with a plaintext-secret fallback for older daemons) and storing it
+in the browser origin's own IndexedDB/localStorage. That feature has been
+**removed**.
 
-How it works:
+The reason is loopback-port squatting: on `http://localhost:<port>`, any
+process that later takes over that port inherits the full origin, including
+everything IndexedDB and localStorage hold for it — Vite's dev port (5173)
+in particular is one of the most commonly contended ports on a developer
+machine. A same-origin script does not need to exfiltrate a non-extractable
+key to abuse it; it can read the `CryptoKey` object straight out of
+IndexedDB and call `crypto.subtle.sign()` with it, and a plaintext secret in
+`localStorage` is even more directly readable. Removing the credential
+entirely, rather than trying to hedge it, means this version of the app
+never creates or uses one again.
 
-- Right after a successful `#wb=` pairing, the web app generates a
-  non-extractable ECDSA P-256 keypair with WebCrypto (the private key never
-  leaves the browser's key store, not even to a bug that tries to export
-  it) and persists it in IndexedDB, then calls
-  `POST /api/reconnect-credential` (authenticated with the daemon token it
-  just received) to enroll this origin's **public key**. The daemon persists
-  the public key JWK, keyed to the exact origin that requested it, in
-  `trusted-web-origins.json` under the data directory (owner-only file
-  permissions, same as `daemon.json`). Only the public half ever leaves the
-  browser; the daemon token itself is never persisted.
-- On a later load with no `#wb=` fragment, the web app calls
-  `POST /api/reconnect-challenge` (unauthenticated) to mint a one-time
-  nonce for this origin, signs it with the stored private key, and calls
-  `POST /api/reconnect-session` with the resulting `{ challengeId,
-  signature }`. If the request's `Origin` header exactly matches the
-  enrolled origin and the signature verifies against that origin's stored
-  public key, the daemon responds with a fresh daemon token. While this
-  request is in flight the app shows a visible "Reconnecting to local
-  daemon…" status (bounded by a ~10-second timeout, never an indefinite
-  hang).
-- A trust record expires automatically 30 days after its last successful
-  use (a sliding TTL), so an origin that stops reconnecting eventually loses
-  its standing access on its own.
-- **Legacy fallback.** A pre-migration daemon that does not yet understand
-  the public-key contract responds to enrollment with a plaintext
-  **reconnect secret** instead; the web app detects that shape, persists
-  the secret in this origin's `localStorage`, and clears the just-created
-  (never confirmed) keypair record. On later loads it then redeems that
-  secret via `Authorization: Bearer <reconnect secret>` on
-  `POST /api/reconnect-session`; a successful redemption rotates the secret
-  and the app persists the replacement before using the token. This legacy
-  path is capped at a 90-day absolute TTL measured from first enrollment
-  (not reset by use), on top of the normal 30-day sliding TTL, so a legacy
-  secret cannot stay reconnectable forever just from periodic use — it is a
-  migration-compatibility shim, not the intended long-term path. The first
-  successful silent redemption of a legacy secret also triggers a
-  best-effort keypair enrollment attempt in the background, so a
-  pre-migration browser upgrades to the public-key contract on its own
-  rather than waiting out the 90-day TTL into a forced re-pairing; the
-  enrollment's outcome never affects that reconnect's own result. If two tabs
-  race to redeem the same legacy secret, the first to arrive wins and
-  rotates it; the loser's request is rejected, and if a concurrent rotation
-  is visible by then the app retries once with the winner's secret — the
-  loser otherwise clears its stale secret and falls back to the banner.
+Credentials written by an earlier version are a separate matter. The app
+erases them the first time it boots on that origin: the `reconnectKeypairs`
+object store is dropped during the IndexedDB upgrade, and the legacy
+localStorage secret is removed at startup regardless of whether the database
+is opened. Until that boot happens the old values are still sitting in the
+origin's storage, so a process that claims the port and serves the origin
+first can still read them. If you have an origin you no longer open with
+this app — an abandoned dev port, for instance — clear its site data in the
+browser rather than relying on a startup path that will never run.
 
-This is deliberately **not** an Origin-only check: the `Origin` header is
-just an HTTP header a same-machine process can set to anything, so trusting
-it alone would not add anything beyond what `daemon.json`'s file permissions
-already provide, and would be weaker for a request coming from anywhere the
-daemon is reachable. Reconnecting requires *proving possession* of the
-private key (or, on the legacy path, the rotating secret), not merely
-claiming an origin.
+The cost: reloading the hosted web app, or opening it in a fresh tab, no
+longer reconnects automatically. Each session re-pairs via a fresh `#wb=`
+link (or the one-click `DaemonDetectedBanner` reconnect below, which is a
+plain top-level navigation to the daemon's own origin — not a stored
+credential). See the [security model](../explanation/security-model.md) for
+the full trust-boundary discussion, including why this does not extend to
+canvas *data* itself in browser-local mode.
 
-**Threat model.** A confirmed keypair credential never leaves a signature
-on the wire that could be replayed — each challenge nonce is single-use —
-and the private key is non-extractable, so even a bug in the web app's own
-code cannot exfiltrate it. The legacy reconnect secret, where it is still
-in use, remains a long-lived *possession* credential: whoever presents it
-from the enrolled origin gets back a full-authority daemon token (a scoped
-OAuth grant is deliberately barred from enrolling either credential kind).
-Origin binding stops a *different* origin from redeeming a credential of
-either kind, but it is **not** a defense against same-origin XSS on the
-paired origin — any script running there can drive WebCrypto's `sign`
-operation, or read `localStorage`, the same way the app does. Treat both
-credential kinds with the same care as a long-lived session cookie.
-
-**Revoking trust.** Clicking "Forget this daemon" in the `DaemonDetectedBanner`
-clears the locally stored legacy secret and reconnect target for that
-browser; it does not remove an already-persisted IndexedDB keypair. Either
-way, the daemon-side trust record is what actually gates a future
-reconnect, so revoke it there (e.g. after a suspected compromise) with the
-CLI — the daemon re-reads the trust file on each reconnect request, so
-revocation takes effect immediately with no restart, regardless of which
-credential kind the browser holds:
+A daemon upgraded from a version that had silent reconnect may still hold
+origin trust records from that era in `trusted-web-origins.json`. Revoke any
+you no longer want trusted (e.g. after a suspected compromise) with:
 
 ```bash
 whiteboard trust list                # show trusted origins

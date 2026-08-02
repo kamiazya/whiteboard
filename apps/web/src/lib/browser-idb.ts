@@ -19,9 +19,20 @@ const DB_NAME = 'whiteboard'
  * Blobs, see canvas-file-store.ts). Existing 'meta'/'canvases'/'loroCanvases'
  * data is untouched.
  *
- * v4 -> v5: additive — adds the 'reconnectKeypairs' object store (WebCrypto
- * ECDSA P-256 keypairs for silent-reconnect, see reconnect-keypair-store.ts),
- * keyed by origin. Existing stores are untouched.
+ * v4 -> v5: additive — added the 'reconnectKeypairs' object store (WebCrypto
+ * ECDSA P-256 keypairs for silent-reconnect).
+ *
+ * v5 -> v6: REMOVES the 'reconnectKeypairs' object store. Unattended
+ * reconnect is gone (see docs/explanation/security-model.md): a process
+ * that takes over this origin's port inherits everything in this origin's
+ * storage, and a non-extractable CryptoKey does not need to be exfiltrated
+ * to be abused — same-origin script can call crypto.subtle.sign() with it
+ * directly. Deleting the store (not just abandoning it) is the point: a
+ * credential no longer read but still stored is still stealable. The
+ * companion plaintext secret this store's credential redeemed
+ * (localStorage['whiteboard.reconnect-secret.v1']) is purged separately by
+ * purge-legacy-reconnect-credentials.ts, since a localStorage key is not
+ * reachable from this IndexedDB upgrade transaction.
  *
  * Known limitation (accepted, not handled): if another tab holds a
  * connection open at the previous version, this open blocks
@@ -29,7 +40,7 @@ const DB_NAME = 'whiteboard'
  * behavior every prior DB_VERSION bump in this file has had. No new handling
  * is added for it here.
  */
-export const DB_VERSION = 5
+export const DB_VERSION = 6
 
 function stripLegacySceneField(tx: IDBTransaction): void {
   const store = tx.objectStore('canvases')
@@ -57,8 +68,11 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('canvases')) db.createObjectStore('canvases')
       if (!db.objectStoreNames.contains('loroCanvases')) db.createObjectStore('loroCanvases')
       if (!db.objectStoreNames.contains('canvasFiles')) db.createObjectStore('canvasFiles')
-      if (!db.objectStoreNames.contains('reconnectKeypairs')) {
-        db.createObjectStore('reconnectKeypairs', { keyPath: 'origin' })
+      // Guarded: deleteObjectStore on a store that does not exist throws and
+      // aborts the whole upgrade transaction, which would brick the DB open
+      // for a fresh install (oldVersion 0) or any DB that never reached v5.
+      if (db.objectStoreNames.contains('reconnectKeypairs')) {
+        db.deleteObjectStore('reconnectKeypairs')
       }
 
       // oldVersion === 0 is a fresh install (empty 'canvases' store), so the

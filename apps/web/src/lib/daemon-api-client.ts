@@ -34,6 +34,15 @@ function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string)
  * token must never leak to an absolute external URL or a foreign-origin
  * Request object that happens to pass through this wrapper (e.g. an
  * Excalidraw asset fetch).
+ *
+ * This is the SOLE place in apps/web allowed to set an Authorization header
+ * toward the daemon (enforced by daemon-auth-seam.test.ts's source scan).
+ * Keeping the token's attachment in one seam, rather than at each call site,
+ * is what lets a browser-extension proxy replace this single function instead
+ * of requiring an audit of every fetch in the app. That matters because an
+ * extension is the only place a persisted daemon credential can live safely:
+ * extension storage is scoped to the extension ID, not to a web origin that
+ * another process can take over by claiming the port.
  */
 export function createDaemonFetch(daemonBaseUrl: string, token?: string): typeof globalThis.fetch {
   const daemonOrigin = new URL(daemonBaseUrl).origin

@@ -17,6 +17,7 @@ import {
   buildMcpHttpDevSpawnArgs,
   isSelfHealableIdentity,
   resolveDevBearerToken,
+  resolveReadyTimeoutMs,
   verifyDevDaemonIdentity,
   waitForAuthenticatedMcp,
 } from './ensure-http-dev-daemon-lib.mjs'
@@ -34,11 +35,13 @@ const PORT = deriveDevPort({
 })
 const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
 const HOST = '127.0.0.1'
-// Upper bound on how long we'll wait for `pnpm mcp:http:dev` to bind. tsx
-// + happy-dom + canvas + resvg cold start + node_modules linking can take
-// ~10-15s on slow machines, so leave generous headroom. The hook is only
-// invoked once per session start, so this isn't on a hot path.
-const READY_TIMEOUT_MS = 30_000
+// Upper bound on how long we'll wait for `pnpm mcp:http:dev` to bind.
+// Defaults to 30s (tsx + happy-dom + canvas + resvg cold start +
+// node_modules linking can take ~10-15s on slow machines, so leave generous
+// headroom — the hook is only invoked once per session start, so this isn't
+// on a hot path). Overridable via WHITEBOARD_DEV_READY_TIMEOUT_MS, mainly so
+// tests can exercise the timeout path without waiting 30s.
+const READY_TIMEOUT_MS = resolveReadyTimeoutMs(process.env)
 const READY_POLL_INTERVAL_MS = 200
 // Bearer token expected by `/mcp`. Must match the value the local clients
 // (.claude/settings.json, .codex/config.toml) send. If a different daemon
@@ -229,7 +232,8 @@ const ready = await waitForAuthenticatedMcp({
 if (!ready) {
   const detail = exitedEarly ? `; spawned process exited with code ${exitCode}` : ''
   console.error(
-    `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}`,
+    `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}. ` +
+      'MCP tools will be unavailable for this session.',
   )
   process.exit(1)
 }
