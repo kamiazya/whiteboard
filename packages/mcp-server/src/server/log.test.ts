@@ -128,6 +128,7 @@ describe('redaction', () => {
     bootstrapToken: 'bootstrap-secret-token',
     accessToken: 'oauth-secret-token',
     wsTicket: 'ws-ticket-secret-value',
+    reconnectSecret: 'reconnect-secret-value',
     authorization: 'Bearer super-secret',
     cookie: 'session=super-secret',
     password: 'hunter2',
