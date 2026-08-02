@@ -76,11 +76,12 @@ anything you would not want a future occupant of that port to read.
 
 ## Browser-dependent operations
 
-Some operations require a connected browser client.
-
-- `viewport_set`
-
-This action is routed through the daemon to the browser and fails fast when no browser client is connected. `export_canvas` (all formats, including `png`) is rendered headlessly from the persisted document and does not require a connected browser client.
+No current MCP tool requires a connected browser client — canvas patching
+(`node_patch` / `edge_patch` / `body_patch` / `facet_set`), rendering
+(`canvas_render_svg`), export/import (`canvas_export_okf` /
+`canvas_export_json_canvas` / `canvas_import_okf`), and versioning
+(`version_save` / `version_restore` / `version_list`) all operate on the
+persisted document headlessly.
 
 ## WebMCP (experimental, browser-only, read-only)
 

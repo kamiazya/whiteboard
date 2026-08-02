@@ -1,7 +1,7 @@
 # Architecture
 
 <p align="center">
-  <img src="../assets/architecture.png" alt="Agent and user both draw on the same Excalidraw canvas via the Whiteboard MCP server" width="780" />
+  <img src="../assets/architecture.png" alt="Agent and user both draw on the same OpenCanvas whiteboard via the Whiteboard MCP server" width="780" />
   <br />
   <sub><i>Source: <a href="../assets/architecture.canvas">architecture.canvas</a> — open as a JSON Canvas document to remix.</i></sub>
 </p>
@@ -60,24 +60,20 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 
 | Tool | Purpose |
 |---|---|
-| `canvas_create` / `canvas_list` / `canvas_inspect` / `canvas_open` | Canvas lifecycle. `canvas_open` supports `fullscreen: true` to hide the sidebar. |
-| `template_list` / `template_insert` | List and insert built-in template fragments. `template_insert` expands through `annotate_batch`, so inserted elements remain normally editable. See [templates](../reference/templates.md). |
-| `annotate` / `annotate_batch` | Add elements, single-shot or batched with grid layout. |
-| `update_element` / `delete_element` / `move_elements` / `canvas_clear` | Edit elements. |
-| `viewport_set` | Control browser pan and zoom (`mode: "fit"` / `"move"`). |
-| `export_canvas` | Export the canvas as `format: "png" \| "svg" \| "json"`. PNG on success also returns `imageBase64` as MCP `ImageContent` to the LLM; JSON is JSON Canvas 1.0 format (with the `x-whiteboard` extension) for round-tripping with other JSON Canvas-compatible tools. |
+| `wb_canvas_create` / `wb_canvas_list` / `wb_canvas_get` / `wb_canvas_delete` | Canvas lifecycle (CRUD). |
+| `node_patch` / `edge_patch` / `body_patch` | Patch a canvas's spatial nodes, edges, or a node's Markdown body. |
+| `facet_set` | Set structured facet metadata on a canvas (used for the private ticketing backlog, among other uses). |
+| `canvas_render_svg` | Render the current canvas to an SVG string from its persisted document — no browser connection required. |
+| `canvas_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. |
+| `canvas_export_okf` / `canvas_import_okf` | Export/import a canvas as an OKF Markdown document (YAML frontmatter + Markdown body). |
+| `canvas_export_json_canvas` | Export a canvas as JSON Canvas 1.0 (with the `x-whiteboard` extension). |
 | `version_save` / `version_restore` / `version_list` | Save and restore labeled canvas versions. `version_restore` accepts an optional `targetSlug` to fork the past state into a new canvas instead of reconciling in place. |
-| `load_image` | Import an external image into the canvas. |
 
-`canvas_create` is the only tool that lazily creates a canvas on first
-touch. `annotate`, `annotate_batch`, `load_image`, `create_frame`,
-`create_embed`, and library-insert calls all check that `canvasId`
-resolves to an existing canvas first and fail with an explicit error
-(pointing at `canvas_create`) instead of silently creating a new, empty
-canvas — this catches a mistyped or hallucinated `canvasId` immediately
-rather than writing into the wrong place.
-
-`viewport_set` and `export_canvas({ format: "png" })` send instructions to the browser over WebSocket and settle on ACK, which is why they need a connected canvas tab. `export_canvas({ format: "svg" | "json" })` always renders headless from the persisted document instead. See [wire-protocol](../contributing/architecture/wire-protocol.md) for the full WebSocket message shapes.
+Every tool above operates on the persisted document and never requires a
+connected browser tab — canvas rendering and export are headless. `wb_canvas_create`
+is the only tool that lazily creates a canvas on first touch; the patch/render/export/
+version tools all fail with an explicit error if `canvasId` does not resolve to an
+existing canvas, instead of silently creating a new, empty one.
 
 ## Why Loro
 

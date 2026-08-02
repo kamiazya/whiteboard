@@ -143,7 +143,7 @@ Add to `~/.gemini/settings.json`:
 
 ### Verify
 
-In your agent session, ask it to call `wb_canvas_create({ slug: "smoke" })`. The first call opens a Chromium tab pointed at the canvas and creates `~/.whiteboard/{workspaceId}/`.
+In your agent session, ask it to call `wb_canvas_create({ workspaceId: "default", segment: "smoke" })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/canvas/{workspaceId}/smoke` in a browser tab to see it.
 
 ## Pair with your local daemon
 
@@ -184,7 +184,7 @@ Three opinionated `SKILL.md` packs ship inside the npm package. The recommended 
 You    Use whiteboard to sketch the request flow for our auth service:
        client → API gateway → token service → DB. Highlight where caching lives.
 
-Agent  { canvasId } = wb_canvas_create({ slug: "auth-flow" })
+Agent  { canvasId } = wb_canvas_create({ workspaceId: "default", segment: "auth-flow" })
        node_patch({ canvasId, nodes: [ /* 4 service boxes */ ] })
        edge_patch({ canvasId, edges: [ /* arrows between them */ ] })
        node_patch({ canvasId, nodes: [ { id: "cache-note", type: "text",
@@ -204,7 +204,7 @@ The agent returns the `canvas_render_svg` result so the next turn can reason abo
 | Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/contributing/development.md](docs/contributing/development.md) |
 | Environment variables, storage layout, Codex sandbox quirks | [docs/reference/configuration.md](docs/reference/configuration.md) |
 | Components, data flow, MCP tool surface, design boundaries | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
-| Custom template fragment JSON format used by `template_insert` | [docs/reference/templates.md](docs/reference/templates.md) |
+| Export formats (SVG, OKF Markdown, JSON Canvas) and their tools | [docs/reference/export-formats.md](docs/reference/export-formats.md) |
 | MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
 | Trust model for all three runtimes (browser-local, local daemon, server mode) | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
 | Pairing a browser tab to a local daemon, copy-first import | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
@@ -213,7 +213,7 @@ The agent returns the `canvas_render_svg` result so the next turn can reason abo
 
 ## Limitations
 
-- Live drawing and PNG export require a Chromium browser tab connected over WebSocket.
+- No MCP tool currently returns a raster (PNG) image or `ImageContent` — `canvas_render_svg` is the closest equivalent for handing a rendered canvas back to an LLM.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
 
 See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.

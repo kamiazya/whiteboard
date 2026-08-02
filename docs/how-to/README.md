@@ -9,12 +9,12 @@ Guides:
 - **[connect-to-local-daemon](connect-to-local-daemon.md)** — detect a local daemon from the web
   app and copy browser-local canvases onto it.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas
-  view inline in an MCP Apps-compatible AI chat client.
+  view inline in an MCP Apps-compatible AI chat client (currently unavailable — see the page's
+  notice).
 
 Planned guides:
 
 - **Configure an MCP client** — point Claude Code or Codex at Whiteboard.
 - **Run the local daemon** — start the loopback daemon for agent workflows.
-- **Use templates** — insert and parameterize reusable canvas fragments.
 
 ← Back to [documentation home](../)

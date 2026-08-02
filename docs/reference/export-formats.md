@@ -1,31 +1,19 @@
 # Export formats
 
-The MCP server exports a canvas through the `export_canvas` tool, selected by its `format`
-argument. `export_svg` also exists as a standalone tool with the same underlying behavior for
-callers that only need SVG.
+The MCP server exposes three export-shaped tools, each rendered headlessly from
+the canvas's persisted document — none of them require a connected browser client.
 
-| `format` | Output | Rendering |
+| Tool | Output | Notes |
 | --- | --- | --- |
-| `png` | Raster image | Always rendered headlessly from the persisted document |
-| `svg` | Vector image (`.svg`) | Always rendered headlessly from the persisted document — no browser connection required |
-| `json` | Standard `.excalidraw` JSON | Always rendered headlessly from the persisted document |
+| `canvas_render_svg` | Vector image (`.svg`) | Rendered from the canvas's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. |
+| `canvas_export_okf` | OKF Markdown document (YAML frontmatter + Markdown body) | Lossless round-trip with `canvas_import_okf`. |
+| `canvas_export_json_canvas` | JSON Canvas 1.0 (with the `x-whiteboard` extension) | Round-trips with other JSON Canvas-compatible tools; the `x-whiteboard` extension carries whiteboard-specific fields that a strict JSON Canvas reader can safely drop. |
 
-All three formats accept an optional `outputPath` (must be an absolute path that resolves
-inside the workspace's `exports/` directory) and `overwrite`. `png` and `svg` additionally
-accept `padding`, `frameId`, and `theme`; `png` alone accepts `scale` and `minFontPx`; `json`
-alone accepts `includeCustomFields`.
+A `file` node renders as a labeled box when exported to SVG; its referenced image
+is not embedded in the output.
 
-`png` and `svg` are rendered from the canvas's spatial layout (canvas-render's scene graph +
-SVG backend, rasterized by resvg for `png`) — shapes, laid-out Markdown text, and routed edges.
-`frameId` and `minFontPx` are accepted for wire compatibility with older callers but are
-ignored: the spatial canvas has no frame grouping and no per-element font size to clamp.
-A `file` node renders as a labeled box; its referenced image is not embedded in the output.
-Exported PNGs no longer embed the canvas's scene data — a `.png` file is a plain raster you
-can view or share, not a round-trippable scene document.
-
-All three formats are rendered headlessly from the persisted document and never depend on a
-live browser connection, so they all work equally well for automated export pipelines (CI,
-scripted diagram linting, doc generation) where no whiteboard client may be attached to the
-canvas.
+There is currently no raster (PNG) export tool and no tool that returns image
+bytes as MCP `ImageContent` — `canvas_render_svg` is the closest equivalent for
+handing a rendered canvas back to an LLM.
 
 ← Back to [reference](README.md)
