@@ -8,12 +8,32 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-canvas-model/mdast'
 import { describe, expect, it } from 'vitest'
+import type { MeasureText } from '../measure.js'
 import type { Scene, SceneNode } from '../scene-graph.js'
-import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
-const measure = createFakeMeasure()
+// Deliberately NOT the shared `createFakeMeasure`, which ignores
+// `font.family` — with a family-blind measurer this whole file passes for any
+// resolver whatsoever, because a resolver's remaining influence on geometry
+// runs exclusively through the family it declares (`resolveLabel().fontFamily`
+// reaches `measure`, see spatial-canvas.ts). The real measurers are
+// family-sensitive (browser Canvas 2D, opentype.js), so a family-blind fake
+// hides the one divergence this guard still has to catch.
+const CHAR_WIDTH_BY_FAMILY: Readonly<Record<string, number>> = {
+  'sans-serif': 0.6,
+  Roboto: 0.55,
+}
+
+const measure: MeasureText = (text, font) => {
+  const charWidth = CHAR_WIDTH_BY_FAMILY[font.family] ?? 0.6
+  return {
+    advanceWidth: text.length * charWidth * font.sizePx,
+    ascent: font.sizePx * 0.8,
+    descent: font.sizePx * 0.2,
+    lineGap: font.sizePx * 0.1,
+  }
+}
 
 function fakeParseBody(text: string): MdastRoot {
   return {
@@ -22,9 +42,13 @@ function fakeParseBody(text: string): MdastRoot {
   }
 }
 
-// Three appearance-only resolvers that disagree on nothing but color — the
-// narrowed `SpatialAppearanceResolver` (post-theme-layer) has no room left
-// for a resolver to smuggle in its own geometry.
+// Three appearance-only resolvers that disagree on nothing but color. The
+// narrowed `SpatialAppearanceResolver` (post-theme-layer) has no room left for
+// a resolver to carry its own geometry CONSTANTS, so those cannot diverge by
+// construction. What a resolver can still change is the label FAMILY, and
+// family changes text metrics — which is why all three declare the same one
+// (explicitly, or via layout's 'sans-serif' fallback) and why the measurer
+// above is family-sensitive.
 const editorShaped: SpatialAppearanceResolver = {
   resolveNode: () => ({ appearance: { fill: 'none', stroke: '#333333' } }),
   resolveEdge: () => ({ stroke: '#333333' }),
