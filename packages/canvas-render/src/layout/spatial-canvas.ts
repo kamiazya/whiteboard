@@ -79,21 +79,24 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
  * field-by-field, keeping this function total rather than letting a bad
  * override propagate NaN/negative values into node/text geometry.
  */
+function nonNegativeOr(value: number, fallback: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : fallback
+}
+
+function positiveOr(value: number, fallback: number): number {
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
 function resolveGeometry(geometry: SpatialGeometry | undefined): SpatialGeometry {
   if (!geometry) return SPATIAL_THEME_GEOMETRY
-  const paddingPx =
-    Number.isFinite(geometry.paddingPx) && geometry.paddingPx >= 0
-      ? geometry.paddingPx
-      : SPATIAL_THEME_GEOMETRY.paddingPx
-  const labelFontSizePx =
-    Number.isFinite(geometry.labelFontSizePx) && geometry.labelFontSizePx > 0
-      ? geometry.labelFontSizePx
-      : SPATIAL_THEME_GEOMETRY.labelFontSizePx
-  const minContentWidthPx =
-    Number.isFinite(geometry.minContentWidthPx) && geometry.minContentWidthPx >= 0
-      ? geometry.minContentWidthPx
-      : SPATIAL_THEME_GEOMETRY.minContentWidthPx
-  return { paddingPx, labelFontSizePx, minContentWidthPx }
+  return {
+    paddingPx: nonNegativeOr(geometry.paddingPx, SPATIAL_THEME_GEOMETRY.paddingPx),
+    labelFontSizePx: positiveOr(geometry.labelFontSizePx, SPATIAL_THEME_GEOMETRY.labelFontSizePx),
+    minContentWidthPx: nonNegativeOr(
+      geometry.minContentWidthPx,
+      SPATIAL_THEME_GEOMETRY.minContentWidthPx,
+    ),
+  }
 }
 
 function contentWidth(nodeWidth: number, options: ResolvedLayoutOptions): number {

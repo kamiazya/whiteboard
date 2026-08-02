@@ -4,9 +4,10 @@
 // exported seam in headless-renderer.ts) with an injected fake measurer, so
 // this stays a fast unit test with no real opentype.js font load — the
 // mutation-check target for this slice.
+import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import { layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
 import { buildSpatialScene } from './headless-renderer.js'
 
@@ -29,19 +30,23 @@ function fixture(): SpatialCanvas {
   }
 }
 
-function geometryOf(scene: { nodes: readonly { kind: string; bbox: unknown }[] }): unknown {
-  return scene.nodes.map((node) => ({ kind: node.kind, bbox: node.bbox }))
+// Geometry-only projection (no color/stroke/fontFamily). `ResolvedEdgeNode`
+// carries `path`, every other SceneNode variant carries `bbox` — same shape
+// canvas-render's own `spatial-geometry-parity.test.ts` compares.
+function geometryOf(scene: Scene): unknown {
+  return scene.nodes.map((node) =>
+    node.kind === 'edge'
+      ? { kind: node.kind, path: node.path }
+      : { kind: node.kind, bbox: node.bbox },
+  )
 }
 
 describe('mcp-server export geometry conformance', () => {
-  it('produces the same geometry as layoutSpatialCanvas with no geometry override', async () => {
+  it('produces the same geometry as layoutSpatialCanvas with no geometry override', () => {
     const measure = fakeMeasure()
     const canvas = fixture()
 
     const exportScene = buildSpatialScene(canvas, measure)
-
-    const { parseMarkdownBody } = await import('@kamiazya/whiteboard-canvas-codec')
-    const { createSpatialTheme } = await import('@kamiazya/whiteboard-canvas-render')
     const defaultScene = layoutSpatialCanvas(canvas, {
       measure,
       parseBody: parseMarkdownBody,
