@@ -346,7 +346,7 @@ const sbomArtifactState = evaluateSbomArtifactState({
 
 describe('generated SBOM artifact currency', () => {
   it.skipIf(!sbomExists)(
-    'absent artifact: skipped — ci.yml sbom-npm job regenerates and runs this file on every PR/push',
+    'marker: when this reports SKIPPED the artifact is absent — ci.yml sbom-npm regenerates and runs this file on every PR/push',
     () => {
       // Intentionally empty: this test's role is to make the skip visible in
       // run output (see it.skipIf above), never a silent no-op inside a
