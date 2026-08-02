@@ -1,44 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-
-// jsdom implements neither the FontFace constructor nor document.fonts (see
-// widget-entry.test.tsx's own note) — each test installs a fake before
-// importing a fresh module instance, since ensureViewerFontLoaded()
-// memoizes its promise at module scope.
-class FakeFontFace {
-  loadDeferred: { resolve: () => void; reject: (err: unknown) => void }
-  private loadPromise: Promise<FakeFontFace>
-
-  constructor(
-    public family: string,
-    public source: string,
-  ) {
-    let resolve!: () => void
-    let reject!: (err: unknown) => void
-    this.loadPromise = new Promise<FakeFontFace>((res, rej) => {
-      resolve = () => res(this)
-      reject = rej
-    })
-    this.loadDeferred = { resolve, reject }
-  }
-
-  load(): Promise<FakeFontFace> {
-    return this.loadPromise
-  }
-}
-
-function installFakeFontApis(): { added: FakeFontFace[] } {
-  const added: FakeFontFace[] = []
-  ;(globalThis as any).FontFace = FakeFontFace
-  Object.defineProperty(document, 'fonts', {
-    configurable: true,
-    value: {
-      add(face: FakeFontFace) {
-        added.push(face)
-      },
-    },
-  })
-  return { added }
-}
+import {
+  FakeFontFace,
+  installFakeFontApis,
+  uninstallFakeFontApis,
+} from './test-utils/fake-font-face.js'
 
 async function importFreshFontLoading() {
   vi.resetModules()
@@ -48,7 +13,7 @@ async function importFreshFontLoading() {
 describe('ensureViewerFontLoaded', () => {
   afterEach(() => {
     vi.useRealTimers()
-    delete (globalThis as any).FontFace
+    uninstallFakeFontApis()
   })
 
   it('resolves "loaded" once the face finishes loading', async () => {
@@ -87,14 +52,14 @@ describe('ensureViewerFontLoaded', () => {
   })
 
   it('resolves "degraded" when FontFace is unavailable', async () => {
-    delete (globalThis as any).FontFace
+    uninstallFakeFontApis()
     const { ensureViewerFontLoaded } = await importFreshFontLoading()
 
     await expect(ensureViewerFontLoaded()).resolves.toBe('degraded')
   })
 
   it('resolves "degraded" when document.fonts is unavailable', async () => {
-    ;(globalThis as any).FontFace = FakeFontFace
+    ;(globalThis as unknown as { FontFace: unknown }).FontFace = FakeFontFace
     Object.defineProperty(document, 'fonts', { configurable: true, value: undefined })
     const { ensureViewerFontLoaded } = await importFreshFontLoading()
 

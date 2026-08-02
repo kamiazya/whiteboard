@@ -1,42 +1,6 @@
 import { act, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
-// jsdom has no real FontFace/document.fonts (see font-loading.test.tsx's own
-// note); ensureViewerFontLoaded() memoizes its promise at module scope, so
-// every case imports a fresh module instance via vi.resetModules().
-class FakeFontFace {
-  loadDeferred: { resolve: () => void }
-  private loadPromise: Promise<FakeFontFace>
-
-  constructor(
-    public family: string,
-    public source: string,
-  ) {
-    let resolve!: () => void
-    this.loadPromise = new Promise<FakeFontFace>((res) => {
-      resolve = () => res(this)
-    })
-    this.loadDeferred = { resolve }
-  }
-
-  load(): Promise<FakeFontFace> {
-    return this.loadPromise
-  }
-}
-
-function installFakeFontApis(): { added: FakeFontFace[] } {
-  const added: FakeFontFace[] = []
-  ;(globalThis as any).FontFace = FakeFontFace
-  Object.defineProperty(document, 'fonts', {
-    configurable: true,
-    value: {
-      add(face: FakeFontFace) {
-        added.push(face)
-      },
-    },
-  })
-  return { added }
-}
+import { installFakeFontApis, uninstallFakeFontApis } from './test-utils/fake-font-face.js'
 
 describe('useViewerFontReady', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>
@@ -47,7 +11,7 @@ describe('useViewerFontReady', () => {
 
   afterEach(() => {
     consoleErrorSpy.mockRestore()
-    delete (globalThis as any).FontFace
+    uninstallFakeFontApis()
   })
 
   it('performs no state update and emits no React warning when the font resolves after unmount', async () => {
@@ -63,8 +27,7 @@ describe('useViewerFontReady', () => {
     const { unmount } = render(<Probe />)
     unmount()
 
-    // The font settles AFTER the component has already unmounted — this is
-    // the ordering MUST-FIX #1 exists to cover.
+    // The font settles AFTER the component has already unmounted.
     added[0]?.loadDeferred.resolve()
     await Promise.resolve()
     await Promise.resolve()

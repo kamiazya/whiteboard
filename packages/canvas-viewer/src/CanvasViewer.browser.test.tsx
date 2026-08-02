@@ -8,8 +8,8 @@ import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
-import { ensureViewerFontLoaded } from './font-loading.js'
 import { VIEWER_FONT_FAMILY } from './font.js'
+import { ensureViewerFontLoaded } from './font-loading.js'
 import { createBrowserMeasureText } from './measure-text.js'
 
 const goldenCanvas: SpatialCanvas = {

@@ -6,16 +6,15 @@
  * (widget/font-assets.ts) so all three never drift into two literal family
  * names.
  *
- * Naming this family was never the problem — until font-loading.ts landed,
- * nothing ever loaded a face under this name, so Canvas 2D silently fell
- * back to a system font while requesting "Roboto" (`document.fonts.check()`
- * reports `true` for an unloaded family and cannot detect this — see
- * font-loading.ts's own doc comment). The invariant that actually holds
- * today is: `ensureViewerFontLoaded()` has registered and loaded the
+ * Naming the family is not enough on its own: Canvas 2D silently falls back
+ * to a system font when no face is registered under the requested name, and
+ * `document.fonts.check()` cannot detect that (it reports `true` for an
+ * unloaded family). The invariant is therefore that
+ * `ensureViewerFontLoaded()` (font-loading.ts) has registered and loaded the
  * vendored `assets/fonts/Roboto/Roboto-Regular.ttf` under this family name
- * before layout measures anything, and `measure-text.browser.test.tsx` /
- * `CanvasViewer.browser.test.tsx` assert the measured width differs from a
- * deliberately bogus family — the executable guard against silent fallback.
+ * before layout measures anything; the executable guard is a browser test
+ * asserting the measured width differs from a deliberately bogus family
+ * (`CanvasViewer.browser.test.tsx`).
  *
  * mcp-server independently vendors the same face (byte-identical) under its
  * own `EXPORT_FONT_FAMILY` constant — the two packages cannot import each

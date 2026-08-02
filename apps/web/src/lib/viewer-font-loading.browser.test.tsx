@@ -1,16 +1,16 @@
-// Real-browser lock for the bug this task fixes: on unmodified main, Canvas
-// 2D silently falls back to a system font when asked for "Roboto" (nothing
-// ever loads a face under that name), producing byte-identical widths to a
-// deliberately bogus family. jsdom has no font stack and cannot see this —
-// only a real browser can. See font-loading.ts and font.ts for the full
-// story; `document.fonts.check()` reports `true` for the bogus family too
-// and must never be used as this guard.
+// Real-browser lock on the apps/web bootstrap seam: without a registered
+// face, Canvas 2D silently falls back to a system font when asked for the
+// viewer family, producing byte-identical widths to a deliberately bogus
+// family. jsdom has no font stack and cannot see this — only a real browser
+// can. `document.fonts.check()` reports `true` for the bogus family too and
+// must never be used as this guard.
+
+import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
 import {
   createBrowserMeasureText,
   ensureViewerFontLoaded,
   VIEWER_FONT_FAMILY,
 } from '@kamiazya/whiteboard-canvas-viewer'
-import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
 
 const SAMPLE_TEXT = 'The quick brown fox jumps'

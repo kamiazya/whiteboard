@@ -4,9 +4,10 @@
 // content sizing. Without this, `document.fonts` never contains the face,
 // Canvas 2D silently falls back to a system font, and the editor's on-screen
 // layout diverges from what a user exports (see font.ts's doc comment).
-import { VIEWER_FONT_FAMILY } from './font.js'
+
 // eslint-disable-next-line import/no-unresolved -- Vite's `?url` asset suffix, resolved at build/dev-server time.
 import robotoFontUrl from '../assets/fonts/Roboto/Roboto-Regular.ttf?url'
+import { VIEWER_FONT_FAMILY } from './font.js'
 
 export type ViewerFontStatus = 'loaded' | 'degraded'
 
@@ -53,7 +54,7 @@ async function loadViewerFont(): Promise<ViewerFontStatus> {
     () => 'degraded',
   )
 
-  let timeoutHandle: ReturnType<typeof setTimeout>
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined
   const timedOut = new Promise<'timeout'>((resolve) => {
     timeoutHandle = setTimeout(() => resolve('timeout'), VIEWER_FONT_LOAD_TIMEOUT_MS)
   })
@@ -61,7 +62,7 @@ async function loadViewerFont(): Promise<ViewerFontStatus> {
   const settled = await Promise.race([loadResult, timedOut])
   // Cleared on whichever path wins — a load that settles before the bound
   // must not leave a pending timer to leak into a fake-timer test teardown.
-  clearTimeout(timeoutHandle!)
+  clearTimeout(timeoutHandle)
 
   if (settled === 'timeout') {
     // The face may still finish loading after this function already
