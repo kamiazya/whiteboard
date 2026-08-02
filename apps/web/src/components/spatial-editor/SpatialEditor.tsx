@@ -38,8 +38,10 @@ import {
   useRef,
   useState,
 } from 'react'
+import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
+import { editorTextFill } from './editor-appearance.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import { findFreeSpot, hitTest, indexNodeBoxes, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
@@ -94,6 +96,13 @@ export interface SpatialEditorProps {
   readonly createId?: () => string
   readonly className?: string
   readonly testId?: string
+  /**
+   * The app's resolved UI theme, threaded straight from `useThemeMode` by
+   * the caller. Defaults to `'light'` so existing mounts render the
+   * pre-existing chrome unchanged; every real page mount must pass its own
+   * `resolvedTheme` or its nodes/edges go invisible in dark mode.
+   */
+  readonly theme?: ResolvedTheme
 }
 
 /** Imperative surface for a page that needs to drive the viewport from
@@ -141,7 +150,16 @@ function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
 
 export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>(
   function SpatialEditor(
-    { canvas, onChange, externalVersion, measure, createId, className, testId = DEFAULT_TEST_ID },
+    {
+      canvas,
+      onChange,
+      externalVersion,
+      measure,
+      createId,
+      className,
+      testId = DEFAULT_TEST_ID,
+      theme = 'light',
+    },
     forwardedRef,
   ) {
     const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
@@ -190,8 +208,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }, [canvas, externalVersion])
 
     const { svg, bounds } = useMemo(
-      () => renderCanvasToSvg(canvas, { measure: resolvedMeasure }),
-      [canvas, resolvedMeasure],
+      () => renderCanvasToSvg(canvas, { measure: resolvedMeasure, theme }),
+      [canvas, resolvedMeasure, theme],
     )
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
@@ -518,7 +536,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           }}
         >
           <div
-            style={{ position: 'absolute', left: bounds.x, top: bounds.y }}
+            style={{
+              position: 'absolute',
+              left: bounds.x,
+              top: bounds.y,
+              // canvas-render's layoutMdastBlocks assigns no appearance to
+              // markdown body text runs (they carry no `fill` attribute at
+              // all), so they inherit this host element's SVG `fill`
+              // instead — the seam that keeps body text visible on the dark
+              // canvas surface without editing canvas-render itself. Any
+              // element that DOES carry its own `fill` presentation
+              // attribute is unaffected (presentation attributes win over
+              // an inherited value).
+              fill: editorTextFill(theme),
+            }}
             // canvas-render's SVG serializer is the SOLE producer of this
             // string and escapes text/attrs (see svg/format.ts) — the same
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.

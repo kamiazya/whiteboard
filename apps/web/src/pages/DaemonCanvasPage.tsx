@@ -96,7 +96,7 @@ export function DaemonCanvasPage({
   // current capabilities.webMcpEnabled value is needed.
   const [settingsStore] = useState(() => createUserSettingsStore())
 
-  const { theme, setTheme } = useThemeMode()
+  const { theme, resolvedTheme, setTheme } = useThemeMode()
 
   // The selected (workspaceId, slug) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
@@ -473,6 +473,7 @@ export function DaemonCanvasPage({
               canvas={canvasValue}
               onChange={onChange}
               externalVersion={externalVersion}
+              theme={resolvedTheme}
             />
           </div>
         )}
