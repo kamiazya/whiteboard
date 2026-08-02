@@ -8,6 +8,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { useMemo } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
+import { useViewerFontReady } from './use-viewer-font-ready.js'
 import { VIEWER_APPEARANCE } from './viewer-appearance.js'
 
 export interface CanvasViewerProps {
@@ -36,6 +37,16 @@ export function CanvasViewer({
   // doesn't recreate the (lazily-created) Canvas 2D context on every render.
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
 
+  // Kicks off (or joins) the shared viewer-font load and flips true once the
+  // real face is loaded — a `mount.ts`-only host (the MCP Apps widget, which
+  // registers its own fonts before mounting, or a standalone
+  // mountCanvasViewer caller) never goes through apps/web's main.tsx bound
+  // wait, so this component is the fallback seam that still eventually
+  // re-measures with the real face instead of staying on fallback metrics
+  // for its whole lifetime. Included in the svg memo's deps so the SVG is
+  // recomputed exactly when readiness ticks, not on every render.
+  const fontReady = useViewerFontReady()
+
   const svg = useMemo(() => {
     const scene = layoutSpatialCanvas(canvas, {
       measure: resolvedMeasure,
@@ -46,7 +57,9 @@ export function CanvasViewer({
       // still renders (chrome-only or a literal fallback run).
     })
     return renderSceneToSvg(scene, { width, height, padding, background })
-  }, [canvas, resolvedMeasure, width, height, padding, background])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fontReady is a
+    // pure re-measure trigger, not a value read inside the callback.
+  }, [canvas, resolvedMeasure, width, height, padding, background, fontReady])
 
   // Injecting canvas-render's SVG string via dangerouslySetInnerHTML is sound
   // BECAUSE canvas-render's serializer (packages/canvas-render/src/svg/format.ts)

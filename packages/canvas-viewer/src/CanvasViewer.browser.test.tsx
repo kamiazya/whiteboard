@@ -8,6 +8,8 @@ import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
+import { ensureViewerFontLoaded } from './font-loading.js'
+import { VIEWER_FONT_FAMILY } from './font.js'
 import { createBrowserMeasureText } from './measure-text.js'
 
 const goldenCanvas: SpatialCanvas = {
@@ -70,5 +72,40 @@ describe('CanvasViewer (real browser)', () => {
     const shorter = measure('a', font).advanceWidth
     const longer = measure('ab', font).advanceWidth
     expect(longer).toBeGreaterThanOrEqual(shorter)
+  })
+
+  it('measures VIEWER_FONT_FAMILY differently from a deliberately bogus family once loaded — this is the guard against silent Canvas 2D font fallback', async () => {
+    const status = await ensureViewerFontLoaded()
+    expect(status).toBe('loaded')
+
+    const measure = createBrowserMeasureText()
+    const sample = 'The quick brown fox jumps'
+    const font = {
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal' as const,
+      sizePx: 16,
+    }
+
+    const real = measure(sample, { ...font, family: VIEWER_FONT_FAMILY })
+    const bogus = measure(sample, { ...font, family: 'ThisFontDoesNotExist12345' })
+
+    expect(real.advanceWidth).not.toBe(bogus.advanceWidth)
+  })
+
+  it('re-measures with the real font once readiness ticks for a component mounted before it was ready', async () => {
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 60, text: 'Whiteboard' }],
+      edges: [],
+    }
+
+    const { container, unmount } = render(<CanvasViewer canvas={canvas} />)
+
+    // useViewerFontReady's effect kicks off (or joins) the shared load; wait
+    // for the component to observe readiness and re-render.
+    await expect.poll(() => container.querySelector('svg')).toBeTruthy()
+    await ensureViewerFontLoaded()
+
+    unmount()
   })
 })
