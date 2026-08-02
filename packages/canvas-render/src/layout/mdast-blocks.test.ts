@@ -384,6 +384,63 @@ describe('layoutMdastBlocks — word wrap', () => {
       expect(() => layoutMdastBlocks(root, bad)).not.toThrow()
     }
   })
+
+  it('keeps an overflowing inline code span whole instead of splitting it at whitespace', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'inlineCode', value: 'function call with spaces()' }],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].text).toBe('function call with spaces()')
+  })
+
+  it('keeps an overflowing raw html run whole instead of splitting it at whitespace', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'html', value: '<span class="a b c" data-x="y">' }],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].text).toBe('<span class="a b c" data-x="y">')
+  })
+
+  it('keeps an overflowing inline math run whole instead of splitting it at whitespace', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'inlineMath', value: 'a + b + c + d + e' }],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].text).toBe('a + b + c + d + e')
+  })
 })
 
 describe('layoutMdastBlocks — single render path', () => {

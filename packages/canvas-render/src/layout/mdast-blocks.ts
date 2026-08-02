@@ -109,7 +109,10 @@ interface PhrasingLayout {
  * A single word wider than `maxWidth` on its own line is a deliberate
  * exception: it is left as one overflowing run rather than broken mid-word.
  * Wrapping is skipped entirely when `maxWidth` is non-finite or <= 0 (no
- * meaningful width to wrap against).
+ * meaningful width to wrap against). Inline code, raw HTML, and inline math
+ * runs are atomic — their source text may contain whitespace that is not a
+ * word boundary (a code span's argument list, an HTML tag's attributes),
+ * so they are always emitted as one run even when they overflow.
  */
 function layoutPhrasing(
   children: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
@@ -164,8 +167,12 @@ function layoutPhrasing(
     text: string,
     extra: Partial<TextRunNode> = {},
     runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean } = style,
+    // Atomic runs (inline code, raw HTML, inline math) must never be split
+    // mid-token at a whitespace boundary — unlike prose, an internal space
+    // in their source text is not a word boundary.
+    wrappable = true,
   ) => {
-    if (canWrap) {
+    if (canWrap && wrappable) {
       const fullWidth = measureRunWidth(options.measure, text, fontSizePx)
       const overflows = line.x + fullWidth > options.maxWidth
       if (overflows && /\s/.test(text)) {
@@ -199,14 +206,14 @@ function layoutPhrasing(
           emit(child.value, {}, currentStyle)
           break
         case 'inlineCode':
-          emit(child.value, { code: true }, currentStyle)
+          emit(child.value, { code: true }, currentStyle, false)
           break
         case 'break':
           line.x = 0
           line.index += 1
           break
         case 'html':
-          emit(child.value, {}, currentStyle)
+          emit(child.value, {}, currentStyle, false)
           break
         case 'emphasis':
           walk(child.children, { ...currentStyle, emphasis: true })
@@ -242,7 +249,7 @@ function layoutPhrasing(
           emit(child.alt ?? child.identifier, {}, currentStyle)
           break
         case 'inlineMath':
-          emit(child.value, {}, currentStyle)
+          emit(child.value, {}, currentStyle, false)
           break
         case 'wikiLink':
           emit(
