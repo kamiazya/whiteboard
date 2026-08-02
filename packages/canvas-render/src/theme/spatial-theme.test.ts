@@ -1,8 +1,8 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
-import { createSpatialTheme } from './spatial-theme.js'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './spatial-palette.js'
+import { createSpatialTheme } from './spatial-theme.js'
 
 function textNode(overrides: Partial<Extract<SpatialNode, { type: 'text' }>> = {}): SpatialNode {
   return {
