@@ -135,13 +135,20 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     fireEvent.pointerDown(switcherB, { button: 0, ctrlKey: false })
     const idALabel = await screen.findByText(idA)
     const itemA = idALabel.closest('[role="menuitem"]') as HTMLElement
+    // `latestMountedCanvases` accumulates every mount, including the one from
+    // when A was originally open. Only mounts recorded from here on can show
+    // that switching BACK re-hydrated A — searching the whole history would
+    // pass even if the switch mounted nothing at all.
+    const mountsBeforeSwitchBack = latestMountedCanvases.length
     await act(async () => {
       fireEvent.pointerUp(itemA)
     })
 
     await waitFor(
       () => {
-        const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
+        const restoredIds = latestMountedCanvases
+          .slice(mountsBeforeSwitchBack)
+          .flatMap((canvas) => canvas.nodes.map((n) => n.id))
         expect(restoredIds).toContain('multi-canvas-node-a')
       },
       { timeout: 5000 },
