@@ -1,12 +1,12 @@
-// The reconnect-credential-store module that owned this constant is
-// deleted along with unattended reconnect (see the module doc comment
-// below); the literal is inlined here since this is now the sole reader.
+// The module that owned this constant is deleted along with unattended
+// reconnect; the literal is inlined here since this is now its sole reader.
 const LEGACY_RECONNECT_SECRET_STORAGE_KEY = 'whiteboard.reconnect-secret.v1'
 
 /**
  * One-shot cleanup for a credential this app no longer writes or reads:
  * the plaintext reconnect secret a pre-removal build persisted in
- * localStorage under `STORAGE_KEY`. Unattended reconnect is gone (see
+ * localStorage under `LEGACY_RECONNECT_SECRET_STORAGE_KEY`. Unattended
+ * reconnect is gone (see
  * `docs/explanation/security-model.md`), so a value surviving here is pure
  * liability — a same-origin script (including a later process that
  * squats this port) could read it and mint a daemon session with no

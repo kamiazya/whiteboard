@@ -31,8 +31,9 @@ const AUTHORIZATION_HEADER_PATTERNS: readonly RegExp[] = [
   /\[\s*['"]Authorization['"]\s*\]/,
 ]
 
+// '.test.' also covers '.browser.test.' and '.property.browser.test.'.
 function isProductionSource(path: string): boolean {
-  return !path.includes('.test.') && !path.includes('.browser.test.') && !path.includes('.stories.')
+  return !path.includes('.test.') && !path.includes('.stories.')
 }
 
 describe('daemon Authorization header single-seam guard', () => {
