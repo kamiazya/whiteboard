@@ -24,6 +24,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   body_patch: { profile: MUTATING, title: 'Patch canvas markdown body' },
   canvas_render_svg: { profile: READ_ONLY, title: 'Render canvas as SVG' },
   canvas_digest: { profile: READ_ONLY, title: 'Generate AI-facing canvas digest' },
+  canvas_import_okf: { profile: MUTATING, title: 'Import OKF Markdown into canvas' },
   canvas_export_okf: { profile: READ_ONLY, title: 'Export canvas as OKF Markdown' },
   canvas_export_json_canvas: { profile: READ_ONLY, title: 'Export canvas as JSON Canvas' },
   wb_canvas_create: { profile: MUTATING, title: 'Create OpenCanvas canvas' },

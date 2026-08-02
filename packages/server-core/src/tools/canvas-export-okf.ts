@@ -1,7 +1,7 @@
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-canvas-codec'
 import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-canvas-codec'
 import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { readFacets } from '@kamiazya/whiteboard-canvas-workspace'
+import { readCoreFacets, readFacets } from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import { loadSpatialCanvas } from '../render/load-spatial-canvas.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -32,8 +32,13 @@ export type CanvasExportOkfOutput = z.infer<typeof canvasExportOkfOutputSchema>
  * `coreFacetsSchema.type` is required, but a spatial (JSON Canvas) doc has
  * no notion of an OKF core-facet `type` of its own — the two formats are
  * deliberately distinct document shapes (package-canvas-codec.md). `canvas`
- * is a fixed placeholder value for this export path until canvas-workspace
- * defines a real spatial-canvas-to-OKF-type mapping.
+ * is the fallback value used ONLY when no core meta was ever persisted for
+ * this doc (every canvas created before this bridge existed, or a
+ * spatial-only canvas that never went through `canvas_import_okf`). Once a
+ * doc has stored core meta (via `writeCoreFacets`), that stored `type`
+ * (and `title`/`tags`/`view`/`facetsRaw`) is echoed back instead — this is
+ * what makes the `canvas_import_okf` -> `canvas_export_okf` round-trip
+ * faithful.
  */
 const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
 
@@ -44,9 +49,13 @@ export function createCanvasExportOkfTool(deps: ServerDeps) {
     outputSchema: canvasExportOkfOutputSchema,
     async execute(input: CanvasExportOkfInput): Promise<CanvasExportOkfOutput> {
       const { doc, canvas } = await loadSpatialCanvas(deps, input.canvasId)
+      const coreMeta = readCoreFacets(doc)
       const facets = readFacets(doc)
       const body = canvas.nodes.find((node) => node.type === 'text')?.text ?? ''
-      const frontmatter: OkfMarkdownFrontmatter = { type: OKF_EXPORT_PLACEHOLDER_TYPE, facets }
+      const frontmatter: OkfMarkdownFrontmatter = {
+        ...(coreMeta ?? { type: OKF_EXPORT_PLACEHOLDER_TYPE }),
+        facets,
+      }
       const markdown = serializeOkf({ frontmatter, body })
       return { markdown, frontmatter }
     },

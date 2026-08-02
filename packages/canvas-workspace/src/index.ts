@@ -12,8 +12,10 @@ export { extractBacklinks } from './extract-backlinks.js'
 export {
   deleteSpatialEdge,
   deleteSpatialNode,
+  readCoreFacets,
   readFacets,
   readSpatialCanvas,
+  writeCoreFacets,
   writeFacets,
   writeSpatialCanvas,
   writeSpatialEdge,

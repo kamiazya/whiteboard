@@ -1,5 +1,7 @@
 import {
+  type CanvasCoreMeta,
   type CanvasEdge,
+  canvasCoreMetaSchema,
   canvasEdgeSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
@@ -8,10 +10,12 @@ import {
   spatialNodeSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import type { LoroDoc } from 'loro-crdt'
+import type { z } from 'zod'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
 const FACETS_KEY = 'facets'
+const CORE_KEY = 'core'
 
 type Fields = Record<string, unknown>
 
@@ -205,4 +209,56 @@ export function readFacets(doc: LoroDoc): ExtensionFacets {
     if (parsed.success) result[key] = parsed.data[key]
   }
   return result
+}
+
+const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = canvasCoreMetaSchema.shape
+
+/**
+ * Core OKF facets (`type`/`title`/`tags`/`view`/`facetsRaw`) are stored the
+ * same way as extension facets above: one `LoroMap` keyed per field, not one
+ * opaque object value, so two peers writing different core fields converge
+ * on both surviving after a merge. `type` is the only required field; a
+ * write always replaces the whole document meta (deletes fields the caller
+ * omitted) rather than merging with stale prior state, matching
+ * `writeFacets`'s replace-on-rewrite convention.
+ */
+export function writeCoreFacets(doc: LoroDoc, meta: CanvasCoreMeta): void {
+  const coreMap = doc.getMap(CORE_KEY)
+  const existingKeys = new Set<string>(coreMap.keys())
+  const fields = meta as Record<string, unknown>
+  const incomingKeys = new Set<string>(Object.keys(fields))
+
+  for (const [key, value] of Object.entries(fields)) {
+    coreMap.set(key, value)
+  }
+  for (const key of existingKeys) {
+    if (!incomingKeys.has(key)) coreMap.delete(key)
+  }
+
+  doc.commit()
+}
+
+/**
+ * An empty `core` map (never written, or every field deleted) means no
+ * core meta is stored — `undefined`, distinct from an all-optional-fields
+ * empty object which is unrepresentable anyway (`type` is required). A
+ * single corrupt field is dropped rather than failing the whole read, but
+ * a missing/invalid `type` after that per-field filter makes the whole
+ * result unrepresentable, since `type` is the one field every consumer
+ * (`canvas_export_okf`'s placeholder fallback) depends on being present.
+ */
+export function readCoreFacets(doc: LoroDoc): CanvasCoreMeta | undefined {
+  const coreMap = doc.getMap(CORE_KEY)
+  if (coreMap.keys().length === 0) return undefined
+
+  const candidate: Record<string, unknown> = {}
+  for (const key of coreMap.keys()) {
+    const fieldSchema = CORE_FACET_FIELD_SCHEMAS[key]
+    if (!fieldSchema) continue
+    const parsed = fieldSchema.safeParse(coreMap.get(key))
+    if (parsed.success) candidate[key] = parsed.data
+  }
+
+  const result = canvasCoreMetaSchema.safeParse(candidate)
+  return result.success ? result.data : undefined
 }
