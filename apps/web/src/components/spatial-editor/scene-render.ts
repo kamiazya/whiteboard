@@ -12,10 +12,13 @@ import {
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import { EDITOR_APPEARANCE } from './editor-appearance.js'
+import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { createEditorAppearance } from './editor-appearance.js'
 
 export interface RenderCanvasOptions {
   readonly measure: MeasureText
+  /** Defaults to 'light' so existing call sites render the pre-existing chrome unchanged. */
+  readonly theme?: ResolvedTheme
 }
 
 export interface RenderedCanvas {
@@ -31,7 +34,7 @@ export function renderCanvasToSvg(
   const scene = layoutSpatialCanvas(canvas, {
     measure: options.measure,
     parseBody: parseMarkdownBody,
-    appearance: EDITOR_APPEARANCE,
+    appearance: createEditorAppearance(options.theme ?? 'light'),
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, {
