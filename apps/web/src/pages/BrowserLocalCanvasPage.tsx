@@ -1,9 +1,7 @@
-import { Excalidraw } from '@excalidraw/excalidraw'
-import '@excalidraw/excalidraw/index.css'
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
+import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -136,7 +134,7 @@ export function BrowserLocalCanvasPage({
   // Owned locally rather than threaded down from App.tsx: useThemeMode already
   // persists to localStorage and applies the <html class="dark"> toggle
   // itself, so there is no App-level state this page needs to share.
-  const { theme, resolvedTheme, setTheme } = useThemeMode()
+  const { theme, setTheme } = useThemeMode()
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
@@ -154,12 +152,6 @@ export function BrowserLocalCanvasPage({
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
-
-  // Fans out to both useCanvasSync's own imperative-API ref (via
-  // setExcalidrawAPI below) and this page-local ref, so the commands layer
-  // can read the live Excalidraw API without useCanvasSync needing to expose
-  // its internal ref.
-  const excalidrawApiRef = useRef<ExcalidrawImperativeAPI | null>(null)
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
@@ -233,33 +225,17 @@ export function BrowserLocalCanvasPage({
     [canvasId],
   )
 
-  // Surfaced when the backend's putFile rejects (IDB write/quota failure),
-  // so a failed image upload is never silent — see useCanvasSync's own
-  // no-silent-success contract for putFile. Cleared on the next successful
-  // upload so a transient failure doesn't stick around forever.
-  const [fileUploadError, setFileUploadError] = useState<string | null>(null)
-
-  // This banner is page-level state, not scoped per backend connection, so a
-  // failure seen on canvas A would otherwise keep showing after switching to
-  // canvas B (which never fired the failure). Reset whenever the loaded
-  // canvas identity changes so a stale error never follows the user across
-  // canvases.
-  useEffect(() => {
-    setFileUploadError(null)
-  }, [canvasId])
-
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
-  const { setExcalidrawAPI, onChange, exportScene } = useCanvasSync(backend, {
-    onFileUploadFailed: () => {
-      setFileUploadError('Could not save an image to this browser. It may not survive a reload.')
-    },
-    onFileUploadSucceeded: () => setFileUploadError(null),
-  })
+  const { canvas, onChange, externalVersion, exportScene } = useCanvasSync(backend)
 
   const commands = useWhiteboardCommands({
-    getExcalidrawApi: () => excalidrawApiRef.current,
+    // SpatialEditor exposes no Excalidraw-shaped imperative API — exportJson
+    // (the only consumer of this seam) is dropped alongside the Excalidraw
+    // dependency itself; a caller that still invokes it sees a surfaced
+    // CommandError('no-api'), not a silent no-op.
+    getExcalidrawApi: () => null,
     provider: { kind: 'browser-local', capabilities },
     canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
   })
@@ -396,11 +372,6 @@ export function BrowserLocalCanvasPage({
             {duplicateError}
           </div>
         )}
-        {fileUploadError && (
-          <div role="alert" aria-live="assertive" className="text-destructive">
-            {fileUploadError}
-          </div>
-        )}
         <span className="ml-auto text-muted-foreground">
           Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
           combining changes
@@ -444,15 +415,11 @@ export function BrowserLocalCanvasPage({
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      <div data-testid="excalidraw-container" className="min-h-0 flex-1">
-        <Excalidraw
-          excalidrawAPI={(api) => {
-            excalidrawApiRef.current = api
-            setExcalidrawAPI(api)
-          }}
-          onChange={onChange}
-          theme={resolvedTheme}
-        />
+      {/* Spatial is the only view this slice supports; markdown-view
+          persistence is deferred (canvas-workspace has no markdown-body
+          container to write to yet). */}
+      <div data-testid="spatial-editor-container" className="min-h-0 flex-1">
+        <SpatialEditor canvas={canvas} onChange={onChange} externalVersion={externalVersion} />
       </div>
       <SettingsPanel
         open={settingsOpen}
