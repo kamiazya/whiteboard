@@ -154,20 +154,25 @@ function layoutPhrasing(
     // `split(/\s+/)` discards this chunk's own leading/trailing whitespace.
     // mdast represents "prose " + strong("word") as two adjacent phrasing
     // children, so a trailing space stripped here would otherwise vanish
-    // between this chunk's last word and the next sibling's first run.
-    if (words.length > 0 && line.x > 0 && /^\s/.test(text)) {
-      line.x += spaceWidth
-    }
-    for (const word of words) {
+    // between this chunk's last word and the next sibling's first run — a
+    // separator is due before the loop's first word in that case exactly
+    // like it is due before every subsequent word in this chunk, so both
+    // cases share the same separator-add-or-wrap logic below (a chunk's
+    // interior words are always whitespace-separated by construction).
+    const chunkHasLeadingSpace = /^\s/.test(text)
+    words.forEach((word, index) => {
       const width = measureRunWidth(options.measure, word, fontSizePx)
-      if (line.x > 0 && line.x + spaceWidth + width > options.maxWidth) {
-        line.x = 0
-        line.index += 1
-      } else if (line.x > 0) {
-        line.x += spaceWidth
+      const needsSeparator = index === 0 ? chunkHasLeadingSpace : true
+      if (needsSeparator && line.x > 0) {
+        if (line.x + spaceWidth + width > options.maxWidth) {
+          line.x = 0
+          line.index += 1
+        } else {
+          line.x += spaceWidth
+        }
       }
       pushRun(word, extra, runStyle)
-    }
+    })
     if (words.length > 0 && /\s$/.test(text)) {
       line.x += spaceWidth
     }

@@ -464,6 +464,45 @@ describe('layoutMdastBlocks — word wrap', () => {
     )
   })
 
+  it('adds exactly one separator space before the first word of a wrapped chunk with leading whitespace', () => {
+    // A chunk whose own text begins with whitespace (e.g. the second of two
+    // adjacent phrasing children "prose" + " word rest...") overflows as a
+    // whole even though its first word alone still fits on the current
+    // line. The leading-whitespace pre-add in `wrapAndPush` must not stack
+    // with the per-word loop's own separator-add on that first iteration —
+    // the gap before the first word must be exactly one space, not two.
+    const narrow = { measure, maxWidth: 100 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'aaaaa' },
+            { type: 'strong', children: [{ type: 'text', value: ` bb ${'c'.repeat(21)}` }] },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    const firstRun = paragraph.runs.find((r) => r.text === 'aaaaa')
+    const bbRun = paragraph.runs.find((r) => r.text === 'bb')
+    expect(firstRun).toBeDefined()
+    expect(bbRun).toBeDefined()
+    if (!firstRun || !bbRun) throw new Error('unreachable')
+    const spaceWidth = measure(' ', {
+      family: 'test',
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal',
+      sizePx: 16,
+    }).advanceWidth
+    expect(bbRun.bbox.x).toBeCloseTo(firstRun.bbox.x + firstRun.bbox.w + spaceWidth, 5)
+  })
+
   it('keeps an overflowing inline math run whole instead of splitting it at whitespace', () => {
     const narrow = { measure, maxWidth: 60 }
     const root: MdastRoot = {
