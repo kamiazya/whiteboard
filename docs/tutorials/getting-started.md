@@ -15,11 +15,14 @@ pnpm --filter @kamiazya/whiteboard-web dev   # open http://localhost:5173
 ```
 
 The page mounts an OpenCanvas spatial editor. A fresh canvas starts empty —
-today the browser UI itself selects, moves, resizes, connects, and edits
-existing nodes; drawing brand-new nodes from the toolbar is not yet available
-in Browser-local mode. Reload the tab after moving a node or editing its text
-and the change is still there — that's your canvas persisting to IndexedDB in
-your own browser, with no server and no account.
+double-click empty canvas space, or click the "Add note" button in the
+top-left corner, to create a new note and start typing immediately. The
+browser UI also selects, moves, resizes, connects, and edits existing nodes,
+and deletes the selected node with Delete/Backspace (disabled while you're
+typing in its text editor, so Backspace edits text instead of deleting the
+note). Reload the tab after any of these edits and the change is still
+there — that's your canvas persisting to IndexedDB in your own browser, with
+no server and no account.
 
 **Where to go next:** want your AI agent (Claude Code, Codex, Gemini) to draw with
 you, or durable canvases as files on disk? That's the **Local daemon** — see
