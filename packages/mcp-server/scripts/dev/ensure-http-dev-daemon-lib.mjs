@@ -1,3 +1,28 @@
+// Upper bound on how long ensure-http-dev-daemon.mjs waits for a spawned
+// daemon to answer. tsx + happy-dom + canvas + resvg cold start + node_modules
+// linking can take ~10-15s on slow machines, so leave generous headroom —
+// the hook only runs once per session start, so this isn't on a hot path.
+export const DEFAULT_READY_TIMEOUT_MS = 30_000
+
+/**
+ * Resolves the ready-wait bound from WHITEBOARD_DEV_READY_TIMEOUT_MS,
+ * falling back to DEFAULT_READY_TIMEOUT_MS whenever the override is absent
+ * or malformed (non-numeric, non-integer, zero, or negative). Total and
+ * never throws — a SessionStart hook must not die over a stray dev env var,
+ * it should just behave as if the override were never set. Kept as a
+ * seam mainly so tests can exercise the timeout path in well under 30s.
+ *
+ * @param {Record<string, string | undefined>} env
+ * @returns {number}
+ */
+export function resolveReadyTimeoutMs(env) {
+  const raw = env.WHITEBOARD_DEV_READY_TIMEOUT_MS
+  if (raw === undefined || raw === '') return DEFAULT_READY_TIMEOUT_MS
+  const parsed = Number(raw)
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_READY_TIMEOUT_MS
+  return parsed
+}
+
 export async function waitForAuthenticatedMcp({
   probe,
   sleep,

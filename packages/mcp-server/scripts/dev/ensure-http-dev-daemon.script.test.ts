@@ -1,0 +1,212 @@
+// Subprocess-level tests of the SessionStart hook entrypoint. Runs the real
+// ensure-http-dev-daemon.mjs as a child process against a PATH-shimmed
+// `pnpm` (never a real build) plus a fake authenticated MCP responder, so
+// the wait-for-ready behavior is exercised the same way a client's session
+// start actually does: wait for the hook process to exit, not for a unit
+// under test to return a promise.
+//
+// No .cmd counterpart exists for the shim, so this suite only runs on POSIX.
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { startFakeMcpResponder } from './test-utils/fake-mcp-daemon.mjs'
+import { resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
+
+const REPO_ROOT = resolveRepoRootFromGit(resolve(import.meta.dirname))
+const HOOK_SCRIPT_PATH = resolve(import.meta.dirname, 'ensure-http-dev-daemon.mjs')
+const SHIM_ENTRY_PATH = resolve(import.meta.dirname, 'test-utils/fake-pnpm-shim.mjs')
+const HOST = '127.0.0.1'
+const LOG_PATH_SUFFIX = 'tmp/logs/mcp-http-dev.log'
+
+async function reserveFreePort(): Promise<number> {
+  return new Promise((resolvePort, rejectPort) => {
+    const tester = createServer()
+    tester.once('error', rejectPort)
+    tester.listen(0, HOST, () => {
+      const address = tester.address()
+      const port = typeof address === 'object' && address ? address.port : undefined
+      tester.close(() => {
+        if (port === undefined) {
+          rejectPort(new Error('failed to reserve a free port'))
+          return
+        }
+        resolvePort(port)
+      })
+    })
+  })
+}
+
+/**
+ * Writes a POSIX `pnpm` wrapper into a fresh temp dir that execs node
+ * directly against fake-pnpm-shim.mjs, and returns that dir for prepending
+ * onto the spawned hook's PATH.
+ */
+function writePnpmShimDir(): string {
+  const shimDir = mkdtempSync(join(tmpdir(), 'ensure-http-dev-daemon-shim-'))
+  const shimPath = join(shimDir, 'pnpm')
+  writeFileSync(shimPath, `#!/bin/sh\nexec node "${SHIM_ENTRY_PATH}" "$@"\n`)
+  chmodSync(shimPath, 0o755)
+  return shimDir
+}
+
+function runHook(env: NodeJS.ProcessEnv): Promise<{
+  exitCode: number | null
+  exitedAt: number
+  stderr: string
+}> {
+  return new Promise((resolveRun) => {
+    const child: ChildProcessWithoutNullStreams = spawn(
+      process.execPath,
+      [HOOK_SCRIPT_PATH, '--quiet'],
+      { cwd: REPO_ROOT, env },
+    )
+    let stderr = ''
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk)
+    })
+    child.once('exit', (exitCode) => {
+      resolveRun({ exitCode, exitedAt: Date.now(), stderr })
+    })
+  })
+}
+
+function killQuietly(pid: number | undefined) {
+  if (pid === undefined) return
+  try {
+    process.kill(pid, 'SIGKILL')
+  } catch {
+    /* already dead */
+  }
+}
+
+describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
+  const cleanupPids: number[] = []
+  const cleanupDirs: string[] = []
+  let cleanupResponder: (() => Promise<void>) | undefined
+
+  afterEach(async () => {
+    for (const pid of cleanupPids.splice(0)) killQuietly(pid)
+    if (cleanupResponder) {
+      await cleanupResponder()
+      cleanupResponder = undefined
+    }
+    for (const dir of cleanupDirs.splice(0)) rmSync(dir, { recursive: true, force: true })
+  })
+
+  it.skipIf(process.platform === 'win32')(
+    'does not exit until the daemon it spawned actually answers MCP (happens-before, not a timing threshold)',
+    async () => {
+      const port = await reserveFreePort()
+      const token = randomUUID()
+      const dataDir = mkdtempSync(join(tmpdir(), 'ensure-http-dev-daemon-data-'))
+      const shimDir = writePnpmShimDir()
+      const bindSentinelPath = join(dataDir, 'bind-sentinel.json')
+      const invokedSentinelPath = join(dataDir, 'invoked-sentinel.json')
+      cleanupDirs.push(dataDir, shimDir)
+
+      const { exitCode, exitedAt, stderr } = await runHook({
+        ...process.env,
+        PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+        WHITEBOARD_DEV_PORT: String(port),
+        WHITEBOARD_TOKEN: token,
+        // No marker is ever written by the fake daemon here (unlike the
+        // real one) — this deliberately exercises the no-marker self-heal
+        // path (verifyDevDaemonIdentity -> 'no-marker' -> isSelfHealableIdentity)
+        // rather than depending on marker-writing behavior the fake lacks.
+        WHITEBOARD_DATA_DIR: dataDir,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
+        FAKE_PNPM_BIND_DELAY_MS: '1200',
+        FAKE_PNPM_BIND_SENTINEL: bindSentinelPath,
+        FAKE_PNPM_INVOKED_SENTINEL: invokedSentinelPath,
+      })
+
+      expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
+      const { boundAt } = JSON.parse(readFileSync(bindSentinelPath, 'utf8')) as { boundAt: number }
+      // The headline invariant: the hook's exit is never earlier than the
+      // daemon's bind. A fire-and-forget hook would exit long before the
+      // 1.2s bind delay elapses and this would fail.
+      expect(exitedAt).toBeGreaterThanOrEqual(boundAt)
+
+      // The hook unref's the spawned daemon rather than killing it — clean
+      // up the still-running fake daemon so it doesn't leak past the test.
+      const { pid } = JSON.parse(readFileSync(invokedSentinelPath, 'utf8')) as { pid: number }
+      cleanupPids.push(pid)
+    },
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    'terminates within the bound and fails loudly when the daemon never answers',
+    async () => {
+      const port = await reserveFreePort()
+      const token = randomUUID()
+      const dataDir = mkdtempSync(join(tmpdir(), 'ensure-http-dev-daemon-data-'))
+      const shimDir = writePnpmShimDir()
+      const invokedSentinelPath = join(dataDir, 'invoked-sentinel.json')
+      cleanupDirs.push(dataDir, shimDir)
+
+      const startedAt = Date.now()
+      const { exitCode, stderr } = await runHook({
+        ...process.env,
+        PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+        WHITEBOARD_DEV_PORT: String(port),
+        WHITEBOARD_TOKEN: token,
+        WHITEBOARD_DATA_DIR: dataDir,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '800',
+        FAKE_PNPM_NEVER_BIND: '1',
+        FAKE_PNPM_INVOKED_SENTINEL: invokedSentinelPath,
+      })
+      const elapsedMs = Date.now() - startedAt
+
+      // Well under the mcp-node project's 10s testTimeout — proves the
+      // hook terminates on its own instead of hanging.
+      expect(elapsedMs).toBeLessThan(6_000)
+      expect(exitCode).not.toBe(0)
+      expect(stderr).toContain(String(port))
+      expect(stderr).toContain(LOG_PATH_SUFFIX)
+      expect(stderr).toContain('MCP tools will be unavailable')
+
+      const { pid } = JSON.parse(readFileSync(invokedSentinelPath, 'utf8')) as { pid: number }
+      cleanupPids.push(pid)
+    },
+  )
+
+  it.skipIf(process.platform === 'win32')(
+    'is a no-op when our authenticated daemon is already up with a matching identity marker (fast path preserved)',
+    async () => {
+      const port = await reserveFreePort()
+      const token = randomUUID()
+      const dataDir = mkdtempSync(join(tmpdir(), 'ensure-http-dev-daemon-data-'))
+      const shimDir = writePnpmShimDir()
+      const invokedSentinelPath = join(dataDir, 'invoked-sentinel.json')
+      cleanupDirs.push(dataDir, shimDir)
+
+      const responder = await startFakeMcpResponder({ port, token, host: HOST })
+      cleanupResponder = responder.close
+      writeFileSync(
+        join(dataDir, 'dev-daemon.json'),
+        JSON.stringify({
+          port,
+          repoRoot: REPO_ROOT,
+          pid: process.pid,
+          startedAt: new Date().toISOString(),
+        }),
+      )
+
+      const { exitCode, stderr } = await runHook({
+        ...process.env,
+        PATH: `${shimDir}:${process.env.PATH ?? ''}`,
+        WHITEBOARD_DEV_PORT: String(port),
+        WHITEBOARD_TOKEN: token,
+        WHITEBOARD_DATA_DIR: dataDir,
+        FAKE_PNPM_INVOKED_SENTINEL: invokedSentinelPath,
+      })
+
+      expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
+      expect(() => readFileSync(invokedSentinelPath, 'utf8')).toThrow()
+    },
+  )
+})
