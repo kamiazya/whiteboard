@@ -10,6 +10,5 @@
 // hand-written mirror.
 export * from './branches.js'
 export * from './canvas.js'
-export * from './reconnect.js'
 export type { DaemonPingResponse } from './runtime.js'
 export { daemonPingResponseSchema } from './runtime.js'

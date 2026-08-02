@@ -8,8 +8,6 @@
 //              - `--version` / `-v` emits a bare semver string (not JSON)
 //              - `logs` emits JSONL (one redacted JSON entry per line,
 //                trailing newline)
-//              - `trust` emits operator-facing plain text (list rows /
-//                revocation confirmations)
 //   stderr  -> diagnostics / usage / errors only
 //
 // `run` is dispatched via a dynamic import so the read-only commands
@@ -52,44 +50,10 @@ whiteboard server run            --json --dry-run [--external-url=<url>] [--auth
 whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
-whiteboard trust list            [--data-dir=<path>]
-whiteboard trust revoke <origin> | revoke --all [--data-dir=<path>]
 `
 
 function writeJsonObject(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value)}\n`)
-}
-
-// `trust` is the operator-facing revocation surface for the silent-reconnect
-// trust store. Its output is plain text by design (see the output contract
-// above). Dynamic imports keep the trust-store module — which pulls in
-// server config (mkdirs on load) — out of every other command path.
-async function dispatchTrust(
-  subcommand: string | undefined,
-  rest: readonly string[],
-): Promise<number> {
-  const dataDirArg = rest.find((arg) => arg.startsWith('--data-dir='))
-  const args =
-    subcommand === undefined
-      ? []
-      : [subcommand, ...rest.filter((arg) => !arg.startsWith('--data-dir='))]
-  const [{ runTrustCommand }, { createWebOriginTrustStore }] = await Promise.all([
-    import('./trust.js'),
-    import('../server/security/web-origin-trust-store.js'),
-  ])
-  const dataDir = dataDirArg
-    ? resolve(dataDirArg.slice('--data-dir='.length))
-    : resolveDefaultDataDir(process.env)
-  const store = createWebOriginTrustStore({ dataDir })
-  const { exitCode, output } = await runTrustCommand(args, store)
-  if (exitCode === 0) {
-    process.stdout.write(`${output}\n`)
-  } else {
-    // Usage / unknown-origin failures stay off stdout so JSON consumers of
-    // other commands piping stdout never see stray text.
-    process.stderr.write(`${output}\n`)
-  }
-  return exitCode
 }
 
 export async function main(argv: readonly string[]): Promise<number> {
@@ -118,10 +82,6 @@ export async function main(argv: readonly string[]): Promise<number> {
 
   if (command === 'server') {
     return await dispatchServer(subcommand, rest)
-  }
-
-  if (command === 'trust') {
-    return await dispatchTrust(subcommand, rest)
   }
 
   if (

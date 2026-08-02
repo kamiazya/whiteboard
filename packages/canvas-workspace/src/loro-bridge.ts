@@ -1,5 +1,7 @@
 import {
+  type CanvasCoreMeta,
   type CanvasEdge,
+  canvasCoreMetaSchema,
   canvasEdgeSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
@@ -8,10 +10,12 @@ import {
   spatialNodeSchema,
 } from '@kamiazya/whiteboard-canvas-model'
 import type { LoroDoc } from 'loro-crdt'
+import type { z } from 'zod'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
 const FACETS_KEY = 'facets'
+const CORE_KEY = 'core'
 
 type Fields = Record<string, unknown>
 
@@ -171,24 +175,33 @@ export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
 }
 
 /**
+ * Replace a whole bucket map: write every incoming key and delete the keys
+ * the caller omitted, so a rewrite never merges with stale prior state.
+ * Entries stay per-key rather than one opaque object value, so two peers
+ * writing different keys converge on both surviving after a CRDT merge.
+ */
+function replaceBucket(doc: LoroDoc, mapKey: string, entries: Fields): void {
+  const map = doc.getMap(mapKey)
+  const existingKeys = map.keys()
+
+  for (const [key, value] of Object.entries(entries)) {
+    map.set(key, value)
+  }
+  for (const key of existingKeys) {
+    if (!Object.hasOwn(entries, key)) map.delete(key)
+  }
+
+  doc.commit()
+}
+
+/**
  * Extension facets (the `{domain}/{version}` keyed bucket from
  * canvas-model's `extensionFacetsSchema`) are stored the same way as
  * nodes/edges above: a plain-object-valued `LoroMap` keyed by facet key, so
  * one domain's CRDT merge never overwrites another's.
  */
 export function writeFacets(doc: LoroDoc, facets: ExtensionFacets): void {
-  const facetsMap = doc.getMap(FACETS_KEY)
-  const existingKeys = new Set<string>(facetsMap.keys())
-  const incomingKeys = new Set<string>(Object.keys(facets))
-
-  for (const [key, value] of Object.entries(facets)) {
-    facetsMap.set(key, value)
-  }
-  for (const key of existingKeys) {
-    if (!incomingKeys.has(key)) facetsMap.delete(key)
-  }
-
-  doc.commit()
+  replaceBucket(doc, FACETS_KEY, facets)
 }
 
 /**
@@ -205,4 +218,44 @@ export function readFacets(doc: LoroDoc): ExtensionFacets {
     if (parsed.success) result[key] = parsed.data[key]
   }
   return result
+}
+
+const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = canvasCoreMetaSchema.shape
+
+/**
+ * Core OKF facets (`type`/`title`/`tags`/`view`/`facetsRaw`) are stored the
+ * same way as extension facets above: one `LoroMap` keyed per field, not one
+ * opaque object value, so two peers writing different core fields converge
+ * on both surviving after a merge. `type` is the only required field; a
+ * write always replaces the whole document meta (deletes fields the caller
+ * omitted) rather than merging with stale prior state, matching
+ * `writeFacets`'s replace-on-rewrite convention.
+ */
+export function writeCoreFacets(doc: LoroDoc, meta: CanvasCoreMeta): void {
+  replaceBucket(doc, CORE_KEY, { ...meta })
+}
+
+/**
+ * An empty `core` map (never written, or every field deleted) means no
+ * core meta is stored — `undefined`, distinct from an all-optional-fields
+ * empty object which is unrepresentable anyway (`type` is required). A
+ * single corrupt field is dropped rather than failing the whole read, but
+ * a missing/invalid `type` after that per-field filter makes the whole
+ * result unrepresentable, since `type` is the one field every consumer
+ * (`canvas_export_okf`'s placeholder fallback) depends on being present.
+ */
+export function readCoreFacets(doc: LoroDoc): CanvasCoreMeta | undefined {
+  const coreMap = doc.getMap(CORE_KEY)
+  if (coreMap.keys().length === 0) return undefined
+
+  const candidate: Record<string, unknown> = {}
+  for (const key of coreMap.keys()) {
+    const fieldSchema = CORE_FACET_FIELD_SCHEMAS[key]
+    if (!fieldSchema) continue
+    const parsed = fieldSchema.safeParse(coreMap.get(key))
+    if (parsed.success) candidate[key] = parsed.data
+  }
+
+  const result = canvasCoreMetaSchema.safeParse(candidate)
+  return result.success ? result.data : undefined
 }

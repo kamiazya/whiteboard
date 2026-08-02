@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  canvasCoreMetaSchema,
   coreFacetsSchema,
   extensionFacetsSchema,
   facetsRawSchema,
@@ -120,5 +121,31 @@ describe('facetsRawSchema', () => {
 
   it('accepts an empty record', () => {
     expect(facetsRawSchema.safeParse({}).success).toBe(true)
+  })
+})
+
+describe('canvasCoreMetaSchema', () => {
+  it('accepts the minimal shape with only type', () => {
+    expect(canvasCoreMetaSchema.safeParse({ type: 'note' }).success).toBe(true)
+  })
+
+  it('accepts core facets plus facetsRaw', () => {
+    const result = canvasCoreMetaSchema.safeParse({
+      type: 'note',
+      title: 'My note',
+      tags: ['a', 'b'],
+      view: 'kanban/1',
+      facetsRaw: { someFutureKey: 'value' },
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a missing type', () => {
+    expect(canvasCoreMetaSchema.safeParse({ title: 'No type' }).success).toBe(false)
+  })
+
+  it('rejects facetsRaw containing a reserved root key', () => {
+    const result = canvasCoreMetaSchema.safeParse({ type: 'note', facetsRaw: { type: 'x' } })
+    expect(result.success).toBe(false)
   })
 })

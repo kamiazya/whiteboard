@@ -134,7 +134,7 @@ export function BrowserLocalCanvasPage({
   // Owned locally rather than threaded down from App.tsx: useThemeMode already
   // persists to localStorage and applies the <html class="dark"> toggle
   // itself, so there is no App-level state this page needs to share.
-  const { theme, setTheme } = useThemeMode()
+  const { theme, resolvedTheme, setTheme } = useThemeMode()
 
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
@@ -422,6 +422,7 @@ export function BrowserLocalCanvasPage({
           canvas={canvas}
           onChange={onChange}
           externalVersion={externalVersion}
+          theme={resolvedTheme}
         />
       </div>
       <SettingsPanel

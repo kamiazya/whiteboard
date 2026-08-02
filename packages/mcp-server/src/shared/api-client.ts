@@ -3,9 +3,9 @@ import { injectTraceContextIntoHeaders } from './browser-tracing.js'
 import { readDaemonTokenOnce } from './token-store.js'
 
 // Re-exported so daemon-pairing callers (apps/web's useDaemonConnection) can
-// seed/verify the same module-singleton token store this file reads from,
+// verify the same module-singleton token store this file reads from,
 // without a separate package export just for pairing/test access.
-export { readDaemonTokenOnce, resetTokenStoreForTests, seedDaemonToken } from './token-store.js'
+export { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
 
 // The server injects this shape into `window.__WHITEBOARD_RUNTIME_CONFIG__`
 // via a same-origin inline <script> (see server/app.ts). It crosses a

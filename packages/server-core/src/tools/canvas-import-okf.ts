@@ -1,6 +1,10 @@
 import { parseOkf } from '@kamiazya/whiteboard-canvas-codec'
 import { canvasIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-canvas-model'
-import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-canvas-workspace'
+import {
+  writeCoreFacets,
+  writeFacets,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-canvas-workspace'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateCanvasDoc, saveDocSnapshot } from './canvas-doc-io.js'
@@ -54,8 +58,10 @@ export function createCanvasImportOkfTool(deps: ServerDeps) {
         const { frontmatter, body } = parsed.value
         const doc = await loadOrCreateCanvasDoc(deps, input.canvasId)
 
-        if (frontmatter.facets) {
-          writeFacets(doc, frontmatter.facets)
+        const { facets, ...coreMeta } = frontmatter
+        writeCoreFacets(doc, coreMeta)
+        if (facets) {
+          writeFacets(doc, facets)
         }
 
         const nodes =

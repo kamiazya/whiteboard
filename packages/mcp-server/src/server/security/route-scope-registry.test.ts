@@ -132,18 +132,13 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
-  it('POST /api/reconnect-credential requires daemon-token-only, never an OAuth grant scope', () => {
-    expect(resolveApiRouteScope('POST', '/api/reconnect-credential')).toEqual({
-      kind: 'daemon-token-only',
-    })
-  })
-
-  it('POST /api/reconnect-challenge is public (mints regardless of enrollment, no enrollment oracle)', () => {
-    expect(resolveApiRouteScope('POST', '/api/reconnect-challenge')).toEqual({ kind: 'public' })
-  })
-
-  it('POST /api/reconnect-session is public (see reconnect.ts for its own gates)', () => {
-    expect(resolveApiRouteScope('POST', '/api/reconnect-session')).toEqual({ kind: 'public' })
+  // The reconnect surface that used to occupy these paths is gone. Removing
+  // its registry entries must move the paths from a decision to null
+  // (fail closed), never silently to a default-allow.
+  it('the removed reconnect routes now resolve to null, not a stale decision', () => {
+    expect(resolveApiRouteScope('POST', '/api/reconnect-credential')).toBeNull()
+    expect(resolveApiRouteScope('POST', '/api/reconnect-challenge')).toBeNull()
+    expect(resolveApiRouteScope('POST', '/api/reconnect-session')).toBeNull()
   })
 
   it('an undeclared path resolves to null (fail-closed signal, not a default scope)', () => {

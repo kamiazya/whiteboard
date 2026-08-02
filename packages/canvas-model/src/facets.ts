@@ -71,6 +71,21 @@ export const facetsRawSchema = z.record(z.string(), z.unknown()).superRefine((va
 export type FacetsRaw = z.infer<typeof facetsRawSchema>
 
 /**
+ * The persisted counterpart to `coreFacetsSchema`: the core OKF facets plus
+ * the `facetsRaw` bucket, as a single shape a store can write/read as one
+ * unit. `facets` (the extension bucket) is deliberately excluded — it has
+ * its own storage key and its own read/write pair (`writeFacets`/
+ * `readFacets` in canvas-workspace) so one domain's CRDT merge never
+ * overwrites another's; folding it into this object would lose that
+ * per-key merge granularity.
+ */
+export const canvasCoreMetaSchema = coreFacetsSchema.extend({
+  facetsRaw: facetsRawSchema.optional(),
+})
+
+export type CanvasCoreMeta = z.infer<typeof canvasCoreMetaSchema>
+
+/**
  * Typed companion for the `issue/1` extension-facet domain. This does NOT
  * replace `extensionFacetsSchema`'s `z.unknown()` payload handling — every
  * domain still round-trips unvalidated through the generic bucket. Callers

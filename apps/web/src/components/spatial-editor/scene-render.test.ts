@@ -48,4 +48,22 @@ describe('renderCanvasToSvg', () => {
     }))
     expect(shapeBoxes).toEqual(expected)
   })
+
+  it('renders dark chrome only when theme is dark, leaving the omitted/light path untouched', () => {
+    const c = canvas()
+    const omitted = renderCanvasToSvg(c, { measure: fakeMeasure })
+    const light = renderCanvasToSvg(c, { measure: fakeMeasure, theme: 'light' })
+    const dark = renderCanvasToSvg(c, { measure: fakeMeasure, theme: 'dark' })
+    expect(omitted.svg).toBe(light.svg)
+    expect(omitted.svg).toContain('#333333')
+    expect(dark.svg).not.toContain('#333333')
+    expect(dark.svg).toContain('#9BA3AF')
+  })
+
+  it('keeps scene geometry identical across themes — only color attributes differ', () => {
+    const c = canvas()
+    const light = renderCanvasToSvg(c, { measure: fakeMeasure, theme: 'light' })
+    const dark = renderCanvasToSvg(c, { measure: fakeMeasure, theme: 'dark' })
+    expect(dark.bounds).toEqual(light.bounds)
+  })
 })

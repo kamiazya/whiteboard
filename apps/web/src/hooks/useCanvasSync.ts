@@ -213,6 +213,10 @@ export function useCanvasSync(
     async (format: SceneExportFormat): Promise<Blob | null> => {
       const { svg, bounds } = renderCanvasToSvg(sessionRef.current?.getCanvas() ?? canvas, {
         measure: createBrowserMeasureText(),
+        // Pinned to 'light' regardless of the UI theme: an exported SVG/PNG
+        // is a saved artifact, and a user's display preference must never
+        // change its bytes.
+        theme: 'light',
       })
       if (format === 'svg') {
         return new Blob([svg], { type: 'image/svg+xml' })

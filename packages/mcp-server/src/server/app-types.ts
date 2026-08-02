@@ -2,8 +2,6 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
-import type { ReconnectChallengeStore } from './security/reconnect-challenge-store.js'
-import type { WebOriginTrustStore } from './security/web-origin-trust-store.js'
 import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
@@ -35,17 +33,6 @@ interface LocalDaemonAppOptions {
    *  exercising this app in isolation), which still makes the route work,
    *  just not reachable from a real WS upgrade outside this process. */
   wsTicketStore?: WsTicketStore
-  /** Backing store for the silent-reconnect surface (POST /api/reconnect-
-   *  credential, POST /api/reconnect-session). Defaults to a store rooted at
-   *  the real data dir when omitted; tests inject one rooted at a scratch
-   *  dir the same way wsTicketStore is injected above. */
-  webOriginTrustStore?: WebOriginTrustStore
-  /** Backing store for POST /api/reconnect-challenge's one-time nonce mint.
-   *  Defaults to a private in-memory store when omitted; tests inject a
-   *  shared instance the same way webOriginTrustStore is injected above so
-   *  a test can drive challenge mint and redemption through the same
-   *  store the route actually uses. */
-  reconnectChallengeStore?: ReconnectChallengeStore
 }
 
 export interface ServerModeAppOptions {

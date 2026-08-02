@@ -51,6 +51,36 @@ describe('canvas_import_okf -> canvas_export_okf composed round-trip', () => {
     expect(result.markdown).toContain('# Title\n\nBody text.')
   })
 
+  test('preserves core facets (type/title/tags/view) through the LoroDoc persistence layer', async () => {
+    const { importOkf, exportOkf } = await setupTools()
+
+    const markdown = [
+      '---',
+      'type: note',
+      'title: "Future: browser-extension auto-connect to the local daemon"',
+      'tags:',
+      '  - idea',
+      '  - browser',
+      'view: kanban/1',
+      'facets:',
+      '  note/1:',
+      '    status: idea',
+      '---',
+      'Body text.',
+    ].join('\n')
+    await importOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID, markdown })
+
+    const result = await exportOkf.execute({ workspaceId: WORKSPACE_ID, canvasId: CANVAS_ID })
+
+    expect(result.frontmatter.type).toBe('note')
+    expect(result.frontmatter.title).toBe(
+      'Future: browser-extension auto-connect to the local daemon',
+    )
+    expect(result.frontmatter.tags).toEqual(['idea', 'browser'])
+    expect(result.frontmatter.view).toBe('kanban/1')
+    expect(result.frontmatter.facets).toEqual({ 'note/1': { status: 'idea' } })
+  })
+
   test('preserves facets with arbitrary domain keys through the LoroDoc persistence layer', async () => {
     const { importOkf, exportOkf } = await setupTools()
 
