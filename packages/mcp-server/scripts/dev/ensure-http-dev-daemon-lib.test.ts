@@ -3,8 +3,10 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   buildMcpHttpDevSpawnArgs,
+  DEFAULT_READY_TIMEOUT_MS,
   isSelfHealableIdentity,
   resolveDevBearerToken,
+  resolveReadyTimeoutMs,
   verifyDevDaemonIdentity,
   waitForAuthenticatedMcp,
 } from './ensure-http-dev-daemon-lib.mjs'
@@ -152,6 +154,36 @@ describe('verifyDevDaemonIdentity', () => {
     })
 
     expect(verdict).toBe('ours')
+  })
+})
+
+describe('resolveReadyTimeoutMs', () => {
+  it('defaults to DEFAULT_READY_TIMEOUT_MS when the override is absent', () => {
+    expect(resolveReadyTimeoutMs({})).toBe(DEFAULT_READY_TIMEOUT_MS)
+  })
+
+  it('defaults when the override is undefined', () => {
+    expect(resolveReadyTimeoutMs({ WHITEBOARD_DEV_READY_TIMEOUT_MS: undefined })).toBe(
+      DEFAULT_READY_TIMEOUT_MS,
+    )
+  })
+
+  it('uses a valid positive integer override', () => {
+    expect(resolveReadyTimeoutMs({ WHITEBOARD_DEV_READY_TIMEOUT_MS: '5000' })).toBe(5000)
+  })
+
+  it.each([
+    '',
+    'abc',
+    '0',
+    '-1',
+    '1.5',
+    'Infinity',
+    'NaN',
+  ])('falls back to the default for a malformed override %j (never throws)', (raw) => {
+    expect(resolveReadyTimeoutMs({ WHITEBOARD_DEV_READY_TIMEOUT_MS: raw })).toBe(
+      DEFAULT_READY_TIMEOUT_MS,
+    )
   })
 })
 
