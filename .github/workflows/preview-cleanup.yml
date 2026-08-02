@@ -41,19 +41,55 @@ jobs:
           alias_prefix="https://$label.kamiazya-whiteboard.pages.dev"
           echo "releasing preview deployments with environment_url under: $alias_prefix"
 
+          # The listing below is a snapshot. When several PRs merge at once
+          # their cleanup runs iterate overlapping snapshots, so a deployment
+          # can disappear between the listing and the calls that act on it.
+          # A 404 therefore means another run already reached the end state we
+          # want, and must not fail this job. Any other error still does.
+          err_file=$(mktemp)
+          trap 'rm -f "$err_file"' EXIT
+          api_or_gone() {
+            local out
+            # stderr goes to a file rather than being folded into stdout, so a
+            # warning from gh can never end up parsed as a deployment URL.
+            if out=$(gh api "$@" 2>"$err_file"); then
+              printf '%s' "$out"
+              return 0
+            fi
+            if grep -q 'HTTP 404' "$err_file"; then
+              return 2
+            fi
+            cat "$err_file" >&2
+            return 1
+          }
+
           ids=$(gh api "repos/$REPO/deployments?environment=preview-web&per_page=100" --jq '.[].id')
           released=0
+          skipped=0
           for id in $ids; do
-            url=$(gh api "repos/$REPO/deployments/$id/statuses?per_page=1" --jq '.[0].environment_url // empty')
+            url=$(api_or_gone "repos/$REPO/deployments/$id/statuses?per_page=1" \
+              --jq '.[0].environment_url // empty') || {
+              [ $? -eq 2 ] || exit 1
+              skipped=$((skipped+1))
+              continue
+            }
             case "$url" in
               "$alias_prefix"|"$alias_prefix"/*)
                 # Deployments must be inactive before they can be deleted.
-                gh api --method POST "repos/$REPO/deployments/$id/statuses" \
-                  -f state=inactive >/dev/null
-                gh api --method DELETE "repos/$REPO/deployments/$id" >/dev/null
+                api_or_gone --method POST "repos/$REPO/deployments/$id/statuses" \
+                  -f state=inactive >/dev/null || {
+                  [ $? -eq 2 ] || exit 1
+                  skipped=$((skipped+1))
+                  continue
+                }
+                api_or_gone --method DELETE "repos/$REPO/deployments/$id" >/dev/null || {
+                  [ $? -eq 2 ] || exit 1
+                  skipped=$((skipped+1))
+                  continue
+                }
                 released=$((released+1))
                 echo "released deployment $id ($url)"
                 ;;
             esac
           done
-          echo "released $released deployment record(s)"
+          echo "released $released deployment record(s); skipped $skipped already removed by a concurrent run"
