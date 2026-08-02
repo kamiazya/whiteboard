@@ -271,6 +271,38 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   )
 
   itPosix(
+    'fails loudly when a colliding worktree answers the readiness probe right after our own spawn (post-spawn TOCTOU)',
+    async () => {
+      const { port, dataDir, invokedSentinelPath, env } = await prepareHookRun()
+
+      // Simulates the race this branch guards against: our spawn's readiness
+      // probe succeeds, but the identity marker written at bind time belongs
+      // to a different worktree (same derived port, different repoRoot) —
+      // i.e. a colliding worktree's daemon answered instead of ours.
+      const foreignMarker = JSON.stringify({
+        port,
+        repoRoot: '/some/other/worktree',
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+      })
+
+      const { exitCode, stderr } = await runHook({
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
+        FAKE_PNPM_MARKER_JSON: foreignMarker,
+      })
+
+      expect(exitCode).not.toBe(0)
+      expect(stderr).toContain('startup race with another worktree')
+      expect(stderr).toContain(String(port))
+
+      // The fake daemon stays up despite the hook's failure — clean it up.
+      cleanupPids.push(readSentinel<{ pid: number }>(invokedSentinelPath).pid)
+      expect(existsSync(join(dataDir, 'dev-daemon.json'))).toBe(true)
+    },
+  )
+
+  itPosix(
     'a stale lock (dead recorded pid) does not block a spawn, and the hook still terminates within its bound',
     async () => {
       const { lockPath, invokedSentinelDir, countSpawns, env } = await prepareHookRun()
