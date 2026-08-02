@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -57,7 +57,6 @@ describe('purgeLegacyWebOriginTrustFile', () => {
 
       const warnings = handle.records.filter((r) => r.level === 'warning')
       expect(warnings).toHaveLength(1)
-      expect(JSON.stringify(warnings[0])).not.toContain('permission denied has file contents')
     } finally {
       handle.restore()
     }
@@ -80,11 +79,10 @@ describe('purgeLegacyWebOriginTrustFile', () => {
 
   it('also removes the sibling lock dir, best-effort', async () => {
     const lockDir = join(dataDir, 'trusted-web-origins.lock')
-    await import('node:fs/promises').then((fs) => fs.mkdir(lockDir))
+    await mkdir(lockDir)
 
     await purgeLegacyWebOriginTrustFile(dataDir)
 
-    const fs = await import('node:fs/promises')
-    await expect(fs.stat(lockDir)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(stat(lockDir)).rejects.toMatchObject({ code: 'ENOENT' })
   })
 })

@@ -16,21 +16,17 @@ import { getLogger } from '../server/log.js'
 
 // The filename/dirname literals formerly lived in web-origin-trust-store.ts,
 // which owned the reconnect trust store. That module is gone; this is now
-// their only reference.
-const WEB_ORIGIN_TRUST_FILENAME = 'trusted-web-origins.json'
-const WEB_ORIGIN_TRUST_LOCK_DIRNAME = 'trusted-web-origins.lock'
+// their only reference. The lock entry is a directory, hence `recursive`
+// below — harmless for the plain JSON file, which `rm` removes either way.
+const LEGACY_TRUST_ARTIFACTS = ['trusted-web-origins.json', 'trusted-web-origins.lock']
 
 export interface PurgeLegacyWebOriginTrustFileDeps {
   rm?: typeof rm
 }
 
-async function removeBestEffort(
-  path: string,
-  removeFn: typeof rm,
-  options: Parameters<typeof rm>[1],
-): Promise<void> {
+async function removeBestEffort(path: string, removeFn: typeof rm): Promise<void> {
   try {
-    await removeFn(path, options)
+    await removeFn(path, { recursive: true })
   } catch (err) {
     const code = (err as NodeJS.ErrnoException)?.code
     if (code === 'ENOENT') return
@@ -46,8 +42,7 @@ export async function purgeLegacyWebOriginTrustFile(
   deps: PurgeLegacyWebOriginTrustFileDeps = {},
 ): Promise<void> {
   const removeFn = deps.rm ?? rm
-  await removeBestEffort(join(dataDir, WEB_ORIGIN_TRUST_FILENAME), removeFn, undefined)
-  await removeBestEffort(join(dataDir, WEB_ORIGIN_TRUST_LOCK_DIRNAME), removeFn, {
-    recursive: true,
-  })
+  for (const name of LEGACY_TRUST_ARTIFACTS) {
+    await removeBestEffort(join(dataDir, name), removeFn)
+  }
 }
