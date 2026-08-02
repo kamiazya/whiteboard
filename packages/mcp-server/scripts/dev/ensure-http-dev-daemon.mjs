@@ -351,7 +351,13 @@ async function runAsWinner() {
 async function runAsLoser() {
   const startedAt = Date.now()
   while (Date.now() - startedAt < READY_TIMEOUT_MS) {
-    if ((await probeAuthenticatedMcpDaemon()) === 'ours') {
+    // Route through assessDaemon (not the raw probe) so a bare 'ours' bearer
+    // match still gets the identity-marker cross-check every other success
+    // path performs — with a shared default bearer token across worktrees,
+    // an authenticated response alone doesn't rule out a different
+    // worktree's daemon that hash-collided on this derived port.
+    const waitingAssessment = await assessDaemon()
+    if (waitingAssessment.kind === 'healthy') {
       info(
         `[ensure-http-dev-daemon] http://${HOST}:${PORT} became reachable while waiting for another process's spawn`,
       )
