@@ -12,6 +12,10 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./font-loading": {
+      "types": "./src/font-loading.ts",
+      "import": "./src/font-loading.ts"
+    },
     "./scene": {
       "types": "./src/scene.ts",
       "import": "./src/scene.ts"
