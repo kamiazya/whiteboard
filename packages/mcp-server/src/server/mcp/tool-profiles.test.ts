@@ -12,6 +12,7 @@ const ACTIVE_TOOL_NAMES = [
   'body_patch',
   'canvas_render_svg',
   'canvas_digest',
+  'canvas_import_okf',
   'canvas_export_okf',
   'canvas_export_json_canvas',
   'wb_canvas_create',
@@ -26,5 +27,11 @@ const ACTIVE_TOOL_NAMES = [
 describe('TOOL_PROFILES', () => {
   it('contains exactly the active OpenCanvas tool set (no dead Excalidraw entries)', () => {
     expect(Object.keys(TOOL_PROFILES).sort()).toEqual([...ACTIVE_TOOL_NAMES].sort())
+  })
+
+  it('declares canvas_import_okf as mutating, not read-only or destructive', () => {
+    const profile = TOOL_PROFILES.canvas_import_okf.profile
+    expect(profile.readOnlyHint).not.toBe(true)
+    expect(profile.destructiveHint).not.toBe(true)
   })
 })

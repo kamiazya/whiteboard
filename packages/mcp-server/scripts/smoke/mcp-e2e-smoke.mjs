@@ -223,9 +223,23 @@ async function main() {
   }
   console.log(`[e2e] version_restore → ${restored.restoredVersionId}`)
 
-  // canvas_import_okf → canvas_export_okf round-trip
-  const importMarkdown =
-    '---\ntype: issue\nfacets:\n  issue/1:\n    status: open\n---\nImported body.'
+  // canvas_import_okf → canvas_export_okf round-trip, including the core
+  // facets (type/title/tags) — these are stored via writeCoreFacets, a
+  // separate code path from the extension `facets` bucket below, so this is
+  // the runtime guard for structuredContent-vs-outputSchema drift on both.
+  const importMarkdown = [
+    '---',
+    'type: issue',
+    'title: "Smoke test issue"',
+    'tags:',
+    '  - smoke',
+    '  - e2e',
+    'facets:',
+    '  issue/1:',
+    '    status: open',
+    '---',
+    'Imported body.',
+  ].join('\n')
   const imported = await callTool('canvas_import_okf', {
     workspaceId: WORKSPACE_ID,
     canvasId,
@@ -248,7 +262,16 @@ async function main() {
       `canvas_export_okf facets missing after import: ${JSON.stringify(exported.frontmatter)}`,
     )
   }
-  console.log('[e2e] canvas_export_okf → round-trip verified')
+  if (
+    exported.frontmatter.type !== 'issue' ||
+    exported.frontmatter.title !== 'Smoke test issue' ||
+    JSON.stringify(exported.frontmatter.tags) !== JSON.stringify(['smoke', 'e2e'])
+  ) {
+    throw new Error(
+      `canvas_export_okf core facets mismatch after import: ${JSON.stringify(exported.frontmatter)}`,
+    )
+  }
+  console.log('[e2e] canvas_export_okf → round-trip verified (core facets + extension facets)')
 
   console.log('\n[e2e] ALL OK')
 }

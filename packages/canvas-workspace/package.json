@@ -22,7 +22,8 @@
     "@kamiazya/whiteboard-canvas-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-codec": "workspace:*",
     "@kamiazya/whiteboard-canvas-ports": "workspace:*",
-    "loro-crdt": "catalog:"
+    "loro-crdt": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.4.1",
