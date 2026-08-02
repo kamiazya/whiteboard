@@ -41,6 +41,8 @@ import {
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
+import { DragPreviewLayer } from './DragPreviewLayer.js'
+import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { editorTextFill } from './editor-appearance.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import { findFreeSpot, hitTest, indexNodeBoxes, resizeBoxByDelta } from './geometry.js'
@@ -179,6 +181,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [livePoint, setLivePoint] = useState<Point | null>(null)
     const isPanningRef = useRef(false)
     const lastPanPointRef = useRef({ x: 0, y: 0 })
+    /**
+     * The pointerId this component currently holds capture for, or `null`.
+     * Tracked so unmount can best-effort release capture (see the teardown
+     * effect below) even though no window-level fallback listener exists to
+     * do it otherwise — mirrors `trySetPointerCapture`'s own
+     * best-effort/never-throw reasoning.
+     */
+    const activePointerIdRef = useRef<number | null>(null)
 
     const canvasRef = useRef(canvas)
     const prevCanvasRef = useRef(canvas)
@@ -210,6 +220,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         origin: isExternal ? 'external' : 'local',
       })
       setGestureState(result.state)
+      // Mirror gestures.ts's canvas-replaced abort/continue answer into the
+      // preview: an abort (result.state no longer in-flight) must retire the
+      // preview too, or it would keep drawing a gesture the reducer already
+      // cancelled. Uses the SAME predicate applyResult's own clearing check
+      // below does, so there is exactly one definition of "no longer in
+      // flight" rather than two clearing rules that could drift apart.
+      if (!isInFlightGesture(result.state)) setLivePoint(null)
       // gestureState intentionally omitted: this effect only reacts to a new
       // canvas identity, not every gestureState transition (that would create
       // an infinite render loop feeding the reducer's own output back in).
@@ -251,46 +268,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     /**
      * The in-flight preview geometry, derived purely from the gesture's own
      * start snapshot plus the live pointer — never from `canvas`, so it costs
-     * nothing beyond a few arithmetic ops per frame. `resizeBoxByDelta` is the
-     * SAME function `reducePointerUpResizing` commits with, so the preview and
-     * the eventual commit cannot disagree.
+     * nothing beyond a few arithmetic ops per frame. See drag-preview.ts for
+     * why this is pulled out of this component and the single-source
+     * `resizeBoxByDelta` guarantee it documents.
      */
-    const dragPreview = useMemo(() => {
-      if (livePoint === null) return undefined
-      if (gestureState.kind === 'moving') {
-        const box = boxes.find((b) => b.id === gestureState.nodeId)?.box
-        if (box === undefined) return undefined
-        return {
-          kind: 'box' as const,
-          box: {
-            ...box,
-            x: gestureState.startX + (livePoint.x - gestureState.startPoint.x),
-            y: gestureState.startY + (livePoint.y - gestureState.startPoint.y),
-          },
-        }
-      }
-      if (gestureState.kind === 'resizing') {
-        return {
-          kind: 'box' as const,
-          box: resizeBoxByDelta(
-            gestureState.startBox,
-            gestureState.handle,
-            livePoint.x - gestureState.startPoint.x,
-            livePoint.y - gestureState.startPoint.y,
-          ),
-        }
-      }
-      if (gestureState.kind === 'connecting') {
-        const box = boxes.find((b) => b.id === gestureState.fromNodeId)?.box
-        if (box === undefined) return undefined
-        return {
-          kind: 'line' as const,
-          from: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-          to: livePoint,
-        }
-      }
-      return undefined
-    }, [gestureState, livePoint, boxes])
+    const dragPreview = useMemo(
+      () => computeDragPreview(gestureState, boxes, livePoint),
+      [gestureState, livePoint, boxes],
+    )
 
     /**
      * Folds `result.commands` in order over a LOCAL running canvas (seeded
@@ -303,8 +288,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const applyResult = (result: ReturnType<typeof reduceGesture>) => {
       // Any gesture that leaves an in-flight state retires the preview: the
-      // committed canvas is about to draw the real thing.
-      if (result.state.kind === 'idle' || result.state.kind === 'editing-text') setLivePoint(null)
+      // committed canvas is about to draw the real thing. Same predicate the
+      // canvas-replaced effect above uses, so both agree on one definition.
+      if (!isInFlightGesture(result.state)) setLivePoint(null)
       setGestureState(result.state)
       if (result.selectedId !== undefined) setSelectedId(result.selectedId)
       let running = canvasRef.current
@@ -321,7 +307,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const beginOverlayGesture = (e: React.PointerEvent): HTMLDivElement | null => {
       const root = rootRef.current
-      if (root !== null) trySetPointerCapture(root, e.pointerId)
+      if (root !== null) {
+        trySetPointerCapture(root, e.pointerId)
+        activePointerIdRef.current = e.pointerId
+      }
       return root
     }
 
@@ -330,6 +319,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const root = rootRef.current
       if (root === null) return
       trySetPointerCapture(root, e.pointerId)
+      activePointerIdRef.current = e.pointerId
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const hitId = hitTest(boxes, point)
@@ -365,6 +355,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
+      activePointerIdRef.current = null
       if (isPanningRef.current) {
         isPanningRef.current = false
         return
@@ -385,6 +376,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
 
     const handlePointerCancel = () => {
       isPanningRef.current = false
+      activePointerIdRef.current = null
       applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
     }
 
@@ -484,6 +476,34 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const onWheel = (e: WheelEvent) => handleWheelRef.current(e)
       root.addEventListener('wheel', onWheel, { passive: false })
       return () => root.removeEventListener('wheel', onWheel)
+    }, [])
+
+    // Unmount-mid-gesture safety net. Every pointer handler above is a JSX
+    // prop (the wheel listener is this component's only native one, and it
+    // already cleans itself up), so React tears them all down with the
+    // component and no stale handler can fire an onChange/command after
+    // this point — that half of "no listener leak" is structural, not
+    // something this effect needs to do. What React does NOT do for us is
+    // release pointer capture the platform is still holding on our behalf;
+    // an unmount mid-drag (route change, a parent swapping this component
+    // out) would otherwise leave the browser holding capture for a pointer
+    // no element can any longer respond to. Best-effort/never-throw, same
+    // reasoning as `trySetPointerCapture`.
+    useEffect(() => {
+      // Capture the root HERE, at mount, rather than reading `rootRef.current`
+      // inside the cleanup closure: React detaches the ref (sets it to
+      // `null`) before this cleanup runs on unmount, so reading the ref at
+      // cleanup time would always see `null` and silently skip the release.
+      const root = rootRef.current
+      return () => {
+        const pointerId = activePointerIdRef.current
+        if (root === null || pointerId === null) return
+        try {
+          root.releasePointerCapture(pointerId)
+        } catch {
+          // best-effort — see doc comment above
+        }
+      }
     }, [])
 
     /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
@@ -653,42 +673,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             layout+stringify+innerHTML path runs once per gesture (at
             pointerup) instead of once per frame. */}
           {dragPreview !== undefined && (
-            <svg
-              data-testid="drag-preview"
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                overflow: 'visible',
-                left: 0,
-                top: 0,
-                pointerEvents: 'none',
-              }}
-            >
-              {dragPreview.kind === 'box' ? (
-                <rect
-                  x={dragPreview.box.x}
-                  y={dragPreview.box.y}
-                  width={dragPreview.box.width}
-                  height={dragPreview.box.height}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2 / viewport.zoom}
-                  strokeDasharray={`${6 / viewport.zoom} ${4 / viewport.zoom}`}
-                  opacity={0.9}
-                />
-              ) : (
-                <line
-                  x1={dragPreview.from.x}
-                  y1={dragPreview.from.y}
-                  x2={dragPreview.to.x}
-                  y2={dragPreview.to.y}
-                  stroke="currentColor"
-                  strokeWidth={2 / viewport.zoom}
-                  strokeDasharray={`${6 / viewport.zoom} ${4 / viewport.zoom}`}
-                  opacity={0.9}
-                />
-              )}
-            </svg>
+            <DragPreviewLayer preview={dragPreview} zoom={viewport.zoom} />
           )}
           {gestureState.kind === 'connecting' && (
             <svg

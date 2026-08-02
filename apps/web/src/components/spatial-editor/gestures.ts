@@ -368,11 +368,14 @@ export function reduceGesture(
         commands: [{ kind: 'set-text', id: state.nodeId, text: event.text }],
       }
     case 'pointermove':
-      // Pure state passthrough: the reducer recomputes the commit from
-      // startPoint/current point at pointerup, so no intermediate point needs
-      // to be stored on the state for move/resize. Connecting has no other
-      // state to update either (the in-flight line is component-rendered from
-      // the raw pointer position, not reducer state).
+      // Pure state passthrough: this reducer never stores an intermediate
+      // point on the state — the eventual commit is always recomputed from
+      // startPoint/current point at pointerup, for move, resize, AND
+      // connect. A live preview (drag outline, in-flight connect line) is
+      // therefore always a projection SpatialEditor.tsx derives itself from
+      // its own component-local pointer state (see `computeDragPreview` in
+      // drag-preview.ts) — this reducer has no opinion on it one way or the
+      // other, and no visual state ever needs to round-trip through here.
       return stateOnly(state)
     case 'pointerup':
       switch (state.kind) {

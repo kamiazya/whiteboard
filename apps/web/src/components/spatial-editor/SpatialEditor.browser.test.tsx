@@ -3,8 +3,8 @@
  * unmount-mid-gesture are exactly what jsdom cannot exercise faithfully.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
-import { cleanup, render, waitFor } from '@testing-library/react'
-import { useState } from 'react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { createRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 // Real app styles — needed so the Add-note-button affordance test's
@@ -12,7 +12,7 @@ import { page, userEvent } from 'vitest/browser'
 // unstyled-DOM defaults.
 import '../../index.css'
 import type { EditorCommand } from './commands.js'
-import { SpatialEditor } from './SpatialEditor.js'
+import { SpatialEditor, type SpatialEditorHandle } from './SpatialEditor.js'
 
 function fakeMeasure() {
   return { advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 }
@@ -588,8 +588,10 @@ describe('SpatialEditor (browser)', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('unmounting mid-drag does not throw and never calls onChange afterward', async () => {
+  it('unmounting mid-drag does not throw, never calls onChange afterward, releases pointer capture, and logs no console.error', async () => {
     const onChange = vi.fn()
+    const consoleError = vi.spyOn(console, 'error')
+    const releaseSpy = vi.spyOn(HTMLElement.prototype, 'releasePointerCapture')
     const { unmount } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
@@ -610,8 +612,451 @@ describe('SpatialEditor (browser)', () => {
       .dispatchEvent(
         new PointerEvent('pointermove', { bubbles: true, clientX: 90, clientY: 90, pointerId: 3 }),
       )
+    await waitFor(() => expect(page.getByTestId('drag-preview').element()).toBeTruthy())
     expect(() => unmount()).not.toThrow()
     expect(onChange).not.toHaveBeenCalled()
+    expect(releaseSpy).toHaveBeenCalledWith(3)
+    expect(consoleError).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+    releaseSpy.mockRestore()
+  })
+
+  it('drag preview tracks the pointer at several increasing deltas', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 200,
+        button: 0,
+      }),
+    )
+    const deltas = [
+      { x: 10, y: 5 },
+      { x: 30, y: 15 },
+      { x: 60, y: 40 },
+    ]
+    let previousRectX: number | undefined
+    let previousRectY: number | undefined
+    for (const delta of deltas) {
+      await editor.element().dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          clientX: 40 + delta.x,
+          clientY: 40 + delta.y,
+          pointerId: 200,
+        }),
+      )
+      const expectedX = 20 + delta.x
+      const expectedY = 20 + delta.y
+      // Poll rather than read synchronously: a pointermove-driven React state
+      // update is not guaranteed to have flushed to the DOM by the time
+      // `dispatchEvent` returns (continuous-priority updates), unlike the
+      // discrete pointerup commit other tests in this file assert on.
+      await waitFor(() => {
+        const rect = page.getByTestId('drag-preview').element().querySelector('rect')
+        expect(rect).toBeTruthy()
+        expect(Number(rect?.getAttribute('x'))).toBe(expectedX)
+        expect(Number(rect?.getAttribute('y'))).toBe(expectedY)
+      })
+      const rect = page.getByTestId('drag-preview').element().querySelector('rect')
+      const x = Number(rect?.getAttribute('x'))
+      const y = Number(rect?.getAttribute('y'))
+      if (previousRectX !== undefined && previousRectY !== undefined) {
+        // Identity-viewport, so canvas-space offset equals screen-space offset.
+        expect(x - previousRectX).toBe(delta.x - deltas[deltas.indexOf(delta) - 1]!.x)
+        expect(y - previousRectY).toBe(delta.y - deltas[deltas.indexOf(delta) - 1]!.y)
+      }
+      previousRectX = x
+      previousRectY = y
+    }
+    // Node "a" starts at canvas (20, 20); final delta is (60, 40).
+    expect(previousRectX).toBe(20 + 60)
+    expect(previousRectY).toBe(20 + 40)
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 80,
+        pointerId: 200,
+      }),
+    )
+    await waitFor(() => expect(page.getByTestId('drag-preview').element).toThrow())
+  })
+
+  it('resize preview tracks the handle drag and its final geometry equals the committed resize-node command', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 201,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 201 }),
+      )
+    const seHandle = page.getByTestId('resize-handle-se')
+    await seHandle.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 120,
+        clientY: 80,
+        pointerId: 202,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 150,
+        clientY: 100,
+        pointerId: 202,
+      }),
+    )
+    await waitFor(() => {
+      const rect = page.getByTestId('drag-preview').element().querySelector('rect')
+      expect(rect).toBeTruthy()
+    })
+    const previewRect = page.getByTestId('drag-preview').element().querySelector('rect')
+    const previewGeometry = {
+      x: Number(previewRect?.getAttribute('x')),
+      y: Number(previewRect?.getAttribute('y')),
+      width: Number(previewRect?.getAttribute('width')),
+      height: Number(previewRect?.getAttribute('height')),
+    }
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: 150,
+        clientY: 100,
+        pointerId: 202,
+      }),
+    )
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({
+      kind: 'resize-node',
+      id: 'a',
+      x: previewGeometry.x,
+      y: previewGeometry.y,
+      width: previewGeometry.width,
+      height: previewGeometry.height,
+    })
+  })
+
+  it('connect: a live line follows the pointer while connecting and disappears once the connection commits', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+          createId={() => 'edge-preview'}
+        />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 203,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 203 }),
+      )
+    const connectHandle = page.getByTestId('connect-handle')
+    await connectHandle.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 130,
+        clientY: 50,
+        pointerId: 204,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 200,
+        clientY: 60,
+        pointerId: 204,
+      }),
+    )
+    await waitFor(() => {
+      const line = page.getByTestId('drag-preview').element().querySelector('line')
+      expect(line).toBeTruthy()
+      expect(Number(line?.getAttribute('x2'))).toBe(200)
+      expect(Number(line?.getAttribute('y2'))).toBe(60)
+    })
+
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 260,
+        clientY: 45,
+        pointerId: 204,
+      }),
+    )
+    await waitFor(() => {
+      const line = page.getByTestId('drag-preview').element().querySelector('line')
+      expect(Number(line?.getAttribute('x2'))).toBe(260)
+      expect(Number(line?.getAttribute('y2'))).toBe(45)
+    })
+
+    // Node "b" chrome rect sits at canvas (250,20)-(330,60); drop inside it.
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 280, clientY: 40, pointerId: 204 }),
+      )
+    await waitFor(() => expect(page.getByTestId('drag-preview').element).toThrow())
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({
+      kind: 'connect-nodes',
+      edgeId: 'edge-preview',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+    expect(next.edges).toEqual([{ id: 'edge-preview', fromNode: 'a', toNode: 'b' }])
+  })
+
+  it('perf invariant: the committed scene is untouched and measure is not re-invoked while a drag is in flight', async () => {
+    const onChange = vi.fn()
+    const measure = vi.fn(fakeMeasure)
+    const { container } = render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={measure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    const committedRectBefore = container.querySelector(
+      'svg:not([data-testid="drag-preview"]) rect',
+    )
+    const xBefore = committedRectBefore?.getAttribute('x')
+    const yBefore = committedRectBefore?.getAttribute('y')
+    measure.mockClear()
+
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 205,
+        button: 0,
+      }),
+    )
+    for (const delta of [10, 20, 30, 40, 50]) {
+      await editor.element().dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          clientX: 40 + delta,
+          clientY: 40 + delta,
+          pointerId: 205,
+        }),
+      )
+    }
+    // No layout/measure work happened: `canvas` never changed mid-gesture, so
+    // the `useMemo` keyed on it never re-ran renderCanvasToSvg.
+    expect(measure).not.toHaveBeenCalled()
+    // The committed shape rect for node "a" is exactly where it started —
+    // only the overlay preview tracked the pointer, not the real scene.
+    const committedRectAfter = container.querySelector('svg:not([data-testid="drag-preview"]) rect')
+    expect(committedRectAfter?.getAttribute('x')).toBe(xBefore)
+    expect(committedRectAfter?.getAttribute('y')).toBe(yBefore)
+    expect(onChange).not.toHaveBeenCalled()
+
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 90, clientY: 90, pointerId: 205 }),
+      )
+    expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('preview tracks the pointer 1:1 in canvas space under a non-identity viewport (panned + zoomed)', async () => {
+    const onChange = vi.fn()
+    const ref = createRef<SpatialEditorHandle>()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor
+          ref={ref}
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+        />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    // Set a known non-identity viewport directly via the imperative handle
+    // rather than replaying wheel-event math — this isolates the property
+    // under test (preview tracks in CANVAS space) from viewport.ts's own
+    // zoom/pan arithmetic, which has its own dedicated tests.
+    act(() => {
+      ref.current?.setViewport({ x: 5, y: 5, zoom: 2 })
+    })
+
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 60,
+        clientY: 60,
+        pointerId: 206,
+        button: 0,
+      }),
+    )
+    const rectAt = () =>
+      page.getByTestId('drag-preview').element().querySelector('rect') as SVGRectElement
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 80,
+        clientY: 90,
+        pointerId: 206,
+      }),
+    )
+    await waitFor(() => expect(rectAt()).toBeTruthy())
+    const first = { x: Number(rectAt().getAttribute('x')), y: Number(rectAt().getAttribute('y')) }
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 80 + 40,
+        clientY: 90 + 20,
+        pointerId: 206,
+      }),
+    )
+    await waitFor(() => {
+      const rect = rectAt()
+      expect(Number(rect.getAttribute('x')) - first.x).toBeCloseTo(20, 5)
+    })
+    const second = { x: Number(rectAt().getAttribute('x')), y: Number(rectAt().getAttribute('y')) }
+    // Screen-space delta (40, 20) at zoom 2 is canvas-space delta (20, 10) —
+    // the preview must move by the CANVAS-space amount, not the raw
+    // screen-space pointer delta, since it draws inside the zoomed content.
+    expect(second.x - first.x).toBeCloseTo(20, 5)
+    expect(second.y - first.y).toBeCloseTo(10, 5)
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: 120,
+        clientY: 110,
+        pointerId: 206,
+      }),
+    )
+  })
+
+  it('Escape mid-drag removes the preview and commits nothing', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 207,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 90,
+        clientY: 90,
+        pointerId: 207,
+      }),
+    )
+    await waitFor(() => expect(page.getByTestId('drag-preview').element()).toBeTruthy())
+    await editor
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await waitFor(() => expect(page.getByTestId('drag-preview').element).toThrow())
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 90, clientY: 90, pointerId: 207 }),
+      )
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('a local canvas swap that keeps the gesture target valid leaves the gesture and preview alive', async () => {
+    const onChange = vi.fn()
+    const initial = twoNodeCanvas()
+    const { rerender } = render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={initial} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 208,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointermove', {
+        bubbles: true,
+        clientX: 90,
+        clientY: 90,
+        pointerId: 208,
+      }),
+    )
+    await waitFor(() => expect(page.getByTestId('drag-preview').element()).toBeTruthy())
+
+    // Same target node, same type, unrelated node "b" edited — this is a
+    // LOCAL replacement (no externalVersion bump), so the gesture must
+    // continue rather than abort (gestures.ts's canvas-replaced contract).
+    const sameTargetStillValid: SpatialCanvas = {
+      nodes: [initial.nodes[0]!, { ...initial.nodes[1]!, x: 999 }],
+      edges: [],
+    }
+    rerender(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={sameTargetStillValid} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    expect(page.getByTestId('drag-preview').element()).toBeTruthy()
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 90, clientY: 90, pointerId: 208 }),
+      )
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'move-node', id: 'a', x: 70, y: 70 })
   })
 
   it('double-clicking empty canvas space creates a node and opens it for typing immediately (no second double-click)', async () => {
@@ -953,6 +1398,7 @@ describe('SpatialEditor (browser)', () => {
       .dispatchEvent(
         new PointerEvent('pointermove', { bubbles: true, clientX: 60, clientY: 60, pointerId: 80 }),
       )
+    await waitFor(() => expect(page.getByTestId('drag-preview').element()).toBeTruthy())
 
     const withoutA: SpatialCanvas = { nodes: [twoNodeCanvas().nodes[1]!], edges: [] }
     expect(() =>
@@ -967,6 +1413,9 @@ describe('SpatialEditor (browser)', () => {
         </div>,
       ),
     ).not.toThrow()
+    // The abort must retire the preview too — a canvas-replaced abort with a
+    // stale preview left behind was the spike's own documented gap.
+    expect(page.getByTestId('drag-preview').element).toThrow()
 
     await editor
       .element()
@@ -993,12 +1442,19 @@ describe('SpatialEditor (browser)', () => {
         button: 0,
       }),
     )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointermove', { bubbles: true, clientX: 55, clientY: 45, pointerId: 4 }),
+      )
+    await waitFor(() => expect(page.getByTestId('drag-preview').element()).toBeTruthy())
     // Simulates the platform revoking capture (e.g. the setPointerCapture
     // rejection this component's trySetPointerCapture swallows) rather than
     // a normal pointerup/pointercancel.
     await editor
       .element()
       .dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, pointerId: 4 }))
+    await waitFor(() => expect(page.getByTestId('drag-preview').element).toThrow())
     // Give React a frame to commit the cancellation before the next event —
     // lostpointercapture and pointerup are dispatched back-to-back here in a
     // way no real gesture ever would be, so nothing later in this test
