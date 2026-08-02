@@ -457,9 +457,6 @@ importers:
 
   packages/mcp-server:
     dependencies:
-      '@excalidraw/excalidraw':
-        specifier: ^0.18.1
-        version: 0.18.1(@types/react-dom@19.2.3(@types/react@19.2.14))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@hono/node-server':
         specifier: ^2.0.11
         version: 2.0.11(hono@4.12.27)
