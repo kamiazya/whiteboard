@@ -1,21 +1,13 @@
-import architectureRaw from '@docs-assets/architecture.canvas?raw'
-import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import { CanvasViewer, ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, it } from 'vitest'
-import { page } from 'vitest/browser'
-import { resolveDocAssetPath } from './_helpers.js'
+import { captureDocAsset, waitForSnapshotContent } from './_helpers.js'
+import { ARCHITECTURE_SCENE } from './_scenes.js'
 
 // Generates docs/assets/architecture.png by rendering the canonical
 // architecture.canvas JSON Canvas source. The .canvas file is the source of
 // truth — re-running this test re-renders it deterministically so a scene
 // edit plus `pnpm docs:snapshots` is enough to publish the updated diagram.
-
-const parsed = parseSpatial(architectureRaw)
-if (!parsed.ok) {
-  throw new Error(`architecture.canvas failed to parse: ${parsed.error.message}`)
-}
-const scene = parsed.value
 
 afterEach(() => {
   cleanup()
@@ -29,7 +21,7 @@ describe('docs snapshot — architecture diagram', () => {
 
     const { container } = render(
       <CanvasViewer
-        canvas={scene}
+        canvas={ARCHITECTURE_SCENE}
         width={1100}
         height={620}
         padding={40}
@@ -38,23 +30,7 @@ describe('docs snapshot — architecture diagram', () => {
       />,
     )
 
-    await waitFor(() => {
-      const svgs = container.querySelectorAll('svg')
-      // CanvasViewer's SVG is always the last one in document order — icon
-      // svgs (WorkspaceTopBar chevrons, kebab menus, etc.) render ahead of it.
-      const svg = svgs[svgs.length - 1]
-      if (!svg) throw new Error('scene svg not yet mounted')
-      if (!(svg.textContent ?? '').includes('Whiteboard')) {
-        throw new Error('scene content not yet rendered')
-      }
-    })
-
-    const target = container.querySelector('[data-testid="architecture-scene"]')
-    if (!(target instanceof HTMLElement)) throw new Error('viewer wrapper not found')
-
-    await page.screenshot({
-      path: resolveDocAssetPath('architecture.png'),
-      element: page.elementLocator(target),
-    })
+    await waitForSnapshotContent(container, { sceneText: 'Whiteboard' })
+    await captureDocAsset(container, 'architecture-scene', 'architecture.png')
   })
 })

@@ -1,22 +1,14 @@
-import authFlowRaw from '@docs-assets/canvas-auth-flow.canvas?raw'
-import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
 import { CanvasViewer, ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
-import { cleanup, render, waitFor } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, it } from 'vitest'
-import { page } from 'vitest/browser'
-import { resolveDocAssetPath } from './_helpers.js'
+import { captureDocAsset, waitForSnapshotContent } from './_helpers.js'
+import { AUTH_FLOW_SCENE } from './_scenes.js'
 
 // Generates docs/assets/canvas-auth-flow.png — a small auth-service request
 // flow diagram: Client -> API Gateway -> Token Service -> Database, with a
 // Redis Cache fan-out from Token Service. Authored as docs/assets/
 // canvas-auth-flow.canvas so the source of the diagram lives alongside the
 // image it produces.
-
-const parsed = parseSpatial(authFlowRaw)
-if (!parsed.ok) {
-  throw new Error(`canvas-auth-flow.canvas failed to parse: ${parsed.error.message}`)
-}
-const scene = parsed.value
 
 afterEach(() => {
   cleanup()
@@ -28,7 +20,7 @@ describe('docs snapshot — canvas auth flow diagram', () => {
 
     const { container } = render(
       <CanvasViewer
-        canvas={scene}
+        canvas={AUTH_FLOW_SCENE}
         width={980}
         height={420}
         padding={40}
@@ -37,23 +29,7 @@ describe('docs snapshot — canvas auth flow diagram', () => {
       />,
     )
 
-    await waitFor(() => {
-      const svgs = container.querySelectorAll('svg')
-      // CanvasViewer's SVG is always the last one in document order — icon
-      // svgs (WorkspaceTopBar chevrons, kebab menus, etc.) render ahead of it.
-      const svg = svgs[svgs.length - 1]
-      if (!svg) throw new Error('scene svg not yet mounted')
-      if (!(svg.textContent ?? '').includes('Token Service')) {
-        throw new Error('scene content not yet rendered')
-      }
-    })
-
-    const target = container.querySelector('[data-testid="canvas-auth-flow-scene"]')
-    if (!(target instanceof HTMLElement)) throw new Error('viewer wrapper not found')
-
-    await page.screenshot({
-      path: resolveDocAssetPath('canvas-auth-flow.png'),
-      element: page.elementLocator(target),
-    })
+    await waitForSnapshotContent(container, { sceneText: 'Token Service' })
+    await captureDocAsset(container, 'canvas-auth-flow-scene', 'canvas-auth-flow.png')
   })
 })
