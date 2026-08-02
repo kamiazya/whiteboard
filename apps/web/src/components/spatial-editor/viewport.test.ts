@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   canvasToScreen,
   clampZoom,
+  fitViewportToBoxes,
+  IDENTITY_VIEWPORT,
   MAX_ZOOM,
   MIN_ZOOM,
   panBy,
@@ -66,5 +68,35 @@ describe('panBy', () => {
 describe('viewportTransformCss', () => {
   it('renders a scale+translate CSS transform from the viewport', () => {
     expect(viewportTransformCss({ x: 10, y: -5, zoom: 2 })).toBe('scale(2) translate(-10px, 5px)')
+  })
+})
+
+describe('fitViewportToBoxes', () => {
+  it('fits the top-left of the union of the given boxes at identity zoom', () => {
+    const boxes = [
+      { x: 30, y: 40, width: 10, height: 10 },
+      { x: 10, y: 60, width: 5, height: 5 },
+    ]
+    expect(fitViewportToBoxes(boxes)).toEqual({ x: 10, y: 40, zoom: 1 })
+  })
+
+  it('degrades to IDENTITY_VIEWPORT for an empty list', () => {
+    expect(fitViewportToBoxes([])).toEqual(IDENTITY_VIEWPORT)
+  })
+
+  it('degrades to IDENTITY_VIEWPORT when every box is non-finite', () => {
+    const boxes = [
+      { x: Number.NaN, y: Number.POSITIVE_INFINITY, width: 10, height: 10 },
+      { x: Number.NEGATIVE_INFINITY, y: Number.NaN, width: 5, height: 5 },
+    ]
+    expect(fitViewportToBoxes(boxes)).toEqual(IDENTITY_VIEWPORT)
+  })
+
+  it('ignores non-finite boxes while fitting the remaining finite ones', () => {
+    const boxes = [
+      { x: Number.NaN, y: Number.NaN, width: 10, height: 10 },
+      { x: 15, y: 25, width: 5, height: 5 },
+    ]
+    expect(fitViewportToBoxes(boxes)).toEqual({ x: 15, y: 25, zoom: 1 })
   })
 })
