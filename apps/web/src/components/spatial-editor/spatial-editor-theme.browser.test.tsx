@@ -10,6 +10,15 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { EDITOR_DARK_PALETTE, EDITOR_LIGHT_PALETTE } from './editor-appearance.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
+/** A real browser normalizes an inline `fill: '#RRGGBB'` style to `rgb(r, g, b)`. */
+function hexToRgb(hex: string): string {
+  const value = Number.parseInt(hex.slice(1), 16)
+  const r = (value >> 16) & 0xff
+  const g = (value >> 8) & 0xff
+  const b = value & 0xff
+  return `rgb(${r}, ${g}, ${b})`
+}
+
 function fakeMeasure() {
   return { advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 }
 }
@@ -67,6 +76,20 @@ describe('SpatialEditor theme chrome (real browser)', () => {
     for (const rect of rects) {
       expect(rect.getAttribute('stroke')).toBe(EDITOR_LIGHT_PALETTE.chromeStroke)
     }
+  })
+
+  it('sets the host element fill to the theme text color, the seam markdown body runs inherit', () => {
+    const { container } = render(
+      <SpatialEditor
+        canvas={twoNodeCanvasWithEdge()}
+        onChange={() => {}}
+        measure={fakeMeasure}
+        theme="dark"
+      />,
+    )
+    const svg = container.querySelector('svg')
+    const host = svg?.parentElement
+    expect(host?.style.fill).toBe(hexToRgb(EDITOR_DARK_PALETTE.textFill))
   })
 
   it('does not change scene geometry between themes — only color attributes differ', () => {
