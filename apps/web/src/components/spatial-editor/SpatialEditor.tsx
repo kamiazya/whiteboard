@@ -168,6 +168,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [gestureState, setGestureState] = useState<GestureState>(createIdleState())
+    /**
+     * Live pointer position during an in-flight move/resize/connect, in canvas
+     * space. Component-local on purpose: the reducer still recomputes the real
+     * commit from startPoint at pointerup, so this drives ONLY the preview
+     * overlay below and never becomes a source of truth. Keeping it out of
+     * `canvas` is what stops a per-frame `renderCanvasToSvg` (measured at
+     * ~30ms on an 80-node canvas — far past a frame budget).
+     */
+    const [livePoint, setLivePoint] = useState<Point | null>(null)
     const isPanningRef = useRef(false)
     const lastPanPointRef = useRef({ x: 0, y: 0 })
 
@@ -240,6 +249,50 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         : undefined
 
     /**
+     * The in-flight preview geometry, derived purely from the gesture's own
+     * start snapshot plus the live pointer — never from `canvas`, so it costs
+     * nothing beyond a few arithmetic ops per frame. `resizeBoxByDelta` is the
+     * SAME function `reducePointerUpResizing` commits with, so the preview and
+     * the eventual commit cannot disagree.
+     */
+    const dragPreview = useMemo(() => {
+      if (livePoint === null) return undefined
+      if (gestureState.kind === 'moving') {
+        const box = boxes.find((b) => b.id === gestureState.nodeId)?.box
+        if (box === undefined) return undefined
+        return {
+          kind: 'box' as const,
+          box: {
+            ...box,
+            x: gestureState.startX + (livePoint.x - gestureState.startPoint.x),
+            y: gestureState.startY + (livePoint.y - gestureState.startPoint.y),
+          },
+        }
+      }
+      if (gestureState.kind === 'resizing') {
+        return {
+          kind: 'box' as const,
+          box: resizeBoxByDelta(
+            gestureState.startBox,
+            gestureState.handle,
+            livePoint.x - gestureState.startPoint.x,
+            livePoint.y - gestureState.startPoint.y,
+          ),
+        }
+      }
+      if (gestureState.kind === 'connecting') {
+        const box = boxes.find((b) => b.id === gestureState.fromNodeId)?.box
+        if (box === undefined) return undefined
+        return {
+          kind: 'line' as const,
+          from: { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+          to: livePoint,
+        }
+      }
+      return undefined
+    }, [gestureState, livePoint, boxes])
+
+    /**
      * Folds `result.commands` in order over a LOCAL running canvas (seeded
      * from `canvasRef.current`, never re-read from the ref between steps) so
      * a multi-command result — e.g. a pending-text commit ordered ahead of a
@@ -249,6 +302,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * command contract for the (still common) single-command case.
      */
     const applyResult = (result: ReturnType<typeof reduceGesture>) => {
+      // Any gesture that leaves an in-flight state retires the preview: the
+      // committed canvas is about to draw the real thing.
+      if (result.state.kind === 'idle' || result.state.kind === 'editing-text') setLivePoint(null)
       setGestureState(result.state)
       if (result.selectedId !== undefined) setSelectedId(result.selectedId)
       let running = canvasRef.current
@@ -303,6 +359,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }
       if (gestureState.kind === 'idle') return
       const point = screenToCanvas(screenPoint, viewport)
+      setLivePoint(point)
       applyResult(reduceGesture(gestureState, canvas, { type: 'pointermove', point }))
     }
 
@@ -590,6 +647,48 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               onHandleKeyDown={handleResizeHandleKeyDown}
               onConnectKeyDown={handleConnectKeyDown}
             />
+          )}
+          {/* In-flight gesture preview. Drawn from component-local pointer
+            state above the committed SVG, so the expensive
+            layout+stringify+innerHTML path runs once per gesture (at
+            pointerup) instead of once per frame. */}
+          {dragPreview !== undefined && (
+            <svg
+              data-testid="drag-preview"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                overflow: 'visible',
+                left: 0,
+                top: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              {dragPreview.kind === 'box' ? (
+                <rect
+                  x={dragPreview.box.x}
+                  y={dragPreview.box.y}
+                  width={dragPreview.box.width}
+                  height={dragPreview.box.height}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2 / viewport.zoom}
+                  strokeDasharray={`${6 / viewport.zoom} ${4 / viewport.zoom}`}
+                  opacity={0.9}
+                />
+              ) : (
+                <line
+                  x1={dragPreview.from.x}
+                  y1={dragPreview.from.y}
+                  x2={dragPreview.to.x}
+                  y2={dragPreview.to.y}
+                  stroke="currentColor"
+                  strokeWidth={2 / viewport.zoom}
+                  strokeDasharray={`${6 / viewport.zoom} ${4 / viewport.zoom}`}
+                  opacity={0.9}
+                />
+              )}
+            </svg>
           )}
           {gestureState.kind === 'connecting' && (
             <svg
