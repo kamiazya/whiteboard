@@ -30,7 +30,7 @@ async function clearDb(): Promise<void> {
 
 async function renderLoaded(store = new IndexedDBStore()) {
   render(<BrowserLocalCanvasPage store={store} />)
-  await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
   return store
@@ -91,7 +91,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
-    expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument()
+    expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
     expect(screen.getByText('Saved')).toBeInTheDocument()
   })
 
@@ -102,7 +102,7 @@ describe('BrowserLocalCanvasPage delete confirmation (browser — real IndexedDB
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
-    expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument()
+    expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
   })
 
   it('dialog exposes an accessible name and description tied to the destructive action', async () => {

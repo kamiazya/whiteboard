@@ -8,24 +8,6 @@ import { MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { DaemonCanvasPage } from './DaemonCanvasPage.js'
 
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: ({ excalidrawAPI }: { excalidrawAPI?: (api: unknown) => void }) => {
-    if (excalidrawAPI) {
-      excalidrawAPI({
-        updateScene: vi.fn(),
-        addFiles: vi.fn(),
-        getSceneElements: () => [],
-        getAppState: () => ({}),
-        getFiles: () => ({}),
-      })
-    }
-    return <div data-testid="excalidraw-container" />
-  },
-  restoreElements: (els: unknown[]) => els,
-  CaptureUpdateAction: { NEVER: 'NEVER' },
-  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
-}))
-
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
   return {
@@ -132,7 +114,7 @@ describe('DaemonCanvasPage', () => {
       )
     })
 
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     // WorkspaceTopBar's canvas switcher shows the current canvas and lists
     // every entry from controller.canvases — this pins the CanvasSummary
     // {slug, updatedAt} -> WorkspaceTopBar CanvasInfo mapping end to end.
@@ -150,7 +132,7 @@ describe('DaemonCanvasPage', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     // The bar's History button is the real versions-capability affordance
     // now that WorkspaceTopBar owns it (see WorkspaceTopBar.tsx).
     expect(screen.getByRole('button', { name: /history/i })).toBeTruthy()
@@ -176,7 +158,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
       expect(Array.from(workspaceSelect.options).map((o) => o.value)).toEqual(['w1', 'w2'])
@@ -204,7 +186,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
       expect(createdBackends).toHaveLength(1)
       expect(createdBackends[0]?.workspaceId).toBe('w1')
 
@@ -242,7 +224,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
       await act(async () => {
@@ -272,7 +254,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
       expect(createdBackends).toHaveLength(1)
 
       mockListCanvases.mockRejectedValueOnce(new Error('daemon unreachable'))
@@ -287,7 +269,7 @@ describe('DaemonCanvasPage', () => {
         expect(screen.getByRole('alert').textContent).toMatch(/daemon unreachable/i),
       )
       // A transient switch failure must not tear down the still-valid editor session.
-      expect(screen.getByTestId('excalidraw-container')).toBeTruthy()
+      expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
       expect(createdBackends).toHaveLength(1)
       expect(createdBackends[0]?.disconnectCount).toBe(0)
     })
@@ -311,7 +293,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByLabelText('Workspaces')).toBeNull()
       const teaser = screen.getByText('Workspaces')
@@ -326,7 +308,7 @@ describe('DaemonCanvasPage', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     const oldBackend = createdBackends[0]!
 
@@ -348,7 +330,7 @@ describe('DaemonCanvasPage', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     const backend = createdBackends[0]!
     await act(async () => {
@@ -361,7 +343,7 @@ describe('DaemonCanvasPage', () => {
     // re-pairing sentence, so the degraded state reads at a glance.
     expect(alert.textContent).toMatch(/live sync off/i)
     // Editor chrome stays mounted — auth error is a banner, not a full-page replacement.
-    expect(screen.getByTestId('excalidraw-container')).toBeTruthy()
+    expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
   })
 
   it('shows a persistent "Sync off" indicator distinct from the alert banner while authError is true', async () => {
@@ -371,7 +353,7 @@ describe('DaemonCanvasPage', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
 
@@ -407,7 +389,7 @@ describe('DaemonCanvasPage', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
@@ -437,7 +419,7 @@ describe('DaemonCanvasPage', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
@@ -467,7 +449,7 @@ describe('DaemonCanvasPage', () => {
         { container: document.body },
       )
     })
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
@@ -504,7 +486,7 @@ describe('DaemonCanvasPage', () => {
 
     await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
     expect(screen.getByRole('alert').textContent).toMatch(/daemon unreachable/i)
-    expect(screen.queryByTestId('excalidraw-container')).toBeNull()
+    expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
   })
 
   it('renders a create-canvas form when the workspace has zero canvases', async () => {
@@ -521,7 +503,7 @@ describe('DaemonCanvasPage', () => {
       expect(screen.getByText('This workspace has no canvases yet.')).toBeTruthy(),
     )
     expect(screen.queryByLabelText('Canvases')).toBeNull()
-    expect(screen.queryByTestId('excalidraw-container')).toBeNull()
+    expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
     expect(screen.getByLabelText('New canvas name')).toBeTruthy()
   })
 
@@ -559,7 +541,7 @@ describe('DaemonCanvasPage', () => {
       'w1',
       'brand-new',
     )
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
   })
 
   it('shows the createError alert in the empty-canvases state when creation fails', async () => {
@@ -633,7 +615,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -697,7 +679,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       // Dirty the doc via a remote update, exactly like the "drives
       // HeaderSaveDot dirty/clean" test does, so this test isolates the
@@ -767,7 +749,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -799,7 +781,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
     })
@@ -830,7 +812,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -904,7 +886,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
@@ -956,7 +938,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
@@ -992,7 +974,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const versionButton = screen.getByRole('button', { name: 'Version history' })
       // The static CapabilityTeaser renders aria-disabled; the real toggle
@@ -1047,7 +1029,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
@@ -1141,7 +1123,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       await waitFor(() => expect(screen.getByTestId('header-branch-chip')).toBeTruthy())
       await waitFor(() => {
@@ -1177,7 +1159,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByTestId('header-branch-chip')).toBeNull()
       expect(screen.getByText('Variations')).toBeTruthy()
@@ -1197,7 +1179,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
       await waitFor(() => expect(screen.getByTestId('header-branch-chip')).toBeTruthy())
 
       const branchCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
@@ -1266,7 +1248,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const banner = await screen.findByTestId('header-branch-banner')
       expect(banner.textContent).toContain('feature-x')
@@ -1333,7 +1315,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByTestId('header-branch-banner')).toBeNull()
 
@@ -1368,7 +1350,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByTestId('merge-toast')).toBeNull()
 
@@ -1399,7 +1381,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       await act(async () => {
         dispatchMergeCommitted()
@@ -1427,7 +1409,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       await act(async () => {
         dispatchMergeCommitted({ preMergeVersionId: 'v-pre' })
@@ -1457,7 +1439,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByRole('button', { name: 'Back to canvas list' })).toBeNull()
     })
@@ -1474,7 +1456,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const button = screen.getByRole('button', { name: 'Back to canvas list' })
       fireEvent.click(button)
@@ -1546,7 +1528,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       await act(async () => {
         fireEvent.keyDown(window, { key: 's', metaKey: true })
@@ -1587,7 +1569,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByTestId('header-save-dot')).toBeNull()
 
@@ -1631,7 +1613,14 @@ describe('DaemonCanvasPage', () => {
   })
 
   describe('Export → JSON routes through the commands layer', () => {
-    it('downloads a .excalidraw envelope produced by commands.exportJson', async () => {
+    // SpatialEditor exposes no Excalidraw-shaped imperative API, so
+    // commands.exportJson's `getExcalidrawApi() === null` branch always
+    // throws CommandError('no-api', ...) — createSceneExportHandler degrades
+    // that to a null blob, which useSceneExport surfaces as a visible error
+    // instead of downloading anything. Pinned so the next slice inherits a
+    // known, non-silent failure state rather than a silently broken menu
+    // entry.
+    it('surfaces a visible export error instead of downloading a .excalidraw envelope', async () => {
       // Spy rather than vi.stubGlobal('URL', {...}) — the page's daemonFetch
       // wiring calls `new URL(...)`, which a plain-object stub can't satisfy.
       const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
@@ -1644,7 +1633,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const canvasActions = screen.getByLabelText('Canvas actions')
       fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
@@ -1653,9 +1642,10 @@ describe('DaemonCanvasPage', () => {
         fireEvent.pointerUp(jsonItem)
       })
 
-      await waitFor(() => expect(clickSpy).toHaveBeenCalled())
-      const anchor = clickSpy.mock.instances[0] as HTMLAnchorElement
-      expect(anchor.download).toBe('main.excalidraw')
+      await waitFor(() => {
+        expect(screen.getByText(/export as excalidraw json failed/i)).toBeTruthy()
+      })
+      expect(clickSpy).not.toHaveBeenCalled()
 
       createObjectURL.mockRestore()
       revokeObjectURL.mockRestore()
@@ -1725,7 +1715,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       const summary = await screen.findByText('Import from this browser')
       fireEvent.click(summary)
@@ -1749,7 +1739,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
       await screen.findByText('Import from this browser')
 
       // <details> only hides collapsed content visually; the section (and its
@@ -1772,7 +1762,7 @@ describe('DaemonCanvasPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
       expect(screen.queryByText('Import from this browser')).toBeNull()
     })

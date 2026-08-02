@@ -34,7 +34,7 @@ function captureExportedBlobs(): { blobs: Blob[] } {
 
 async function renderLoaded(): Promise<void> {
   render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-  await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
 }
@@ -67,7 +67,7 @@ async function openExportMenuItem(label: string): Promise<HTMLElement> {
   return item
 }
 
-describe('BrowserLocalCanvasPage export (browser — real Excalidraw)', () => {
+describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Excalidraw)', () => {
   beforeEach(async () => {
     await clearDb()
   })
@@ -77,24 +77,39 @@ describe('BrowserLocalCanvasPage export (browser — real Excalidraw)', () => {
     vi.restoreAllMocks()
   })
 
-  it('exports JSON through commands.exportJson as a real .excalidraw envelope, not exportScene', async () => {
+  it('exports SVG through the imperative-API-free exportScene path', async () => {
     await renderLoaded()
     const { blobs } = captureExportedBlobs()
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    const svgItem = await openExportMenuItem('Export as SVG')
+    fireEvent.pointerUp(svgItem)
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+    expect(blobs).toHaveLength(1)
+    const blob = blobs[0]
+    expect(blob.type).toBe('image/svg+xml')
+    const text = await blob.text()
+    expect(text).toContain('<svg')
+  })
+
+  // SpatialEditor exposes no Excalidraw-shaped imperative API, so
+  // commands.exportJson's `getExcalidrawApi() === null` branch always
+  // throws CommandError('no-api', ...); createSceneExportHandler degrades
+  // that to a null blob, which useSceneExport surfaces as a visible error
+  // instead of downloading anything. Pinned here (a real-browser mount, not
+  // a mocked one) so this degraded state is a known one, not silently
+  // broken.
+  it('surfaces a visible error for JSON export instead of downloading a .excalidraw envelope', async () => {
+    await renderLoaded()
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
     const jsonItem = await openExportMenuItem('Export as JSON')
     fireEvent.pointerUp(jsonItem)
 
-    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
-    expect(blobs).toHaveLength(1)
-    const blob = blobs[0]
-    expect(blob.type).toBe('application/json')
-
-    const text = await blob.text()
-    const parsed = JSON.parse(text)
-    // The commands-layer envelope (serializeSceneAsExcalidrawJson) — a
-    // exportScene('svg'|'png') fallback would never produce this shape.
-    expect(parsed).toMatchObject({ type: 'excalidraw', version: 2 })
-    expect(Array.isArray(parsed.elements)).toBe(true)
+    await waitFor(() => {
+      expect(screen.getByText(/export as excalidraw json failed/i)).toBeInTheDocument()
+    })
+    expect(clickSpy).not.toHaveBeenCalled()
   })
 })

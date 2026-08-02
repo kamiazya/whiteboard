@@ -30,22 +30,28 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
     cleanup()
   })
 
-  it('load: renders Excalidraw container after initial load', async () => {
+  it('load: renders spatial editor container after initial load', async () => {
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
   })
 
-  it('layout: excalidraw container fills the viewport below the header', async () => {
+  it('layout: spatial editor container fills the viewport below the header', async () => {
     // An unsized height chain collapses the container to 0px and the whiteboard
     // becomes invisible. The page must own its viewport height so the editor
     // area gets real geometry.
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
-    const container = screen.getByTestId('excalidraw-container')
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
+    const container = screen.getByTestId('spatial-editor-container')
     // Viewport is 1280x900; the editor area must occupy most of it.
     expect(container.clientHeight).toBeGreaterThan(300)
     expect(container.clientWidth).toBeGreaterThan(600)
@@ -53,9 +59,12 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
 
   it('cleanup: delete canvas shows cleanup-completed', async () => {
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
     screen.getByRole('button', { name: /delete canvas/i }).click()
     const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
     within(dialog)
@@ -68,9 +77,12 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
 
   it('post-cleanup reload: remount after delete shows a fresh canvas', async () => {
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
     screen.getByRole('button', { name: /delete canvas/i }).click()
     const dialog = await screen.findByRole('alertdialog', undefined, { timeout: 5000 })
     within(dialog)
@@ -81,9 +93,12 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
     })
     cleanup()
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
   })
 
   it('network-negative: no fetch to /api/ or daemon endpoints during editing', async () => {
@@ -100,9 +115,12 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
       return original(...args)
     })
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
     // Wait a bit to catch any delayed fetch calls from async init.
     await new Promise((resolve) => setTimeout(resolve, 500))
     const daemonCalls = calls.filter(
@@ -114,9 +132,12 @@ describe('BrowserLocalCanvasPage (browser — real IndexedDB)', () => {
 
   it('does not render an "Add rectangle" button', async () => {
     render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
     expect(screen.queryByRole('button', { name: /add rectangle/i })).toBeNull()
   })
 })

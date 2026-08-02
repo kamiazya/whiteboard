@@ -1,11 +1,16 @@
 /**
- * S-C2 multi-canvas UI (real IndexedDB): draw on canvas A, create+switch to a
+ * S-C2 multi-canvas UI (real IndexedDB): edit canvas A, create+switch to a
  * fresh empty canvas B via the page's New-canvas control, switch back to A via
- * the switcher, and confirm A's element is restored. Proves the switcher/New
+ * the switcher, and confirm A's node is restored. Proves the switcher/New
  * UI drives the S-C1 store+controller API end to end, including the
  * useCanvasSync reconnect-on-backend-identity-change path.
+ *
+ * SpatialEditor is mocked (see BrowserLocalCanvasPage.reload-elements.browser.test.tsx's
+ * doc comment for why) so edits are driven deterministically via onChange —
+ * this suite's subject is the backend/IndexedDB sync layer, not gesture input.
  */
 
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   act,
   cleanup,
@@ -27,31 +32,17 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-type ExcalidrawOnChange = (elements: unknown[], appState: unknown, files: unknown) => void
+type OnChange = (next: SpatialCanvas, command: unknown) => void
 
-let latestOnChange: ExcalidrawOnChange | null = null
-let latestUpdateSceneCalls: Array<{ elements: unknown[] }> = []
+let latestOnChange: OnChange | null = null
+let latestMountedCanvases: SpatialCanvas[] = []
 
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: (props: {
-    excalidrawAPI?: (api: unknown) => void
-    onChange?: ExcalidrawOnChange
-  }) => {
+vi.mock('../components/spatial-editor/index.js', () => ({
+  SpatialEditor: (props: { canvas: SpatialCanvas; onChange?: OnChange }) => {
     latestOnChange = props.onChange ?? null
-    props.excalidrawAPI?.({
-      updateScene: (args: { elements: unknown[] }) => {
-        latestUpdateSceneCalls.push(args)
-      },
-      addFiles: () => {},
-      getSceneElements: () => [],
-      getAppState: () => ({}),
-    })
+    latestMountedCanvases.push(props.canvas)
     return null
   },
-  restoreElements: (els: unknown[]) => els,
-  CaptureUpdateAction: { NEVER: 'never' },
-  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
-  exportToSvg: vi.fn(async () => document.createElementNS('http://www.w3.org/2000/svg', 'svg')),
 }))
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
@@ -89,8 +80,8 @@ async function loroCanvasesKeys(): Promise<string[]> {
   })
 }
 
-/** Element ids persisted for a given canvas id, decoded straight from IndexedDB. */
-async function persistedElementIds(canvasId: string): Promise<string[]> {
+/** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
+async function persistedNodeIds(canvasId: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard')
     req.onsuccess = () => {
@@ -114,12 +105,10 @@ async function persistedElementIds(canvasId: string): Promise<string[]> {
         for (const delta of envelope.deltas ?? []) {
           doc.import(delta)
         }
-        // onSceneChange writes into the MovableList container; fall back to the
-        // plain List for a doc that has never had a live scene write.
-        const movable = doc.getMovableList('elements').toJSON() as Array<{ id: string }>
-        const chosen =
-          movable.length > 0 ? movable : (doc.getList('elements').toJSON() as Array<{ id: string }>)
-        resolve(chosen.map((el) => el.id))
+        // canvas-workspace's LoroDoc spatial layout: doc.getMap('nodes') keyed
+        // by nodeId (see package-canvas-workspace.md).
+        const nodes = doc.getMap('nodes').toJSON() as Record<string, { id: string }>
+        resolve(Object.keys(nodes))
       }
       getReq.onerror = () => {
         db.close()
@@ -130,23 +119,33 @@ async function persistedElementIds(canvasId: string): Promise<string[]> {
   })
 }
 
+function textNode(id: string, x: number, y: number): SpatialCanvas {
+  return {
+    nodes: [{ id, type: 'text', x, y, width: 80, height: 40, text: id }],
+    edges: [],
+  }
+}
+
 describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', () => {
   beforeEach(async () => {
     await clearDb()
     latestOnChange = null
-    latestUpdateSceneCalls = []
+    latestMountedCanvases = []
   })
 
   afterEach(() => {
     cleanup()
   })
 
-  it('draws on A, New switches to empty B, switching back to A restores the drawn element', async () => {
+  it('edits A, New switches to empty B, switching back to A restores the edited node', async () => {
     const store = new IndexedDBStore()
     render(<BrowserLocalCanvasPage store={store} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(
@@ -160,21 +159,14 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       { timeout: 5000 },
     )
 
-    const rectangle = {
-      id: 'multi-canvas-rect-a',
-      type: 'rectangle',
-      x: 10,
-      y: 10,
-      width: 80,
-      height: 40,
-    }
+    const nodeA = textNode('multi-canvas-node-a', 10, 10)
 
     // Re-fire until the write lands in loroCanvases (see reload-elements test
     // for why: the backend connects asynchronously with no sync signal).
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!([rectangle], {}, {})
+          latestOnChange!(nodeA, { kind: 'set-text', id: 'multi-canvas-node-a', text: 'x' })
         })
         const keys = await loroCanvasesKeys()
         expect(keys).toContain(idA)
@@ -199,10 +191,10 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       { timeout: 5000 },
     )
 
-    // B is a fresh canvas: its persisted doc must never contain A's element —
-    // asserted straight from IndexedDB so the check is independent of the mock
-    // Excalidraw's render timing.
-    expect(await persistedElementIds(idB)).not.toContain('multi-canvas-rect-a')
+    // B is a fresh canvas: its persisted doc must never contain A's node —
+    // asserted straight from IndexedDB so the check is independent of the
+    // mock SpatialEditor's render timing.
+    expect(await persistedNodeIds(idB)).not.toContain('multi-canvas-node-a')
 
     // No stray placeholder row from the backend re-key.
     expect(await loroCanvasesKeys()).not.toContain('__placeholder__')
@@ -221,10 +213,8 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
 
     await waitFor(
       () => {
-        const restoredIds = latestUpdateSceneCalls.flatMap((call) =>
-          (call.elements as Array<{ id: string }>).map((el) => el.id),
-        )
-        expect(restoredIds).toContain('multi-canvas-rect-a')
+        const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
+        expect(restoredIds).toContain('multi-canvas-node-a')
       },
       { timeout: 5000 },
     )
@@ -235,9 +225,12 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
   it('persists an edit made immediately (within the 300ms debounce window) before switching to a new canvas', async () => {
     const store = new IndexedDBStore()
     render(<BrowserLocalCanvasPage store={store} />)
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(
@@ -251,14 +244,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       { timeout: 5000 },
     )
 
-    const warmupRect = {
-      id: 'multi-canvas-warmup-a',
-      type: 'rectangle',
-      x: 0,
-      y: 0,
-      width: 20,
-      height: 20,
-    }
+    const warmupNode = textNode('multi-canvas-warmup-a', 0, 0)
 
     // Warm up so the backend connection for A is confirmed live before we
     // exercise the race — re-fire until the write lands in loroCanvases (the
@@ -266,7 +252,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!([warmupRect], {}, {})
+          latestOnChange!(warmupNode, { kind: 'set-text', id: 'multi-canvas-warmup-a', text: 'x' })
         })
         const keys = await loroCanvasesKeys()
         expect(keys).toContain(idA)
@@ -274,13 +260,20 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       { timeout: 10000, interval: 600 },
     )
 
-    const lateRect = {
-      id: 'multi-canvas-late-edit-a',
-      type: 'rectangle',
-      x: 30,
-      y: 30,
-      width: 15,
-      height: 15,
+    const lateEdit: SpatialCanvas = {
+      nodes: [
+        ...warmupNode.nodes,
+        {
+          id: 'multi-canvas-late-edit-a',
+          type: 'text',
+          x: 30,
+          y: 30,
+          width: 15,
+          height: 15,
+          text: 'x',
+        },
+      ],
+      edges: [],
     }
 
     // Fire the late edit and, WITHOUT waiting for the 300ms debounce to
@@ -288,7 +281,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     // debounced write for A must be flushed to A during the backend
     // teardown rather than cancelled and lost.
     act(() => {
-      latestOnChange!([warmupRect, lateRect], {}, {})
+      latestOnChange!(lateEdit, { kind: 'set-text', id: 'multi-canvas-late-edit-a', text: 'x' })
     })
 
     const switcherA = await screen.findByRole('button', { name: 'untitled' })
@@ -309,18 +302,18 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     expect(idB).not.toBe(idA)
 
     // The late edit must have landed on A — verified by decoding straight
-    // from IndexedDB, independent of the mock Excalidraw's render timing.
+    // from IndexedDB, independent of the mock SpatialEditor's render timing.
     // The flushed write reaches IDB asynchronously (via the backend's write
     // queue), so this must be polled, never asserted immediately.
     await waitFor(
       async () => {
-        const ids = await persistedElementIds(idA)
+        const ids = await persistedNodeIds(idA)
         expect(ids).toContain('multi-canvas-late-edit-a')
       },
       { timeout: 5000 },
     )
 
     // Never leaked into B.
-    expect(await persistedElementIds(idB)).not.toContain('multi-canvas-late-edit-a')
+    expect(await persistedNodeIds(idB)).not.toContain('multi-canvas-late-edit-a')
   })
 })

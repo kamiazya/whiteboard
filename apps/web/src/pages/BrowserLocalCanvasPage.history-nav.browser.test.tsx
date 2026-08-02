@@ -3,8 +3,14 @@
  * the address bar: create+switch to a second canvas, go Back to the first
  * (proving the URL->switchCanvas direction fires), then Forward to the
  * second again.
+ *
+ * SpatialEditor is mocked (see BrowserLocalCanvasPage.reload-elements.browser.test.tsx's
+ * doc comment for why) so each canvas's edit is driven deterministically via
+ * onChange — this suite's subject is router<->canvas-id sync, not gesture
+ * input.
  */
 
+import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
   act,
   cleanup,
@@ -19,28 +25,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
 import '../index.css'
 
-type ExcalidrawOnChange = (elements: unknown[], appState: unknown, files: unknown) => void
+type OnChange = (next: SpatialCanvas, command: unknown) => void
 
-let latestOnChange: ExcalidrawOnChange | null = null
+let latestOnChange: OnChange | null = null
 
-vi.mock('@excalidraw/excalidraw', () => ({
-  Excalidraw: (props: {
-    excalidrawAPI?: (api: unknown) => void
-    onChange?: ExcalidrawOnChange
-  }) => {
+vi.mock('../components/spatial-editor/index.js', () => ({
+  SpatialEditor: (props: { canvas: SpatialCanvas; onChange?: OnChange }) => {
     latestOnChange = props.onChange ?? null
-    props.excalidrawAPI?.({
-      updateScene: () => {},
-      addFiles: () => {},
-      getSceneElements: () => [],
-      getAppState: () => ({}),
-    })
     return null
   },
-  restoreElements: (els: unknown[]) => els,
-  CaptureUpdateAction: { NEVER: 'never' },
-  exportToBlob: vi.fn(async () => new Blob(['png'], { type: 'image/png' })),
-  exportToSvg: vi.fn(async () => document.createElementNS('http://www.w3.org/2000/svg', 'svg')),
 }))
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
@@ -54,8 +47,8 @@ async function clearDb(): Promise<void> {
   })
 }
 
-/** Element ids persisted for a given canvas id, decoded straight from IndexedDB. */
-async function persistedElementIds(canvasId: string): Promise<string[]> {
+/** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
+async function persistedNodeIds(canvasId: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open('whiteboard')
     req.onsuccess = () => {
@@ -76,10 +69,8 @@ async function persistedElementIds(canvasId: string): Promise<string[]> {
         for (const delta of envelope.deltas ?? []) {
           doc.import(delta)
         }
-        const movable = doc.getMovableList('elements').toJSON() as Array<{ id: string }>
-        const chosen =
-          movable.length > 0 ? movable : (doc.getList('elements').toJSON() as Array<{ id: string }>)
-        resolve(chosen.map((el) => el.id))
+        const nodes = doc.getMap('nodes').toJSON() as Record<string, { id: string }>
+        resolve(Object.keys(nodes))
       }
       getReq.onerror = () => {
         db.close()
@@ -88,6 +79,13 @@ async function persistedElementIds(canvasId: string): Promise<string[]> {
     }
     req.onerror = () => reject(req.error)
   })
+}
+
+function textNode(id: string, x: number, y: number): SpatialCanvas {
+  return {
+    nodes: [{ id, type: 'text', x, y, width: 10, height: 10, text: id }],
+    edges: [],
+  }
 }
 
 describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedDB)', () => {
@@ -108,9 +106,12 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
     )
     rtlRender(<RouterProvider router={router} />)
 
-    await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(
@@ -122,13 +123,13 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
       { timeout: 5000 },
     )
 
-    const rectA = { id: 'history-nav-rect-a', type: 'rectangle', x: 0, y: 0, width: 10, height: 10 }
+    const nodeA = textNode('history-nav-node-a', 0, 0)
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!([rectA], {}, {})
+          latestOnChange!(nodeA, { kind: 'set-text', id: 'history-nav-node-a', text: 'x' })
         })
-        expect(await persistedElementIds(idA)).toContain('history-nav-rect-a')
+        expect(await persistedNodeIds(idA)).toContain('history-nav-node-a')
       },
       { timeout: 10000, interval: 600 },
     )
@@ -154,20 +155,13 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
       timeout: 5000,
     })
 
-    const rectB = {
-      id: 'history-nav-rect-b',
-      type: 'rectangle',
-      x: 20,
-      y: 20,
-      width: 10,
-      height: 10,
-    }
+    const nodeB = textNode('history-nav-node-b', 20, 20)
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!([rectB], {}, {})
+          latestOnChange!(nodeB, { kind: 'set-text', id: 'history-nav-node-b', text: 'x' })
         })
-        expect(await persistedElementIds(idB)).toContain('history-nav-rect-b')
+        expect(await persistedNodeIds(idB)).toContain('history-nav-node-b')
       },
       { timeout: 10000, interval: 600 },
     )

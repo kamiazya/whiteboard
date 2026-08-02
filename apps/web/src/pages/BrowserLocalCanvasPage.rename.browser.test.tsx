@@ -23,7 +23,7 @@ async function clearDb(): Promise<void> {
 
 async function renderLoaded(): Promise<void> {
   render(<BrowserLocalCanvasPage store={new IndexedDBStore()} />)
-  await waitFor(() => expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument(), {
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
 }
@@ -97,19 +97,19 @@ describe('BrowserLocalCanvasPage rename (browser — real IndexedDB)', () => {
     await waitForTitle('Reloaded title')
   })
 
-  it('layout: excalidraw container still fills the viewport after editing the title', async () => {
+  it('layout: spatial editor container still fills the viewport after editing the title', async () => {
     await renderLoaded()
     const titleInput = await openRenameInput()
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Layout check' } })
     titleInput.blur()
     await waitForTitle('Layout check')
-    const container = screen.getByTestId('excalidraw-container')
+    const container = screen.getByTestId('spatial-editor-container')
     expect(container.clientHeight).toBeGreaterThan(300)
     expect(container.clientWidth).toBeGreaterThan(600)
   })
 
-  it("keyboard isolation: Enter/Escape/Backspace/Delete typed in the title do not reach Excalidraw's document-level shortcut handlers", async () => {
+  it("keyboard isolation: Enter/Escape/Backspace/Delete typed in the title do not reach the spatial editor's document-level shortcut handlers", async () => {
     await renderLoaded()
     const documentKeyDown = vi.fn()
     document.addEventListener('keydown', documentKeyDown)
@@ -130,7 +130,7 @@ describe('BrowserLocalCanvasPage rename (browser — real IndexedDB)', () => {
 
       expect(documentKeyDown).not.toHaveBeenCalled()
       // The canvas editor is still mounted and unaffected.
-      expect(screen.getByTestId('excalidraw-container')).toBeInTheDocument()
+      expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
     } finally {
       document.removeEventListener('keydown', documentKeyDown)
     }
