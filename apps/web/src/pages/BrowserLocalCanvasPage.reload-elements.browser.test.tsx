@@ -20,7 +20,14 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+import {
+  clearWhiteboardDb,
+  loroCanvasesKeys,
+  setTextCommand,
+  textNodeCanvas,
+} from '../test-utils/browser-local-canvas.js'
 import '../index.css'
 
 // The page reads/writes the canvas id through the router, so it needs a router
@@ -29,7 +36,7 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-type OnChange = (next: SpatialCanvas, command: unknown) => void
+type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
 
 let latestOnChange: OnChange | null = null
 let latestMountedCanvases: SpatialCanvas[] = []
@@ -44,45 +51,9 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
-
-/** Raw keys of the 'loroCanvases' object store, real IndexedDB. */
-async function loroCanvasesKeys(): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard')
-    req.onsuccess = () => {
-      const db = req.result
-      const tx = db.transaction('loroCanvases', 'readonly')
-      const keysReq = tx.objectStore('loroCanvases').getAllKeys()
-      keysReq.onsuccess = () => {
-        db.close()
-        resolve(keysReq.result as string[])
-      }
-      keysReq.onerror = () => {
-        db.close()
-        reject(keysReq.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
-}
-
-function textNode(id: string, x: number, y: number): SpatialCanvas {
-  return {
-    nodes: [{ id, type: 'text', x, y, width: 80, height: 40, text: id }],
-    edges: [],
-  }
-}
-
 describe('BrowserLocalCanvasPage reload persistence (browser — real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
     latestOnChange = null
     latestMountedCanvases = []
   })
@@ -101,7 +72,7 @@ describe('BrowserLocalCanvasPage reload persistence (browser — real IndexedDB)
     )
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
-    const next = textNode('reload-regression-node', 10, 10)
+    const next = textNodeCanvas('reload-regression-node', 10, 10)
 
     // The backend connects asynchronously after the editing state mounts, and
     // there is no synchronous "connected" signal to await. Re-fire the same
@@ -111,7 +82,7 @@ describe('BrowserLocalCanvasPage reload persistence (browser — real IndexedDB)
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!(next, { kind: 'set-text', id: 'reload-regression-node', text: 'x' })
+          latestOnChange!(next, setTextCommand('reload-regression-node'))
         })
         const keys = await loroCanvasesKeys()
         expect(keys.length).toBeGreaterThan(0)

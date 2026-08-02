@@ -19,11 +19,18 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { Loro } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+import {
+  clearWhiteboardDb,
+  loroCanvasesKeys,
+  persistedNodeIds,
+  setTextCommand,
+  textNodeCanvas,
+} from '../test-utils/browser-local-canvas.js'
 import '../index.css'
 
 // The page reads/writes the canvas id through the router, so it needs a router
@@ -32,7 +39,7 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-type OnChange = (next: SpatialCanvas, command: unknown) => void
+type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
 
 let latestOnChange: OnChange | null = null
 let latestMountedCanvases: SpatialCanvas[] = []
@@ -47,88 +54,9 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-    // If a prior connection isn't fully closed, deleteDatabase fires onblocked
-    // (not onsuccess/onerror); settle anyway so the suite fails clearly instead
-    // of hanging until timeout.
-    req.onblocked = () => resolve()
-  })
-}
-
-/** Raw keys of the 'loroCanvases' object store, real IndexedDB. */
-async function loroCanvasesKeys(): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard')
-    req.onsuccess = () => {
-      const db = req.result
-      const tx = db.transaction('loroCanvases', 'readonly')
-      const keysReq = tx.objectStore('loroCanvases').getAllKeys()
-      keysReq.onsuccess = () => {
-        db.close()
-        resolve(keysReq.result as string[])
-      }
-      keysReq.onerror = () => {
-        db.close()
-        reject(keysReq.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
-}
-
-/** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
-async function persistedNodeIds(canvasId: string): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard')
-    req.onsuccess = () => {
-      const db = req.result
-      const tx = db.transaction('loroCanvases', 'readonly')
-      const getReq = tx.objectStore('loroCanvases').get(canvasId)
-      getReq.onsuccess = () => {
-        db.close()
-        const envelope = getReq.result as
-          | { snapshot: Uint8Array; deltas?: Uint8Array[] }
-          | undefined
-        if (!envelope) {
-          resolve([])
-          return
-        }
-        const doc = new Loro()
-        doc.import(envelope.snapshot)
-        // Replay deltas recorded after the initial snapshot — a canvas that
-        // received more than one write (e.g. a flushed edit on top of a
-        // warmup write) is stored as snapshot + deltas, not a single snapshot.
-        for (const delta of envelope.deltas ?? []) {
-          doc.import(delta)
-        }
-        // canvas-workspace's LoroDoc spatial layout: doc.getMap('nodes') keyed
-        // by nodeId (see package-canvas-workspace.md).
-        const nodes = doc.getMap('nodes').toJSON() as Record<string, { id: string }>
-        resolve(Object.keys(nodes))
-      }
-      getReq.onerror = () => {
-        db.close()
-        reject(getReq.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
-}
-
-function textNode(id: string, x: number, y: number): SpatialCanvas {
-  return {
-    nodes: [{ id, type: 'text', x, y, width: 80, height: 40, text: id }],
-    edges: [],
-  }
-}
-
 describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
     latestOnChange = null
     latestMountedCanvases = []
   })
@@ -159,14 +87,14 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       { timeout: 5000 },
     )
 
-    const nodeA = textNode('multi-canvas-node-a', 10, 10)
+    const nodeA = textNodeCanvas('multi-canvas-node-a', 10, 10)
 
     // Re-fire until the write lands in loroCanvases (see reload-elements test
     // for why: the backend connects asynchronously with no sync signal).
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!(nodeA, { kind: 'set-text', id: 'multi-canvas-node-a', text: 'x' })
+          latestOnChange!(nodeA, setTextCommand('multi-canvas-node-a'))
         })
         const keys = await loroCanvasesKeys()
         expect(keys).toContain(idA)
@@ -244,7 +172,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
       { timeout: 5000 },
     )
 
-    const warmupNode = textNode('multi-canvas-warmup-a', 0, 0)
+    const warmupNode = textNodeCanvas('multi-canvas-warmup-a', 0, 0)
 
     // Warm up so the backend connection for A is confirmed live before we
     // exercise the race — re-fire until the write lands in loroCanvases (the
@@ -252,7 +180,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!(warmupNode, { kind: 'set-text', id: 'multi-canvas-warmup-a', text: 'x' })
+          latestOnChange!(warmupNode, setTextCommand('multi-canvas-warmup-a'))
         })
         const keys = await loroCanvasesKeys()
         expect(keys).toContain(idA)
@@ -281,7 +209,7 @@ describe('BrowserLocalCanvasPage multi-canvas UI (browser — real IndexedDB)', 
     // debounced write for A must be flushed to A during the backend
     // teardown rather than cancelled and lost.
     act(() => {
-      latestOnChange!(lateEdit, { kind: 'set-text', id: 'multi-canvas-late-edit-a', text: 'x' })
+      latestOnChange!(lateEdit, setTextCommand('multi-canvas-late-edit-a'))
     })
 
     const switcherA = await screen.findByRole('button', { name: 'untitled' })

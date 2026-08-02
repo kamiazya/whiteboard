@@ -19,13 +19,19 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { Loro } from 'loro-crdt'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IndexedDBStore } from '../lib/browser-local-store.js'
+import {
+  clearWhiteboardDb,
+  persistedNodeIds,
+  setTextCommand,
+  textNodeCanvas,
+} from '../test-utils/browser-local-canvas.js'
 import '../index.css'
 
-type OnChange = (next: SpatialCanvas, command: unknown) => void
+type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
 
 let latestOnChange: OnChange | null = null
 
@@ -38,59 +44,9 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-    req.onblocked = () => resolve()
-  })
-}
-
-/** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
-async function persistedNodeIds(canvasId: string): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard')
-    req.onsuccess = () => {
-      const db = req.result
-      const tx = db.transaction('loroCanvases', 'readonly')
-      const getReq = tx.objectStore('loroCanvases').get(canvasId)
-      getReq.onsuccess = () => {
-        db.close()
-        const envelope = getReq.result as
-          | { snapshot: Uint8Array; deltas?: Uint8Array[] }
-          | undefined
-        if (!envelope) {
-          resolve([])
-          return
-        }
-        const doc = new Loro()
-        doc.import(envelope.snapshot)
-        for (const delta of envelope.deltas ?? []) {
-          doc.import(delta)
-        }
-        const nodes = doc.getMap('nodes').toJSON() as Record<string, { id: string }>
-        resolve(Object.keys(nodes))
-      }
-      getReq.onerror = () => {
-        db.close()
-        reject(getReq.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
-}
-
-function textNode(id: string, x: number, y: number): SpatialCanvas {
-  return {
-    nodes: [{ id, type: 'text', x, y, width: 10, height: 10, text: id }],
-    edges: [],
-  }
-}
-
 describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
     latestOnChange = null
   })
 
@@ -123,11 +79,11 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
       { timeout: 5000 },
     )
 
-    const nodeA = textNode('history-nav-node-a', 0, 0)
+    const nodeA = textNodeCanvas('history-nav-node-a', 0, 0)
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!(nodeA, { kind: 'set-text', id: 'history-nav-node-a', text: 'x' })
+          latestOnChange!(nodeA, setTextCommand('history-nav-node-a'))
         })
         expect(await persistedNodeIds(idA)).toContain('history-nav-node-a')
       },
@@ -155,11 +111,11 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
       timeout: 5000,
     })
 
-    const nodeB = textNode('history-nav-node-b', 20, 20)
+    const nodeB = textNodeCanvas('history-nav-node-b', 20, 20)
     await waitFor(
       async () => {
         act(() => {
-          latestOnChange!(nodeB, { kind: 'set-text', id: 'history-nav-node-b', text: 'x' })
+          latestOnChange!(nodeB, setTextCommand('history-nav-node-b'))
         })
         expect(await persistedNodeIds(idB)).toContain('history-nav-node-b')
       },
