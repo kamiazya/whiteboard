@@ -11,7 +11,7 @@
 import { spawn } from 'node:child_process'
 import { mkdir, open } from 'node:fs/promises'
 import { createServer } from 'node:net'
-import { join, relative } from 'node:path'
+import { join } from 'node:path'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
   acquireSpawnLock,
@@ -40,13 +40,12 @@ const PORT = deriveDevPort({
   env: process.env,
 })
 const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
-// Messages name the marker by its repo-relative path. The absolute one carries
-// the developer's home directory into stderr for no added value — the reader is
-// standing in the repo. A data dir moved outside the repo (WHITEBOARD_DATA_DIR)
-// has no useful relative form, so it falls back to the absolute path.
-const DATA_DIR_LABEL = relative(REPO_ROOT, EXPECTED_DATA_DIR).startsWith('..')
-  ? EXPECTED_DATA_DIR
-  : relative(REPO_ROOT, EXPECTED_DATA_DIR)
+// Messages name the marker by what it is, never by where it is. The path is
+// derived from the environment (WHITEBOARD_DATA_DIR, else the repo root), and
+// echoing an environment-derived path into stderr buys the reader nothing:
+// this log is per-worktree, so its location is already implied by which log
+// they are reading. Naming the file is what makes the message actionable.
+const MARKER_LABEL = "this worktree's dev-daemon.json marker"
 const HOST = '127.0.0.1'
 // Upper bound on how long we'll wait for `pnpm mcp:http:dev` to bind.
 // Defaults to 30s (tsx + happy-dom + canvas + resvg cold start +
@@ -197,7 +196,7 @@ async function assessDaemon() {
       kind: 'conflict',
       message:
         `http://${HOST}:${PORT} answers MCP but its ` +
-        `${DATA_DIR_LABEL}/dev-daemon.json marker does not match this worktree ` +
+        `${MARKER_LABEL} does not match this worktree ` +
         '(a different port or repo root is recorded). ' +
         "This is very likely a different worktree's daemon that hash-collided on this port. " +
         'Set WHITEBOARD_DEV_PORT to a distinct value for one of the worktrees, or stop the ' +
@@ -329,7 +328,7 @@ async function runAsWinner() {
   if (postSpawnIdentity !== 'ours' && !isSelfHealableIdentity(postSpawnIdentity)) {
     console.error(
       `[ensure-http-dev-daemon] http://${HOST}:${PORT} answered MCP right after we spawned our own ` +
-        `daemon, but its ${DATA_DIR_LABEL}/dev-daemon.json marker does not match this worktree ` +
+        `daemon, but ${MARKER_LABEL} does not match this worktree ` +
         '(a different port or repo root is recorded). ' +
         'This is very likely a startup race with another worktree that bound the same derived port ' +
         'first. Rerun this hook; if it keeps happening, set WHITEBOARD_DEV_PORT to a distinct value ' +
