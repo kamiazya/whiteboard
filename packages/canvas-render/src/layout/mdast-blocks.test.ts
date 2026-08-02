@@ -423,6 +423,47 @@ describe('layoutMdastBlocks — word wrap', () => {
     expect(paragraph.runs[0].text).toBe('<span class="a b c" data-x="y">')
   })
 
+  it('preserves a space between a wrapped chunk and the next inline sibling', () => {
+    // mdast represents "long line " + strong("word") as two adjacent
+    // phrasing children: a text node ending in a space, then a styled run.
+    // The trailing space belongs to the wrapped chunk, not the sibling, so
+    // it must still separate them even when the chunk wraps mid-word.
+    const narrow = { measure, maxWidth: 50 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'long line ' },
+            { type: 'strong', children: [{ type: 'text', value: 'word' }] },
+          ],
+        },
+      ],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    const lastWrappedRun = paragraph.runs.find((r) => r.text === 'line')
+    const siblingRun = paragraph.runs.find((r) => r.text === 'word')
+    expect(lastWrappedRun).toBeDefined()
+    expect(siblingRun).toBeDefined()
+    if (!lastWrappedRun || !siblingRun) throw new Error('unreachable')
+    // Same line, so a real gap (a space's width) must separate them.
+    expect(siblingRun.bbox.y).toBe(lastWrappedRun.bbox.y)
+    const spaceWidth = measure(' ', {
+      family: 'test',
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal',
+      sizePx: 16,
+    }).advanceWidth
+    expect(siblingRun.bbox.x).toBeGreaterThanOrEqual(
+      lastWrappedRun.bbox.x + lastWrappedRun.bbox.w + spaceWidth,
+    )
+  })
+
   it('keeps an overflowing inline math run whole instead of splitting it at whitespace', () => {
     const narrow = { measure, maxWidth: 60 }
     const root: MdastRoot = {

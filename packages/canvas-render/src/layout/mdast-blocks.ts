@@ -151,6 +151,13 @@ function layoutPhrasing(
   ) => {
     const words = text.split(/\s+/).filter((word) => word.length > 0)
     const spaceWidth = measureRunWidth(options.measure, ' ', fontSizePx)
+    // `split(/\s+/)` discards this chunk's own leading/trailing whitespace.
+    // mdast represents "prose " + strong("word") as two adjacent phrasing
+    // children, so a trailing space stripped here would otherwise vanish
+    // between this chunk's last word and the next sibling's first run.
+    if (words.length > 0 && line.x > 0 && /^\s/.test(text)) {
+      line.x += spaceWidth
+    }
     for (const word of words) {
       const width = measureRunWidth(options.measure, word, fontSizePx)
       if (line.x > 0 && line.x + spaceWidth + width > options.maxWidth) {
@@ -160,6 +167,9 @@ function layoutPhrasing(
         line.x += spaceWidth
       }
       pushRun(word, extra, runStyle)
+    }
+    if (words.length > 0 && /\s$/.test(text)) {
+      line.x += spaceWidth
     }
   }
 
