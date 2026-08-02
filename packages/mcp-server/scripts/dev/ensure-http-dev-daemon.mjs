@@ -14,6 +14,11 @@ import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import {
+  acquireSpawnLock,
+  releaseSpawnLock,
+  resolveSpawnLockStaleMs,
+} from './dev-spawn-lock-lib.mjs'
+import {
   buildMcpHttpDevSpawnArgs,
   isSelfHealableIdentity,
   resolveDevBearerToken,
@@ -22,6 +27,7 @@ import {
   waitForAuthenticatedMcp,
 } from './ensure-http-dev-daemon-lib.mjs'
 import {
+  ensureDevDataDirSecured,
   readDevDaemonMarker,
   resolveDevDataDirEnv,
   resolveRepoRootFromGit,
@@ -34,6 +40,12 @@ const PORT = deriveDevPort({
   env: process.env,
 })
 const EXPECTED_DATA_DIR = resolveDevDataDirEnv(process.env, REPO_ROOT).WHITEBOARD_DATA_DIR
+// Messages name the marker by what it is, never by where it is. The path is
+// derived from the environment (WHITEBOARD_DATA_DIR, else the repo root), and
+// echoing an environment-derived path into stderr buys the reader nothing:
+// this log is per-worktree, so its location is already implied by which log
+// they are reading. Naming the file is what makes the message actionable.
+const MARKER_LABEL = "this worktree's dev-daemon.json marker"
 const HOST = '127.0.0.1'
 // Upper bound on how long we'll wait for `pnpm mcp:http:dev` to bind.
 // Defaults to 30s (tsx + happy-dom + canvas + resvg cold start +
@@ -130,8 +142,16 @@ async function probeAuthenticatedMcpDaemon() {
   }
 }
 
-const status = await probe(PORT)
-if (status === 'in-use') {
+// Runs the probe + identity-verification sequence and returns a verdict
+// instead of acting on it directly, so the same assessment can run twice:
+// once unlocked (the fast path — "is our daemon already healthy?") and
+// once again under the spawn lock (the decisive assessment a winner makes
+// right before choosing to spawn). Neither pass ever mutates state.
+async function assessDaemon() {
+  const status = await probe(PORT)
+  if (status !== 'in-use') {
+    return { kind: 'free' }
+  }
   // Something is on the port. It might be our dev daemon from a previous
   // session, an old whiteboard daemon spawned by the stdio path with a
   // different token, or an unrelated local service that grabbed 3099.
@@ -151,8 +171,7 @@ if (status === 'in-use') {
       isPidAlive,
     })
     if (identity === 'ours') {
-      info(`[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — verified`)
-      process.exit(0)
+      return { kind: 'healthy', message: `http://${HOST}:${PORT} already listening — verified` }
     }
     if (isSelfHealableIdentity(identity)) {
       // A marker-less daemon on our own derived port predates this feature
@@ -166,71 +185,78 @@ if (status === 'in-use') {
         identity === 'stale'
           ? 'its recorded pid is no longer running (the dev wrapper likely crashed or was killed without cleanup, but the daemon itself is still up)'
           : 'no identity marker was found (daemon predates this check)'
-      info(
-        `[ensure-http-dev-daemon] http://${HOST}:${PORT} already listening — ${reason}; ` +
+      return {
+        kind: 'healthy',
+        message:
+          `http://${HOST}:${PORT} already listening — ${reason}; ` +
           "assuming it is this worktree's own daemon",
-      )
-      process.exit(0)
+      }
     }
-    console.error(
-      `[ensure-http-dev-daemon] http://${HOST}:${PORT} answers MCP but its ` +
-        `${EXPECTED_DATA_DIR}/dev-daemon.json marker does not match this worktree ` +
+    return {
+      kind: 'conflict',
+      message:
+        `http://${HOST}:${PORT} answers MCP but its ` +
+        `${MARKER_LABEL} does not match this worktree ` +
         '(a different port or repo root is recorded). ' +
         "This is very likely a different worktree's daemon that hash-collided on this port. " +
-        `Set WHITEBOARD_DEV_PORT to a distinct value for one of the worktrees, or stop the ` +
+        'Set WHITEBOARD_DEV_PORT to a distinct value for one of the worktrees, or stop the ' +
         'conflicting process (e.g. `pkill -f mcp:http:dev`) and rerun.',
-    )
-    process.exit(1)
+    }
   }
   const why =
     {
       'wrong-token': 'rejected the dev bearer token (likely a stale daemon with a different token)',
       'not-mcp': 'is not speaking MCP',
     }[verdict] ?? 'did not respond to a probe'
-  console.error(
-    `[ensure-http-dev-daemon] http://${HOST}:${PORT} is in use but ${why}. ` +
-      'Stop the conflicting process (e.g. `pkill -f mcp:http:dev`) and rerun.',
-  )
-  process.exit(1)
+  return {
+    kind: 'conflict',
+    message: `http://${HOST}:${PORT} is in use but ${why}. Stop the conflicting process (e.g. \`pkill -f mcp:http:dev\`) and rerun.`,
+  }
 }
 
-await mkdir(LOG_DIR, { recursive: true })
-const logFile = await open(LOG_PATH, 'a')
-const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+// UNLOCKED fast path. When a healthy authenticated daemon with a matching
+// identity is already up, exit without ever touching the lock — this is
+// the common case on every session start after the first, and it must
+// stay a pure read: no lock file created, no state left behind.
+const fastAssessment = await assessDaemon()
+if (fastAssessment.kind === 'healthy') {
+  info(`[ensure-http-dev-daemon] ${fastAssessment.message}`)
+  process.exit(0)
+}
 
-const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN, PORT), {
-  cwd: REPO_ROOT,
-  detached: true,
-  stdio: ['ignore', logFile.fd, logFile.fd],
-  env: process.env,
-})
-child.on('error', (err) => {
-  console.error(`[ensure-http-dev-daemon] failed to spawn ${pnpmCmd}: ${err.message}`)
-  process.exit(1)
-})
-await logFile.close()
+ensureDevDataDirSecured(EXPECTED_DATA_DIR)
+const LOCK_PATH = join(EXPECTED_DATA_DIR, 'dev-daemon-spawn.lock')
+const SPAWN_LOCK_STALE_MS = resolveSpawnLockStaleMs(process.env)
+const lockMeta = {
+  pid: process.pid,
+  startedAt: new Date().toISOString(),
+  port: PORT,
+  repoRoot: REPO_ROOT,
+}
 
-// Wait for the daemon to actually accept connections before letting the
-// hook return. Without this, an MCP client started right after the hook
-// can race the daemon's bind and see ECONNREFUSED while the script
-// reports success.
-let exitedEarly = false
-let exitCode = null
-child.once('exit', (code) => {
-  exitedEarly = true
-  exitCode = code
+// Single release path: every exit below goes through process.exit(), so
+// releasing here covers them all (release only unlinks a lock that still
+// records our own pid, so it can never clobber a successor). Correctness
+// never depends on this running; the staleness window in acquireSpawnLock
+// is the backstop for a process that dies without reaching it (SIGKILL).
+process.on('exit', () => {
+  releaseSpawnLock({ lockPath: LOCK_PATH, ownerPid: process.pid })
 })
-const ready = await waitForAuthenticatedMcp({
-  // A concurrent hook can win the bind race and make our child exit. Keep
-  // probing until timeout because that competing process may still become the
-  // healthy daemon this session needs.
-  probe: probeAuthenticatedMcpDaemon,
-  sleep: (ms) => new Promise((resolveSleep) => setTimeout(resolveSleep, ms)),
-  timeoutMs: READY_TIMEOUT_MS,
-  pollIntervalMs: READY_POLL_INTERVAL_MS,
-})
-if (!ready) {
-  const detail = exitedEarly ? `; spawned process exited with code ${exitCode}` : ''
+
+function tryAcquireLock() {
+  return acquireSpawnLock({
+    lockPath: LOCK_PATH,
+    meta: lockMeta,
+    staleAfterMs: SPAWN_LOCK_STALE_MS,
+    isPidAlive,
+  })
+}
+
+function sleep(ms) {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms))
+}
+
+function failReadyTimeout(detail = '') {
   console.error(
     `[ensure-http-dev-daemon] timed out waiting for authenticated MCP at http://${HOST}:${PORT} after ${READY_TIMEOUT_MS}ms${detail} — see ${LOG_PATH}. ` +
       'MCP tools will be unavailable for this session.',
@@ -238,33 +264,122 @@ if (!ready) {
   process.exit(1)
 }
 
-// The initial probe() saw the port free, but another worktree's hook can
-// win a startup race and bind the same derived port between that probe and
-// our own spawn becoming ready (TOCTOU). An authenticated MCP response
-// alone doesn't prove it's OUR spawn that answered — cross-check the
-// identity marker before declaring success, exactly as the pre-existing
-// "port already in use" branch does.
-const postSpawnIdentity = verifyDevDaemonIdentity({
-  marker: readDevDaemonMarker(EXPECTED_DATA_DIR),
-  expectedPort: PORT,
-  expectedRepoRoot: REPO_ROOT,
-  isPidAlive,
-})
-if (postSpawnIdentity !== 'ours' && !isSelfHealableIdentity(postSpawnIdentity)) {
-  console.error(
-    `[ensure-http-dev-daemon] http://${HOST}:${PORT} answered MCP right after we spawned our own ` +
-      `daemon, but its ${EXPECTED_DATA_DIR}/dev-daemon.json marker does not match this worktree ` +
-      '(a different port or repo root is recorded). ' +
-      'This is very likely a startup race with another worktree that bound the same derived port ' +
-      'first. Rerun this hook; if it keeps happening, set WHITEBOARD_DEV_PORT to a distinct value ' +
-      'for one of the worktrees.',
+// WINNER: acquired the spawn lock. Re-run the assessment now that we hold
+// exclusive access — probe-decide-spawn must be one atomic sequence, and
+// this is the decisive pass that actually acts on its verdict.
+async function runAsWinner() {
+  const assessment = await assessDaemon()
+  if (assessment.kind === 'healthy') {
+    info(`[ensure-http-dev-daemon] ${assessment.message}`)
+    process.exit(0)
+  }
+  if (assessment.kind === 'conflict') {
+    console.error(`[ensure-http-dev-daemon] ${assessment.message}`)
+    process.exit(1)
+  }
+
+  await mkdir(LOG_DIR, { recursive: true })
+  const logFile = await open(LOG_PATH, 'a')
+  const pnpmCmd = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
+
+  const child = spawn(pnpmCmd, buildMcpHttpDevSpawnArgs(DEV_BEARER_TOKEN, PORT), {
+    cwd: REPO_ROOT,
+    detached: true,
+    stdio: ['ignore', logFile.fd, logFile.fd],
+    env: process.env,
+  })
+  child.on('error', (err) => {
+    console.error(`[ensure-http-dev-daemon] failed to spawn ${pnpmCmd}: ${err.message}`)
+    process.exit(1)
+  })
+  await logFile.close()
+
+  // Wait for the daemon to actually accept connections before letting the
+  // hook return. Without this, an MCP client started right after the hook
+  // can race the daemon's bind and see ECONNREFUSED while the script
+  // reports success.
+  let exitedEarly = false
+  let exitCode = null
+  child.once('exit', (code) => {
+    exitedEarly = true
+    exitCode = code
+  })
+  const ready = await waitForAuthenticatedMcp({
+    probe: probeAuthenticatedMcpDaemon,
+    sleep,
+    timeoutMs: READY_TIMEOUT_MS,
+    pollIntervalMs: READY_POLL_INTERVAL_MS,
+  })
+  if (!ready) {
+    failReadyTimeout(exitedEarly ? `; spawned process exited with code ${exitCode}` : '')
+  }
+
+  // The initial assessment saw the port free, but another worktree's hook
+  // can win a startup race and bind the same derived port between that
+  // assessment and our own spawn becoming ready (TOCTOU). An authenticated
+  // MCP response alone doesn't prove it's OUR spawn that answered —
+  // cross-check the identity marker before declaring success.
+  const postSpawnIdentity = verifyDevDaemonIdentity({
+    marker: readDevDaemonMarker(EXPECTED_DATA_DIR),
+    expectedPort: PORT,
+    expectedRepoRoot: REPO_ROOT,
+    isPidAlive,
+  })
+  if (postSpawnIdentity !== 'ours' && !isSelfHealableIdentity(postSpawnIdentity)) {
+    console.error(
+      `[ensure-http-dev-daemon] http://${HOST}:${PORT} answered MCP right after we spawned our own ` +
+        `daemon, but ${MARKER_LABEL} does not match this worktree ` +
+        '(a different port or repo root is recorded). ' +
+        'This is very likely a startup race with another worktree that bound the same derived port ' +
+        'first. Rerun this hook; if it keeps happening, set WHITEBOARD_DEV_PORT to a distinct value ' +
+        'for one of the worktrees.',
+    )
+    process.exit(1)
+  }
+
+  // Detach now that we know the daemon is up — keeps the parent shell free
+  // to disconnect without taking the child down with it.
+  child.unref()
+  info(
+    `[ensure-http-dev-daemon] started ${pnpmCmd} mcp:http:dev (pid ${child.pid}) — log: ${LOG_PATH}`,
   )
-  process.exit(1)
+  process.exit(0)
 }
 
-// Detach now that we know the daemon is up — keeps the parent shell free
-// to disconnect without taking the child down with it.
-child.unref()
-info(
-  `[ensure-http-dev-daemon] started ${pnpmCmd} mcp:http:dev (pid ${child.pid}) — log: ${LOG_PATH}`,
-)
+// LOSER: another process holds the spawn lock. This process's session
+// still needs a working daemon regardless of who starts it, so it waits
+// for the daemon to become reachable — the same wait the winner does —
+// instead of exiting immediately. On each poll it also retries
+// acquisition: if the holder died before spawning (a dead recorded pid
+// makes its lock immediately stale), this process promotes itself to
+// winner and finishes the job itself rather than the developer's session
+// staying stuck behind a corpse.
+async function runAsLoser() {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < READY_TIMEOUT_MS) {
+    // Route through assessDaemon (not the raw probe) so a bare 'ours' bearer
+    // match still gets the identity-marker cross-check every other success
+    // path performs — with a shared default bearer token across worktrees,
+    // an authenticated response alone doesn't rule out a different
+    // worktree's daemon that hash-collided on this derived port.
+    const waitingAssessment = await assessDaemon()
+    if (waitingAssessment.kind === 'healthy') {
+      info(
+        `[ensure-http-dev-daemon] http://${HOST}:${PORT} became reachable while waiting for another process's spawn`,
+      )
+      process.exit(0)
+    }
+    if (tryAcquireLock() === 'acquired') {
+      await runAsWinner()
+      return
+    }
+    await sleep(READY_POLL_INTERVAL_MS)
+  }
+  failReadyTimeout()
+}
+
+if (tryAcquireLock() === 'acquired') {
+  await runAsWinner()
+} else {
+  await runAsLoser()
+}
