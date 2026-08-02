@@ -412,7 +412,17 @@ export function BrowserLocalCanvasPage({
           persistence is deferred (canvas-workspace has no markdown-body
           container to write to yet). */}
       <div data-testid="spatial-editor-container" className="min-h-0 flex-1">
-        <SpatialEditor canvas={canvas} onChange={onChange} externalVersion={externalVersion} />
+        {/* Keyed on canvas identity: the editor's pan/zoom, in-flight gesture
+            and open text editor all describe ONE canvas, and `SpatialCanvas`
+            carries no id for the editor to notice a switch by. Without the
+            key, switching canvases silently inherits the previous canvas's
+            viewport. */}
+        <SpatialEditor
+          key={canvasId ?? 'no-canvas'}
+          canvas={canvas}
+          onChange={onChange}
+          externalVersion={externalVersion}
+        />
       </div>
       <SettingsPanel
         open={settingsOpen}

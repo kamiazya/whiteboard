@@ -25,7 +25,15 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
@@ -152,7 +160,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // advanced — that is what tells an undo/redo/remote-import replacement
     // (which must cancel the gesture unconditionally) apart from this
     // component's own controlled re-render after `onChange`.
-    useEffect(() => {
+    // Layout, not passive: this must land before the browser can dispatch the
+    // next pointer event, or a pointerup could still be reduced against the
+    // gesture the replacement was meant to cancel — committing a delta derived
+    // from a canvas that no longer exists. Nothing here reads layout, so the
+    // synchronous slot costs nothing and removes the need to reason about when
+    // React flushes passive effects relative to input.
+    useLayoutEffect(() => {
       if (prevCanvasRef.current === canvas) return
       prevCanvasRef.current = canvas
       const isExternal =
