@@ -37,12 +37,12 @@ function resolveRequestUrl(input: Request | string | URL, daemonBaseUrl: string)
  *
  * This is the SOLE place in apps/web allowed to set an Authorization header
  * toward the daemon (enforced by daemon-auth-seam.test.ts's source scan).
- * Keeping the token's attachment in one seam — rather than scattered across
- * call sites, as the now-removed unattended-reconnect client once did — is
- * what would let a future browser-extension proxy (extension storage is
- * scoped to the extension ID, not a squattable web origin, so it is the
- * safe way to bring convenience-reconnect back) replace this one function
- * instead of requiring an audit of every fetch call in the app.
+ * Keeping the token's attachment in one seam, rather than at each call site,
+ * is what lets a browser-extension proxy replace this single function instead
+ * of requiring an audit of every fetch in the app. That matters because an
+ * extension is the only place a persisted daemon credential can live safely:
+ * extension storage is scoped to the extension ID, not to a web origin that
+ * another process can take over by claiming the port.
  */
 export function createDaemonFetch(daemonBaseUrl: string, token?: string): typeof globalThis.fetch {
   const daemonOrigin = new URL(daemonBaseUrl).origin

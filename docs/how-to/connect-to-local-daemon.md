@@ -142,8 +142,18 @@ machine. A same-origin script does not need to exfiltrate a non-extractable
 key to abuse it; it can read the `CryptoKey` object straight out of
 IndexedDB and call `crypto.subtle.sign()` with it, and a plaintext secret in
 `localStorage` is even more directly readable. Removing the credential
-entirely — rather than trying to hedge it — closes that hole outright:
-there is nothing left for a squatting process to find.
+entirely, rather than trying to hedge it, means this version of the app
+never creates or uses one again.
+
+Credentials written by an earlier version are a separate matter. The app
+erases them the first time it boots on that origin: the `reconnectKeypairs`
+object store is dropped during the IndexedDB upgrade, and the legacy
+localStorage secret is removed at startup regardless of whether the database
+is opened. Until that boot happens the old values are still sitting in the
+origin's storage, so a process that claims the port and serves the origin
+first can still read them. If you have an origin you no longer open with
+this app — an abandoned dev port, for instance — clear its site data in the
+browser rather than relying on a startup path that will never run.
 
 The cost: reloading the hosted web app, or opening it in a fresh tab, no
 longer reconnects automatically. Each session re-pairs via a fresh `#wb=`

@@ -29,12 +29,18 @@ with no additional prompt or permission check. This is ordinary browser
 origin semantics, not a Whiteboard-specific bug, and it is not something
 this project can fix by itself.
 
-The practical consequence: **pairing with a local daemon now requires a
-fresh `#wb=` link every session.** An earlier "silent reconnect" feature
-stored a possession credential (a WebCrypto keypair, with a plaintext
-localStorage secret as a fallback for older daemons) in this origin's own
-browser storage specifically so a reload would not require re-pairing. That
-credential is exactly what a port-squatting process could read or invoke —
+The practical consequence: **connecting the hosted web app to a local daemon
+now requires a fresh `#wb=` link every session.** This applies to pairing
+from a hosted origin. Opening the daemon's own origin directly is a separate
+path — there the daemon serves the page and supplies the token same-origin,
+so no pairing link is involved; the `DaemonDetectedBanner` one-click
+reconnect navigates there.
+
+An earlier "silent reconnect" feature stored a possession credential (a
+WebCrypto keypair, with a plaintext localStorage secret as a fallback for
+older daemons) in the hosted origin's own browser storage specifically so a
+reload would not require re-pairing. That credential is what a
+port-squatting process could read or invoke —
 a non-extractable `CryptoKey` does not need to be exfiltrated to be abused;
 same-origin script can call `crypto.subtle.sign()` with it directly, and a
 plaintext secret needs no cryptography at all. The feature has been
