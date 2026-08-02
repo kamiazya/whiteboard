@@ -1,51 +1,55 @@
-import architectureRaw from '@docs-assets/architecture.excalidraw?raw'
+import architectureRaw from '@docs-assets/architecture.canvas?raw'
+import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
+import { CanvasViewer, ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, it } from 'vitest'
 import { page } from 'vitest/browser'
 import { resolveDocAssetPath } from './_helpers.js'
-import { ScenePreview } from './_scene-preview.js'
 
 // Generates docs/assets/canvas-presentation.png — the same architecture
-// scene rendered fullscreen-style (no chrome, larger viewport) so the
-// README's "fullscreen presentation mode" card matches what the actual
-// Excalidraw fullscreen route shows.
+// scene rendered chrome-free at a larger viewport, suitable for embedding
+// in docs. This is a plain canvas render, not a capture of the app's real
+// fullscreen route (apps/web/src/lib/canvas-fullscreen-hash.ts) — see the
+// README caption this image backs.
 
-interface Scene {
-  elements: unknown[]
-  appState?: Record<string, unknown>
-  files?: Record<string, unknown>
+const parsed = parseSpatial(architectureRaw)
+if (!parsed.ok) {
+  throw new Error(`architecture.canvas failed to parse: ${parsed.error.message}`)
 }
-
-const scene: Scene = JSON.parse(architectureRaw)
+const scene = parsed.value
 
 afterEach(() => {
   cleanup()
 })
 
-describe('docs snapshot — canvas presentation mode', () => {
+describe('docs snapshot — canvas presentation render', () => {
   it('writes docs/assets/canvas-presentation.png', async () => {
+    await ensureViewerFontLoaded()
+
     const { container } = render(
-      <ScenePreview
+      <CanvasViewer
+        canvas={scene}
         width={1280}
         height={760}
-        elements={scene.elements}
-        appState={scene.appState}
-        files={scene.files}
-        hideChrome
+        padding={60}
+        background="#ffffff"
         testId="canvas-presentation-scene"
       />,
     )
 
     await waitFor(() => {
-      const canvas = container.querySelector('canvas')
-      if (!canvas) throw new Error('Excalidraw canvas not yet mounted')
-      if (canvas.width === 0) throw new Error('Excalidraw canvas not yet sized')
+      const svgs = container.querySelectorAll('svg')
+      // CanvasViewer's SVG is always the last one in document order — icon
+      // svgs (WorkspaceTopBar chevrons, kebab menus, etc.) render ahead of it.
+      const svg = svgs[svgs.length - 1]
+      if (!svg) throw new Error('scene svg not yet mounted')
+      if (!(svg.textContent ?? '').includes('Whiteboard')) {
+        throw new Error('scene content not yet rendered')
+      }
     })
-    await new Promise((r) => requestAnimationFrame(() => r(undefined)))
-    await new Promise((r) => requestAnimationFrame(() => r(undefined)))
 
     const target = container.querySelector('[data-testid="canvas-presentation-scene"]')
-    if (!(target instanceof HTMLElement)) throw new Error('preview wrapper not found')
+    if (!(target instanceof HTMLElement)) throw new Error('viewer wrapper not found')
 
     await page.screenshot({
       path: resolveDocAssetPath('canvas-presentation.png'),

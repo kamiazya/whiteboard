@@ -1,26 +1,24 @@
-import { Excalidraw } from '@excalidraw/excalidraw'
+import architectureRaw from '@docs-assets/architecture.canvas?raw'
+import { parseSpatial } from '@kamiazya/whiteboard-canvas-codec'
+import { CanvasViewer, ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import '@excalidraw/excalidraw/index.css'
-import architectureRaw from '@docs-assets/architecture.excalidraw?raw'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import '../index.css'
 import { jsonResponse, makeFetchMock, resolveDocAssetPath } from './_helpers.js'
 
 // Generates docs/assets/canvas-browser-ui.png — README hero. Shows the
-// full canvas chrome (workspace + canvas selector top bar, Excalidraw
-// editing toolbar, viewport with a populated diagram) so a reader sees
-// what the running app looks like with content. The diagram comes from
-// the canonical architecture.excalidraw scene file.
+// full canvas chrome (workspace + canvas selector top bar, the OpenCanvas
+// spatial viewport with a populated diagram) so a reader sees what the
+// running app looks like with content. The diagram comes from the
+// canonical architecture.canvas scene file.
 
-interface Scene {
-  elements: unknown[]
-  appState?: Record<string, unknown>
-  files?: Record<string, unknown>
+const parsed = parseSpatial(architectureRaw)
+if (!parsed.ok) {
+  throw new Error(`architecture.canvas failed to parse: ${parsed.error.message}`)
 }
-
-const scene: Scene = JSON.parse(architectureRaw)
+const scene = parsed.value
 
 // Anchor every relative timestamp the TopBar might render so the labels
 // are stable across regenerations.
@@ -71,6 +69,8 @@ afterEach(() => {
 
 describe('docs snapshot — canvas browser UI hero', () => {
   it('writes docs/assets/canvas-browser-ui.png', async () => {
+    await ensureViewerFontLoaded()
+
     const { container } = render(
       <div
         data-testid="canvas-browser-ui-frame"
@@ -90,27 +90,17 @@ describe('docs snapshot — canvas browser UI hero', () => {
           onToggleTheme={() => undefined}
         />
         <div style={{ height: 'calc(100% - 48px)' }}>
-          <Excalidraw
-            initialData={{
-              elements: scene.elements as never,
-              appState: {
-                viewBackgroundColor: '#ffffff',
-                ...((scene.appState as object | undefined) ?? {}),
-              } as never,
-              files: ((scene.files as object | undefined) ?? {}) as never,
-              scrollToContent: true,
-            }}
-          />
+          <CanvasViewer canvas={scene} width={1280} height={712} background="#ffffff" />
         </div>
       </div>,
     )
 
     // Wait for the TopBar's mocked display-name fetch, its
-    // HeaderBranchChip's separate /branches fetch, AND Excalidraw's canvas
-    // to all settle. These are independent async chains — waiting on the
-    // display name alone lets the branch chip's later-settling text or
-    // icon shift the top bar layout after the screenshot is taken,
-    // producing a byte-unstable capture across regenerations.
+    // HeaderBranchChip's separate /branches fetch, AND the scene svg to
+    // all settle. These are independent async chains — waiting on the
+    // display name alone lets the branch chip's later-settling text shift
+    // the top bar layout after the screenshot is taken, producing a
+    // byte-unstable capture across regenerations.
     await waitFor(() => {
       const titleText = container.textContent ?? ''
       if (!titleText.includes('System architecture')) {
@@ -119,31 +109,17 @@ describe('docs snapshot — canvas browser UI hero', () => {
       if (!container.querySelector('[aria-label^="Switch variation"]')) {
         throw new Error('HeaderBranchChip not yet rendered')
       }
-      const canvas = container.querySelector('canvas')
-      if (!canvas) throw new Error('Excalidraw canvas not yet mounted')
-      if (canvas.width === 0) throw new Error('Excalidraw canvas not yet sized')
+      const svgs = container.querySelectorAll('svg')
+      // CanvasViewer's SVG is always the last one in document order — icon
+      // svgs (WorkspaceTopBar chevrons, kebab menus, etc.) render ahead of it.
+      const svg = svgs[svgs.length - 1]
+      if (!svg || !(svg.textContent ?? '').includes('Whiteboard')) {
+        throw new Error('scene content not yet rendered')
+      }
     })
-    for (let i = 0; i < 5; i++) {
-      await new Promise((r) => requestAnimationFrame(() => r(undefined)))
-    }
 
     const target = container.querySelector('[data-testid="canvas-browser-ui-frame"]')
     if (!(target instanceof HTMLElement)) throw new Error('preview wrapper not found')
-    // Force a fresh layout + repaint pass. The settled DOM is byte-identical
-    // run to run, yet the rendered pixels can still flip between two states
-    // — Chromium's incremental layout/paint converging to a slightly
-    // different sub-pixel rounding than a single fresh layout of the same
-    // final markup would (confirmed via repeated regenerations + a pixel
-    // diff). Toggling display off/on forces that fresh pass while
-    // preserving the Excalidraw <canvas>'s rasterised bitmap, which a
-    // cloneNode would silently wipe.
-    target.style.display = 'none'
-    void target.offsetHeight
-    target.style.display = ''
-    void target.offsetHeight
-    for (let i = 0; i < 4; i++) {
-      await new Promise((r) => requestAnimationFrame(() => r(undefined)))
-    }
 
     await page.screenshot({
       path: resolveDocAssetPath('canvas-browser-ui.png'),

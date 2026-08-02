@@ -28,10 +28,10 @@ const DaemonCanvasPage = lazy(() =>
 )
 
 // Lazy for the same reason: BrowserLocalCanvasPage statically imports
-// Excalidraw + useCanvasSync (which imports loro-crdt), and it is the
-// default render path (no daemon, no pairing fragment) — so it was the one
-// making Excalidraw/loro-crdt part of every session's initial paint even
-// though DaemonCanvasPage above was already lazy.
+// useCanvasSync (which imports loro-crdt), and it is the default render
+// path (no daemon, no pairing fragment) — so it was the one making
+// loro-crdt part of every session's initial paint even though
+// DaemonCanvasPage above was already lazy.
 const BrowserLocalCanvasPage = lazy(() =>
   import('./pages/BrowserLocalCanvasPage.js').then((m) => ({ default: m.BrowserLocalCanvasPage })),
 )

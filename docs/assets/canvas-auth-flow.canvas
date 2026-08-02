@@ -1,0 +1,80 @@
+{
+  "nodes": [
+    {
+      "id": "client",
+      "type": "text",
+      "x": 60,
+      "y": 200,
+      "width": 160,
+      "height": 80,
+      "text": "Client"
+    },
+    {
+      "id": "gateway",
+      "type": "text",
+      "x": 320,
+      "y": 200,
+      "width": 180,
+      "height": 80,
+      "text": "API Gateway"
+    },
+    {
+      "id": "token",
+      "type": "text",
+      "x": 600,
+      "y": 200,
+      "width": 190,
+      "height": 80,
+      "text": "Token Service"
+    },
+    {
+      "id": "database",
+      "type": "text",
+      "x": 890,
+      "y": 200,
+      "width": 170,
+      "height": 80,
+      "text": "Database"
+    },
+    {
+      "id": "cache",
+      "type": "text",
+      "x": 600,
+      "y": 40,
+      "width": 190,
+      "height": 80,
+      "color": "#fff3bf",
+      "text": "Redis Cache"
+    }
+  ],
+  "edges": [
+    {
+      "id": "client-to-gateway",
+      "fromNode": "client",
+      "toNode": "gateway",
+      "toEnd": "arrow",
+      "label": "login"
+    },
+    {
+      "id": "gateway-to-token",
+      "fromNode": "gateway",
+      "toNode": "token",
+      "toEnd": "arrow",
+      "label": "verify"
+    },
+    {
+      "id": "token-to-database",
+      "fromNode": "token",
+      "toNode": "database",
+      "toEnd": "arrow",
+      "label": "fetch"
+    },
+    {
+      "id": "token-to-cache",
+      "fromNode": "token",
+      "toNode": "cache",
+      "toEnd": "arrow",
+      "label": "cache hit?"
+    }
+  ]
+}

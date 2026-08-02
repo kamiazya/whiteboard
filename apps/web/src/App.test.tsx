@@ -17,8 +17,8 @@ afterEach(cleanup)
 
 // Records the props BrowserLocalCanvasPage receives so tests can assert
 // capabilities actually flow from App down to the page, not just that the
-// page mounts. BrowserLocalCanvasPage pulls in Excalidraw/loro-crdt which
-// need a real browser (roughjs native bindings, WASM), so it stays mocked.
+// page mounts. BrowserLocalCanvasPage pulls in loro-crdt, which needs a
+// real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
 // Captures the initialCanvasId prop so a test can assert App derives it from
 // the /local/:canvasId URL (parseBrowserLocalRoute) rather than merely

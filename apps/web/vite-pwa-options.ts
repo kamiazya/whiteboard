@@ -44,8 +44,12 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   workbox: {
     // wasm: the browser-local editor loads loro-crdt's WASM module; without
     // it in the precache manifest an installed/offline PWA loads the JS
-    // shell but fails the moment it needs Loro.
-    globPatterns: ['**/*.{js,css,html,woff2,png,svg,ico,wasm}'],
+    // shell but fails the moment it needs Loro. ttf: the app's only font
+    // (the vendored Roboto face canvas-viewer's measurer and mcp-server's
+    // exporter both measure) ships as a .ttf, not .woff2 — without it here
+    // an installed offline PWA has no precached font at all and silently
+    // falls back to a system face, diverging from exported metrics.
+    globPatterns: ['**/*.{js,css,html,woff2,ttf,png,svg,ico,wasm}'],
     navigateFallbackDenylist: [/^\/api(\/|$)/, /^\/mcp(\/|$)/, /^\/ws(\/|$)/],
     // Workbox's 2 MiB default would silently drop the entry chunk (~560 KB
     // gzip, larger uncompressed) from the precache manifest with only a

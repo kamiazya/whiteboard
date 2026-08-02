@@ -1,6 +1,6 @@
 # `@kamiazya/whiteboard-mcp`
 
-Excalidraw-based whiteboard MCP server for Claude Code, Codex, and other MCP hosts.
+OpenCanvas-based whiteboard MCP server for Claude Code, Codex, and other MCP hosts.
 
 ## Requirements
 

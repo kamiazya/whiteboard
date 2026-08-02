@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 // Post-build guard for the generated service worker (run after `pnpm build`).
 //
-// Rollup/Rolldown does not guarantee plugin hook execution order matches
-// declaration order, so the Excalidraw font-copy plugin (closeBundle) racing
-// vite-plugin-pwa's precache-manifest generation is a real risk: if fonts
-// aren't in dist/fonts yet when workbox globs the output, they silently drop
-// out of the precache and the app breaks offline. This script inspects the
-// actually generated dist/sw.js precache manifest rather than trusting
-// plugin declaration order.
+// This script inspects the actually generated dist/sw.js precache manifest
+// rather than trusting the workbox globPatterns config alone — a config
+// that looks right (vite-pwa-options.ts) can still miss an asset if Vite
+// emits it under an extension the glob doesn't cover (see the vendored
+// Roboto .ttf check below).
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -40,7 +38,10 @@ const swSource = readFileSync(SW_PATH, 'utf8')
 
 const checks = [
   { label: 'entry chunk (index-*.js) is precached', pattern: /url:"assets\/index-[^"]+\.js"/ },
-  { label: 'an Excalidraw font (*.woff2) is precached', pattern: /url:"fonts\/[^"]+\.woff2"/ },
+  {
+    label: 'the vendored Roboto face (*.ttf) is precached',
+    pattern: /url:"assets\/[^"]+\.ttf"/,
+  },
   { label: 'icon-192.png is precached', pattern: /url:"icon-192\.png"/ },
   { label: 'icon-512.png is precached', pattern: /url:"icon-512\.png"/ },
   // The browser-local editor depends on loro-crdt's WASM module at runtime;

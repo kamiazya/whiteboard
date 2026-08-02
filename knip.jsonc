@@ -99,8 +99,9 @@
   "ignoreDependencies": [
     // docs-snapshots `@docs-assets/*` alias resolves through Vite's
     // `resolve.alias` (vitest.docs-snapshots.config.ts) to files under
-    // docs/assets-src/, not an npm package.
-    "@docs-assets/architecture.excalidraw",
+    // docs/assets/, not an npm package.
+    "@docs-assets/architecture.canvas",
+    "@docs-assets/canvas-auth-flow.canvas",
     // Tailwind v4 is loaded from CSS (`@import "tailwindcss"` /
     // `@import "tw-animate-css"` in src/index.css); knip does not parse CSS
     // imports, only JS/TS module graphs.

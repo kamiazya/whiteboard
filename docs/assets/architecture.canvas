@@ -1,0 +1,95 @@
+{
+  "nodes": [
+    {
+      "id": "human",
+      "type": "text",
+      "x": 20,
+      "y": 220,
+      "width": 180,
+      "height": 80,
+      "text": "You\n(human)"
+    },
+    {
+      "id": "agent",
+      "type": "text",
+      "x": 300,
+      "y": 220,
+      "width": 220,
+      "height": 80,
+      "text": "Agent\n(Claude / Codex / Gemini)"
+    },
+    {
+      "id": "browser",
+      "type": "text",
+      "x": 300,
+      "y": 440,
+      "width": 260,
+      "height": 100,
+      "text": "Browser Canvas\nOpenCanvas spatial editor running in the browser"
+    },
+    {
+      "id": "plugin-group",
+      "type": "group",
+      "x": 620,
+      "y": 40,
+      "width": 400,
+      "height": 340,
+      "label": "kamiazya/whiteboard Plugin"
+    },
+    {
+      "id": "skills",
+      "type": "text",
+      "x": 650,
+      "y": 80,
+      "width": 340,
+      "height": 130,
+      "text": "Skills\n/drawing-visuals\n/coauthoring-visuals\n/auditing-workspaces"
+    },
+    {
+      "id": "mcp",
+      "type": "text",
+      "x": 650,
+      "y": 240,
+      "width": 340,
+      "height": 110,
+      "text": "Whiteboard MCP\n@kamiazya/whiteboard-mcp — stdio + local daemon"
+    }
+  ],
+  "edges": [
+    {
+      "id": "human-to-agent",
+      "fromNode": "human",
+      "toNode": "agent",
+      "toEnd": "arrow",
+      "label": "prompts / replies"
+    },
+    {
+      "id": "agent-to-mcp",
+      "fromNode": "agent",
+      "toNode": "mcp",
+      "toEnd": "arrow",
+      "label": "stdio"
+    },
+    {
+      "id": "mcp-to-browser",
+      "fromNode": "mcp",
+      "toNode": "browser",
+      "toEnd": "arrow",
+      "label": "HTTP / WS"
+    },
+    {
+      "id": "human-to-browser",
+      "fromNode": "human",
+      "toNode": "browser",
+      "toEnd": "arrow",
+      "label": "edit"
+    },
+    {
+      "id": "skills-to-agent",
+      "fromNode": "skills",
+      "toNode": "agent",
+      "toEnd": "arrow",
+      "label": "guides"
+    }
+  ]
+}

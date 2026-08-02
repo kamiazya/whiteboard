@@ -84,17 +84,14 @@ function main() {
   assert(existsSync(DIST), 'dist/ directory exists')
   assert(existsSync(resolve(DIST, 'index.html')), 'dist/index.html exists')
 
-  // Self-hosted Excalidraw fonts: Excalidraw resolves
-  // `${EXCALIDRAW_ASSET_PATH}fonts/<Family>/…` and the CSP blocks the esm.sh
-  // fallback, so the fonts must land at dist/fonts/<Family>/ exactly.
-  assert(
-    existsSync(resolve(DIST, 'fonts/Excalifont')),
-    'dist/fonts/Excalifont/ exists (self-hosted)',
-  )
-  assert(
-    !existsSync(resolve(DIST, 'fonts/node_modules')),
-    'dist/fonts has no node_modules path prefix (copy structure regression)',
-  )
+  // The vendored Roboto face (canvas-viewer's browser measurer and
+  // mcp-server's Node exporter both measure this exact face, so on-screen
+  // layout and exported output agree) must land under dist/assets/ as a
+  // real build output, not merely referenced from source.
+  const fontsAssetsDir = resolve(DIST, 'assets')
+  const hasRobotoAsset =
+    existsSync(fontsAssetsDir) && readdirSync(fontsAssetsDir).some((f) => /Roboto.*\.ttf$/.test(f))
+  assert(hasRobotoAsset, 'dist/assets/ contains the vendored Roboto .ttf face')
 
   // ── _headers copied ───────────────────────────────────────────────────────────
   console.log('\n[smoke-artifact] _headers')

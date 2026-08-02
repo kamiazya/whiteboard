@@ -1,9 +1,8 @@
-import { cpSync, createReadStream, statSync } from 'node:fs'
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
@@ -11,65 +10,6 @@ import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-
-const EXCALIDRAW_FONTS_DIR = resolve(
-  __dirname,
-  'node_modules/@excalidraw/excalidraw/dist/prod/fonts',
-)
-
-// Self-host the Excalidraw fonts so the app works offline and the CSP
-// (default-src 'self') does not block lazy font loading. Excalidraw resolves
-// font URLs as `${window.EXCALIDRAW_ASSET_PATH}fonts/<Family>/<file>.woff2`
-// (asset path is set in src/excalidraw-asset-path.ts), so both build output
-// and the dev server must expose the fonts at /fonts/<Family>/….
-// cpSync (dereference) instead of a glob copy plugin: pnpm symlinks plus
-// fast-glob base-path inference kept reproducing the node_modules prefix in
-// the destination.
-function excalidrawFontsPlugin(): Plugin {
-  return {
-    name: 'excalidraw-self-hosted-fonts',
-    closeBundle() {
-      cpSync(EXCALIDRAW_FONTS_DIR, resolve(__dirname, 'dist/fonts'), {
-        recursive: true,
-        dereference: true,
-      })
-    },
-    configureServer(server) {
-      server.middlewares.use('/fonts', (req, res, next) => {
-        const relPath = normalize(decodeURIComponent(req.url ?? '')).replace(/^([/\\])+/, '')
-        const filePath = join(EXCALIDRAW_FONTS_DIR, relPath)
-        // Terminate the base with a separator: a bare prefix check would accept
-        // sibling directories (e.g. fonts-backup). Serve regular files only so a
-        // directory request cannot reach createReadStream (EISDIR crash).
-        const safeBase = EXCALIDRAW_FONTS_DIR.endsWith(sep)
-          ? EXCALIDRAW_FONTS_DIR
-          : EXCALIDRAW_FONTS_DIR + sep
-        let isFile = false
-        try {
-          isFile = filePath.startsWith(safeBase) && statSync(filePath).isFile()
-        } catch {
-          // missing file → fall through to next()
-        }
-        if (!isFile) {
-          next()
-          return
-        }
-        res.setHeader(
-          'Content-Type',
-          extname(filePath) === '.woff2' ? 'font/woff2' : 'application/octet-stream',
-        )
-        const stream = createReadStream(filePath)
-        stream.on('error', () => {
-          // Without this, a read error crashes the dev server via an
-          // unhandled 'error' event on the stream.
-          if (!res.headersSent) res.statusCode = 500
-          res.end()
-        })
-        stream.pipe(res)
-      })
-    },
-  }
-}
 
 export default defineConfig({
   resolve: {
@@ -143,17 +83,6 @@ export default defineConfig({
         // the entry ended up eagerly loading the whole vendor-loro-crdt
         // chunk through a dependency that had nothing to do with loro.
         //
-        // Deliberately NOT grouping @excalidraw/* the same way: Excalidraw's
-        // own dist already dynamically imports its heavy optional features
-        // (mermaid-to-excalidraw's parser, cytoscape, katex — the various
-        // *Diagram-*.js / cytoscape.esm-*.js / katex-*.js chunks visible in
-        // the build output). A blanket `id.includes('@excalidraw')` rule
-        // merges those into one eager multi-MB chunk regardless of import
-        // kind, which both defeats Excalidraw's own lazy split and blows
-        // past vite-plugin-pwa's 2 MiB precache-per-file limit. Leave
-        // Excalidraw's core module to whichever automatic chunk it lands in;
-        // Stage 2 (deferring the whole editor page behind React.lazy) is
-        // what actually keeps it out of the initial paint.
         manualChunks(id) {
           if (!id.includes('node_modules')) return undefined
           if (id.includes('/react-dom/') || id.includes('/react/') || id.includes('scheduler')) {
@@ -171,11 +100,6 @@ export default defineConfig({
     // Required for the browser bundle that includes the Loro CRDT WASM build.
     wasm(),
     topLevelAwait(),
-    // Must run after excalidrawFontsPlugin (declaration-order hint only —
-    // Rollup does not guarantee closeBundle execution order; the real
-    // guard is scripts/check-pwa-precache.mjs, which fails the build if the
-    // generated precache manifest is missing font entries).
-    excalidrawFontsPlugin(),
     // Must run before VitePWA: see stripWasmSourceMapPlugin's doc comment —
     // VitePWA hashes dist/ contents for the precache manifest in closeBundle,
     // so the wasm bytes must already be stripped when that hook runs.

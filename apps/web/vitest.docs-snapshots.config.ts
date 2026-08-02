@@ -31,8 +31,8 @@ export default defineConfig({
     __DOCS_ASSETS_DIR__: JSON.stringify(DOCS_ASSETS_DIR),
   },
   // The doc-snapshot tests need to read existing scene fixtures (e.g.
-  // docs/assets/architecture.excalidraw) as raw JSON so they can hand
-  // them to Excalidraw without an extra fixture-copy step. Vite's
+  // docs/assets/architecture.canvas) as raw JSON Canvas text so they can
+  // parse and render them without an extra fixture-copy step. Vite's
   // default allow-list is the package root; widen it to the repo root
   // so the `@docs-assets/...` alias resolves under `docs/assets/`.
   server: {
@@ -71,9 +71,9 @@ export default defineConfig({
     setupFiles: ['./src/docs-snapshots/_setup.ts'],
     css: true,
     // Generous timeout: each test mounts a real component, waits for
-    // network-mocked content + Excalidraw / fonts to settle, then writes
-    // a PNG to disk. Cold-start on the first test in the suite can take
-    // several seconds even before any rendering.
+    // network-mocked content and fonts to settle, then writes a PNG to
+    // disk. Cold-start on the first test in the suite can take several
+    // seconds even before any rendering.
     testTimeout: 30_000,
     api: { host: '127.0.0.1' },
     browser: {

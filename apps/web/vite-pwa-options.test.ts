@@ -58,9 +58,12 @@ describe('pwaOptions', () => {
     )
   })
 
-  it('precaches the app shell: entry assets, Excalidraw fonts, and icons', () => {
+  it('precaches the app shell: entry assets, the vendored Roboto face, and icons', () => {
     const patterns = pwaOptions.workbox?.globPatterns ?? []
-    expect(patterns.some((p) => p.includes('woff2'))).toBe(true)
+    // The vendored face (packages/canvas-viewer/assets/fonts/Roboto) ships as
+    // a .ttf, not .woff2 — without this, an installed offline PWA has no
+    // precached font at all and silently falls back to a system face.
+    expect(patterns.some((p) => p.includes('ttf'))).toBe(true)
     expect(patterns.some((p) => p.includes('png'))).toBe(true)
   })
 

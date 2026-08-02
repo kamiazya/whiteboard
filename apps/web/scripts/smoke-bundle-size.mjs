@@ -9,7 +9,7 @@
 //
 // The per-file entry-JS budget checks ONLY the literal index-*.js file, which
 // is misleading on its own: Vite/Rollup splits shared dependencies (React,
-// loro-crdt, Excalidraw...) into separate chunk files, and index.html
+// loro-crdt...) into separate chunk files, and index.html
 // <link rel="modulepreload"> forces the browser to fetch every one of them
 // alongside the entry script before first paint — so they are part of the
 // same critical-path payload even though they live in different files. The
@@ -30,7 +30,8 @@ const BUDGETS = [
   // The entry file itself is now a thin bootstrap (~5 KB gz) now that both
   // canvas pages are React.lazy — 30 KB leaves headroom for App.tsx growth
   // without going back to the old 560 KB ceiling, which stopped meaning
-  // anything once the entry stopped containing Excalidraw/loro-crdt.
+  // anything once the entry stopped containing loro-crdt (and, later, the
+  // editor's own diagramming library).
   { label: 'entry JS (index-*.js)', pattern: /^index-.*\.js$/, limit: 30 * KB, required: true },
   { label: 'CSS (index-*.css)', pattern: /^index-.*\.css$/, limit: 30 * KB, required: true },
   {
@@ -135,8 +136,8 @@ function main() {
   // listed in dist/index.html. This is what actually determines first-paint
   // transfer size — see the module comment above for why the per-file
   // entry-JS budget above cannot catch a regression here (e.g. a statically
-  // imported Excalidraw/loro-crdt page would inflate this total without ever
-  // growing index-*.js itself).
+  // imported loro-crdt page would inflate this total without ever growing
+  // index-*.js itself).
   const indexHtmlPath = join(DIST, 'index.html')
   if (!existsSync(indexHtmlPath)) {
     console.error(

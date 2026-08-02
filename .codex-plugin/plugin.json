@@ -1,7 +1,7 @@
 {
   "name": "whiteboard",
   "version": "0.0.19",
-  "description": "Collaborative Excalidraw whiteboard for Codex. Wraps the @kamiazya/whiteboard-mcp server and exposes the shared skills bundled with that package.",
+  "description": "Collaborative OpenCanvas whiteboard for Codex. Wraps the @kamiazya/whiteboard-mcp server and exposes the shared skills bundled with that package.",
   "author": {
     "name": "kamiazya",
     "url": "https://github.com/kamiazya"
@@ -9,13 +9,13 @@
   "homepage": "https://github.com/kamiazya/whiteboard",
   "repository": "https://github.com/kamiazya/whiteboard",
   "license": "MIT",
-  "keywords": ["excalidraw", "diagramming", "mcp", "whiteboard", "codex"],
+  "keywords": ["opencanvas", "diagramming", "mcp", "whiteboard", "codex"],
   "skills": "./skills",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Whiteboard",
-    "shortDescription": "Collaborative Excalidraw canvas for AI agents",
-    "longDescription": "Runs a live Excalidraw canvas in your browser and exposes MCP tools so Codex can draw, annotate, and refine diagrams alongside you. Canvases live locally under ~/.whiteboard/ and round-trip with stock .excalidraw JSON.",
+    "shortDescription": "Collaborative OpenCanvas canvas for AI agents",
+    "longDescription": "Runs a live OpenCanvas whiteboard in your browser and exposes MCP tools so Codex can draw, annotate, and refine diagrams alongside you. Canvases live locally under ~/.whiteboard/ as OKF Markdown or JSON Canvas 1.0.",
     "developerName": "kamiazya",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
