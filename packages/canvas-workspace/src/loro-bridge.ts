@@ -175,24 +175,33 @@ export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
 }
 
 /**
+ * Replace a whole bucket map: write every incoming key and delete the keys
+ * the caller omitted, so a rewrite never merges with stale prior state.
+ * Entries stay per-key rather than one opaque object value, so two peers
+ * writing different keys converge on both surviving after a CRDT merge.
+ */
+function replaceBucket(doc: LoroDoc, mapKey: string, entries: Fields): void {
+  const map = doc.getMap(mapKey)
+  const existingKeys = map.keys()
+
+  for (const [key, value] of Object.entries(entries)) {
+    map.set(key, value)
+  }
+  for (const key of existingKeys) {
+    if (!Object.hasOwn(entries, key)) map.delete(key)
+  }
+
+  doc.commit()
+}
+
+/**
  * Extension facets (the `{domain}/{version}` keyed bucket from
  * canvas-model's `extensionFacetsSchema`) are stored the same way as
  * nodes/edges above: a plain-object-valued `LoroMap` keyed by facet key, so
  * one domain's CRDT merge never overwrites another's.
  */
 export function writeFacets(doc: LoroDoc, facets: ExtensionFacets): void {
-  const facetsMap = doc.getMap(FACETS_KEY)
-  const existingKeys = new Set<string>(facetsMap.keys())
-  const incomingKeys = new Set<string>(Object.keys(facets))
-
-  for (const [key, value] of Object.entries(facets)) {
-    facetsMap.set(key, value)
-  }
-  for (const key of existingKeys) {
-    if (!incomingKeys.has(key)) facetsMap.delete(key)
-  }
-
-  doc.commit()
+  replaceBucket(doc, FACETS_KEY, facets)
 }
 
 /**
@@ -223,19 +232,7 @@ const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = canvasCoreMetaSch
  * `writeFacets`'s replace-on-rewrite convention.
  */
 export function writeCoreFacets(doc: LoroDoc, meta: CanvasCoreMeta): void {
-  const coreMap = doc.getMap(CORE_KEY)
-  const existingKeys = new Set<string>(coreMap.keys())
-  const fields = meta as Record<string, unknown>
-  const incomingKeys = new Set<string>(Object.keys(fields))
-
-  for (const [key, value] of Object.entries(fields)) {
-    coreMap.set(key, value)
-  }
-  for (const key of existingKeys) {
-    if (!incomingKeys.has(key)) coreMap.delete(key)
-  }
-
-  doc.commit()
+  replaceBucket(doc, CORE_KEY, { ...meta })
 }
 
 /**
