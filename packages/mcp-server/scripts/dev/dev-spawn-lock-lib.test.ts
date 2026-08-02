@@ -2,6 +2,8 @@ import {
   closeSync as closeSyncReal,
   mkdtempSync,
   openSync as openSyncReal,
+  readFileSync,
+  renameSync as renameSyncReal,
   rmSync,
   writeSync as writeSyncReal,
 } from 'node:fs'
@@ -146,6 +148,63 @@ describe('acquireSpawnLock / releaseSpawnLock (real temp dir)', () => {
       isPidAlive: () => false,
     })
     expect(stolen).toBe('acquired')
+  })
+
+  it('never lets a losing stealer clobber the winner: a failed atomic rename degrades to held-by-other without touching the winner lock (TOCTOU regression)', () => {
+    acquireSpawnLock({
+      lockPath,
+      meta: { pid: 999_999 },
+      staleAfterMs: 10_000,
+      isPidAlive: () => false,
+    })
+    const winner = acquireSpawnLock({
+      lockPath,
+      meta: { pid: process.pid },
+      staleAfterMs: 10_000,
+      isPidAlive: () => false,
+    })
+    expect(winner).toBe('acquired')
+    const winnerContent = readFileSync(lockPath, 'utf8')
+
+    // Simulates a second stealer that inspected the same stale snapshot but
+    // loses the atomic claim because the winner already renamed the file
+    // out from under it: rename() fails with ENOENT, the classic signal
+    // that the source path no longer exists.
+    const enoent = Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
+    const loser = acquireSpawnLock({
+      lockPath,
+      meta: { pid: 555 },
+      staleAfterMs: 10_000,
+      isPidAlive: () => false, // treats the (actually live) winner as dead too, forcing the loser down the steal path
+      fsRename: () => {
+        throw enoent
+      },
+    })
+
+    expect(loser).toBe('held-by-other')
+    expect(readFileSync(lockPath, 'utf8')).toBe(winnerContent)
+  })
+
+  it('steals via an atomic rename() claim rather than a bare unlink+create', () => {
+    acquireSpawnLock({
+      lockPath,
+      meta: { pid: 999_999 },
+      staleAfterMs: 10_000,
+      isPidAlive: () => false,
+    })
+    const calls: string[] = []
+    const result = acquireSpawnLock({
+      lockPath,
+      meta: { pid: process.pid },
+      staleAfterMs: 10_000,
+      isPidAlive: () => false,
+      fsRename: (from, to) => {
+        calls.push('rename')
+        renameSyncReal(from, to)
+      },
+    })
+    expect(result).toBe('acquired')
+    expect(calls).toEqual(['rename'])
   })
 
   it('returns held-by-other when a steal-retry loses to a concurrent EEXIST', () => {

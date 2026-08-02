@@ -9,7 +9,15 @@
 // the "no existence-check before create" structural guarantee without
 // touching the real filesystem.
 
-import { closeSync, openSync, readFileSync, statSync, unlinkSync, writeSync } from 'node:fs'
+import {
+  closeSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeSync,
+} from 'node:fs'
 
 // Must exceed ensure-http-dev-daemon-lib.mjs's DEFAULT_READY_TIMEOUT_MS
 // (30s) with margin, so a legitimately slow cold start (tsx + happy-dom +
@@ -66,14 +74,23 @@ function createLockFileExclusive(lockPath, content, { fsOpen, fsWrite, fsClose }
  * reopen the exact race this lock exists to close.
  *
  * On EEXIST, reads and stat's the existing lock; if `isLockStale` says the
- * holder is gone, unlinks it and retries the exclusive create exactly once
+ * holder is gone, claims it via an atomic `rename()` of the stale file to a
+ * private per-attempt path, then retries the exclusive create exactly once
  * (a second EEXIST means another process won the steal race — returns
- * 'held-by-other' rather than looping unbounded). Any unexpected fs error
- * anywhere on this path also degrades to 'held-by-other', so a caller
- * always has a well-defined fallback (wait for the daemon) instead of a
- * thrown exception killing a SessionStart hook.
+ * 'held-by-other' rather than looping unbounded). The rename is the
+ * mutual-exclusion point for two racing stealers: `rename()` only succeeds
+ * for the first caller — a second `rename()` of the same source path fails
+ * with ENOENT once the first has already moved it away — so at most one
+ * stealer ever proceeds to (re)create the lock. A bare `unlink()` here
+ * would NOT provide this guarantee: it removes whatever currently sits at
+ * `lockPath` unconditionally, so a second stealer's unlink could silently
+ * delete a lock a faster stealer had already recreated, letting both
+ * believe they hold it. Any unexpected fs error anywhere on this path also
+ * degrades to 'held-by-other', so a caller always has a well-defined
+ * fallback (wait for the daemon) instead of a thrown exception killing a
+ * SessionStart hook.
  *
- * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: typeof writeSync, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync }} args
+ * @param {{ lockPath: string, meta: unknown, nowMs?: number, staleAfterMs: number, isPidAlive: (pid: number) => boolean, fsOpen?: typeof openSync, fsWrite?: typeof writeSync, fsClose?: typeof closeSync, fsReadFile?: typeof readFileSync, fsStat?: typeof statSync, fsUnlink?: typeof unlinkSync, fsRename?: typeof renameSync }} args
  * @returns {'acquired' | 'held-by-other'}
  */
 export function acquireSpawnLock({
@@ -88,6 +105,7 @@ export function acquireSpawnLock({
   fsReadFile = readFileSync,
   fsStat = statSync,
   fsUnlink = unlinkSync,
+  fsRename = renameSync,
 }) {
   const content = JSON.stringify(meta)
   const writers = { fsOpen, fsWrite, fsClose }
@@ -119,12 +137,27 @@ export function acquireSpawnLock({
     return 'held-by-other'
   }
 
+  const claimPath = `${lockPath}.stale-${process.pid}-${nowMs}-${Math.random().toString(36).slice(2)}`
   try {
-    fsUnlink(lockPath)
+    fsRename(lockPath, claimPath)
+  } catch {
+    // Another stealer already won the atomic claim (or the file vanished
+    // for some other reason) — no lock was moved, so there is nothing of
+    // ours to clean up.
+    return 'held-by-other'
+  }
+
+  try {
     createLockFileExclusive(lockPath, content, writers)
     return 'acquired'
   } catch {
     return 'held-by-other'
+  } finally {
+    try {
+      fsUnlink(claimPath)
+    } catch {
+      /* Best-effort cleanup of the claimed stale lock's private copy. */
+    }
   }
 }
 
