@@ -419,6 +419,52 @@ describe('createCanvasSyncSession', () => {
     expect(backendB._ctrl.pushLocalUpdateCalls).toHaveLength(0)
   })
 
+  it('undo() reverts the last committed edit and notifies subscribers with the "external" origin', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const next = applyCommand(twoNodeCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(session.getCanvas()).toEqual(next)
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribe(listener)
+
+    const undone = session.undo()
+
+    expect(undone).toBe(true)
+    expect(session.getCanvas()).toEqual(twoNodeCanvas())
+    expect(listener).toHaveBeenCalledWith(twoNodeCanvas(), 'external')
+    unsubscribe()
+  })
+
+  it('redo() re-applies an undone edit and notifies subscribers with the "external" origin', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    const next = applyCommand(twoNodeCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+    session.undo()
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribe(listener)
+
+    const redone = session.redo()
+
+    expect(redone).toBe(true)
+    expect(session.getCanvas()).toEqual(next)
+    expect(listener).toHaveBeenCalledWith(next, 'external')
+    unsubscribe()
+  })
+
   it('onEditorReady re-sends clientReady and flushes pending export requests, even with no doc yet', () => {
     const backend = makeFakeBackend()
     const sendReadySpy = vi.spyOn(backend, 'sendClientReady')
