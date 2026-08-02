@@ -26,7 +26,7 @@
  * own blur-commits convention in `TextNodeEditor`). Escape
  * (`cancel-text-edit`) remains the only explicit discard.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { EditorCommand } from './commands.js'
 import { type ResizeHandleKind, resizeBoxByDelta } from './geometry.js'
 import type { Point } from './viewport.js'
@@ -86,6 +86,8 @@ export type GestureEvent =
     }
   | { readonly type: 'pointerdown-connect'; readonly nodeId: string }
   | { readonly type: 'pointerdown-empty' }
+  | { readonly type: 'dblclick-empty'; readonly point: Point }
+  | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
   | { readonly type: 'pointerup'; readonly point: Point; readonly targetNodeId?: string }
   | { readonly type: 'pointercancel' }
@@ -246,26 +248,54 @@ function reducePointerUpResizing(
 function reducePointerUpConnecting(
   state: ConnectSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
-  createEdgeId: () => string,
+  createId: () => string,
 ): GestureResult {
   if (event.targetNodeId === undefined || event.targetNodeId === state.fromNodeId) return idle
   return {
     state: { kind: 'idle' },
     command: {
       kind: 'connect-nodes',
-      edgeId: createEdgeId(),
+      edgeId: createId(),
       fromNode: state.fromNodeId,
       toNode: event.targetNodeId,
     },
   }
 }
 
-export interface ReduceGestureOptions {
-  /** Injection seam for deterministic tests; defaults to crypto.randomUUID. */
-  readonly createEdgeId?: () => string
+/** Default geometry (canvas-space px) for a node created via dblclick-empty/Add-note. */
+const NEW_NODE_WIDTH = 200
+const NEW_NODE_HEIGHT = 100
+
+/**
+ * Builds the freshly-created text node, centered on `point`, plus the
+ * `create-node` command/state transition that opens it for typing
+ * immediately — a node you must double-click again to type into is a worse
+ * affordance than Excalidraw's.
+ */
+function reduceCreateTextNodeAt(point: Point, createId: () => string): GestureResult {
+  const id = createId()
+  const node: SpatialNode = {
+    id,
+    type: 'text',
+    x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+    y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
+    width: NEW_NODE_WIDTH,
+    height: NEW_NODE_HEIGHT,
+    text: '',
+  }
+  return {
+    state: { kind: 'editing-text', nodeId: id, pendingText: '' },
+    command: { kind: 'create-node', node },
+    selectedId: id,
+  }
 }
 
-const defaultCreateEdgeId = () =>
+export interface ReduceGestureOptions {
+  /** Injection seam for deterministic tests; defaults to crypto.randomUUID. Used for both node and edge ids. */
+  readonly createId?: () => string
+}
+
+const defaultCreateId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : String(Math.random())
@@ -276,7 +306,7 @@ export function reduceGesture(
   event: GestureEvent,
   options: ReduceGestureOptions = {},
 ): GestureResult {
-  const createEdgeId = options.createEdgeId ?? defaultCreateEdgeId
+  const createId = options.createId ?? defaultCreateId
 
   switch (event.type) {
     case 'canvas-replaced':
@@ -286,6 +316,15 @@ export function reduceGesture(
       return idle
     case 'pointerdown-empty':
       return { state: { kind: 'idle' }, selectedId: null }
+    case 'dblclick-empty':
+      return withPendingTextCommit(state, reduceCreateTextNodeAt(event.point, createId))
+    case 'delete-selection':
+      if (state.kind === 'editing-text') return { state }
+      return {
+        state: { kind: 'idle' },
+        command: { kind: 'delete-node', id: event.nodeId },
+        selectedId: null,
+      }
     case 'pointerdown':
       return withPendingTextCommit(state, reducePointerDown(event, canvas))
     case 'pointerdown-handle':
@@ -319,7 +358,7 @@ export function reduceGesture(
         case 'resizing':
           return reducePointerUpResizing(state, event)
         case 'connecting':
-          return reducePointerUpConnecting(state, event, createEdgeId)
+          return reducePointerUpConnecting(state, event, createId)
         default:
           return idle
       }

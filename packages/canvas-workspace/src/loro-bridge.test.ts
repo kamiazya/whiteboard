@@ -7,6 +7,8 @@ import type {
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
+  deleteSpatialEdge,
+  deleteSpatialNode,
   readFacets,
   readSpatialCanvas,
   writeFacets,
@@ -297,6 +299,72 @@ describe('loro-bridge', () => {
     const result = readSpatialCanvas(doc1)
     const ids = result.nodes.map((n) => n.id).sort()
     expect(ids).toEqual([TEXT_NODE.id, LINK_NODE.id].sort())
+  })
+
+  test('deleteSpatialNode removes the node and cascades to its incident edges', () => {
+    const doc = makeDoc()
+    const otherEdge: CanvasEdge = { id: 'edge-2', fromNode: 'node-2', toNode: 'node-1' }
+    writeSpatialCanvas(doc, {
+      nodes: [TEXT_NODE, FILE_NODE, LINK_NODE],
+      edges: [EDGE, otherEdge],
+    })
+
+    deleteSpatialNode(doc, TEXT_NODE.id)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes.map((n) => n.id).sort()).toEqual([FILE_NODE.id, LINK_NODE.id].sort())
+    expect(result.edges).toEqual([])
+  })
+
+  test('deleteSpatialNode leaves unrelated nodes/edges untouched', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+
+    deleteSpatialNode(doc, FILE_NODE.id)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes).toEqual([TEXT_NODE])
+    // EDGE references node-1/node-2; node-2 (FILE_NODE) was removed so its
+    // incident edge must cascade too.
+    expect(result.edges).toEqual([])
+  })
+
+  test('deleteSpatialNode is idempotent and a no-op for a missing id', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE], edges: [] })
+
+    deleteSpatialNode(doc, 'missing-id')
+    deleteSpatialNode(doc, TEXT_NODE.id)
+    deleteSpatialNode(doc, TEXT_NODE.id)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes).toEqual([])
+  })
+
+  test('deleteSpatialNode is a single commit: one UndoManager step restores node and edges together', async () => {
+    const { UndoManager } = await import('loro-crdt')
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
+    const undoManager = new UndoManager(doc, {})
+
+    deleteSpatialNode(doc, TEXT_NODE.id)
+    undoManager.undo()
+
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes.map((n) => n.id).sort()).toEqual([TEXT_NODE.id, FILE_NODE.id].sort())
+    expect(result.edges).toEqual([EDGE])
+  })
+
+  test('deleteSpatialEdge removes exactly one edge, leaving nodes and other edges untouched', () => {
+    const doc = makeDoc()
+    const otherEdge: CanvasEdge = { id: 'edge-2', fromNode: 'node-2', toNode: 'node-1' }
+    writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE, otherEdge] })
+
+    deleteSpatialEdge(doc, EDGE.id)
+
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes).toHaveLength(2)
+    expect(result.edges).toEqual([otherEdge])
   })
 })
 

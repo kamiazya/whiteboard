@@ -1,5 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import {
+  deleteSpatialNode,
   readSpatialCanvas,
   writeSpatialCanvas,
   writeSpatialEdge,
@@ -44,9 +45,12 @@ function commandTargetKey(command: EditorCommand): string {
     case 'move-node':
     case 'resize-node':
     case 'set-text':
+    case 'delete-node':
       return `node:${command.id}`
     case 'connect-nodes':
       return `edge:${command.edgeId}`
+    case 'create-node':
+      return `node:${command.node.id}`
     default:
       return `unmapped:${++unmappedCommandCounter}`
   }
@@ -148,6 +152,19 @@ function writeCommandTarget(doc: LoroDoc, next: SpatialCanvas, command: EditorCo
       writeSpatialEdge(doc, edge)
       return true
     }
+    case 'create-node': {
+      const node = next.nodes.find((n) => n.id === command.node.id)
+      if (!node) return false
+      writeSpatialNode(doc, node)
+      return true
+    }
+    case 'delete-node':
+      // Always "handled": deleteSpatialNode is a documented no-op for an
+      // already-absent id, so there is no missing-target case to fall back
+      // from here (unlike the other kinds, which need the target to still
+      // exist in `next` to know what to write).
+      deleteSpatialNode(doc, command.id)
+      return true
     default:
       return false
   }

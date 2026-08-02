@@ -289,7 +289,7 @@ describe('connect gesture', () => {
       result.state,
       c,
       { type: 'pointerup', point: { x: 250, y: 30 }, targetNodeId: 'b' },
-      { createEdgeId: () => 'edge-1' },
+      { createId: () => 'edge-1' },
     )
     expect(result.command).toEqual({
       kind: 'connect-nodes',
@@ -431,5 +431,79 @@ describe('text-edit gesture', () => {
     const result = reduceGesture(editing.state, c, { type: 'canvas-replaced', canvas: replaced })
     expect(result.state.kind).toBe('idle')
     expect(result.command).toBeUndefined()
+  })
+})
+
+describe('dblclick-empty (create-node)', () => {
+  it('creates a text node centered on the point, selects it, and opens it for typing immediately', () => {
+    const c = canvas()
+    const result = reduceGesture(
+      createIdleState(),
+      c,
+      { type: 'dblclick-empty', point: { x: 300, y: 200 } },
+      { createId: () => 'new-node' },
+    )
+    expect(result.command).toMatchObject({
+      kind: 'create-node',
+      node: { id: 'new-node', type: 'text', text: '' },
+    })
+    expect(result.selectedId).toBe('new-node')
+    expect(result.state).toEqual({
+      kind: 'editing-text',
+      nodeId: 'new-node',
+      pendingText: '',
+    })
+  })
+
+  it('while a text edit is open, first commits the pending text, then creates the new node', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const updated = reduceGesture(editing.state, c, { type: 'update-text-edit', text: 'edited' })
+    const result = reduceGesture(
+      updated.state,
+      c,
+      { type: 'dblclick-empty', point: { x: 300, y: 200 } },
+      { createId: () => 'new-node' },
+    )
+    // withPendingTextCommit's precedence: the emitted command is the pending
+    // set-text, matching every other pointerdown variant's click-away-commits
+    // policy — the create itself still lands (state advances to editing-text
+    // for the NEW node), it is simply not double-encoded into one command.
+    expect(result.command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
+    expect(result.state).toEqual({
+      kind: 'editing-text',
+      nodeId: 'new-node',
+      pendingText: '',
+    })
+  })
+})
+
+describe('delete-selection', () => {
+  it('emits delete-node and clears selection while idle', () => {
+    const c = canvas()
+    const result = reduceGesture(createIdleState(), c, {
+      type: 'delete-selection',
+      nodeId: 'a',
+    })
+    expect(result.command).toEqual({ kind: 'delete-node', id: 'a' })
+    expect(result.selectedId).toBeNull()
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('emits NO command while a text edit is open, leaving state untouched (Backspace must not delete while typing)', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const result = reduceGesture(editing.state, c, { type: 'delete-selection', nodeId: 'a' })
+    expect(result.command).toBeUndefined()
+    expect(result.state).toEqual(editing.state)
+    expect(result.selectedId).toBeUndefined()
   })
 })

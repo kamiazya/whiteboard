@@ -17,6 +17,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { applyCommand } from '../components/spatial-editor/commands.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+
+// Spies on the module's logger so a fallback-to-full-resync (which always
+// logs a warning first, see commitToDoc's doc comment) is directly
+// observable rather than inferred from doc contents.
+const appLoggerSpies = vi.hoisted(() => ({ warn: vi.fn(), error: vi.fn() }))
+vi.mock('./app-logger.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./app-logger.js')>()
+  return {
+    ...actual,
+    getAppLogger: (name: string) => ({
+      ...actual.getAppLogger(name),
+      warn: appLoggerSpies.warn,
+      error: appLoggerSpies.error,
+    }),
+  }
+})
+
 import {
   createCanvasSyncSession,
   createGenerationCounters,
@@ -115,6 +132,8 @@ function twoNodeCanvas(): SpatialCanvas {
 describe('createCanvasSyncSession', () => {
   beforeEach(() => {
     vi.useFakeTimers()
+    appLoggerSpies.warn.mockClear()
+    appLoggerSpies.error.mockClear()
   })
 
   afterEach(() => {
@@ -233,6 +252,119 @@ describe('createCanvasSyncSession', () => {
     expect(result.edges).toHaveLength(2)
     expect(result.edges.find((e) => e.id === 'e-existing')).toEqual(initial.edges[0])
     expect(result.edges.find((e) => e.id === 'e-new')).toEqual(next.edges[1])
+  })
+
+  it('onChange with create-node writes only the new node via writeSpatialNode, no fallback/log.warn', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const newNode: SpatialCanvas['nodes'][number] = {
+      id: 'n-c',
+      type: 'text',
+      x: 400,
+      y: 0,
+      width: 100,
+      height: 50,
+      text: '',
+    }
+    const command: EditorCommand = { kind: 'create-node', node: newNode }
+    const next = applyCommand(twoNodeCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes.map((n) => n.id).sort()).toEqual(['n-a', 'n-b', 'n-c'])
+  })
+
+  it('onChange with delete-node writes only that deletion via deleteSpatialNode (cascading edges), no fallback/log.warn', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    const initial: SpatialCanvas = {
+      nodes: [TEXT_NODE_A, TEXT_NODE_B],
+      edges: [{ id: 'e-1', fromNode: 'n-a', toNode: 'n-b' }],
+    }
+    session.connect()
+    const snapshotBytes = makeSnapshot(initial)
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const command: EditorCommand = { kind: 'delete-node', id: 'n-a' }
+    const next = applyCommand(initial, command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes.map((n) => n.id)).toEqual(['n-b'])
+    expect(result.edges).toEqual([])
+  })
+
+  it('debounce coalescing: create-node then move-node for the same id dedupes to a single write of the final node value', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(emptyCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const newNode: SpatialCanvas['nodes'][number] = {
+      id: 'n-c',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 50,
+      text: '',
+    }
+    const createCmd: EditorCommand = { kind: 'create-node', node: newNode }
+    const afterCreate = applyCommand(emptyCanvas(), createCmd)
+    session.onChange(afterCreate, createCmd)
+
+    const moveCmd: EditorCommand = { kind: 'move-node', id: 'n-c', x: 50, y: 60 }
+    const afterMove = applyCommand(afterCreate, moveCmd)
+    session.onChange(afterMove, moveCmd)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes).toHaveLength(1)
+    expect(result.nodes[0]).toMatchObject({ id: 'n-c', x: 50, y: 60 })
+  })
+
+  it('debounce coalescing: move-node then delete-node for the same id dedupes to the delete', async () => {
+    const backend = makeFakeBackend()
+    const session = createCanvasSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const moveCmd: EditorCommand = { kind: 'move-node', id: 'n-a', x: 1, y: 1 }
+    const afterMove = applyCommand(twoNodeCanvas(), moveCmd)
+    session.onChange(afterMove, moveCmd)
+
+    const deleteCmd: EditorCommand = { kind: 'delete-node', id: 'n-a' }
+    const afterDelete = applyCommand(afterMove, deleteCmd)
+    session.onChange(afterDelete, deleteCmd)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) doc.import(bytes)
+    const result = readSpatialCanvas(doc)
+    expect(result.nodes.map((n) => n.id)).toEqual(['n-b'])
   })
 
   it('falls back to a full writeSpatialCanvas resync when the command target is missing from `next`, still converging on `next`', async () => {

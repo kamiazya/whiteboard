@@ -4,8 +4,10 @@
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
 import { cleanup, render, waitFor } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+import type { EditorCommand } from './commands.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 function fakeMeasure() {
@@ -20,6 +22,39 @@ function twoNodeCanvas(): SpatialCanvas {
     ],
     edges: [],
   }
+}
+
+/**
+ * SpatialEditor is CONTROLLED and owns no state of its own — a real host
+ * (canvas-sync-session's synchronous `currentCanvas = next; notify(...)`,
+ * see canvas-sync-session.ts) feeds the `onChange` result straight back as
+ * the next `canvas` prop. Several create/delete scenarios below depend on
+ * that feedback loop (e.g. a newly-created node's own TextNodeEditor only
+ * renders once `canvas.nodes` actually contains it), so this thin wrapper
+ * reproduces the real host's behavior instead of leaving onChange a
+ * feedback-free spy.
+ */
+function ControlledEditor({
+  initial,
+  onChange,
+  createId,
+}: {
+  initial: SpatialCanvas
+  onChange: (next: SpatialCanvas, command: EditorCommand) => void
+  createId?: () => string
+}) {
+  const [canvas, setCanvas] = useState(initial)
+  return (
+    <SpatialEditor
+      canvas={canvas}
+      onChange={(next, command) => {
+        setCanvas(next)
+        onChange(next, command)
+      }}
+      measure={fakeMeasure}
+      createId={createId}
+    />
+  )
 }
 
 afterEach(() => {
@@ -572,6 +607,372 @@ describe('SpatialEditor (browser)', () => {
         new PointerEvent('pointermove', { bubbles: true, clientX: 90, clientY: 90, pointerId: 3 }),
       )
     expect(() => unmount()).not.toThrow()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('double-clicking empty canvas space creates a node and opens it for typing immediately (no second double-click)', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <ControlledEditor
+          initial={twoNodeCanvas()}
+          onChange={onChange}
+          createId={() => 'new-node'}
+        />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    // Empty space: far from both node "a" (20,20-120,80) and node "b" (250,20-330,60).
+    await editor.element().dispatchEvent(
+      new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: 500,
+        clientY: 300,
+      }),
+    )
+
+    const textEditor = page.getByTestId('text-node-editor')
+    expect(textEditor.element()).toBeTruthy()
+    expect(document.activeElement).toBe(textEditor.element())
+
+    await textEditor.fill('my first note')
+    ;(textEditor.element() as HTMLTextAreaElement).blur()
+
+    expect(onChange).toHaveBeenCalledTimes(2)
+    const [firstNext, firstCommand] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(firstCommand).toMatchObject({ kind: 'create-node', node: { id: 'new-node', text: '' } })
+    expect(firstNext.nodes.map((n) => n.id)).toContain('new-node')
+    const [, secondCommand] = onChange.mock.calls[1] as [SpatialCanvas, unknown]
+    expect(secondCommand).toEqual({ kind: 'set-text', id: 'new-node', text: 'my first note' })
+  })
+
+  it('the Add note button creates a node at viewport center via a real click', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+          createId={() => 'add-note-1'}
+        />
+      </div>,
+    )
+    const button = page.getByTestId('add-node-button')
+    await button
+      .element()
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toMatchObject({ kind: 'create-node', node: { id: 'add-note-1' } })
+    expect(next.nodes.map((n) => n.id)).toContain('add-note-1')
+  })
+
+  it('the Add note button is reachable and activatable via keyboard (Enter)', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor
+          canvas={twoNodeCanvas()}
+          onChange={onChange}
+          measure={fakeMeasure}
+          createId={() => 'add-note-2'}
+        />
+      </div>,
+    )
+    const button = page.getByTestId('add-node-button')
+    ;(button.element() as HTMLButtonElement).focus()
+    expect(document.activeElement).toBe(button.element())
+    await button
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    // A native <button> fires 'click' on Enter keyup, not keydown; simulate
+    // the browser's own follow-through since dispatching a synthetic keydown
+    // alone does not trigger it.
+    await button
+      .element()
+      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+  })
+
+  it('select a node then Delete removes it from the next canvas and clears the selection overlay', async () => {
+    const onChange = vi.fn()
+    const { container } = render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 60,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 60 }),
+      )
+    expect(container.querySelector('[data-testid="resize-handle-se"]')).not.toBeNull()
+
+    await editor
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'delete-node', id: 'a' })
+    expect(next.nodes.map((n) => n.id)).toEqual(['b'])
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="resize-handle-se"]')).toBeNull()
+    })
+  })
+
+  it('select a node then Backspace also deletes it', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 61,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 61 }),
+      )
+    await editor
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }))
+
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'delete-node', id: 'a' })
+  })
+
+  it('while the text editor is open, Backspace edits the textarea and does NOT delete the node', async () => {
+    const onChange = vi.fn()
+    render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 62,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 62 }),
+      )
+    await editor.element().dispatchEvent(
+      new MouseEvent('dblclick', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+      }),
+    )
+
+    const textEditor = page.getByTestId('text-node-editor')
+    await textEditor.fill('hell')
+    await textEditor
+      .element()
+      .dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true, cancelable: true }),
+      )
+
+    // The node must still exist — the reducer's editing-text guard means no
+    // delete-node command was ever emitted from this keystroke.
+    expect(onChange).not.toHaveBeenCalled()
+    expect(page.getByTestId('text-node-editor').element()).toBeTruthy()
+    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    expect(onChange).toHaveBeenCalledTimes(1)
+    const [, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
+    expect(command).toEqual({ kind: 'set-text', id: 'a', text: 'hell' })
+  })
+
+  it('creating two nodes, connecting them, then deleting one leaves no dangling edge in the canvas or the rendered SVG', async () => {
+    const onChange = vi.fn()
+    let ids = 0
+    const { container } = render(
+      <div style={{ width: 600, height: 400 }}>
+        <ControlledEditor
+          initial={{ nodes: [], edges: [] }}
+          onChange={onChange}
+          createId={() => `id-${++ids}`}
+        />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+
+    // Create node 1 at (100, 100), commit empty text via blur.
+    await editor
+      .element()
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 100 }))
+    let textEditor = page.getByTestId('text-node-editor')
+    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    let canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+    expect(canvas.nodes).toHaveLength(1)
+    // Wait for ControlledEditor's setCanvas to actually flush and re-render
+    // SpatialEditor with the updated `canvas` prop (evidenced by the
+    // TextNodeEditor unmounting) — otherwise the next dblclick's handler
+    // closure still sees the PRE-create (empty) canvas, and the next create
+    // silently overwrites node 1 instead of adding node 2.
+    await waitFor(() => {
+      expect(() => page.getByTestId('text-node-editor').element()).toThrow()
+    })
+
+    // Create node 2 at (400, 100), commit.
+    await editor
+      .element()
+      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 400, clientY: 100 }))
+    textEditor = page.getByTestId('text-node-editor')
+    ;(textEditor.element() as HTMLTextAreaElement).blur()
+    canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+    expect(canvas.nodes).toHaveLength(2)
+    await waitFor(() => {
+      expect(() => page.getByTestId('text-node-editor').element()).toThrow()
+    })
+
+    // Select node 1, connect it to node 2 via the connect handle.
+    const node1Box = canvas.nodes[0]!
+    const node2Box = canvas.nodes[1]!
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: node1Box.x + 10,
+        clientY: node1Box.y + 10,
+        pointerId: 70,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: node1Box.x + 10,
+        clientY: node1Box.y + 10,
+        pointerId: 70,
+      }),
+    )
+    const connectHandle = page.getByTestId('connect-handle')
+    await connectHandle.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: node1Box.x + node1Box.width,
+        clientY: node1Box.y + node1Box.height / 2,
+        pointerId: 71,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: node2Box.x + 10,
+        clientY: node2Box.y + 10,
+        pointerId: 71,
+      }),
+    )
+    canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+    expect(canvas.edges).toHaveLength(1)
+    const edgeId = canvas.edges[0]!.id
+    expect(canvas.edges[0]).toEqual({ id: edgeId, fromNode: node1Box.id, toNode: node2Box.id })
+
+    // Select node 1 again, delete it.
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: node1Box.x + 10,
+        clientY: node1Box.y + 10,
+        pointerId: 72,
+        button: 0,
+      }),
+    )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerup', {
+        bubbles: true,
+        clientX: node1Box.x + 10,
+        clientY: node1Box.y + 10,
+        pointerId: 72,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+
+    canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
+    expect(canvas.nodes.map((n) => n.id)).toEqual([node2Box.id])
+    expect(canvas.edges).toEqual([])
+
+    await waitFor(() => {
+      const svgText = container.querySelector('[data-testid="spatial-editor"]')?.innerHTML ?? ''
+      expect(svgText).not.toContain(edgeId)
+    })
+  })
+
+  it('deleting the node an in-flight move gesture targets (canvas replaced mid-drag) does not throw and commits nothing', async () => {
+    const onChange = vi.fn()
+    const { rerender } = render(
+      <div style={{ width: 600, height: 400 }}>
+        <SpatialEditor canvas={twoNodeCanvas()} onChange={onChange} measure={fakeMeasure} />
+      </div>,
+    )
+    const editor = page.getByTestId('spatial-editor')
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 40,
+        clientY: 40,
+        pointerId: 80,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointermove', { bubbles: true, clientX: 60, clientY: 60, pointerId: 80 }),
+      )
+
+    const withoutA: SpatialCanvas = { nodes: [twoNodeCanvas().nodes[1]!], edges: [] }
+    expect(() =>
+      rerender(
+        <div style={{ width: 600, height: 400 }}>
+          <SpatialEditor
+            canvas={withoutA}
+            onChange={onChange}
+            measure={fakeMeasure}
+            externalVersion={1}
+          />
+        </div>,
+      ),
+    ).not.toThrow()
+
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 60, clientY: 60, pointerId: 80 }),
+      )
     expect(onChange).not.toHaveBeenCalled()
   })
 
