@@ -23,13 +23,18 @@ export const VIEWER_FONT_LOAD_TIMEOUT_MS = 3000
 // registration, one fetch, and one settle — never re-registers the face.
 let fontLoadPromise: Promise<ViewerFontStatus> | undefined
 
+// Identifies the in-flight load, so a late-arriving result only ever
+// rewrites the memoized promise it actually belongs to — a load orphaned by
+// resetViewerFontLoadingForTests must not resurrect itself into the next run.
+let loadGeneration = 0
+
 const readySubscribers = new Set<() => void>()
 
 function notifyReady(): void {
   for (const callback of readySubscribers) callback()
 }
 
-async function loadViewerFont(): Promise<ViewerFontStatus> {
+async function loadViewerFont(generation: number): Promise<ViewerFontStatus> {
   // Totality: an environment with no FontFace constructor or no
   // document.fonts (a non-browser test runner, or a browser lacking the
   // API) degrades instead of throwing — the caller always gets a value.
@@ -72,7 +77,13 @@ async function loadViewerFont(): Promise<ViewerFontStatus> {
     // subscribers re-measure on a tick, and a tick that does not mean
     // "the real face is now available" is a signal that lies.
     void loadResult.then((status) => {
-      if (status === 'loaded') notifyReady()
+      if (status !== 'loaded' || generation !== loadGeneration) return
+      // The memoized promise resolved 'degraded' so first paint could
+      // proceed. The face is present now, so a caller arriving after this
+      // point must not still be told it is missing — the tick alone does
+      // not reach them, since it fires before they subscribe.
+      fontLoadPromise = Promise.resolve<ViewerFontStatus>('loaded')
+      notifyReady()
     })
     return 'degraded'
   }
@@ -87,7 +98,8 @@ async function loadViewerFont(): Promise<ViewerFontStatus> {
  */
 export function ensureViewerFontLoaded(): Promise<ViewerFontStatus> {
   if (fontLoadPromise === undefined) {
-    fontLoadPromise = loadViewerFont()
+    loadGeneration += 1
+    fontLoadPromise = loadViewerFont(loadGeneration)
   }
   return fontLoadPromise
 }
@@ -108,5 +120,8 @@ export function subscribeViewerFontReady(callback: () => void): () => void {
 /** Test-only: clears the memoized promise/subscribers between test cases. */
 export function resetViewerFontLoadingForTests(): void {
   fontLoadPromise = undefined
+  // Orphans any still-pending load from a previous case, so its late result
+  // cannot write into the next one.
+  loadGeneration += 1
   readySubscribers.clear()
 }

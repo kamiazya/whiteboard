@@ -135,6 +135,23 @@ describe('ensureViewerFontLoaded', () => {
     expect(notifications).toBe(0)
   })
 
+  it('reports "loaded" to a caller arriving after a late successful load, not the stale timeout verdict', async () => {
+    vi.useFakeTimers()
+    const { added } = installFakeFontApis()
+    const { ensureViewerFontLoaded, VIEWER_FONT_LOAD_TIMEOUT_MS } = await importFreshFontLoading()
+
+    const pending = ensureViewerFontLoaded()
+    await vi.advanceTimersByTimeAsync(VIEWER_FONT_LOAD_TIMEOUT_MS)
+    await expect(pending).resolves.toBe('degraded')
+
+    added[0]?.loadDeferred.resolve()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The face is present now. A consumer mounting at this point missed the
+    // readiness tick, so the status is the only thing that can tell it.
+    await expect(ensureViewerFontLoaded()).resolves.toBe('loaded')
+  })
+
   it('clears the pending timeout when the load wins the race before the bound', async () => {
     vi.useFakeTimers()
     const { added } = installFakeFontApis()
