@@ -36,7 +36,6 @@ import {
   OAUTH_AUTHZ_CORS_PATHS,
   OAUTH_AUTHZ_PATHS,
 } from './routes/oauth-authz.js'
-import { createReconnectRouter } from './routes/reconnect.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
@@ -50,7 +49,6 @@ import {
 } from './security/mcp-auth.js'
 import { createMcpHttpAuthMiddleware, createMcpHttpOriginMiddleware } from './security/mcp-http.js'
 import { createOAuthTransactionStore } from './security/oauth-authz-transactions.js'
-import { createReconnectChallengeStore } from './security/reconnect-challenge-store.js'
 import { planServerModeAuth } from './security/server-mode-auth-plan.js'
 import {
   createServerModeApiAuthMiddleware,
@@ -58,7 +56,6 @@ import {
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
-import { createWebOriginTrustStore } from './security/web-origin-trust-store.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import {
   BranchNotFoundError,
@@ -374,24 +371,6 @@ export function createApp(options: AppOptions) {
       createWsTicketRouter({
         grantStore: oauthAuthz?.store,
         ticketStore: options.wsTicketStore ?? createWsTicketStore(),
-      }),
-    )
-  }
-  // Silent-reconnect surface (see reconnect.ts + web-origin-trust-store.ts):
-  // local-daemon only. Server-mode authenticates through its own OAuth
-  // resource-server strategy and has no daemon token to hand back here.
-  // Mounted even when `token` is undefined (dev/tokenless mode) — the
-  // reconnect-session response simply carries an empty token in that case,
-  // same as every other /api/* route being unauthenticated when no token is
-  // configured at all.
-  if (options.authMode === 'local-daemon') {
-    app.route(
-      '/',
-      createReconnectRouter({
-        trustStore: options.webOriginTrustStore ?? createWebOriginTrustStore(),
-        challengeStore: options.reconnectChallengeStore ?? createReconnectChallengeStore(),
-        allowedWebOrigins: options.allowedWebOrigins ?? [],
-        daemonToken: token ?? '',
       }),
     )
   }

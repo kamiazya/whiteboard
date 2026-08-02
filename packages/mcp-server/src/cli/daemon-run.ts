@@ -14,8 +14,10 @@ import {
   loadDaemonRecord,
   saveDaemonRecord,
 } from '../daemon/daemon-registry.js'
+import { purgeLegacyWebOriginTrustFile } from '../daemon/purge-legacy-trust-file.js'
 import { assertLoopbackBindHost } from '../server/daemon-auth-binding.js'
 import { startHttpServer } from '../server/http-server.js'
+import { getLogger } from '../server/log.js'
 import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from '../server/security/web-origin-allowlist.js'
 import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
@@ -111,6 +113,23 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
   // Read back through the seam (not options.dataDir) so the registry and the
   // startup lock share the same resolved-absolute path the stores will use.
   const dataDir = getDataDir()
+
+  // Best-effort cleanup of the stale silent-reconnect credential file, on
+  // every startup: it holds enrolled public keys and hashed legacy secrets
+  // for a feature that no longer has a server half, and its outcome must
+  // never affect whether the daemon starts. purgeLegacyWebOriginTrustFile
+  // already swallows its own expected failures (ENOENT, permission errors);
+  // this outer catch is defense-in-depth against any other unexpected
+  // rejection reaching this call.
+  try {
+    await purgeLegacyWebOriginTrustFile(dataDir)
+  } catch (err) {
+    getLogger('daemon-startup').warning(
+      { err: err as Error },
+      'legacy reconnect trust-file purge failed unexpectedly',
+    )
+  }
+
   const host = options.host ?? '127.0.0.1'
 
   // Pre-startup guard: local-daemon is loopback-only regardless of --host.

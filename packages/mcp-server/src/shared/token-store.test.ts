@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { readDaemonTokenOnce, resetTokenStoreForTests, seedDaemonToken } from './token-store.js'
+import { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
 
 function setWindow(value: unknown): void {
   ;(globalThis as { window?: unknown }).window = value
@@ -65,31 +65,6 @@ describe('token-store', () => {
     deleteWindow()
     expect(() => readDaemonTokenOnce()).not.toThrow()
     expect(readDaemonTokenOnce()).toBeNull()
-  })
-
-  it('seedDaemonToken makes readDaemonTokenOnce return the seeded token with no window global', () => {
-    deleteWindow()
-    seedDaemonToken('silent-reconnect-token')
-    expect(readDaemonTokenOnce()).toBe('silent-reconnect-token')
-  })
-
-  it('seedDaemonToken does not clobber a token already consumed from the fragment global', () => {
-    setWindow({ __WHITEBOARD_DAEMON_TOKEN__: 'fragment-token' })
-    expect(readDaemonTokenOnce()).toBe('fragment-token')
-    seedDaemonToken('reconnect-token')
-    expect(readDaemonTokenOnce()).toBe('fragment-token')
-  })
-
-  it('seedDaemonToken installs a token after an earlier fragment-free read already consumed the one-shot slot', () => {
-    // Reproduces App.tsx's real mount order: readDaemonTokenOnce() always
-    // runs once on mount (lazy useState initializer), even when there is no
-    // #wb= fragment. A silent-reconnect redemption that resolves afterward
-    // must still be able to seed its token — otherwise DaemonBackend.
-    // openSocket's direct read of this store silently gets null forever.
-    setWindow({})
-    expect(readDaemonTokenOnce()).toBeNull()
-    seedDaemonToken('reconnect-token')
-    expect(readDaemonTokenOnce()).toBe('reconnect-token')
   })
 
   it('resetTokenStoreForTests restores first-read semantics between tests', () => {

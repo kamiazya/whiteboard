@@ -23,10 +23,13 @@ export type RouteScopeDecision =
   | { kind: 'public' }
   // Never satisfiable by an OAuth access token, regardless of its granted
   // scopes — only the literal shared daemon token authorizes this route.
-  // Reserved for routes whose whole purpose is to hand out daemon-level
-  // authority (see reconnect.ts): a scope-limited hosted-origin grant that
-  // could reach this route would let itself mint a path back to the full,
-  // unscoped daemon token, escaping the very scopes it was approved for.
+  // Reserved for a route whose whole purpose is to hand out daemon-level
+  // authority: a scope-limited hosted-origin grant that could reach such a
+  // route would let itself mint a path back to the full, unscoped daemon
+  // token, escaping the very scopes it was approved for. No route currently
+  // produces this decision (the silent-reconnect surface that introduced it
+  // was removed), but it is kept as defense-in-depth for a future
+  // daemon-authority route rather than deleted.
   | { kind: 'daemon-token-only' }
 
 function isWriteMethod(method: string): boolean {
@@ -131,38 +134,6 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // requirement, so this is a "can you ask at all" gate, not an escalation.
   if (path === '/api/ws-ticket') {
     return { kind: 'scoped', scopes: ['canvas:read'] }
-  }
-
-  // Silent-reconnect enrollment (see reconnect.ts): mints a reconnect secret
-  // for the caller's own admitted Origin, which /api/reconnect-session later
-  // exchanges for the full daemon token. `daemon-token-only`, not
-  // `runtime:admin` — an OAuth grant scoped to `runtime:admin` (issued for
-  // touch/shutdown/logs-prune/debug) must not be able to reach this route,
-  // or it could use it as a one-way escalation to the unrestricted daemon
-  // token the grant was never approved for.
-  if (path === '/api/reconnect-credential') {
-    return { kind: 'daemon-token-only' }
-  }
-  // Public like /api/reconnect-session below: minting a challenge nonce must
-  // not itself require a daemon token (the caller no longer has one), and it
-  // must mint regardless of whether the origin actually has an enrolled
-  // credential — refusing based on enrollment status would make this route
-  // an enrollment oracle. Origin admission is still enforced inside the
-  // route; the challenge itself proves nothing without a subsequent valid
-  // signature at /api/reconnect-session.
-  if (path === '/api/reconnect-challenge') {
-    return { kind: 'public' }
-  }
-  // The ONLY other deliberately public /api/* route besides the liveness
-  // probe and the challenge mint above. Its purpose is to hand back a daemon
-  // token to a caller that no longer has one, so it cannot itself require
-  // that token. Its internal gates (reconnect.ts) are Origin admission +
-  // credential possession (a valid challenge signature, or a legacy secret
-  // during the grace period) + non-expired trust record — see
-  // web-origin-trust-store.ts for why that combination does not weaken the
-  // daemon-token boundary the way an Origin-only check would.
-  if (path === '/api/reconnect-session') {
-    return { kind: 'public' }
   }
 
   // No rule matched: an undeclared /api/* route. Callers must fail closed.

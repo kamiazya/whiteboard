@@ -164,14 +164,11 @@ the full trust-boundary discussion, including why this does not extend to
 canvas *data* itself in browser-local mode.
 
 A daemon upgraded from a version that had silent reconnect may still hold
-origin trust records from that era in `trusted-web-origins.json`. Revoke any
-you no longer want trusted (e.g. after a suspected compromise) with:
-
-```bash
-whiteboard trust list                # show trusted origins
-whiteboard trust revoke <origin>    # revoke one origin
-whiteboard trust revoke --all       # revoke every trusted origin
-```
+origin trust records from that era in `trusted-web-origins.json`. The daemon
+now removes that file automatically on its first start after the upgrade —
+no operator action is needed, and no CLI command exists to inspect or revoke
+individual entries any more. If you are auditing the data directory after an
+upgrade and the file is gone, this is why.
 
 ## Copy-first import
 
