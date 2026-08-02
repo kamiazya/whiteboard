@@ -19,7 +19,7 @@ import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalCanvasPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
+import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -231,16 +231,9 @@ export function BrowserLocalCanvasPage({
   const { canvas, onChange, externalVersion, exportScene } = useCanvasSync(backend)
 
   const commands = useWhiteboardCommands({
-    // SpatialEditor exposes no Excalidraw-shaped imperative API — exportJson
-    // (the only consumer of this seam) is dropped alongside the Excalidraw
-    // dependency itself; a caller that still invokes it sees a surfaced
-    // CommandError('no-api'), not a silent no-op.
-    getExcalidrawApi: () => null,
     provider: { kind: 'browser-local', capabilities },
     canvas: canvasId !== null ? { canvasId, name: canvasName ?? '' } : null,
   })
-
-  const handleExport = createSceneExportHandler(commands, exportScene)
 
   // Reactive: toggling in the SettingsPanel updates this state, which causes
   // useBrowserToolRegistry to re-run (ON→OFF triggers abort via the hook's
@@ -349,7 +342,7 @@ export function BrowserLocalCanvasPage({
             branches: capabilities.branches,
             merge: capabilities.merge,
           }}
-          onExport={handleExport}
+          onExport={exportScene}
           onOpenSettings={handleOpenSettings}
         />
       </Suspense>

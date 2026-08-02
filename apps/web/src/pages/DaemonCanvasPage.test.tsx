@@ -1612,47 +1612,6 @@ describe('DaemonCanvasPage', () => {
     })
   })
 
-  describe('Export → JSON routes through the commands layer', () => {
-    // SpatialEditor exposes no Excalidraw-shaped imperative API, so
-    // commands.exportJson's `getExcalidrawApi() === null` branch always
-    // throws CommandError('no-api', ...) — createSceneExportHandler degrades
-    // that to a null blob, which useSceneExport surfaces as a visible error
-    // instead of downloading anything. Pinned so the next slice inherits a
-    // known, non-silent failure state rather than a silently broken menu
-    // entry.
-    it('surfaces a visible export error instead of downloading a .excalidraw envelope', async () => {
-      // Spy rather than vi.stubGlobal('URL', {...}) — the page's daemonFetch
-      // wiring calls `new URL(...)`, which a plain-object stub can't satisfy.
-      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
-      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-      await act(async () => {
-        render(
-          <DaemonCanvasPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-
-      const canvasActions = screen.getByLabelText('Canvas actions')
-      fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-      const jsonItem = await screen.findByText('Export as JSON')
-      await act(async () => {
-        fireEvent.pointerUp(jsonItem)
-      })
-
-      await waitFor(() => {
-        expect(screen.getByText(/export as excalidraw json failed/i)).toBeTruthy()
-      })
-      expect(clickSpy).not.toHaveBeenCalled()
-
-      createObjectURL.mockRestore()
-      revokeObjectURL.mockRestore()
-      clickSpy.mockRestore()
-    })
-  })
-
   describe('default backend wiring (no createBackend override)', () => {
     class FakeWebSocket {
       static instances: FakeWebSocket[] = []

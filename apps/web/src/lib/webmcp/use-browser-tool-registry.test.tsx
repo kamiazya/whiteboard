@@ -7,9 +7,6 @@ import { useBrowserToolRegistry } from './use-browser-tool-registry.js'
 
 function fakeCommands(): WhiteboardCommands {
   return {
-    exportJson: async () => {
-      throw new Error('not used in this test')
-    },
     getAppContext: async () => ({
       provider: { mode: 'browser-local' },
       canvas: { kind: 'browser-local', canvasId: 'c1' },
@@ -220,7 +217,6 @@ describe('useBrowserToolRegistry', () => {
     const { BROWSER_LOCAL_CAPABILITIES } = await import('../provider.js')
     const realCommands = createWhiteboardCommands({
       current: {
-        getExcalidrawApi: () => null,
         provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
         canvas: { canvasId: 'c1', name: 'c1' },
       },

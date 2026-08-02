@@ -15,7 +15,7 @@ import { dispatchIdentityEvent, useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { createSceneExportHandler, useWhiteboardCommands } from '../lib/commands/index.js'
+import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -164,11 +164,6 @@ export function DaemonCanvasPage({
   })
 
   const commands = useWhiteboardCommands({
-    // SpatialEditor exposes no Excalidraw-shaped imperative API — exportJson
-    // (the only consumer of this seam) is dropped alongside the Excalidraw
-    // dependency itself; a caller that still invokes it sees a surfaced
-    // CommandError('no-api'), not a silent no-op.
-    getExcalidrawApi: () => null,
     provider: { kind: 'local-daemon', daemonBaseUrl, capabilities },
     // The daemon canvas summary carries no display name yet (only
     // slug/updatedAt) — the slug doubles as `name` until that changes.
@@ -177,8 +172,6 @@ export function DaemonCanvasPage({
         ? { workspaceId: canvas.workspaceId, canvasId: canvas.slug, name: canvas.slug }
         : null,
   })
-
-  const handleExport = createSceneExportHandler(commands, exportScene)
 
   // Identity key = workspaceId+slug, matching this page's own canvas
   // Reactive: toggling in the SettingsPanel updates this state, which causes
@@ -350,7 +343,7 @@ export function DaemonCanvasPage({
             onRestored={clearLocalUndo}
             versionPanelExtra={versionPanelExtra}
             onNavigateBack={onNavigateBack}
-            onExport={handleExport}
+            onExport={exportScene}
             onOpenSettings={handleOpenSettings}
           />
         )}

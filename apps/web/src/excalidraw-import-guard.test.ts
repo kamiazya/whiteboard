@@ -10,11 +10,8 @@ import { describe, expect, it } from 'vitest'
  *
  * The dependency itself, `excalidraw-asset-path.ts` (+ its test), `main.tsx`,
  * and `docs-snapshots/*` are the intended end state for this dependency —
- * see `tmp/notes/opencanvas-cutover-design.md`'s D4/slice-D notes. The three
- * `lib/commands/*` / `lib/canvas-sync-export.ts` files below are a TEMPORARY
- * allowlist entry for the still-live `exportJson` command chain, tracked as
- * its own follow-up (removing `exportJson`/`getSceneSummary` rather than
- * porting them) — this allowlist entry shrinks to zero when that lands.
+ * see `tmp/notes/opencanvas-cutover-design.md`'s D4/slice-D notes. No other
+ * source file should import `@excalidraw/excalidraw`.
  */
 const sourceModules = import.meta.glob('./**/*.{ts,tsx}', {
   query: '?raw',
@@ -30,11 +27,6 @@ const ALLOWED_PATH_SUBSTRINGS = [
   '/excalidraw-asset-path.test.ts',
   '/main.tsx',
   '/docs-snapshots/',
-  // Temporary — the still-live exportJson command chain (Task #20 removes
-  // rather than ports it; see this file's doc comment).
-  '/lib/canvas-sync-export.ts',
-  '/lib/commands/excalidraw-json.ts',
-  '/lib/commands/types.ts',
 ]
 
 function isAllowed(path: string): boolean {

@@ -20,7 +20,7 @@ export { dispatchIdentityEvent }
 
 // canvas-render's SVG backend + this hook's own Canvas-2D raster path are the
 // only export routes now that Excalidraw's exportToBlob/exportToSvg are gone.
-export type SceneExportFormat = 'png' | 'svg' | 'json'
+export type SceneExportFormat = 'png' | 'svg'
 
 export interface UseCanvasSyncResult {
   syncStatus: SyncStatus
@@ -211,15 +211,6 @@ export function useCanvasSync(
   // a SpatialEditor is currently mounted.
   const exportScene = useCallback(
     async (format: SceneExportFormat): Promise<Blob | null> => {
-      // Callers are expected to route through createSceneExportHandler, which
-      // intercepts 'json' and delegates to commands.exportJson before this
-      // function is ever invoked. Guard defensively rather than silently
-      // falling through and mislabeling the blob's content type.
-      if (format === 'json') {
-        throw new Error(
-          "exportScene does not support 'json' directly; route through createSceneExportHandler",
-        )
-      }
       const { svg, bounds } = renderCanvasToSvg(sessionRef.current?.getCanvas() ?? canvas, {
         measure: createBrowserMeasureText(),
       })

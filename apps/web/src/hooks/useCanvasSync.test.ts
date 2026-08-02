@@ -608,13 +608,6 @@ describe('useCanvasSync', () => {
       expect(blob).not.toBeNull()
       expect(blob?.type).toBe('image/svg+xml')
     })
-
-    it("exportScene('json') still throws, routed through createSceneExportHandler instead", async () => {
-      const backend = makeFakeBackend()
-      const { result } = renderHook(() => useCanvasSync(backend))
-
-      await expect(result.current.exportScene('json')).rejects.toThrow(/createSceneExportHandler/)
-    })
   })
 
   describe('type-level: no Excalidraw surface remains', () => {

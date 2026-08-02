@@ -7,8 +7,6 @@ describe('CommandErrorCode', () => {
   // is what turns that into a compile-time failure instead of something
   // only grep would catch (see create-commands.ts for every producer).
   it('equals exactly the set of codes a surviving code path can construct', () => {
-    expectTypeOf<CommandErrorCode>().toEqualTypeOf<
-      'no-api' | 'no-canvas' | 'invalid-input' | 'export-failed' | 'invalid-provider-state'
-    >()
+    expectTypeOf<CommandErrorCode>().toEqualTypeOf<'invalid-input' | 'invalid-provider-state'>()
   })
 })

@@ -19,9 +19,7 @@ async function clearDb(): Promise<void> {
 }
 
 // Captures every Blob handed to URL.createObjectURL so assertions can inspect
-// the real payload instead of only the downloaded filename — a regression
-// that bypasses commands.exportJson (e.g. falling through to exportScene for
-// the 'json' format) would still produce *a* download, but not this content.
+// the real payload instead of only the downloaded filename.
 //
 // Delegates to the real createObjectURL/revokeObjectURL rather than faking
 // the returned URL: the PNG export path (rasterizeSvgToPng) creates its own
@@ -121,23 +119,17 @@ describe('BrowserLocalCanvasPage export (browser — real SpatialEditor, no Exca
     expect(blob.size).toBeGreaterThan(0)
   })
 
-  // SpatialEditor exposes no Excalidraw-shaped imperative API, so
-  // commands.exportJson's `getExcalidrawApi() === null` branch always
-  // throws CommandError('no-api', ...); createSceneExportHandler degrades
-  // that to a null blob, which useSceneExport surfaces as a visible error
-  // instead of downloading anything. Pinned here (a real-browser mount, not
-  // a mocked one) so this degraded state is a known one, not silently
-  // broken.
-  it('surfaces a visible error for JSON export instead of downloading a .excalidraw envelope', async () => {
+  // Regression guard for the removed exportJson command chain: the export
+  // menu must never offer a JSON/Excalidraw entry whose only outcome is a
+  // thrown CommandError.
+  it('never renders a JSON/Excalidraw export menu item', async () => {
     await renderLoaded()
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    const jsonItem = await openExportMenuItem('Export as JSON')
-    fireEvent.pointerUp(jsonItem)
-
-    await waitFor(() => {
-      expect(screen.getByText(/export as excalidraw json failed/i)).toBeInTheDocument()
+    fireEvent.pointerDown(screen.getByLabelText('Canvas actions'), {
+      button: 0,
+      ctrlKey: false,
     })
-    expect(clickSpy).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByText('Export as PNG')).toBeInTheDocument())
+
+    expect(screen.queryByText(/json|excalidraw/i)).toBeNull()
   })
 })

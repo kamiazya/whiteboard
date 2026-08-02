@@ -7,23 +7,16 @@
  * a manual Tools/debug panel. Each of those consumers should be able to
  * obtain a `WhiteboardCommands` instance (via `useWhiteboardCommands` in a
  * component, or `createWhiteboardCommands` outside React) and call into it
- * with a single line — `commands.exportJson(...)` — with no business logic
+ * with a single line — `commands.<method>(...)` — with no business logic
  * duplicated at the call site.
  *
- * Today this exposes `exportJson` and `getAppContext`; see
- * create-commands.ts's doc comment for the extension recipe for the next
- * one.
+ * Today this exposes `getAppContext`; see create-commands.ts's doc comment
+ * for the extension recipe for the next one.
  */
 export { createWhiteboardCommands } from './create-commands.js'
-export { createSceneExportHandler } from './create-export-handler.js'
 export {
   CommandError,
   type CommandErrorCode,
-  type ExcalidrawApiHandle,
-  type ExportJsonInput,
-  type ExportJsonResult,
-  exportJsonInputSchema,
-  exportJsonResultSchema,
   type GetAppContextInput,
   type GetAppContextResult,
   getAppContextInputSchema,

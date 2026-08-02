@@ -769,36 +769,4 @@ describe('BrowserLocalCanvasPage', () => {
       expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
     })
   })
-
-  describe('Export → JSON routes through the commands layer', () => {
-    // SpatialEditor exposes no Excalidraw-shaped imperative API, so
-    // commands.exportJson's `getExcalidrawApi() === null` branch always
-    // throws CommandError('no-api', ...) — createSceneExportHandler degrades
-    // that to a null blob, which useSceneExport then surfaces as a visible
-    // error rather than downloading anything. Pinned here so the next slice
-    // (an OpenCanvas-shaped exportCanvasJson) inherits a known, non-silent
-    // failure state rather than a silently broken menu entry.
-    it('surfaces a visible export error instead of downloading a .excalidraw envelope', async () => {
-      vi.useRealTimers()
-      const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
-      await store.save(snap)
-      const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-      await act(async () => {
-        render(<BrowserLocalCanvasPage store={store} />)
-      })
-      const canvasActions = await screen.findByLabelText('Canvas actions')
-      fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-      const jsonItem = await screen.findByText('Export as JSON')
-      await act(async () => {
-        fireEvent.pointerUp(jsonItem)
-      })
-
-      await waitFor(() => {
-        expect(screen.getByText(/export as excalidraw json failed/i)).toBeTruthy()
-      })
-      expect(clickSpy).not.toHaveBeenCalled()
-    })
-  })
 })
