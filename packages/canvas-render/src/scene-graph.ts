@@ -58,6 +58,14 @@ export interface TextRunNode {
   /** Present when this run is (or is inside) a link/wikiLink/reference. */
   readonly link?: LinkProvenance
   readonly appearance?: Appearance
+  /**
+   * Distance (px) from `bbox.y` (the line TOP) down to the text baseline,
+   * i.e. the measured font ascent. `bbox` stays a true top-left box either
+   * way — sceneBounds/sceneDigest read `bbox`, never this field — so an
+   * absent `baseline` renders exactly as it always has (SVG `y = bbox.y`),
+   * and a present one only shifts where the glyphs paint within that box.
+   */
+  readonly baseline?: number
 }
 
 /**

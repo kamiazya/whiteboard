@@ -72,9 +72,23 @@ function appearanceAttrs(appearance?: Appearance): string {
   return parts.join(' ')
 }
 
+/**
+ * SVG `<text y>` is the BASELINE, not the top of the glyph box — `bbox.y`
+ * is deliberately the line TOP (so sceneBounds/sceneDigest keep reading a
+ * true top-left box), so the two must never be conflated. A non-finite
+ * baseline is omitted rather than reaching `formatCoord` (which throws by
+ * contract); an absent baseline reproduces the pre-baseline `y = bbox.y`
+ * output byte-for-byte, which is what keeps `DETERMINISM_GOLDEN_SVG` frozen.
+ */
+function textBaselineY(run: TextRunNode): number {
+  return run.baseline !== undefined && Number.isFinite(run.baseline)
+    ? run.bbox.y + run.baseline
+    : run.bbox.y
+}
+
 function renderTextRun(run: TextRunNode): string {
   const appearance = withLeadingSpace(appearanceAttrs(run.appearance))
-  const text = `<text x="${formatCoord(run.bbox.x)}" y="${formatCoord(run.bbox.y)}"${appearance}>${escapeXmlText(run.text)}</text>`
+  const text = `<text x="${formatCoord(run.bbox.x)}" y="${formatCoord(textBaselineY(run))}"${appearance}>${escapeXmlText(run.text)}</text>`
   if (!run.link) return text
   const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.canvasId
   return `<a href="${escapeXmlAttr(href)}">${text}</a>`

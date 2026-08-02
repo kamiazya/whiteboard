@@ -318,6 +318,74 @@ describe('layoutMdastBlocks — inline cursor', () => {
   })
 })
 
+describe('layoutMdastBlocks — text run baseline', () => {
+  it('carries a measured ascent baseline while leaving bbox.y as the line top', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'heading', depth: 1, children: [{ type: 'text', value: 'Heading' }] }],
+    }
+    const scene = layoutMdastBlocks(root, options)
+    const heading = scene.nodes.find((n) => n.kind === 'heading')
+    expect(heading?.kind).toBe('heading')
+    if (heading?.kind !== 'heading') throw new Error('unreachable')
+    const [run] = heading.runs
+    // fake measure: ascent = fontSizePx * 0.8
+    expect(run.baseline).toBe(32 * 0.8)
+    // bbox.y must stay the line TOP (unaffected by baseline) so sceneBounds
+    // keeps measuring a true top-left box.
+    expect(run.bbox.y).toBe(0)
+  })
+})
+
+describe('layoutMdastBlocks — word wrap', () => {
+  it('wraps a paragraph whose text overflows maxWidth onto multiple lines, each run contained', () => {
+    const narrow = { measure, maxWidth: 60 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three four' }] }],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.length).toBeGreaterThan(1)
+    for (const run of paragraph.runs) {
+      expect(run.bbox.x).toBeGreaterThanOrEqual(0)
+      expect(run.bbox.x + run.bbox.w).toBeLessThanOrEqual(narrow.maxWidth)
+    }
+    // block height grows with the number of lines produced.
+    const lineHeight = paragraph.runs[0].bbox.h
+    const lineCount = new Set(paragraph.runs.map((r) => r.bbox.y)).size
+    expect(lineCount).toBeGreaterThan(1)
+    expect(paragraph.bbox.h).toBe(lineCount * lineHeight)
+  })
+
+  it('keeps a single unbreakable token wider than maxWidth as one overflowing run', () => {
+    const narrow = { measure, maxWidth: 10 }
+    const root: MdastRoot = {
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'unbreakabletoken' }] }],
+    }
+    const scene = layoutMdastBlocks(root, narrow)
+    const paragraph = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(paragraph?.kind).toBe('paragraph')
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs).toHaveLength(1)
+    expect(paragraph.runs[0].bbox.w).toBeGreaterThan(narrow.maxWidth)
+  })
+
+  it('does not throw and produces no wrap for a non-finite or non-positive maxWidth', () => {
+    for (const badWidth of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const bad = { measure, maxWidth: badWidth }
+      const root: MdastRoot = {
+        type: 'root',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three' }] }],
+      }
+      expect(() => layoutMdastBlocks(root, bad)).not.toThrow()
+    }
+  })
+})
+
 describe('layoutMdastBlocks — single render path', () => {
   it('produces a deep-equal scene for preview, spatial-text-node, and export callers', () => {
     const root: MdastRoot = {
