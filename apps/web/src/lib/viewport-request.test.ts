@@ -17,7 +17,7 @@ describe('applyViewportRequest', () => {
     expect(handle.setViewport).not.toHaveBeenCalled()
   })
 
-  it('routes mode: move (or an absent mode) to setViewport', () => {
+  it('routes mode: move to setViewport', () => {
     const handle: SpatialEditorHandle = { setViewport: vi.fn(), fitToContent: vi.fn() }
     applyViewportRequest(payload({ mode: 'move', scrollX: 10, scrollY: 20, zoom: 2 }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 2 })
@@ -28,9 +28,16 @@ describe('applyViewportRequest', () => {
     expect(() => applyViewportRequest(payload({ mode: 'fit' }), null)).not.toThrow()
   })
 
+  it('defaults an absent mode to fit, matching the daemon route contract', () => {
+    const handle: SpatialEditorHandle = { setViewport: vi.fn(), fitToContent: vi.fn() }
+    applyViewportRequest(payload({ elementIds: ['a'] }), handle)
+    expect(handle.fitToContent).toHaveBeenCalledWith(['a'])
+    expect(handle.setViewport).not.toHaveBeenCalled()
+  })
+
   it('degrades missing scroll/zoom fields to the identity viewport rather than throwing', () => {
     const handle: SpatialEditorHandle = { setViewport: vi.fn(), fitToContent: vi.fn() }
-    applyViewportRequest(payload({}), handle)
+    applyViewportRequest(payload({ mode: 'move' }), handle)
     expect(handle.setViewport).toHaveBeenCalledWith({ x: 0, y: 0, zoom: 1 })
   })
 })

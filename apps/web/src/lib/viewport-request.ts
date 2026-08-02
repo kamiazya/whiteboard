@@ -3,8 +3,11 @@ import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 
 /**
  * Maps a daemon-driven `viewport_request` onto a mounted `SpatialEditor`'s
- * imperative handle. `mode: 'fit'` (optionally scoped by `elementIds`) routes
- * to `fitToContent`; `mode: 'move'` or an absent mode routes to `setViewport`.
+ * imperative handle. `mode` is optional on the wire
+ * (`viewportRequestMessageSchema`) and defaults to `'fit'` here, matching the
+ * server-side route's documented contract that the browser applies defaults
+ * for an omitted mode. `mode: 'fit'` (optionally scoped by `elementIds`)
+ * routes to `fitToContent`; `mode: 'move'` routes to `setViewport`.
  *
  * The wire payload is Excalidraw-shaped (a scene scroll offset + a scalar
  * zoom) from when the daemon's only client was Excalidraw; this maps it
@@ -22,7 +25,8 @@ export function applyViewportRequest(
   handle: SpatialEditorHandle | null,
 ): void {
   if (handle === null) return
-  if (payload.mode === 'fit') {
+  const mode = payload.mode ?? 'fit'
+  if (mode === 'fit') {
     handle.fitToContent(payload.elementIds)
     return
   }
