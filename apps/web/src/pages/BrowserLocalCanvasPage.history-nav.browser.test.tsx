@@ -34,13 +34,23 @@ import '../index.css'
 type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
 
 let latestOnChange: OnChange | null = null
+// The canvas the editor is CURRENTLY mounted with. Asserting the router path
+// and the store's default-canvas pointer only proves the navigation happened;
+// both would still agree while the editor kept rendering the canvas it had
+// before the switch.
+let latestCanvas: SpatialCanvas | null = null
 
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: (props: { canvas: SpatialCanvas; onChange?: OnChange }) => {
     latestOnChange = props.onChange ?? null
+    latestCanvas = props.canvas
     return null
   },
 }))
+
+function mountedNodeIds(): string[] {
+  return (latestCanvas?.nodes ?? []).map((node) => node.id)
+}
 
 const { BrowserLocalCanvasPage } = await import('./BrowserLocalCanvasPage.js')
 
@@ -139,6 +149,11 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
       { timeout: 5000 },
     )
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument())
+    // The editor must actually be showing canvas A now — the assertions above
+    // only establish that the navigation and the store agree about which
+    // canvas is current.
+    await waitFor(() => expect(mountedNodeIds()).toContain('history-nav-node-a'), { timeout: 5000 })
+    expect(mountedNodeIds()).not.toContain('history-nav-node-b')
 
     // Forward: back to B.
     await act(async () => {
@@ -154,5 +169,7 @@ describe('BrowserLocalCanvasPage browser Back/Forward (browser — real IndexedD
       },
       { timeout: 5000 },
     )
+    await waitFor(() => expect(mountedNodeIds()).toContain('history-nav-node-b'), { timeout: 5000 })
+    expect(mountedNodeIds()).not.toContain('history-nav-node-a')
   })
 })
