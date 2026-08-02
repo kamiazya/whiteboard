@@ -4,21 +4,17 @@
  * surface by formula (WCAG 1.4.3 / 1.4.11) instead of eyeballing colors.
  */
 
-function hexToRgb(hex: string): readonly [number, number, number] {
-  const normalized = hex.replace('#', '')
-  const r = Number.parseInt(normalized.slice(0, 2), 16)
-  const g = Number.parseInt(normalized.slice(2, 4), 16)
-  const b = Number.parseInt(normalized.slice(4, 6), 16)
-  return [r, g, b]
-}
-
 function channelToLinear(channel8bit: number): number {
   const c = channel8bit / 255
   return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
 }
 
-export function relativeLuminance(hex: string): number {
-  const [r, g, b] = hexToRgb(hex).map(channelToLinear)
+/** Relative luminance of an sRGB `#rrggbb` color. */
+function relativeLuminance(hex: string): number {
+  const rgb = hex.replace('#', '')
+  const r = channelToLinear(Number.parseInt(rgb.slice(0, 2), 16))
+  const g = channelToLinear(Number.parseInt(rgb.slice(2, 4), 16))
+  const b = channelToLinear(Number.parseInt(rgb.slice(4, 6), 16))
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 

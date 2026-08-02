@@ -57,14 +57,28 @@ function buildResolver(palette: EditorPalette): SpatialAppearanceResolver {
   }
 }
 
+const PALETTES: Readonly<Record<ResolvedTheme, EditorPalette>> = {
+  light: EDITOR_LIGHT_PALETTE,
+  dark: EDITOR_DARK_PALETTE,
+}
+
 // Frozen module-level singletons (one per theme), not built per call: a
 // fresh object identity every render would churn `SpatialEditor`'s
 // `useMemo` deps and re-render its SVG on every frame.
 const RESOLVERS: Readonly<Record<ResolvedTheme, SpatialAppearanceResolver>> = Object.freeze({
-  light: Object.freeze(buildResolver(EDITOR_LIGHT_PALETTE)),
-  dark: Object.freeze(buildResolver(EDITOR_DARK_PALETTE)),
+  light: Object.freeze(buildResolver(PALETTES.light)),
+  dark: Object.freeze(buildResolver(PALETTES.dark)),
 })
 
 export function createEditorAppearance(theme: ResolvedTheme): SpatialAppearanceResolver {
   return RESOLVERS[theme]
+}
+
+/**
+ * The theme's text color, for the one caller that needs a single value rather
+ * than a whole resolver: `SpatialEditor`'s host element sets it as the SVG
+ * `fill` markdown body runs inherit (canvas-render assigns them none).
+ */
+export function editorTextFill(theme: ResolvedTheme): string {
+  return PALETTES[theme].textFill
 }

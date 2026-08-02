@@ -41,7 +41,7 @@ import {
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
-import { EDITOR_DARK_PALETTE, EDITOR_LIGHT_PALETTE } from './editor-appearance.js'
+import { editorTextFill } from './editor-appearance.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import { findFreeSpot, hitTest, indexNodeBoxes, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
@@ -548,7 +548,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // element that DOES carry its own `fill` presentation
               // attribute is unaffected (presentation attributes win over
               // an inherited value).
-              fill: theme === 'dark' ? EDITOR_DARK_PALETTE.textFill : EDITOR_LIGHT_PALETTE.textFill,
+              fill: editorTextFill(theme),
             }}
             // canvas-render's SVG serializer is the SOLE producer of this
             // string and escapes text/attrs (see svg/format.ts) — the same
