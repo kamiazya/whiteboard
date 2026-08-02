@@ -87,6 +87,48 @@ export function resizeHandleBoxes(box: Box, zoom: number): readonly ResizeHandle
   }))
 }
 
+/** Cascade step (canvas-space px) used by `findFreeSpot` between successive placement attempts. */
+const CASCADE_STEP_PX = 24
+/** Bounded search depth: `findFreeSpot` never loops forever on a densely occupied canvas. */
+const MAX_CASCADE_STEPS = 50
+
+function boxesIntersect(a: Box, b: Box): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+/**
+ * Finds a placement for a `size`-shaped box, centered on `preferred`, that
+ * does not overlap any box in `occupied`. Cascades diagonally in fixed
+ * `CASCADE_STEP_PX` steps from `preferred` until a non-colliding spot is
+ * found or the bounded search is exhausted, in which case it degrades to
+ * the last candidate rather than looping forever or throwing — an
+ * occasional overlap on a densely packed canvas is an accepted degradation,
+ * not a correctness bug. Deterministic: the same `preferred`/`size`/
+ * `occupied` always returns the same point.
+ */
+export function findFreeSpot(
+  preferred: Point,
+  size: { readonly width: number; readonly height: number },
+  occupied: readonly Box[],
+): Point {
+  const candidateAt = (step: number): Point => ({
+    x: preferred.x + step * CASCADE_STEP_PX,
+    y: preferred.y + step * CASCADE_STEP_PX,
+  })
+  const boxAt = (center: Point): Box => ({
+    x: Math.round(center.x - size.width / 2),
+    y: Math.round(center.y - size.height / 2),
+    width: size.width,
+    height: size.height,
+  })
+  for (let step = 0; step < MAX_CASCADE_STEPS; step += 1) {
+    const candidate = candidateAt(step)
+    const box = boxAt(candidate)
+    if (!occupied.some((other) => boxesIntersect(box, other))) return candidate
+  }
+  return candidateAt(MAX_CASCADE_STEPS)
+}
+
 /** Which axes a given handle moves, and in which direction, as a corner/edge is dragged. */
 export const HANDLE_SIGN: Record<ResizeHandleKind, { x: -1 | 0 | 1; y: -1 | 0 | 1 }> = {
   nw: { x: -1, y: -1 },

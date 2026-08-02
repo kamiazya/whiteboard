@@ -11,7 +11,11 @@
  * cancels), connect an edge (drag from a selected node's connect handle
  * onto another node, OR Enter/Space the connect handle then Tab to a
  * target node's connect-target control and Enter/Space it; Escape cancels
- * an in-flight gesture from the keyboard too).
+ * an in-flight gesture from the keyboard too), create a node (double-click
+ * empty canvas space, or the keyboard-reachable "Add note" button — both
+ * open the new node for typing immediately), and delete the current
+ * selection (Delete/Backspace, disabled while its text editor is open so
+ * Backspace-while-typing edits text instead of deleting the node).
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -37,15 +41,16 @@ import {
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
-import { hitTest, indexNodeBoxes, resizeBoxByDelta } from './geometry.js'
+import { findFreeSpot, hitTest, indexNodeBoxes, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'
-import { createIdleState, reduceGesture } from './gestures.js'
+import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import {
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
+  type Point,
   panBy,
   screenToCanvas,
   type Viewport,
@@ -85,7 +90,7 @@ export interface SpatialEditorProps {
   readonly externalVersion?: number
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   readonly measure?: MeasureText
-  /** Injection seam for deterministic edge-id tests; defaults to crypto.randomUUID. */
+  /** Injection seam for deterministic node/edge-id tests; defaults to crypto.randomUUID. */
   readonly createId?: () => string
   readonly className?: string
   readonly testId?: string
@@ -216,11 +221,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ? { id: selectedId, box: selectedBox }
         : undefined
 
+    /**
+     * Folds `result.commands` in order over a LOCAL running canvas (seeded
+     * from `canvasRef.current`, never re-read from the ref between steps) so
+     * a multi-command result — e.g. a pending-text commit ordered ahead of a
+     * create-node — can never lose its first command to a stale read. Each
+     * command still gets its own `onChange` call, one canvas/command pair
+     * per mutation, matching this component's pre-existing one-call-per-
+     * command contract for the (still common) single-command case.
+     */
     const applyResult = (result: ReturnType<typeof reduceGesture>) => {
       setGestureState(result.state)
       if (result.selectedId !== undefined) setSelectedId(result.selectedId)
-      if (result.command !== undefined) {
-        onChange(applyCommand(canvasRef.current, result.command), result.command)
+      let running = canvasRef.current
+      for (const command of result.commands) {
+        running = applyCommand(running, command)
+        onChange(running, command)
       }
     }
 
@@ -287,7 +303,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           gestureState,
           canvas,
           { type: 'pointerup', point, targetNodeId },
-          { createEdgeId: createId },
+          { createId },
         ),
       )
     }
@@ -303,6 +319,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (e.key === 'Escape' && gestureState.kind !== 'idle') {
         e.preventDefault()
         applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+        return
+      }
+      // Delete/Backspace deletes the current selection — but never while the
+      // event's own target is a text-entry surface (the open TextNodeEditor's
+      // textarea, or any other input this root might contain), or Backspace
+      // while typing would delete the node instead of a character. The
+      // reducer's own editing-text guard is the second, machine-checkable
+      // layer of that same policy (see gestures.ts's delete-selection arm).
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+        e.preventDefault()
+        applyResult(
+          reduceGesture(gestureState, canvas, { type: 'delete-selection', nodeId: selection.id }),
+        )
       }
     }
 
@@ -379,15 +411,60 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return () => root.removeEventListener('wheel', onWheel)
     }, [])
 
-    const handleDoubleClick = () => {
-      if (selectedNode?.type !== 'text') return
+    /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
+    const createNodeAt = (point: Point) => {
       applyResult(
-        reduceGesture(gestureState, canvas, {
-          type: 'start-text-edit',
-          nodeId: selectedNode.id,
-          text: selectedNode.text,
-        }),
+        reduceGesture(gestureState, canvas, { type: 'dblclick-empty', point }, { createId }),
       )
+    }
+
+    const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+      const root = rootRef.current
+      if (root === null) return
+      const screenPoint = clientPointToRootLocal(e, root)
+      const point = screenToCanvas(screenPoint, viewport)
+      // Hit-test the ACTUAL double-click point rather than trusting whatever
+      // happens to be selected: a text-edit commit does not clear selection
+      // (see gestures.ts's commit-text-edit), so a later double-click
+      // elsewhere on empty space would otherwise reopen the previously
+      // selected node's editor instead of creating a new node.
+      const hitId = hitTest(boxes, point)
+      if (hitId !== undefined) {
+        const node = canvas.nodes.find((n) => n.id === hitId)
+        if (node?.type === 'text') {
+          applyResult(
+            reduceGesture(gestureState, canvas, {
+              type: 'start-text-edit',
+              nodeId: node.id,
+              text: node.text,
+            }),
+          )
+        }
+        return
+      }
+      createNodeAt(point)
+    }
+
+    /**
+     * The button path (unlike double-click, whose point comes straight from
+     * the pointer) always resolves to the same viewport-center point, so
+     * without a placement rule every click here would stack an identical,
+     * unreachable rect on the last one. `findFreeSpot` cascades off the
+     * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
+     * stale `canvas` prop) so two rapid clicks still see each other's result.
+     */
+    const createNodeAtViewportCenter = () => {
+      const root = rootRef.current
+      const centerScreen =
+        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
+      const preferred = screenToCanvas(centerScreen, viewport)
+      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+      const point = findFreeSpot(
+        preferred,
+        { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT },
+        occupied,
+      )
+      createNodeAt(point)
     }
 
     return (
@@ -417,6 +494,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         onDoubleClick={handleDoubleClick}
         onKeyDown={handleKeyDown}
       >
+        {/* Discoverability affordance: every canvas is empty until a node
+          exists, and double-click-empty-space has no visible cue at all —
+          this real, keyboard-reachable button is the one always-visible way
+          in. Positioned outside the pan/zoom transform so it stays fixed on
+          screen regardless of viewport. */}
+        <button
+          type="button"
+          data-testid="add-node-button"
+          onClick={createNodeAtViewportCenter}
+          className="absolute z-10 rounded-md border bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          style={{ top: 8, left: 8 }}
+        >
+          Add note
+        </button>
         <div
           style={{
             position: 'absolute',
@@ -519,7 +610,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                             point: { x: b.box.x, y: b.box.y },
                             targetNodeId: b.id,
                           },
-                          { createEdgeId: createId },
+                          { createId },
                         ),
                       )
                     }}

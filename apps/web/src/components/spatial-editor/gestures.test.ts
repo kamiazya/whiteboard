@@ -20,7 +20,7 @@ describe('gesture reducer', () => {
     expect(down.selectedId).toBe('a')
     const up = reduceGesture(down.state, c, { type: 'pointerup', point: { x: 50, y: 30 } })
     expect(up.state.kind).toBe('idle')
-    expect(up.command).toBeUndefined()
+    expect(up.commands).toEqual([])
   })
 
   it('a drag on a selected node commits a move-node with the delta applied', () => {
@@ -35,7 +35,7 @@ describe('gesture reducer', () => {
       point: { x: 70, y: 45 },
     })
     result = reduceGesture(result.state, c, { type: 'pointerup', point: { x: 70, y: 45 } })
-    expect(result.command).toEqual({ kind: 'move-node', id: 'a', x: 30, y: 25 })
+    expect(result.commands).toEqual([{ kind: 'move-node', id: 'a', x: 30, y: 25 }])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -49,7 +49,7 @@ describe('gesture reducer', () => {
     result = reduceGesture(result.state, c, { type: 'pointermove', point: { x: 90, y: 90 } })
     result = reduceGesture(result.state, c, { type: 'pointercancel' })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('aborts cleanly when the target node vanishes mid-drag (canvas-replaced)', () => {
@@ -62,7 +62,7 @@ describe('gesture reducer', () => {
     const replaced: SpatialCanvas = { nodes: [], edges: [] }
     result = reduceGesture(result.state, c, { type: 'canvas-replaced', canvas: replaced })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('an externally-originated canvas-replaced (e.g. undo) cancels an in-flight move even when the target node still exists unchanged', () => {
@@ -82,7 +82,7 @@ describe('gesture reducer', () => {
       origin: 'external',
     })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('a locally-originated canvas-replaced leaves a valid in-flight move gesture unaffected', () => {
@@ -100,7 +100,7 @@ describe('gesture reducer', () => {
     })
     expect(result.state.kind).toBe('moving')
     result = reduceGesture(result.state, c, { type: 'pointerup', point: { x: 70, y: 45 } })
-    expect(result.command).toEqual({ kind: 'move-node', id: 'a', x: 30, y: 25 })
+    expect(result.commands).toEqual([{ kind: 'move-node', id: 'a', x: 30, y: 25 }])
   })
 
   it('aborts cleanly when the target node type changes mid-drag', () => {
@@ -116,7 +116,7 @@ describe('gesture reducer', () => {
     }
     result = reduceGesture(result.state, c, { type: 'canvas-replaced', canvas: replaced })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('commits from the gesture start snapshot when the node moved remotely mid-drag', () => {
@@ -134,7 +134,7 @@ describe('gesture reducer', () => {
     result = reduceGesture(result.state, remote, { type: 'canvas-replaced', canvas: remote })
     result = reduceGesture(result.state, remote, { type: 'pointerup', point: { x: 70, y: 45 } })
     // start node was at (10, 10); delta is (20, 15) -> commits 30, 25, NOT 999-based
-    expect(result.command).toEqual({ kind: 'move-node', id: 'a', x: 30, y: 25 })
+    expect(result.commands).toEqual([{ kind: 'move-node', id: 'a', x: 30, y: 25 }])
   })
 
   it('pointerdown on a missing node id is a no-op (no selection, stays idle)', () => {
@@ -146,7 +146,7 @@ describe('gesture reducer', () => {
     })
     expect(result.state.kind).toBe('idle')
     expect(result.selectedId).toBeUndefined()
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('is total over arbitrary pointerup/pointercancel without a prior pointerdown', () => {
@@ -174,14 +174,16 @@ describe('resize gesture', () => {
       point: { x: 130, y: 90 },
     })
     // se: width/height grow by the delta, x/y (the nw corner) stay fixed.
-    expect(result.command).toEqual({
-      kind: 'resize-node',
-      id: 'a',
-      x: 10,
-      y: 10,
-      width: 120,
-      height: 80,
-    })
+    expect(result.commands).toEqual([
+      {
+        kind: 'resize-node',
+        id: 'a',
+        x: 10,
+        y: 10,
+        width: 120,
+        height: 80,
+      },
+    ])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -200,14 +202,16 @@ describe('resize gesture', () => {
     })
     // nw: dragging inward shrinks width/height and moves x/y by the same
     // delta, so the se corner (x + width, y + height) stays fixed at (110, 60).
-    expect(result.command).toEqual({
-      kind: 'resize-node',
-      id: 'a',
-      x: 30,
-      y: 20,
-      width: 80,
-      height: 40,
-    })
+    expect(result.commands).toEqual([
+      {
+        kind: 'resize-node',
+        id: 'a',
+        x: 30,
+        y: 20,
+        width: 80,
+        height: 40,
+      },
+    ])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -224,7 +228,7 @@ describe('resize gesture', () => {
       type: 'pointerup',
       point: { x: 110, y: 60 },
     })
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -244,14 +248,16 @@ describe('resize gesture', () => {
       type: 'pointerup',
       point: { x: 210, y: 210 },
     })
-    expect(result.command).toEqual({
-      kind: 'resize-node',
-      id: 'a',
-      x: 110,
-      y: 60,
-      width: 0,
-      height: 0,
-    })
+    expect(result.commands).toEqual([
+      {
+        kind: 'resize-node',
+        id: 'a',
+        x: 110,
+        y: 60,
+        width: 0,
+        height: 0,
+      },
+    ])
     expect(result.state.kind).toBe('idle')
   })
 })
@@ -267,7 +273,7 @@ describe('resize handle miss', () => {
       box: { x: 10, y: 10, width: 100, height: 50 },
     })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 })
 
@@ -289,14 +295,16 @@ describe('connect gesture', () => {
       result.state,
       c,
       { type: 'pointerup', point: { x: 250, y: 30 }, targetNodeId: 'b' },
-      { createEdgeId: () => 'edge-1' },
+      { createId: () => 'edge-1' },
     )
-    expect(result.command).toEqual({
-      kind: 'connect-nodes',
-      edgeId: 'edge-1',
-      fromNode: 'a',
-      toNode: 'b',
-    })
+    expect(result.commands).toEqual([
+      {
+        kind: 'connect-nodes',
+        edgeId: 'edge-1',
+        fromNode: 'a',
+        toNode: 'b',
+      },
+    ])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -307,7 +315,7 @@ describe('connect gesture', () => {
       nodeId: 'a',
     })
     result = reduceGesture(result.state, c, { type: 'pointerup', point: { x: 500, y: 500 } })
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -322,7 +330,7 @@ describe('connect gesture', () => {
       point: { x: 50, y: 30 },
       targetNodeId: 'a',
     })
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
     expect(result.state.kind).toBe('idle')
   })
 })
@@ -336,7 +344,7 @@ describe('text-edit gesture', () => {
       text: 'hi',
     })
     expect(result.state).toEqual({ kind: 'editing-text', nodeId: 'a', pendingText: 'hi' })
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('commit-text-edit emits set-text and returns to idle', () => {
@@ -350,7 +358,7 @@ describe('text-edit gesture', () => {
       type: 'commit-text-edit',
       text: 'updated',
     })
-    expect(result.command).toEqual({ kind: 'set-text', id: 'a', text: 'updated' })
+    expect(result.commands).toEqual([{ kind: 'set-text', id: 'a', text: 'updated' }])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -373,9 +381,30 @@ describe('text-edit gesture', () => {
       nodeId: 'b',
       point: { x: 250, y: 30 },
     })
-    expect(result.command).toEqual({ kind: 'set-text', id: 'a', text: 'edited' })
+    expect(result.commands).toEqual([{ kind: 'set-text', id: 'a', text: 'edited' }])
     expect(result.state.kind).toBe('moving')
     expect(result.selectedId).toBe('b')
+  })
+
+  it('a pointerdown on empty canvas while a text edit is open commits the pending text (click-away commits)', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const updated = reduceGesture(editing.state, c, { type: 'update-text-edit', text: 'edited' })
+    const result = reduceGesture(updated.state, c, { type: 'pointerdown-empty' })
+    expect(result.commands).toEqual([{ kind: 'set-text', id: 'a', text: 'edited' }])
+    expect(result.state.kind).toBe('idle')
+    expect(result.selectedId).toBeNull()
+  })
+
+  it('pointerdown-empty outside a text edit emits no command', () => {
+    const c = canvas()
+    const result = reduceGesture(createIdleState(), c, { type: 'pointerdown-empty' })
+    expect(result.commands).toEqual([])
+    expect(result.selectedId).toBeNull()
   })
 
   it('commit-text-edit outside editing-text state is a no-op', () => {
@@ -384,7 +413,7 @@ describe('text-edit gesture', () => {
       type: 'commit-text-edit',
       text: 'updated',
     })
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
     expect(result.state.kind).toBe('idle')
   })
 
@@ -397,7 +426,7 @@ describe('text-edit gesture', () => {
     })
     const result = reduceGesture(editing.state, c, { type: 'cancel-text-edit' })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('an externally-originated canvas-replaced closes an open text edit without committing its pending text', () => {
@@ -414,7 +443,7 @@ describe('text-edit gesture', () => {
       origin: 'external',
     })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
   })
 
   it('aborts an in-flight text edit when the node type changes mid-edit (canvas-replaced)', () => {
@@ -430,6 +459,82 @@ describe('text-edit gesture', () => {
     }
     const result = reduceGesture(editing.state, c, { type: 'canvas-replaced', canvas: replaced })
     expect(result.state.kind).toBe('idle')
-    expect(result.command).toBeUndefined()
+    expect(result.commands).toEqual([])
+  })
+})
+
+describe('dblclick-empty (create-node)', () => {
+  it('creates a text node centered on the point, selects it, and opens it for typing immediately', () => {
+    const c = canvas()
+    const result = reduceGesture(
+      createIdleState(),
+      c,
+      { type: 'dblclick-empty', point: { x: 300, y: 200 } },
+      { createId: () => 'new-node' },
+    )
+    expect(result.commands[0]).toMatchObject({
+      kind: 'create-node',
+      node: { id: 'new-node', type: 'text', text: '' },
+    })
+    expect(result.selectedId).toBe('new-node')
+    expect(result.state).toEqual({
+      kind: 'editing-text',
+      nodeId: 'new-node',
+      pendingText: '',
+    })
+  })
+
+  it('while a text edit is open, first commits the pending text, then creates the new node', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const updated = reduceGesture(editing.state, c, { type: 'update-text-edit', text: 'edited' })
+    const result = reduceGesture(
+      updated.state,
+      c,
+      { type: 'dblclick-empty', point: { x: 300, y: 200 } },
+      { createId: () => 'new-node' },
+    )
+    // withPendingTextCommit prepends the pending set-text ahead of the
+    // event's own commands (ordered commit-then-create) — neither command is
+    // dropped, and the old node's text is never lost.
+    expect(result.commands).toEqual([
+      { kind: 'set-text', id: 'a', text: 'edited' },
+      { kind: 'create-node', node: expect.objectContaining({ id: 'new-node', text: '' }) },
+    ])
+    expect(result.state).toEqual({
+      kind: 'editing-text',
+      nodeId: 'new-node',
+      pendingText: '',
+    })
+  })
+})
+
+describe('delete-selection', () => {
+  it('emits delete-node and clears selection while idle', () => {
+    const c = canvas()
+    const result = reduceGesture(createIdleState(), c, {
+      type: 'delete-selection',
+      nodeId: 'a',
+    })
+    expect(result.commands).toEqual([{ kind: 'delete-node', id: 'a' }])
+    expect(result.selectedId).toBeNull()
+    expect(result.state.kind).toBe('idle')
+  })
+
+  it('emits NO command while a text edit is open, leaving state untouched (Backspace must not delete while typing)', () => {
+    const c = canvas()
+    const editing = reduceGesture(createIdleState(), c, {
+      type: 'start-text-edit',
+      nodeId: 'a',
+      text: 'hi',
+    })
+    const result = reduceGesture(editing.state, c, { type: 'delete-selection', nodeId: 'a' })
+    expect(result.commands).toEqual([])
+    expect(result.state).toEqual(editing.state)
+    expect(result.selectedId).toBeUndefined()
   })
 })

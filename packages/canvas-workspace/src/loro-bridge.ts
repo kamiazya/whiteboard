@@ -113,6 +113,42 @@ export function writeSpatialEdge(doc: LoroDoc, edge: CanvasEdge): void {
   doc.commit()
 }
 
+/**
+ * Deletes one node's LoroMap entry AND every edge whose fromNode/toNode
+ * referenced it, in a single `doc.commit()` — a cascading edge-integrity
+ * invariant this bridge enforces so `readSpatialCanvas` never returns an
+ * edge with a dangling endpoint. One commit (not one commit per removal)
+ * is what lets a single `UndoManager` step restore the node together with
+ * its edges, rather than leaving one half of the deletion undone.
+ * Idempotent and a no-op (no commit) for an id absent from the doc.
+ */
+export function deleteSpatialNode(doc: LoroDoc, nodeId: string): void {
+  const nodesMap = doc.getMap(NODES_KEY)
+  const edgesMap = doc.getMap(EDGES_KEY)
+  if (!nodesMap.keys().includes(nodeId)) return
+
+  nodesMap.delete(nodeId)
+  for (const edgeId of edgesMap.keys()) {
+    const raw = edgesMap.get(edgeId)
+    const parsed = canvasEdgeSchema.safeParse(raw)
+    if (parsed.success && (parsed.data.fromNode === nodeId || parsed.data.toNode === nodeId)) {
+      edgesMap.delete(edgeId)
+    }
+  }
+  doc.commit()
+}
+
+/**
+ * Edge counterpart to `deleteSpatialNode` — removes exactly one edge, no
+ * cascade needed since an edge has no dependents of its own.
+ */
+export function deleteSpatialEdge(doc: LoroDoc, edgeId: string): void {
+  const edgesMap = doc.getMap(EDGES_KEY)
+  if (!edgesMap.keys().includes(edgeId)) return
+  edgesMap.delete(edgeId)
+  doc.commit()
+}
+
 export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)

@@ -1,6 +1,6 @@
 /**
  * Pure gesture state machine: pointer/text-edit events in, next state plus
- * an optional `EditorCommand` out. Keeps all drag math out of React so it
+ * zero or more `EditorCommand`s out. Keeps all drag math out of React so it
  * can be unit-tested without a DOM.
  *
  * Canvas-prop-change-during-gesture policy (this component is controlled,
@@ -19,14 +19,15 @@
  *
  * Open-text-edit-vs-other-gesture policy: `editing-text` carries the
  * in-progress `pendingText` (kept current via `update-text-edit`, one per
- * keystroke). A `pointerdown`/`pointerdown-handle`/`pointerdown-connect`
- * arriving while a text edit is open COMMITS that pending text — emits
- * `set-text` — and then transitions into the requested gesture, matching
- * every text editor's click-away-commits behavior (and this component's
- * own blur-commits convention in `TextNodeEditor`). Escape
- * (`cancel-text-edit`) remains the only explicit discard.
+ * keystroke). A `pointerdown`/`pointerdown-handle`/`pointerdown-connect`/
+ * `pointerdown-empty`/`dblclick-empty` arriving while a text edit is open
+ * COMMITS that pending text — emits `set-text` — and then proceeds with the
+ * requested gesture, matching every text editor's click-away-commits
+ * behavior (and this component's own blur-commits convention in
+ * `TextNodeEditor`). Escape (`cancel-text-edit`) remains the only explicit
+ * discard.
  */
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { EditorCommand } from './commands.js'
 import { type ResizeHandleKind, resizeBoxByDelta } from './geometry.js'
 import type { Point } from './viewport.js'
@@ -86,6 +87,8 @@ export type GestureEvent =
     }
   | { readonly type: 'pointerdown-connect'; readonly nodeId: string }
   | { readonly type: 'pointerdown-empty' }
+  | { readonly type: 'dblclick-empty'; readonly point: Point }
+  | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
   | { readonly type: 'pointerup'; readonly point: Point; readonly targetNodeId?: string }
   | { readonly type: 'pointercancel' }
@@ -111,12 +114,18 @@ export type GestureEvent =
 
 export interface GestureResult {
   readonly state: GestureState
-  readonly command?: EditorCommand
+  /** Ordered — applied left-to-right by the caller. Empty when nothing mutates the canvas. */
+  readonly commands: readonly EditorCommand[]
   /** `string` selects a node, `null` clears selection, `undefined` = no change. */
   readonly selectedId?: string | null
 }
 
-const idle: GestureResult = { state: { kind: 'idle' } }
+const idle: GestureResult = { state: { kind: 'idle' }, commands: [] }
+
+/** A result that only advances the gesture state: no canvas mutation, no selection change. */
+function stateOnly(state: GestureState): GestureResult {
+  return { state, commands: [] }
+}
 
 function findNode(canvas: SpatialCanvas, id: string) {
   return canvas.nodes.find((node) => node.id === id)
@@ -138,18 +147,26 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
 }
 
 /**
- * When `prevState` is an open text edit, folds its `pendingText` into
- * `result` as a `set-text` command — see the open-text-edit-vs-other-gesture
- * policy documented at the top of this file. `result.command` is always
- * `undefined` for the three pointerdown variants this is applied to, so
- * there is nothing to merge with, only to add.
+ * When `prevState` is an open text edit, PREPENDS a `set-text` command
+ * carrying its `pendingText` ahead of `result`'s own commands — see the
+ * open-text-edit-vs-other-gesture policy documented at the top of this
+ * file.
+ *
+ * It must PREPEND rather than overwrite, because the arms this wraps can
+ * already carry a command of their own — `dblclick-empty` carries
+ * `create-node`. Overwriting drops that one, leaving the returned gesture
+ * state referencing a node the canvas never received. Prepending also fixes
+ * the order: the text belongs to the node being left, so it has to commit
+ * before whatever the new gesture does.
  */
 function withPendingTextCommit(prevState: GestureState, result: GestureResult): GestureResult {
   if (prevState.kind !== 'editing-text') return result
-  return {
-    ...result,
-    command: { kind: 'set-text', id: prevState.nodeId, text: prevState.pendingText },
+  const commit: EditorCommand = {
+    kind: 'set-text',
+    id: prevState.nodeId,
+    text: prevState.pendingText,
   }
+  return { ...result, commands: [commit, ...result.commands] }
 }
 
 function reduceCanvasReplaced(
@@ -161,7 +178,7 @@ function reduceCanvasReplaced(
   if (targetsStillValid(state, replacement)) {
     // Continue the gesture unchanged — the commit still uses the start
     // snapshot captured in `state`, never the replacement's coordinates.
-    return { state }
+    return stateOnly(state)
   }
   return idle
 }
@@ -181,6 +198,7 @@ function reducePointerDown(
       startX: node.x,
       startY: node.y,
     },
+    commands: [],
     selectedId: event.nodeId,
   }
 }
@@ -191,16 +209,14 @@ function reducePointerDownHandle(
 ): GestureResult {
   const node = findNode(canvas, event.nodeId)
   if (node === undefined) return idle
-  return {
-    state: {
-      kind: 'resizing',
-      nodeId: event.nodeId,
-      startType: node.type,
-      handle: event.handle,
-      startPoint: event.point,
-      startBox: event.box,
-    },
-  }
+  return stateOnly({
+    kind: 'resizing',
+    nodeId: event.nodeId,
+    startType: node.type,
+    handle: event.handle,
+    startPoint: event.point,
+    startBox: event.box,
+  })
 }
 
 function reducePointerUpMoving(
@@ -212,7 +228,7 @@ function reducePointerUpMoving(
   if (dx === 0 && dy === 0) return idle
   return {
     state: { kind: 'idle' },
-    command: { kind: 'move-node', id: state.nodeId, x: state.startX + dx, y: state.startY + dy },
+    commands: [{ kind: 'move-node', id: state.nodeId, x: state.startX + dx, y: state.startY + dy }],
   }
 }
 
@@ -232,40 +248,72 @@ function reducePointerUpResizing(
   if (isUnchanged) return idle
   return {
     state: { kind: 'idle' },
-    command: {
-      kind: 'resize-node',
-      id: state.nodeId,
-      x: nextBox.x,
-      y: nextBox.y,
-      width: nextBox.width,
-      height: nextBox.height,
-    },
+    commands: [
+      {
+        kind: 'resize-node',
+        id: state.nodeId,
+        x: nextBox.x,
+        y: nextBox.y,
+        width: nextBox.width,
+        height: nextBox.height,
+      },
+    ],
   }
 }
 
 function reducePointerUpConnecting(
   state: ConnectSnapshot,
   event: Extract<GestureEvent, { type: 'pointerup' }>,
-  createEdgeId: () => string,
+  createId: () => string,
 ): GestureResult {
   if (event.targetNodeId === undefined || event.targetNodeId === state.fromNodeId) return idle
   return {
     state: { kind: 'idle' },
-    command: {
-      kind: 'connect-nodes',
-      edgeId: createEdgeId(),
-      fromNode: state.fromNodeId,
-      toNode: event.targetNodeId,
-    },
+    commands: [
+      {
+        kind: 'connect-nodes',
+        edgeId: createId(),
+        fromNode: state.fromNodeId,
+        toNode: event.targetNodeId,
+      },
+    ],
+  }
+}
+
+/** Default geometry (canvas-space px) for a node created via dblclick-empty/Add-note. */
+export const NEW_NODE_WIDTH = 200
+export const NEW_NODE_HEIGHT = 100
+
+/**
+ * Builds the freshly-created text node, centered on `point`, plus the
+ * `create-node` command/state transition that opens it for typing
+ * immediately — a node you must double-click again to type into is a worse
+ * affordance than Excalidraw's.
+ */
+function reduceCreateTextNodeAt(point: Point, createId: () => string): GestureResult {
+  const id = createId()
+  const node: SpatialNode = {
+    id,
+    type: 'text',
+    x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+    y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
+    width: NEW_NODE_WIDTH,
+    height: NEW_NODE_HEIGHT,
+    text: '',
+  }
+  return {
+    state: { kind: 'editing-text', nodeId: id, pendingText: '' },
+    commands: [{ kind: 'create-node', node }],
+    selectedId: id,
   }
 }
 
 export interface ReduceGestureOptions {
-  /** Injection seam for deterministic tests; defaults to crypto.randomUUID. */
-  readonly createEdgeId?: () => string
+  /** Injection seam for deterministic tests; defaults to crypto.randomUUID. Used for both node and edge ids. */
+  readonly createId?: () => string
 }
 
-const defaultCreateEdgeId = () =>
+const defaultCreateId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : String(Math.random())
@@ -276,7 +324,7 @@ export function reduceGesture(
   event: GestureEvent,
   options: ReduceGestureOptions = {},
 ): GestureResult {
-  const createEdgeId = options.createEdgeId ?? defaultCreateEdgeId
+  const createId = options.createId ?? defaultCreateId
 
   switch (event.type) {
     case 'canvas-replaced':
@@ -285,25 +333,39 @@ export function reduceGesture(
     case 'cancel-text-edit':
       return idle
     case 'pointerdown-empty':
-      return { state: { kind: 'idle' }, selectedId: null }
+      return withPendingTextCommit(state, {
+        state: { kind: 'idle' },
+        commands: [],
+        selectedId: null,
+      })
+    case 'dblclick-empty':
+      return withPendingTextCommit(state, reduceCreateTextNodeAt(event.point, createId))
+    case 'delete-selection':
+      if (state.kind === 'editing-text') return stateOnly(state)
+      return {
+        state: { kind: 'idle' },
+        commands: [{ kind: 'delete-node', id: event.nodeId }],
+        selectedId: null,
+      }
     case 'pointerdown':
       return withPendingTextCommit(state, reducePointerDown(event, canvas))
     case 'pointerdown-handle':
       return withPendingTextCommit(state, reducePointerDownHandle(event, canvas))
     case 'pointerdown-connect':
-      return withPendingTextCommit(state, {
-        state: { kind: 'connecting', fromNodeId: event.nodeId },
-      })
+      return withPendingTextCommit(
+        state,
+        stateOnly({ kind: 'connecting', fromNodeId: event.nodeId }),
+      )
     case 'start-text-edit':
-      return { state: { kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text } }
+      return stateOnly({ kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text })
     case 'update-text-edit':
-      if (state.kind !== 'editing-text') return { state }
-      return { state: { ...state, pendingText: event.text } }
+      if (state.kind !== 'editing-text') return stateOnly(state)
+      return stateOnly({ ...state, pendingText: event.text })
     case 'commit-text-edit':
       if (state.kind !== 'editing-text') return idle
       return {
         state: { kind: 'idle' },
-        command: { kind: 'set-text', id: state.nodeId, text: event.text },
+        commands: [{ kind: 'set-text', id: state.nodeId, text: event.text }],
       }
     case 'pointermove':
       // Pure state passthrough: the reducer recomputes the commit from
@@ -311,7 +373,7 @@ export function reduceGesture(
       // to be stored on the state for move/resize. Connecting has no other
       // state to update either (the in-flight line is component-rendered from
       // the raw pointer position, not reducer state).
-      return { state }
+      return stateOnly(state)
     case 'pointerup':
       switch (state.kind) {
         case 'moving':
@@ -319,7 +381,7 @@ export function reduceGesture(
         case 'resizing':
           return reducePointerUpResizing(state, event)
         case 'connecting':
-          return reducePointerUpConnecting(state, event, createEdgeId)
+          return reducePointerUpConnecting(state, event, createId)
         default:
           return idle
       }

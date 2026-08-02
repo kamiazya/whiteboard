@@ -10,6 +10,8 @@ export {
 } from './derive-index.js'
 export { extractBacklinks } from './extract-backlinks.js'
 export {
+  deleteSpatialEdge,
+  deleteSpatialNode,
   readFacets,
   readSpatialCanvas,
   writeFacets,

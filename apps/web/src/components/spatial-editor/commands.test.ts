@@ -115,4 +115,59 @@ describe('applyCommand', () => {
     const next = applyCommand(canvas, { kind: 'move-node', id: 'a', x: 5, y: 5 })
     expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
   })
+
+  it('create-node appends the node, leaving the input canvas untouched', () => {
+    const canvas = baseCanvas()
+    const snapshot = structuredClone(canvas)
+    const newNode = {
+      id: 'c',
+      type: 'text',
+      x: 400,
+      y: 0,
+      width: 100,
+      height: 50,
+      text: '',
+    } as const
+    const next = applyCommand(canvas, { kind: 'create-node', node: newNode })
+
+    expect(next).not.toBe(canvas)
+    expect(next.nodes).toEqual([...canvas.nodes, newNode])
+    expect(canvas).toEqual(snapshot)
+    expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
+  })
+
+  it('create-node with an id already present is a no-op returning the input canvas', () => {
+    const canvas = baseCanvas()
+    const dup = { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'dup' } as const
+    const next = applyCommand(canvas, { kind: 'create-node', node: dup })
+    expect(next).toBe(canvas)
+  })
+
+  it('delete-node removes the node and every edge referencing it, leaving the rest untouched', () => {
+    const connected = applyCommand(baseCanvas(), {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+    const next = applyCommand(connected, { kind: 'delete-node', id: 'a' })
+
+    expect(next.nodes).toEqual([connected.nodes[1]])
+    expect(next.edges).toEqual([])
+    expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
+  })
+
+  it('delete-node with a missing id returns the input canvas unchanged', () => {
+    const canvas = baseCanvas()
+    const next = applyCommand(canvas, { kind: 'delete-node', id: 'missing' })
+    expect(next).toBe(canvas)
+  })
+
+  it('create then delete the same node is the identity (up to deep equality)', () => {
+    const canvas = baseCanvas()
+    const node = { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' } as const
+    const created = applyCommand(canvas, { kind: 'create-node', node })
+    const deleted = applyCommand(created, { kind: 'delete-node', id: node.id })
+    expect(deleted).toEqual(canvas)
+  })
 })

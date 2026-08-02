@@ -33,6 +33,18 @@ afterEach(() => {
   cleanup()
 })
 
+describe('Add note button', () => {
+  it('exists as a real, accessibly-named button reachable without a selection', () => {
+    const { getByTestId } = render(
+      <SpatialEditor canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+    )
+    const button = getByTestId('add-node-button') as HTMLButtonElement
+    expect(button.tagName).toBe('BUTTON')
+    expect(button.textContent).toBe('Add note')
+    expect(button.disabled).toBe(false)
+  })
+})
+
 describe('SpatialEditorHandle', () => {
   it('setViewport applies the given viewport to the rendered transform', () => {
     const ref = createRef<SpatialEditorHandle>()

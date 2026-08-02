@@ -88,3 +88,13 @@ export function textNodeCanvas(id: string, x: number, y: number): SpatialCanvas 
 export function setTextCommand(id: string): EditorCommand {
   return { kind: 'set-text', id, text: 'x' }
 }
+
+/** The command a real SpatialEditor would report when creating `textNodeCanvas(id, x, y)`'s node. */
+export function createNodeCommand(id: string, x: number, y: number): EditorCommand {
+  return { kind: 'create-node', node: textNodeCanvas(id, x, y).nodes[0]! }
+}
+
+/** The command a real SpatialEditor would report when deleting the node with `id`. */
+export function deleteNodeCommand(id: string): EditorCommand {
+  return { kind: 'delete-node', id }
+}
