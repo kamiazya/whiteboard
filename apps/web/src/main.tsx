@@ -1,6 +1,10 @@
 // Must run before any module that pulls in @excalidraw/excalidraw.
 import './excalidraw-asset-path.js'
-import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer'
+// Deliberately the narrow subpath, not the package barrel: the barrel
+// re-exports CanvasViewer and the scene codec, which drag canvas-render and
+// canvas-codec's remark pipeline onto the critical path for a module that
+// only needs the font loader. The bundle-size gate fails if this regresses.
+import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
