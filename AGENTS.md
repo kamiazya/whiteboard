@@ -131,6 +131,19 @@ investigate. Output goes to `tmp/logs/mcp-http-dev.log`. If hooks are
 disabled or the project is not trusted yet, run `pnpm mcp:http:dev`
 manually in another terminal before opening the repo.
 
+The probe-decide-spawn sequence is mutually exclusive across
+processes: two hooks starting close together (a new editor session
+plus a `new-worktree.mjs` run, say) acquire an exclusive, atomically-
+created lock file (`<dataDir>/dev-daemon-spawn.lock`, alongside the
+`dev-daemon.json` identity marker — per-worktree exactly like the
+derived port) before probing the port, so only one of them ever
+spawns. The loser doesn't exit or spawn a competitor — it waits for
+the winner's daemon to become reachable and exits 0 once it answers,
+because the developer's session just needs a working daemon regardless
+of who started it. A lock abandoned by a crashed hook self-heals: it
+is stolen once its recorded pid is dead, or once it exceeds
+`WHITEBOARD_DEV_SPAWN_LOCK_STALE_MS` (default 45s).
+
 With HTTP transport every client reload connects to the same long-lived
 daemon, picking up source changes immediately and avoiding the stale-daemon
 reuse that the old stdio + daemon-registry path was prone to.

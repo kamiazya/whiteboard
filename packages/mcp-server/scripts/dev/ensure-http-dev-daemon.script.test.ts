@@ -8,7 +8,15 @@
 // No .cmd counterpart exists for the shim, so this suite only runs on POSIX.
 import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -118,6 +126,9 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
     token: string
     dataDir: string
     invokedSentinelPath: string
+    invokedSentinelDir: string
+    lockPath: string
+    countSpawns: () => number
     env: NodeJS.ProcessEnv
   }> {
     const port = await reserveFreePort()
@@ -126,12 +137,19 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
     const shimDir = writePnpmShimDir()
     cleanupDirs.push(dataDir, shimDir)
     const invokedSentinelPath = join(dataDir, 'invoked-sentinel.json')
+    const invokedSentinelDir = join(dataDir, 'invoked-sentinels')
+    const lockPath = join(dataDir, 'dev-daemon-spawn.lock')
+    const countSpawns = () =>
+      existsSync(invokedSentinelDir) ? readdirSync(invokedSentinelDir).length : 0
 
     return {
       port,
       token,
       dataDir,
       invokedSentinelPath,
+      invokedSentinelDir,
+      lockPath,
+      countSpawns,
       env: {
         ...process.env,
         PATH: `${shimDir}:${process.env.PATH ?? ''}`,
@@ -139,7 +157,16 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
         WHITEBOARD_TOKEN: token,
         WHITEBOARD_DATA_DIR: dataDir,
         FAKE_PNPM_INVOKED_SENTINEL: invokedSentinelPath,
+        FAKE_PNPM_INVOKED_SENTINEL_DIR: invokedSentinelDir,
       },
+    }
+  }
+
+  function killAllSpawnedPids(invokedSentinelDir: string) {
+    if (!existsSync(invokedSentinelDir)) return
+    for (const file of readdirSync(invokedSentinelDir)) {
+      const { pid } = readSentinel<{ pid: number }>(join(invokedSentinelDir, file))
+      killQuietly(pid)
     }
   }
 
@@ -197,7 +224,7 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
   itPosix(
     'is a no-op when our authenticated daemon is already up with a matching identity marker (fast path preserved)',
     async () => {
-      const { port, token, dataDir, invokedSentinelPath, env } = await prepareHookRun()
+      const { port, token, dataDir, invokedSentinelPath, lockPath, env } = await prepareHookRun()
 
       const responder = await startFakeMcpResponder({ port, token, host: HOST })
       cleanupResponder = responder.close
@@ -215,6 +242,60 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
 
       expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
       expect(() => readFileSync(invokedSentinelPath, 'utf8')).toThrow()
+      // The fast path must never touch the lock: no spawn decision was made.
+      expect(existsSync(lockPath)).toBe(false)
+    },
+  )
+
+  itPosix(
+    'THE RED TEST: two concurrent hooks against the same free port produce exactly one spawn, both exit 0',
+    async () => {
+      const { invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+
+      const runEnv = {
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
+        FAKE_PNPM_BIND_DELAY_MS: '500',
+      }
+
+      const [first, second] = await Promise.all([runHook(runEnv), runHook(runEnv)])
+
+      expect(first.exitCode, `hook 1 stderr:\n${first.stderr}`).toBe(0)
+      expect(second.exitCode, `hook 2 stderr:\n${second.stderr}`).toBe(0)
+      // The discriminating assertion: exactly one process was ever spawned.
+      // On unpatched main, both hooks observe the port free and both spawn.
+      expect(countSpawns()).toBe(1)
+
+      killAllSpawnedPids(invokedSentinelDir)
+    },
+  )
+
+  itPosix(
+    'a stale lock (dead recorded pid) does not block a spawn, and the hook still terminates within its bound',
+    async () => {
+      const { lockPath, invokedSentinelDir, countSpawns, env } = await prepareHookRun()
+
+      // A definitely-dead pid: reserve one by starting and killing a
+      // throwaway child, so this isn't a real live pid on the test machine.
+      const throwaway = spawn(process.execPath, ['-e', ''])
+      const deadPid = await new Promise<number>((resolvePid) => {
+        throwaway.once('exit', () => resolvePid(throwaway.pid as number))
+      })
+
+      writeFileSync(lockPath, JSON.stringify({ pid: deadPid, startedAt: new Date().toISOString() }))
+
+      const startedAt = Date.now()
+      const { exitCode, stderr } = await runHook({
+        ...env,
+        WHITEBOARD_DEV_READY_TIMEOUT_MS: '8000',
+      })
+      const elapsedMs = Date.now() - startedAt
+
+      expect(exitCode, `hook stderr:\n${stderr}`).toBe(0)
+      expect(elapsedMs).toBeLessThan(6_000)
+      expect(countSpawns()).toBe(1)
+
+      killAllSpawnedPids(invokedSentinelDir)
     },
   )
 })
