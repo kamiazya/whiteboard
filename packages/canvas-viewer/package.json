@@ -33,7 +33,7 @@
     "@kamiazya/whiteboard-canvas-codec": "workspace:*",
     "@kamiazya/whiteboard-canvas-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
-    "@modelcontextprotocol/ext-apps": "1.7.4",
+    "@modelcontextprotocol/ext-apps": "1.7.5",
     "react": "catalog:",
     "react-dom": "catalog:",
     "zod": "catalog:"
