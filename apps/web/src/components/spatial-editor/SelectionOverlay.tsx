@@ -40,6 +40,25 @@ const HANDLE_LABEL: Record<ResizeHandleKind, string> = {
 }
 const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 
+/**
+ * One connect handle per side. Every handle starts the SAME connecting
+ * gesture — the committed edge's path is routed from geometry at layout
+ * time, so the chosen side is ergonomic freedom, not persisted data. The
+ * right handle keeps the historical un-suffixed testid.
+ */
+type SideSpec = {
+  readonly kind: 'n' | 'e' | 's' | 'w'
+  readonly label: string
+  readonly cx: (box: Box, size: number) => number
+  readonly cy: (box: Box, size: number) => number
+}
+const CONNECT_SIDES: readonly SideSpec[] = [
+  { kind: 'n', label: 'top', cx: (b) => b.x + b.width / 2, cy: (b, s) => b.y - s },
+  { kind: 'e', label: 'right', cx: (b, s) => b.x + b.width + s, cy: (b) => b.y + b.height / 2 },
+  { kind: 's', label: 'bottom', cx: (b) => b.x + b.width / 2, cy: (b, s) => b.y + b.height + s },
+  { kind: 'w', label: 'left', cx: (b, s) => b.x - s, cy: (b) => b.y + b.height / 2 },
+]
+
 export function SelectionOverlay({
   box,
   zoom,
@@ -102,27 +121,30 @@ export function SelectionOverlay({
           }}
         />
       ))}
-      {/* biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand. */}
-      <circle
-        data-testid="connect-handle"
-        role="button"
-        tabIndex={0}
-        aria-label="Connect to another node"
-        cx={box.x + box.width + connectHandleSize}
-        cy={box.y + box.height / 2}
-        r={connectHandleSize / 2}
-        fill={SELECTION_STROKE}
-        style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
-        onPointerDown={(e) => {
-          if (e.button !== 0) return
-          e.stopPropagation()
-          onConnectPointerDown(e)
-        }}
-        onKeyDown={(e) => {
-          if (onConnectKeyDown === undefined || (e.key !== 'Enter' && e.key !== ' ')) return
-          onConnectKeyDown(e)
-        }}
-      />
+      {CONNECT_SIDES.map((side) => (
+        // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
+        <circle
+          key={side.kind}
+          data-testid={side.kind === 'e' ? 'connect-handle' : `connect-handle-${side.kind}`}
+          role="button"
+          tabIndex={0}
+          aria-label={`Connect to another node (from the ${side.label} side)`}
+          cx={side.cx(box, connectHandleSize)}
+          cy={side.cy(box, connectHandleSize)}
+          r={connectHandleSize / 2}
+          fill={SELECTION_STROKE}
+          style={{ pointerEvents: 'auto', cursor: 'crosshair' }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            e.stopPropagation()
+            onConnectPointerDown(e)
+          }}
+          onKeyDown={(e) => {
+            if (onConnectKeyDown === undefined || (e.key !== 'Enter' && e.key !== ' ')) return
+            onConnectKeyDown(e)
+          }}
+        />
+      ))}
       {onEditRequest !== undefined && (
         // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
         <g
