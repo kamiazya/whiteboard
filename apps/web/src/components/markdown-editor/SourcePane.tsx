@@ -1,7 +1,33 @@
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
-import { EditorState } from '@codemirror/state'
-import { EditorView } from '@codemirror/view'
+import { EditorState, EditorSelection, type StateCommand } from '@codemirror/state'
+import { EditorView, keymap } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
+
+// Wraps each selection range in `delimiter` (Mod-b -> **, Mod-i -> *). A
+// collapsed selection inserts an empty pair and parks the cursor between
+// the delimiters so the next keystroke lands inside. Toggling (detecting
+// an already-wrapped range and unwrapping) is deliberately not attempted:
+// markdown emphasis nesting makes reliable detection lexer work, and a
+// wrong unwrap corrupts text — insert-only is predictable.
+function wrapSelectionWith(delimiter: string): StateCommand {
+  return ({ state, dispatch }) => {
+    const changes = state.changeByRange((range) => ({
+      changes: [
+        { from: range.from, insert: delimiter },
+        { from: range.to, insert: delimiter },
+      ],
+      range: EditorSelection.range(range.from + delimiter.length, range.to + delimiter.length),
+    }))
+    dispatch(state.update(changes, { scrollIntoView: true, userEvent: 'input' }))
+    return true
+  }
+}
+
+const styleKeymap = [
+  { key: 'Mod-b', run: wrapSelectionWith('**') },
+  { key: 'Mod-i', run: wrapSelectionWith('*') },
+]
 
 export interface SourcePaneProps {
   value: string
@@ -31,6 +57,22 @@ export function SourcePane({ value, onChange, className }: SourcePaneProps) {
       doc: value,
       extensions: [
         markdown(),
+        history(),
+        // styleKeymap precedes defaultKeymap so Mod-b/Mod-i win over any
+        // default binding; indentWithTab keeps Tab in the editor (Escape
+        // then Tab remains the keyboard escape hatch, per CodeMirror's
+        // own accessibility guidance).
+        keymap.of([...styleKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        // Prose, not code: long paragraphs soft-wrap instead of growing a
+        // horizontal scrollbar.
+        EditorView.lineWrapping,
+        // Fill the host pane instead of sizing to content: without a
+        // bounded height the scroller never scrolls and the pane collapses
+        // to its padding inside a flex row.
+        EditorView.theme({
+          '&': { height: '100%', width: '100%' },
+          '.cm-scroller': { overflow: 'auto' },
+        }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChangeRef.current(update.state.doc.toString())
@@ -64,5 +106,12 @@ export function SourcePane({ value, onChange, className }: SourcePaneProps) {
     })
   }, [value])
 
-  return <div ref={hostRef} className={className} data-testid="markdown-source-pane" />
+  return (
+    <div
+      ref={hostRef}
+      className={className}
+      style={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden' }}
+      data-testid="markdown-source-pane"
+    />
+  )
 }

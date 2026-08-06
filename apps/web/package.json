@@ -20,6 +20,7 @@
     "smoke:pwa-precache": "node scripts/check-pwa-precache.mjs"
   },
   "dependencies": {
+    "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.1",
     "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.43.6",
