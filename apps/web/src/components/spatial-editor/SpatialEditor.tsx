@@ -39,6 +39,7 @@ import {
   useState,
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { ContextMenu } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -185,6 +186,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * ~30ms on an 80-node canvas — far past a frame budget).
      */
     const [livePoint, setLivePoint] = useState<Point | null>(null)
+    /** Open right-click menu: screen position (root-relative) + hit target. */
+    const [contextMenu, setContextMenu] = useState<{
+      x: number
+      y: number
+      nodeId: string | undefined
+      point: Point
+    } | null>(null)
     const isPanningRef = useRef(false)
     /** Last primary press for double-press detection: logical target + time. */
     const lastPressRef = useRef<{ key: string; at: number } | null>(null)
@@ -432,6 +440,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       )
     }
 
+    const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isOverlayEvent(e)) return
+      // Replace the browser menu with the object's own action menu.
+      e.preventDefault()
+      const root = rootRef.current
+      if (root === null) return
+      const screenPoint = clientPointToRootLocal(e, root)
+      const point = screenToCanvas(screenPoint, viewport)
+      const hitId = hitTest(boxes, point)
+      if (hitId !== undefined) setSelectedId(hitId)
+      setContextMenu({ x: screenPoint.x, y: screenPoint.y, nodeId: hitId, point })
+    }
+
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
@@ -662,6 +683,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           touchAction: 'none',
         }}
         onPointerDown={handlePointerDown}
+        onContextMenu={handleContextMenu}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
@@ -673,6 +695,50 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
         <ToolPalette onCreateNode={createNodeAtViewportCenter} />
+        {contextMenu !== null && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+            items={(() => {
+              const node =
+                contextMenu.nodeId === undefined
+                  ? undefined
+                  : canvas.nodes.find((n) => n.id === contextMenu.nodeId)
+              if (node === undefined) {
+                return [{ label: 'Add note here', onSelect: () => createNodeAt(contextMenu.point) }]
+              }
+              const items = []
+              if (node.type === 'text') {
+                items.push({
+                  label: 'Edit text',
+                  onSelect: () => {
+                    applyResult(
+                      reduceGesture(gestureState, canvas, {
+                        type: 'start-text-edit',
+                        nodeId: node.id,
+                        text: node.text,
+                      }),
+                    )
+                  },
+                })
+              }
+              items.push({
+                label: 'Delete',
+                danger: true,
+                onSelect: () => {
+                  applyResult(
+                    reduceGesture(gestureState, canvas, {
+                      type: 'delete-selection',
+                      nodeId: node.id,
+                    }),
+                  )
+                },
+              })
+              return items
+            })()}
+          />
+        )}
         <div
           data-testid="viewport-transform"
           style={{
