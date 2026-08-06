@@ -1,6 +1,6 @@
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
-import { EditorState, EditorSelection, type StateCommand } from '@codemirror/state'
+import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { useEffect, useRef } from 'react'
 
