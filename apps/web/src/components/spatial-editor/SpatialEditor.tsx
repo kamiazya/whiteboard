@@ -715,6 +715,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               onHandleKeyDown={handleResizeHandleKeyDown}
               onConnectKeyDown={handleConnectKeyDown}
+              onEditRequest={
+                selectedNode?.type === 'text'
+                  ? () => {
+                      applyResult(
+                        reduceGesture(gestureState, canvas, {
+                          type: 'start-text-edit',
+                          nodeId: selectedNode.id,
+                          text: selectedNode.text,
+                        }),
+                      )
+                    }
+                  : undefined
+              }
             />
           )}
           {/* In-flight gesture preview. Drawn from component-local pointer

@@ -15,6 +15,16 @@ export interface SelectionOverlayProps {
   readonly onHandleKeyDown?: (handle: ResizeHandleKind, box: Box, e: React.KeyboardEvent) => void
   /** Enter/Space on the focused connect handle — the keyboard equivalent of a pointer connect-drag. */
   readonly onConnectKeyDown?: (e: React.KeyboardEvent) => void
+  /**
+   * Opens the selected node's text editor. Rendered only when provided
+   * (non-text nodes have no text to edit). Fired on CLICK, not pointerdown:
+   * the editor mount (autofocus included) flushes synchronously inside a
+   * discrete event, and mousedown's default focus action would then blur
+   * the just-mounted textarea and instantly close it — the same fight the
+   * double-press path suppresses with preventDefault. Click fires after
+   * those defaults, so it needs no suppression at all.
+   */
+  readonly onEditRequest?: () => void
 }
 
 const SELECTION_STROKE = '#2563eb'
@@ -37,6 +47,7 @@ export function SelectionOverlay({
   onConnectPointerDown,
   onHandleKeyDown,
   onConnectKeyDown,
+  onEditRequest,
 }: SelectionOverlayProps) {
   const handles = resizeHandleBoxes(box, zoom)
   const connectHandleSize = 10 / zoom
@@ -112,6 +123,46 @@ export function SelectionOverlay({
           onConnectKeyDown(e)
         }}
       />
+      {onEditRequest !== undefined && (
+        // biome-ignore lint/a11y/useSemanticElements: must stay an SVG shape to render/hit-test at this canvas-space position under the ancestor pan/zoom transform; role+tabIndex+onKeyDown reproduce native <button> semantics by hand.
+        <g
+          data-testid="edit-handle"
+          role="button"
+          tabIndex={0}
+          aria-label="Edit text"
+          style={{ pointerEvents: 'auto', cursor: 'pointer' }}
+          onPointerDown={(e) => {
+            // Keep the press away from the root's node/empty hit-test; the
+            // action itself fires on click (see onEditRequest's doc).
+            e.stopPropagation()
+          }}
+          onClick={() => onEditRequest()}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return
+            e.preventDefault()
+            onEditRequest()
+          }}
+        >
+          <rect
+            x={box.x + box.width - 22 / zoom}
+            y={box.y - 26 / zoom}
+            width={22 / zoom}
+            height={20 / zoom}
+            rx={4 / zoom}
+            fill={SELECTION_STROKE}
+          />
+          <text
+            x={box.x + box.width - 11 / zoom}
+            y={box.y - 12 / zoom}
+            textAnchor="middle"
+            fontSize={12 / zoom}
+            fill="#ffffff"
+            style={{ userSelect: 'none' }}
+          >
+            ✎
+          </text>
+        </g>
+      )}
     </svg>
   )
 }
