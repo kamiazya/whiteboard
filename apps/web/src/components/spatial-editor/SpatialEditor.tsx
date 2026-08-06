@@ -193,6 +193,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       nodeId: string | undefined
       point: Point
     } | null>(null)
+    /**
+     * Additional selected node ids beyond the reducer's single primary
+     * selection. Multi-select lives at the component layer on purpose: the
+     * gesture reducer keeps its single-node contract, and group operations
+     * expand into per-member commands at commit time (see the pointerup and
+     * delete paths). Cleared whenever the primary selection clears.
+     */
+    const [extraIds, setExtraIds] = useState<ReadonlySet<string>>(new Set())
+    /**
+     * Armed by a second same-target press inside the double-press window;
+     * RESOLVED at pointerup: zero movement opens the editor (node) or
+     * creates (empty), any movement means it was a drag all along. Firing
+     * at the release also sidesteps mousedown's default focus action, which
+     * used to blur the just-mounted textarea when we opened at the press.
+     */
+    const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
     const isPanningRef = useRef(false)
     /** Last primary press for double-press detection: logical target + time. */
     const lastPressRef = useRef<{ key: string; at: number } | null>(null)
@@ -400,6 +416,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // synthesises a dblclick at all. Detecting two presses on the same
       // logical target within the OS-conventional window is stable against
       // re-renders because it compares node ids, not DOM identity.
+      // Shift-click builds a multi-selection instead of starting a gesture.
+      if (e.shiftKey && hitId !== undefined) {
+        if (selectedId === null) {
+          setSelectedId(hitId)
+        } else if (hitId === selectedId) {
+          // Deselecting the primary promotes an extra, if any.
+          const [next, ...rest] = [...extraIds]
+          setSelectedId(next ?? null)
+          setExtraIds(new Set(rest))
+        } else {
+          const next = new Set(extraIds)
+          if (next.has(hitId)) next.delete(hitId)
+          else next.add(hitId)
+          setExtraIds(next)
+        }
+        return
+      }
       const pressKey = hitId ?? 'empty'
       const now = e.timeStamp
       const isDoublePress =
@@ -407,38 +440,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         lastPressRef.current.key === pressKey &&
         now - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
       lastPressRef.current = isDoublePress ? null : { key: pressKey, at: now }
+      doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
 
       if (hitId === undefined) {
-        if (isDoublePress) {
-          // Suppress the press's default focus action: React flushes the
-          // editor mount (with autofocus) synchronously inside this
-          // discrete event, and the browser would otherwise apply
-          // mousedown's default focus AFTER our handler — yanking focus off
-          // the just-mounted textarea, whose blur instantly commits and
-          // closes it again.
-          e.preventDefault()
-          createNodeAt(point)
-          return
-        }
         isPanningRef.current = true
         lastPanPointRef.current = screenPoint
+        setExtraIds(new Set())
         applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
         return
       }
-      if (isDoublePress) {
-        const node = canvas.nodes.find((n) => n.id === hitId)
-        if (node?.type === 'text') {
-          // Same focus-default suppression as the empty-space branch above.
-          e.preventDefault()
-          applyResult(
-            reduceGesture(gestureState, canvas, {
-              type: 'start-text-edit',
-              nodeId: node.id,
-              text: node.text,
-            }),
-          )
-          return
-        }
+      // A plain press on a NON-member collapses the multi-selection; a press
+      // on a member keeps it (that press starts a group move).
+      if (hitId !== undefined && hitId !== selectedId && !extraIds.has(hitId)) {
+        setExtraIds(new Set())
       }
       applyResult(
         reduceGesture(gestureState, canvas, { type: 'pointerdown', nodeId: hitId, point }),
@@ -489,22 +503,69 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       activePointerIdRef.current = null
+      const armed = doublePressRef.current
+      doublePressRef.current = null
       if (isPanningRef.current) {
         isPanningRef.current = false
+        // A double press on empty space that never panned creates a node
+        // at the pressed point (double-click-to-create).
+        if (armed !== null && armed.key === 'empty' && root !== null) {
+          const screenPoint = clientPointToRootLocal(e, root)
+          const point = screenToCanvas(screenPoint, viewport)
+          if (point.x === armed.point.x && point.y === armed.point.y) {
+            createNodeAt(armed.point)
+          }
+        }
         return
       }
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const targetNodeId = gestureState.kind === 'connecting' ? hitTest(boxes, point) : undefined
-      applyResult(
-        reduceGesture(
-          gestureState,
-          canvas,
-          { type: 'pointerup', point, targetNodeId },
-          { createId },
-        ),
+      const result = reduceGesture(
+        gestureState,
+        canvas,
+        { type: 'pointerup', point, targetNodeId },
+        { createId },
       )
+      // A move commit on a multi-selection member applies the SAME delta to
+      // every other member — expanded here at commit time so the reducer
+      // keeps its single-node contract.
+      // A double press on a node that never moved is double-click-to-edit.
+      if (
+        armed !== null &&
+        gestureState.kind === 'moving' &&
+        armed.key === gestureState.nodeId &&
+        result.commands.length === 0
+      ) {
+        const node = canvasRef.current.nodes.find((n) => n.id === gestureState.nodeId)
+        if (node?.type === 'text') {
+          applyResult(
+            reduceGesture(result.state, canvas, {
+              type: 'start-text-edit',
+              nodeId: node.id,
+              text: node.text,
+            }),
+          )
+          return
+        }
+      }
+      const moved = result.commands.find((c) => c.kind === 'move-node')
+      if (moved !== undefined && extraIds.size > 0 && gestureState.kind === 'moving') {
+        const dx = moved.x - gestureState.startX
+        const dy = moved.y - gestureState.startY
+        const extras = [...extraIds]
+          .filter((id) => id !== moved.id)
+          .flatMap((id) => {
+            const node = canvasRef.current.nodes.find((n) => n.id === id)
+            return node === undefined
+              ? []
+              : [{ kind: 'move-node' as const, id, x: node.x + dx, y: node.y + dy }]
+          })
+        applyResult({ ...result, commands: [...result.commands, ...extras] })
+        return
+      }
+      applyResult(result)
     }
 
     const handlePointerCancel = () => {
@@ -556,6 +617,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             },
           ],
         })
+        return
+      }
+      if (
+        (e.key === 'Delete' || e.key === 'Backspace') &&
+        selection !== undefined &&
+        extraIds.size > 0 &&
+        gestureState.kind !== 'editing-text'
+      ) {
+        e.preventDefault()
+        const ids = [selection.id, ...extraIds]
+        applyResult({
+          state: { kind: 'idle' },
+          commands: ids.map((id) => ({ kind: 'delete-node' as const, id })),
+          selectedId: null,
+        })
+        setExtraIds(new Set())
         return
       }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
@@ -805,6 +882,38 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
             dangerouslySetInnerHTML={{ __html: svg }}
           />
+          {extraIds.size > 0 && (
+            <svg
+              data-testid="extra-selection-outlines"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                overflow: 'visible',
+                left: 0,
+                top: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              {[...extraIds].flatMap((id) => {
+                const b = boxes.find((entry) => entry.id === id)
+                return b === undefined ? (
+                  []
+                ) : (
+                  <rect
+                    key={id}
+                    x={b.box.x}
+                    y={b.box.y}
+                    width={b.box.width}
+                    height={b.box.height}
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth={1.5 / viewport.zoom}
+                    opacity={0.7}
+                  />
+                )
+              })}
+            </svg>
+          )}
           {selection !== undefined && (
             <SelectionOverlay
               box={selection.box}
