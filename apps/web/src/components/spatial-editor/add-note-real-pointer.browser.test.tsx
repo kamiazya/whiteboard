@@ -49,7 +49,12 @@ it('committing the new note untouched keeps a visible empty node, not a blank ca
   await userEvent.click(page.getByRole('button', { name: 'Add note' }))
   // Click empty canvas space without typing — the editor commits the (empty)
   // pending text and the node must survive as a visible box.
-  await userEvent.click(container.querySelector('[data-testid="spatial-editor"]') as Element)
+  await userEvent.click(container.querySelector('[data-testid="spatial-editor"]') as Element, {
+    // A far corner: the new note (and its editor) sit at the viewport
+    // centre, and clicking INSIDE the open textarea correctly keeps the
+    // editor open — the commit only happens when the press lands outside.
+    position: { x: 770, y: 570 },
+  })
 
   expect(commands[0]).toBe('create-node')
   expect(container.querySelectorAll('textarea').length).toBe(0)

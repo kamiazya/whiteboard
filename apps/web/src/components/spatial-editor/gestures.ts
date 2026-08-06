@@ -385,6 +385,11 @@ export function reduceGesture(
           return reducePointerUpResizing(state, event)
         case 'connecting':
           return reducePointerUpConnecting(state, event, createId)
+        case 'editing-text':
+          // A double-press opens the editor on the SECOND pointerdown; that
+          // press's own pointerup arrives afterwards and must not tear the
+          // editor down again.
+          return stateOnly(state)
         default:
           return idle
       }

@@ -117,6 +117,11 @@ export interface SpatialEditorHandle {
 }
 
 const DEFAULT_TEST_ID = 'spatial-editor'
+/**
+ * Window for OUR double-press detection (see handlePointerDown). Matches the
+ * common OS double-click interval; not user-configurable today.
+ */
+const DOUBLE_PRESS_WINDOW_MS = 400
 const ZOOM_WHEEL_FACTOR = 1.1
 /** Canvas-space px per arrow-key nudge on a focused resize handle; Shift multiplies by 4. */
 const RESIZE_KEYBOARD_STEP = 8
@@ -180,6 +185,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const [livePoint, setLivePoint] = useState<Point | null>(null)
     const isPanningRef = useRef(false)
+    /** Last primary press for double-press detection: logical target + time. */
+    const lastPressRef = useRef<{ key: string; at: number } | null>(null)
     const lastPanPointRef = useRef({ x: 0, y: 0 })
     /**
      * The pointerId this component currently holds capture for, or `null`.
@@ -339,15 +346,63 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
-      capturePointer(root, e.pointerId)
+      // Deliberately NO pointer capture here. Capturing on the press
+      // retargets the subsequent clicks to the capturing root, so a control
+      // the press bubbled from never receives its click. Capture is taken
+      // on the first real pointermove instead (see handlePointerMove): a
+      // press that turns into a drag still gets capture before it can
+      // escape the element. Overlay handle/connect gestures are the
+      // exception (beginOverlayGesture) — they want capture immediately.
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const hitId = hitTest(boxes, point)
+
+      // Double-press detection is OURS, not the browser's `dblclick`: the
+      // first press selects the node, which re-renders the DOM under the
+      // pointer (selection overlay, gesture state), so the second click can
+      // land on a different element instance and Chromium then never
+      // synthesises a dblclick at all. Detecting two presses on the same
+      // logical target within the OS-conventional window is stable against
+      // re-renders because it compares node ids, not DOM identity.
+      const pressKey = hitId ?? 'empty'
+      const now = e.timeStamp
+      const isDoublePress =
+        lastPressRef.current !== null &&
+        lastPressRef.current.key === pressKey &&
+        now - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
+      lastPressRef.current = isDoublePress ? null : { key: pressKey, at: now }
+
       if (hitId === undefined) {
+        if (isDoublePress) {
+          // Suppress the press's default focus action: React flushes the
+          // editor mount (with autofocus) synchronously inside this
+          // discrete event, and the browser would otherwise apply
+          // mousedown's default focus AFTER our handler — yanking focus off
+          // the just-mounted textarea, whose blur instantly commits and
+          // closes it again.
+          e.preventDefault()
+          createNodeAt(point)
+          return
+        }
         isPanningRef.current = true
         lastPanPointRef.current = screenPoint
         applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
         return
+      }
+      if (isDoublePress) {
+        const node = canvas.nodes.find((n) => n.id === hitId)
+        if (node?.type === 'text') {
+          // Same focus-default suppression as the empty-space branch above.
+          e.preventDefault()
+          applyResult(
+            reduceGesture(gestureState, canvas, {
+              type: 'start-text-edit',
+              nodeId: node.id,
+              text: node.text,
+            }),
+          )
+          return
+        }
       }
       applyResult(
         reduceGesture(gestureState, canvas, { type: 'pointerdown', nodeId: hitId, point }),
@@ -357,6 +412,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
+      // First movement of an in-flight gesture: take capture now (see the
+      // handlePointerDown comment for why not at the press). Idempotent —
+      // re-capturing the same pointer is a no-op.
+      if (
+        activePointerIdRef.current === null &&
+        (isPanningRef.current || gestureState.kind !== 'idle')
+      ) {
+        capturePointer(root, e.pointerId)
+      }
       const screenPoint = clientPointToRootLocal(e, root)
       if (isPanningRef.current) {
         const screenDelta = {
@@ -533,34 +597,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       )
     }
 
-    const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
-      if (isOverlayEvent(e)) return
-      const root = rootRef.current
-      if (root === null) return
-      const screenPoint = clientPointToRootLocal(e, root)
-      const point = screenToCanvas(screenPoint, viewport)
-      // Hit-test the ACTUAL double-click point rather than trusting whatever
-      // happens to be selected: a text-edit commit does not clear selection
-      // (see gestures.ts's commit-text-edit), so a later double-click
-      // elsewhere on empty space would otherwise reopen the previously
-      // selected node's editor instead of creating a new node.
-      const hitId = hitTest(boxes, point)
-      if (hitId !== undefined) {
-        const node = canvas.nodes.find((n) => n.id === hitId)
-        if (node?.type === 'text') {
-          applyResult(
-            reduceGesture(gestureState, canvas, {
-              type: 'start-text-edit',
-              nodeId: node.id,
-              text: node.text,
-            }),
-          )
-        }
-        return
-      }
-      createNodeAt(point)
-    }
-
     /**
      * The button path (unlike double-click, whose point comes straight from
      * the pointer) always resolves to the same viewport-center point, so
@@ -607,7 +643,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onLostPointerCapture={handlePointerCancel}
-        onDoubleClick={handleDoubleClick}
         onKeyDown={handleKeyDown}
       >
         {/* Discoverability affordance: every canvas is empty until a node
