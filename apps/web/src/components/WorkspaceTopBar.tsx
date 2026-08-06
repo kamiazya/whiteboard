@@ -59,6 +59,8 @@ interface Props {
   // an unmount guard — rejections are not swallowed.
   onRenameCanvas?: (name: string) => void | Promise<void>
   onCreateCanvas?: () => void | Promise<void>
+  /** Local mode only for now: creates a markdown-kind canvas and opens it. */
+  onCreateMarkdownCanvas?: () => void | Promise<void>
   // Omitted when the host page has no fullscreen affordance of its own.
   onEnterFullscreen?: () => void
   // Gates HeaderSaveDot/Cmd+S/History (versions), HeaderBranchChip (branches),
@@ -106,6 +108,7 @@ export default function WorkspaceTopBar({
   dataMode = 'daemon',
   onRenameCanvas,
   onCreateCanvas,
+  onCreateMarkdownCanvas,
   capabilities,
   branchRefreshSignal,
   versionRefreshSignal,
@@ -285,6 +288,9 @@ export default function WorkspaceTopBar({
           onNavigateToCanvas={onNavigateToCanvas}
           onTogglePin={togglePin}
           onOpenNewCanvas={openNewCanvas}
+          onCreateMarkdown={
+            onCreateMarkdownCanvas === undefined ? undefined : () => void onCreateMarkdownCanvas()
+          }
         />
 
         {/* Canvas-specific actions such as rename and copy URL. */}
