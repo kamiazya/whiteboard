@@ -117,6 +117,9 @@ export function SelectionOverlay({
           }}
           onKeyDown={(e) => {
             if (onHandleKeyDown === undefined || !ARROW_KEYS.has(e.key)) return
+            // Fully handled here — without this the root's own arrow handler
+            // would ALSO nudge the node, double-applying every keypress.
+            e.stopPropagation()
             onHandleKeyDown(handle.kind, handle.box, e)
           }}
         />

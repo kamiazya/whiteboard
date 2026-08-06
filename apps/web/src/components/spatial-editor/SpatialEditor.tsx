@@ -335,6 +335,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         running = applyCommand(running, command)
         onChange(running, command)
       }
+      // Written back HERE, not only from the canvas prop at re-render: two
+      // commits landing in one tick (key auto-repeat, batched events) would
+      // otherwise both compute from the pre-commit ref and the second would
+      // clobber the first.
+      canvasRef.current = running
     }
 
     /**
@@ -522,6 +527,37 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // while typing would delete the node instead of a character. The
       // reducer's own editing-text guard is the second, machine-checkable
       // layer of that same policy (see gestures.ts's delete-selection arm).
+      // Arrow keys nudge the SELECTED node (standard canvas-tool parity);
+      // Shift multiplies the step. A focused resize handle handles arrows
+      // itself and stops propagation there, so an arrow reaching THIS
+      // handler is never a resize.
+      const nudge = ARROW_KEY_DELTA[e.key]
+      if (
+        nudge !== undefined &&
+        selection !== undefined &&
+        selectedNode !== undefined &&
+        gestureState.kind === 'idle'
+      ) {
+        e.preventDefault()
+        const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
+        // Read the node's position from canvasRef, not the render closure:
+        // key auto-repeat delivers keydowns faster than commits re-render,
+        // and a stale base makes each repeat clobber the previous nudge.
+        const current = canvasRef.current.nodes.find((n) => n.id === selectedNode.id)
+        if (current === undefined) return
+        applyResult({
+          state: gestureState,
+          commands: [
+            {
+              kind: 'move-node',
+              id: current.id,
+              x: current.x + nudge.dx * step,
+              y: current.y + nudge.dy * step,
+            },
+          ],
+        })
+        return
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
         const target = e.target as HTMLElement | null
         const tag = target?.tagName

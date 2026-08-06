@@ -50,3 +50,21 @@ it('the Edit control is keyboard-operable (Enter opens the editor)', async () =>
 
   await vi.waitFor(() => expect(container.querySelector('textarea')).not.toBeNull())
 })
+
+it('arrow keys nudge the selected node; Shift enlarges the step', async () => {
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await userEvent.click(root, { position: { x: 200, y: 150 } })
+
+  root.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+  root.dispatchEvent(
+    new KeyboardEvent('keydown', { key: 'ArrowDown', shiftKey: true, bubbles: true }),
+  )
+
+  // Start (100,100); +8 right, +32 down.
+  await vi.waitFor(() => {
+    const rect = container.querySelector('svg rect[fill="#ffffff"]')
+    expect(rect?.getAttribute('x')).toBe('108')
+    expect(rect?.getAttribute('y')).toBe('132')
+  })
+})
