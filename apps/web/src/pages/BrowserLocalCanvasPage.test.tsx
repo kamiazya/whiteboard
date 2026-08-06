@@ -76,6 +76,7 @@ const snap: CanvasSnapshot = {
   id: 'c1',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
+  kind: 'spatial' as const,
 }
 
 describe('BrowserLocalCanvasPage', () => {
@@ -435,7 +436,12 @@ describe('BrowserLocalCanvasPage', () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
-    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await store.save({
+      id: 'c2',
+      name: 'Other canvas',
+      updatedAt: '2026-05-25T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
     })
@@ -452,7 +458,12 @@ describe('BrowserLocalCanvasPage', () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
-    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await store.save({
+      id: 'c2',
+      name: 'Other canvas',
+      updatedAt: '2026-05-25T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
     })
@@ -476,7 +487,12 @@ describe('BrowserLocalCanvasPage', () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
-    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await store.save({
+      id: 'c2',
+      name: 'Other canvas',
+      updatedAt: '2026-05-25T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
     await act(async () => {
       rtlRender(
         <MemoryRouter initialEntries={['/']}>
@@ -493,7 +509,12 @@ describe('BrowserLocalCanvasPage', () => {
     const store = new MemoryStore()
     await store.setDefaultCanvasId('c1')
     await store.save(snap)
-    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await store.save({
+      id: 'c2',
+      name: 'Other canvas',
+      updatedAt: '2026-05-25T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
     const router = createMemoryRouter(
       [{ path: '*', element: <BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} /> }],
       { initialEntries: ['/'] },
@@ -516,7 +537,12 @@ describe('BrowserLocalCanvasPage', () => {
     await store.setDefaultCanvasId('c1')
     // A distinctly-named current canvas so the switch to the new 'untitled' one
     // is observable in the heading, not just an inert re-render.
-    await store.save({ id: 'c1', name: 'Diagram A', updatedAt: '2026-05-24T00:00:00.000Z' })
+    await store.save({
+      id: 'c1',
+      name: 'Diagram A',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
     await act(async () => {
       render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
     })
@@ -577,7 +603,12 @@ describe('BrowserLocalCanvasPage', () => {
     await store.setDefaultCanvasId('c1')
     vi.useRealTimers()
     await store.save(snap)
-    await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+    await store.save({
+      id: 'c2',
+      name: 'Other canvas',
+      updatedAt: '2026-05-25T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
 
     const resolvers: Array<(list: CanvasSnapshot[]) => void> = []
     const controllableStore: BrowserLocalStore = {
@@ -599,7 +630,12 @@ describe('BrowserLocalCanvasPage', () => {
     await act(async () => {
       resolvers[0]!([
         snap,
-        { id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' },
+        {
+          id: 'c2',
+          name: 'Other canvas',
+          updatedAt: '2026-05-25T00:00:00.000Z',
+          kind: 'spatial' as const,
+        },
       ])
     })
 
@@ -624,10 +660,20 @@ describe('BrowserLocalCanvasPage', () => {
     // generation 2 (stale, superseded) — the out-of-order case the
     // generation guard exists to handle.
     const freshList: CanvasSnapshot[] = [
-      { id: 'c1', name: 'untitled (fresh)', updatedAt: '2026-05-26T00:00:00.000Z' },
+      {
+        id: 'c1',
+        name: 'untitled (fresh)',
+        updatedAt: '2026-05-26T00:00:00.000Z',
+        kind: 'spatial' as const,
+      },
     ]
     const staleList: CanvasSnapshot[] = [
-      { id: 'c2', name: 'Other canvas (stale)', updatedAt: '2026-05-25T00:00:00.000Z' },
+      {
+        id: 'c2',
+        name: 'Other canvas (stale)',
+        updatedAt: '2026-05-25T00:00:00.000Z',
+        kind: 'spatial' as const,
+      },
     ]
     await act(async () => {
       resolvers[2]!(freshList)
@@ -653,7 +699,12 @@ describe('BrowserLocalCanvasPage', () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
-      await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+      await store.save({
+        id: 'c2',
+        name: 'Other canvas',
+        updatedAt: '2026-05-25T00:00:00.000Z',
+        kind: 'spatial' as const,
+      })
       await act(async () => {
         render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
       })
@@ -758,7 +809,12 @@ describe('BrowserLocalCanvasPage', () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
-      await store.save({ id: 'c2', name: 'Other canvas', updatedAt: '2026-05-25T00:00:00.000Z' })
+      await store.save({
+        id: 'c2',
+        name: 'Other canvas',
+        updatedAt: '2026-05-25T00:00:00.000Z',
+        kind: 'spatial' as const,
+      })
       await act(async () => {
         render(<BrowserLocalCanvasPage store={store} loro={new FakeLoroStore()} />)
       })

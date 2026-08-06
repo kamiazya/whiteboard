@@ -48,6 +48,7 @@ const snap: CanvasSnapshot = {
   id: 'c1',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
+  kind: 'spatial' as const,
 }
 
 describe('useBrowserLocalCanvasController', () => {
@@ -508,6 +509,7 @@ describe('useBrowserLocalCanvasController', () => {
       id: 'c2',
       name: 'other canvas',
       updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'spatial' as const,
     }
 
     it('loads the requested canvas instead of the store default when given', async () => {
@@ -968,7 +970,12 @@ describe('useBrowserLocalCanvasController', () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
-      await store.save({ id: 'existing-copy', name: 'untitled (copy)', updatedAt: snap.updatedAt })
+      await store.save({
+        id: 'existing-copy',
+        name: 'untitled (copy)',
+        updatedAt: snap.updatedAt,
+        kind: 'spatial' as const,
+      })
       const loro = new FakeLoroStore()
       await loro.save('c1', realSnapshotWithElements([]))
       const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))

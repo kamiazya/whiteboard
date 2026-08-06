@@ -39,6 +39,7 @@ const snap: CanvasSnapshot = {
   id: 'c1',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
+  kind: 'spatial' as const,
 }
 
 function createFakeModelContext(): ModelContext & { liveNames(): string[] } {

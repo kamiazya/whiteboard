@@ -23,6 +23,13 @@ export type BrowserLocalPersistenceState =
   | { kind: 'degraded'; reason: string; message: string; lastSavedAt: null | string }
 
 export interface BrowserLocalCanvasController {
+  /**
+   * The resolved Loro store this controller persists through. Exposed so
+   * sibling consumers (the markdown-body hook) share the SAME instance —
+   * resolving the optional page prop's default twice would silently split
+   * spatial and markdown persistence across two stores.
+   */
+  loro: LoroStoreLike
   snapshot: CanvasSnapshot | null
   persistence: BrowserLocalPersistenceState
   cleanupCompleted: boolean
@@ -34,7 +41,7 @@ export interface BrowserLocalCanvasController {
   triggerCleanup(): Promise<void>
   startFresh(): Promise<void>
   listCanvases(): Promise<CanvasSnapshot[]>
-  createCanvas(name?: string): Promise<CanvasSnapshot>
+  createCanvas(name?: string, kind?: CanvasSnapshot['kind']): Promise<CanvasSnapshot>
   switchCanvas(id: string): Promise<void>
   // Duplicates the CURRENTLY open canvas (flushing any pending edit first so
   // the copy reflects the latest state) under a derived "<name> (copy)" name,
@@ -42,8 +49,12 @@ export interface BrowserLocalCanvasController {
   duplicateCanvas(): Promise<CanvasSnapshot>
 }
 
-function createCanvasSnapshot(id: string, name?: string): CanvasSnapshot {
-  return { id, name: name?.trim() || 'untitled', updatedAt: new Date().toISOString() }
+function createCanvasSnapshot(
+  id: string,
+  name?: string,
+  kind: CanvasSnapshot['kind'] = 'spatial',
+): CanvasSnapshot {
+  return { id, name: name?.trim() || 'untitled', updatedAt: new Date().toISOString(), kind }
 }
 
 export function useBrowserLocalCanvasController(
@@ -301,25 +312,28 @@ export function useBrowserLocalCanvasController(
     return storeRef.current.listCanvases()
   }, [])
 
-  const createCanvas = useCallback(async (name?: string): Promise<CanvasSnapshot> => {
-    const id = storeRef.current.generateId()
-    const fresh = createCanvasSnapshot(id, name)
-    // Metadata first, then the Loro doc: if the Loro write fails, the
-    // metadata row is rolled back so a failed create never leaves an
-    // orphan metadata row with no backing Loro doc.
-    await storeRef.current.save(fresh)
-    try {
-      await loroRef.current.save(id, loroRef.current.createEmptySnapshot())
-    } catch (err) {
+  const createCanvas = useCallback(
+    async (name?: string, kind: CanvasSnapshot['kind'] = 'spatial'): Promise<CanvasSnapshot> => {
+      const id = storeRef.current.generateId()
+      const fresh = createCanvasSnapshot(id, name, kind)
+      // Metadata first, then the Loro doc: if the Loro write fails, the
+      // metadata row is rolled back so a failed create never leaves an
+      // orphan metadata row with no backing Loro doc.
+      await storeRef.current.save(fresh)
       try {
-        await storeRef.current.removeCanvas?.(id)
-      } catch {
-        // Orphan cleanup is best-effort; leaving a stray metadata row is harmless.
+        await loroRef.current.save(id, loroRef.current.createEmptySnapshot())
+      } catch (err) {
+        try {
+          await storeRef.current.removeCanvas?.(id)
+        } catch {
+          // Orphan cleanup is best-effort; leaving a stray metadata row is harmless.
+        }
+        throw err
       }
-      throw err
-    }
-    return fresh
-  }, [])
+      return fresh
+    },
+    [],
+  )
 
   const switchCanvas = useCallback(
     async (id: string): Promise<void> => {
@@ -409,6 +423,7 @@ export function useBrowserLocalCanvasController(
   }, [flushSave, switchCanvas])
 
   return {
+    loro: loroRef.current,
     snapshot,
     persistence,
     cleanupCompleted,
