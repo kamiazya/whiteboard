@@ -25,7 +25,7 @@ function twoNodeCanvas(): SpatialCanvas {
 }
 
 function transformOf(container: HTMLElement) {
-  return container.querySelector<HTMLDivElement>('[data-testid="spatial-editor"] > div')?.style
+  return container.querySelector<HTMLDivElement>('[data-testid="viewport-transform"]')?.style
     .transform
 }
 
