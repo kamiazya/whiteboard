@@ -1,5 +1,12 @@
 # View a canvas inline in your AI chat (MCP Apps)
 
+> **Currently unavailable.** The OpenCanvas migration removed the `canvas_view` tool
+> this page describes, along with the rest of the pre-OpenCanvas tool surface. The
+> MCP Apps widget resource (`ui://whiteboard/canvas-view`) is still registered, but
+> no current MCP tool links `_meta.ui.resourceUri` to it, so nothing triggers the
+> inline view today. This page describes the Phase-A design; it is kept as a record
+> of intent until a tool is wired back up to the widget.
+
 Whiteboard's local daemon MCP server implements the [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps)
 (`io.modelcontextprotocol/ui`, spec 2026-01-26). When your MCP client supports it, calling
 the `canvas_view` tool renders an interactive canvas view directly inside the chat —

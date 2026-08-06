@@ -7,6 +7,9 @@
 // in vitest.docs-snapshots.config.ts (node:path is not available inside
 // the browser-mode test bundle).
 
+import { waitFor } from '@testing-library/react'
+import { page } from 'vitest/browser'
+
 declare const __DOCS_ASSETS_DIR__: string
 
 export function resolveDocAssetPath(name: `${string}.png`): string {
@@ -25,28 +28,10 @@ export type DocFetchHandler = (
   init?: RequestInit,
 ) => Promise<Response> | undefined | Response
 
-// Pin the random-shaped fields on a list of Excalidraw elements to
-// values derived from their position in the array. Necessary because
-// `convertToExcalidrawElements` and Excalidraw itself reach for
-// nanoid / crypto.getRandomValues when assigning element ids, seeds,
-// and versionNonces — neither is intercepted by seedMathRandom() below.
-// Stamping deterministic values gives us a byte-stable scene without
-// having to monkey-patch global crypto.
-export function pinRandomFields<T extends Record<string, unknown>>(elements: T[]): T[] {
-  return elements.map((el, i) => ({
-    ...el,
-    id: `docs-snapshot-${i}`,
-    seed: 100 + i,
-    versionNonce: 200 + i,
-    version: 1,
-    updated: 0,
-  }))
-}
-
 // Replace Math.random with a deterministic seeded PRNG (mulberry32) for
-// the duration of a snapshot test. Used as belt-and-suspenders alongside
-// pinRandomFields above — any random call that survives ID pinning
-// (e.g. rough.js wobble offsets) still gets a deterministic source.
+// the duration of a snapshot test, so any component that reaches for
+// Math.random for an id or a display detail stays byte-stable across
+// regenerations.
 //
 // Returns a restore function the caller installs in afterEach.
 export function seedMathRandom(seed = 0xc0ffee): () => void {
@@ -62,6 +47,71 @@ export function seedMathRandom(seed = 0xc0ffee): () => void {
   return () => {
     Math.random = original
   }
+}
+
+// The WorkspaceTopBar fetches its display names, dirty flag, and branch list
+// from three independent endpoints. Snapshot tests that mount the top bar
+// share this handler so every card renders the same chrome; `dirty` is the
+// only detail a caller varies.
+export function topBarFetchHandler({ dirty }: { dirty: boolean }): DocFetchHandler {
+  return (url) => {
+    if (url.endsWith('/names')) {
+      return jsonResponse({
+        workspace: 'Main workspace',
+        canvases: { 'design/architecture': 'System architecture' },
+        pinned: [],
+      })
+    }
+    if (url.endsWith('/dirty')) return jsonResponse({ dirty })
+    if (url.endsWith('/branches'))
+      return jsonResponse({ head: 'main', branches: [{ name: 'main' }] })
+    // Catch-all for any unrelated TopBar fetch, so it resolves instead of
+    // surfacing an error state in the captured UI.
+    return jsonResponse({})
+  }
+}
+
+// Wait until every independent async chain feeding the screenshot has
+// settled. Waiting on one of them alone lets the others' later-settling
+// content shift layout after the capture, producing a byte-unstable PNG.
+export async function waitForSnapshotContent(
+  container: HTMLElement,
+  { sceneText, topBarDisplayName }: { sceneText: string; topBarDisplayName?: string },
+): Promise<void> {
+  await waitFor(() => {
+    if (topBarDisplayName !== undefined) {
+      if (!(container.textContent ?? '').includes(topBarDisplayName)) {
+        throw new Error('TopBar canvas display name not yet rendered')
+      }
+      if (!container.querySelector('[aria-label^="Switch variation"]')) {
+        throw new Error('HeaderBranchChip not yet rendered')
+      }
+    }
+    const svgs = container.querySelectorAll('svg')
+    // CanvasViewer's SVG is always the last one in document order — icon
+    // svgs (WorkspaceTopBar chevrons, kebab menus, etc.) render ahead of it.
+    const svg = svgs[svgs.length - 1]
+    if (!svg || !(svg.textContent ?? '').includes(sceneText)) {
+      throw new Error('scene content not yet rendered')
+    }
+  })
+}
+
+// Screenshot the element carrying `testId` straight to its canonical
+// docs/assets/ path.
+export async function captureDocAsset(
+  container: HTMLElement,
+  testId: string,
+  fileName: `${string}.png`,
+): Promise<void> {
+  const target = container.querySelector(`[data-testid="${testId}"]`)
+  if (!(target instanceof HTMLElement)) {
+    throw new Error(`docs-snapshot: no element with data-testid="${testId}"`)
+  }
+  await page.screenshot({
+    path: resolveDocAssetPath(fileName),
+    element: page.elementLocator(target),
+  })
 }
 
 // Adapt a (url, init) → Response handler to fetch's signature, and reject

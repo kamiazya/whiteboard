@@ -117,7 +117,7 @@ Mutation testing checks whether the current test suite notices plausible impleme
 Keep Stryker scope **narrow**:
 
 - Intended for contract/helper surfaces: schemas, parsers, diagnostics redaction, path guards, small pure helpers.
-- Do **not** expand runs to browser-mode, Playwright E2E, Excalidraw rendering, daemon lifecycle smokes, or broad React interaction flows unless a dedicated Stryker target is added for that surface.
+- Do **not** expand runs to browser-mode, Playwright E2E, canvas-render/canvas-viewer SVG rendering, daemon lifecycle smokes, or broad React interaction flows unless a dedicated Stryker target is added for that surface.
 
 ### Survivor classification
 
@@ -237,8 +237,7 @@ Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. Test
 | Script | What it covers |
 |---|---|
 | `pnpm smoke` | Startup-only: MCP server starts without fatal errors and stays alive for 3 s |
-| `pnpm smoke:e2e` / `pnpm smoke:checkpoint` | Full stdio MCP round-trip: canvas create → annotate → checkpoint → restore → export |
-| `pnpm smoke:template` | Template tool render and content checks |
+| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_canvas_create` → `facet_set` → version save/list/restore → `canvas_import_okf` → `canvas_export_okf` |
 
 Run all mcp-smoke tests together:
 
@@ -276,27 +275,24 @@ node --import tsx/esm scripts/smoke/mcp-smoke.mjs
 node --import tsx/esm scripts/smoke/mcp-e2e-checkpoint.mjs
 node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs
 node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs
-tsx scripts/smoke/mcp-template-smoke.mjs
 ```
 
 ### MCP Smoke Coverage Registry
 
-`src/server/mcp/mcp-smoke-coverage.ts` is the authoritative static registry that classifies all 48 registered MCP tools into four categories:
+`src/server/mcp/mcp-smoke-coverage.ts` is the authoritative static registry that classifies all 16 registered MCP tools into four categories:
 
 | Category | Description |
 |---|---|
 | `COVERED_TOOLS` | Called in `smoke:e2e` success path; MCP SDK validates `structuredContent` against `outputSchema` at runtime |
-| `ERROR_PATH_ONLY_TOOLS` | Route wiring verified via error path only (`viewport_set` — requires a browser client for the success path) |
+| `ERROR_PATH_ONLY_TOOLS` | Route wiring verified only via an expected error path (no browser client, missing canvas, etc.) — success path needs infrastructure the offline smoke cannot provide |
 | `UNIT_ONLY_TOOLS` | Unit tests cover `outputSchema`; offline smoke call not needed |
 | `DEFERRED_TOOLS` | Cannot be called in offline smoke; each entry must carry `reason` + `unblock` fields |
+
+Both `ERROR_PATH_ONLY_TOOLS` and `DEFERRED_TOOLS` are currently empty — every registered tool is either exercised end-to-end in `smoke:e2e` (`COVERED_TOOLS`) or covered by its own unit tests (`UNIT_ONLY_TOOLS`).
 
 `src/server/mcp/tool-structured-content.property.test.ts` enforces classification invariants as a meta-property test (runs with `pnpm test --project mcp-node`). `mcp-e2e-checkpoint.smoke-impl.ts` enforces a SET equality guard between `tools/list` runtime results and `ALL_REGISTERED_TOOLS`.
 
 **Adding a new MCP tool**: Update `mcp-smoke-coverage.ts` first. If you skip this step, both the meta-property test and the smoke SET guard fail.
-
-**`library_install` — explicitly DEFERRED**
-
-`library_install.execute()` calls `fetchExternalLibraryPayload()` via global `fetch`. Additionally, `validateExternalUrl()` rejects localhost and private-range IPs before the fetch fires, so a plain `node:http.createServer` stub is insufficient. Unblocking requires nock/MSW fetch interception or a testable lookup injection seam in production code.
 
 ---
 

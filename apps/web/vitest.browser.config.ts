@@ -48,7 +48,7 @@ export default defineConfig({
     },
   },
   // tailwindcss: layout browser tests import src/index.css to assert real
-  // computed geometry (e.g. the Excalidraw container filling the viewport).
+  // computed geometry (e.g. the canvas viewer container filling the viewport).
   plugins: [tailwindcss(), react(), wasm(), topLevelAwait()],
   // Vitest browser mode serves test dependencies from the Vite dev server on
   // demand instead of bundling them ahead of time. Under CI load, the lazy

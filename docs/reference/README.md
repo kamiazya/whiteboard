@@ -7,8 +7,7 @@ it when you already know what you are doing and need exact details.
 Reference pages:
 
 - **[configuration](configuration.md)** — runtime environment variables and storage layout.
-- **[templates](templates.md)** — the template fragment JSON format.
-- **[export formats](export-formats.md)** — `png` / `svg` / `json` via `export_canvas` (and the standalone `export_svg` tool).
+- **[export formats](export-formats.md)** — SVG / OKF Markdown / JSON Canvas via `canvas_render_svg` / `canvas_export_okf` / `canvas_export_json_canvas`.
 - **MCP tools** — the tools the MCP server exposes (entry point to the live `tools/list`) _(planned)_.
 
 ← Back to [documentation home](../)

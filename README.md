@@ -1,6 +1,6 @@
 # @kamiazya/whiteboard
 
-> A collaborative Excalidraw canvas for Claude Code, Codex, and Gemini CLI. Draw with your AI agent to align on specs, architecture, and workflows — directly on a shared real-time whiteboard.
+> A collaborative OpenCanvas whiteboard for Claude Code, Codex, and Gemini CLI. Draw with your AI agent to align on specs, architecture, and workflows — directly on a shared real-time canvas.
 
 [![npm version](https://img.shields.io/npm/v/@kamiazya/whiteboard-mcp.svg)](https://www.npmjs.com/package/@kamiazya/whiteboard-mcp)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
@@ -31,30 +31,30 @@ identity provider and TLS. <sub>*Server mode: a shared server you operate.*</sub
 
 ## How whiteboard works
 
-You and your agent both reach the same Excalidraw canvas — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser over WebSocket.
+You and your agent both reach the same OpenCanvas whiteboard — they talk, the agent acts, skills shape the prompts. The `kamiazya/whiteboard` plugin packages three skills and a Whiteboard MCP server together; the agent calls MCP tools via stdio and the daemon syncs the canvas to your browser over WebSocket.
 
 <p align="center">
   <img src="docs/assets/architecture.png" alt="Architecture diagram: Skills and Whiteboard MCP are packaged in the kamiazya/whiteboard Plugin. You and Agent (Claude/Codex/Gemini) interact via prompts/replies; Agent calls Whiteboard MCP via stdio; MCP controls the Browser Canvas via HTTP/WS." width="780" />
   <br />
-  <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.excalidraw">architecture.excalidraw</a> to open it in Excalidraw and remix.</i></sub>
+  <sub><i>Diagram drawn with whiteboard itself — see <a href="docs/assets/architecture.canvas">architecture.canvas</a> to open it as a JSON Canvas document and remix.</i></sub>
 </p>
 
-`@kamiazya/whiteboard-mcp` runs a live Excalidraw canvas in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and round-trip with stock `.excalidraw` JSON.
+`@kamiazya/whiteboard-mcp` runs an OpenCanvas spatial editor in your browser and exposes MCP tools so Claude Code, Codex, Gemini CLI, or any MCP-capable agent can draw, annotate, and refine diagrams alongside you. Canvases live locally under `~/.whiteboard/`, sync over WebSocket, and are stored as OKF Markdown or JSON Canvas 1.0 — both round-trip losslessly through the same codec that exports the PNG/SVG images on this page.
 
 <p align="center">
-  <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, Excalidraw drawing toolbar, live diagram synced from the agent in real time" width="780" />
+  <img src="docs/assets/canvas-browser-ui.png" alt="The browser canvas: workspace and canvas selector in the top bar, live diagram synced from the agent in real time" width="780" />
 </p>
 
 ## Reach for whiteboard when…
 
 - **You're aligning with your agent on a design and text alone keeps drifting.** Sketch the request flow once, ask the agent to fill in the missing edges, point at the diagram instead of re-explaining.
 - **You're reviewing a change and want to mark up the architecture together.** Open an existing workspace, ask the agent to add the new path, compare against the previous frame, export a PNG for the PR description.
-- **You're writing docs or onboarding material and want a reusable diagram.** Drive the agent to produce the diagram, save the `.excalidraw`, drop the PNG into the doc — open it again later in [excalidraw.com](https://excalidraw.com) when something needs updating.
+- **You're writing docs or onboarding material and want a reusable diagram.** Drive the agent to produce the diagram, drop the exported PNG into the doc, and keep the canvas itself around to reopen and update later.
 
 | Aligning on a design | Reviewing and marking up | Presenting or sharing |
 |:---:|:---:|:---:|
-| ![Agent drew the architecture diagram](docs/assets/canvas-agent-drew.png) | ![Review notes added by the user](docs/assets/canvas-user-annotated.png) | ![Fullscreen presentation mode](docs/assets/canvas-presentation.png) |
-| **Agent drew it** — you guided the layout | **You annotated it** — review notes on the canvas | **Fullscreen mode** — clean export for docs |
+| ![Agent drew the architecture diagram](docs/assets/canvas-agent-drew.png) | ![Review notes added by the user](docs/assets/canvas-user-annotated.png) | ![Chrome-free canvas render](docs/assets/canvas-presentation.png) |
+| **Agent drew it** — you guided the layout | **You annotated it** — review notes on the canvas | **Chrome-free render** — clean export for docs |
 
 The same workflow works across any scenario — the agent draws boxes, arrows, and labels on a fresh canvas:
 
@@ -143,7 +143,7 @@ Add to `~/.gemini/settings.json`:
 
 ### Verify
 
-In your agent session, ask it to call `canvas_create({ slug: "smoke" })`. The first call opens a Chromium tab pointed at the canvas and creates `~/.whiteboard/{workspaceId}/`.
+In your agent session, ask it to call `wb_canvas_create({ workspaceId: "default", segment: "smoke" })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/canvas/{workspaceId}/smoke` in a browser tab to see it.
 
 ## Pair with your local daemon
 
@@ -184,18 +184,18 @@ Three opinionated `SKILL.md` packs ship inside the npm package. The recommended 
 You    Use whiteboard to sketch the request flow for our auth service:
        client → API gateway → token service → DB. Highlight where caching lives.
 
-Agent  cid = canvas_create({ slug: "auth-flow" }).id
-       annotate_batch({ canvasId: cid, annotations: [ /* 4 service boxes + arrows */ ] })
-       annotate({ canvasId: cid, type: "text",
-                  target: { x: 240, y: 360 },
-                  text: "cache lives here" })
-       export_canvas({ canvasId: cid, format: "png" })
+Agent  { canvasId } = wb_canvas_create({ workspaceId: "default", segment: "auth-flow" })
+       node_patch({ canvasId, nodes: [ /* 4 service boxes */ ] })
+       edge_patch({ canvasId, edges: [ /* arrows between them */ ] })
+       node_patch({ canvasId, nodes: [ { id: "cache-note", type: "text",
+                                         x: 240, y: 360, text: "cache lives here" } ] })
+       canvas_render_svg({ canvasId })
 
        Drew a 4-stage flow on the auth-flow canvas. Cache callout placed
-       between API gateway and token service. PNG attached.
+       between API gateway and token service. SVG attached.
 ```
 
-The agent returns the `export_canvas` PNG result as an MCP `ImageContent`, so the next turn can reason about what was actually drawn — closing the loop between prompt and pixels.
+The agent returns the `canvas_render_svg` result so the next turn can reason about what was actually drawn — closing the loop between prompt and pixels.
 
 ## Documentation
 
@@ -204,7 +204,7 @@ The agent returns the `export_canvas` PNG result as an MCP `ImageContent`, so th
 | Local checkout, HTTP MCP development loop, repo-local config override, skill linking | [docs/contributing/development.md](docs/contributing/development.md) |
 | Environment variables, storage layout, Codex sandbox quirks | [docs/reference/configuration.md](docs/reference/configuration.md) |
 | Components, data flow, MCP tool surface, design boundaries | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
-| Custom template fragment JSON format used by `template_insert` | [docs/reference/templates.md](docs/reference/templates.md) |
+| Export formats (SVG, OKF Markdown, JSON Canvas) and their tools | [docs/reference/export-formats.md](docs/reference/export-formats.md) |
 | MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
 | Trust model for all three runtimes (browser-local, local daemon, server mode) | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
 | Pairing a browser tab to a local daemon, copy-first import | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
@@ -213,7 +213,7 @@ The agent returns the `export_canvas` PNG result as an MCP `ImageContent`, so th
 
 ## Limitations
 
-- Live drawing and PNG export require a Chromium browser tab connected over WebSocket.
+- No MCP tool currently returns a raster (PNG) image or `ImageContent` — `canvas_render_svg` is the closest equivalent for handing a rendered canvas back to an LLM.
 - The published transport is `stdio`. The HTTP MCP endpoint (`pnpm mcp:http:dev`) is for local development.
 
 See [docs/reference/configuration.md](docs/reference/configuration.md#codex-sandbox-constraints) for sandbox quirks.

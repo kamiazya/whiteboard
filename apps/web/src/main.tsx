@@ -1,5 +1,3 @@
-// Must run before any module that pulls in @excalidraw/excalidraw.
-import './excalidraw-asset-path.js'
 // Deliberately the narrow subpath, not the package barrel: the barrel
 // re-exports CanvasViewer and the scene codec, which drag canvas-render and
 // canvas-codec's remark pipeline onto the critical path for a module that

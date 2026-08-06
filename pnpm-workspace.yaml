@@ -16,8 +16,6 @@ catalog:
   # cross-process contract cores — one version everywhere
   zod: "^4.4.2"
   loro-crdt: "1.13.6"
-  # shared with apps/web + packages/canvas-viewer — one version everywhere
-  "@excalidraw/excalidraw": "^0.18.1"
   # shared build/test tooling
   typescript: "^6.0.3"
   vite: "^8.1.5"
@@ -88,39 +86,15 @@ enableGlobalVirtualStore: true
 # includes the consumer's devDependencies as siblings — so a package that
 # references a type or a runtime module without declaring it as a real
 # dependency still resolves one under standard mode, but not under GVS.
-# These two entries patch packages in the @excalidraw/excalidraw dependency
-# chain that hit exactly that gap:
 #
-# - @excalidraw/excalidraw's own AppState/MutableAppState mapped types
-#   reference React's types without declaring @types/react. Under GVS,
-#   TypeScript resolves a *different* React type identity through
-#   @excalidraw/excalidraw than the one apps/web uses directly, and the two
-#   AppState shapes stop being structurally assignable (TS2740).
-# - tunnel-rat (a transitive dep of @excalidraw/excalidraw) only lists
-#   react/react-dom under devDependencies, not dependencies or
-#   peerDependencies, even though its runtime code imports "react". Under
-#   GVS the bundler (Vite/Rolldown) can no longer find react as a sibling
-#   and fails to resolve the import at build time.
-#
-# Both entries inject the missing dependency edge so pnpm links the
-# workspace's own react / @types/react into the offending package's
-# node_modules, restoring a single shared module/type identity.
-#
-# @secretlint/resolver hits the same class of gap for a different reason:
-# its tryResolve() falls back to `createRequire(import.meta.url).resolve(...)`
-# scoped to @secretlint/resolver's own module location (no resolve hook is
-# registered anywhere in this call chain), so every rule package configured
-# in .secretlintrc.json (e.g. "@secretlint/secretlint-rule-pattern") must be
-# a real sibling of @secretlint/resolver itself, not merely available
-# somewhere in the workspace's devDependencies.
+# @secretlint/resolver hits exactly that gap: its tryResolve() falls back to
+# `createRequire(import.meta.url).resolve(...)` scoped to @secretlint/resolver's
+# own module location (no resolve hook is registered anywhere in this call
+# chain), so every rule package configured in .secretlintrc.json (e.g.
+# "@secretlint/secretlint-rule-pattern") must be a real sibling of
+# @secretlint/resolver itself, not merely available somewhere in the
+# workspace's devDependencies.
 packageExtensions:
-  "@excalidraw/excalidraw":
-    dependencies:
-      "@types/react": "*"
-  "tunnel-rat":
-    dependencies:
-      react: "*"
-      react-dom: "*"
   "@secretlint/resolver":
     dependencies:
       "@secretlint/secretlint-rule-pattern": "*"

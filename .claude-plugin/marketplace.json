@@ -5,7 +5,7 @@
     "url": "https://github.com/kamiazya"
   },
   "metadata": {
-    "description": "Claude Code plugin distribution for the @kamiazya/whiteboard collaborative Excalidraw MCP.",
+    "description": "Claude Code plugin distribution for the @kamiazya/whiteboard collaborative OpenCanvas MCP.",
     "version": "0.0.19"
   },
   "plugins": [
@@ -16,7 +16,7 @@
         "repo": "kamiazya/whiteboard",
         "ref": "stable"
       },
-      "description": "Collaborative Excalidraw canvas for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the bundled /drawing-visuals, /coauthoring-visuals, and /auditing-workspaces skills.",
+      "description": "Collaborative OpenCanvas canvas for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the bundled /drawing-visuals, /coauthoring-visuals, and /auditing-workspaces skills.",
       "version": "0.0.19",
       "author": {
         "name": "kamiazya",
@@ -25,9 +25,9 @@
       "homepage": "https://github.com/kamiazya/whiteboard",
       "repository": "https://github.com/kamiazya/whiteboard",
       "license": "MIT",
-      "keywords": ["excalidraw", "diagramming", "mcp", "whiteboard", "claude-code", "codex"],
+      "keywords": ["opencanvas", "diagramming", "mcp", "whiteboard", "claude-code", "codex"],
       "category": "productivity",
-      "tags": ["diagramming", "mcp", "excalidraw", "visualization"]
+      "tags": ["diagramming", "mcp", "opencanvas", "visualization"]
     }
   ]
 }
