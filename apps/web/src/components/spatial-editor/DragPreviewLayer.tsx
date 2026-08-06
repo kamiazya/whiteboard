@@ -47,7 +47,6 @@ export function DragPreviewLayer({ preview, zoom, contentSvg }: DragPreviewLayer
         // Same trusted producer as the committed scene: canvas-render's
         // serializer is the sole source of this string (see CanvasViewer's
         // documented reasoning for dangerouslySetInnerHTML).
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: string comes exclusively from renderSceneToSvg's escaping serializer
         dangerouslySetInnerHTML={{ __html: contentSvg.svg }}
       />
     )
