@@ -51,6 +51,7 @@ import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from 
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
+import { ToolPalette } from './ToolPalette.js'
 import {
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
@@ -645,22 +646,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         onLostPointerCapture={handlePointerCancel}
         onKeyDown={handleKeyDown}
       >
-        {/* Discoverability affordance: every canvas is empty until a node
-          exists, and double-click-empty-space has no visible cue at all —
-          this real, keyboard-reachable button is the one always-visible way
-          in. Positioned outside the pan/zoom transform so it stays fixed on
-          screen regardless of viewport. */}
-        <button
-          type="button"
-          data-testid="add-node-button"
-          onClick={createNodeAtViewportCenter}
-          data-editor-overlay
-          className="absolute z-10 rounded-md border bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          style={{ top: 8, left: 8 }}
-        >
-          Add note
-        </button>
+        {/* The OOUI creation surface: every canvas is empty until a node
+          exists and double-click-empty-space has no visible cue, so the
+          palette is the always-visible, keyboard-reachable way in. Fixed to
+          the bottom edge outside the pan/zoom transform. */}
+        <ToolPalette onCreateNode={createNodeAtViewportCenter} />
         <div
+          data-testid="viewport-transform"
           style={{
             position: 'absolute',
             left: 0,

@@ -501,7 +501,7 @@ describe('SpatialEditor (browser)', () => {
     )
     const editor = page.getByTestId('spatial-editor')
     const transformed = container.querySelector<HTMLDivElement>(
-      '[data-testid="spatial-editor"] > div',
+      '[data-testid="viewport-transform"]',
     )
     expect(transformed).not.toBeNull()
     expect(transformed?.style.transform).toBe('scale(1) translate(0px, 0px)')
@@ -579,7 +579,7 @@ describe('SpatialEditor (browser)', () => {
     )
     const editor = page.getByTestId('spatial-editor')
     const transformed = container.querySelector<HTMLDivElement>(
-      '[data-testid="spatial-editor"] > div',
+      '[data-testid="viewport-transform"]',
     )
     expect(transformed).not.toBeNull()
 
