@@ -675,14 +675,13 @@ describe('SpatialEditor (browser)', () => {
       // `dispatchEvent` returns (continuous-priority updates), unlike the
       // discrete pointerup commit other tests in this file assert on.
       await waitFor(() => {
-        const rect = page.getByTestId('drag-preview').element().querySelector('rect')
-        expect(rect).toBeTruthy()
-        expect(Number(rect?.getAttribute('x'))).toBe(expectedX)
-        expect(Number(rect?.getAttribute('y'))).toBe(expectedY)
+        const el = page.getByTestId('drag-preview').element()
+        expect(Number(el.getAttribute('data-box-x'))).toBe(expectedX)
+        expect(Number(el.getAttribute('data-box-y'))).toBe(expectedY)
       })
-      const rect = page.getByTestId('drag-preview').element().querySelector('rect')
-      const x = Number(rect?.getAttribute('x'))
-      const y = Number(rect?.getAttribute('y'))
+      const el = page.getByTestId('drag-preview').element()
+      const x = Number(el.getAttribute('data-box-x'))
+      const y = Number(el.getAttribute('data-box-y'))
       if (previousRectX !== undefined && previousRectY !== undefined) {
         // Identity-viewport, so canvas-space offset equals screen-space offset.
         expect(x - previousRectX).toBe(delta.x - deltas[deltas.indexOf(delta) - 1]!.x)
@@ -896,8 +895,21 @@ describe('SpatialEditor (browser)', () => {
       )
     }
     // No layout/measure work happened: `canvas` never changed mid-gesture, so
-    // the `useMemo` keyed on it never re-ran renderCanvasToSvg.
-    expect(measure).not.toHaveBeenCalled()
+    // the `useMemo` keyed on it never re-ran renderCanvasToSvg. The ONE
+    // allowed cost is the single-node drag-start render feeding the content
+    // preview; the invariant is that further moves add ZERO calls.
+    const afterFirstMove = measure.mock.calls.length
+    for (const dx of [12, 24, 36]) {
+      await editor.element().dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          clientX: 40 + dx,
+          clientY: 40,
+          pointerId: 204,
+        }),
+      )
+    }
+    expect(measure.mock.calls.length).toBe(afterFirstMove)
     // The committed shape rect for node "a" is exactly where it started —
     // only the overlay preview tracked the pointer, not the real scene.
     const committedRectAfter = container.querySelector('svg:not([data-testid="drag-preview"]) rect')
@@ -944,8 +956,10 @@ describe('SpatialEditor (browser)', () => {
         button: 0,
       }),
     )
-    const rectAt = () =>
-      page.getByTestId('drag-preview').element().querySelector('rect') as SVGRectElement
+    const boxAt = () => {
+      const el = page.getByTestId('drag-preview').element()
+      return { x: Number(el.getAttribute('data-box-x')), y: Number(el.getAttribute('data-box-y')) }
+    }
     await editor.element().dispatchEvent(
       new PointerEvent('pointermove', {
         bubbles: true,
@@ -954,8 +968,8 @@ describe('SpatialEditor (browser)', () => {
         pointerId: 206,
       }),
     )
-    await waitFor(() => expect(rectAt()).toBeTruthy())
-    const first = { x: Number(rectAt().getAttribute('x')), y: Number(rectAt().getAttribute('y')) }
+    await waitFor(() => expect(Number.isFinite(boxAt().x)).toBe(true))
+    const first = boxAt()
     await editor.element().dispatchEvent(
       new PointerEvent('pointermove', {
         bubbles: true,
@@ -965,10 +979,9 @@ describe('SpatialEditor (browser)', () => {
       }),
     )
     await waitFor(() => {
-      const rect = rectAt()
-      expect(Number(rect.getAttribute('x')) - first.x).toBeCloseTo(20, 5)
+      expect(boxAt().x - first.x).toBeCloseTo(20, 5)
     })
-    const second = { x: Number(rectAt().getAttribute('x')), y: Number(rectAt().getAttribute('y')) }
+    const second = boxAt()
     // Screen-space delta (40, 20) at zoom 2 is canvas-space delta (20, 10) —
     // the preview must move by the CANVAS-space amount, not the raw
     // screen-space pointer delta, since it draws inside the zoomed content.

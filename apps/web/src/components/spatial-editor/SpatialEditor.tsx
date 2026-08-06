@@ -247,6 +247,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
+    /**
+     * The dragged node's own content, rendered ONCE per drag (the reducer's
+     * pointermove passthrough returns the same state reference, so this memo
+     * holds for the whole gesture; a single-node render costs ~0.4ms).
+     * Per-frame motion is then a pure CSS transform in DragPreviewLayer —
+     * the full-canvas render stays untouched during the drag.
+     */
+    const dragContentSvg = useMemo(() => {
+      if (gestureState.kind !== 'moving') return undefined
+      const node = canvas.nodes.find((n) => n.id === gestureState.nodeId)
+      if (node === undefined) return undefined
+      const rendered = renderCanvasToSvg(
+        { nodes: [node], edges: [] },
+        { measure: resolvedMeasure, theme },
+      )
+      return {
+        svg: rendered.svg,
+        originX: gestureState.startX - rendered.bounds.x,
+        originY: gestureState.startY - rendered.bounds.y,
+      }
+    }, [gestureState, canvas, resolvedMeasure, theme])
+
     useImperativeHandle(
       forwardedRef,
       () => ({
@@ -735,7 +757,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             layout+stringify+innerHTML path runs once per gesture (at
             pointerup) instead of once per frame. */}
           {dragPreview !== undefined && (
-            <DragPreviewLayer preview={dragPreview} zoom={viewport.zoom} />
+            <DragPreviewLayer
+              preview={dragPreview}
+              zoom={viewport.zoom}
+              contentSvg={dragContentSvg}
+            />
           )}
           {gestureState.kind === 'connecting' && (
             <svg
