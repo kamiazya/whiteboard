@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { CanvasThumb } from '../components/CanvasThumb.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
+import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import {
   createCanvas,
@@ -94,7 +95,7 @@ function formatRelative(iso: string): string {
   return `${Math.floor(diff / 86400)}d ago`
 }
 
-type TabKey = 'canvases' | 'storage'
+type TabKey = 'canvases' | 'files' | 'storage'
 
 export function DaemonIndexPage({
   daemonBaseUrl,
@@ -282,6 +283,16 @@ export function DaemonIndexPage({
             <button
               type="button"
               role="tab"
+              aria-selected={tab === 'files'}
+              onClick={() => setTab('files')}
+              className="rounded px-3 py-1 text-sm font-medium data-[selected=true]:bg-accent"
+              data-selected={tab === 'files'}
+            >
+              Files
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={tab === 'storage'}
               onClick={() => setTab('storage')}
               className="rounded px-3 py-1 text-sm font-medium data-[selected=true]:bg-accent"
@@ -290,22 +301,22 @@ export function DaemonIndexPage({
               Storage
             </button>
           </div>
+          {(tab === 'canvases' || tab === 'files') && workspaces.length > 0 && (
+            <select
+              aria-label="Workspace"
+              value={selectedWorkspace ?? ''}
+              onChange={(event) => setSelectedWorkspace(event.target.value)}
+              className="rounded-md border bg-background px-2 py-1 text-sm"
+            >
+              {workspaces.map((w) => (
+                <option key={w} value={w}>
+                  {w}
+                </option>
+              ))}
+            </select>
+          )}
           {tab === 'canvases' && (
             <>
-              {workspaces.length > 0 && (
-                <select
-                  aria-label="Workspace"
-                  value={selectedWorkspace ?? ''}
-                  onChange={(event) => setSelectedWorkspace(event.target.value)}
-                  className="rounded-md border bg-background px-2 py-1 text-sm"
-                >
-                  {workspaces.map((w) => (
-                    <option key={w} value={w}>
-                      {w}
-                    </option>
-                  ))}
-                </select>
-              )}
               <input
                 aria-label="Search canvases"
                 value={search}
@@ -350,6 +361,16 @@ export function DaemonIndexPage({
 
         {tab === 'storage' ? (
           <StorageReportCard />
+        ) : tab === 'files' ? (
+          selectedWorkspace ? (
+            <WorkspaceFilesPanel
+              daemonFetch={daemonFetch}
+              daemonBaseUrl={daemonBaseUrl}
+              workspaceId={selectedWorkspace}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">No workspace selected.</p>
+          )
         ) : loadError ? (
           <div role="alert" className="text-sm text-destructive">
             {loadError}
