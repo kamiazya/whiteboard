@@ -78,6 +78,7 @@ export function TextNodeEditor({
         setValue(e.target.value)
         onChange?.(e.target.value)
       }}
+      data-editor-overlay
       onPointerDown={(e) => e.stopPropagation()}
       onBlur={commit}
       onKeyDown={(e) => {

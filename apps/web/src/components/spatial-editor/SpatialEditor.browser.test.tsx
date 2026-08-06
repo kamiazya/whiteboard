@@ -1107,10 +1107,12 @@ describe('SpatialEditor (browser)', () => {
         />
       </div>,
     )
-    const button = page.getByTestId('add-node-button')
-    await button
-      .element()
-      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    // A REAL pointer sequence (pointerdown -> pointerup -> click), not a
+    // synthetic MouseEvent: the synthetic form skips pointerdown and so
+    // cannot detect the root capturing the pointer and swallowing the
+    // button's click — the bug that made this button do nothing in the
+    // running app while this test stayed green.
+    await userEvent.click(page.getByTestId('add-node-button'))
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]

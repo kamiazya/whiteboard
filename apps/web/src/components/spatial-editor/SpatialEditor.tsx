@@ -320,8 +320,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return root
     }
 
+    /**
+     * True when the event originated inside an overlay control (the Add
+     * note button, the text editor, a future tool palette) rather than the
+     * canvas surface. The root's gesture handlers must ignore those:
+     * capturing the pointer on such a press retargets the subsequent
+     * `click` to the capturing root, so the control's own onClick never
+     * fires — a press on "Add note" silently did nothing. Overlay controls
+     * opt in via `data-editor-overlay`; a per-control stopPropagation is
+     * exactly the thing someone forgets (this bug), so the guard lives here
+     * where forgetting is impossible.
+     */
+    const isOverlayEvent = (e: React.SyntheticEvent) =>
+      e.target instanceof Element && e.target.closest('[data-editor-overlay]') !== null
+
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
       if (e.button !== 0) return
+      if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
       capturePointer(root, e.pointerId)
@@ -519,6 +534,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
@@ -603,6 +619,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           type="button"
           data-testid="add-node-button"
           onClick={createNodeAtViewportCenter}
+          data-editor-overlay
           className="absolute z-10 rounded-md border bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           style={{ top: 8, left: 8 }}
         >
