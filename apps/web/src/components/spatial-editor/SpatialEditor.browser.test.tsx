@@ -884,7 +884,13 @@ describe('SpatialEditor (browser)', () => {
         button: 0,
       }),
     )
+    // A real drag delivers each move on its own frame; back-to-back
+    // dispatches in one tick all see the pre-down handler closure, so
+    // livePoint never updates and no live-drag frame ever happens — the
+    // exact blind spot that let a per-frame-render mutation pass unseen.
+    await new Promise((resolve) => requestAnimationFrame(resolve))
     for (const delta of [10, 20, 30, 40, 50]) {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
       await editor.element().dispatchEvent(
         new PointerEvent('pointermove', {
           bubbles: true,
@@ -900,6 +906,7 @@ describe('SpatialEditor (browser)', () => {
     // preview; the invariant is that further moves add ZERO calls.
     const afterFirstMove = measure.mock.calls.length
     for (const dx of [12, 24, 36]) {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
       await editor.element().dispatchEvent(
         new PointerEvent('pointermove', {
           bubbles: true,
@@ -909,6 +916,11 @@ describe('SpatialEditor (browser)', () => {
         }),
       )
     }
+    // Continuous-priority updates flush asynchronously — without this wait
+    // the assertion runs before React processes the moves, and a per-frame
+    // re-render mutation slips through unseen (observed; this line is what
+    // gives the guard teeth).
+    await new Promise((resolve) => requestAnimationFrame(resolve))
     expect(measure.mock.calls.length).toBe(afterFirstMove)
     // The committed shape rect for node "a" is exactly where it started —
     // only the overlay preview tracked the pointer, not the real scene.
