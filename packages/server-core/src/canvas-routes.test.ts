@@ -4,13 +4,16 @@ import { FakeWorkspaceIndex } from './test-utils/fake-workspace-index.js'
 import { createInMemoryCanvasDocStore } from './test-utils/in-memory-canvas-doc-store.js'
 import { createCanvasOutputSchema, listCanvasesOutputSchema } from './tools/canvas-crud.schemas.js'
 
-function makeApp() {
-  const { app } = createServer({
+function makeServer() {
+  return createServer({
     canvasDocStore: createInMemoryCanvasDocStore(),
     workspaceIndex: new FakeWorkspaceIndex(),
     blobStore: {} as never,
   })
-  return app
+}
+
+function makeApp() {
+  return makeServer().app
 }
 
 describe('canvas CRUD routes', () => {
@@ -111,5 +114,45 @@ describe('canvas CRUD routes', () => {
       method: 'DELETE',
     })
     expect(notFoundRes.status).toBe(404)
+  })
+})
+
+describe('canvas OKF read route', () => {
+  it('GET .../canvases/:canvasId/okf returns the exported OKF markdown', async () => {
+    const { app, tools } = makeServer()
+    const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ segment: 'doc-a' }),
+    })
+    const created = createCanvasOutputSchema.parse(await createRes.json())
+    await tools.canvasImportOkf.execute({
+      workspaceId: 'ws-1',
+      canvasId: created.canvasId,
+      markdown: '---\ntype: note\ntitle: Doc A\n---\n\nHello tree',
+    })
+
+    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${created.canvasId}/okf`)
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { markdown: string }
+    expect(body.markdown).toContain('Hello tree')
+  })
+
+  it('GET okf for a canvas whose doc was never written returns 404', async () => {
+    const app = makeApp()
+    const createRes = await app.request('/api/v1/workspaces/ws-1/canvases', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ segment: 'doc-a' }),
+    })
+    const created = createCanvasOutputSchema.parse(await createRes.json())
+    const res = await app.request(`/api/v1/workspaces/ws-1/canvases/${created.canvasId}/okf`)
+    expect(res.status).toBe(404)
+  })
+
+  it('GET okf for an unknown canvas returns 404', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/ws-1/canvases/01ARZ3NDEKTSV4RRFFQ69G5FAV/okf')
+    expect(res.status).toBe(404)
   })
 })
