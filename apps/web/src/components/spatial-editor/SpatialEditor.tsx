@@ -209,6 +209,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * used to blur the just-mounted textarea when we opened at the press.
      */
     const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
+    /** In-flight marquee selection rect, in canvas space (Excalidraw
+     * semantics: plain drag on empty space selects; pan is Space+drag,
+     * middle-button drag, or wheel). */
+    const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null)
+    const spaceDownRef = useRef(false)
     const isPanningRef = useRef(false)
     /** Last primary press for double-press detection: logical target + time. */
     const lastPressRef = useRef<{ key: string; at: number } | null>(null)
@@ -394,10 +399,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       e.target instanceof Element && e.target.closest('[data-editor-overlay]') !== null
 
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0) return
       if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
+      const screenPointForPan = clientPointToRootLocal(e, root)
+      // Middle-button (or Space-held) drag pans from ANYWHERE — Excalidraw
+      // semantics; a plain left drag on empty space marquee-selects instead.
+      if (e.button === 1 || (e.button === 0 && spaceDownRef.current)) {
+        e.preventDefault()
+        isPanningRef.current = true
+        lastPanPointRef.current = screenPointForPan
+        return
+      }
+      if (e.button !== 0) return
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
       // the press bubbled from never receives its click. Capture is taken
@@ -443,8 +457,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
 
       if (hitId === undefined) {
-        isPanningRef.current = true
-        lastPanPointRef.current = screenPoint
+        setMarquee({ start: point, current: point })
         setExtraIds(new Set())
         applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
         return
@@ -485,6 +498,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         capturePointer(root, e.pointerId)
       }
       const screenPoint = clientPointToRootLocal(e, root)
+      if (marquee !== null) {
+        setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
+        return
+      }
       if (isPanningRef.current) {
         const screenDelta = {
           x: screenPoint.x - lastPanPointRef.current.x,
@@ -505,17 +522,39 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       activePointerIdRef.current = null
       const armed = doublePressRef.current
       doublePressRef.current = null
+      if (marquee !== null) {
+        setMarquee(null)
+        const zeroMove =
+          marquee.start.x === marquee.current.x && marquee.start.y === marquee.current.y
+        if (zeroMove) {
+          // A stationary empty press: a plain one just cleared selection at
+          // the press; a DOUBLE one creates a node here (resolved at the
+          // release, consistent with the node-edit double-press rule).
+          if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+          return
+        }
+        const rect = {
+          x: Math.min(marquee.start.x, marquee.current.x),
+          y: Math.min(marquee.start.y, marquee.current.y),
+          w: Math.abs(marquee.current.x - marquee.start.x),
+          h: Math.abs(marquee.current.y - marquee.start.y),
+        }
+        const hitIds = boxes
+          .filter(
+            (entry) =>
+              entry.box.x < rect.x + rect.w &&
+              entry.box.x + entry.box.width > rect.x &&
+              entry.box.y < rect.y + rect.h &&
+              entry.box.y + entry.box.height > rect.y,
+          )
+          .map((entry) => entry.id)
+        const [primary, ...rest] = hitIds
+        setSelectedId(primary ?? null)
+        setExtraIds(new Set(rest))
+        return
+      }
       if (isPanningRef.current) {
         isPanningRef.current = false
-        // A double press on empty space that never panned creates a node
-        // at the pressed point (double-click-to-create).
-        if (armed !== null && armed.key === 'empty' && root !== null) {
-          const screenPoint = clientPointToRootLocal(e, root)
-          const point = screenToCanvas(screenPoint, viewport)
-          if (point.x === armed.point.x && point.y === armed.point.y) {
-            createNodeAt(armed.point)
-          }
-        }
         return
       }
       if (root === null) return
@@ -592,6 +631,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // Shift multiplies the step. A focused resize handle handles arrows
       // itself and stops propagation there, so an arrow reaching THIS
       // handler is never a resize.
+      if (e.key === ' ' && gestureState.kind === 'idle') {
+        // Held Space turns the next left-drag into a pan (Excalidraw
+        // semantics). preventDefault stops the page scrolling on Space.
+        e.preventDefault()
+        spaceDownRef.current = true
+        return
+      }
       const nudge = ARROW_KEY_DELTA[e.key]
       if (
         nudge !== undefined &&
@@ -797,6 +843,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }}
         onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
+        onKeyUp={(e) => {
+          if (e.key === ' ') spaceDownRef.current = false
+        }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
@@ -882,6 +931,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
             dangerouslySetInnerHTML={{ __html: svg }}
           />
+          {marquee !== null && (
+            <svg
+              data-testid="marquee-rect"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                overflow: 'visible',
+                left: 0,
+                top: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              <rect
+                x={Math.min(marquee.start.x, marquee.current.x)}
+                y={Math.min(marquee.start.y, marquee.current.y)}
+                width={Math.abs(marquee.current.x - marquee.start.x)}
+                height={Math.abs(marquee.current.y - marquee.start.y)}
+                fill="#2563eb"
+                fillOpacity={0.08}
+                stroke="#2563eb"
+                strokeWidth={1 / viewport.zoom}
+                strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
+              />
+            </svg>
+          )}
           {extraIds.size > 0 && (
             <svg
               data-testid="extra-selection-outlines"
