@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
+import { createServer as createOpenCanvasServer } from '@kamiazya/whiteboard-server-core'
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
@@ -331,6 +332,13 @@ export function createApp(options: AppOptions) {
       }
     }
   })
+
+  // server-core's OpenCanvas /api/v1 surface (workspace tree, canvasId +
+  // alias world). Mounted at '/' because its routes carry full /api/v1/*
+  // paths; the /api/* auth middlewares registered above already cover it.
+  if (options.serverDeps) {
+    app.route('/', createOpenCanvasServer(options.serverDeps).app)
+  }
 
   app.route(
     '/',
