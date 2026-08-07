@@ -290,6 +290,71 @@ describe('DaemonDetectedBanner', () => {
     expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
   })
 
+  it('a failed manual check on a hosted origin explains the allowlist requirement instead of silence', async () => {
+    // The real shape of the 2026-08-07 report: daemon running, hosted origin
+    // not in WHITEBOARD_ALLOWED_WEB_ORIGINS -> CORS rejection surfaces as an
+    // opaque 'network' failure, indistinguishable from daemon-absent. The
+    // banner must say SOMETHING actionable either way.
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'network' })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/no daemon reachable from this origin/i)
+    const docsLink = screen.getByRole('link', { name: /how to connect/i })
+    expect(docsLink.getAttribute('href')).toBe(HOW_TO_CONNECT_URL)
+    // Retry stays available.
+    expect(screen.getByRole('button', { name: /check for local daemon/i })).not.toBeNull()
+  })
+
+  it('a failed manual check on a loopback origin reports plainly that nothing was found', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'refused' })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/no local daemon found/i)
+    // No hosted-origin allowlist lecture on loopback — it does not apply.
+    expect(screen.queryByText(/no daemon reachable from this origin/i)).toBeNull()
+  })
+
+  it('the failure message clears once a re-check succeeds', async () => {
+    const probeFn = vi
+      .fn()
+      .mockResolvedValueOnce(NOT_DETECTED)
+      .mockResolvedValueOnce(NOT_DETECTED)
+      .mockResolvedValue(DETECTED)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    await screen.findByText(/no local daemon found/i)
+
+    fireEvent.click(screen.getByRole('button', { name: /check for local daemon/i }))
+    await screen.findByText(/A local whiteboard daemon is running at/)
+    expect(screen.queryByText(/no local daemon found/i)).toBeNull()
+  })
+
   it('keeps the CTA affordance when the probe fails inconclusively (not proven blocked)', async () => {
     const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'network' })
     render(

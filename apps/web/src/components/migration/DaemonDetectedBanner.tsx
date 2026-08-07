@@ -49,6 +49,10 @@ export function DaemonDetectedBanner({
   probeFn = probeDaemon,
 }: DaemonDetectedBannerProps) {
   const [result, setResult] = useState<DaemonProbeResult | null>(null)
+  // Set only when the USER clicked the check and it came back empty — the
+  // silent auto-probe on loopback mounts must not spawn failure copy the
+  // user never asked for.
+  const [manualCheckFailed, setManualCheckFailed] = useState(false)
   const [dismissedAt, setDismissedAt] = useState(
     () => settingsStore.load().storage.dismissedDaemonCtaAt,
   )
@@ -103,6 +107,7 @@ export function DaemonDetectedBanner({
     }).then((next) => {
       if (controller.signal.aborted) return
       setResult(next)
+      setManualCheckFailed(Boolean(forceRecheck) && !next.detected)
     })
   }
 
@@ -193,6 +198,33 @@ export function DaemonDetectedBanner({
         >
           Check for local daemon
         </button>
+      )}
+      {showManualAffordance && manualCheckFailed && (
+        // A CORS rejection (daemon running but this origin not in its
+        // WHITEBOARD_ALLOWED_WEB_ORIGINS) is indistinguishable from
+        // daemon-absent at the fetch layer, so the hosted-origin copy stays
+        // conditional ("if yours is running…") per the honesty discipline
+        // above. Loopback origins need no allowlist entry, so they get the
+        // plain not-found message.
+        <span data-testid="daemon-check-failed-notice" className="text-xs text-muted-foreground">
+          {pageOriginScheme === 'https' ? (
+            <>
+              No daemon reachable from this origin. If yours is running, it must allow this origin
+              via <code>WHITEBOARD_ALLOWED_WEB_ORIGINS</code> —{' '}
+              <a
+                href={HOW_TO_CONNECT_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium underline"
+              >
+                how to connect
+              </a>
+              .
+            </>
+          ) : (
+            <>No local daemon found at {baseUrl}.</>
+          )}
+        </span>
       )}
       {showBanner && (
         <div
