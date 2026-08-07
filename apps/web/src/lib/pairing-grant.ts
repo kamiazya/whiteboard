@@ -141,3 +141,35 @@ export async function consumeGrantFragment({
     return { status: 'error', detail: `token exchange failed: ${String(error)}` }
   }
 }
+
+/**
+ * Silent renewal on a later visit: the browser-enforced Origin header
+ * matched against the daemon's persisted grant is the whole credential, so
+ * this never redirects and carries no secret. A 403 (grant revoked, or a
+ * restarted daemon that lost nothing but was never granted) and an
+ * unreachable daemon both collapse to 'none' — the caller falls back to
+ * browser-local exactly as if nothing had been stored, and the banner
+ * remains the path back to a fresh consent.
+ */
+export async function renewPairingToken({
+  daemonBaseUrl,
+  fetch,
+}: {
+  daemonBaseUrl: string
+  fetch: typeof globalThis.fetch
+}): Promise<GrantConsumeResult> {
+  const base = daemonBaseUrl.replace(/\/+$/, '')
+  try {
+    const response = await fetch(`${base}/api/pairing/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ grantType: 'origin' }),
+    })
+    if (!response.ok) return { status: 'none' }
+    const body = (await response.json()) as { token?: unknown }
+    if (typeof body.token !== 'string' || body.token.length === 0) return { status: 'none' }
+    return { status: 'paired', daemonBaseUrl: base, token: body.token }
+  } catch {
+    return { status: 'none' }
+  }
+}
