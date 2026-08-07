@@ -89,3 +89,18 @@ it('double-click creation survives while the Connect tool is armed (S6-2)', asyn
   await vi.waitFor(() => expect(latest.commands).toContain('create-node'))
   expect(latest.canvas.nodes.length).toBe(3)
 })
+
+it('arming a connect shows the source indicator immediately, before any pointer move', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+
+  await userEvent.click(connectToolButton(container))
+  await userEvent.click(rootOf(container), { position: { x: 160, y: 130 } })
+
+  // A still hand must still see that the connect armed: the source node
+  // carries a visible indicator without waiting for the rubber-band line
+  // (which only appears on pointermove).
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="connect-source-indicator"]')).not.toBeNull(),
+  )
+})

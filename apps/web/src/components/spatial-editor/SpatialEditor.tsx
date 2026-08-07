@@ -1101,6 +1101,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
             >
               <title>Connection targets</title>
+              {/* Immediate acknowledgment that the connect ARMED: the
+                rubber-band line only appears once the pointer moves, so a
+                still hand needs the source node marked right away. */}
+              {(() => {
+                const source = boxes.find((b) => b.id === gestureState.fromNodeId)
+                if (source === undefined) return null
+                return (
+                  <rect
+                    data-testid="connect-source-indicator"
+                    x={source.box.x - 2}
+                    y={source.box.y - 2}
+                    width={source.box.width + 4}
+                    height={source.box.height + 4}
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                  />
+                )
+              })()}
               {/* Named rather than aria-hidden for the same reason as the
                 selection overlay: this subtree holds the focusable connection
                 targets, so hiding it would remove the keyboard path. */}
