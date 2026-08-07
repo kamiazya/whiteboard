@@ -175,6 +175,31 @@ describe('silent renewal on a hosted origin', () => {
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
   })
 
+  it('surfaces the identity-mismatch warning when renewal fails closed', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'identity-mismatch', daemonBaseUrl: 'http://127.0.0.1:3099' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <App providerState={BROWSER_LOCAL_STATE} />
+        </MemoryRouter>,
+      )
+    })
+
+    // Fail closed: stays on browser-local AND tells the user why.
+    await screen.findByTestId('browser-local-canvas-page')
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toMatch(/identity changed/i)
+  })
+
   it('does not attempt renewal when no daemon was ever stored', async () => {
     await act(async () => {
       render(
