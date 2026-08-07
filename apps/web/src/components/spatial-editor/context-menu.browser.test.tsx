@@ -175,3 +175,37 @@ it('Delete from the edge menu removes the edge and leaves the nodes', async () =
   expect(latest.commands).toContain('delete-edge')
   expect(latest.canvas.nodes).toHaveLength(2)
 })
+
+it('context-menu targeting keeps node and edge selection mutually exclusive', async () => {
+  const { EdgeHost, latest } = makeEdgeHost()
+  const { container } = render(<EdgeHost />)
+
+  // Select the edge first (click its line), then right-click a NODE: the
+  // edge selection must clear, or a later Delete removes the edge the user
+  // is no longer pointing at. Positions are recomputed at each use: the
+  // vitest browser iframe's UI scale can settle between renders, so a
+  // cached rect-derived point goes stale (this test caught that live).
+  await userEvent.click(rootOf(container), { position: edgeMidpoint(container) })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
+  )
+  rightClick(rootOf(container), 160, 130)
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).toBeNull(),
+  )
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+
+  // And the reverse: node selected, then right-click the edge.
+  const mid = edgeMidpoint(container)
+  rightClick(rootOf(container), mid.x, mid.y)
+  await expect.element(page.getByRole('menuitem', { name: 'Edit label' })).toBeInTheDocument()
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+  rootOf(container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+  // The node right-clicked earlier is no longer selected; Delete acts on
+  // the edge selection made by the second right-click only.
+  await vi.waitFor(() => expect(latest.canvas.edges).toHaveLength(0))
+  expect(latest.canvas.nodes).toHaveLength(2)
+})

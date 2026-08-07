@@ -574,7 +574,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const hitId = hitTest(boxes, point)
-      if (hitId !== undefined) setSelectedId(hitId)
+      // Node and edge selection stay mutually exclusive here too (see the
+      // pointerdown path): Delete acts on a selected edge FIRST, so leaving
+      // the other object type selected makes Delete remove the wrong thing.
+      if (hitId !== undefined) {
+        setSelectedId(hitId)
+        setSelectedEdgeId(null)
+      }
       // Same edge tolerance as the click path: the object under the pointer
       // gets ITS menu, so an edge line must not read as empty space.
       const hitEdge =
@@ -584,7 +590,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
             )
           : undefined
-      if (hitEdge !== undefined) setSelectedEdgeId(hitEdge.id)
+      if (hitEdge !== undefined) {
+        setSelectedEdgeId(hitEdge.id)
+        setSelectedId(null)
+        setExtraIds(new Set())
+      }
       setContextMenu({
         x: screenPoint.x,
         y: screenPoint.y,
