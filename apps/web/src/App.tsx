@@ -195,7 +195,12 @@ export function App({ providerState }: AppProps) {
       daemonBaseUrl: storedBaseUrl,
       fetch: globalThis.fetch.bind(globalThis),
     }).then((result) => {
-      if (result.status === 'paired') setGrantConnection(result)
+      // 'paired' connects; 'identity-mismatch' must ALSO land in state — it
+      // is the fail-closed warning ("this daemon's identity changed"), and
+      // dropping it here would silently swallow the whole verification.
+      if (result.status === 'paired' || result.status === 'identity-mismatch') {
+        setGrantConnection(result)
+      }
     })
     // Cold-load decision over mount-time facts; the ref guards StrictMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
