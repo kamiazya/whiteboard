@@ -266,7 +266,12 @@ function reducePointerUpConnecting(
   event: Extract<GestureEvent, { type: 'pointerup' }>,
   createId: () => string,
 ): GestureResult {
-  if (event.targetNodeId === undefined || event.targetNodeId === state.fromNodeId) return idle
+  // Releasing over empty space cancels. Releasing over the SOURCE node
+  // keeps the connect armed: that is the first click of the object-first
+  // click-A-click-B flow (the press and its own release both land on A),
+  // and in the drag flow it just means "still choosing a target".
+  if (event.targetNodeId === undefined) return idle
+  if (event.targetNodeId === state.fromNodeId) return stateOnly(state)
   return {
     state: { kind: 'idle' },
     commands: [

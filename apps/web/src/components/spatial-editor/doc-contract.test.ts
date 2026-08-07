@@ -4,7 +4,6 @@ import { SPATIAL_EDITOR_UNSUPPORTED } from './SpatialEditor.js'
 const REQUIRED_UNSUPPORTED = [
   'freehand-drawing',
   'shape-tools',
-  'multi-select',
   'grouping',
   'undo-redo',
   'arrow-side-pinning',

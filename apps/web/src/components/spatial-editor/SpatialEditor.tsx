@@ -23,7 +23,7 @@
  *
  * NOT yet supported (see `SPATIAL_EDITOR_UNSUPPORTED`): freehand drawing
  * and shape tools (`x-whiteboard` extension authoring — its own slice),
- * multi-select, grouping, undo/redo, arrow-side pinning, snapping,
+ * grouping, undo/redo, arrow-side pinning, snapping,
  * persistence, and sync. Those are later phases.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
@@ -52,7 +52,7 @@ import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from 
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
-import { ToolPalette } from './ToolPalette.js'
+import { type EditorTool, ToolPalette } from './ToolPalette.js'
 import {
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
@@ -71,7 +71,6 @@ import {
 export const SPATIAL_EDITOR_UNSUPPORTED = [
   'freehand-drawing',
   'shape-tools',
-  'multi-select',
   'grouping',
   'undo-redo',
   'arrow-side-pinning',
@@ -186,6 +185,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * ~30ms on an 80-node canvas — far past a frame budget).
      */
     const [livePoint, setLivePoint] = useState<Point | null>(null)
+    // OOUI interaction mode (S6/S7): Select is the default and matches the
+    // pre-tool behavior byte-for-byte; Connect arms object-first click-A,
+    // click-B edge creation. Creation is deliberately NOT a mode — the
+    // palette's Add note and double-click-anywhere both work in every mode.
+    const [tool, setTool] = useState<EditorTool>('select')
     /** Open right-click menu: screen position (root-relative) + hit target. */
     const [contextMenu, setContextMenu] = useState<{
       x: number
@@ -491,6 +495,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // on a member keeps it (that press starts a group move).
       if (hitId !== undefined && hitId !== selectedId && !extraIds.has(hitId)) {
         setExtraIds(new Set())
+      }
+      // Connect tool: the FIRST node press arms the connect (the same
+      // reducer arm the keyboard/handle flows use). While 'connecting', a
+      // node press is swallowed — the connect completes on the POINTERUP
+      // over the target (the reducer's completion arm), so dispatching a
+      // plain pointerdown here would tear the in-flight connect down first.
+      if (tool === 'connect' && hitId !== undefined) {
+        if (gestureState.kind !== 'connecting') {
+          applyResult(
+            reduceGesture(gestureState, canvas, { type: 'pointerdown-connect', nodeId: hitId }),
+          )
+        }
+        return
       }
       applyResult(
         reduceGesture(gestureState, canvas, { type: 'pointerdown', nodeId: hitId, point }),
@@ -881,7 +898,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           exists and double-click-empty-space has no visible cue, so the
           palette is the always-visible, keyboard-reachable way in. Fixed to
           the bottom edge outside the pan/zoom transform. */}
-        <ToolPalette onCreateNode={createNodeAtViewportCenter} />
+        <ToolPalette onCreateNode={createNodeAtViewportCenter} tool={tool} onToolChange={setTool} />
         {contextMenu !== null && (
           <ContextMenu
             x={contextMenu.x}
