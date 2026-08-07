@@ -8,7 +8,7 @@ import type { CanvasSnapshot } from '../../lib/whiteboard-client.js'
 import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
 
 function makeCanvas(id: string, name: string): CanvasSnapshot {
-  return { id, name, updatedAt: new Date().toISOString() }
+  return { id, name, updatedAt: new Date().toISOString(), kind: 'spatial' as const }
 }
 
 function snapshotFor(tag: string): Uint8Array {

@@ -41,11 +41,13 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
       id: 'c1',
       name: 'No Deltas',
       updatedAt: '2026-01-01T00:00:00.000Z',
+      kind: 'spatial' as const,
     })
     await browserLocalStore.save({
       id: 'c2',
       name: 'With Deltas',
       updatedAt: '2026-01-02T00:00:00.000Z',
+      kind: 'spatial' as const,
     })
 
     const doc1 = new Loro()

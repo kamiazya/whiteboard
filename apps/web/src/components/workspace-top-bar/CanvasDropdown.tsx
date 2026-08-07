@@ -31,7 +31,8 @@ interface CanvasDropdownProps {
   onCanvasSearchChange: (value: string) => void
   onNavigateToCanvas: (slug: string) => void
   onTogglePin: (slug: string, nextPinned: boolean) => void
-  onOpenNewCanvas: () => void
+  onOpenNewCanvas: () => void /** Renders a second creation entry for markdown-kind canvases (local mode). */
+  onCreateMarkdown?: () => void
 }
 
 // The canvas switcher dropdown — workspace identity is intentionally hidden
@@ -51,6 +52,7 @@ export function CanvasDropdown({
   onNavigateToCanvas,
   onTogglePin,
   onOpenNewCanvas,
+  onCreateMarkdown,
 }: CanvasDropdownProps) {
   const sortedCanvases = useMemo(() => sortCanvasesByRecency(canvases), [canvases])
   const filteredCanvases = useMemo(
@@ -188,6 +190,16 @@ export function CanvasDropdown({
             <FilePlus2 className="size-3.5" />
             New canvas…
           </DropdownMenuItem>
+          {onCreateMarkdown !== undefined && (
+            <DropdownMenuItem
+              data-testid="new-markdown-menu-item"
+              onSelect={onCreateMarkdown}
+              className="gap-2 rounded-none font-medium"
+            >
+              <FilePlus2 className="size-3.5" />
+              New markdown note…
+            </DropdownMenuItem>
+          )}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

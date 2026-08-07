@@ -7,6 +7,7 @@ const snapshot: CanvasSnapshot = {
   id: 'canvas-A',
   name: 'untitled',
   updatedAt: '2026-05-04T00:00:00.000Z',
+  kind: 'spatial' as const,
 }
 
 const saved: BrowserLocalPersistenceState = { kind: 'saved', lastSavedAt: null }

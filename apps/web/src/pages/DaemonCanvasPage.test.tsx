@@ -1662,6 +1662,7 @@ describe('DaemonCanvasPage', () => {
         id: 'local-1',
         name: 'My local canvas',
         updatedAt: '2026-01-01T00:00:00Z',
+        kind: 'spatial' as const,
       })
 
       await act(async () => {

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
@@ -31,6 +32,7 @@ import {
   type LoroStoreLike,
   useBrowserLocalCanvasController,
 } from './use-browser-local-canvas-controller.js'
+import { useMarkdownBody } from './use-markdown-body.js'
 
 // React.lazy: DaemonDetectedBanner pulls in daemon-probe.ts + Zod parsing
 // that would otherwise ship in the entry chunk, which is already close to
@@ -93,6 +95,7 @@ export function BrowserLocalCanvasPage({
   initialCanvasId,
 }: BrowserLocalCanvasPageProps) {
   const {
+    loro: resolvedLoro,
     snapshot,
     persistence,
     cleanupCompleted,
@@ -151,6 +154,8 @@ export function BrowserLocalCanvasPage({
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const canvasId = pageState.kind === 'editing' ? pageState.snapshot.id : null
   const canvasName = pageState.kind === 'editing' ? pageState.snapshot.name : null
+  const canvasKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
+  const markdownBody = useMarkdownBody(resolvedLoro, canvasId, canvasKind === 'markdown')
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
@@ -217,12 +222,17 @@ export function BrowserLocalCanvasPage({
   }, [canvasId, currentUpdatedAt, listCanvases])
 
   // Stable backend instance keyed on the canvas id. useMemo avoids
-  // re-connecting on re-renders when id is unchanged.
+  // re-connecting on re-renders when id is unchanged. A markdown canvas
+  // gets NO backend: the spatial sync layer persists its own LoroDoc to
+  // the same store id, and two independent docs for one id are last-writer-
+  // wins — the sync layer's body-less doc would clobber the markdown body
+  // written by use-markdown-body.
   const backend = useMemo(
-    () => (canvasId != null ? new BrowserLocalBackend(canvasId) : null),
-    // Re-create backend only when canvasId changes; a null id means not-yet-loaded.
+    () =>
+      canvasId != null && canvasKind !== 'markdown' ? new BrowserLocalBackend(canvasId) : null,
+    // Re-create backend only when canvasId/kind changes; a null id means not-yet-loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [canvasId],
+    [canvasId, canvasKind],
   )
 
   // useCanvasSync tolerates a null backend (idle, no writes) and reconnects
@@ -332,6 +342,10 @@ export function BrowserLocalCanvasPage({
             const created = await createCanvas()
             await switchCanvas(created.id)
           }}
+          onCreateMarkdownCanvas={async () => {
+            const created = await createCanvas(undefined, 'markdown')
+            await switchCanvas(created.id)
+          }}
           theme={theme}
           onToggleTheme={setTheme}
           onEnterFullscreen={() => {
@@ -408,22 +422,35 @@ export function BrowserLocalCanvasPage({
           </AlertDialogContent>
         </AlertDialog>
       </div>
-      {/* Spatial is the only view this slice supports; markdown-view
-          persistence is deferred (canvas-workspace has no markdown-body
-          container to write to yet). */}
+      {/* The snapshot's kind picks the editor: markdown canvases open the
+          markdown editor (body persisted as a Loro 'body' text container
+          through the same store — see use-markdown-body.ts), everything
+          else the spatial editor. */}
       <div data-testid="spatial-editor-container" className="min-h-0 flex-1">
-        {/* Keyed on canvas identity: the editor's pan/zoom, in-flight gesture
-            and open text editor all describe ONE canvas, and `SpatialCanvas`
-            carries no id for the editor to notice a switch by. Without the
-            key, switching canvases silently inherits the previous canvas's
-            viewport. */}
-        <SpatialEditor
-          key={canvasId ?? 'no-canvas'}
-          canvas={canvas}
-          onChange={onChange}
-          externalVersion={externalVersion}
-          theme={resolvedTheme}
-        />
+        {canvasKind === 'markdown' ? (
+          markdownBody.body !== null && (
+            <MarkdownEditor
+              key={canvasId ?? 'no-canvas'}
+              value={markdownBody.body}
+              onChange={markdownBody.setBody}
+              className="h-full"
+            />
+          )
+        ) : (
+          // Keyed on canvas identity: the editor's pan/zoom, in-flight
+          // gesture and open text editor all describe ONE canvas, and
+          // `SpatialCanvas` carries no id for the editor to notice a switch
+          // by. Without the key, switching canvases silently inherits the
+          // previous canvas's viewport. (The markdown branch keys for the
+          // same reason.)
+          <SpatialEditor
+            key={canvasId ?? 'no-canvas'}
+            canvas={canvas}
+            onChange={onChange}
+            externalVersion={externalVersion}
+            theme={resolvedTheme}
+          />
+        )}
       </div>
       <SettingsPanel
         open={settingsOpen}
