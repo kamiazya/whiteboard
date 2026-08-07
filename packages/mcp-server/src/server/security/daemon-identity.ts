@@ -83,7 +83,11 @@ function tryLoad(filepath: string): LoadedKeys | null {
       privateKey: createPrivateKey({ key: parsed.privateJwk, format: 'jwk' }),
     }
   } catch (err) {
-    log.warning({ err }, 'daemon identity file unreadable; generating a fresh keypair')
+    // Deliberately NOT logging the error object: the parsed JSON carries the
+    // private key (privateJwk.d), and a validation error could echo parts of
+    // its input. The reason class is enough to act on.
+    const reason = err instanceof SyntaxError ? 'invalid-json' : 'invalid-shape'
+    log.warning({ reason }, 'daemon identity file unreadable; generating a fresh keypair')
     return null
   }
 }

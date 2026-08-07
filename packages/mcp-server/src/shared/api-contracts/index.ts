@@ -19,6 +19,12 @@ export {
 } from '@kamiazya/whiteboard-server-core'
 export * from './branches.js'
 export * from './canvas.js'
+export type { PairingTokenResponse } from './pairing.js'
+export {
+  pairingTokenNonceSchema,
+  pairingTokenRequestSchema,
+  pairingTokenResponseSchema,
+} from './pairing.js'
 export type { DaemonPingResponse } from './runtime.js'
 export { daemonPingResponseSchema } from './runtime.js'
 

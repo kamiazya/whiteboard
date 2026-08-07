@@ -267,17 +267,19 @@ describe('daemon identity surfaces', () => {
     }
   })
 
-  it('verify rate-limits a tight loop with 429', async () => {
+  it('verify allows exactly the configured window then rate-limits with 429', async () => {
     const { app } = createApp()
-    let limited = 0
-    for (let i = 0; i < 70; i += 1) {
+    const statuses: number[] = []
+    for (let i = 0; i < 65; i += 1) {
       const res = await app.request('/api/runtime/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nonce: NONCE }),
       })
-      if (res.status === 429) limited += 1
+      statuses.push(res.status)
     }
-    expect(limited).toBeGreaterThan(0)
+    // First 60 succeed; everything after the boundary is throttled.
+    expect(statuses.slice(0, 60).every((status) => status === 200)).toBe(true)
+    expect(statuses.slice(60).every((status) => status === 429)).toBe(true)
   })
 })

@@ -77,6 +77,32 @@ describe('createDaemonIdentity', () => {
     }
   })
 
+  it('a wrong-shape identity file rotates without echoing its private key into logs', () => {
+    createDaemonIdentity({ dataDir: dir })
+    const plantedD = 'PLANTED-PRIVATE-KEY-MATERIAL-d'
+    writeFileSync(
+      join(dir, 'daemon-identity.json'),
+      JSON.stringify({
+        version: 999,
+        alg: 'Ed25519',
+        publicJwk: { kty: 'OKP', crv: 'Ed25519', x: 'x' },
+        privateJwk: { kty: 'OKP', crv: 'Ed25519', x: 'x', d: plantedD },
+      }),
+    )
+    const capture = captureLogsForTests('debug')
+    try {
+      const rotated = createDaemonIdentity({ dataDir: dir })
+      expect(Buffer.from(rotated.publicKey, 'base64url')).toHaveLength(32)
+      const record = capture.records.find(
+        (r) => r.scope === 'daemon-identity' && r.level === 'warning',
+      )
+      expect(record).toBeDefined()
+      expect(JSON.stringify(capture.records)).not.toContain(plantedD)
+    } finally {
+      capture.restore()
+    }
+  })
+
   it('never leaks the private key through the returned object or logs', () => {
     const capture = captureLogsForTests('debug')
     try {

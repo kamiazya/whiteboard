@@ -202,6 +202,25 @@ describe('pairing token identity signatures', () => {
     ).toBe(false)
   })
 
+  it('rejects malformed and out-of-range nonces with 400', async () => {
+    const { app, grants } = makeApp()
+    grants.addGrant(HOSTED)
+    const bad = [
+      '!!!not-base64url!!!',
+      Buffer.alloc(15).toString('base64url'), // one byte short
+      Buffer.alloc(33).toString('base64url'), // one byte long
+    ]
+    for (const nonce of bad) {
+      const res = await post(
+        app,
+        '/api/pairing/token',
+        { grantType: 'origin', nonce },
+        { Origin: HOSTED },
+      )
+      expect(res.status).toBe(400)
+    }
+  })
+
   it('a request without a nonce gets no identity field (wire-compat)', async () => {
     const { app, grants } = makeApp()
     grants.addGrant(HOSTED)

@@ -28,6 +28,10 @@
 import { createHash } from 'node:crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import {
+  type PairingTokenResponse,
+  pairingTokenRequestSchema,
+} from '../../shared/api-contracts/pairing.js'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from '../security/pairing-session.js'
@@ -57,51 +61,7 @@ const listGrantsResponseSchema = z
   .strict()
 type ListGrantsResponse = z.infer<typeof listGrantsResponseSchema>
 
-// A caller-random challenge nonce (base64url, 16-32 decoded bytes). When
-// present, the response carries an identity signature binding this nonce —
-// see the identity note on tokenResponseSchema.
-const tokenNonceSchema = z
-  .string()
-  .regex(/^[A-Za-z0-9_-]+$/, 'nonce must be base64url')
-  .refine((value) => {
-    const bytes = Buffer.from(value, 'base64url')
-    return bytes.length >= 16 && bytes.length <= 32
-  }, 'nonce must decode to 16-32 bytes')
-
-const tokenRequestSchema = z.discriminatedUnion('grantType', [
-  z
-    .object({
-      grantType: z.literal('code'),
-      code: z.string().min(1),
-      codeVerifier: z.string().min(1),
-      nonce: tokenNonceSchema.optional(),
-    })
-    .strict(),
-  z.object({ grantType: z.literal('origin'), nonce: tokenNonceSchema.optional() }).strict(),
-])
-
-const tokenResponseSchema = z
-  .object({
-    token: z.string(),
-    expiresAt: z.string(),
-    origin: z.string(),
-    // Present iff the request carried a nonce: the daemon's identity plus a
-    // signature over ["wb-token-v1", nonce, origin, sha256(token), expiresAt].
-    // Binding sha256(token) makes the signature vouch for the very credential
-    // being handed over — a squatter cannot splice a real daemon's signature
-    // onto its own fake token. Verified browser-side against the key pinned
-    // at /pair consent.
-    identity: z
-      .object({
-        alg: z.literal('Ed25519'),
-        publicKey: z.string(),
-        signature: z.string(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict()
-type TokenResponse = z.infer<typeof tokenResponseSchema>
+type TokenResponse = PairingTokenResponse
 
 function signTokenResponse(
   identity: DaemonIdentity,
@@ -176,7 +136,7 @@ export function createPairingRouter({ grants, codes, tokens, identity }: Pairing
     } catch {
       return c.json({ error: 'invalid JSON body' }, 400)
     }
-    const parsed = tokenRequestSchema.safeParse(body)
+    const parsed = pairingTokenRequestSchema.safeParse(body)
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
     }
