@@ -152,8 +152,19 @@ describe('isAllowedWebOrigin', () => {
 })
 
 describe('loadAllowedWebOriginsFromEnv', () => {
-  it('returns an empty allowlist when unset', () => {
-    expect(loadAllowedWebOriginsFromEnv({})).toEqual([])
+  it('defaults to the official hosted origin when the env var is UNSET', () => {
+    expect(loadAllowedWebOriginsFromEnv({})).toEqual(['https://kamiazya-whiteboard.pages.dev'])
+  })
+
+  it('an explicitly EMPTY env value opts out of the default entirely', () => {
+    expect(loadAllowedWebOriginsFromEnv({ WHITEBOARD_ALLOWED_WEB_ORIGINS: '' })).toEqual([])
+    expect(loadAllowedWebOriginsFromEnv({ WHITEBOARD_ALLOWED_WEB_ORIGINS: '  ' })).toEqual([])
+  })
+
+  it('an explicit value REPLACES the default rather than merging with it', () => {
+    expect(
+      loadAllowedWebOriginsFromEnv({ WHITEBOARD_ALLOWED_WEB_ORIGINS: 'https://example.com' }),
+    ).toEqual(['https://example.com'])
   })
 
   it('returns the parsed allowlist on success', () => {

@@ -146,8 +146,10 @@ the browser, most recent first) and scans a small range above the default
 3099 upward. When several daemons respond — one per dev worktree is
 common — the banner lists each of them.
 
-For hosted (non-loopback) `webOrigin` values, the daemon must also be
-configured to accept that origin via `WHITEBOARD_ALLOWED_WEB_ORIGINS` — either
+For hosted (non-loopback) `webOrigin` values other than the official web app
+(`https://kamiazya-whiteboard.pages.dev`, admitted by default), the daemon
+must also be configured to accept that origin via
+`WHITEBOARD_ALLOWED_WEB_ORIGINS` — either
 as an exact match or via a `https://*.example.com` wildcard subdomain pattern
 that covers it (see
 [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)).

@@ -154,8 +154,9 @@ open it in your browser to connect that tab to the daemon's workspaces,
 version history, branches, and merge, with live sync over WebSocket.
 
 - Loopback web origins (`http://127.0.0.1:...`) need no extra configuration.
-- HTTPS hosted origins must be added to `WHITEBOARD_ALLOWED_WEB_ORIGINS`
-  (exact-match, no wildcards) before they can pair. This setting governs
+- The official hosted web app (`https://kamiazya-whiteboard.pages.dev`) can
+  pair out of the box; other HTTPS hosted origins must be added to
+  `WHITEBOARD_ALLOWED_WEB_ORIGINS` (which, when set, replaces that default). This setting governs
   local-daemon pairing only; [server mode](docs/how-to/self-host-with-docker.md)
   reads the separate `WHITEBOARD_SERVER_ALLOWED_ORIGINS` variable instead.
 - Treat the pairing link like a credential: anyone who has it can pair with

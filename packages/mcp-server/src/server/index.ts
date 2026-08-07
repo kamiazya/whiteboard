@@ -11,7 +11,10 @@ import {
   resolveMcpProtectedResourceMetadataFromEnv,
 } from './security/mcp-auth.js'
 import { parseOAuthClientRegistryEnv } from './security/oauth-authz-registry.js'
-import { loadAllowedWebOriginsFromEnv } from './security/web-origin-allowlist.js'
+import {
+  DEFAULT_ALLOWED_WEB_ORIGINS,
+  loadAllowedWebOriginsFromEnv,
+} from './security/web-origin-allowlist.js'
 
 /**
  * Reads a `--name=value` flag out of an argv list. When the same flag is
@@ -123,9 +126,21 @@ export async function main() {
   // WHITEBOARD_ALLOWED_WEB_ORIGINS must abort startup rather than silently
   // fall back to an empty (loopback-only) allowlist. The failure record is
   // logged by loadAllowedWebOriginsFromEnv itself (no raw value echoed).
-  const allowedWebOrigins = loadAllowedWebOriginsFromEnv(process.env)
+  let allowedWebOrigins = loadAllowedWebOriginsFromEnv(process.env)
   if (allowedWebOrigins === null) {
     process.exit(1)
+  }
+
+  // The DEFAULT hosted-origin admission (env var unset) pairs with the auth
+  // guard below: with no token, missing-token auth strategies treat every
+  // request as authenticated, so admitting a hosted origin would expose the
+  // daemon unauthenticated. An operator-set allowlist refuses to start in
+  // that state (guard below), but the built-in default must not brick the
+  // tokenless local-dev path — drop it to loopback-only instead.
+  if (!token && allowedWebOrigins === DEFAULT_ALLOWED_WEB_ORIGINS) {
+    const log = getLogger('server-index')
+    log.notice('no auth token provided; default hosted-origin admission disabled (loopback-only)')
+    allowedWebOrigins = []
   }
 
   // Same fail-fast posture: a malformed registry must abort startup rather

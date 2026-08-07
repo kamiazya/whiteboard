@@ -148,12 +148,25 @@ describe('runDaemonRun WHITEBOARD_ALLOWED_WEB_ORIGINS wiring', () => {
     )
   })
 
-  it('defaults to an empty allowlist when the env var is unset', async () => {
+  it('defaults to the official hosted origin when the env var is unset', async () => {
     const outcome = await runDaemonRun({
       host: '127.0.0.1',
       tokenStdin: false,
       dataDir: '/tmp/whiteboard-test',
       env: {},
+    })
+    expect(outcome.kind).toBe('running')
+    expect(startHttpServerMock).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedWebOrigins: ['https://kamiazya-whiteboard.pages.dev'] }),
+    )
+  })
+
+  it('an explicitly empty env value opts out of the default allowlist', async () => {
+    const outcome = await runDaemonRun({
+      host: '127.0.0.1',
+      tokenStdin: false,
+      dataDir: '/tmp/whiteboard-test',
+      env: { WHITEBOARD_ALLOWED_WEB_ORIGINS: '' },
     })
     expect(outcome.kind).toBe('running')
     expect(startHttpServerMock).toHaveBeenCalledWith(
