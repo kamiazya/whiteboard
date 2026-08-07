@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { startSwUpdateScheduler, SW_UPDATE_CHECK_INTERVAL_MS } from './sw-update-scheduler.js'
+import {
+  type SchedulerDocument,
+  startSwUpdateScheduler,
+  SW_UPDATE_CHECK_INTERVAL_MS,
+} from './sw-update-scheduler.js'
 
-// Minimal fake Document surface: startSwUpdateScheduler only needs
-// visibilitychange add/remove + a mutable visibilityState.
 function createFakeDoc(): {
-  doc: Pick<Document, 'addEventListener' | 'removeEventListener'> & {
-    visibilityState: DocumentVisibilityState
-  }
+  doc: SchedulerDocument
   fireVisibilityChange: (state: DocumentVisibilityState) => void
   listenerCount: () => number
 } {

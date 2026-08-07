@@ -9,17 +9,19 @@ const log = getAppLogger('sw-update-scheduler')
 // toast without requiring a hard reload or manual unregister.
 export const SW_UPDATE_CHECK_INTERVAL_MS = 60 * 60 * 1000
 
-type FakeableDocument = Pick<Document, 'addEventListener' | 'removeEventListener'> & {
+/** Minimal Document surface this scheduler needs, so tests can pass a fake. */
+export type SchedulerDocument = Pick<Document, 'addEventListener' | 'removeEventListener'> & {
   visibilityState: DocumentVisibilityState
 }
 
 export interface StartSwUpdateSchedulerOptions {
-  /** Triggers one service worker update check, e.g. `() => registration.update()`. */
-  update: () => Promise<void>
+  /**
+   * Triggers one service worker update check, e.g. `() => registration.update()`.
+   * Whatever it resolves to is ignored — only rejection is meaningful here.
+   */
+  update: () => Promise<unknown>
   intervalMs?: number
-  doc?: FakeableDocument
-  setIntervalFn?: typeof setInterval
-  clearIntervalFn?: typeof clearInterval
+  doc?: SchedulerDocument
 }
 
 export type StopSwUpdateScheduler = () => void
@@ -36,8 +38,6 @@ export function startSwUpdateScheduler({
   update,
   intervalMs = SW_UPDATE_CHECK_INTERVAL_MS,
   doc = document,
-  setIntervalFn = setInterval,
-  clearIntervalFn = clearInterval,
 }: StartSwUpdateSchedulerOptions): StopSwUpdateScheduler {
   const checkForUpdate = (): void => {
     // A rejection here (offline, transient network failure) must never
@@ -48,7 +48,7 @@ export function startSwUpdateScheduler({
     })
   }
 
-  const intervalId = setIntervalFn(checkForUpdate, intervalMs)
+  const intervalId = setInterval(checkForUpdate, intervalMs)
 
   const onVisibilityChange = (): void => {
     if (doc.visibilityState === 'visible') {
@@ -58,7 +58,7 @@ export function startSwUpdateScheduler({
   doc.addEventListener('visibilitychange', onVisibilityChange)
 
   return () => {
-    clearIntervalFn(intervalId)
+    clearInterval(intervalId)
     doc.removeEventListener('visibilitychange', onVisibilityChange)
   }
 }

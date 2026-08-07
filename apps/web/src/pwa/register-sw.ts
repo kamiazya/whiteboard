@@ -54,11 +54,7 @@ export function setupSwRegistration({
             if (!registration) return
             void import('./sw-update-scheduler.js')
               .then(({ startSwUpdateScheduler }) => {
-                startSwUpdateScheduler({
-                  update: async () => {
-                    await registration.update()
-                  },
-                })
+                startSwUpdateScheduler({ update: () => registration.update() })
               })
               .catch((err: unknown) => {
                 log.error('failed to load the service worker update scheduler', err)
