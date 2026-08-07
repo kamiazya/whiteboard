@@ -1,19 +1,16 @@
-#!/usr/bin/env node
-// Real-browser proof for R3 of the MCP-UI retirement (ADR 0001) AND for the
-// daemon-auto-open-browser feature: a real Chromium tab loading the local
-// daemon's own origin lands directly in a CONNECTED, working app — same
-// origin, no `#wb=` fragment, no pairing step — because the daemon injects
-// the token server-side into the HTML it serves. Requires a real prior
-// `pnpm build` so it exercises the actual built dist/web-app, not a
-// fixture.
+// Real-browser proof of the daemon's hosted-first UI end state (ADR-0001
+// addendum): the daemon serves exactly ONE page — /pair, the pairing consent
+// trust anchor — and redirects every other UI path to the official hosted
+// app. Requires a real prior `pnpm build` so it exercises the actual built
+// dist/web-app, not a fixture.
 //
-// The auto-open feature's whole reason to exist is that a human opening
-// this URL manually (or via the OS auto-launching a browser tab) must NOT
-// need to run through the pairing flow. This script is the proof: it seeds
-// a real canvas through the daemon's own HTTP API (not a fixture write),
-// then drives a real browser to the bare origin and asserts the canvas
-// gallery shows it, the "Check for local daemon" pairing CTA is absent, and
-// opening the canvas actually renders it.
+// What this pins:
+// 1. The bare origin (and any other UI path) answers 302 to the official
+//    hosted app URL, and the redirect leaks no token.
+// 2. /pair renders the real consent page from the built bundle, with the
+//    daemon's identity fingerprint (proves the daemon-served page, its
+//    asset serving, AND the identity ping end-to-end in one shot).
+// 3. Reserved paths keep their non-UI semantics (/token stays 404).
 //
 // Direct invocation requires tsx:
 //   node --import tsx/esm scripts/smoke/mcp-daemon-origin-smoke.mjs
@@ -36,50 +33,46 @@ if (!existsSync(webAppIndexHtml)) {
 
 // `server/config.ts`'s DATA_DIR is a module-level constant captured from
 // WHITEBOARD_DATA_DIR at import time — it MUST be set before the dynamic
-// import below, or this smoke silently reuses whatever data dir the
-// developer's own daemon uses (and a re-run collides with the canvas slug
-// this script seeds on every invocation).
+// import below.
 const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-daemon-origin-smoke-'))
 process.env.WHITEBOARD_DATA_DIR = dataDir
 
 const { startHttpServer } = await import(resolve(root, 'src/server/http-server.ts'))
 const { findAvailablePort } = await import(resolve(root, 'src/cli/daemon-run.ts'))
 
-const TOKEN = 'smoke-daemon-origin-token-connected-app'
-const WORKSPACE_ID = 'sess-daemon-origin-smoke'
-const CANVAS_SLUG = 'daemon-origin-smoke-canvas'
+const TOKEN = 'smoke-daemon-origin-token-pair-only'
+const OFFICIAL_HOSTED_APP_URL = 'https://kamiazya-whiteboard.pages.dev/'
 
 const port = await findAvailablePort(4300)
 const running = await startHttpServer({ port, host: '127.0.0.1', token: TOKEN })
-
 const daemonBaseUrl = `http://127.0.0.1:${port}`
 
-async function authedFetch(path, init = {}) {
-  const headers = new Headers(init.headers)
-  headers.set('Authorization', `Bearer ${TOKEN}`)
-  return fetch(`${daemonBaseUrl}${path}`, { ...init, headers })
+let failed = false
+
+// --- 1. Redirect contract (plain fetch, redirects not followed) ---
+for (const path of ['/', '/local/some-canvas', '/w/ws/c/alias']) {
+  const res = await fetch(`${daemonBaseUrl}${path}`, { redirect: 'manual' })
+  const location = res.headers.get('location')
+  if (res.status === 302 && location === OFFICIAL_HOSTED_APP_URL && !location.includes(TOKEN)) {
+    console.log(`  pass  ${path} redirects to the official hosted app`)
+  } else {
+    console.error(
+      `  FAIL  ${path} expected 302 -> ${OFFICIAL_HOSTED_APP_URL}, got ${res.status} -> ${location}`,
+    )
+    failed = true
+  }
 }
 
-// Seed a real canvas through the live daemon's own HTTP API — same route
-// the apps/web gallery itself calls — so this proves the served app is
-// actually reading daemon-backed state, not a coincidental empty gallery.
-const createRes = await authedFetch(
-  `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/canvases`,
-  {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slug: CANVAS_SLUG }),
-  },
-)
-if (!createRes.ok) {
-  const body = await createRes.text().catch(() => '')
-  console.error(
-    `[mcp-daemon-origin-smoke] FAIL: seed canvas POST failed: ${createRes.status} ${body}`,
-  )
-  await running.close()
-  process.exit(1)
+// Reserved path semantics survive the catch-all change.
+const tokenRes = await fetch(`${daemonBaseUrl}/token`, { redirect: 'manual' })
+if (tokenRes.status === 404) {
+  console.log('  pass  /token stays 404 (reserved, never redirected)')
+} else {
+  console.error(`  FAIL  /token expected 404, got ${tokenRes.status}`)
+  failed = true
 }
 
+// --- 2. /pair renders the real consent page in a real browser ---
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.WHITEBOARD_CHROME_PATH && {
@@ -87,9 +80,7 @@ const browser = await chromium.launch({
   }),
 })
 
-let failed = false
 const consoleErrors = []
-
 try {
   const page = await browser.newPage()
   page.on('console', (msg) => {
@@ -99,175 +90,59 @@ try {
     consoleErrors.push(`uncaught: ${err.message}`)
   })
 
-  // The daemon origin itself — no #wb= fragment. This is the "open the
-  // daemon and get the canonical UI, already connected" scenario the
-  // auto-open feature (and the retirement) are pinning.
-  await page.goto(`${daemonBaseUrl}/`, { waitUntil: 'networkidle' })
+  const pairUrl = `${daemonBaseUrl}/pair?origin=${encodeURIComponent(
+    'https://app.example',
+  )}&challenge=smoke-challenge&state=smoke-state`
+  await page.goto(pairUrl, { waitUntil: 'networkidle' })
 
-  if (page.url().includes('#wb=')) {
-    console.error(`  FAIL  daemon origin URL carries a #wb= pairing fragment: ${page.url()}`)
-    failed = true
+  const consentHeading = page.getByRole('heading', {
+    name: /allow this web app to use your local daemon/i,
+  })
+  if (await consentHeading.isVisible({ timeout: 10_000 }).catch(() => false)) {
+    console.log('  pass  /pair renders the consent page from the built bundle')
   } else {
-    console.log('  pass  no #wb= pairing fragment on the daemon origin URL')
-  }
-
-  const galleryHeading = page.getByRole('heading', { name: /canvases|whiteboard/i }).first()
-  const galleryVisible = await galleryHeading
-    .waitFor({ state: 'visible', timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false)
-  if (galleryVisible) {
-    console.log('  pass  the daemon origin renders the apps/web canvas gallery')
-  } else {
-    console.error('  FAIL  no recognizable gallery heading rendered at the daemon origin')
+    console.error('  FAIL  /pair did not render the consent heading')
     failed = true
   }
 
-  // Connected-to-daemon proof: the gallery must show the canvas seeded
-  // through the live daemon's own API above. A stale/disconnected app would
-  // render an empty gallery instead (browser-local mode has no daemon data
-  // to read from).
-  const seededSlug = page.getByTestId('canvas-slug').filter({ hasText: CANVAS_SLUG })
-  const seededVisible = await seededSlug
-    .waitFor({ state: 'visible', timeout: 15_000 })
-    .then(() => true)
-    .catch(() => false)
-  if (seededVisible) {
-    console.log('  pass  gallery shows the canvas seeded through the live daemon API')
+  // The fingerprint proves the identity ping worked end-to-end from the
+  // daemon-served page (daemon identity keypair -> ping -> WebCrypto
+  // fingerprint render).
+  const fingerprint = page.getByTestId('daemon-fingerprint')
+  const fingerprintText = await fingerprint.textContent({ timeout: 10_000 }).catch(() => null)
+  if (fingerprintText !== null && /^[A-Z2-7]{4}-[A-Z2-7]{4}$/.test(fingerprintText.trim())) {
+    console.log(`  pass  /pair shows the daemon identity fingerprint (${fingerprintText.trim()})`)
   } else {
-    console.error(
-      '  FAIL  seeded canvas slug not visible in the gallery — app may not be reading daemon data',
-    )
+    console.error(`  FAIL  no daemon identity fingerprint rendered (got: ${fingerprintText})`)
     failed = true
   }
 
-  // Not-connected proof: the "Check for local daemon" CTA only renders in
-  // the browser-local (disconnected) provider path — its presence here
-  // would mean the daemon token injection failed and the app fell back to
-  // browser-local storage instead of talking to this daemon.
-  const pairingCta = await page
-    .getByText('Check for local daemon', { exact: false })
-    .first()
-    .isVisible()
-    .catch(() => false)
-  if (pairingCta) {
-    console.error(
-      '  FAIL  the browser-local "Check for local daemon" CTA is visible — not connected',
-    )
-    failed = true
+  // A browser navigation to the bare origin must land on the hosted app URL
+  // (it will fail to LOAD offline/in CI — the assertion is the URL, so stop
+  // at 'commit' and tolerate a network error for the external origin).
+  await page.goto(`${daemonBaseUrl}/`, { waitUntil: 'commit' }).catch(() => {})
+  const landedUrl = page.url()
+  if (landedUrl.startsWith(OFFICIAL_HOSTED_APP_URL)) {
+    console.log('  pass  navigating the bare origin follows the redirect to the hosted app')
   } else {
-    console.log('  pass  no "Check for local daemon" CTA (already connected, no pairing needed)')
-  }
-
-  // Opening the seeded canvas must actually render it, not just list it.
-  // Match the editor's OWN root (its `role="application"` + accessible name)
-  // rather than the page's wrapping `data-testid`: a wrapper can mount while
-  // the editor inside it fails, which is exactly the case this check exists
-  // to catch. Page-agnostic, so both canvas pages are covered by one signal.
-  if (seededVisible) {
-    await seededSlug.click()
-    const editorVisible = await page
-      .locator('[role="application"][aria-label="Spatial canvas editor"]')
-      .first()
-      .waitFor({ state: 'visible', timeout: 20_000 })
-      .then(() => true)
-      .catch(() => false)
-    if (editorVisible) {
-      console.log('  pass  opening the seeded canvas renders the spatial editor surface')
-    } else {
-      console.error('  FAIL  opening the seeded canvas did not render the spatial editor surface')
-      failed = true
-    }
-  }
-
-  // Token-injection proof: `/api/*` only gates MUTATION methods (POST/PUT/
-  // DELETE/PATCH — see routes/auth.ts createDaemonMutationAuthMiddleware),
-  // so an unauthenticated GET-only check (gallery listing, opening a
-  // canvas) would pass even if the server had stopped injecting
-  // `__WHITEBOARD_DAEMON_TOKEN__`. Driving a real WRITE through the UI
-  // (creating a canvas) is what actually depends on the injected token
-  // reaching `readDaemonTokenOnce()` and riding along on the browser's own
-  // fetch — this is the assertion the token-injection mutation-check pins.
-  // A fresh navigation back to `/` (not `page.goBack()`) deliberately, so
-  // this step doesn't inherit the canvas page's live WS reconnect loop —
-  // that loop keeps the network "busy" forever once connected, so a
-  // history-back navigation never reaches a quiet state to interact from.
-  await page.goto(`${daemonBaseUrl}/`, { waitUntil: 'domcontentloaded' })
-  const newCanvasSlug = 'daemon-origin-smoke-new-canvas'
-  const newCanvasNameInput = page.getByLabel('New canvas name')
-  // handleCreate in DaemonIndexPage.tsx navigates straight into the newly
-  // created canvas on success (onOpenCanvas), rather than staying on the
-  // gallery — so success is "the URL now names the new canvas", and
-  // failure (401 from a missing token) is "a createError alert appears and
-  // the gallery URL is unchanged". Race both outcomes instead of waiting
-  // for only one, so an auth failure resolves promptly instead of only
-  // being caught by the outer timeout.
-  const created = await newCanvasNameInput
-    .waitFor({ state: 'visible', timeout: 15_000 })
-    .then(() => newCanvasNameInput.fill(newCanvasSlug))
-    .then(() => page.getByRole('button', { name: 'Create canvas' }).click())
-    .then(() =>
-      Promise.race([
-        page
-          .waitForURL((url) => url.pathname.includes(newCanvasSlug), { timeout: 15_000 })
-          .then(() => true),
-        page
-          .getByRole('alert')
-          .waitFor({ state: 'visible', timeout: 15_000 })
-          .then(() => false),
-      ]),
-    )
-    .catch(() => false)
-  if (created) {
-    console.log(
-      '  pass  creating a canvas through the UI succeeds (token reached the mutation gate)',
-    )
-  } else {
-    console.error(
-      '  FAIL  creating a canvas through the UI did not succeed — the injected token may be missing',
-    )
+    console.error(`  FAIL  bare-origin navigation landed on ${landedUrl}`)
     failed = true
-  }
-
-  // R3 pins no service worker on the daemon origin (see
-  // apps/web/scripts/copy-into-mcp-dist.mjs) — a stale precached shell would
-  // pin an old injected daemon token across restarts.
-  const swController = await page.evaluate(() => navigator.serviceWorker?.controller ?? null)
-  if (swController === null) {
-    console.log('  pass  no service worker controls the daemon-origin page')
-  } else {
-    console.error('  FAIL  a service worker is controlling the daemon-origin page')
-    failed = true
-  }
-
-  const swRegistrationErrors = consoleErrors.filter((line) => /sw\.js|service.?worker/i.test(line))
-  const uncaughtErrors = consoleErrors.filter((line) => line.startsWith('uncaught:'))
-  if (uncaughtErrors.length === 0) {
-    console.log('  pass  no uncaught page errors (absent sw.js is caught and logged, not thrown)')
-  } else {
-    console.error(`  FAIL  uncaught page errors: ${uncaughtErrors.join('; ')}`)
-    failed = true
-  }
-  if (swRegistrationErrors.length > 0) {
-    console.log(
-      `  note  ${swRegistrationErrors.length} console error(s) mention the service worker (expected: registration is attempted and its rejection is caught+logged) — ${swRegistrationErrors.join('; ')}`,
-    )
   }
 } finally {
-  // Both must be attempted even if one throws — otherwise a browser.close()
-  // failure would leave the daemon's listening port open for the rest of
-  // the process's lifetime.
-  const [browserResult, serverResult] = await Promise.allSettled([browser.close(), running.close()])
-  for (const result of [browserResult, serverResult]) {
-    if (result.status === 'rejected') {
-      console.error('[mcp-daemon-origin-smoke] cleanup error:', result.reason)
-    }
-  }
+  await browser.close()
+  await running.close()
   rmSync(dataDir, { recursive: true, force: true })
+}
+
+if (consoleErrors.length > 0) {
+  // Console errors on /pair are diagnostic only for the external-origin
+  // navigation (expected to fail to load in an offline CI sandbox) — but a
+  // consent-page error is a real failure signal worth surfacing.
+  console.log(`  note  browser console errors observed:\n    ${consoleErrors.join('\n    ')}`)
 }
 
 if (failed) {
   console.error('[mcp-daemon-origin-smoke] FAIL')
   process.exit(1)
 }
-console.log('[mcp-daemon-origin-smoke] passed')
+console.log('[mcp-daemon-origin-smoke] PASS')

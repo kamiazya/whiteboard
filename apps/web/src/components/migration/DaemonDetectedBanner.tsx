@@ -26,7 +26,7 @@ import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 // gate that produced this notice in the first place. The "Open the local
 // app" link below is the escape hatch.
 export const UNSUPPORTED_BROWSER_NOTICE =
-  'This browser blocks the hosted app from reaching a local daemon over the network, so canvases stay saved in this browser only.'
+  'This browser blocks the hosted app from reaching a local daemon over the network, so canvases stay saved in this browser only. Use a Chromium-based browser to connect a local daemon.'
 
 // Docs are not served from apps/web (no /docs route), so the banner links to
 // the source-of-truth GitHub blob rather than fabricating a local route.
@@ -135,16 +135,6 @@ export function DaemonDetectedBanner({
   // else is labelled unverified. This is presentation-level honesty, not a
   // security boundary: the durable fix is daemon->browser mutual auth.
   const isPairedTarget = detectedBaseUrl === storedTarget.localDaemonBaseUrl
-
-  const openLocalAppUrl = useMemo(() => {
-    const { lastConnectedWorkspaceId, lastConnectedSlug } = storedTarget
-    // The last-connected canvas belongs to the STORED daemon — deep-link
-    // only when the discovered daemon is that same base, else land on root.
-    if (detectedBaseUrl === baseUrl && lastConnectedWorkspaceId && lastConnectedSlug) {
-      return `${baseUrl}/canvas/${encodeURIComponent(lastConnectedWorkspaceId)}/${encodeURIComponent(lastConnectedSlug)}`
-    }
-    return detectedBaseUrl
-  }, [storedTarget, baseUrl, detectedBaseUrl])
 
   // 'http:'/'https:' -> 'http'/'https'; any other scheme (e.g. jsdom's
   // default 'about:' outside these injected-prop tests) falls back to
@@ -299,8 +289,13 @@ export function DaemonDetectedBanner({
         // its own line, away from the sentence that explains it.
         <span className="text-xs text-muted-foreground">
           {UNSUPPORTED_BROWSER_NOTICE}{' '}
-          <a href={openLocalAppUrl} className="font-medium underline">
-            Open the local app
+          <a
+            href={HOW_TO_CONNECT_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="font-medium underline"
+          >
+            Learn more
           </a>
         </span>
       )}
@@ -378,13 +373,6 @@ export function DaemonDetectedBanner({
               >
                 Use here
               </button>
-              <a
-                href={daemon.baseUrl}
-                aria-label={`Open ${daemon.baseUrl}`}
-                className="rounded-md border px-2 py-0.5 font-medium transition-colors hover:bg-accent"
-              >
-                Open
-              </a>
             </span>
           ))}
           <button
@@ -419,12 +407,6 @@ export function DaemonDetectedBanner({
           >
             Use here
           </button>
-          <a
-            href={openLocalAppUrl}
-            className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent"
-          >
-            Open the local app
-          </a>
           <a
             href={HOW_TO_CONNECT_URL}
             target="_blank"

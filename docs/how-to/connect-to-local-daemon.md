@@ -11,37 +11,27 @@ underlying MCP tools your AI agent calls (`create_branch`, `merge`, and so
 on) intentionally keep their git-derived names — the UI vocabulary is a
 presentation-layer choice and does not change the tool contract.
 
-## Opening the daemon's own UI directly
+## The daemon serves only the pairing page
 
-The local daemon serves the canonical `apps/web` build at its own origin —
-open `http://127.0.0.1:<port>/` (default port `3099`) in a browser and it
-renders the same canvas gallery and editor as a standalone `apps/web` deploy,
-already same-origin with the daemon's `/api/*`, `/mcp`, and WebSocket routes.
-No pairing link or Local Network Access prompt is needed for this path.
+The local daemon is a backend: the one page it serves is `/pair`, the
+pairing consent page (which must come from the daemon's own origin — it is
+the trust anchor that pins the daemon's identity key). Opening
+`http://127.0.0.1:<port>/` (default port `3099`) in a browser redirects to
+the official hosted app, which connects back to the daemon through its
+default origin admission and a pairing grant.
 
-Running `whiteboard daemon run` interactively opens this URL in your default
-browser automatically once the daemon is listening, so there is no separate
-step even for a human with no AI agent in the loop. Pass `--no-open` (or set
-`openBrowser: false` in a [config file](../reference/configuration.md#config-file-local-daemon))
+Running `whiteboard daemon run` interactively opens the hosted app in your
+default browser automatically once the daemon is listening. Pass `--no-open`
+(or set `openBrowser: false` in a
+[config file](../reference/configuration.md#config-file-local-daemon))
 to disable this. See
 [Auto-opening the browser](../reference/configuration.md#auto-opening-the-browser-whiteboard-daemon-run)
 for the full list of conditions under which it is suppressed (CI, containers,
 non-interactive shells, non-loopback binds).
 
-- **No service worker on this origin.** The daemon injects a per-request
-  `__WHITEBOARD_RUNTIME_CONFIG__` and `__WHITEBOARD_DAEMON_TOKEN__` into every
-  response; a Workbox-precached shell would pin a stale token across daemon
-  restarts, so the daemon-served build ships without the offline service
-  worker that a standalone `apps/web` deploy installs.
-- **Loopback-only live sync.** The injected daemon base URL for the
-  WebSocket connection is always `http://127.0.0.1:<port>` — a fixed loopback
-  address, not whatever host or IP the browser used to reach the page. If you
-  bind the daemon beyond loopback (for example `--host 0.0.0.0`) and open its
-  UI from another device on the LAN, the page loads but its live-sync
-  WebSocket still tries to reach `127.0.0.1` on *that device*, which is not
-  the daemon — sync silently fails. This same-origin UI is intended for
-  local, same-machine use; reach a daemon from another device through the
-  pairing flow below instead.
+Note the tradeoff this design accepts: with no network access and no
+previously-installed PWA, there is no canvas UI on a first run — install the
+hosted app as a PWA while online to keep an offline-capable editor.
 
 ## How detection works
 
@@ -77,22 +67,19 @@ depends on capability, not a fixed version list:
   WebKit blocks the request as mixed content with no override. On this
   browser, canvases stay in this browser (IndexedDB) — the app shows an
   explicit notice instead of a silently missing "connect" option, with a
-  link to open the local app directly (see below).
+  link to this page.
 
 This is determined by probing the daemon, not by inspecting your browser's
 identity string: the app only shows the "not supported" notice once a probe
 has actually proven the browser blocked the request.
 
-**The way out on an unsupported browser: open the daemon's own origin.** The
-mixed-content/private-network block above applies only to the background
-`fetch` the app uses to detect a daemon — it does not apply to a normal
-top-level navigation. So on Safari (or any future engine with the same
-restriction), click the "Open the local app" link in the notice, or type the
-daemon's address directly into the address bar (`http://127.0.0.1:3099` by
-default). That loads the same `apps/web` build served same-origin by the
-daemon, described in
-[Opening the daemon's own UI directly](#opening-the-daemons-own-ui-directly)
-above, where every feature — including live daemon sync — works normally.
+**On an unsupported browser, daemon connectivity is currently unavailable.**
+The daemon no longer serves a full UI at its own origin (it serves only the
+`/pair` consent page), so the previous escape hatch — opening
+`http://127.0.0.1:3099` directly — no longer applies. Use a Chromium-based
+browser (Chrome, Edge, Brave, Arc) to connect the hosted app to a local
+daemon; on other engines the hosted app keeps working with browser-local
+storage only.
 
 ## How pairing works
 

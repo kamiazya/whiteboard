@@ -181,7 +181,7 @@ afterEach(async () => {
 
 describe.skipIf(!hasWorkingPty)('daemon run auto-open: real process launch', () => {
   it(
-    'invokes the fake opener with the daemon origin URL exactly once when every guard passes',
+    'invokes the fake opener with the hosted app URL exactly once when every guard passes',
     async () => {
       const port = await findAvailablePort(4310)
       const dataDir = makeTempDir('whiteboard-auto-open-launch-data-')
@@ -215,7 +215,7 @@ describe.skipIf(!hasWorkingPty)('daemon run auto-open: real process launch', () 
       await killAndWait(pid, closed)
       liveChildren.splice(0, liveChildren.length)
 
-      expect(lines).toEqual([`http://127.0.0.1:${port}`])
+      expect(lines).toEqual(['https://kamiazya-whiteboard.pages.dev/'])
     },
     READINESS_TIMEOUT_MS + OPEN_SETTLE_MS + SHUTDOWN_TIMEOUT_MS + 5_000,
   )

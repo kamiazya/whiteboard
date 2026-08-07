@@ -15,6 +15,7 @@ import {
   isRunningInContainer,
 } from '../daemon/container-detection.js'
 import { getLogger } from '../server/log.js'
+import { OFFICIAL_HOSTED_APP_URL } from '../server/security/web-origin-allowlist.js'
 
 const log = getLogger('daemon-run-auto-open')
 
@@ -47,7 +48,10 @@ export async function maybeOpenDaemonBrowser(input: MaybeOpenDaemonBrowserInput)
   // propagate: the caller does not — and must not have to — wrap this call
   // in its own try/catch. The URL is computed up front so every failure
   // path below can tell the user what to open manually.
-  const url = `http://${input.host}:${input.port}`
+  // Hosted-first: the browser opens the official hosted app, which reaches
+  // this daemon via its default origin admission + a pairing grant. The
+  // daemon's own origin now serves only the /pair consent page.
+  const url = OFFICIAL_HOSTED_APP_URL
   try {
     const env = input.env ?? process.env
     const decision = decideAutoOpenBrowser({

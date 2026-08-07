@@ -54,7 +54,7 @@ describe('startHttpServer runtime status app.ui / app.buildPresent', () => {
     await rm(tmpRoot, { recursive: true, force: true })
   })
 
-  it('reports ui: "web-app" and buildPresent from dist/web-app', async () => {
+  it('reports ui: "pair-only" and buildPresent from dist/web-app', async () => {
     await writeFile(join(distWebAppDir, 'index.html'), '<html></html>')
 
     const port = await findAvailablePort(4200)
@@ -62,7 +62,7 @@ describe('startHttpServer runtime status app.ui / app.buildPresent', () => {
     await waitUntilListening(port)
 
     const status = running.getRuntimeStatus()
-    expect(status.app.ui).toBe('web-app')
+    expect(status.app.ui).toBe('pair-only')
     expect(status.app.buildPresent).toBe(true)
   })
 
@@ -72,7 +72,7 @@ describe('startHttpServer runtime status app.ui / app.buildPresent', () => {
     await waitUntilListening(port)
 
     const status = running.getRuntimeStatus()
-    expect(status.app.ui).toBe('web-app')
+    expect(status.app.ui).toBe('pair-only')
     expect(status.app.buildPresent).toBe(false)
   })
 })

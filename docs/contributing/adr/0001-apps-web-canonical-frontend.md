@@ -38,3 +38,24 @@ The migration proceeds in stages so each stage ships as a working increment:
 **Keep daemon-served UI as canonical** — Continue treating `packages/mcp-server/src/app` as the primary frontend and treat `apps/web` as secondary. Rejected: contradicts the goal of a statically deployable frontend independent of the daemon process.
 
 **One-shot migration** — Replace both UIs in a single PR. Rejected: too wide a regression surface; staged approach keeps each increment verifiable.
+
+## Addendum (2026-08-08): the daemon serves /pair only
+
+The original decision left the daemon "optionally serving the static build
+of `apps/web`" as a convenience fallback. That option is now retired
+(maintainer decision, 2026-08-08): the local daemon serves exactly one page —
+`/pair`, the pairing consent trust anchor that must come from the daemon's
+own origin (see ADR-0005 and the daemon identity keypair design) — plus the
+static assets it needs. Every other UI path answers a 302 to the official
+hosted app, and daemon startup auto-open targets the hosted app as well.
+
+Rationale: with the official hosted origin admitted by the daemon by
+default and pairing grants persisting across restarts, the hosted PWA is
+the canonical entry for every flow, and a second fully-functional origin
+was a source of divergence (duplicate SW/PWA behavior, split user state,
+double security surface). Accepted tradeoff, explicitly: a fully-offline
+FIRST run (PWA never installed) has no canvas UI — the installed PWA is
+the offline path.
+
+The `dist/web-app` copy step and its packaging checks remain: `/pair` is
+rendered by the same built bundle.

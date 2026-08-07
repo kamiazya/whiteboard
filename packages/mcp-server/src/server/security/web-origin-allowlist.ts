@@ -102,6 +102,11 @@ export const DEFAULT_ALLOWED_WEB_ORIGINS: readonly string[] = [
   'https://kamiazya-whiteboard.pages.dev',
 ]
 
+// The canonical entry URL of the official hosted app — the daemon's
+// non-/pair UI redirect target and the auto-open destination. Kept next to
+// the CORS default above so the two can never drift apart.
+export const OFFICIAL_HOSTED_APP_URL = `${DEFAULT_ALLOWED_WEB_ORIGINS[0]}/`
+
 // Startup-time wiring helper shared by both entrypoints (cli/daemon-run.ts,
 // server/index.ts): parses the env once and logs a structured failure record
 // (never echoing the raw offending value) instead of each entrypoint
