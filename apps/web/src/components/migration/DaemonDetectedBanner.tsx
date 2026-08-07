@@ -295,7 +295,7 @@ export function DaemonDetectedBanner({
             rel="noreferrer"
             className="font-medium underline"
           >
-            Learn more
+            How to connect a local daemon
           </a>
         </span>
       )}

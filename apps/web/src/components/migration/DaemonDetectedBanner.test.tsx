@@ -231,7 +231,7 @@ describe('DaemonDetectedBanner', () => {
     // No daemon-origin escape hatch anymore (the daemon serves only /pair);
     // the honest affordance is the docs link.
     expect(screen.queryByRole('link', { name: /open the local app/i })).toBeNull()
-    const learnMore = screen.getByRole('link', { name: /learn more/i })
+    const learnMore = screen.getByRole('link', { name: /how to connect a local daemon/i })
     expect(learnMore.getAttribute('href')).toContain('connect-to-local-daemon')
   })
 
