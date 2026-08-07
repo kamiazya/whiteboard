@@ -22,6 +22,8 @@ import type { Box } from './geometry.js'
 export interface TextNodeEditorProps {
   readonly box: Box
   readonly initialText: string
+  /** Overrides the testid for non-node uses (e.g. the edge label editor). */
+  readonly testId?: string
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
   /** Fires on every keystroke so a caller can track the in-progress value (e.g. to commit it if a gesture interrupts the edit). */
@@ -31,6 +33,7 @@ export interface TextNodeEditorProps {
 export function TextNodeEditor({
   box,
   initialText,
+  testId = 'text-node-editor',
   onCommit,
   onCancel,
   onChange,
@@ -63,7 +66,7 @@ export function TextNodeEditor({
   return (
     <textarea
       ref={textareaRef}
-      data-testid="text-node-editor"
+      data-testid={testId}
       value={value}
       style={{
         position: 'absolute',
