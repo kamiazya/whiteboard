@@ -40,19 +40,22 @@ describe('theme resolver purity (no ambient DOM read)', () => {
 
 describe('single content path (S10 guardrail)', () => {
   it('raw HTML injection exists ONLY at the two documented scene-svg sinks', async () => {
-    // Every user-visible string in the editor renders either as plain React
-    // text (palette labels, notices) or through canvas-render's escaping
-    // serializer injected at exactly these two places. A third
-    // dangerouslySetInnerHTML/innerHTML would be a new, unguarded XSS
-    // surface — add it here only with the same serializer-only guarantee.
+    // String-level TRIPWIRE, not a syntax-aware proof: it catches the ways
+    // raw markup realistically enters a React/DOM codebase
+    // (dangerouslySetInnerHTML, innerHTML/outerHTML assignment,
+    // insertAdjacentHTML). The escaping guarantee itself lives in
+    // canvas-render's serializer tests — this test only pins that nothing
+    // BUT that serializer's two documented injection points exists here.
     const allowed = new Map([
       ['./SpatialEditor.tsx', 1],
       ['./DragPreviewLayer.tsx', 1],
     ])
+    const sinkPattern =
+      /dangerouslySetInnerHTML=|\.innerHTML\s*=|\.outerHTML\s*=|insertAdjacentHTML\(/g
     for (const [path, loader] of Object.entries(modules)) {
-      if (path.endsWith('.test.ts') || path.endsWith('.test.tsx')) continue
+      if (/\.(test|spec)\.(ts|tsx)$/.test(path)) continue
       const source = (await loader()) as string
-      const injections = (source.match(/dangerouslySetInnerHTML=/g) ?? []).length
+      const injections = (source.match(sinkPattern) ?? []).length
       expect({ path, injections }).toEqual({ path, injections: allowed.get(path) ?? 0 })
     }
   })
@@ -64,11 +67,17 @@ describe('single content path (S10 guardrail)', () => {
     // command layer sync consumers replay.
     const loader = modules['./SpatialEditor.tsx']
     const source = (await loader?.()) as string
-    // The doc comment's `onChange(next, command)` mention is prose, not a
-    // call — match call sites by their argument shape: every real call
-    // passes a canvas produced by applyCommand (directly or via `running`).
-    const callSites = (source.match(/onChange\((running|applyCommand\()/g) ?? []).length
-    const allCalls = (source.match(/onChange\(/g) ?? []).length - 1 // minus the doc-comment mention
+    // String-level TRIPWIRE for the command boundary: every statement-level
+    // onChange call must hand over a canvas spelled `running` (the
+    // applyCommand accumulator) or an inline `applyCommand(...)` result.
+    // This is deliberately formatting-sensitive and NOT data-flow analysis —
+    // a rename or a bypass shows up as a diff in this file, and the
+    // behavioral guarantee (sync consumers can replay commands) is carried
+    // by the browser-tier tests that assert commands reconstruct the
+    // canvas. Prose mentions inside comments don't match: only call sites
+    // preceded by code punctuation/whitespace count.
+    const callSites = (source.match(/[^`\w]onChange\((running\b|applyCommand\()/g) ?? []).length
+    const allCalls = (source.match(/[^`\w]onChange\(/g) ?? []).length
     expect(allCalls).toBe(callSites)
   })
 })
