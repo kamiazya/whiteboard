@@ -40,6 +40,14 @@ catalog:
 # minimumReleaseAgeExclude when one is needed before the window elapses.
 # Requires pnpm >= 10.16 (see packageManager in package.json).
 minimumReleaseAge: 10080
+
+# Security-patch escape hatch (see the comment above): versions listed here
+# may be installed before the 7-day window elapses because they close a
+# published advisory. Prune entries once they age past the window.
+minimumReleaseAgeExclude:
+  - js-yaml
+  - fast-uri
+  - ip-address
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 
@@ -51,12 +59,14 @@ overrides:
   nanoid@<3.3.8: ^3.3.8
   nanoid@>=4.0.0 <5.0.9: ^5.0.9
   protobufjs@<8.6.6: ^8.6.6
-  fast-uri@<3.1.4: ^3.1.4
+  fast-uri@<3.1.5: ^3.1.5
   kysely@<0.28.17: ^0.28.17
   "@grpc/grpc-js@<1.14.4": ^1.14.4
   shell-quote@<1.9.0: ^1.9.0
   uuid@<11.1.1: ^11.1.1
   qs@>=6.11.1 <6.15.2: ^6.15.2
+  ip-address@<=10.3.0: '>=10.3.1'
+  js-yaml@>=4.0.0 <4.3.1: ^4.3.1
   ip-address@<=10.1.0: ^10.1.1
   mermaid@<11.15.0: ^11.16.0
   dompurify@<3.4.12: ^3.4.12
