@@ -39,6 +39,7 @@ import {
   useState,
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { ContextMenu } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -51,6 +52,7 @@ import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from 
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
+import { ToolPalette } from './ToolPalette.js'
 import {
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
@@ -184,6 +186,34 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * ~30ms on an 80-node canvas — far past a frame budget).
      */
     const [livePoint, setLivePoint] = useState<Point | null>(null)
+    /** Open right-click menu: screen position (root-relative) + hit target. */
+    const [contextMenu, setContextMenu] = useState<{
+      x: number
+      y: number
+      nodeId: string | undefined
+      point: Point
+    } | null>(null)
+    /**
+     * Additional selected node ids beyond the reducer's single primary
+     * selection. Multi-select lives at the component layer on purpose: the
+     * gesture reducer keeps its single-node contract, and group operations
+     * expand into per-member commands at commit time (see the pointerup and
+     * delete paths). Cleared whenever the primary selection clears.
+     */
+    const [extraIds, setExtraIds] = useState<ReadonlySet<string>>(new Set())
+    /**
+     * Armed by a second same-target press inside the double-press window;
+     * RESOLVED at pointerup: zero movement opens the editor (node) or
+     * creates (empty), any movement means it was a drag all along. Firing
+     * at the release also sidesteps mousedown's default focus action, which
+     * used to blur the just-mounted textarea when we opened at the press.
+     */
+    const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
+    /** In-flight marquee selection rect, in canvas space (Excalidraw
+     * semantics: plain drag on empty space selects; pan is Space+drag,
+     * middle-button drag, or wheel). */
+    const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null)
+    const spaceDownRef = useRef(false)
     const isPanningRef = useRef(false)
     /** Last primary press for double-press detection: logical target + time. */
     const lastPressRef = useRef<{ key: string; at: number } | null>(null)
@@ -246,6 +276,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
+    /**
+     * The dragged node's own content, rendered ONCE per drag (the reducer's
+     * pointermove passthrough returns the same state reference, so this memo
+     * holds for the whole gesture; a single-node render costs ~0.4ms).
+     * Per-frame motion is then a pure CSS transform in DragPreviewLayer —
+     * the full-canvas render stays untouched during the drag.
+     */
+    const dragContentSvg = useMemo(() => {
+      if (gestureState.kind !== 'moving') return undefined
+      const node = canvas.nodes.find((n) => n.id === gestureState.nodeId)
+      if (node === undefined) return undefined
+      const rendered = renderCanvasToSvg(
+        { nodes: [node], edges: [] },
+        { measure: resolvedMeasure, theme },
+      )
+      return {
+        svg: rendered.svg,
+        originX: gestureState.startX - rendered.bounds.x,
+        originY: gestureState.startY - rendered.bounds.y,
+      }
+    }, [gestureState, canvas, resolvedMeasure, theme])
+
     useImperativeHandle(
       forwardedRef,
       () => ({
@@ -304,6 +356,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         running = applyCommand(running, command)
         onChange(running, command)
       }
+      // Written back HERE, not only from the canvas prop at re-render: two
+      // commits landing in one tick (key auto-repeat, batched events) would
+      // otherwise both compute from the pre-commit ref and the second would
+      // clobber the first.
+      canvasRef.current = running
     }
 
     /**
@@ -342,10 +399,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       e.target instanceof Element && e.target.closest('[data-editor-overlay]') !== null
 
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0) return
       if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
+      const screenPointForPan = clientPointToRootLocal(e, root)
+      // Middle-button (or Space-held) drag pans from ANYWHERE — Excalidraw
+      // semantics; a plain left drag on empty space marquee-selects instead.
+      if (e.button === 1 || (e.button === 0 && spaceDownRef.current)) {
+        e.preventDefault()
+        isPanningRef.current = true
+        lastPanPointRef.current = screenPointForPan
+        return
+      }
+      if (e.button !== 0) return
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
       // the press bubbled from never receives its click. Capture is taken
@@ -364,6 +430,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // synthesises a dblclick at all. Detecting two presses on the same
       // logical target within the OS-conventional window is stable against
       // re-renders because it compares node ids, not DOM identity.
+      // Shift-click builds a multi-selection instead of starting a gesture.
+      if (e.shiftKey && hitId !== undefined) {
+        if (selectedId === null) {
+          setSelectedId(hitId)
+        } else if (hitId === selectedId) {
+          // Deselecting the primary promotes an extra, if any.
+          const [next, ...rest] = [...extraIds]
+          setSelectedId(next ?? null)
+          setExtraIds(new Set(rest))
+        } else {
+          const next = new Set(extraIds)
+          if (next.has(hitId)) next.delete(hitId)
+          else next.add(hitId)
+          setExtraIds(next)
+        }
+        return
+      }
       const pressKey = hitId ?? 'empty'
       const now = e.timeStamp
       const isDoublePress =
@@ -371,42 +454,35 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         lastPressRef.current.key === pressKey &&
         now - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
       lastPressRef.current = isDoublePress ? null : { key: pressKey, at: now }
+      doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
 
       if (hitId === undefined) {
-        if (isDoublePress) {
-          // Suppress the press's default focus action: React flushes the
-          // editor mount (with autofocus) synchronously inside this
-          // discrete event, and the browser would otherwise apply
-          // mousedown's default focus AFTER our handler — yanking focus off
-          // the just-mounted textarea, whose blur instantly commits and
-          // closes it again.
-          e.preventDefault()
-          createNodeAt(point)
-          return
-        }
-        isPanningRef.current = true
-        lastPanPointRef.current = screenPoint
+        setMarquee({ start: point, current: point })
+        setExtraIds(new Set())
         applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
         return
       }
-      if (isDoublePress) {
-        const node = canvas.nodes.find((n) => n.id === hitId)
-        if (node?.type === 'text') {
-          // Same focus-default suppression as the empty-space branch above.
-          e.preventDefault()
-          applyResult(
-            reduceGesture(gestureState, canvas, {
-              type: 'start-text-edit',
-              nodeId: node.id,
-              text: node.text,
-            }),
-          )
-          return
-        }
+      // A plain press on a NON-member collapses the multi-selection; a press
+      // on a member keeps it (that press starts a group move).
+      if (hitId !== undefined && hitId !== selectedId && !extraIds.has(hitId)) {
+        setExtraIds(new Set())
       }
       applyResult(
         reduceGesture(gestureState, canvas, { type: 'pointerdown', nodeId: hitId, point }),
       )
+    }
+
+    const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+      if (isOverlayEvent(e)) return
+      // Replace the browser menu with the object's own action menu.
+      e.preventDefault()
+      const root = rootRef.current
+      if (root === null) return
+      const screenPoint = clientPointToRootLocal(e, root)
+      const point = screenToCanvas(screenPoint, viewport)
+      const hitId = hitTest(boxes, point)
+      if (hitId !== undefined) setSelectedId(hitId)
+      setContextMenu({ x: screenPoint.x, y: screenPoint.y, nodeId: hitId, point })
     }
 
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -422,6 +498,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         capturePointer(root, e.pointerId)
       }
       const screenPoint = clientPointToRootLocal(e, root)
+      if (marquee !== null) {
+        setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
+        return
+      }
       if (isPanningRef.current) {
         const screenDelta = {
           x: screenPoint.x - lastPanPointRef.current.x,
@@ -440,6 +520,39 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       activePointerIdRef.current = null
+      const armed = doublePressRef.current
+      doublePressRef.current = null
+      if (marquee !== null) {
+        setMarquee(null)
+        const zeroMove =
+          marquee.start.x === marquee.current.x && marquee.start.y === marquee.current.y
+        if (zeroMove) {
+          // A stationary empty press: a plain one just cleared selection at
+          // the press; a DOUBLE one creates a node here (resolved at the
+          // release, consistent with the node-edit double-press rule).
+          if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+          return
+        }
+        const rect = {
+          x: Math.min(marquee.start.x, marquee.current.x),
+          y: Math.min(marquee.start.y, marquee.current.y),
+          w: Math.abs(marquee.current.x - marquee.start.x),
+          h: Math.abs(marquee.current.y - marquee.start.y),
+        }
+        const hitIds = boxes
+          .filter(
+            (entry) =>
+              entry.box.x < rect.x + rect.w &&
+              entry.box.x + entry.box.width > rect.x &&
+              entry.box.y < rect.y + rect.h &&
+              entry.box.y + entry.box.height > rect.y,
+          )
+          .map((entry) => entry.id)
+        const [primary, ...rest] = hitIds
+        setSelectedId(primary ?? null)
+        setExtraIds(new Set(rest))
+        return
+      }
       if (isPanningRef.current) {
         isPanningRef.current = false
         return
@@ -448,14 +561,50 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const targetNodeId = gestureState.kind === 'connecting' ? hitTest(boxes, point) : undefined
-      applyResult(
-        reduceGesture(
-          gestureState,
-          canvas,
-          { type: 'pointerup', point, targetNodeId },
-          { createId },
-        ),
+      const result = reduceGesture(
+        gestureState,
+        canvas,
+        { type: 'pointerup', point, targetNodeId },
+        { createId },
       )
+      // A move commit on a multi-selection member applies the SAME delta to
+      // every other member — expanded here at commit time so the reducer
+      // keeps its single-node contract.
+      // A double press on a node that never moved is double-click-to-edit.
+      if (
+        armed !== null &&
+        gestureState.kind === 'moving' &&
+        armed.key === gestureState.nodeId &&
+        result.commands.length === 0
+      ) {
+        const node = canvasRef.current.nodes.find((n) => n.id === gestureState.nodeId)
+        if (node?.type === 'text') {
+          applyResult(
+            reduceGesture(result.state, canvas, {
+              type: 'start-text-edit',
+              nodeId: node.id,
+              text: node.text,
+            }),
+          )
+          return
+        }
+      }
+      const moved = result.commands.find((c) => c.kind === 'move-node')
+      if (moved !== undefined && extraIds.size > 0 && gestureState.kind === 'moving') {
+        const dx = moved.x - gestureState.startX
+        const dy = moved.y - gestureState.startY
+        const extras = [...extraIds]
+          .filter((id) => id !== moved.id)
+          .flatMap((id) => {
+            const node = canvasRef.current.nodes.find((n) => n.id === id)
+            return node === undefined
+              ? []
+              : [{ kind: 'move-node' as const, id, x: node.x + dx, y: node.y + dy }]
+          })
+        applyResult({ ...result, commands: [...result.commands, ...extras] })
+        return
+      }
+      applyResult(result)
     }
 
     const handlePointerCancel = () => {
@@ -478,6 +627,60 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // while typing would delete the node instead of a character. The
       // reducer's own editing-text guard is the second, machine-checkable
       // layer of that same policy (see gestures.ts's delete-selection arm).
+      // Arrow keys nudge the SELECTED node (standard canvas-tool parity);
+      // Shift multiplies the step. A focused resize handle handles arrows
+      // itself and stops propagation there, so an arrow reaching THIS
+      // handler is never a resize.
+      if (e.key === ' ' && gestureState.kind === 'idle') {
+        // Held Space turns the next left-drag into a pan (Excalidraw
+        // semantics). preventDefault stops the page scrolling on Space.
+        e.preventDefault()
+        spaceDownRef.current = true
+        return
+      }
+      const nudge = ARROW_KEY_DELTA[e.key]
+      if (
+        nudge !== undefined &&
+        selection !== undefined &&
+        selectedNode !== undefined &&
+        gestureState.kind === 'idle'
+      ) {
+        e.preventDefault()
+        const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
+        // Read the node's position from canvasRef, not the render closure:
+        // key auto-repeat delivers keydowns faster than commits re-render,
+        // and a stale base makes each repeat clobber the previous nudge.
+        const current = canvasRef.current.nodes.find((n) => n.id === selectedNode.id)
+        if (current === undefined) return
+        applyResult({
+          state: gestureState,
+          commands: [
+            {
+              kind: 'move-node',
+              id: current.id,
+              x: current.x + nudge.dx * step,
+              y: current.y + nudge.dy * step,
+            },
+          ],
+        })
+        return
+      }
+      if (
+        (e.key === 'Delete' || e.key === 'Backspace') &&
+        selection !== undefined &&
+        extraIds.size > 0 &&
+        gestureState.kind !== 'editing-text'
+      ) {
+        e.preventDefault()
+        const ids = [selection.id, ...extraIds]
+        applyResult({
+          state: { kind: 'idle' },
+          commands: ids.map((id) => ({ kind: 'delete-node' as const, id })),
+          selectedId: null,
+        })
+        setExtraIds(new Set())
+        return
+      }
       if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
         const target = e.target as HTMLElement | null
         const tag = target?.tagName
@@ -639,28 +842,67 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           touchAction: 'none',
         }}
         onPointerDown={handlePointerDown}
+        onContextMenu={handleContextMenu}
+        onKeyUp={(e) => {
+          if (e.key === ' ') spaceDownRef.current = false
+        }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         onLostPointerCapture={handlePointerCancel}
         onKeyDown={handleKeyDown}
       >
-        {/* Discoverability affordance: every canvas is empty until a node
-          exists, and double-click-empty-space has no visible cue at all —
-          this real, keyboard-reachable button is the one always-visible way
-          in. Positioned outside the pan/zoom transform so it stays fixed on
-          screen regardless of viewport. */}
-        <button
-          type="button"
-          data-testid="add-node-button"
-          onClick={createNodeAtViewportCenter}
-          data-editor-overlay
-          className="absolute z-10 rounded-md border bg-background px-3 py-1.5 text-sm shadow-sm hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          style={{ top: 8, left: 8 }}
-        >
-          Add note
-        </button>
+        {/* The OOUI creation surface: every canvas is empty until a node
+          exists and double-click-empty-space has no visible cue, so the
+          palette is the always-visible, keyboard-reachable way in. Fixed to
+          the bottom edge outside the pan/zoom transform. */}
+        <ToolPalette onCreateNode={createNodeAtViewportCenter} />
+        {contextMenu !== null && (
+          <ContextMenu
+            x={contextMenu.x}
+            y={contextMenu.y}
+            onClose={() => setContextMenu(null)}
+            items={(() => {
+              const node =
+                contextMenu.nodeId === undefined
+                  ? undefined
+                  : canvas.nodes.find((n) => n.id === contextMenu.nodeId)
+              if (node === undefined) {
+                return [{ label: 'Add note here', onSelect: () => createNodeAt(contextMenu.point) }]
+              }
+              const items = []
+              if (node.type === 'text') {
+                items.push({
+                  label: 'Edit text',
+                  onSelect: () => {
+                    applyResult(
+                      reduceGesture(gestureState, canvas, {
+                        type: 'start-text-edit',
+                        nodeId: node.id,
+                        text: node.text,
+                      }),
+                    )
+                  },
+                })
+              }
+              items.push({
+                label: 'Delete',
+                danger: true,
+                onSelect: () => {
+                  applyResult(
+                    reduceGesture(gestureState, canvas, {
+                      type: 'delete-selection',
+                      nodeId: node.id,
+                    }),
+                  )
+                },
+              })
+              return items
+            })()}
+          />
+        )}
         <div
+          data-testid="viewport-transform"
           style={{
             position: 'absolute',
             left: 0,
@@ -689,6 +931,63 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
             dangerouslySetInnerHTML={{ __html: svg }}
           />
+          {marquee !== null && (
+            <svg
+              data-testid="marquee-rect"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                overflow: 'visible',
+                left: 0,
+                top: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              <rect
+                x={Math.min(marquee.start.x, marquee.current.x)}
+                y={Math.min(marquee.start.y, marquee.current.y)}
+                width={Math.abs(marquee.current.x - marquee.start.x)}
+                height={Math.abs(marquee.current.y - marquee.start.y)}
+                fill="#2563eb"
+                fillOpacity={0.08}
+                stroke="#2563eb"
+                strokeWidth={1 / viewport.zoom}
+                strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
+              />
+            </svg>
+          )}
+          {extraIds.size > 0 && (
+            <svg
+              data-testid="extra-selection-outlines"
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                overflow: 'visible',
+                left: 0,
+                top: 0,
+                pointerEvents: 'none',
+              }}
+            >
+              {[...extraIds].flatMap((id) => {
+                const b = boxes.find((entry) => entry.id === id)
+                return b === undefined ? (
+                  []
+                ) : (
+                  <rect
+                    key={id}
+                    x={b.box.x}
+                    y={b.box.y}
+                    width={b.box.width}
+                    height={b.box.height}
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth={1.5 / viewport.zoom}
+                    opacity={0.7}
+                  />
+                )
+              })}
+            </svg>
+          )}
           {selection !== undefined && (
             <SelectionOverlay
               box={selection.box}
@@ -723,6 +1022,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               onHandleKeyDown={handleResizeHandleKeyDown}
               onConnectKeyDown={handleConnectKeyDown}
+              onEditRequest={
+                selectedNode?.type === 'text'
+                  ? () => {
+                      applyResult(
+                        reduceGesture(gestureState, canvas, {
+                          type: 'start-text-edit',
+                          nodeId: selectedNode.id,
+                          text: selectedNode.text,
+                        }),
+                      )
+                    }
+                  : undefined
+              }
             />
           )}
           {/* In-flight gesture preview. Drawn from component-local pointer
@@ -730,7 +1042,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             layout+stringify+innerHTML path runs once per gesture (at
             pointerup) instead of once per frame. */}
           {dragPreview !== undefined && (
-            <DragPreviewLayer preview={dragPreview} zoom={viewport.zoom} />
+            <DragPreviewLayer
+              preview={dragPreview}
+              zoom={viewport.zoom}
+              contentSvg={dragContentSvg}
+            />
           )}
           {gestureState.kind === 'connecting' && (
             <svg
