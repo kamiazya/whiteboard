@@ -17,6 +17,14 @@
  * the caller).
  */
 
+import {
+  createChallengeNonce,
+  getPinnedIdentity,
+  pinIdentity,
+  sha256Base64Url,
+  verifyIdentitySignature,
+} from './daemon-identity-pin.js'
+
 const TRANSACTION_KEY = 'whiteboard:pairing-transaction'
 const GRANT_FRAGMENT_PREFIX = '#wb-grant='
 
@@ -69,28 +77,42 @@ export async function beginPairingGrant({
   navigate(url.toString())
 }
 
-export function parseGrantFragment(hash: string): { code: string; state: string } | null {
+export function parseGrantFragment(
+  hash: string,
+): { code: string; state: string; identity: string | null } | null {
   if (!hash.startsWith(GRANT_FRAGMENT_PREFIX)) return null
   const params = new URLSearchParams(hash.slice(1))
   const code = params.get('wb-grant')
   const state = params.get('state')
   if (!code || !state) return null
-  return { code, state }
+  // The daemon-served consent page embeds the daemon's public key here —
+  // learned over the SAME top-level navigation the user just approved on,
+  // which is the trust anchor the pin inherits. Absent on legacy daemons.
+  return { code, state, identity: params.get('identity') }
 }
 
 export type GrantConsumeResult =
   | { status: 'paired'; daemonBaseUrl: string; token: string }
   | { status: 'none' }
   | { status: 'error'; detail: string }
+  /** A PINNED daemon answered with a wrong/missing identity signature.
+   *  Renewal is refused (fail closed) but the pin is kept so the
+   *  key-changed warning UI has its evidence; re-approving on /pair
+   *  re-pins. */
+  | { status: 'identity-mismatch'; daemonBaseUrl: string }
 
 export async function consumeGrantFragment({
   hash,
   sessionStorage,
   fetch,
+  hostedOrigin = globalThis.location.origin,
+  pinStorage = globalThis.localStorage,
 }: {
   hash: string
   sessionStorage: StorageLike
   fetch: typeof globalThis.fetch
+  hostedOrigin?: string
+  pinStorage?: StorageLike
 }): Promise<GrantConsumeResult> {
   const fragment = parseGrantFragment(hash)
   if (fragment === null) return { status: 'none' }
@@ -119,6 +141,7 @@ export async function consumeGrantFragment({
     return { status: 'error', detail: 'pairing state mismatch' }
   }
 
+  const nonce = createChallengeNonce()
   try {
     const response = await fetch(`${transaction.daemonBaseUrl}/api/pairing/token`, {
       method: 'POST',
@@ -127,14 +150,46 @@ export async function consumeGrantFragment({
         grantType: 'code',
         code: fragment.code,
         codeVerifier: transaction.codeVerifier,
+        nonce,
       }),
     })
     if (!response.ok) {
       return { status: 'error', detail: `token exchange rejected (${response.status})` }
     }
-    const body = (await response.json()) as { token?: unknown }
+    const body = (await response.json()) as {
+      token?: unknown
+      expiresAt?: unknown
+      identity?: { publicKey?: unknown; signature?: unknown }
+    }
     if (typeof body.token !== 'string' || body.token.length === 0) {
       return { status: 'error', detail: 'token exchange returned no token' }
+    }
+    if (fragment.identity !== null) {
+      // The key the user just approved (fragment) must be the key that
+      // signs the credential handed over — anything else is refused.
+      const verified =
+        typeof body.expiresAt === 'string' &&
+        body.identity?.publicKey === fragment.identity &&
+        typeof body.identity?.signature === 'string' &&
+        (await verifyIdentitySignature({
+          publicKey: fragment.identity,
+          parts: [
+            'wb-token-v1',
+            nonce,
+            hostedOrigin,
+            await sha256Base64Url(body.token),
+            body.expiresAt,
+          ],
+          signature: body.identity.signature,
+        }))
+      if (!verified) {
+        return { status: 'error', detail: 'daemon identity verification failed' }
+      }
+      pinIdentity(
+        transaction.daemonBaseUrl,
+        { alg: 'Ed25519', publicKey: fragment.identity },
+        pinStorage,
+      )
     }
     return { status: 'paired', daemonBaseUrl: transaction.daemonBaseUrl, token: body.token }
   } catch (error) {
@@ -154,20 +209,51 @@ export async function consumeGrantFragment({
 export async function renewPairingToken({
   daemonBaseUrl,
   fetch,
+  hostedOrigin = globalThis.location.origin,
+  pinStorage = globalThis.localStorage,
 }: {
   daemonBaseUrl: string
   fetch: typeof globalThis.fetch
+  hostedOrigin?: string
+  pinStorage?: StorageLike
 }): Promise<GrantConsumeResult> {
   const base = daemonBaseUrl.replace(/\/+$/, '')
+  const pinned = getPinnedIdentity(base, pinStorage)
+  const nonce = pinned !== null ? createChallengeNonce() : undefined
   try {
     const response = await fetch(`${base}/api/pairing/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ grantType: 'origin' }),
+      body: JSON.stringify({ grantType: 'origin', ...(nonce !== undefined ? { nonce } : {}) }),
     })
     if (!response.ok) return { status: 'none' }
-    const body = (await response.json()) as { token?: unknown }
+    const body = (await response.json()) as {
+      token?: unknown
+      expiresAt?: unknown
+      identity?: { publicKey?: unknown; signature?: unknown }
+    }
     if (typeof body.token !== 'string' || body.token.length === 0) return { status: 'none' }
+    if (pinned !== null && nonce !== undefined) {
+      // Verified against the PIN, never the advertised key: a squatter (or
+      // a rotated daemon) fails closed here and the user re-approves on
+      // /pair, which re-pins.
+      const verified =
+        typeof body.expiresAt === 'string' &&
+        body.identity?.publicKey === pinned.publicKey &&
+        typeof body.identity?.signature === 'string' &&
+        (await verifyIdentitySignature({
+          publicKey: pinned.publicKey,
+          parts: [
+            'wb-token-v1',
+            nonce,
+            hostedOrigin,
+            await sha256Base64Url(body.token),
+            body.expiresAt,
+          ],
+          signature: body.identity.signature,
+        }))
+      if (!verified) return { status: 'identity-mismatch', daemonBaseUrl: base }
+    }
     return { status: 'paired', daemonBaseUrl: base, token: body.token }
   } catch {
     return { status: 'none' }

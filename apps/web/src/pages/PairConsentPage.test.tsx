@@ -40,8 +40,13 @@ describe('PairConsentPage', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledTimes(1))
     expect(navigate.mock.calls[0]?.[0]).toBe(`${HOSTED}/#wb-grant=the-code&state=st-1`)
-    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe('/api/pairing/grants')
+    // The page also pings its own origin for the identity fingerprint;
+    // find the grant call by URL rather than by index.
+    const grantCall = fetchFn.mock.calls.find(
+      (call) => (call as unknown as [string])[0] === '/api/pairing/grants',
+    ) as unknown as [string, RequestInit]
+    expect(grantCall).toBeDefined()
+    const [, init] = grantCall
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer daemon-secret')
     expect(JSON.parse(String(init.body))).toEqual({ origin: HOSTED, codeChallenge: 'chal' })
   })
@@ -54,7 +59,13 @@ describe('PairConsentPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /deny/i }))
 
     await screen.findByText(/denied/i)
-    expect(fetchFn).not.toHaveBeenCalled()
+    // The identity-fingerprint ping is a harmless same-origin read; what
+    // Deny must never do is touch the pairing API.
+    expect(
+      fetchFn.mock.calls.filter((call) =>
+        String((call as unknown as [string])[0]).startsWith('/api/pairing'),
+      ),
+    ).toHaveLength(0)
     expect(navigate).not.toHaveBeenCalled()
   })
 

@@ -493,6 +493,30 @@ export function App({ providerState }: AppProps) {
           message="Beta preview — your data is stored only in this browser."
         />
         <BackendConfigChip state={effectiveState} />
+        {grantConnection?.status === 'identity-mismatch' && !grantErrorDismissed && (
+          // Fail-closed renewal refusal: a PINNED daemon answered with a
+          // wrong or missing identity signature. Either the daemon rotated
+          // its key (delete + regenerate) or something else is on its port —
+          // both need a fresh human approval on the daemon's consent page.
+          <div
+            role="alert"
+            className="flex shrink-0 items-center justify-between gap-2 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+          >
+            <span>
+              This daemon's identity changed — automatic reconnection was refused. If you rotated or
+              reinstalled the daemon, re-approve it from "Check for local daemon"; otherwise treat
+              this as a warning that something else may be answering on its port.
+            </span>
+            <button
+              type="button"
+              onClick={() => setGrantErrorDismissed(true)}
+              aria-label="Dismiss identity warning"
+              className="shrink-0 rounded px-1.5 py-0.5 font-medium hover:bg-background/60"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {grantConnection?.status === 'error' && !grantErrorDismissed && (
           // The user just clicked Approve on the daemon's consent page —
           // landing back here on browser-local with no explanation was a

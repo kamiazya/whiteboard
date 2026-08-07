@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
+import { fingerprintPublicKey } from '@/lib/daemon-identity-pin'
 
 // Mirrors the daemon's GET /api/pairing/grants response (see
 // packages/mcp-server/src/server/routes/pairing.ts) — hydrated through the
@@ -33,6 +34,32 @@ export function PairedOriginsCard() {
   // daemon can never overwrite the active one's grants — its grantIds
   // belong to the other daemon entirely.
   const generationRef = useRef(0)
+  const [fingerprint, setFingerprint] = useState<string | null>(null)
+
+  // The daemon's identity fingerprint, so a user can cross-check the value
+  // shown on the /pair consent page out-of-band. Best-effort: absent on
+  // legacy daemons or while unreachable.
+  useEffect(() => {
+    const generation = generationRef.current
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetchApi('/api/runtime/ping')
+        if (!res.ok) return
+        const body = (await res.json()) as { identity?: { publicKey?: unknown } }
+        const publicKey = body.identity?.publicKey
+        if (typeof publicKey !== 'string' || publicKey.length === 0) return
+        const value = await fingerprintPublicKey(publicKey)
+        if (!cancelled && generation === generationRef.current) setFingerprint(value)
+      } catch {
+        // Leave the fingerprint absent.
+      }
+    })()
+    return () => {
+      cancelled = true
+      setFingerprint(null)
+    }
+  }, [fetchApi])
 
   const load = useCallback(async () => {
     const generation = ++generationRef.current
@@ -91,6 +118,16 @@ export function PairedOriginsCard() {
       <p className="mb-3 text-xs text-muted-foreground">
         Web apps you approved on this daemon's consent page. Revoking cuts their access immediately,
         including any active session.
+        {fingerprint !== null && (
+          <>
+            {' '}
+            This daemon's identity:{' '}
+            <span data-testid="daemon-fingerprint" className="font-mono">
+              {fingerprint}
+            </span>
+            .
+          </>
+        )}
       </p>
       {revokeError && (
         <p role="alert" className="mb-2 text-xs text-destructive">
