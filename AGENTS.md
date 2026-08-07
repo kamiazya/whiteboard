@@ -110,10 +110,23 @@ pnpm mcp:debug:http
 - If request flow is unclear, restart with `MCP_HTTP_DEBUG=1 pnpm mcp:http:dev` and inspect the `[mcp-http:init]` / `[mcp-http]` logs.
 - Keep the detailed checklist in `docs/contributing/mcp-debugging.md` in sync with actual repo workflow.
 
-The repo ships HTTP-mode overrides for both clients:
+Dev sessions reach the daemon through the stdio proxy
+`packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs`:
 
-- `.mcp.json` → stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` → `http://127.0.0.1:3099/mcp` (Claude Code reads project-scope MCP servers ONLY from `.mcp.json`; `settings.json` has no `mcpServers` field in its schema)
-- `.codex/config.toml` → the same stdio proxy (server name `whiteboard_dev`)
+- **Claude Code**: register it once per checkout at LOCAL scope (machine-
+  private `~/.claude.json`), which shadows the published `npx` definition
+  in `.mcp.json` (precedence: local > project). `.mcp.json` itself is the
+  PUBLIC plugin/team surface and stays pointed at the published package —
+  do not repoint it at dev tooling. Note `settings.json` has no
+  `mcpServers` field in its schema; a definition there is silently ignored.
+
+  ```bash
+  claude mcp add --scope local --transport stdio whiteboard --     node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
+  ```
+
+- **Codex**: `.codex/config.toml` registers the same proxy as
+  `whiteboard_dev` (repo-tracked; it already disables the plugin-provided
+  published server).
 
 The clients register the proxy as a stdio server rather than the HTTP URL
 directly: an MCP client attempts one HTTP connection at session start and

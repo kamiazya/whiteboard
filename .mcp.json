@@ -1,22 +1,10 @@
 {
   "mcpServers": {
     "whiteboard": {
-      "_comment": [
-        "Dev stdio proxy to the long-lived HTTP dev daemon (pnpm mcp:http:dev,",
-        "http://127.0.0.1:3099/mcp). The proxy ensures the daemon, waits for",
-        "readiness, and retries each request across tsx-watch restarts — see",
-        "the script header. NOTE: this is the ONLY file Claude Code reads",
-        "project-scope MCP servers from; .claude/settings.json has no",
-        "mcpServers field in its schema, so a definition there is silently",
-        "ignored. Packaged-distribution checks run",
-        "`npx -y @kamiazya/whiteboard-mcp@latest` manually instead.",
-        "${CLAUDE_PROJECT_DIR:-.} per the docs: relative args resolve against",
-        "the LAUNCH directory, not this file's location."
-      ],
-      "type": "stdio",
-      "command": "node",
+      "command": "npx",
       "args": [
-        "${CLAUDE_PROJECT_DIR:-.}/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
+        "-y",
+        "@kamiazya/whiteboard-mcp@latest"
       ]
     }
   }

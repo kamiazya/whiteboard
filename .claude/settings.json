@@ -2,11 +2,13 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "_comment": [
     "NOTE: settings.json has NO mcpServers field in its schema \u2014 a definition",
-    "here is silently ignored (learned the hard way; see the docs note under",
-    "'MCP servers' in self-hosted-environments-configuration). The whiteboard",
-    "dev MCP server is defined in .mcp.json (project scope) as a stdio proxy",
-    "to the HTTP dev daemon; see that file and",
-    "packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs."
+    "here is silently ignored. The dev whiteboard MCP server is a LOCAL-scope",
+    "registration (per developer, per checkout):",
+    "  claude mcp add --scope local --transport stdio whiteboard -- \\",
+    "    node \"$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs\"",
+    "which shadows .mcp.json's published npx definition (local > project).",
+    ".mcp.json is the public plugin surface \u2014 do not repoint it at dev tooling.",
+    "See AGENTS.md 'MCP Development Mode' and docs/contributing/mcp-debugging.md."
   ],
   "worktree": {
     "baseRef": "head"
