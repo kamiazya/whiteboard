@@ -408,12 +408,19 @@ describe('SpatialEditor (browser)', () => {
         new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 30 }),
       )
     await editor.element().dispatchEvent(
-      new MouseEvent('dblclick', {
+      new PointerEvent('pointerdown', {
         bubbles: true,
         clientX: 40,
         clientY: 40,
+        pointerId: 90,
+        button: 0,
       }),
     )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 90 }),
+      )
 
     const textEditor = page.getByTestId('text-node-editor')
     await textEditor.fill('edited')
@@ -447,12 +454,19 @@ describe('SpatialEditor (browser)', () => {
         new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 40 }),
       )
     await editor.element().dispatchEvent(
-      new MouseEvent('dblclick', {
+      new PointerEvent('pointerdown', {
         bubbles: true,
         clientX: 40,
         clientY: 40,
+        pointerId: 90,
+        button: 0,
       }),
     )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 90 }),
+      )
 
     const textEditor = page.getByTestId('text-node-editor')
     await textEditor.fill('edited')
@@ -1073,12 +1087,33 @@ describe('SpatialEditor (browser)', () => {
     const editor = page.getByTestId('spatial-editor')
     // Empty space: far from both node "a" (20,20-120,80) and node "b" (250,20-330,60).
     await editor.element().dispatchEvent(
-      new MouseEvent('dblclick', {
+      new PointerEvent('pointerdown', {
         bubbles: true,
         clientX: 500,
         clientY: 300,
+        pointerId: 91,
+        button: 0,
       }),
     )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 500, clientY: 300, pointerId: 91 }),
+      )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 500,
+        clientY: 300,
+        pointerId: 91,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 500, clientY: 300, pointerId: 91 }),
+      )
 
     const textEditor = page.getByTestId('text-node-editor')
     expect(textEditor.element()).toBeTruthy()
@@ -1107,10 +1142,12 @@ describe('SpatialEditor (browser)', () => {
         />
       </div>,
     )
-    const button = page.getByTestId('add-node-button')
-    await button
-      .element()
-      .dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+    // A REAL pointer sequence (pointerdown -> pointerup -> click), not a
+    // synthetic MouseEvent: the synthetic form skips pointerdown and so
+    // cannot detect the root capturing the pointer and swallowing the
+    // button's click — the bug that made this button do nothing in the
+    // running app while this test stayed green.
+    await userEvent.click(page.getByTestId('add-node-button'))
 
     expect(onChange).toHaveBeenCalledTimes(1)
     const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
@@ -1233,12 +1270,19 @@ describe('SpatialEditor (browser)', () => {
         new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 62 }),
       )
     await editor.element().dispatchEvent(
-      new MouseEvent('dblclick', {
+      new PointerEvent('pointerdown', {
         bubbles: true,
         clientX: 40,
         clientY: 40,
+        pointerId: 90,
+        button: 0,
       }),
     )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 40, clientY: 40, pointerId: 90 }),
+      )
 
     const textEditor = page.getByTestId('text-node-editor')
     await textEditor.fill('hell')
@@ -1273,16 +1317,41 @@ describe('SpatialEditor (browser)', () => {
     const editor = page.getByTestId('spatial-editor')
 
     // Create node 1 at (100, 100), commit empty text via blur.
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+        pointerId: 92,
+        button: 0,
+      }),
+    )
     await editor
       .element()
-      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 100 }))
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 100, clientY: 100, pointerId: 92 }),
+      )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 100,
+        pointerId: 92,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 100, clientY: 100, pointerId: 92 }),
+      )
     let textEditor = page.getByTestId('text-node-editor')
     ;(textEditor.element() as HTMLTextAreaElement).blur()
     let canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
     expect(canvas.nodes).toHaveLength(1)
     // Wait for ControlledEditor's setCanvas to actually flush and re-render
     // SpatialEditor with the updated `canvas` prop (evidenced by the
-    // TextNodeEditor unmounting) — otherwise the next dblclick's handler
+    // TextNodeEditor unmounting) — otherwise the next double-press's handler
     // closure still sees the PRE-create (empty) canvas, and the next create
     // silently overwrites node 1 instead of adding node 2.
     await waitFor(() => {
@@ -1290,9 +1359,34 @@ describe('SpatialEditor (browser)', () => {
     })
 
     // Create node 2 at (400, 100), commit.
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 400,
+        clientY: 100,
+        pointerId: 93,
+        button: 0,
+      }),
+    )
     await editor
       .element()
-      .dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 400, clientY: 100 }))
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 400, clientY: 100, pointerId: 93 }),
+      )
+    await editor.element().dispatchEvent(
+      new PointerEvent('pointerdown', {
+        bubbles: true,
+        clientX: 400,
+        clientY: 100,
+        pointerId: 93,
+        button: 0,
+      }),
+    )
+    await editor
+      .element()
+      .dispatchEvent(
+        new PointerEvent('pointerup', { bubbles: true, clientX: 400, clientY: 100, pointerId: 93 }),
+      )
     textEditor = page.getByTestId('text-node-editor')
     ;(textEditor.element() as HTMLTextAreaElement).blur()
     canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
@@ -1343,6 +1437,12 @@ describe('SpatialEditor (browser)', () => {
     expect(canvas.edges).toHaveLength(1)
     const edgeId = canvas.edges[0]!.id
     expect(canvas.edges[0]).toEqual({ id: edgeId, fromNode: node1Box.id, toNode: node2Box.id })
+
+    // Give the double-press window time to lapse: the press that started
+    // the connect gesture was also on node 1's chrome, and a same-node press
+    // inside DOUBLE_PRESS_WINDOW_MS correctly opens the text editor instead
+    // of selecting. A human pauses here; synthetic dispatch does not.
+    await new Promise((resolve) => setTimeout(resolve, 450))
 
     // Select node 1 again, delete it.
     await editor.element().dispatchEvent(
