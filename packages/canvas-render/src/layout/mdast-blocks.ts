@@ -49,13 +49,23 @@ const TABLE_ROW_HEIGHT_PX = 24
 const CODE_LINE_HEIGHT_PX = 20
 const THEMATIC_BREAK_HEIGHT_PX = 1
 
-function bodyFont(sizePx: number) {
-  return { family: 'sans-serif', fallbackChain: [], weight: 400, style: 'normal' as const, sizePx }
+function bodyFont(family: string, sizePx: number) {
+  return { family, fallbackChain: [], weight: 400, style: 'normal' as const, sizePx }
 }
 
 export interface MdastLayoutOptions {
   readonly measure: MeasureText
   readonly maxWidth: number
+  /**
+   * Family every body run is measured with AND declares in its emitted
+   * appearance. Required, and deliberately one field for both roles: body
+   * runs are placed per word at absolute x coordinates computed from
+   * `measure`, so a run drawn in any family other than the measured one
+   * renders each word at a width the layout did not account for — the error
+   * is visible as uneven word gaps. A separate "measure family" and
+   * "declared family" could drift; one field cannot.
+   */
+  readonly fontFamily: string
   /**
    * Renders a math source string to an SVG fragment. Optional composition-
    * root seam — MathJax itself is never imported by this package. Absent a
@@ -80,8 +90,13 @@ interface Cursor {
   y: number
 }
 
-function measureRunWidth(measure: MeasureText, text: string, sizePx: number): number {
-  const metrics = measure(text, bodyFont(sizePx))
+function measureRunWidth(
+  measure: MeasureText,
+  fontFamily: string,
+  text: string,
+  sizePx: number,
+): number {
+  const metrics = measure(text, bodyFont(fontFamily, sizePx))
   return clampAdvance(metrics.advanceWidth)
 }
 
@@ -130,7 +145,7 @@ function layoutPhrasing(
     extra: Partial<TextRunNode>,
     runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
   ) => {
-    const metrics = options.measure(text, bodyFont(fontSizePx))
+    const metrics = options.measure(text, bodyFont(options.fontFamily, fontSizePx))
     const width = clampAdvance(metrics.advanceWidth)
     const baseline = clampAdvance(metrics.ascent)
     runs.push({
@@ -140,6 +155,9 @@ function layoutPhrasing(
       text,
       ...runStyle,
       ...extra,
+      // Stamped last so nothing can emit a run declaring a family other than
+      // the one it was measured with (see MdastLayoutOptions.fontFamily).
+      appearance: { ...extra.appearance, fontFamily: options.fontFamily },
     })
     line.x += width
   }
@@ -150,7 +168,7 @@ function layoutPhrasing(
     runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
   ) => {
     const words = text.split(/\s+/).filter((word) => word.length > 0)
-    const spaceWidth = measureRunWidth(options.measure, ' ', fontSizePx)
+    const spaceWidth = measureRunWidth(options.measure, options.fontFamily, ' ', fontSizePx)
     // `split(/\s+/)` discards this chunk's own leading/trailing whitespace.
     // mdast represents "prose " + strong("word") as two adjacent phrasing
     // children, so a trailing space stripped here would otherwise vanish
@@ -161,7 +179,7 @@ function layoutPhrasing(
     // interior words are always whitespace-separated by construction).
     const chunkHasLeadingSpace = /^\s/.test(text)
     words.forEach((word, index) => {
-      const width = measureRunWidth(options.measure, word, fontSizePx)
+      const width = measureRunWidth(options.measure, options.fontFamily, word, fontSizePx)
       const needsSeparator = index === 0 ? chunkHasLeadingSpace : true
       if (needsSeparator && line.x > 0) {
         if (line.x + spaceWidth + width > options.maxWidth) {
@@ -188,7 +206,7 @@ function layoutPhrasing(
     wrappable = true,
   ) => {
     if (canWrap && wrappable) {
-      const fullWidth = measureRunWidth(options.measure, text, fontSizePx)
+      const fullWidth = measureRunWidth(options.measure, options.fontFamily, text, fontSizePx)
       const overflows = line.x + fullWidth > options.maxWidth
       if (overflows && /\s/.test(text)) {
         wrapAndPush(text, extra, runStyle)
