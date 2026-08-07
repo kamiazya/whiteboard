@@ -34,6 +34,7 @@ describe('api-contracts barrel scope', () => {
       '@kamiazya/whiteboard-server-core',
       './branches.js',
       './canvas.js',
+      './pairing.js',
       './runtime.js',
     ])
   })

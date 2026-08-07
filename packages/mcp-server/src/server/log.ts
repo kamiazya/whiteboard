@@ -172,6 +172,8 @@ const REDACTED_PATHS = [
   'password',
   'secret',
   'apiKey',
+  'privateJwk',
+  'd',
   '*.token',
   '*.daemonToken',
   '*.bootstrapToken',
@@ -182,6 +184,8 @@ const REDACTED_PATHS = [
   '*.password',
   '*.secret',
   '*.apiKey',
+  '*.privateJwk',
+  '*.d',
 ]
 
 const root: Logger = pino(
