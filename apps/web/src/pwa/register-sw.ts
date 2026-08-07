@@ -43,6 +43,23 @@ export function setupSwRegistration({
                 log.error('failed to load the update toast module', err)
               })
           },
+          onRegisteredSW: (_swScriptUrl, registration) => {
+            // A long-open or quickly-reloaded tab may never re-check sw.js on
+            // its own cadence, so a deploy can go unnoticed indefinitely.
+            // Scheduling periodic + focus-triggered `registration.update()`
+            // calls is what turns a deploy into an onNeedRefresh toast within
+            // one interval tick or tab refocus. The scheduler module stays
+            // out of the entry chunk via this dynamic import, matching the
+            // update-toast module above.
+            if (!registration) return
+            void import('./sw-update-scheduler.js')
+              .then(({ startSwUpdateScheduler }) => {
+                startSwUpdateScheduler({ update: () => registration.update() })
+              })
+              .catch((err: unknown) => {
+                log.error('failed to load the service worker update scheduler', err)
+              })
+          },
         })
       })
       .catch((err: unknown) => {
