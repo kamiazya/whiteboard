@@ -7,6 +7,10 @@ import {
   rememberKnownDaemon,
 } from '../../lib/daemon-discovery.js'
 import {
+  challengeDaemonIdentity,
+  type IdentityChallengeResult,
+} from '../../lib/daemon-identity-pin.js'
+import {
   type DaemonProbeResult,
   DEFAULT_DAEMON_BASE_URL,
   type ProbeDaemonOptions,
@@ -57,6 +61,9 @@ interface DaemonDetectedBannerProps {
   // Injectable for tests; production default starts the pairing-grant
   // redirect (see lib/pairing-grant.ts).
   beginGrantFn?: (input: { daemonBaseUrl: string }) => Promise<void>
+  // Injectable for tests; production default challenges the responder's
+  // identity against the pinned key (see lib/daemon-identity-pin.ts).
+  challengeFn?: (baseUrl: string) => Promise<IdentityChallengeResult>
 }
 
 /**
@@ -78,12 +85,20 @@ export function DaemonDetectedBanner({
       sessionStorage: window.sessionStorage,
       navigate: (url) => window.location.assign(url),
     }),
+  challengeFn = (baseUrl) =>
+    challengeDaemonIdentity({ daemonBaseUrl: baseUrl, fetch: globalThis.fetch.bind(globalThis) }),
 }: DaemonDetectedBannerProps) {
   const [result, setResult] = useState<DaemonProbeResult | null>(null)
   // Every daemon the last sweep confirmed (dynamic ports mean there can be
   // several — one per dev worktree is the local norm). `result` above stays
   // the representative single answer the dismissal/tier logic reads.
   const [found, setFound] = useState<DiscoveredDaemon[] | null>(null)
+  // Cryptographic upgrade of the trust label: when the single detected
+  // responder's baseUrl carries a PIN (approved on /pair before), challenge
+  // it and only then say "identity verified". 'failed' downgrades the copy
+  // to the cautious form even for the paired target — a daemon we once
+  // pinned must be able to answer its own challenge.
+  const [identityStatus, setIdentityStatus] = useState<IdentityChallengeResult | null>(null)
   // Set only when the USER clicked the check and it came back empty — the
   // silent auto-probe on loopback mounts must not spawn failure copy the
   // user never asked for.
@@ -135,6 +150,25 @@ export function DaemonDetectedBanner({
   // else is labelled unverified. This is presentation-level honesty, not a
   // security boundary: the durable fix is daemon->browser mutual auth.
   const isPairedTarget = detectedBaseUrl === storedTarget.localDaemonBaseUrl
+
+  const detectedCount = found?.length ?? 0
+  useEffect(() => {
+    if (detectedCount !== 1) {
+      setIdentityStatus(null)
+      return
+    }
+    let cancelled = false
+    setIdentityStatus(null)
+    void challengeFn(detectedBaseUrl).then((status) => {
+      if (!cancelled) setIdentityStatus(status)
+    })
+    return () => {
+      cancelled = true
+    }
+    // challengeFn is an injected seam with a stable default; re-challenging
+    // is keyed on WHICH daemon was detected, not the callback identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectedCount, detectedBaseUrl])
 
   // 'http:'/'https:' -> 'http'/'https'; any other scheme (e.g. jsdom's
   // default 'about:' outside these injected-prop tests) falls back to
@@ -391,7 +425,9 @@ export function DaemonDetectedBanner({
           className="flex shrink-0 items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
         >
           <span>
-            {isPairedTarget ? (
+            {isPairedTarget && identityStatus === 'verified' ? (
+              <>A local whiteboard daemon is running at {detectedBaseUrl} (identity verified).</>
+            ) : isPairedTarget && identityStatus !== 'failed' ? (
               <>A local whiteboard daemon is running at {detectedBaseUrl}.</>
             ) : (
               <>

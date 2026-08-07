@@ -334,6 +334,51 @@ describe('DaemonDetectedBanner', () => {
     })
   })
 
+  it('a pinned, challenge-verified daemon earns the "identity verified" label', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+    }))
+    const challengeFn = vi.fn(async () => 'verified' as const)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+        challengeFn={challengeFn}
+      />,
+    )
+
+    await screen.findByText(/identity verified/)
+    expect(challengeFn).toHaveBeenCalledWith('http://127.0.0.1:3099')
+  })
+
+  it('a pinned daemon FAILING its challenge is downgraded to the cautious copy', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+    }))
+    const challengeFn = vi.fn(async () => 'failed' as const)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+        challengeFn={challengeFn}
+      />,
+    )
+
+    // The paired-target trust copy must NOT survive a failed challenge.
+    await screen.findByText(/A server responded at/)
+    expect(screen.queryByText(/identity verified/)).toBeNull()
+  })
+
   it('an unpaired swept responder is labelled UNVERIFIED, not "a whiteboard daemon is running"', async () => {
     // Any local process can bind a loopback port and answer /api/runtime/
     // ping with a self-asserted instanceId, so a swept hit is an unproven
