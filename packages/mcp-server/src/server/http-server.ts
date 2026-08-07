@@ -19,6 +19,8 @@ import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
+import { createPairingGrantStore } from './security/pairing-grant-store.js'
+import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { getDb } from './store/db/index.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
@@ -174,6 +176,23 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // upgrade — the route and the upgrade path have to agree on which store.
   const wsTicketStore = createWsTicketStore()
 
+  // Pairing-grant flow: durable origin grants + in-memory codes/tokens.
+  // The allowlist PROVIDER folds granted origins into the env-configured
+  // set per request, so an Approve on /pair takes effect on /api, /mcp,
+  // and WS without a restart (see the tri-surface provider contract test).
+  const pairingGrants = createPairingGrantStore(getDataDir())
+  const pairing = {
+    grants: pairingGrants,
+    codes: createPairingCodeStore(),
+    tokens: createPairingTokenStore(),
+  }
+  const envWebOrigins = options.allowedWebOrigins ?? []
+  const allowedWebOrigins = () => {
+    const grantOrigins = pairingGrants.origins()
+    if (grantOrigins.length === 0 && Array.isArray(envWebOrigins)) return envWebOrigins
+    return [...envWebOrigins, ...grantOrigins]
+  }
+
   // OpenCanvas /api/v1 surface: same libSQL database as the MCP tools
   // (getDb memoizes per dataDir, so this container shares the connection
   // with the per-session MCP containers rather than opening a second one).
@@ -190,9 +209,10 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     touch,
     getStatus: getRuntimeStatus,
     shutdown: close,
-    allowedWebOrigins: options.allowedWebOrigins,
+    allowedWebOrigins,
     oauthClientRegistry: options.oauthClientRegistry,
     wsTicketStore,
+    pairing,
     serverDeps,
   })
 
@@ -244,8 +264,9 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     const decision = authorizeWsUpgrade(
       req.headers,
       options.token,
-      options.allowedWebOrigins,
+      allowedWebOrigins,
       wsTicketStore.redeemTicket,
+      pairing.tokens,
     )
     if (!decision.accept) {
       const statusCode = decision.statusCode ?? 401

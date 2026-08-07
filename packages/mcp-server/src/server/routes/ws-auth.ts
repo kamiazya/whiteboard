@@ -89,6 +89,11 @@ export function authorizeWsUpgrade(
   token?: string,
   allowedOrigins: AllowedWebOrigins = [],
   redeemTicket?: RedeemTicketFn,
+  // Origin-scoped pairing session tokens: accepted through the same
+  // daemon-token subprotocol carrier the paired web app already uses, but
+  // only when the upgrade's own Origin header matches the origin the token
+  // was minted for.
+  pairingTokens?: { validate(token: string, origin: string): boolean },
 ): WsUpgradeDecision {
   if (!isAllowedBrowserOrigin(headers.origin, headers.host, allowedOrigins)) {
     return { accept: false, statusCode: 403 }
@@ -136,13 +141,23 @@ export function authorizeWsUpgrade(
     protocol.startsWith(DAEMON_TOKEN_WS_PROTOCOL_PREFIX),
   )
   const expectedToken = `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`
-  if (
-    !offeredBaseProtocol ||
-    offeredToken === undefined ||
-    !timingSafeEqualStrings(offeredToken, expectedToken)
-  ) {
+  if (!offeredBaseProtocol || offeredToken === undefined) {
     return { accept: false, statusCode: 401 }
   }
-
-  return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+  if (timingSafeEqualStrings(offeredToken, expectedToken)) {
+    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+  }
+  if (pairingTokens !== undefined && typeof headers.origin === 'string') {
+    let origin: string | null = null
+    try {
+      origin = new URL(headers.origin).origin
+    } catch {
+      origin = null
+    }
+    const rawToken = offeredToken.slice(DAEMON_TOKEN_WS_PROTOCOL_PREFIX.length)
+    if (origin !== null && pairingTokens.validate(rawToken, origin)) {
+      return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+    }
+  }
+  return { accept: false, statusCode: 401 }
 }

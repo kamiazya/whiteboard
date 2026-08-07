@@ -145,6 +145,14 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     expect(resolveApiRouteScope('GET', '/api/some-route-nobody-declared-yet')).toBeNull()
   })
 
+  it('POST /api/pairing/token is public — it authenticates via PKCE code or Origin-vs-grant, not a bearer', () => {
+    expect(resolveApiRouteScope('POST', '/api/pairing/token')).toEqual({ kind: 'public' })
+    expect(resolveApiRouteScope('POST', '/api/pairing/grants')).toEqual({
+      kind: 'scoped',
+      scopes: ['runtime:admin'],
+    })
+  })
+
   it('GET /api/runtime/ping is the sole declared public route', () => {
     expect(resolveApiRouteScope('GET', '/api/runtime/ping')).toEqual({ kind: 'public' })
   })

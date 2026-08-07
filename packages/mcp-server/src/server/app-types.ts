@@ -3,6 +3,9 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
+import type { PairingGrantStore } from './security/pairing-grant-store.js'
+import type { PairingCodeStore, PairingTokenStore } from './security/pairing-session.js'
+import type { AllowedWebOrigins } from './security/web-origin-allowlist.js'
 import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
@@ -25,7 +28,7 @@ interface LocalDaemonAppOptions {
    *  (WHITEBOARD_ALLOWED_WEB_ORIGINS). Empty by default — current loopback-only
    *  behavior is unchanged unless an operator opts in. Local-daemon only;
    *  server-mode governs its origins solely via allowedOrigins below. */
-  allowedWebOrigins?: readonly string[]
+  allowedWebOrigins?: AllowedWebOrigins
   /** Exact-URI redirect_uri registry for the hosted-origin OAuth 2.1
    *  authorization-server surface (ADR-0005): /.well-known/oauth-protected-
    *  resource/api, /.well-known/oauth-authorization-server, and /token.
@@ -40,6 +43,15 @@ interface LocalDaemonAppOptions {
    *  exercising this app in isolation), which still makes the route work,
    *  just not reachable from a real WS upgrade outside this process. */
   wsTicketStore?: WsTicketStore
+  /** Pairing-grant flow stores (hosted-PWA-first pairing). When present the
+   *  /api/pairing routes mount, pairing session tokens are accepted by the
+   *  /api auth middleware, and the caller is expected to fold
+   *  `pairing.grants.origins()` into allowedWebOrigins via a provider. */
+  pairing?: {
+    grants: PairingGrantStore
+    codes: PairingCodeStore
+    tokens: PairingTokenStore
+  }
 }
 
 export interface ServerModeAppOptions {
