@@ -92,13 +92,29 @@ export function isAllowedWebOrigin(
   return matchOrigin(compiledPatternsFor(allowlist), originHeader)
 }
 
+// The official hosted web app is the primary onboarding funnel ("open the
+// hosted app, pair with your local daemon"), so the published daemon admits
+// its PRODUCTION origin out of the box. Admission is CORS-level only — data
+// access still requires a pairing grant approved on the daemon's own consent
+// page. Deliberately narrow: no preview wildcard here (dev daemons opt into
+// that via WHITEBOARD_ALLOWED_WEB_ORIGINS themselves).
+export const DEFAULT_ALLOWED_WEB_ORIGINS: readonly string[] = [
+  'https://kamiazya-whiteboard.pages.dev',
+]
+
 // Startup-time wiring helper shared by both entrypoints (cli/daemon-run.ts,
 // server/index.ts): parses the env once and logs a structured failure record
 // (never echoing the raw offending value) instead of each entrypoint
 // re-implementing the parse-and-log seam.
+//
+// Default contract: an UNSET env var yields DEFAULT_ALLOWED_WEB_ORIGINS; a
+// SET value — including the empty string, which is the explicit opt-out —
+// replaces the default entirely (never merges). Mirrors the dev resolver's
+// explicit-value-wins convention in with-dev-data-dir-lib.mjs.
 export function loadAllowedWebOriginsFromEnv(
   env: Readonly<Record<string, string | undefined>>,
 ): readonly string[] | null {
+  if (env.WHITEBOARD_ALLOWED_WEB_ORIGINS === undefined) return DEFAULT_ALLOWED_WEB_ORIGINS
   const result = parseAllowedWebOriginsEnv(env.WHITEBOARD_ALLOWED_WEB_ORIGINS)
   if (!result.ok) {
     const log = getLogger('web-origin-allowlist')

@@ -276,6 +276,28 @@ describe('server/index main() config-file wiring', () => {
     }
   })
 
+  it('drops the default hosted-origin admission on a tokenless start instead of refusing', async () => {
+    delete process.env.WHITEBOARD_TOKEN
+    delete process.env.WHITEBOARD_ALLOWED_WEB_ORIGINS
+
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    const capture = captureLogsForTests()
+    try {
+      await main()
+      expect(startHttpServerMock).toHaveBeenCalledWith(
+        expect.objectContaining({ allowedWebOrigins: [] }),
+      )
+      const notice = capture.records.find(
+        (r) =>
+          r.scope === 'server-index' && r.msg.includes('default hosted-origin admission disabled'),
+      )
+      expect(notice).toBeDefined()
+    } finally {
+      capture.restore()
+      stdoutSpy.mockRestore()
+    }
+  })
+
   it('warns instead of honoring a config-file dataDir on this entrypoint', async () => {
     dir = mkdtempSync(join(tmpdir(), 'whiteboard-index-config-'))
     originalCwd = process.cwd()
