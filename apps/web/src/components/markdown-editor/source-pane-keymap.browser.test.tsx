@@ -9,6 +9,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
+// CodeMirror's Mod- prefix resolves to Cmd on macOS and Ctrl elsewhere;
+// CI runs Linux, local dev runs macOS, so the tests must send whichever
+// modifier the platform under test actually binds.
+const MOD = navigator.platform.toUpperCase().includes('MAC') ? 'Meta' : 'Control'
+const mod = (key: string) => `{${MOD}>}${key}{/${MOD}}`
+
 afterEach(cleanup)
 
 function mountEditor() {
@@ -29,7 +35,7 @@ describe('SourcePane keymap (real browser)', () => {
     const { onChange, editable } = mountEditor()
     await userEvent.click(editable)
     await userEvent.keyboard('hello')
-    await userEvent.keyboard('{Meta>}z{/Meta}')
+    await userEvent.keyboard(mod('z'))
     expect(lastValue(onChange)).not.toBe('hello')
   })
 
@@ -48,8 +54,8 @@ describe('SourcePane keymap (real browser)', () => {
     const { onChange, editable } = mountEditor()
     await userEvent.click(editable)
     await userEvent.keyboard('bold')
-    await userEvent.keyboard('{Meta>}a{/Meta}')
-    await userEvent.keyboard('{Meta>}b{/Meta}')
+    await userEvent.keyboard(mod('a'))
+    await userEvent.keyboard(mod('b'))
     expect(lastValue(onChange)).toBe('**bold**')
   })
 
@@ -57,15 +63,15 @@ describe('SourcePane keymap (real browser)', () => {
     const { onChange, editable } = mountEditor()
     await userEvent.click(editable)
     await userEvent.keyboard('slanted')
-    await userEvent.keyboard('{Meta>}a{/Meta}')
-    await userEvent.keyboard('{Meta>}i{/Meta}')
+    await userEvent.keyboard(mod('a'))
+    await userEvent.keyboard(mod('i'))
     expect(lastValue(onChange)).toBe('*slanted*')
   })
 
   it('Mod-b with a collapsed selection inserts delimiters and keeps the cursor between them', async () => {
     const { onChange, editable } = mountEditor()
     await userEvent.click(editable)
-    await userEvent.keyboard('{Meta>}b{/Meta}')
+    await userEvent.keyboard(mod('b'))
     await userEvent.keyboard('x')
     expect(lastValue(onChange)).toBe('**x**')
   })
