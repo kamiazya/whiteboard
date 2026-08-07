@@ -39,6 +39,7 @@ export type EditorCommand =
     }
   | { readonly kind: 'create-node'; readonly node: SpatialNode }
   | { readonly kind: 'delete-node'; readonly id: string }
+  | { readonly kind: 'delete-edge'; readonly id: string }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -152,6 +153,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return connectNodes(canvas, command.edgeId, command.fromNode, command.toNode)
     case 'create-node':
       return createNode(canvas, command.node)
+    case 'delete-edge':
+      return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== command.id) }
     case 'delete-node':
       return deleteNode(canvas, command.id)
   }
