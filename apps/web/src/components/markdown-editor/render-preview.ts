@@ -1,6 +1,10 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
 import type { MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
-import { layoutMdastBlocks, renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import {
+  layoutMdastBlocks,
+  renderSceneToSvg,
+  SPATIAL_THEME_FONT_FAMILY,
+} from '@kamiazya/whiteboard-canvas-render'
 
 export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText
@@ -35,7 +39,11 @@ export function renderMarkdownPreviewSvg(
 
 function layoutScene(value: string, measure: MeasureText, maxWidth: number): Scene {
   try {
-    return layoutMdastBlocks(parseMarkdownBody(value), { measure, maxWidth })
+    return layoutMdastBlocks(parseMarkdownBody(value), {
+      measure,
+      maxWidth,
+      fontFamily: SPATIAL_THEME_FONT_FAMILY,
+    })
   } catch {
     return { nodes: [] }
   }
