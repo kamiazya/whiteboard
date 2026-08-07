@@ -112,7 +112,7 @@ pnpm mcp:debug:http
 
 The repo ships HTTP-mode overrides for both clients:
 
-- `.claude/settings.json` → stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` → `http://127.0.0.1:3099/mcp`
+- `.mcp.json` → stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` → `http://127.0.0.1:3099/mcp` (Claude Code reads project-scope MCP servers ONLY from `.mcp.json`; `settings.json` has no `mcpServers` field in its schema)
 - `.codex/config.toml` → the same stdio proxy (server name `whiteboard_dev`)
 
 The clients register the proxy as a stdio server rather than the HTTP URL

@@ -51,7 +51,7 @@ pnpm mcp:debug:http
 What each does:
 
 - `pnpm mcp:http:dev`: starts the local daemon in watch mode and exposes MCP at `http://127.0.0.1:3099/mcp`
-- Claude Code / Codex sessions reach that endpoint through the stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` (spawned per session; ensures the daemon, waits for readiness, retries per request across watch restarts). Inspector and curl still hit the HTTP endpoint directly.
+- Claude Code / Codex sessions reach that endpoint through the stdio proxy `packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` (spawned per session; ensures the daemon, waits for readiness, retries per request across watch restarts). Claude Code reads the definition from `.mcp.json` — `settings.json` has no `mcpServers` field, so never define servers there. Inspector and curl still hit the HTTP endpoint directly.
 - `pnpm mcp:inspect`: starts the official MCP Inspector UI
 - `pnpm mcp:inspect:stdio`: starts Inspector against the raw stdio MCP entrypoint
 - `pnpm mcp:debug:http`: runs `mcp:http:dev` and Inspector together for quick iteration

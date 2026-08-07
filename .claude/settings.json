@@ -1,31 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "_comment": [
-    "Repo Claude Code MCP override.",
-    "Registers the whiteboard MCP as a LOCAL STDIO PROXY",
-    "(packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs) that forwards",
-    "each request to the long-lived dev daemon at http://127.0.0.1:3099/mcp",
-    "(launched by `pnpm mcp:http:dev`).",
-    "",
-    "Why a proxy instead of a direct HTTP entry: the client attempts ONE HTTP",
-    "connection at session start and never retries, so it regularly lost the",
-    "race against the SessionStart hook spawning the daemon, and a tsx-watch",
-    "restart mid-session stranded the connection the same way. The stdio spawn",
-    "always succeeds; the proxy ensures the daemon, waits for readiness, and",
-    "retries per request across watch restarts (the daemon's /mcp is stateless",
-    "per request, so there is no protocol session to lose)."
+    "NOTE: settings.json has NO mcpServers field in its schema \u2014 a definition",
+    "here is silently ignored (learned the hard way; see the docs note under",
+    "'MCP servers' in self-hosted-environments-configuration). The whiteboard",
+    "dev MCP server is defined in .mcp.json (project scope) as a stdio proxy",
+    "to the HTTP dev daemon; see that file and",
+    "packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs."
   ],
-  "mcpServers": {
-    "whiteboard": {
-      "type": "stdio",
-      "command": "node",
-      "args": [
-        "${CLAUDE_PROJECT_DIR:-.}/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
-      ],
-      "_comment_auth": "The proxy sends 'Bearer whiteboard-dev' \u2014 a NON-SECRET, well-known local-dev constant scoped to the loopback dev daemon; safe to commit. See CONTRIBUTING.md.",
-      "_comment_path": "${CLAUDE_PROJECT_DIR:-.} per the docs: relative args resolve against the LAUNCH directory, not this file's location, so a session started from a subdirectory would fail to find the script without it."
-    }
-  },
   "worktree": {
     "baseRef": "head"
   },
