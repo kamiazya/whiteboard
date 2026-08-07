@@ -50,7 +50,7 @@ import { findFreeSpot, hitTest, indexNodeBoxes, resizeBoxByDelta } from './geome
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
-import { renderCanvasToSvg } from './scene-render.js'
+import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { ToolPalette } from './ToolPalette.js'
 import {
@@ -355,6 +355,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       for (const command of result.commands) {
         running = applyCommand(running, command)
         onChange(running, command)
+        // Grow-only auto-fit: a committed body that lays out taller than the
+        // stored box gets a follow-up resize so content never overflows the
+        // border. Never shrinks — an authored roomy box (or manual enlarge)
+        // is respected. Stored geometry stays truthful, so export (the same
+        // layout over the same canvas) renders exactly what the editor shows.
+        if (command.kind === 'set-text') {
+          const node = running.nodes.find((n) => n.id === command.id)
+          if (node !== undefined && node.type === 'text') {
+            const required = Math.ceil(
+              requiredTextNodeHeight(node, { measure: resolvedMeasure, theme }),
+            )
+            if (required > node.height) {
+              const grow = {
+                kind: 'resize-node',
+                id: node.id,
+                x: node.x,
+                y: node.y,
+                width: node.width,
+                height: required,
+              } as const
+              running = applyCommand(running, grow)
+              onChange(running, grow)
+            }
+          }
+        }
       }
       // Written back HERE, not only from the canvas prop at re-render: two
       // commits landing in one tick (key auto-repeat, batched events) would
