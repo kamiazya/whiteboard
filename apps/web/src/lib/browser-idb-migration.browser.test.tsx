@@ -403,6 +403,9 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
         id: canvasId,
         name: 'Pre-migration canvas',
         updatedAt: '2026-01-01T00:00:00.000Z',
+        // Not stored in the v2 fixture: the schema's own default — a
+        // pre-kind row parses as a spatial canvas with no migration.
+        kind: 'spatial',
       })
     }
 
