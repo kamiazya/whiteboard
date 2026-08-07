@@ -130,6 +130,9 @@ export interface SpatialEditorHandle {
 
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160
 const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
+/** Screen-space px within which a press/right-click counts as hitting an
+ * edge line; divided by the zoom for the canvas-space comparison. */
+const EDGE_HIT_TOLERANCE_PX = 6
 const DEFAULT_TEST_ID = 'spatial-editor'
 /**
  * Window for OUR double-press detection (see handlePointerDown). Matches the
@@ -208,6 +211,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       x: number
       y: number
       nodeId: string | undefined
+      edgeId: string | undefined
       point: Point
     } | null>(null)
     /**
@@ -509,7 +513,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // distinguish "double-click on an edge" (open its label editor) from
       // "double-click on empty space" (create a node) — both have
       // hitId === undefined.
-      const EDGE_HIT_TOLERANCE_PX = 6
       const hitEdge =
         hitId === undefined
           ? edgePaths.find(
@@ -571,8 +574,34 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const hitId = hitTest(boxes, point)
-      if (hitId !== undefined) setSelectedId(hitId)
-      setContextMenu({ x: screenPoint.x, y: screenPoint.y, nodeId: hitId, point })
+      // Node and edge selection stay mutually exclusive here too (see the
+      // pointerdown path): Delete acts on a selected edge FIRST, so leaving
+      // the other object type selected makes Delete remove the wrong thing.
+      if (hitId !== undefined) {
+        setSelectedId(hitId)
+        setSelectedEdgeId(null)
+      }
+      // Same edge tolerance as the click path: the object under the pointer
+      // gets ITS menu, so an edge line must not read as empty space.
+      const hitEdge =
+        hitId === undefined
+          ? edgePaths.find(
+              (edge) =>
+                distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
+            )
+          : undefined
+      if (hitEdge !== undefined) {
+        setSelectedEdgeId(hitEdge.id)
+        setSelectedId(null)
+        setExtraIds(new Set())
+      }
+      setContextMenu({
+        x: screenPoint.x,
+        y: screenPoint.y,
+        nodeId: hitId,
+        edgeId: hitEdge?.id,
+        point,
+      })
     }
 
     const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -1008,6 +1037,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 contextMenu.nodeId === undefined
                   ? undefined
                   : canvas.nodes.find((n) => n.id === contextMenu.nodeId)
+              const edge =
+                contextMenu.edgeId === undefined
+                  ? undefined
+                  : canvas.edges.find((entry) => entry.id === contextMenu.edgeId)
+              if (node === undefined && edge !== undefined) {
+                return [
+                  { label: 'Edit label', onSelect: () => setEdgeLabelEditId(edge.id) },
+                  {
+                    label: 'Delete',
+                    danger: true,
+                    onSelect: () => {
+                      applyResult({
+                        state: { kind: 'idle' },
+                        commands: [{ kind: 'delete-edge', id: edge.id } as const],
+                      })
+                      setSelectedEdgeId(null)
+                    },
+                  },
+                ]
+              }
               if (node === undefined) {
                 return [{ label: 'Add note here', onSelect: () => createNodeAt(contextMenu.point) }]
               }
