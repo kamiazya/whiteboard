@@ -155,9 +155,12 @@ function layoutPhrasing(
       text,
       ...runStyle,
       ...extra,
-      // Stamped last so nothing can emit a run declaring a family other than
-      // the one it was measured with (see MdastLayoutOptions.fontFamily).
-      appearance: { ...extra.appearance, fontFamily: options.fontFamily },
+      // Stamped last so nothing can emit a run declaring a family OR SIZE
+      // other than the ones it was measured with (see
+      // MdastLayoutOptions.fontFamily) — a run drawn at the host's inherited
+      // size would render every measured wrap width wrong and flatten the
+      // heading hierarchy.
+      appearance: { ...extra.appearance, fontFamily: options.fontFamily, fontSize: fontSizePx },
     })
     line.x += width
   }
@@ -465,7 +468,30 @@ function layoutListItem(
 ): ListItemNode {
   const startY = cursor.y
   const indented: MdastLayoutOptions = { ...options, maxWidth: options.maxWidth - LIST_INDENT_PX }
-  const children = item.children.map((child) => layoutBlock(child, cursor, indented, depth))
+  const children: (ListItemNode['children'][number] | TextRunNode)[] = item.children.map((child) =>
+    layoutBlock(child, cursor, indented, depth),
+  )
+  // The marker glyph (bullet or ordinal). Wrapper-RELATIVE like every other
+  // child (the listItem renderer translates by its own bbox.x), so the
+  // gutter to the left of the content is negative x. Checked task items
+  // keep provenance only — a checkbox affordance is a separate feature,
+  // and drawing a bullet next to it would double the glyphs.
+  if (item.checked === null || item.checked === undefined) {
+    const markerText = ordinal !== undefined ? `${ordinal}.` : '\u2022'
+    const metrics = options.measure(markerText, bodyFont(options.fontFamily, BODY_FONT_SIZE_PX))
+    children.unshift({
+      kind: 'textRun',
+      bbox: {
+        x: -LIST_INDENT_PX,
+        y: startY,
+        w: clampAdvance(metrics.advanceWidth),
+        h: BODY_FONT_SIZE_PX,
+      },
+      baseline: clampAdvance(metrics.ascent),
+      text: markerText,
+      appearance: { fontFamily: options.fontFamily, fontSize: BODY_FONT_SIZE_PX },
+    })
+  }
   return {
     kind: 'listItem',
     bbox: {

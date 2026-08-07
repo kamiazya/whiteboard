@@ -109,3 +109,69 @@ describe('layoutMdastBlocks — declared font family matches the measured one', 
     expect([...families]).toEqual(['OneFamily'])
   })
 })
+
+describe('measured-vs-declared font SIZE on markdown runs', () => {
+  it('a heading run declares the size it was measured at, not the inherited default', () => {
+    // Headings are measured at HEADING_FONT_SIZE_PX[depth]; a run that then
+    // draws at the host's inherited size renders every wrap width and block
+    // height wrong AND flattens the visual hierarchy (h1 == body). Same
+    // invariant class as the fontFamily guard above, for size.
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        { type: 'heading', depth: 1, children: [{ type: 'text', value: 'Title' }] },
+        { type: 'paragraph', children: [{ type: 'text', value: 'body' }] },
+      ],
+    }
+    const runs = collectRuns(
+      layoutMdastBlocks(root, { measure, maxWidth: 400, fontFamily: 'Roboto' }),
+    )
+    const heading = runs.find((run) => run.text === 'Title')
+    const body = runs.find((run) => run.text === 'body')
+    expect(heading?.appearance?.fontSize).toBe(32)
+    expect(body?.appearance?.fontSize).toBe(16)
+  })
+
+  it('list items draw their marker glyph (bullet / ordinal) as a measured run', () => {
+    const root: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'list',
+          ordered: false,
+          children: [
+            {
+              type: 'listItem',
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'alpha' }] }],
+            },
+          ],
+        },
+        {
+          type: 'list',
+          ordered: true,
+          children: [
+            {
+              type: 'listItem',
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'first' }] }],
+            },
+            {
+              type: 'listItem',
+              children: [{ type: 'paragraph', children: [{ type: 'text', value: 'second' }] }],
+            },
+          ],
+        },
+      ],
+    }
+    const runs = collectRuns(
+      layoutMdastBlocks(root, { measure, maxWidth: 400, fontFamily: 'Roboto' }),
+    )
+    const texts = runs.map((run) => run.text)
+    expect(texts).toContain('\u2022')
+    expect(texts).toContain('1.')
+    expect(texts).toContain('2.')
+    // Markers sit in the indent gutter, left of the content (wrapper-relative
+    // negative x, since the listItem wrapper translates by its own bbox.x).
+    const bullet = runs.find((run) => run.text === '\u2022')
+    expect((bullet?.bbox.x ?? 0) < 0).toBe(true)
+  })
+})
