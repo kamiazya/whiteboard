@@ -98,6 +98,12 @@ describe('createDaemonIdentity', () => {
       )
       expect(record).toBeDefined()
       expect(JSON.stringify(capture.records)).not.toContain(plantedD)
+      // Pin the sanitized-record contract itself: only a reason class, never
+      // the error object — ZodError happens not to echo input today, but the
+      // moment someone logs { err } this assertion fails rather than relying
+      // on that library behavior staying true.
+      expect(record).toMatchObject({ data: { reason: 'invalid-shape' } })
+      expect(record && 'err' in (record.data as Record<string, unknown>)).toBe(false)
     } finally {
       capture.restore()
     }
