@@ -169,7 +169,13 @@ function composeTextNode(
   let body: Scene
   try {
     const mdast = options.parseBody(node.text)
-    body = layoutMdastBlocks(mdast, { measure: options.measure, maxWidth })
+    body = layoutMdastBlocks(mdast, {
+      measure: options.measure,
+      maxWidth,
+      // Body content is measured and declared with the SAME family the
+      // label path resolves, so one theme drives every glyph in a node.
+      fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
+    })
   } catch (err) {
     options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
     body = { nodes: [labelRun(node.text, options)] }

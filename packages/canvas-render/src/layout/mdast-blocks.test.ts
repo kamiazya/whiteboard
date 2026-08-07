@@ -4,7 +4,7 @@ import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
-const options = { measure, maxWidth: 600 }
+const options = { measure, maxWidth: 600, fontFamily: 'sans-serif' }
 
 describe('layoutMdastBlocks — semantic provenance', () => {
   const root: MdastRoot = {
@@ -339,7 +339,7 @@ describe('layoutMdastBlocks — text run baseline', () => {
 
 describe('layoutMdastBlocks — word wrap', () => {
   it('wraps a paragraph whose text overflows maxWidth onto multiple lines, each run contained', () => {
-    const narrow = { measure, maxWidth: 60 }
+    const narrow = { measure, maxWidth: 60, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three four' }] }],
@@ -361,7 +361,7 @@ describe('layoutMdastBlocks — word wrap', () => {
   })
 
   it('keeps a single unbreakable token wider than maxWidth as one overflowing run', () => {
-    const narrow = { measure, maxWidth: 10 }
+    const narrow = { measure, maxWidth: 10, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: 'unbreakabletoken' }] }],
@@ -376,7 +376,7 @@ describe('layoutMdastBlocks — word wrap', () => {
 
   it('does not throw and produces no wrap for a non-finite or non-positive maxWidth', () => {
     for (const badWidth of [0, -10, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const bad = { measure, maxWidth: badWidth }
+      const bad = { measure, maxWidth: badWidth, fontFamily: 'sans-serif' }
       const root: MdastRoot = {
         type: 'root',
         children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one two three' }] }],
@@ -386,7 +386,7 @@ describe('layoutMdastBlocks — word wrap', () => {
   })
 
   it('keeps an overflowing inline code span whole instead of splitting it at whitespace', () => {
-    const narrow = { measure, maxWidth: 60 }
+    const narrow = { measure, maxWidth: 60, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [
@@ -405,7 +405,7 @@ describe('layoutMdastBlocks — word wrap', () => {
   })
 
   it('keeps an overflowing raw html run whole instead of splitting it at whitespace', () => {
-    const narrow = { measure, maxWidth: 60 }
+    const narrow = { measure, maxWidth: 60, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [
@@ -428,7 +428,7 @@ describe('layoutMdastBlocks — word wrap', () => {
     // phrasing children: a text node ending in a space, then a styled run.
     // The trailing space belongs to the wrapped chunk, not the sibling, so
     // it must still separate them even when the chunk wraps mid-word.
-    const narrow = { measure, maxWidth: 50 }
+    const narrow = { measure, maxWidth: 50, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [
@@ -471,7 +471,7 @@ describe('layoutMdastBlocks — word wrap', () => {
     // line. The leading-whitespace pre-add in `wrapAndPush` must not stack
     // with the per-word loop's own separator-add on that first iteration —
     // the gap before the first word must be exactly one space, not two.
-    const narrow = { measure, maxWidth: 100 }
+    const narrow = { measure, maxWidth: 100, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [
@@ -504,7 +504,7 @@ describe('layoutMdastBlocks — word wrap', () => {
   })
 
   it('keeps an overflowing inline math run whole instead of splitting it at whitespace', () => {
-    const narrow = { measure, maxWidth: 60 }
+    const narrow = { measure, maxWidth: 60, fontFamily: 'sans-serif' }
     const root: MdastRoot = {
       type: 'root',
       children: [
