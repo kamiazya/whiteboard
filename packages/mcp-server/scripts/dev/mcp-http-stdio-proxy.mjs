@@ -95,6 +95,15 @@ async function forwardOnce(line) {
   const text = await res.text()
   // 202/empty: a notification was accepted — nothing to write back.
   if (res.status === 202 || text.trim() === '') return null
+  if (!res.ok && !isJson(text)) {
+    // The daemon's own /mcp errors carry JSON-RPC bodies (a 401 does) and
+    // are passed through below. A non-JSON error body is NOT a protocol
+    // response — never write it to stdout. 5xx is treated as transient
+    // (retried by the caller); anything else fails the request fast.
+    const error = new Error(`HTTP ${res.status} from the daemon endpoint`)
+    error.nonRetryable = res.status < 500
+    throw error
+  }
   if (contentType.includes('text/event-stream')) {
     // enableJsonResponse keeps POSTs JSON in practice; parse SSE defensively
     // so an unexpected stream reply still yields the final message.
@@ -108,6 +117,15 @@ async function forwardOnce(line) {
   return text
 }
 
+function isJson(text) {
+  try {
+    JSON.parse(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function forwardWithRetry(line) {
   const deadline = Date.now() + RETRY_TIMEOUT_MS
   let lastError
@@ -116,6 +134,7 @@ async function forwardWithRetry(line) {
       return await forwardOnce(line)
     } catch (error) {
       lastError = error
+      if (error?.nonRetryable === true) break
       if (Date.now() >= deadline) break
       await new Promise((r) => setTimeout(r, RETRY_INTERVAL_MS))
     }

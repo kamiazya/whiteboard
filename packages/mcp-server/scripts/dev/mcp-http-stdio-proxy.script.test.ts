@@ -52,17 +52,25 @@ function spawnProxy(port: number, envOverrides: Record<string, string> = {}) {
 function nextStdoutLine(proc: ChildProcessWithoutNullStreams): Promise<string> {
   return new Promise((resolveLine, rejectLine) => {
     let buffer = ''
+    const settle = (fn: () => void) => {
+      proc.stdout.off('data', onData)
+      proc.off('exit', onExit)
+      clearTimeout(timer)
+      fn()
+    }
     const onData = (chunk: Buffer) => {
       buffer += chunk.toString()
       const newline = buffer.indexOf('\n')
-      if (newline !== -1) {
-        proc.stdout.off('data', onData)
-        resolveLine(buffer.slice(0, newline))
-      }
+      if (newline !== -1) settle(() => resolveLine(buffer.slice(0, newline)))
     }
+    const onExit = (code: number | null) =>
+      settle(() => rejectLine(new Error(`proxy exited early (code ${code})`)))
+    const timer = setTimeout(
+      () => settle(() => rejectLine(new Error('timed out waiting for a stdout line'))),
+      8_000,
+    )
     proc.stdout.on('data', onData)
-    proc.once('exit', (code) => rejectLine(new Error(`proxy exited early (code ${code})`)))
-    setTimeout(() => rejectLine(new Error('timed out waiting for a stdout line')), 8_000)
+    proc.once('exit', onExit)
   })
 }
 
@@ -117,7 +125,7 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     // The first stdout line must be the RESPONSE to id 3 — the notification
     // produced no line of its own.
     const line = await nextStdoutLine(proc)
-    expect(JSON.parse(line).id).not.toBe(undefined)
+    expect(JSON.parse(line).id).toBe('fake-mcp-daemon')
   })
 
   it('an invalid retry-timeout override falls back to the default instead of wedging', async () => {
@@ -129,6 +137,25 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/list' })}\n`)
     const line = await nextStdoutLine(proc)
     expect(JSON.parse(line)).toHaveProperty('result')
+  })
+
+  it('a non-JSON 4xx from the endpoint becomes a JSON-RPC error, not garbage on stdout', async () => {
+    const port = await reserveFreePort()
+    // A plain HTTP server that is NOT an MCP endpoint: 404 with an HTML body.
+    const { createServer: createHttpServer } = await import('node:http')
+    const server = createHttpServer((_req, res) => {
+      res.writeHead(404, { 'content-type': 'text/html' })
+      res.end('<html>not found</html>')
+    })
+    await new Promise<void>((r) => server.listen(port, HOST, () => r()))
+    closeResponder = () => new Promise((r) => server.close(() => r(undefined)))
+
+    const proc = spawnProxy(port)
+    proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 4, method: 'tools/list' })}\n`)
+    const line = await nextStdoutLine(proc)
+    const parsed = JSON.parse(line)
+    expect(parsed.id).toBe(4)
+    expect(parsed.error.message).toContain('HTTP 404')
   })
 
   it('exits cleanly when stdin closes', async () => {
