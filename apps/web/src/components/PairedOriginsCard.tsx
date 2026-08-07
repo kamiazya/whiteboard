@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { z } from 'zod'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 
@@ -28,21 +28,32 @@ export function PairedOriginsCard() {
   const fetchApi = useDaemonApi()
   const [state, setState] = useState<CardState>({ kind: 'loading' })
   const [revokeError, setRevokeError] = useState<string | null>(null)
+  // A changed fetchApi identity means a DIFFERENT daemon: bump the
+  // generation so a slow response (load or revoke) from the previous
+  // daemon can never overwrite the active one's grants — its grantIds
+  // belong to the other daemon entirely.
+  const generationRef = useRef(0)
 
   const load = useCallback(async () => {
+    const generation = ++generationRef.current
+    setState({ kind: 'loading' })
+    setRevokeError(null)
     try {
       const res = await fetchApi('/api/pairing/grants')
+      if (generation !== generationRef.current) return
       if (!res.ok) {
         setState({ kind: 'error' })
         return
       }
       const parsed = listGrantsResponseSchema.safeParse(await res.json())
+      if (generation !== generationRef.current) return
       if (!parsed.success) {
         setState({ kind: 'error' })
         return
       }
       setState({ kind: 'loaded', grants: parsed.data.grants })
     } catch {
+      if (generation !== generationRef.current) return
       setState({ kind: 'error' })
     }
   }, [fetchApi])
@@ -52,11 +63,13 @@ export function PairedOriginsCard() {
   }, [load])
 
   async function revoke(grant: PairedGrant) {
+    const generation = generationRef.current
     setRevokeError(null)
     try {
       const res = await fetchApi(`/api/pairing/grants/${encodeURIComponent(grant.grantId)}`, {
         method: 'DELETE',
       })
+      if (generation !== generationRef.current) return
       if (!res.ok) {
         setRevokeError(`Could not revoke ${grant.origin}.`)
         return
@@ -67,6 +80,7 @@ export function PairedOriginsCard() {
           : current,
       )
     } catch {
+      if (generation !== generationRef.current) return
       setRevokeError(`Could not revoke ${grant.origin}.`)
     }
   }

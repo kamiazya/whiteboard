@@ -75,6 +75,50 @@ describe('PairedOriginsCard', () => {
     expect(screen.getByText('https://example.com')).not.toBeNull()
   })
 
+  it('a stale response from a previous daemon never overwrites the active one', async () => {
+    // Rerendering with a different DaemonApiContext fetch = a different
+    // daemon. The OLD daemon's slow list resolving after the switch must
+    // not clobber the new daemon's grants (its grantIds would then be sent
+    // to the wrong daemon on revoke).
+    let resolveOld: (r: Response) => void = () => {}
+    const oldFetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveOld = resolve
+        }),
+    )
+    const newFetch = vi.fn(async () =>
+      jsonResponse({
+        grants: [
+          {
+            grantId: 'new-1',
+            origin: 'https://new.example.com',
+            createdAt: '2026-08-07T00:00:00.000Z',
+          },
+        ],
+      }),
+    )
+
+    const { rerender } = render(
+      <DaemonApiContext.Provider value={oldFetch as unknown as typeof globalThis.fetch}>
+        <PairedOriginsCard />
+      </DaemonApiContext.Provider>,
+    )
+    rerender(
+      <DaemonApiContext.Provider value={newFetch as unknown as typeof globalThis.fetch}>
+        <PairedOriginsCard />
+      </DaemonApiContext.Provider>,
+    )
+    await screen.findByText('https://new.example.com')
+
+    // The old daemon answers last — with different grants.
+    resolveOld(jsonResponse({ grants: GRANTS }))
+    await new Promise((r) => setTimeout(r, 50))
+
+    expect(screen.getByText('https://new.example.com')).not.toBeNull()
+    expect(screen.queryByText('https://example.com')).toBeNull()
+  })
+
   it('renders a quiet error state when listing fails', async () => {
     renderCard(async () => jsonResponse({ error: 'boom' }, 500))
     await screen.findByText(/could not load paired web apps/i)
