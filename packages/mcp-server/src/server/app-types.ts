@@ -1,5 +1,6 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
+import type { DaemonIdentity } from './security/daemon-identity.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
@@ -52,10 +53,15 @@ interface LocalDaemonAppOptions {
     codes: PairingCodeStore
     tokens: PairingTokenStore
   }
+  /** Daemon signing identity (security/daemon-identity.ts). Injectable for
+   *  tests; when omitted, createApp loads-or-creates it from the data dir. */
+  identity?: DaemonIdentity
 }
 
 export interface ServerModeAppOptions {
   authMode: 'server-mode'
+  /** See LocalDaemonAppOptions.identity. */
+  identity?: DaemonIdentity
   /** OpenCanvas store/sync ports. When present, server-core's /api/v1
    *  HTTP surface (createServer(deps).app) is mounted behind the same
    *  /api/* auth as every other API route; when absent, /api/v1 stays

@@ -5,12 +5,53 @@ import { z } from 'zod'
 // alone can misidentify an unrelated process as "our" daemon; instanceId is
 // unique per start and never reused, closing that identity-confusion window
 // for the CLI's stop/status/doctor checks that read this endpoint.
+// The daemon's durable signing identity (see server/security/daemon-identity.ts).
+// publicKey is the raw Ed25519 public key, base64url. Advertising it is safe:
+// trust comes from the web app PINNING the key at /pair consent time and
+// verifying signatures against the pin, never from the advertisement itself.
+export const daemonIdentitySchema = z.object({
+  alg: z.literal('Ed25519'),
+  publicKey: z.string().min(1),
+})
+
+export type DaemonIdentityInfo = z.infer<typeof daemonIdentitySchema>
+
 export const daemonPingResponseSchema = z.object({
   ok: z.literal(true),
   instanceId: z.string(),
+  // Optional for wire-compat with daemons predating the identity keypair;
+  // current daemons always include it.
+  identity: daemonIdentitySchema.optional(),
 })
 
 export type DaemonPingResponse = z.infer<typeof daemonPingResponseSchema>
+
+// POST /api/runtime/verify: a caller-random nonce (base64url, 16-32 decoded
+// bytes) is answered with a signature over ["wb-verify-v1", nonce, origin]
+// so a browser can challenge a loopback responder to prove it holds the
+// pinned daemon's private key. Public (like ping) and unreplayable (fresh
+// nonce per challenge).
+export const runtimeVerifyRequestSchema = z
+  .object({
+    nonce: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]+$/, 'nonce must be base64url')
+      .refine((value) => {
+        const bytes = Buffer.from(value, 'base64url')
+        return bytes.length >= 16 && bytes.length <= 32
+      }, 'nonce must decode to 16-32 bytes'),
+  })
+  .strict()
+
+export const runtimeVerifyResponseSchema = z
+  .object({
+    alg: z.literal('Ed25519'),
+    publicKey: z.string().min(1),
+    signature: z.string().min(1),
+  })
+  .strict()
+
+export type RuntimeVerifyResponse = z.infer<typeof runtimeVerifyResponseSchema>
 
 export const runtimeStatusResponseSchema = z.object({
   ok: z.boolean(),

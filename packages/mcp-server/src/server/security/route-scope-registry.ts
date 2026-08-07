@@ -53,6 +53,11 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   // other /api/runtime/* path requires a scope below.
   if (path === '/api/runtime/ping') return { kind: 'public' }
 
+  // Same carve-out class as ping: the identity challenge (POST-only) must be
+  // answerable BEFORE any pairing exists — it is how a browser decides
+  // whether a responder is trustworthy at all. Rate-limited in the router.
+  if (path === '/api/runtime/verify') return { kind: 'public' }
+
   const isWrite = isWriteMethod(method)
 
   // File routes: reading/writing a canvas's attached binary file.

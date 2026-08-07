@@ -161,8 +161,12 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
     })
   })
 
-  it('GET /api/runtime/ping is the sole declared public route', () => {
+  it('GET /api/runtime/ping is a declared public route', () => {
     expect(resolveApiRouteScope('GET', '/api/runtime/ping')).toEqual({ kind: 'public' })
+  })
+
+  it('POST /api/runtime/verify is public — the identity challenge must precede any pairing', () => {
+    expect(resolveApiRouteScope('POST', '/api/runtime/verify')).toEqual({ kind: 'public' })
   })
 
   it('a non-/api path is out of scope for this registry (null, not silently public)', () => {
