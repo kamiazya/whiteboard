@@ -108,7 +108,7 @@ describe('DaemonDetectedBanner', () => {
     expect(probeFn.mock.calls[1]?.[1]).toMatchObject({ forceRecheck: true })
   })
 
-  it('renders the detected banner with an "Open the local app" primary CTA linking to the daemon origin', async () => {
+  it('renders the detected banner with pairing as the only action (no daemon-origin link)', async () => {
     const probeFn = vi.fn().mockResolvedValue(DETECTED)
     render(
       <DaemonDetectedBanner
@@ -120,60 +120,11 @@ describe('DaemonDetectedBanner', () => {
     )
 
     await screen.findByText(/(A local whiteboard daemon is running at|A server responded at)/)
-    const openLink = screen.getByRole('link', { name: /open the local app/i })
-    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099')
-    // The pairing-link ask is gone: since R3, navigating to the daemon
-    // origin needs no pairing at all.
+    // The daemon origin serves only /pair now — a bare-origin link would
+    // just bounce off its redirect, so the banner must not offer one.
+    expect(screen.queryByRole('link', { name: /open the local app|^open /i })).toBeNull()
+    expect(screen.getByRole('button', { name: /use .*here|use here/i })).not.toBeNull()
     expect(screen.queryByText(/ask your ai agent/i)).toBeNull()
-  })
-
-  it('deep-links "Open the local app" to the last-connected workspace/slug when known', async () => {
-    const probeFn = vi.fn().mockResolvedValue(DETECTED)
-    const store = makeStore()
-    store.update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        lastConnectedWorkspaceId: 'w1',
-        lastConnectedSlug: 'main',
-      },
-    }))
-    render(
-      <DaemonDetectedBanner
-        settingsStore={store}
-        fetch={vi.fn()}
-        locationProtocol="http:"
-        probeFn={probeFn}
-      />,
-    )
-
-    const openLink = await screen.findByRole('link', { name: /open the local app/i })
-    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
-  })
-
-  it('does not emit a double slash when the stored base URL has a trailing slash', async () => {
-    const probeFn = vi.fn().mockResolvedValue(DETECTED)
-    const store = makeStore()
-    store.update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        localDaemonBaseUrl: 'http://127.0.0.1:3099/',
-        lastConnectedWorkspaceId: 'w1',
-        lastConnectedSlug: 'main',
-      },
-    }))
-    render(
-      <DaemonDetectedBanner
-        settingsStore={store}
-        fetch={vi.fn()}
-        locationProtocol="http:"
-        probeFn={probeFn}
-      />,
-    )
-
-    const openLink = await screen.findByRole('link', { name: /open the local app/i })
-    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
   })
 
   it('still links to the how-to doc alongside the primary CTA', async () => {
@@ -277,36 +228,11 @@ describe('DaemonDetectedBanner', () => {
     await screen.findByText(UNSUPPORTED_BROWSER_NOTICE)
     expect(screen.queryByRole('button', { name: /check for local daemon/i })).toBeNull()
 
-    // The way out: a normal top-level navigation to the daemon's own origin
-    // is not subject to the fetch-level block that produced this notice.
-    const openLink = screen.getByRole('link', { name: /open the local app/i })
-    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099')
-  })
-
-  it('deep-links the unsupported-notice escape hatch to the last-connected workspace when known', async () => {
-    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'blocked' })
-    const store = makeStore()
-    store.update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        lastConnectedWorkspaceId: 'w1',
-        lastConnectedSlug: 'main',
-      },
-    }))
-    render(
-      <DaemonDetectedBanner
-        settingsStore={store}
-        fetch={vi.fn()}
-        locationProtocol="https:"
-        probeFn={probeFn}
-      />,
-    )
-
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
-
-    const openLink = await screen.findByRole('link', { name: /open the local app/i })
-    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
+    // No daemon-origin escape hatch anymore (the daemon serves only /pair);
+    // the honest affordance is the docs link.
+    expect(screen.queryByRole('link', { name: /open the local app/i })).toBeNull()
+    const learnMore = screen.getByRole('link', { name: /how to connect a local daemon/i })
+    expect(learnMore.getAttribute('href')).toContain('connect-to-local-daemon')
   })
 
   it('a manual check finds a daemon on a non-default port (server-side ports are dynamic)', async () => {
@@ -330,8 +256,7 @@ describe('DaemonDetectedBanner', () => {
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
 
     await screen.findByText(/A server responded at http:\/\/127\.0\.0\.1:3101/)
-    const openLink = screen.getByRole('link', { name: /open the local app/i })
-    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3101')
+    expect(screen.getByRole('button', { name: /use here/i })).not.toBeNull()
   })
 
   it('remembers a found daemon and re-probes it first on the next mount', async () => {
@@ -391,21 +316,16 @@ describe('DaemonDetectedBanner', () => {
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
 
     await screen.findByText(/2 servers responded on local ports/i)
-    // Each responder offers pairing IN PLACE (the hosted-app-first model);
-    // leaving for the daemon's own origin stays available as a secondary
-    // link, but must not be the only affordance.
+    // Each responder offers pairing IN PLACE (the hosted-app-first model).
     // Unique accessible names per daemon: a control list must identify
-    // WHICH daemon each action targets.
+    // WHICH daemon each action targets. No daemon-origin links: the daemon
+    // serves only /pair now, so a bare-origin link would just redirect back.
     const useHere = screen.getAllByRole('button', { name: /use http:\/\/127\.0\.0\.1:\d+ here/i })
     expect(useHere.map((b) => b.getAttribute('aria-label'))).toEqual([
       'Use http://127.0.0.1:3099 here',
       'Use http://127.0.0.1:3102 here',
     ])
-    const links = screen.getAllByRole('link', { name: /open http:\/\/127\.0\.0\.1:\d+/i })
-    expect(links.map((l) => l.getAttribute('href'))).toEqual([
-      'http://127.0.0.1:3099',
-      'http://127.0.0.1:3102',
-    ])
+    expect(screen.queryAllByRole('link', { name: /open http/i })).toHaveLength(0)
 
     fireEvent.click(useHere[1] as HTMLElement)
     await waitFor(() => expect(beginGrantFn).toHaveBeenCalledTimes(1))

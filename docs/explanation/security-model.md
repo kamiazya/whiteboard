@@ -31,10 +31,9 @@ this project can fix by itself.
 
 The practical consequence: **connecting the hosted web app to a local daemon
 now requires a fresh `#wb=` link every session.** This applies to pairing
-from a hosted origin. Opening the daemon's own origin directly is a separate
-path — there the daemon serves the page and supplies the token same-origin,
-so no pairing link is involved; the `DaemonDetectedBanner` one-click
-reconnect navigates there.
+from a hosted origin. (The daemon itself serves only the `/pair` consent
+page at its own origin; every other UI path redirects to the official
+hosted app.)
 
 An earlier "silent reconnect" feature stored a possession credential (a
 WebCrypto keypair, with a plaintext localStorage secret as a fallback for

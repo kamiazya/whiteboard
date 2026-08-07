@@ -59,6 +59,7 @@ import {
   createServerModeOriginMiddleware,
   sanitizeServerModeStatus,
 } from './security/server-mode-middleware.js'
+import { OFFICIAL_HOSTED_APP_URL } from './security/web-origin-allowlist.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import {
   BranchNotFoundError,
@@ -709,9 +710,19 @@ export function createApp(options: AppOptions) {
   // SPA page load.
   const daemonPort = options.getStatus().port
 
+  // Hosted-first end state (supersedes ADR-0001's optional full-UI serving,
+  // see the ADR addendum): the daemon serves exactly ONE page — /pair, the
+  // pairing consent trust anchor that must come from the daemon's own
+  // origin — plus the assets it needs. Every other UI path redirects to the
+  // official hosted app, which reaches this daemon through its default
+  // origin admission + a pairing grant. Accepted tradeoff: a fully-offline
+  // FIRST run has no canvas UI; the installed PWA is the offline path.
   app.get('*', async (c) => {
     if (isReservedUiPath(c.req.path)) {
       return c.notFound()
+    }
+    if (c.req.path !== '/pair') {
+      return c.redirect(OFFICIAL_HOSTED_APP_URL, 302)
     }
     try {
       const html = await readFile(join(DIST_WEB_APP_DIR, 'index.html'), 'utf-8')

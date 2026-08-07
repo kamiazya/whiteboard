@@ -122,7 +122,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
       app: {
         served: true,
         buildPresent: existsSync(join(DIST_WEB_APP_DIR, 'index.html')),
-        ui: 'web-app',
+        ui: 'pair-only',
       },
       mcp: { httpEnabled: true, endpoint: `http://${host}:${options.port}/mcp` },
       clients: { connected: stats.connectedClients, ready: stats.readyClients },

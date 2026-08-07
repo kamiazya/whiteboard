@@ -148,7 +148,7 @@ describe('createApp daemon mutation auth', () => {
 
   it('injects the daemon token into its own dedicated global, not the runtime-config object', async () => {
     const app = createApp(createRuntimeOptions('secret'))
-    const res = await app.request('/canvas/session1/demo')
+    const res = await app.request('/pair')
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
@@ -156,9 +156,32 @@ describe('createApp daemon mutation auth', () => {
     expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
   })
 
+  it('redirects every non-/pair UI path to the official hosted app', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    for (const path of ['/', '/canvas/session1/demo', '/local/abc', '/w/ws/c/alias']) {
+      const res = await app.request(path)
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toBe('https://kamiazya-whiteboard.pages.dev/')
+      // The redirect must never leak the daemon token anywhere.
+      expect(res.headers.get('location')).not.toContain('secret')
+    }
+    // Reserved paths keep their existing semantics (404, not redirect).
+    const reserved = await app.request('/token')
+    expect(reserved.status).toBe(404)
+  })
+
+  it('still serves the injected app shell on /pair (the consent trust anchor)', async () => {
+    const app = createApp(createRuntimeOptions('secret'))
+    const res = await app.request('/pair?origin=https%3A%2F%2Fapp.example&challenge=c&state=s')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
+    expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
+  })
+
   it('omits the token script entirely when no daemon token is configured', async () => {
     const app = createApp(createRuntimeOptions(undefined))
-    const res = await app.request('/canvas/session1/demo')
+    const res = await app.request('/pair')
     expect(res.status).toBe(200)
     const html = await res.text()
     expect(html).toContain('window.__WHITEBOARD_RUNTIME_CONFIG__')
@@ -168,7 +191,7 @@ describe('createApp daemon mutation auth', () => {
   it('adds baseline security headers to HTML responses', async () => {
     const app = createApp(createRuntimeOptions('secret'))
 
-    const res = await app.request('/canvas/session1/demo')
+    const res = await app.request('/pair')
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Security-Policy')).toBe("frame-ancestors 'none'")
@@ -1087,7 +1110,7 @@ describe('createApp daemon mutation auth', () => {
   describe('runtime config injection', () => {
     it('injects daemonBaseUrl composed from 127.0.0.1 and port into served HTML, with no daemonToken key', async () => {
       const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/canvas/session1/demo')
+      const res = await app.request('/pair')
       expect(res.status).toBe(200)
       const html = await res.text()
       expect(html).toContain('"daemonBaseUrl":"http://127.0.0.1:3099"')
@@ -1145,8 +1168,8 @@ describe('createApp daemon mutation auth', () => {
     })
   })
 
-  describe('local-daemon root serves the built apps/web (R3/R5 UI retirement)', () => {
-    it('serves dist/web-app/index.html with runtime config injected when present', async () => {
+  describe('local-daemon serves /pair only (hosted-first UI end state)', () => {
+    it('serves dist/web-app/index.html on /pair with runtime config injected', async () => {
       await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
       await writeFile(
         join(tmp.dir, 'web-app', 'index.html'),
@@ -1154,7 +1177,7 @@ describe('createApp daemon mutation auth', () => {
       )
 
       const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/')
+      const res = await app.request('/pair')
       expect(res.status).toBe(200)
       const html = await res.text()
       expect(html).toContain('apps-web-marker')
@@ -1162,10 +1185,19 @@ describe('createApp daemon mutation auth', () => {
       expect(html).toContain('window.__WHITEBOARD_DAEMON_TOKEN__ = "secret"')
     })
 
-    it('returns the clean 404 (not a fallback UI) when dist/web-app is absent', async () => {
-      await rm(join(tmp.dir, 'web-app', 'index.html'), { force: true })
+    it('the root redirects to the hosted app even when the build is present', async () => {
+      await mkdir(join(tmp.dir, 'web-app'), { recursive: true })
+      await writeFile(join(tmp.dir, 'web-app', 'index.html'), '<!DOCTYPE html><html></html>')
       const app = createApp(createRuntimeOptions('secret'))
       const res = await app.request('/')
+      expect(res.status).toBe(302)
+      expect(res.headers.get('location')).toBe('https://kamiazya-whiteboard.pages.dev/')
+    })
+
+    it('returns the clean 404 on /pair when dist/web-app is absent', async () => {
+      await rm(join(tmp.dir, 'web-app', 'index.html'), { force: true })
+      const app = createApp(createRuntimeOptions('secret'))
+      const res = await app.request('/pair')
       expect(res.status).toBe(404)
       const body = await res.text()
       expect(body).toBe('Not found. Run `pnpm build` first.')
@@ -1207,7 +1239,7 @@ describe('createApp daemon mutation auth', () => {
       )
 
       const app = createApp(createRuntimeOptions('secret'))
-      const res = await app.request('/canvas/session1/demo')
+      const res = await app.request('/pair')
       expect(res.status).toBe(200)
       expect(await res.text()).toContain('apps-web-marker')
     })

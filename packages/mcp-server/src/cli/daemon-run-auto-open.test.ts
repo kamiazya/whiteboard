@@ -16,10 +16,10 @@ function baseInput(overrides: Partial<Parameters<typeof maybeOpenDaemonBrowser>[
 }
 
 describe('maybeOpenDaemonBrowser', () => {
-  it('opens the daemon origin URL when every guard passes', async () => {
+  it('opens the official hosted app URL when every guard passes', async () => {
     const input = baseInput()
     await maybeOpenDaemonBrowser(input)
-    expect(input.openFn).toHaveBeenCalledWith('http://127.0.0.1:3099')
+    expect(input.openFn).toHaveBeenCalledWith('https://kamiazya-whiteboard.pages.dev/')
   })
 
   it('does not open when --no-open was passed', async () => {

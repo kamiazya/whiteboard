@@ -65,14 +65,17 @@ export const runtimeStatusResponseSchema = z.object({
   idleForMs: z.number(),
   auth: z.object({ mode: z.string(), hasToken: z.boolean() }),
   storage: z.object({ dataDir: z.string(), dataDirWritable: z.boolean() }),
-  // 'web-app' is the canonical apps/web build (dist/web-app), served by the
-  // local daemon. 'server-placeholder' is the minimal static page served at
-  // server-mode's root (apps/web is not served there — server-mode has no
-  // token/session-acquisition flow apps/web's provider model can use).
+  // 'pair-only' is the local daemon's hosted-first end state: it serves the
+  // apps/web build only on /pair (the consent trust anchor) and redirects
+  // every other UI path to the official hosted app. 'web-app' is retained
+  // for wire-compat with older daemons that served the full build.
+  // 'server-placeholder' is the minimal static page served at server-mode's
+  // root (apps/web is not served there — server-mode has no token/session-
+  // acquisition flow apps/web's provider model can use).
   app: z.object({
     served: z.boolean(),
     buildPresent: z.boolean(),
-    ui: z.enum(['web-app', 'server-placeholder']),
+    ui: z.enum(['pair-only', 'web-app', 'server-placeholder']),
   }),
   mcp: z.object({ httpEnabled: z.boolean(), endpoint: z.string() }),
   clients: z.object({ connected: z.number(), ready: z.number() }),

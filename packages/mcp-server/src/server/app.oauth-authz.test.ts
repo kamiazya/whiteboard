@@ -150,7 +150,9 @@ describe('createApp oauth-authz wiring', () => {
         allowedWebOrigins: ['https://whiteboard.pages.dev'],
       }),
     )
-    const res = await app.request('http://127.0.0.1:3099/', { headers: { Host: '127.0.0.1:3099' } })
+    const res = await app.request('http://127.0.0.1:3099/pair', {
+      headers: { Host: '127.0.0.1:3099' },
+    })
     const html = await res.text()
     // The daemon-served app must stay entirely out of the OAuth state,
     // storage, callback, and client_id path — it authenticates same-origin
