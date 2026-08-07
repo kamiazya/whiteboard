@@ -147,8 +147,10 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
   }
   // Persisting a grant is a consent decision made on the daemon's own
   // served UI (which carries the daemon token); nothing below admin may
-  // widen the origin allowlist.
-  if (path === '/api/pairing/grants') {
+  // widen the origin allowlist. Listing and revoking grants (the
+  // management surface, including DELETE /api/pairing/grants/:grantId)
+  // sit behind the same bar.
+  if (path === '/api/pairing/grants' || path.startsWith('/api/pairing/grants/')) {
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
 
