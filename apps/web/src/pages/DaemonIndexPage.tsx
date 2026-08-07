@@ -2,6 +2,7 @@ import { workspaceNamesSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { CanvasThumb } from '../components/CanvasThumb.js'
+import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
@@ -360,7 +361,10 @@ export function DaemonIndexPage({
         )}
 
         {tab === 'storage' ? (
-          <StorageReportCard />
+          <div className="space-y-4">
+            <PairedOriginsCard />
+            <StorageReportCard />
+          </div>
         ) : tab === 'files' ? (
           selectedWorkspace ? (
             <WorkspaceFilesPanel
