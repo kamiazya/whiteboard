@@ -151,6 +151,14 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       kind: 'scoped',
       scopes: ['runtime:admin'],
     })
+    expect(resolveApiRouteScope('GET', '/api/pairing/grants')).toEqual({
+      kind: 'scoped',
+      scopes: ['runtime:admin'],
+    })
+    expect(resolveApiRouteScope('DELETE', '/api/pairing/grants/abc123')).toEqual({
+      kind: 'scoped',
+      scopes: ['runtime:admin'],
+    })
   })
 
   it('GET /api/runtime/ping is the sole declared public route', () => {

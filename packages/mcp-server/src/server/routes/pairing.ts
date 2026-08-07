@@ -46,6 +46,15 @@ const createGrantResponseSchema = z
   .strict()
 type CreateGrantResponse = z.infer<typeof createGrantResponseSchema>
 
+const listGrantsResponseSchema = z
+  .object({
+    grants: z.array(
+      z.object({ grantId: z.string(), origin: z.string(), createdAt: z.string() }).strict(),
+    ),
+  })
+  .strict()
+type ListGrantsResponse = z.infer<typeof listGrantsResponseSchema>
+
 const tokenRequestSchema = z.discriminatedUnion('grantType', [
   z
     .object({
@@ -95,6 +104,26 @@ export function createPairingRouter({ grants, codes, tokens }: PairingRouterOpti
     const code = codes.mint({ origin: grant.origin, codeChallenge: parsed.data.codeChallenge })
     const response: CreateGrantResponse = { grantId: grant.grantId, origin: grant.origin, code }
     return c.json(response, 201)
+  })
+
+  // Grant management (Bearer-gated like grant creation — the settings UI
+  // on either the daemon origin or a PAIRED hosted origin may manage them;
+  // the pairing-token auth path in createDaemonAuthMiddleware covers the
+  // latter). Revocation also kills the origin's live session tokens: a
+  // revoked origin keeping a working 24h token would make revoke a lie.
+  app.get('/api/pairing/grants', (c) => {
+    const response: ListGrantsResponse = { grants: [...grants.list()] }
+    return c.json(response, 200)
+  })
+
+  app.delete('/api/pairing/grants/:grantId', (c) => {
+    const grantId = c.req.param('grantId')
+    const revoked = grants.list().find((grant) => grant.grantId === grantId)
+    if (revoked === undefined || !grants.revoke(grantId)) {
+      return c.json({ error: 'unknown grant' }, 404)
+    }
+    tokens.revokeOrigin(revoked.origin)
+    return c.json({ revoked: true }, 200)
   })
 
   app.post('/api/pairing/token', async (c) => {

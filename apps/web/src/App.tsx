@@ -8,6 +8,7 @@ import {
   consumeGrantFragment,
   type GrantConsumeResult,
   parseGrantFragment,
+  renewPairingToken,
 } from './lib/pairing-grant.js'
 
 // Lazy: the /pair consent page transitively pulls daemon-api-client's zod
@@ -154,6 +155,7 @@ export function App({ providerState }: AppProps) {
   const [grantConnection, setGrantConnection] = useState<GrantConsumeResult | null>(() =>
     parseGrantFragment(window.location.hash) !== null ? { status: 'none' } : null,
   )
+  const [grantErrorDismissed, setGrantErrorDismissed] = useState(false)
   useEffect(() => {
     const hash = window.location.hash
     if (parseGrantFragment(hash) === null) return
@@ -169,6 +171,33 @@ export function App({ providerState }: AppProps) {
     }).then(setGrantConnection)
     // Runs once per page load — the fragment only exists on a fresh
     // top-level navigation back from the consent page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Silent renewal: a later visit to a hosted origin that already holds a
+  // pairing grant reconnects without any redirect — the browser-enforced
+  // Origin header against the daemon's persisted grant is the whole
+  // credential (POST /api/pairing/token, grantType 'origin'). Gated to the
+  // no-fragment cold load: an in-flight #wb=/#wb-grant flow always wins,
+  // and a 403/unreachable daemon collapses to 'none' so the app falls back
+  // to browser-local exactly as before, with the banner as the path back.
+  const attemptedRenewalRef = useRef(false)
+  useEffect(() => {
+    if (attemptedRenewalRef.current) return
+    attemptedRenewalRef.current = true
+    if (isPairRoute) return
+    if (daemonConnection.status !== 'none') return
+    if (grantConnection !== null) return
+    if ((providerState ?? defaultProviderState).kind !== 'browser-local') return
+    const storedBaseUrl = userSettingsStore.load().storage.localDaemonBaseUrl
+    if (storedBaseUrl === undefined) return
+    void renewPairingToken({
+      daemonBaseUrl: storedBaseUrl,
+      fetch: globalThis.fetch.bind(globalThis),
+    }).then((result) => {
+      if (result.status === 'paired') setGrantConnection(result)
+    })
+    // Cold-load decision over mount-time facts; the ref guards StrictMode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -464,6 +493,30 @@ export function App({ providerState }: AppProps) {
           message="Beta preview — your data is stored only in this browser."
         />
         <BackendConfigChip state={effectiveState} />
+        {grantConnection?.status === 'error' && !grantErrorDismissed && (
+          // The user just clicked Approve on the daemon's consent page —
+          // landing back here on browser-local with no explanation was a
+          // silent dead end. The likeliest cause on a hosted origin is the
+          // browser's local-network permission still being closed.
+          <div
+            role="alert"
+            className="flex shrink-0 items-center justify-between gap-2 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+          >
+            <span>
+              Pairing didn't complete: {grantConnection.detail}. If your browser asked for
+              permission to reach local devices, allow it and try again from "Check for local
+              daemon".
+            </span>
+            <button
+              type="button"
+              onClick={() => setGrantErrorDismissed(true)}
+              aria-label="Dismiss pairing error"
+              className="shrink-0 rounded px-1.5 py-0.5 font-medium hover:bg-background/60"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
             <BrowserLocalCanvasPage

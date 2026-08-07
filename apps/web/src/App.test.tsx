@@ -52,6 +52,15 @@ vi.mock('./hooks/useDaemonConnection.js', () => ({
   useDaemonConnection: () => mockDaemonConnectionResult,
 }))
 
+// Silent-renewal seam: everything else in pairing-grant stays real (the
+// /pair tests exercise the true fragment/PKCE code paths).
+let mockRenewResult: import('./lib/pairing-grant.js').GrantConsumeResult = { status: 'none' }
+const renewPairingTokenMock = vi.fn(async () => mockRenewResult)
+vi.mock('./lib/pairing-grant.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/pairing-grant.js')>()),
+  renewPairingToken: (...args: unknown[]) => renewPairingTokenMock(...(args as [])),
+}))
+
 let receivedDaemonPageProps: Record<string, unknown> | undefined
 // Toggled by the error-boundary test: throwing from the lazily-resolved page
 // exercises the paired branch's boundary, which must sit OUTSIDE Suspense to
@@ -106,6 +115,107 @@ const INVALID_CONFIG_STATE: ProviderState = {
   kind: 'invalid-config',
   message: 'Runtime configuration is invalid.',
 }
+
+describe('silent renewal on a hosted origin', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    renewPairingTokenMock.mockClear()
+    mockRenewResult = { status: 'none' }
+  })
+
+  it('reconnects to the stored daemon without a redirect and renders daemon mode', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok-r' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <App providerState={BROWSER_LOCAL_STATE} />
+        </MemoryRouter>,
+      )
+    })
+
+    await screen.findByTestId('daemon-index-page')
+    expect(renewPairingTokenMock).toHaveBeenCalledWith(
+      expect.objectContaining({ daemonBaseUrl: 'http://127.0.0.1:3099' }),
+    )
+    expect(receivedDaemonIndexPageProps).toMatchObject({
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+      token: 'tok-r',
+    })
+  })
+
+  it('falls back to browser-local when renewal reports none (revoked / unreachable)', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 1,
+        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'none' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <App providerState={BROWSER_LOCAL_STATE} />
+        </MemoryRouter>,
+      )
+    })
+
+    await screen.findByTestId('browser-local-canvas-page')
+    expect(screen.queryByTestId('daemon-index-page')).toBeNull()
+  })
+
+  it('does not attempt renewal when no daemon was ever stored', async () => {
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <App providerState={BROWSER_LOCAL_STATE} />
+        </MemoryRouter>,
+      )
+    })
+
+    await screen.findByTestId('browser-local-canvas-page')
+    expect(renewPairingTokenMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('grant exchange failure surfacing', () => {
+  it('a failed #wb-grant exchange shows an alert instead of silently falling back', async () => {
+    // No pairing transaction in sessionStorage -> the real consumeGrantFragment
+    // deterministically resolves { status: 'error' }. The user just clicked
+    // Approve on the daemon's consent page; browser-local with zero feedback
+    // is the dead end this notice exists to close.
+    sessionStorage.clear()
+    window.location.hash = '#wb-grant=abc&state=xyz'
+    try {
+      await act(async () => {
+        render(
+          <MemoryRouter initialEntries={['/']}>
+            <App providerState={BROWSER_LOCAL_STATE} />
+          </MemoryRouter>,
+        )
+      })
+
+      const alert = await screen.findByRole('alert')
+      expect(alert.textContent).toMatch(/pairing didn't complete/i)
+      // Dismissible: the notice must not permanently occupy the banner row.
+      fireEvent.click(screen.getByRole('button', { name: /dismiss pairing error/i }))
+      expect(screen.queryByRole('alert')).toBeNull()
+    } finally {
+      window.location.hash = ''
+    }
+  })
+})
 
 describe('/pair consent route', () => {
   it('renders the consent page and does NOT rewrite the URL away from /pair', async () => {

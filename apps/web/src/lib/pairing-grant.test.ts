@@ -4,6 +4,7 @@ import {
   consumeGrantFragment,
   createPkcePair,
   parseGrantFragment,
+  renewPairingToken,
 } from './pairing-grant.js'
 
 const DAEMON = 'http://127.0.0.1:3099'
@@ -59,6 +60,42 @@ describe('beginPairingGrant', () => {
     expect(stashed.state).toBe(state)
     expect(stashed.daemonBaseUrl).toBe(DAEMON)
     expect(typeof stashed.codeVerifier).toBe('string')
+  })
+})
+
+describe('renewPairingToken', () => {
+  it('mints a token via grantType origin against the stored daemon', async () => {
+    const fetchFn = vi.fn(async () =>
+      Response.json({ token: 'renewed', expiresAt: '2099-01-01T00:00:00.000Z', origin: HOSTED }),
+    )
+    const result = await renewPairingToken({
+      daemonBaseUrl: `${DAEMON}/`,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result).toEqual({ status: 'paired', daemonBaseUrl: DAEMON, token: 'renewed' })
+    const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe(`${DAEMON}/api/pairing/token`)
+    expect(JSON.parse(String(init.body))).toEqual({ grantType: 'origin' })
+  })
+
+  it('reports none on a 403 (grant revoked / daemon restarted unpaired)', async () => {
+    const fetchFn = vi.fn(async () => new Response('no grant', { status: 403 }))
+    const result = await renewPairingToken({
+      daemonBaseUrl: DAEMON,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result).toEqual({ status: 'none' })
+  })
+
+  it('reports none when the daemon is unreachable', async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    const result = await renewPairingToken({
+      daemonBaseUrl: DAEMON,
+      fetch: fetchFn as unknown as typeof globalThis.fetch,
+    })
+    expect(result).toEqual({ status: 'none' })
   })
 })
 
