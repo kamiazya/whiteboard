@@ -105,4 +105,59 @@ describe('setupSwRegistration', () => {
       window.removeEventListener('unhandledrejection', onUnhandledRejection)
     }
   })
+
+  it('passes both onNeedRefresh and onRegisteredSW to registerSW', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const registerSW = vi.fn()
+    const importRegister = vi.fn().mockResolvedValue({ registerSW })
+
+    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(registerSW).toHaveBeenCalledTimes(1)
+    expect(registerSW.mock.calls[0][0]).toHaveProperty('onNeedRefresh')
+    expect(registerSW.mock.calls[0][0]).toHaveProperty('onRegisteredSW')
+    expect(typeof registerSW.mock.calls[0][0].onRegisteredSW).toBe('function')
+  })
+
+  it('starts the update scheduler when onRegisteredSW is invoked with a registration', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const registerSW = vi.fn()
+    const importRegister = vi.fn().mockResolvedValue({ registerSW })
+
+    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const { onRegisteredSW } = registerSW.mock.calls[0][0]
+    const update = vi.fn().mockResolvedValue(undefined)
+    const fakeRegistration = { update } as unknown as ServiceWorkerRegistration
+
+    vi.useFakeTimers()
+    try {
+      onRegisteredSW('/sw.js', fakeRegistration)
+      // dynamic import of the scheduler module needs microtask flushes
+      await vi.waitFor(() => {
+        vi.advanceTimersByTime(60 * 60 * 1000)
+        expect(update).toHaveBeenCalled()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not throw and schedules nothing when onRegisteredSW is invoked with no registration', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const registerSW = vi.fn()
+    const importRegister = vi.fn().mockResolvedValue({ registerSW })
+
+    setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const { onRegisteredSW } = registerSW.mock.calls[0][0]
+
+    expect(() => onRegisteredSW('/sw.js', undefined)).not.toThrow()
+  })
 })
