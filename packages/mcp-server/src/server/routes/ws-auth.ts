@@ -11,7 +11,11 @@ import {
   normalizeOriginHostname,
 } from '../security/cors-loopback.js'
 import { timingSafeEqualStrings } from '../security/timing-safe.js'
-import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
+import {
+  type AllowedWebOrigins,
+  isAllowedWebOrigin,
+  resolveAllowedWebOrigins,
+} from '../security/web-origin-allowlist.js'
 
 function parseProtocolHeader(header: string | string[] | undefined): string[] {
   if (Array.isArray(header)) {
@@ -27,7 +31,7 @@ function parseProtocolHeader(header: string | string[] | undefined): string[] {
 function isAllowedBrowserOrigin(
   originHeader: string | undefined,
   hostHeader: string | undefined,
-  allowedOrigins: readonly string[] = [],
+  allowedOrigins: AllowedWebOrigins = [],
 ): boolean {
   // Requests without Origin (curl, ws CLI, MCP daemon clients, etc.) are treated as
   // non-browser callers and are allowed, but DNS rebinding protection still requires
@@ -52,7 +56,7 @@ function isAllowedBrowserOrigin(
   }
   // A hosted pairing origin (e.g. https://kamiazya-whiteboard.pages.dev) is
   // never loopback — it is admitted only via an exact allowlist match.
-  return isAllowedWebOrigin(originHeader, allowedOrigins)
+  return isAllowedWebOrigin(originHeader, resolveAllowedWebOrigins(allowedOrigins))
 }
 
 export interface WsUpgradeDecision {
@@ -83,7 +87,7 @@ export type RedeemTicketFn = (ticket: string) => {
 export function authorizeWsUpgrade(
   headers: IncomingHttpHeaders,
   token?: string,
-  allowedOrigins: readonly string[] = [],
+  allowedOrigins: AllowedWebOrigins = [],
   redeemTicket?: RedeemTicketFn,
 ): WsUpgradeDecision {
   if (!isAllowedBrowserOrigin(headers.origin, headers.host, allowedOrigins)) {
