@@ -6,7 +6,11 @@ import type {
   Scene,
   SceneNode,
 } from '@kamiazya/whiteboard-canvas-render'
-import { layoutMdastBlocks, routeEdge } from '@kamiazya/whiteboard-canvas-render'
+import {
+  layoutMdastBlocks,
+  routeEdge,
+  SPATIAL_THEME_FONT_FAMILY,
+} from '@kamiazya/whiteboard-canvas-render'
 
 /**
  * Recursively translates every bbox in a scene node subtree by (dx, dy).
@@ -95,7 +99,11 @@ function layoutTextNode(node: SpatialNode & { type: 'text' }, measure: MeasureTe
   let laidOut: Scene
   try {
     const mdastRoot = parseMarkdownBody(node.text)
-    laidOut = layoutMdastBlocks(mdastRoot, { measure, maxWidth: node.width })
+    laidOut = layoutMdastBlocks(mdastRoot, {
+      measure,
+      maxWidth: node.width,
+      fontFamily: SPATIAL_THEME_FONT_FAMILY,
+    })
   } catch {
     // parseMarkdownBody throws when a body's remark-parsed tree falls
     // outside the closed mdast subset (mdastRootSchema rejects it) — a
