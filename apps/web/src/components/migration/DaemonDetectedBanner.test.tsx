@@ -1,12 +1,23 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DaemonProbeResult, ProbeDaemonOptions } from '../../lib/daemon-probe.js'
 import { createUserSettingsStore, type UserSettingsStore } from '../../lib/user-settings-store.js'
 import {
   DaemonDetectedBanner,
   HOW_TO_CONNECT_URL,
+  LNA_HINT_TEXT,
   UNSUPPORTED_BROWSER_NOTICE,
 } from './DaemonDetectedBanner.js'
+
+/** A promise plus its resolver, for tests that need to control exactly
+ *  when a probe sweep settles relative to fake-timer advances. */
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((res) => {
+    resolve = res
+  })
+  return { promise, resolve }
+}
 
 function makeStore(): UserSettingsStore {
   localStorage.clear()
@@ -598,5 +609,183 @@ describe('DaemonDetectedBanner', () => {
     unmount()
 
     expect(capturedSignal?.aborted).toBe(true)
+  })
+
+  describe('in-flight state and the Local Network Access hint', () => {
+    // These cases drive the ~1s hint timer with fake timers. Real-timer
+    // testing-library helpers (waitFor/findBy*) poll on a real setTimeout
+    // and would hang once fake timers are installed, so every assertion in
+    // this block uses the synchronous get*/query* queries instead, and
+    // `act`/`vi.advanceTimersByTimeAsync` drive time forward explicitly.
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('disables the button and renders a "Checking…" status while a sweep is outstanding on https:', () => {
+      const probeFn = vi.fn().mockImplementation(() => new Promise<DaemonProbeResult>(() => {}))
+      render(
+        <DaemonDetectedBanner
+          settingsStore={makeStore()}
+          fetch={vi.fn()}
+          locationProtocol="https:"
+          probeFn={probeFn}
+        />,
+      )
+
+      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      act(() => {
+        fireEvent.click(button)
+      })
+
+      expect(button.hasAttribute('disabled')).toBe(true)
+      expect(button.getAttribute('aria-busy')).toBe('true')
+      expect(screen.getByRole('status').textContent).toMatch(/checking/i)
+    })
+
+    it('shows the LNA hint on https: after the sweep has been outstanding for ~1s', async () => {
+      const { promise } = deferred<DaemonProbeResult>()
+      const probeFn = vi.fn().mockReturnValue(promise)
+      render(
+        <DaemonDetectedBanner
+          settingsStore={makeStore()}
+          fetch={vi.fn()}
+          locationProtocol="https:"
+          probeFn={probeFn}
+        />,
+      )
+
+      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
+      act(() => {
+        fireEvent.click(button)
+      })
+
+      expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+      expect(screen.getByText(LNA_HINT_TEXT)).not.toBeNull()
+    })
+
+    it('never shows the LNA hint on http:, even during the auto-probe well past the delay', async () => {
+      const { promise } = deferred<DaemonProbeResult>()
+      const probeFn = vi.fn().mockReturnValue(promise)
+      render(
+        <DaemonDetectedBanner
+          settingsStore={makeStore()}
+          fetch={vi.fn()}
+          locationProtocol="http:"
+          probeFn={probeFn}
+        />,
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5000)
+      })
+      expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
+      // The in-flight state is still visible though — the sweep never
+      // settles because `promise` is never resolved.
+      expect(screen.getByRole('status').textContent).toMatch(/checking/i)
+    })
+
+    it('resets checking, the hint, and re-enables the button once the sweep settles', async () => {
+      const { promise, resolve } = deferred<void>()
+      // Every candidate in the sweep awaits the same deferred, so resolving
+      // it once settles the whole sweep at a controlled moment.
+      const resolvingProbeFn = vi
+        .fn()
+        .mockReturnValue(promise.then(() => ({ detected: false, reason: 'refused' }) as const))
+      render(
+        <DaemonDetectedBanner
+          settingsStore={makeStore()}
+          fetch={vi.fn()}
+          locationProtocol="https:"
+          probeFn={resolvingProbeFn}
+        />,
+      )
+
+      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      act(() => {
+        fireEvent.click(button)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+      expect(screen.getByText(LNA_HINT_TEXT)).not.toBeNull()
+
+      await act(async () => {
+        resolve()
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
+      expect(screen.queryByRole('status')).toBeNull()
+      const rechecked = screen.getByRole('button', { name: /check for local daemon/i })
+      expect(rechecked.hasAttribute('disabled')).toBe(false)
+    })
+
+    it('never flashes the hint when the sweep settles before the ~1s delay', async () => {
+      const { promise, resolve } = deferred<DaemonProbeResult>()
+      const probeFn = vi.fn().mockReturnValue(promise)
+      render(
+        <DaemonDetectedBanner
+          settingsStore={makeStore()}
+          fetch={vi.fn()}
+          locationProtocol="https:"
+          probeFn={probeFn}
+        />,
+      )
+
+      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      act(() => {
+        fireEvent.click(button)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200)
+        resolve({ detected: false, reason: 'refused' })
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000)
+      })
+
+      expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
+    })
+
+    it('clears the stale failure notice once a retry sweep starts', async () => {
+      const { promise: firstProbe, resolve: resolveFirst } = deferred<DaemonProbeResult>()
+      const probeFn = vi.fn().mockReturnValueOnce(firstProbe)
+      render(
+        <DaemonDetectedBanner
+          settingsStore={makeStore()}
+          fetch={vi.fn()}
+          locationProtocol="https:"
+          probeFn={probeFn}
+        />,
+      )
+
+      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      act(() => {
+        fireEvent.click(button)
+      })
+      await act(async () => {
+        resolveFirst({ detected: false, reason: 'network' })
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(screen.getByTestId('daemon-check-failed-notice')).not.toBeNull()
+
+      // Retry: leave the second sweep in flight so we can see whether the
+      // stale failure notice from the first sweep is still rendered.
+      probeFn.mockReturnValueOnce(new Promise<DaemonProbeResult>(() => {}))
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: /check for local daemon/i }))
+      })
+
+      expect(screen.getByRole('status').textContent).toMatch(/checking/i)
+      expect(screen.queryByTestId('daemon-check-failed-notice')).toBeNull()
+    })
   })
 })
