@@ -104,6 +104,13 @@ export function CanvasDropdown({
         // Search stays sticky at the top and the footer stays sticky at the bottom.
         className="w-[320px] p-0"
         align="start"
+        // Radix's default close behavior returns focus to the trigger
+        // ASYNCHRONOUSLY. When a menu item switches to a fresh editor that
+        // takes focus itself (New markdown note…), that late focus return
+        // steals the keyboard mid-word — keystrokes silently land on the
+        // trigger, and a Space reopens the menu. Selecting from this menu
+        // always moves the user somewhere else, so never yank focus back.
+        onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <div className="sticky top-0 z-10 border-b bg-popover p-2">
           <div className="relative">
