@@ -21,6 +21,18 @@ describe('UpdateToast', () => {
     expect(onReload).toHaveBeenCalledTimes(1)
   })
 
+  it('renders overlaid on the viewport, not in document flow', () => {
+    // The app shell fills 100dvh, so a static toast appended to <body> lands
+    // BELOW the viewport and is never seen — the exact failure observed on
+    // the deployed preview (toast at y === viewport height). Fixed
+    // positioning with a stacking z-index is what keeps it visible.
+    render(<UpdateToast onReload={vi.fn()} onDismiss={vi.fn()} />)
+
+    const toast = screen.getByRole('status')
+    expect(toast.className).toMatch(/\bfixed\b/)
+    expect(toast.className).toMatch(/\bz-\d+\b/)
+  })
+
   it('hides the toast and calls onDismiss when Dismiss is clicked', () => {
     const onDismiss = vi.fn()
     render(<UpdateToast onReload={vi.fn()} onDismiss={onDismiss} />)
