@@ -37,3 +37,47 @@ describe('theme resolver purity (no ambient DOM read)', () => {
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
   })
 })
+
+describe('single content path (S10 guardrail)', () => {
+  it('raw HTML injection exists ONLY at the two documented scene-svg sinks', async () => {
+    // String-level TRIPWIRE, not a syntax-aware proof: it catches the ways
+    // raw markup realistically enters a React/DOM codebase
+    // (dangerouslySetInnerHTML, innerHTML/outerHTML assignment,
+    // insertAdjacentHTML). The escaping guarantee itself lives in
+    // canvas-render's serializer tests — this test only pins that nothing
+    // BUT that serializer's two documented injection points exists here.
+    const allowed = new Map([
+      ['./SpatialEditor.tsx', 1],
+      ['./DragPreviewLayer.tsx', 1],
+    ])
+    const sinkPattern =
+      /dangerouslySetInnerHTML=|\.innerHTML\s*=|\.outerHTML\s*=|insertAdjacentHTML\(/g
+    for (const [path, loader] of Object.entries(modules)) {
+      if (/\.(test|spec)\.(ts|tsx)$/.test(path)) continue
+      const source = (await loader()) as string
+      const injections = (source.match(sinkPattern) ?? []).length
+      expect({ path, injections }).toEqual({ path, injections: allowed.get(path) ?? 0 })
+    }
+  })
+
+  it('canvas mutations construct typed EditorCommands (no setter bypasses applyCommand)', async () => {
+    // The palette and every tool mode mutate the canvas exclusively by
+    // dispatching an EditorCommand through applyCommand — a hand-rolled
+    // canvas object spread reaching onChange directly would bypass the
+    // command layer sync consumers replay.
+    const loader = modules['./SpatialEditor.tsx']
+    const source = (await loader?.()) as string
+    // String-level TRIPWIRE for the command boundary: every statement-level
+    // onChange call must hand over a canvas spelled `running` (the
+    // applyCommand accumulator) or an inline `applyCommand(...)` result.
+    // This is deliberately formatting-sensitive and NOT data-flow analysis —
+    // a rename or a bypass shows up as a diff in this file, and the
+    // behavioral guarantee (sync consumers can replay commands) is carried
+    // by the browser-tier tests that assert commands reconstruct the
+    // canvas. Prose mentions inside comments don't match: only call sites
+    // preceded by code punctuation/whitespace count.
+    const callSites = (source.match(/[^`\w]onChange\((running\b|applyCommand\()/g) ?? []).length
+    const allCalls = (source.match(/[^`\w]onChange\(/g) ?? []).length
+    expect(allCalls).toBe(callSites)
+  })
+})
