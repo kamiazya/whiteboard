@@ -33,7 +33,7 @@ async function reserveFreePort(): Promise<number> {
 let child: ChildProcessWithoutNullStreams | null = null
 let closeResponder: (() => Promise<unknown>) | null = null
 
-function spawnProxy(port: number, extraEnv: Record<string, string> = {}) {
+function spawnProxy(port: number, envOverrides: Record<string, string> = {}) {
   child = spawn(process.execPath, [PROXY_SCRIPT_PATH], {
     env: {
       ...process.env,
@@ -42,9 +42,9 @@ function spawnProxy(port: number, extraEnv: Record<string, string> = {}) {
       // Tests own the backend lifecycle; never spawn the real hook.
       WHITEBOARD_PROXY_SKIP_ENSURE: '1',
       WHITEBOARD_PROXY_RETRY_TIMEOUT_MS: '5000',
+      ...envOverrides,
     },
     stdio: ['pipe', 'pipe', 'pipe'],
-    ...extraEnv,
   })
   return child
 }
@@ -118,6 +118,17 @@ describe('mcp-http-stdio-proxy (subprocess)', () => {
     // produced no line of its own.
     const line = await nextStdoutLine(proc)
     expect(JSON.parse(line).id).not.toBe(undefined)
+  })
+
+  it('an invalid retry-timeout override falls back to the default instead of wedging', async () => {
+    const port = await reserveFreePort()
+    const responder = await startFakeMcpResponder({ port, token: TOKEN })
+    closeResponder = responder.close
+    // NaN/Infinity would otherwise make the retry deadline unreachable.
+    const proc = spawnProxy(port, { WHITEBOARD_PROXY_RETRY_TIMEOUT_MS: 'Infinity' })
+    proc.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 9, method: 'tools/list' })}\n`)
+    const line = await nextStdoutLine(proc)
+    expect(JSON.parse(line)).toHaveProperty('result')
   })
 
   it('exits cleanly when stdin closes', async () => {

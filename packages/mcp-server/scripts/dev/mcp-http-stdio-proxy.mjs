@@ -43,7 +43,22 @@ const PORT = deriveDevPort({
   env: process.env,
 })
 const TOKEN = process.env.WHITEBOARD_TOKEN ?? 'whiteboard-dev'
-const RETRY_TIMEOUT_MS = Number(process.env.WHITEBOARD_PROXY_RETRY_TIMEOUT_MS ?? 30_000)
+const DEFAULT_RETRY_TIMEOUT_MS = 30_000
+
+// Only a finite, non-negative override is usable: NaN or Infinity would make
+// the per-request deadline unreachable, turning the retry loop into an
+// infinite block against a daemon that never comes up.
+function parseRetryTimeoutMs(raw) {
+  if (raw === undefined) return DEFAULT_RETRY_TIMEOUT_MS
+  const parsed = Number(raw)
+  if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  log(
+    `ignoring invalid WHITEBOARD_PROXY_RETRY_TIMEOUT_MS=${JSON.stringify(raw)}; using ${DEFAULT_RETRY_TIMEOUT_MS}`,
+  )
+  return DEFAULT_RETRY_TIMEOUT_MS
+}
+
+const RETRY_TIMEOUT_MS = parseRetryTimeoutMs(process.env.WHITEBOARD_PROXY_RETRY_TIMEOUT_MS)
 const RETRY_INTERVAL_MS = 250
 
 // stdout is the protocol channel — logs go to stderr only.
