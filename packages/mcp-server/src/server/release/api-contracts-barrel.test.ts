@@ -26,6 +26,15 @@ describe('api-contracts barrel scope', () => {
   it('re-exports exactly the declared public surface — no other api-contracts modules', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)
-    expect(specifiers).toEqual(['./branches.js', './canvas.js', './runtime.js'])
+    // '@kamiazya/whiteboard-server-core' is a deliberate widening: the
+    // OpenCanvas /api/v1 contracts (canvas list + OKF read) are consumed by
+    // apps/web through this barrel so it never imports the shared-layer
+    // package directly (architecture-map.md).
+    expect(specifiers).toEqual([
+      '@kamiazya/whiteboard-server-core',
+      './branches.js',
+      './canvas.js',
+      './runtime.js',
+    ])
   })
 })

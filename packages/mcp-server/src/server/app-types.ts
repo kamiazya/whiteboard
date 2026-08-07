@@ -1,3 +1,4 @@
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
@@ -6,6 +7,12 @@ import type { WsTicketStore } from './security/ws-ticket-store.js'
 
 interface LocalDaemonAppOptions {
   authMode: 'local-daemon'
+  /** OpenCanvas store/sync ports. When present, server-core's /api/v1
+   *  HTTP surface (createServer(deps).app) is mounted behind the same
+   *  /api/* auth as every other API route; when absent, /api/v1 stays
+   *  unmounted (404). Optional so ad-hoc callers and legacy tests need no
+   *  container. */
+  serverDeps?: ServerDeps
   token?: string
   mcpAuth?: McpHttpAuthStrategy
   /** Per-process-start identifier for /api/runtime/ping. Falls back to a
@@ -37,6 +44,12 @@ interface LocalDaemonAppOptions {
 
 export interface ServerModeAppOptions {
   authMode: 'server-mode'
+  /** OpenCanvas store/sync ports. When present, server-core's /api/v1
+   *  HTTP surface (createServer(deps).app) is mounted behind the same
+   *  /api/* auth as every other API route; when absent, /api/v1 stays
+   *  unmounted (404). Optional so ad-hoc callers and legacy tests need no
+   *  container. */
+  serverDeps?: ServerDeps
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy

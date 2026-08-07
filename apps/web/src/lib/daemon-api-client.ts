@@ -1,9 +1,13 @@
 import {
+  type CanvasOkfV1Response,
   type CreateCanvasResponse,
+  canvasOkfV1ResponseSchema,
   createCanvasResponseSchema,
   type ListCanvasesResponse,
+  type ListCanvasesV1Response,
   type ListWorkspacesResponse,
   listCanvasesResponseSchema,
+  listCanvasesV1ResponseSchema,
   listWorkspacesResponseSchema,
   problemDetailsErrorSchema,
   type UpdateCanvasResponse,
@@ -201,5 +205,32 @@ export function setCanvasName(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name }),
     },
+  )
+}
+
+// ---- OpenCanvas /api/v1 surface (canvasId + derived alias world) ----
+
+export function listCanvasesV1(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+): Promise<ListCanvasesV1Response> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases`,
+    listCanvasesV1ResponseSchema,
+  )
+}
+
+export function getCanvasOkfV1(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  canvasId: string,
+): Promise<CanvasOkfV1Response> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(canvasId)}/okf`,
+    canvasOkfV1ResponseSchema,
   )
 }

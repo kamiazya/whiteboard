@@ -5,6 +5,8 @@ import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import { WebSocketServer } from 'ws'
 import { IdleTimer } from '../daemon/idle-timer.js'
+import { createContainer, resolveServerDeps } from '../di/container.js'
+import { createStoreLocalModule } from '../di/store-local.module.js'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
@@ -18,6 +20,7 @@ import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
+import { getDb } from './store/db/index.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { validationErrorBody } from './validators.js'
 
@@ -171,6 +174,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // upgrade — the route and the upgrade path have to agree on which store.
   const wsTicketStore = createWsTicketStore()
 
+  // OpenCanvas /api/v1 surface: same libSQL database as the MCP tools
+  // (getDb memoizes per dataDir, so this container shares the connection
+  // with the per-session MCP containers rather than opening a second one).
+  const dataDir = getDataDir()
+  const serverDeps = resolveServerDeps(
+    createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
+  )
+
   const app = createApp({
     authMode: 'local-daemon',
     token: options.token,
@@ -182,6 +193,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     allowedWebOrigins: options.allowedWebOrigins,
     oauthClientRegistry: options.oauthClientRegistry,
     wsTicketStore,
+    serverDeps,
   })
 
   setRuntimeTouchFn(touch)

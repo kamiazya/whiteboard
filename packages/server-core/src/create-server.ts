@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { CanvasNotFoundError as SnapshotNotFoundError } from './render/load-spatial-canvas.js'
 import type { ServerDeps } from './server-deps.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
 import {
@@ -16,10 +17,11 @@ import {
 } from './tools/canvas-crud.schemas.js'
 import { createCanvasDigestTool } from './tools/canvas-digest.js'
 import { createCanvasExportJsonCanvasTool } from './tools/canvas-export-json-canvas.js'
-import { createCanvasExportOkfTool } from './tools/canvas-export-okf.js'
+import { canvasExportOkfInputSchema, createCanvasExportOkfTool } from './tools/canvas-export-okf.js'
 import { createCanvasImportOkfTool } from './tools/canvas-import-okf.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createEdgePatchTool } from './tools/edge-patch.js'
+import { CanvasDocNotFoundError } from './tools/errors.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createNodePatchTool } from './tools/node-patch.js'
 import { createReindexTool } from './tools/reindex-tool.js'
@@ -88,6 +90,33 @@ export function createServer(deps: ServerDeps) {
     }
   })
 
+  // Read-only OKF projection of one canvas — the same canvas_export_okf
+  // tool the MCP surface exposes, reachable over HTTP so a browsing UI
+  // (workspace file tree) can open a canvas without an MCP client.
+  const canvasExportOkfTool = createCanvasExportOkfTool(deps)
+  app.get('/api/v1/workspaces/:workspaceId/canvases/:canvasId/okf', async (c) => {
+    const parsed = canvasExportOkfInputSchema.safeParse({
+      workspaceId: c.req.param('workspaceId'),
+      canvasId: c.req.param('canvasId'),
+    })
+    if (!parsed.success) {
+      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+    }
+    try {
+      const result = await canvasExportOkfTool.execute(parsed.data)
+      return c.json(result, 200)
+    } catch (err) {
+      // A tree node whose doc was never written (created but never
+      // imported/edited) has no OKF projection — a read miss, not a 500.
+      // Note: loadSpatialCanvas throws its own CanvasNotFoundError class,
+      // distinct from canvas-crud's; mapCanvasError only knows the latter.
+      if (err instanceof SnapshotNotFoundError || err instanceof CanvasDocNotFoundError) {
+        return c.json({ error: err.message }, 404)
+      }
+      return mapCanvasError(c, err)
+    }
+  })
+
   const tools = {
     facetSet: createFacetSetTool(deps),
     nodePatch: createNodePatchTool(deps),
@@ -95,7 +124,7 @@ export function createServer(deps: ServerDeps) {
     bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasDigest: createCanvasDigestTool(deps),
-    canvasExportOkf: createCanvasExportOkfTool(deps),
+    canvasExportOkf: canvasExportOkfTool,
     canvasExportJsonCanvas: createCanvasExportJsonCanvasTool(deps),
     canvasImportOkf: createCanvasImportOkfTool(deps),
     versionSave: createVersionSaveTool(deps),
