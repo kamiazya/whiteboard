@@ -163,6 +163,33 @@ describe('applyCommand', () => {
     expect(next).toBe(canvas)
   })
 
+  it('set-edge-label sets, updates, and (with an empty string) removes the label', () => {
+    const connected = applyCommand(baseCanvas(), {
+      kind: 'connect-nodes',
+      edgeId: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+    })
+
+    const labeled = applyCommand(connected, { kind: 'set-edge-label', id: 'e1', label: 'yes' })
+    expect(labeled.edges[0]).toMatchObject({ id: 'e1', label: 'yes' })
+    expect(labeled.nodes).toBe(connected.nodes)
+    expect(spatialCanvasSchema.safeParse(labeled).success).toBe(true)
+
+    const relabeled = applyCommand(labeled, { kind: 'set-edge-label', id: 'e1', label: 'no' })
+    expect(relabeled.edges[0]).toMatchObject({ id: 'e1', label: 'no' })
+
+    const cleared = applyCommand(relabeled, { kind: 'set-edge-label', id: 'e1', label: '' })
+    expect(cleared.edges[0]).not.toHaveProperty('label')
+    expect(spatialCanvasSchema.safeParse(cleared).success).toBe(true)
+  })
+
+  it('set-edge-label with a missing id returns the input canvas unchanged', () => {
+    const canvas = baseCanvas()
+    const next = applyCommand(canvas, { kind: 'set-edge-label', id: 'missing', label: 'x' })
+    expect(next).toBe(canvas)
+  })
+
   it('create then delete the same node is the identity (up to deep equality)', () => {
     const canvas = baseCanvas()
     const node = { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' } as const

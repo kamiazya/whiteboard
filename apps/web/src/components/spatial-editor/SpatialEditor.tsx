@@ -13,9 +13,12 @@
  * target node's connect-target control and Enter/Space it; Escape cancels
  * an in-flight gesture from the keyboard too), create a node (double-click
  * empty canvas space, or the keyboard-reachable "Add note" button — both
- * open the new node for typing immediately), and delete the current
+ * open the new node for typing immediately), delete the current
  * selection (Delete/Backspace, disabled while its text editor is open so
- * Backspace-while-typing edits text instead of deleting the node).
+ * Backspace-while-typing edits text instead of deleting the node), select
+ * an edge (click its line) and delete it (Delete/Backspace), and edit an
+ * edge's label (double-click its line; commits on blur, empty removes,
+ * Escape cancels).
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -51,8 +54,10 @@ import {
   findFreeSpot,
   hitTest,
   indexNodeBoxes,
+  polylineMidpoint,
   resizeBoxByDelta,
 } from './geometry.js'
+
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
@@ -123,6 +128,8 @@ export interface SpatialEditorHandle {
   fitToContent(nodeIds?: readonly string[]): void
 }
 
+const EDGE_LABEL_EDITOR_WIDTH_PX = 160
+const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
 const DEFAULT_TEST_ID = 'spatial-editor'
 /**
  * Window for OUR double-press detection (see handlePointerDown). Matches the
@@ -295,6 +302,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [scene],
     )
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
+    const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
     /**
@@ -497,7 +505,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }
         return
       }
-      const pressKey = hitId ?? 'empty'
+      // Edge hit-test runs at the press so the double-press pairing can
+      // distinguish "double-click on an edge" (open its label editor) from
+      // "double-click on empty space" (create a node) — both have
+      // hitId === undefined.
+      const EDGE_HIT_TOLERANCE_PX = 6
+      const hitEdge =
+        hitId === undefined
+          ? edgePaths.find(
+              (edge) =>
+                distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
+            )
+          : undefined
+      const pressKey = hitId ?? (hitEdge !== undefined ? `edge:${hitEdge.id}` : 'empty')
       const now = e.timeStamp
       const isDoublePress =
         lastPressRef.current !== null &&
@@ -509,10 +529,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (hitId === undefined) {
         setMarquee({ start: point, current: point })
         setExtraIds(new Set())
-        const EDGE_HIT_TOLERANCE_PX = 6
-        const hitEdge = edgePaths.find(
-          (edge) => distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
-        )
         if (hitEdge !== undefined) {
           setSelectedEdgeId(hitEdge.id)
           applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
@@ -605,6 +621,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the press; a DOUBLE one creates a node here (resolved at the
           // release, consistent with the node-edit double-press rule).
           if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+          // Double press ON an edge line edits the OBJECT under the pointer
+          // (the label), mirroring the node double-press-edits rule; node
+          // creation stays the empty-space double press above.
+          if (armed?.key.startsWith('edge:')) {
+            setEdgeLabelEditId(armed.key.slice('edge:'.length))
+          }
           // An edge selected at this press has no focusable element of its
           // own (node shapes carry tabIndex; edge polylines do not), so
           // without an explicit focus the real keyboard's Delete/Escape
@@ -740,9 +762,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // handler is never a resize.
       if (e.key === ' ' && gestureState.kind === 'idle') {
         // Held Space turns the next left-drag into a pan (Excalidraw
-        // semantics). preventDefault stops the page scrolling on Space.
-        e.preventDefault()
-        spaceDownRef.current = true
+        // semantics). preventDefault stops the page scrolling on Space —
+        // but never while the key originates in a text-entry surface. Node
+        // text editing is covered by the gesture-state check (editing-text
+        // is not idle); the edge label editor keeps the gesture idle, so a
+        // typed space would otherwise be swallowed here.
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !target?.isContentEditable) {
+          e.preventDefault()
+          spaceDownRef.current = true
+        }
         return
       }
       const nudge = ARROW_KEY_DELTA[e.key]
@@ -1263,6 +1293,35 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ))}
             </svg>
           )}
+          {edgeLabelEditId !== null &&
+            (() => {
+              const edge = canvas.edges.find((entry) => entry.id === edgeLabelEditId)
+              const path = edgePaths.find((entry) => entry.id === edgeLabelEditId)?.path
+              if (edge === undefined || path === undefined || path.length < 2) return null
+              const mid = polylineMidpoint(path)
+              return (
+                <TextNodeEditor
+                  box={{
+                    x: mid.x - EDGE_LABEL_EDITOR_WIDTH_PX / 2,
+                    y: mid.y - EDGE_LABEL_EDITOR_HEIGHT_PX / 2,
+                    width: EDGE_LABEL_EDITOR_WIDTH_PX,
+                    height: EDGE_LABEL_EDITOR_HEIGHT_PX,
+                  }}
+                  initialText={edge.label ?? ''}
+                  testId="edge-label-editor"
+                  onCommit={(label) => {
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-edge-label', id: edge.id, label: label.trim() } as const,
+                      ],
+                    })
+                    setEdgeLabelEditId(null)
+                  }}
+                  onCancel={() => setEdgeLabelEditId(null)}
+                />
+              )
+            })()}
           {gestureState.kind === 'editing-text' &&
             selectedNode?.type === 'text' &&
             selection !== undefined && (

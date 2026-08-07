@@ -40,6 +40,7 @@ export type EditorCommand =
   | { readonly kind: 'create-node'; readonly node: SpatialNode }
   | { readonly kind: 'delete-node'; readonly id: string }
   | { readonly kind: 'delete-edge'; readonly id: string }
+  | { readonly kind: 'set-edge-label'; readonly id: string; readonly label: string }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -141,6 +142,23 @@ function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
   }
 }
 
+/** An empty label removes the field: the model's `label` is optional and an
+ * empty string would serialize as an authored-but-blank label. */
+function setEdgeLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  return {
+    ...canvas,
+    edges: canvas.edges.map((edge) => {
+      if (edge.id !== id) return edge
+      if (label === '') {
+        const { label: _removed, ...rest } = edge
+        return rest
+      }
+      return { ...edge, label }
+    }),
+  }
+}
+
 export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): SpatialCanvas {
   switch (command.kind) {
     case 'move-node':
@@ -155,6 +173,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return createNode(canvas, command.node)
     case 'delete-edge':
       return { ...canvas, edges: canvas.edges.filter((edge) => edge.id !== command.id) }
+    case 'set-edge-label':
+      return setEdgeLabel(canvas, command.id, command.label)
     case 'delete-node':
       return deleteNode(canvas, command.id)
   }
