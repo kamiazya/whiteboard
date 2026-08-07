@@ -16,12 +16,34 @@ import {
   readDevDaemonMarker,
   removeDevDaemonMarker,
   reraiseSignalOrExit,
+  resolveDevAllowedWebOriginsEnv,
   resolveDevDataDirEnv,
   resolveEffectivePort,
   resolveRepoRootFromScriptDir,
   resolveTsxWatchSpawn,
   writeDevDaemonMarker,
 } from './with-dev-data-dir-lib.mjs'
+
+describe('resolveDevAllowedWebOriginsEnv', () => {
+  it('defaults to the project pages.dev origins when unset', () => {
+    const result = resolveDevAllowedWebOriginsEnv({})
+    expect(result.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe(
+      'https://kamiazya-whiteboard.pages.dev,https://*.kamiazya-whiteboard.pages.dev',
+    )
+  })
+
+  it('an explicit env value wins over the dev default', () => {
+    const result = resolveDevAllowedWebOriginsEnv({
+      WHITEBOARD_ALLOWED_WEB_ORIGINS: 'https://example.com',
+    })
+    expect(result.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe('https://example.com')
+  })
+
+  it('an explicit empty string disables the default (deliberate loopback-only)', () => {
+    const result = resolveDevAllowedWebOriginsEnv({ WHITEBOARD_ALLOWED_WEB_ORIGINS: '' })
+    expect(result.WHITEBOARD_ALLOWED_WEB_ORIGINS).toBe('')
+  })
+})
 
 describe('resolveDevDataDirEnv', () => {
   const repoRoot = '/repo'

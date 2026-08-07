@@ -68,6 +68,27 @@ export function resolveRepoRootFromGit(cwd) {
  * .dev-data, which is intentional: it keeps parallel dev-loop lanes from
  * sharing (and corrupting) one another's canvas data.
  */
+// The project's own hosted-app origins (production + preview deployments).
+// Dev-only default: the hosted app pairing with a local dev daemon is this
+// repo's primary dogfood loop, and a hook-respawned daemon silently losing
+// the allowance was a real dead end (2026-08-07). The published daemon keeps
+// its loopback-only default — widening THAT is a product decision
+// (see the default-allow-official-hosted-origins canvas).
+const DEV_DEFAULT_ALLOWED_WEB_ORIGINS =
+  'https://kamiazya-whiteboard.pages.dev,https://*.kamiazya-whiteboard.pages.dev'
+
+/**
+ * Returns a new env object with WHITEBOARD_ALLOWED_WEB_ORIGINS defaulted to
+ * the project's own pages.dev origins. Any explicit caller value wins —
+ * including the empty string, which deliberately restores loopback-only.
+ */
+export function resolveDevAllowedWebOriginsEnv(env) {
+  if (env.WHITEBOARD_ALLOWED_WEB_ORIGINS !== undefined) {
+    return { ...env }
+  }
+  return { ...env, WHITEBOARD_ALLOWED_WEB_ORIGINS: DEV_DEFAULT_ALLOWED_WEB_ORIGINS }
+}
+
 export function resolveDevDataDirEnv(env, repoRoot) {
   if (env.WHITEBOARD_DATA_DIR) {
     return { ...env }

@@ -69,11 +69,13 @@ describe('DaemonDetectedBanner', () => {
     )
 
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
-    await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
-    expect(probeFn.mock.calls[0]?.[1]).toMatchObject({
-      forceRecheck: true,
-      pageOriginScheme: 'https',
-    })
+    // A manual check sweeps the default port range in parallel (dynamic
+    // server-side ports); every probe in the sweep is a forced recheck.
+    await waitFor(() => expect(probeFn.mock.calls.length).toBeGreaterThanOrEqual(2))
+    expect(probeFn.mock.calls[0]?.[0]).toBe('http://127.0.0.1:3099')
+    for (const call of probeFn.mock.calls) {
+      expect(call[1]).toMatchObject({ forceRecheck: true, pageOriginScheme: 'https' })
+    }
   })
 
   it('renders the manual affordance on http: too when the result is not-detected', async () => {
@@ -87,9 +89,11 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
+    // The silent auto-probe stays narrow: exactly the one stored/default
+    // baseUrl, no port sweep.
     await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
-    await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(probeFn.mock.calls.length).toBeGreaterThanOrEqual(2))
     expect(probeFn.mock.calls[1]?.[1]).toMatchObject({ forceRecheck: true })
   })
 
@@ -290,6 +294,158 @@ describe('DaemonDetectedBanner', () => {
     expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099/canvas/w1/main')
   })
 
+  it('a manual check finds a daemon on a non-default port (server-side ports are dynamic)', async () => {
+    // ensure-daemon binds findAvailablePort(3099): when 3099 is taken by
+    // something else, the daemon lives on 3100+ — the check must scan, not
+    // assume.
+    const probeFn = vi.fn(async (baseUrl: string) =>
+      baseUrl === 'http://127.0.0.1:3101'
+        ? ({ detected: true, instanceId: 'moved' } as const)
+        : ({ detected: false, reason: 'refused' } as const),
+    )
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/A local whiteboard daemon is running at http:\/\/127\.0\.0\.1:3101/)
+    const openLink = screen.getByRole('link', { name: /open the local app/i })
+    expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3101')
+  })
+
+  it('remembers a found daemon and re-probes it first on the next mount', async () => {
+    const store = makeStore()
+    const probeFn = vi.fn(async (baseUrl: string) =>
+      baseUrl === 'http://127.0.0.1:3104'
+        ? ({ detected: true, instanceId: 'wt' } as const)
+        : ({ detected: false, reason: 'refused' } as const),
+    )
+    const first = render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    await screen.findByText(/running at http:\/\/127\.0\.0\.1:3104/)
+    expect(store.load().storage.knownDaemonBaseUrls).toEqual(['http://127.0.0.1:3104'])
+    first.unmount()
+
+    // Next visit on a loopback origin: the auto-probe includes the
+    // remembered baseUrl, so the moved daemon is found without a click.
+    probeFn.mockClear()
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+    await screen.findByText(/running at http:\/\/127\.0\.0\.1:3104/)
+    expect(probeFn.mock.calls.map((c) => c[0])).toContain('http://127.0.0.1:3104')
+  })
+
+  it('shows a picker listing every daemon when several respond', async () => {
+    const probeFn = vi.fn(async (baseUrl: string) => {
+      if (baseUrl === 'http://127.0.0.1:3099')
+        return { detected: true, instanceId: 'main' } as const
+      if (baseUrl === 'http://127.0.0.1:3102')
+        return { detected: true, instanceId: 'worktree' } as const
+      return { detected: false, reason: 'refused' } as const
+    })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/2 local daemons are running/i)
+    const links = screen.getAllByRole('link', { name: /open/i })
+    expect(links.map((l) => l.getAttribute('href'))).toEqual([
+      'http://127.0.0.1:3099',
+      'http://127.0.0.1:3102',
+    ])
+  })
+
+  it('a failed manual check on a hosted origin explains the allowlist requirement instead of silence', async () => {
+    // The real shape of the 2026-08-07 report: daemon running, hosted origin
+    // not in WHITEBOARD_ALLOWED_WEB_ORIGINS -> CORS rejection surfaces as an
+    // opaque 'network' failure, indistinguishable from daemon-absent. The
+    // banner must say SOMETHING actionable either way.
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'network' })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/no daemon reachable from this origin/i)
+    const docsLink = screen.getByRole('link', { name: /how to connect/i })
+    expect(docsLink.getAttribute('href')).toBe(HOW_TO_CONNECT_URL)
+    // Retry stays available.
+    expect(screen.getByRole('button', { name: /check for local daemon/i })).not.toBeNull()
+  })
+
+  it('a failed manual check on a loopback origin reports plainly that nothing was found', async () => {
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'refused' })
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/no local daemon found/i)
+    // No hosted-origin allowlist lecture on loopback — it does not apply.
+    expect(screen.queryByText(/no daemon reachable from this origin/i)).toBeNull()
+  })
+
+  it('the failure message clears once a re-check succeeds', async () => {
+    // Sweep-aware fake: a mutable flag instead of call-count sequencing,
+    // because one manual check now issues several probes.
+    let daemonUp = false
+    const probeFn = vi.fn(async () => (daemonUp ? DETECTED : NOT_DETECTED))
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="http:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    await screen.findByText(/no local daemon found/i)
+
+    daemonUp = true
+    fireEvent.click(screen.getByRole('button', { name: /check for local daemon/i }))
+    await screen.findByText(/A local whiteboard daemon is running at/)
+    expect(screen.queryByText(/no local daemon found/i)).toBeNull()
+  })
+
   it('keeps the CTA affordance when the probe fails inconclusively (not proven blocked)', async () => {
     const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'network' })
     render(
@@ -303,7 +459,7 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
 
-    await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(probeFn.mock.calls.length).toBeGreaterThanOrEqual(1))
     expect(screen.getByRole('button', { name: /check for local daemon/i })).not.toBeNull()
     expect(screen.queryByText(UNSUPPORTED_BROWSER_NOTICE)).toBeNull()
     expect(screen.queryByRole('link', { name: /open the local app/i })).toBeNull()

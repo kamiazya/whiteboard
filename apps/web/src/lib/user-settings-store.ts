@@ -67,6 +67,26 @@ const storageSettingsSchema = z
     // by a cross-field refine the way daemonConnectionPayloadSchema does.
     lastConnectedWorkspaceId: z.string().optional(),
     lastConnectedSlug: z.string().optional(),
+    // Every daemon baseUrl a probe has actually confirmed, most recent
+    // first (see daemon-discovery.ts's MRU helper). Same http(s)-only
+    // constraint as localDaemonBaseUrl above and for the same reason:
+    // these values are rendered into hrefs and fetched.
+    knownDaemonBaseUrls: z
+      .array(
+        z.string().refine((value) => {
+          try {
+            const { protocol } = new URL(value)
+            return protocol === 'http:' || protocol === 'https:'
+          } catch {
+            return false
+          }
+        }, 'must be an http(s) URL'),
+      )
+      // The writer keeps this MRU-capped (daemon-discovery's helper), and
+      // every stored entry is re-probed on the next check — an oversized
+      // tampered array must not turn discovery into an unbounded fan-out.
+      .max(5, 'must contain at most 5 daemon URLs')
+      .optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
     dismissedBetaBannerAt: z.string().optional(),
     dismissedDaemonCtaAt: z.string().optional(),

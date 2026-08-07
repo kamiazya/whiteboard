@@ -117,6 +117,13 @@ bootstrap token, so anyone who has the link can pair with your daemon until
 the token is rotated. Share it only with the intended recipient, and prefer
 loopback (`http://127.0.0.1:...`) origins for purely local use.
 
+The hosted app's "Check for local daemon" does not assume the default
+port: it re-checks daemons it has successfully found before (remembered in
+the browser, most recent first) and scans a small range above the default
+(3099–3108) in parallel, because the daemon binds the first free port from
+3099 upward. When several daemons respond — one per dev worktree is
+common — the banner lists each of them.
+
 For hosted (non-loopback) `webOrigin` values, the daemon must also be
 configured to accept that origin via `WHITEBOARD_ALLOWED_WEB_ORIGINS` — either
 as an exact match or via a `https://*.example.com` wildcard subdomain pattern
