@@ -138,6 +138,13 @@ export function App({ providerState }: AppProps) {
   const location = useLocation()
   const navigate = useNavigate()
 
+  // The daemon-served consent page is its OWN surface, not a daemon view:
+  // parseDaemonRoute('/pair') is null, so without this guard the
+  // daemonView -> URL sync effect below immediately navigated to '/',
+  // dropping the origin/challenge/state query and dumping the user on the
+  // gallery instead of the consent prompt.
+  const isPairRoute = location.pathname === '/pair'
+
   // Pairing-grant return leg: a `#wb-grant=<code>&state=` fragment from the
   // daemon's /pair consent page. The exchange is async (a direct POST — the
   // token itself never rides the URL), so unlike the synchronous #wb= path
@@ -203,6 +210,7 @@ export function App({ providerState }: AppProps) {
   // subsequent sync pushes, so browser back/forward has real steps to walk.
   const isFirstUrlSyncRef = useRef(true)
   useEffect(() => {
+    if (isPairRoute) return
     const path = daemonRoutePath(daemonView)
     // Read-then-clear on the FIRST EFFECT RUN regardless of whether it ends
     // up navigating: a no-op first run (URL already matches the initial
@@ -216,7 +224,7 @@ export function App({ providerState }: AppProps) {
     // this effect on every navigation (including the one it just performed),
     // which is harmless but noisy. daemonView is the actual trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daemonView, navigate])
+  }, [daemonView, navigate, isPairRoute])
 
   // URL -> state: handles the browser back/forward buttons (and, in
   // principle, any other code path that changes the route without going
@@ -225,6 +233,7 @@ export function App({ providerState }: AppProps) {
   // that hasn't caught up to the #wb= sync effect yet.
   const isFirstRouteSyncRef = useRef(true)
   useEffect(() => {
+    if (isPairRoute) return
     if (isFirstRouteSyncRef.current) {
       isFirstRouteSyncRef.current = false
       return
@@ -239,7 +248,7 @@ export function App({ providerState }: AppProps) {
       daemonRoutePath(current) === daemonRoutePath(parsed) ? current : parsed,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname])
+  }, [location.pathname, isPairRoute])
 
   // Persists ONLY the reconnect target (baseUrl/workspaceId/slug), never the
   // bootstrapToken — the token stays in-memory via readDaemonTokenOnce's
@@ -285,7 +294,7 @@ export function App({ providerState }: AppProps) {
 
   // The daemon-served /pair consent page (pairing-grant flow) — rendered
   // in place of every other view; approving needs the R3-injected token.
-  if (location.pathname === '/pair') {
+  if (isPairRoute) {
     return (
       <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
         <PairConsentPage daemonToken={daemonToken} />
