@@ -478,6 +478,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // re-renders because it compares node ids, not DOM identity.
       // Shift-click builds a multi-selection instead of starting a gesture.
       if (e.shiftKey && hitId !== undefined) {
+        // Node and edge selection are mutually exclusive: Delete processes a
+        // selected edge FIRST, so an edge left selected here would be what a
+        // Delete on the node multi-selection actually removes.
+        setSelectedEdgeId(null)
         if (selectedId === null) {
           setSelectedId(hitId)
         } else if (hitId === selectedId) {
@@ -629,6 +633,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         const [primary, ...rest] = hitIds
         setSelectedId(primary ?? null)
         setExtraIds(new Set(rest))
+        // A drag that began on an edge line was a marquee, not an edge click
+        // — drop the press-time edge selection so Delete acts on the nodes.
+        setSelectedEdgeId(null)
         return
       }
       if (isPanningRef.current) {

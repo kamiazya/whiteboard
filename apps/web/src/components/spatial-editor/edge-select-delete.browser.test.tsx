@@ -128,4 +128,53 @@ it('Escape and empty-space clicks clear the edge selection without deleting', as
     expect(container.querySelector('[data-testid="edge-selection-highlight"]')).toBeNull(),
   )
   expect(latest.canvas.edges).toHaveLength(1)
+
+  // The pointer path of the same policy: reselect, then click empty space.
+  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
+  )
+  await userEvent.click(rootOf(container), { position: { x: 650, y: 500 } })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).toBeNull(),
+  )
+  expect(latest.canvas.edges).toHaveLength(1)
+})
+
+it('Shift-clicking a node clears the edge selection (mutually exclusive)', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+
+  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
+  )
+
+  await userEvent.click(rootOf(container), { position: { x: 160, y: 130 }, modifiers: ['Shift'] })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).toBeNull(),
+  )
+  // Delete now acts on the node selection, never the previously clicked edge.
+  rootOf(container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+  await vi.waitFor(() => expect(latest.canvas.nodes.length).toBeLessThan(2))
+  expect(latest.commands).not.toContain('delete-edge')
+})
+
+it('a marquee drag that starts on an edge line ends with no edge selected', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+
+  const mid = edgeMidpointPosition(container)
+  // Drag from the edge line into empty space below: this is a marquee, not
+  // an edge click, so the press-time edge selection must not survive it.
+  await userEvent.dragAndDrop(rootOf(container), rootOf(container), {
+    sourcePosition: mid,
+    targetPosition: { x: mid.x + 120, y: mid.y + 150 },
+  })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).toBeNull(),
+  )
+  rootOf(container).dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }))
+  expect(latest.canvas.edges).toHaveLength(1)
+  expect(latest.commands).not.toContain('delete-edge')
 })
