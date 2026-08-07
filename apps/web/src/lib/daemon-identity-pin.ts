@@ -147,3 +147,51 @@ export async function fingerprintPublicKey(publicKey: string): Promise<string> {
   }
   return `${out.slice(0, 4)}-${out.slice(4, 8)}`
 }
+
+export type IdentityChallengeResult = 'verified' | 'failed' | 'unpinned'
+
+/**
+ * Challenges a loopback responder to prove it holds the PINNED daemon's
+ * private key (POST /api/runtime/verify with a fresh nonce, signature over
+ * ["wb-verify-v1", nonce, origin]). 'unpinned' when this browser never
+ * pinned that baseUrl (nothing to verify against — the caller keeps its
+ * cautious copy). Any non-verifying answer from a pinned responder —
+ * wrong key, bad signature, missing route, network failure — is 'failed':
+ * a daemon we once pinned MUST be able to answer its own challenge, so
+ * the absence of proof is treated as no proof.
+ */
+export async function challengeDaemonIdentity({
+  daemonBaseUrl,
+  fetch,
+  hostedOrigin = globalThis.location.origin,
+  storage = globalThis.localStorage,
+}: {
+  daemonBaseUrl: string
+  fetch: typeof globalThis.fetch
+  hostedOrigin?: string
+  storage?: StorageLike
+}): Promise<IdentityChallengeResult> {
+  const pinned = getPinnedIdentity(daemonBaseUrl, storage)
+  if (pinned === null) return 'unpinned'
+  const nonce = createChallengeNonce()
+  try {
+    const response = await fetch(`${daemonBaseUrl.replace(/\/+$/, '')}/api/runtime/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nonce }),
+    })
+    if (!response.ok) return 'failed'
+    const body = (await response.json()) as { publicKey?: unknown; signature?: unknown }
+    const verified =
+      body.publicKey === pinned.publicKey &&
+      typeof body.signature === 'string' &&
+      (await verifyIdentitySignature({
+        publicKey: pinned.publicKey,
+        parts: ['wb-verify-v1', nonce, hostedOrigin],
+        signature: body.signature,
+      }))
+    return verified ? 'verified' : 'failed'
+  } catch {
+    return 'failed'
+  }
+}

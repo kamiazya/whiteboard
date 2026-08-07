@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
+  challengeDaemonIdentity,
   createChallengeNonce,
   fingerprintPublicKey,
   getPinnedIdentity,
@@ -106,5 +107,105 @@ describe('sha256Base64Url', () => {
     await expect(sha256Base64Url('abc')).resolves.toBe(
       'ungWv48Bz-pBQUDeXa4iI7ADYaOWF3qctBD_YfIAFa0',
     )
+  })
+})
+
+describe('challengeDaemonIdentity', () => {
+  const BASE = 'http://127.0.0.1:3099'
+
+  function pinsWith(publicKey: string) {
+    const storage = fakeStorage()
+    storage.setItem(
+      'whiteboard:daemon-identity-pins',
+      JSON.stringify({ [BASE]: { alg: 'Ed25519', publicKey, pinnedAt: 'then' } }),
+    )
+    return storage
+  }
+
+  it('resolves unpinned without ever fetching when no pin exists', async () => {
+    const fetchFn = vi.fn()
+    await expect(
+      challengeDaemonIdentity({
+        daemonBaseUrl: BASE,
+        fetch: fetchFn as unknown as typeof globalThis.fetch,
+        hostedOrigin: 'https://app.example',
+        storage: fakeStorage(),
+      }),
+    ).resolves.toBe('unpinned')
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('verifies a genuine challenge answer against the pin', async () => {
+    const pair = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair
+    const jwk = await crypto.subtle.exportKey('jwk', pair.publicKey)
+    const publicKey = jwk.x as string
+    const fetchFn = vi.fn(async (_url: string, init?: RequestInit) => {
+      const { nonce } = JSON.parse(String(init?.body)) as { nonce: string }
+      const payload = new TextEncoder().encode(
+        JSON.stringify(['wb-verify-v1', nonce, 'https://app.example']),
+      )
+      const sig = new Uint8Array(
+        await crypto.subtle.sign({ name: 'Ed25519' }, pair.privateKey, payload),
+      )
+      const signature = btoa(String.fromCharCode(...sig))
+        .replaceAll('+', '-')
+        .replaceAll('/', '_')
+        .replaceAll('=', '')
+      return Response.json({ alg: 'Ed25519', publicKey, signature })
+    })
+    await expect(
+      challengeDaemonIdentity({
+        daemonBaseUrl: BASE,
+        fetch: fetchFn as unknown as typeof globalThis.fetch,
+        hostedOrigin: 'https://app.example',
+        storage: pinsWith(publicKey),
+      }),
+    ).resolves.toBe('verified')
+  })
+
+  it('fails a pinned responder answering with another key, an error, or nothing', async () => {
+    const squatter = (await crypto.subtle.generateKey({ name: 'Ed25519' }, true, [
+      'sign',
+      'verify',
+    ])) as CryptoKeyPair
+    const squatterJwk = await crypto.subtle.exportKey('jwk', squatter.publicKey)
+    const storage = pinsWith('PINNED-REAL-KEY')
+
+    const wrongKey = vi.fn(async () =>
+      Response.json({ alg: 'Ed25519', publicKey: squatterJwk.x, signature: 'sig' }),
+    )
+    await expect(
+      challengeDaemonIdentity({
+        daemonBaseUrl: BASE,
+        fetch: wrongKey as unknown as typeof globalThis.fetch,
+        hostedOrigin: 'https://app.example',
+        storage,
+      }),
+    ).resolves.toBe('failed')
+
+    const notFound = vi.fn(async () => new Response('nope', { status: 404 }))
+    await expect(
+      challengeDaemonIdentity({
+        daemonBaseUrl: BASE,
+        fetch: notFound as unknown as typeof globalThis.fetch,
+        hostedOrigin: 'https://app.example',
+        storage,
+      }),
+    ).resolves.toBe('failed')
+
+    const network = vi.fn(async () => {
+      throw new TypeError('unreachable')
+    })
+    await expect(
+      challengeDaemonIdentity({
+        daemonBaseUrl: BASE,
+        fetch: network as unknown as typeof globalThis.fetch,
+        hostedOrigin: 'https://app.example',
+        storage,
+      }),
+    ).resolves.toBe('failed')
   })
 })
