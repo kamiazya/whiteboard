@@ -2,25 +2,27 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "_comment": [
     "Repo Claude Code MCP override.",
-    "Connects every reload to the long-lived daemon launched by",
-    "  pnpm mcp:http:dev",
-    "which serves http://127.0.0.1:3099/mcp. The HTTP transport sidesteps the",
-    "stdio + daemon-registry path that would otherwise reuse stale daemons",
-    "recorded in ~/.whiteboard/daemon.json.",
+    "Registers the whiteboard MCP as a LOCAL STDIO PROXY",
+    "(packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs) that forwards",
+    "each request to the long-lived dev daemon at http://127.0.0.1:3099/mcp",
+    "(launched by `pnpm mcp:http:dev`).",
     "",
-    "The SessionStart hook starts the dev daemon automatically. If hooks are",
-    "disabled, Claude Code will see a connection error on the whiteboard MCP",
-    "server. Start it in another terminal first:",
-    "  pnpm mcp:http:dev"
+    "Why a proxy instead of a direct HTTP entry: the client attempts ONE HTTP",
+    "connection at session start and never retries, so it regularly lost the",
+    "race against the SessionStart hook spawning the daemon, and a tsx-watch",
+    "restart mid-session stranded the connection the same way. The stdio spawn",
+    "always succeeds; the proxy ensures the daemon, waits for readiness, and",
+    "retries per request across watch restarts (the daemon's /mcp is stateless",
+    "per request, so there is no protocol session to lose)."
   ],
   "mcpServers": {
     "whiteboard": {
-      "type": "http",
-      "url": "http://127.0.0.1:3099/mcp",
-      "_comment_auth": "'whiteboard-dev' is a NON-SECRET, well-known local-dev constant (also defined in the dev daemon launcher and test fixtures). It authenticates only to the loopback 127.0.0.1:3099 dev daemon and grants nothing on any other machine — safe to commit. See CONTRIBUTING.md.",
-      "headers": {
-        "Authorization": "Bearer whiteboard-dev"
-      }
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
+      ],
+      "_comment_auth": "The proxy sends 'Bearer whiteboard-dev' \u2014 a NON-SECRET, well-known local-dev constant scoped to the loopback dev daemon; safe to commit. See CONTRIBUTING.md."
     }
   },
   "worktree": {
@@ -66,7 +68,7 @@
           {
             "type": "command",
             "command": "node .claude/scripts/hooks/post-push-pr-sync.mjs",
-            "_comment": "After `git push` on a branch with an open PR, surfaces the PR title + latest commit subjects so the session verifies the title/body still describe the diff (the squash title is the release-notes line). Detection only — the session performs any gh pr edit.",
+            "_comment": "After `git push` on a branch with an open PR, surfaces the PR title + latest commit subjects so the session verifies the title/body still describe the diff (the squash title is the release-notes line). Detection only \u2014 the session performs any gh pr edit.",
             "timeout": 30
           }
         ]
