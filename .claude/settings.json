@@ -20,9 +20,10 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
+        "${CLAUDE_PROJECT_DIR:-.}/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
       ],
-      "_comment_auth": "The proxy sends 'Bearer whiteboard-dev' \u2014 a NON-SECRET, well-known local-dev constant scoped to the loopback dev daemon; safe to commit. See CONTRIBUTING.md."
+      "_comment_auth": "The proxy sends 'Bearer whiteboard-dev' \u2014 a NON-SECRET, well-known local-dev constant scoped to the loopback dev daemon; safe to commit. See CONTRIBUTING.md.",
+      "_comment_path": "${CLAUDE_PROJECT_DIR:-.} per the docs: relative args resolve against the LAUNCH directory, not this file's location, so a session started from a subdirectory would fail to find the script without it."
     }
   },
   "worktree": {
