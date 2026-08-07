@@ -203,7 +203,13 @@ export function BrowserLocalCanvasPage({
     lastKnownCanvasIdRef.current = canvasId
     if (requestedId === undefined || requestedId === canvasId) return
     if (requestedId === lastKnownCanvasId) return
-    void switchCanvas(requestedId)
+    void switchCanvas(requestedId).then((switched) => {
+      // A stale deep link (deleted/unknown canvas) is a recoverable miss:
+      // keep the loaded canvas and repair the address bar instead of
+      // leaving a URL that names nothing.
+      if (!switched) navigate(browserLocalCanvasPath(canvasId), { replace: true })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, canvasId, switchCanvas])
 
   useEffect(() => {
@@ -433,6 +439,7 @@ export function BrowserLocalCanvasPage({
               key={canvasId ?? 'no-canvas'}
               value={markdownBody.body}
               onChange={markdownBody.setBody}
+              autoFocus
               className="h-full"
             />
           )

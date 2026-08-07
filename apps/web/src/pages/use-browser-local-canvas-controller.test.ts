@@ -671,7 +671,7 @@ describe('useBrowserLocalCanvasController', () => {
       })
     })
 
-    it('switchCanvas to an unknown id degrades persistence with feedback and leaves current snapshot untouched', async () => {
+    it('switchCanvas to an unknown id resolves false and leaves the current canvas untouched (recoverable miss)', async () => {
       const store = new MemoryStore()
       await store.setDefaultCanvasId('c1')
       await store.save(snap)
@@ -680,21 +680,36 @@ describe('useBrowserLocalCanvasController', () => {
       await act(async () => {})
       const before = result.current.snapshot
 
+      let switched: boolean | undefined
       await act(async () => {
-        await result.current.switchCanvas('does-not-exist')
+        switched = await result.current.switchCanvas('does-not-exist')
       })
 
-      // A missing/corrupted target record must surface the same way a failed
-      // load does — silently doing nothing leaves the user with no explanation.
-      expect(result.current.persistence.kind).toBe('degraded')
+      // A missing target is exactly what a stale /local/:id bookmark
+      // produces — the caller (the page) repairs the URL, so the controller
+      // must NOT park the whole page on a degraded screen.
+      expect(switched).toBe(false)
+      expect(result.current.persistence.kind).toBe('saved')
       expect(result.current.snapshot).toEqual(before)
       expect(await store.getDefaultCanvasId()).toBe('c1')
     })
 
     it('switchCanvas clears a stale degraded banner from the previous canvas on a successful switch', async () => {
-      const store = new MemoryStore()
-      await store.setDefaultCanvasId('c1')
-      await store.save(snap)
+      const base = new MemoryStore()
+      await base.setDefaultCanvasId('c1')
+      await base.save(snap)
+      // 'corrupt-1' reads as an unreadable record: not-found is a
+      // recoverable miss and no longer degrades, so a corrupt read is the
+      // way a failed switch leaves a degraded banner behind.
+      const store: BrowserLocalStore = {
+        getDefaultCanvasId: base.getDefaultCanvasId.bind(base),
+        setDefaultCanvasId: base.setDefaultCanvasId.bind(base),
+        save: base.save.bind(base),
+        del: base.del.bind(base),
+        generateId: base.generateId.bind(base),
+        listCanvases: base.listCanvases.bind(base),
+        load: async (id: string) => (id === 'corrupt-1' ? { kind: 'corrupted' } : base.load(id)),
+      }
       const loro = new FakeLoroStore()
       const { result } = renderHook(() => useBrowserLocalCanvasController(store, loro))
       await act(async () => {})
@@ -704,9 +719,10 @@ describe('useBrowserLocalCanvasController', () => {
         created = await result.current.createCanvas('Second canvas')
       })
 
-      // Leave a stale degraded banner behind, as a prior failed switch would.
+      // Leave a stale degraded banner behind, as a prior corrupt-record
+      // switch would.
       await act(async () => {
-        await result.current.switchCanvas('does-not-exist')
+        await result.current.switchCanvas('corrupt-1')
       })
       expect(result.current.persistence.kind).toBe('degraded')
 

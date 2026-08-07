@@ -33,6 +33,8 @@ export interface SourcePaneProps {
   value: string
   onChange: (next: string) => void
   className?: string
+  /** Focus the editor as soon as it mounts (fresh-note flows). */
+  autoFocus?: boolean
 }
 
 /**
@@ -41,7 +43,7 @@ export interface SourcePaneProps {
  * kitchen sink (line numbers, search panel, etc.): this is an editing
  * surface for a markdown canvas, not a general-purpose IDE.
  */
-export function SourcePane({ value, onChange, className }: SourcePaneProps) {
+export function SourcePane({ value, onChange, className, autoFocus = false }: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
   // Always holds the latest onChange without forcing the effect below to
@@ -82,6 +84,7 @@ export function SourcePane({ value, onChange, className }: SourcePaneProps) {
     })
     const view = new EditorView({ state, parent: host })
     viewRef.current = view
+    if (autoFocus) view.focus()
 
     return () => {
       view.destroy()

@@ -22,6 +22,8 @@ export interface MarkdownEditorProps {
   previewDebounceMs?: number
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
+  /** Focus the source pane on mount (fresh-note flows). */
+  autoFocus?: boolean
 }
 
 const DEFAULT_MAX_WIDTH = 480
@@ -62,6 +64,7 @@ export function MarkdownEditor({
   maxWidth = DEFAULT_MAX_WIDTH,
   previewDebounceMs = DEFAULT_PREVIEW_DEBOUNCE_MS,
   measure,
+  autoFocus = false,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
@@ -134,7 +137,12 @@ export function MarkdownEditor({
         ref={sourceWrapRef}
         style={{ flexBasis: `${splitRatio * 100}%`, minWidth: 0, display: 'flex' }}
       >
-        <SourcePane value={value} onChange={onChange} className="markdown-editor-source" />
+        <SourcePane
+          value={value}
+          onChange={onChange}
+          autoFocus={autoFocus}
+          className="markdown-editor-source"
+        />
       </div>
       {/* biome-ignore lint/a11y/useSemanticElements: this is the ARIA window-splitter pattern (focusable, arrow-key operable separator); an <hr> cannot take focus or a value */}
       <div

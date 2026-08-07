@@ -68,17 +68,13 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     })
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
 
-    // Radix returns focus to the dropdown trigger asynchronously after the
-    // menu closes; clicking the editor before that lands would let the
-    // trigger steal focus back mid-typing (and a Space would reopen the
-    // menu). Wait until the menu is fully gone and focus has settled inside
-    // CodeMirror before typing — real users are slower than this test.
+    // Typing starts the moment the editor appears, with NO click and NO
+    // settling wait: a fresh markdown note must be focused for typing
+    // immediately, and the dropdown's close-time focus return must never
+    // steal keystrokes mid-word (the bug shipped as "type a sentence,
+    // only the first three characters persist").
     await waitFor(() => {
-      expect(screen.queryByTestId('new-markdown-menu-item')).toBeNull()
-    })
-    await waitFor(async () => {
-      await userEvent.click(editable)
-      expect(document.activeElement?.closest('.cm-editor')).not.toBeNull()
+      expect(editable.closest('.cm-editor')?.contains(document.activeElement)).toBe(true)
     })
     await userEvent.keyboard('# Persisted note')
     await waitFor(() => {

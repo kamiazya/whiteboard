@@ -42,7 +42,10 @@ export interface BrowserLocalCanvasController {
   startFresh(): Promise<void>
   listCanvases(): Promise<CanvasSnapshot[]>
   createCanvas(name?: string, kind?: CanvasSnapshot['kind']): Promise<CanvasSnapshot>
-  switchCanvas(id: string): Promise<void>
+  /** Resolves true when the switch landed; false when superseded, when the
+   *  target is missing (recoverable — e.g. a stale deep link), or when the
+   *  store degraded. */
+  switchCanvas(id: string): Promise<boolean>
   // Duplicates the CURRENTLY open canvas (flushing any pending edit first so
   // the copy reflects the latest state) under a derived "<name> (copy)" name,
   // then switches to it — matching the create-then-open flow the UI expects.
@@ -336,39 +339,47 @@ export function useBrowserLocalCanvasController(
   )
 
   const switchCanvas = useCallback(
-    async (id: string): Promise<void> => {
+    async (id: string): Promise<boolean> => {
       const generation = ++switchGenerationRef.current
       // Flush any pending edit on the current canvas before switching away
       // from it, so a fast switch never drops an in-flight rename.
       const flushed = await flushSave()
-      if (generation !== switchGenerationRef.current) return // superseded while flushing
-      if (!flushed) return
+      if (generation !== switchGenerationRef.current) return false // superseded while flushing
+      if (!flushed) return false
       try {
         const result = await storeRef.current.load(id)
-        if (generation !== switchGenerationRef.current) return // superseded while loading
+        if (generation !== switchGenerationRef.current) return false // superseded while loading
+        if (result.kind === 'not-found') {
+          // A missing target is a RECOVERABLE miss, not a degraded store: it
+          // is exactly what a stale /local/:id bookmark produces, and parking
+          // the page on a degraded screen would dead-end the user. Leave the
+          // current canvas untouched and let the caller decide (the page
+          // replaces the URL with the still-loaded canvas).
+          return false
+        }
         if (result.kind !== 'ok') {
-          // Target record is missing or unreadable: surface it the same way the
-          // initial-mount load does, instead of leaving the user with no feedback
-          // for why the switch silently did nothing. Current snapshot and default
-          // pointer are left untouched — the still-current canvas view is not corrupted.
+          // Unreadable/corrupt record: surface it the same way the
+          // initial-mount load does. Current snapshot and default pointer are
+          // left untouched — the still-current canvas view is not corrupted.
           setPersistenceRef.current((p) => ({
             kind: 'degraded',
             reason: 'switch-failed',
             message: 'The canvas could not be switched.',
             lastSavedAt: p.lastSavedAt ?? null,
           }))
-          return
+          return false
         }
         await storeRef.current.setDefaultCanvasId(id)
-        if (generation !== switchGenerationRef.current) return // superseded while persisting the pointer
+        if (generation !== switchGenerationRef.current) return false // superseded while persisting the pointer
         snapshotRef.current = result.snapshot
         setSnapshot(result.snapshot)
         // Clear any stale degraded banner left over from the previous canvas —
         // a successful switch to a freshly-loaded, in-sync canvas should not keep
         // showing an error from before the switch.
         setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
+        return true
       } catch {
-        if (generation !== switchGenerationRef.current) return
+        if (generation !== switchGenerationRef.current) return false
         // Generic safe copy — do not expose raw IndexedDB error. Current
         // snapshot and default pointer are left untouched: a failed switch
         // must not corrupt the still-current canvas view.
@@ -378,6 +389,7 @@ export function useBrowserLocalCanvasController(
           message: 'The canvas could not be switched.',
           lastSavedAt: p.lastSavedAt ?? null,
         }))
+        return false
       }
     },
     [flushSave],
