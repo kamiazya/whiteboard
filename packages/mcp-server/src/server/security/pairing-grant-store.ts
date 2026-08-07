@@ -42,7 +42,7 @@ const pairingGrantsFileSchema = z
   })
   .strict()
 
-export type PairingGrant = z.infer<typeof pairingGrantSchema>
+type PairingGrant = z.infer<typeof pairingGrantSchema>
 
 export interface PairingGrantStore {
   /** Canonical origins of every persisted grant. Returns a NEW array per

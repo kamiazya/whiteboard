@@ -15,6 +15,7 @@ import {
   type WorkspaceNames,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { z } from 'zod'
 
 /**
  * Resolves an input (string/URL/Request) against `daemonBaseUrl` and returns
@@ -233,4 +234,33 @@ export function getCanvasOkfV1(
     `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/canvases/${encodeURIComponent(canvasId)}/okf`,
     canvasOkfV1ResponseSchema,
   )
+}
+
+// ---- pairing-grant flow (daemon-origin consent page) ----
+
+const createPairingGrantResponseSchema = z
+  .object({ grantId: z.string(), origin: z.string(), code: z.string() })
+  .strict()
+export type CreatePairingGrantResponse = z.infer<typeof createPairingGrantResponseSchema>
+
+/** Same-origin call from the daemon-served /pair page; the daemon token is
+ *  the R3-injected one. Kept here because this module is the single seam
+ *  allowed to set an Authorization header (daemon-auth-seam guard). */
+export async function createPairingGrant(
+  fetchFn: typeof globalThis.fetch,
+  daemonToken: string,
+  input: { origin: string; codeChallenge: string },
+): Promise<CreatePairingGrantResponse> {
+  const res = await fetchFn('/api/pairing/grants', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${daemonToken}`,
+    },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    throw new Error(`grant request failed (${res.status})`)
+  }
+  return createPairingGrantResponseSchema.parse(await res.json())
 }

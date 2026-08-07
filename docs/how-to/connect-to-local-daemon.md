@@ -101,6 +101,28 @@ the web app's canvas editor to a specific workspace requires a pairing link,
 which the web app cannot mint itself — it can only detect that *a* daemon is
 reachable and prompt you toward the pairing flow below.
 
+## Connect from the hosted app (pairing grant)
+
+The hosted web app can pair itself — no agent required:
+
+1. In the hosted app, use "Check for local daemon" and click **Use here**
+   (or **connect anyway** from the failure notice when the daemon has not
+   allowed this origin yet — the consent navigation is not subject to the
+   CORS block that hides the daemon from the check).
+2. The browser navigates to the daemon's own `/pair` consent page, which
+   shows the requesting origin. Click **Approve**.
+3. The daemon persists an origin grant, allowlists the origin on every
+   surface immediately, and sends the browser back with a single-use
+   PKCE-bound code (never a token). The hosted app exchanges it for a
+   24-hour, origin-scoped session token and opens the daemon's workspaces
+   in place.
+
+Grants persist across daemon restarts; session tokens do not (a restart is
+a deliberate global session kill). Approving is always an explicit click on
+the daemon's own page — there is no silent grant path.
+
+## Connect with an agent-minted link
+
 1. Ask your AI agent (Claude, Codex, or any MCP client connected to the
    whiteboard daemon) to call the `create_pairing_link` MCP tool. Optionally
    pass `workspaceId` / `slug` to target a specific canvas, or `webOrigin` to
