@@ -110,10 +110,34 @@ pnpm mcp:debug:http
 - If request flow is unclear, restart with `MCP_HTTP_DEBUG=1 pnpm mcp:http:dev` and inspect the `[mcp-http:init]` / `[mcp-http]` logs.
 - Keep the detailed checklist in `docs/contributing/mcp-debugging.md` in sync with actual repo workflow.
 
-The repo ships HTTP-mode overrides for both clients:
+Dev sessions reach the daemon through the stdio proxy
+`packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs`:
 
-- `.claude/settings.json` → `http://127.0.0.1:3099/mcp`
-- `.codex/config.toml` → `http://127.0.0.1:3099/mcp`
+- **Claude Code**: register it once per checkout at LOCAL scope (machine-
+  private `~/.claude.json`), which shadows the published `npx` definition
+  in `.mcp.json` (precedence: local > project). `.mcp.json` itself is the
+  PUBLIC plugin/team surface and stays pointed at the published package —
+  do not repoint it at dev tooling. Note `settings.json` has no
+  `mcpServers` field in its schema; a definition there is silently ignored.
+
+  ```bash
+  claude mcp add --scope local --transport stdio whiteboard --     node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
+  ```
+
+- **Codex**: `.codex/config.toml` registers the same proxy as
+  `whiteboard_dev` (repo-tracked; it already disables the plugin-provided
+  published server).
+
+The clients register the proxy as a stdio server rather than the HTTP URL
+directly: an MCP client attempts one HTTP connection at session start and
+never retries, so it can lose the race against the SessionStart hook
+spawning the daemon, and a watch restart mid-session strands the
+connection the same way. The stdio spawn always succeeds; the proxy runs
+the ensure hook, waits for readiness, and retries each request across
+watch restarts. This is sound because `/mcp` is stateless per request —
+one stdin line becomes one authenticated POST, with no protocol session
+to lose. Server-initiated notifications do not traverse the proxy;
+reload the client session to pick up a changed tool list.
 
 Both Claude Code (`.claude/settings.json`) and Codex
 (`.codex/config.toml`) wire a `SessionStart` hook to

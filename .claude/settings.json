@@ -1,28 +1,15 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "_comment": [
-    "Repo Claude Code MCP override.",
-    "Connects every reload to the long-lived daemon launched by",
-    "  pnpm mcp:http:dev",
-    "which serves http://127.0.0.1:3099/mcp. The HTTP transport sidesteps the",
-    "stdio + daemon-registry path that would otherwise reuse stale daemons",
-    "recorded in ~/.whiteboard/daemon.json.",
-    "",
-    "The SessionStart hook starts the dev daemon automatically. If hooks are",
-    "disabled, Claude Code will see a connection error on the whiteboard MCP",
-    "server. Start it in another terminal first:",
-    "  pnpm mcp:http:dev"
+    "NOTE: settings.json has NO mcpServers field in its schema \u2014 a definition",
+    "here is silently ignored. The dev whiteboard MCP server is a LOCAL-scope",
+    "registration (per developer, per checkout):",
+    "  claude mcp add --scope local --transport stdio whiteboard -- \\",
+    "    node \"$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs\"",
+    "which shadows .mcp.json's published npx definition (local > project).",
+    ".mcp.json is the public plugin surface \u2014 do not repoint it at dev tooling.",
+    "See AGENTS.md 'MCP Development Mode' and docs/contributing/mcp-debugging.md."
   ],
-  "mcpServers": {
-    "whiteboard": {
-      "type": "http",
-      "url": "http://127.0.0.1:3099/mcp",
-      "_comment_auth": "'whiteboard-dev' is a NON-SECRET, well-known local-dev constant (also defined in the dev daemon launcher and test fixtures). It authenticates only to the loopback 127.0.0.1:3099 dev daemon and grants nothing on any other machine — safe to commit. See CONTRIBUTING.md.",
-      "headers": {
-        "Authorization": "Bearer whiteboard-dev"
-      }
-    }
-  },
   "worktree": {
     "baseRef": "head"
   },
@@ -66,7 +53,7 @@
           {
             "type": "command",
             "command": "node .claude/scripts/hooks/post-push-pr-sync.mjs",
-            "_comment": "After `git push` on a branch with an open PR, surfaces the PR title + latest commit subjects so the session verifies the title/body still describe the diff (the squash title is the release-notes line). Detection only — the session performs any gh pr edit.",
+            "_comment": "After `git push` on a branch with an open PR, surfaces the PR title + latest commit subjects so the session verifies the title/body still describe the diff (the squash title is the release-notes line). Detection only \u2014 the session performs any gh pr edit.",
             "timeout": 30
           }
         ]
