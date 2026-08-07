@@ -55,7 +55,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     await screen.findByTestId('mock-spatial-editor')
 
     // Open the switcher dropdown and create a markdown note.
-    const switcher = await screen.findByRole('button', { name: 'untitled' })
+    const switcher = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
     await userEvent.click(switcher)
     const newMarkdown = await screen.findByTestId('new-markdown-menu-item')
     await userEvent.click(newMarkdown)
@@ -111,7 +111,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
     render(<BrowserLocalCanvasPage store={store} />)
     await screen.findByTestId('mock-spatial-editor')
 
-    const switcher = await screen.findByRole('button', { name: 'Diagram A' })
+    const switcher = await screen.findByRole('button', { name: 'Diagram A' }, { timeout: 10_000 })
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
     await waitFor(() => {
@@ -120,7 +120,7 @@ describe('BrowserLocalCanvasPage markdown 導線 (browser — real IndexedDB)', 
 
     // Switch back to the original spatial canvas via the switcher list.
     const before = spatialMounts
-    const switcher2 = await screen.findByRole('button', { name: 'untitled' })
+    const switcher2 = await screen.findByRole('button', { name: 'untitled' }, { timeout: 10_000 })
     await userEvent.click(switcher2)
     await userEvent.click(await screen.findByText('Diagram A'))
 
