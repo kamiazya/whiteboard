@@ -106,6 +106,15 @@ export function DaemonDetectedBanner({
   // the stored/default target while nothing is confirmed.
   const detectedBaseUrl = found?.[0]?.baseUrl ?? baseUrl
 
+  // A responder on a loopback port is an UNPROVEN claim: any local process
+  // can bind a free port and answer /api/runtime/ping with a self-asserted
+  // instanceId (see the daemon-impersonation-port-squatting issue). Only a
+  // baseUrl this browser has actually paired with — the user approved it on
+  // that daemon's own consent page — earns the app's trust label. Everything
+  // else is labelled unverified. This is presentation-level honesty, not a
+  // security boundary: the durable fix is daemon->browser mutual auth.
+  const isPairedTarget = detectedBaseUrl === storedTarget.localDaemonBaseUrl
+
   const openLocalAppUrl = useMemo(() => {
     const { lastConnectedWorkspaceId, lastConnectedSlug } = storedTarget
     // The last-connected canvas belongs to the STORED daemon — deep-link
@@ -279,7 +288,7 @@ export function DaemonDetectedBanner({
               >
                 connect anyway
               </button>
-              , or see{' '}
+              . Only approve a daemon you started yourself, or see{' '}
               <a
                 href={HOW_TO_CONNECT_URL}
                 target="_blank"
@@ -300,7 +309,7 @@ export function DaemonDetectedBanner({
           data-testid="daemon-picker"
           className="flex shrink-0 flex-wrap items-center gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
         >
-          <span>{found.length} local daemons are running.</span>
+          <span>{found.length} servers responded on local ports (unverified).</span>
           {found.map((daemon) => (
             <a
               key={daemon.instanceId}
@@ -325,7 +334,16 @@ export function DaemonDetectedBanner({
           data-testid="daemon-detected-banner"
           className="flex shrink-0 items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
         >
-          <span>A local whiteboard daemon is running at {detectedBaseUrl}.</span>
+          <span>
+            {isPairedTarget ? (
+              <>A local whiteboard daemon is running at {detectedBaseUrl}.</>
+            ) : (
+              <>
+                A server responded at {detectedBaseUrl} (unverified — approve it on its own page to
+                confirm it is your daemon).
+              </>
+            )}
+          </span>
           <button
             type="button"
             onClick={() => void beginGrantFn({ daemonBaseUrl: detectedBaseUrl })}

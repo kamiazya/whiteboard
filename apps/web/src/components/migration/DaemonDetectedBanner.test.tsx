@@ -108,7 +108,7 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    await screen.findByText(/A local whiteboard daemon is running at/)
+    await screen.findByText(/(A local whiteboard daemon is running at|A server responded at)/)
     const openLink = screen.getByRole('link', { name: /open the local app/i })
     expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3099')
     // The pairing-link ask is gone: since R3, navigating to the daemon
@@ -194,7 +194,9 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /dismiss/i }))
 
-    expect(screen.queryByText(/A local whiteboard daemon is running at/)).toBeNull()
+    expect(
+      screen.queryByText(/(A local whiteboard daemon is running at|A server responded at)/),
+    ).toBeNull()
 
     const saved = store.load()
     expect(saved.storage.dismissedDaemonCtaInstanceId).toBe('inst-1')
@@ -224,7 +226,9 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /forget this daemon/i }))
 
-    expect(screen.queryByText(/A local whiteboard daemon is running at/)).toBeNull()
+    expect(
+      screen.queryByText(/(A local whiteboard daemon is running at|A server responded at)/),
+    ).toBeNull()
     const saved = store.load()
     expect(saved.storage.localDaemonBaseUrl).toBeUndefined()
     expect(saved.storage.lastConnectedWorkspaceId).toBeUndefined()
@@ -242,7 +246,7 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    await screen.findByText(/A local whiteboard daemon is running at/)
+    await screen.findByText(/(A local whiteboard daemon is running at|A server responded at)/)
     expect(screen.queryByRole('button', { name: /forget this daemon/i })).toBeNull()
   })
 
@@ -314,7 +318,7 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
 
-    await screen.findByText(/A local whiteboard daemon is running at http:\/\/127\.0\.0\.1:3101/)
+    await screen.findByText(/A server responded at http:\/\/127\.0\.0\.1:3101/)
     const openLink = screen.getByRole('link', { name: /open the local app/i })
     expect(openLink.getAttribute('href')).toBe('http://127.0.0.1:3101')
   })
@@ -335,7 +339,7 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
-    await screen.findByText(/running at http:\/\/127\.0\.0\.1:3104/)
+    await screen.findByText(/responded at http:\/\/127\.0\.0\.1:3104/)
     expect(store.load().storage.knownDaemonBaseUrls).toEqual(['http://127.0.0.1:3104'])
     first.unmount()
 
@@ -350,7 +354,7 @@ describe('DaemonDetectedBanner', () => {
         probeFn={probeFn}
       />,
     )
-    await screen.findByText(/running at http:\/\/127\.0\.0\.1:3104/)
+    await screen.findByText(/responded at http:\/\/127\.0\.0\.1:3104/)
     expect(probeFn.mock.calls.map((c) => c[0])).toContain('http://127.0.0.1:3104')
   })
 
@@ -373,12 +377,56 @@ describe('DaemonDetectedBanner', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
 
-    await screen.findByText(/2 local daemons are running/i)
+    await screen.findByText(/2 servers responded on local ports/i)
     const links = screen.getAllByRole('link', { name: /open/i })
     expect(links.map((l) => l.getAttribute('href'))).toEqual([
       'http://127.0.0.1:3099',
       'http://127.0.0.1:3102',
     ])
+  })
+
+  it('an unpaired swept responder is labelled UNVERIFIED, not "a whiteboard daemon is running"', async () => {
+    // Any local process can bind a loopback port and answer /api/runtime/
+    // ping with a self-asserted instanceId, so a swept hit is an unproven
+    // claim. The app must not lend it its own trust label until the user
+    // has actually granted this origin on that daemon's own consent page.
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/responded at/i)
+    expect(screen.getByText(/unverified/i)).not.toBeNull()
+    expect(screen.queryByText(/a local whiteboard daemon is running/i)).toBeNull()
+  })
+
+  it('a previously paired daemon keeps the plain trusted label', async () => {
+    const store = makeStore()
+    store.update((current) => ({
+      ...current,
+      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+    }))
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    render(
+      <DaemonDetectedBanner
+        settingsStore={store}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+
+    await screen.findByText(/a local whiteboard daemon is running/i)
+    expect(screen.queryByText(/unverified/i)).toBeNull()
   })
 
   it('a detected daemon offers connect-in-place, which starts the pairing-grant redirect', async () => {
@@ -487,7 +535,7 @@ describe('DaemonDetectedBanner', () => {
 
     daemonUp = true
     fireEvent.click(screen.getByRole('button', { name: /check for local daemon/i }))
-    await screen.findByText(/A local whiteboard daemon is running at/)
+    await screen.findByText(/(A local whiteboard daemon is running at|A server responded at)/)
     expect(screen.queryByText(/no local daemon found/i)).toBeNull()
   })
 
