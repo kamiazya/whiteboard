@@ -33,6 +33,20 @@ export const UNSUPPORTED_BROWSER_NOTICE =
 export const HOW_TO_CONNECT_URL =
   'https://github.com/kamiazya/whiteboard/blob/main/docs/how-to/connect-to-local-daemon.md'
 
+// Chrome's Local Network Access prompt lives in browser chrome, not the
+// page, so a probe sweep that is merely waiting on that decision looks
+// identical (from script) to one still timing out. This delay is a
+// judgment call, not a measured threshold: long enough that a fast sweep
+// never flashes the hint, short enough that a stalled one gets a hint
+// before the user gives up and clicks again.
+const LNA_HINT_DELAY_MS = 1000
+
+// Phrased as a possibility, not a claim: the same stall also happens from
+// a plain network timeout with no permission prompt involved, and this
+// component has no way to distinguish the two from script.
+export const LNA_HINT_TEXT =
+  'This is taking a while — your browser may be asking for permission to reach local devices. Check for a permission prompt.'
+
 interface DaemonDetectedBannerProps {
   settingsStore: UserSettingsStore
   fetch: typeof globalThis.fetch
@@ -78,6 +92,13 @@ export function DaemonDetectedBanner({
     () => settingsStore.load().storage.dismissedDaemonCtaAt,
   )
   const abortRef = useRef<AbortController | null>(null)
+  // True for the whole window between a sweep starting and it settling
+  // (found, failed, or blocked) — drives the disabled/"Checking…" button
+  // state so a second click during the sweep is impossible instead of
+  // silently deduped by the in-flight map one layer down.
+  const [checking, setChecking] = useState(false)
+  const [showLnaHint, setShowLnaHint] = useState(false)
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // The store object identity never changes, so anything derived from it has
   // to be recomputed explicitly when we write to it — a useMemo keyed on the
@@ -135,6 +156,16 @@ export function DaemonDetectedBanner({
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    setChecking(true)
+    setShowLnaHint(false)
+    if (hintTimerRef.current !== null) clearTimeout(hintTimerRef.current)
+    hintTimerRef.current =
+      pageOriginScheme === 'https'
+        ? setTimeout(() => {
+            if (controller.signal.aborted) return
+            setShowLnaHint(true)
+          }, LNA_HINT_DELAY_MS)
+        : null
     const known = settingsStore.load().storage.knownDaemonBaseUrls ?? []
     // The server side binds dynamically (findAvailablePort from 3099; dev
     // worktrees use derived ports), so a single fixed-port ping misses
@@ -154,6 +185,12 @@ export function DaemonDetectedBanner({
       signal: controller.signal,
     }).then(({ found: nextFound, failures }) => {
       if (controller.signal.aborted) return
+      if (hintTimerRef.current !== null) {
+        clearTimeout(hintTimerRef.current)
+        hintTimerRef.current = null
+      }
+      setChecking(false)
+      setShowLnaHint(false)
       setFound(nextFound)
       const first = nextFound[0]
       setResult(
@@ -182,7 +219,10 @@ export function DaemonDetectedBanner({
 
   useEffect(() => {
     if (locationProtocol === 'http:') runProbe()
-    return () => abortRef.current?.abort()
+    return () => {
+      abortRef.current?.abort()
+      if (hintTimerRef.current !== null) clearTimeout(hintTimerRef.current)
+    }
     // Auto-probe once on mount for the http: (loopback) path only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationProtocol])
@@ -263,10 +303,20 @@ export function DaemonDetectedBanner({
         <button
           type="button"
           onClick={() => runProbe(true)}
-          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent"
+          disabled={checking}
+          aria-busy={checking}
+          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
           Check for local daemon
         </button>
+      )}
+      {showManualAffordance && checking && (
+        <span role="status" className="text-xs text-muted-foreground">
+          Checking…
+        </span>
+      )}
+      {showManualAffordance && checking && showLnaHint && (
+        <span className="text-xs text-muted-foreground">{LNA_HINT_TEXT}</span>
       )}
       {showManualAffordance && manualCheckFailed && (
         // A CORS rejection (daemon running but this origin not in its
