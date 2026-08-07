@@ -115,7 +115,7 @@ describe('headless-renderer', () => {
       edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'flows' }],
     }
     const { renderSpatialCanvasToSvg } = await importRenderer()
-    const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
+    const darkSvg = (await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })).svg
     // Dark palette chrome (canvas-render SPATIAL_DARK_PALETTE).
     expect(darkSvg).toContain('stroke="#9BA3AF"')
     expect(darkSvg).toContain('fill="#E6E8EB"')
@@ -124,7 +124,7 @@ describe('headless-renderer', () => {
     expect(darkSvg).toMatch(/<svg [^>]*fill="#E6E8EB">/)
 
     // The light export is byte-stable: no root fill, light chrome only.
-    const lightSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
+    const lightSvg = (await renderSpatialCanvasToSvg(canvas, { theme: 'light' })).svg
     expect(lightSvg).toContain('stroke="#333333"')
     expect(lightSvg).not.toMatch(/<svg [^>]*fill=/)
   })
