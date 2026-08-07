@@ -130,7 +130,10 @@ describe('/pair consent route', () => {
     })
 
     expect(router.state.location.pathname).toBe('/pair')
-    expect(router.state.location.search).toContain('challenge=chal')
+    const search = new URLSearchParams(router.state.location.search)
+    expect(search.get('origin')).toBe('https://example.com')
+    expect(search.get('challenge')).toBe('chal')
+    expect(search.get('state')).toBe('st')
     await screen.findByText(/allow this web app to use your local daemon/i)
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })

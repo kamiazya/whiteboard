@@ -318,12 +318,14 @@ export function DaemonDetectedBanner({
               <button
                 type="button"
                 onClick={() => void beginGrantFn({ daemonBaseUrl: daemon.baseUrl })}
+                aria-label={`Use ${daemon.baseUrl} here`}
                 className="rounded-md border px-2 py-0.5 font-medium transition-colors hover:bg-accent"
               >
                 Use here
               </button>
               <a
                 href={daemon.baseUrl}
+                aria-label={`Open ${daemon.baseUrl}`}
                 className="rounded-md border px-2 py-0.5 font-medium transition-colors hover:bg-accent"
               >
                 Open

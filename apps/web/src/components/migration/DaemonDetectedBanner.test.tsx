@@ -383,9 +383,14 @@ describe('DaemonDetectedBanner', () => {
     // Each responder offers pairing IN PLACE (the hosted-app-first model);
     // leaving for the daemon's own origin stays available as a secondary
     // link, but must not be the only affordance.
-    const useHere = screen.getAllByRole('button', { name: /use here/i })
-    expect(useHere).toHaveLength(2)
-    const links = screen.getAllByRole('link', { name: /open/i })
+    // Unique accessible names per daemon: a control list must identify
+    // WHICH daemon each action targets.
+    const useHere = screen.getAllByRole('button', { name: /use http:\/\/127\.0\.0\.1:\d+ here/i })
+    expect(useHere.map((b) => b.getAttribute('aria-label'))).toEqual([
+      'Use http://127.0.0.1:3099 here',
+      'Use http://127.0.0.1:3102 here',
+    ])
+    const links = screen.getAllByRole('link', { name: /open http:\/\/127\.0\.0\.1:\d+/i })
     expect(links.map((l) => l.getAttribute('href'))).toEqual([
       'http://127.0.0.1:3099',
       'http://127.0.0.1:3102',
