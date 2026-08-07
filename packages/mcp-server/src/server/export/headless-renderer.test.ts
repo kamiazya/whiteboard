@@ -76,7 +76,6 @@ describe('headless-renderer', () => {
     // The background reaches the SVG as a leading background rect — assert
     // the fill color directly rather than decoding rendered PNG pixels.
     const lightSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
-    const { renderSpatialCanvasToSvg } = await importRenderer()
     const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
     expect(lightSvg.svg).toContain('fill="#ffffff"')
     expect(darkSvg.svg).toContain('fill="#121212"')
@@ -115,6 +114,7 @@ describe('headless-renderer', () => {
       ],
       edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'flows' }],
     }
+    const { renderSpatialCanvasToSvg } = await importRenderer()
     const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
     // Dark palette chrome (canvas-render SPATIAL_DARK_PALETTE).
     expect(darkSvg).toContain('stroke="#9BA3AF"')
