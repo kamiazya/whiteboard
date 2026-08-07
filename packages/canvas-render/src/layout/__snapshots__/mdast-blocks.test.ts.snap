@@ -16,6 +16,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
         {
           "appearance": {
             "fontFamily": "sans-serif",
+            "fontSize": 32,
           },
           "baseline": 25.6,
           "bbox": {
@@ -41,6 +42,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
         {
           "appearance": {
             "fontFamily": "sans-serif",
+            "fontSize": 16,
           },
           "baseline": 12.8,
           "bbox": {
@@ -72,6 +74,21 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
           },
           "children": [
             {
+              "appearance": {
+                "fontFamily": "sans-serif",
+                "fontSize": 16,
+              },
+              "baseline": 12.8,
+              "bbox": {
+                "h": 16,
+                "w": 19.2,
+                "x": -24,
+                "y": 64,
+              },
+              "kind": "textRun",
+              "text": "1.",
+            },
+            {
               "bbox": {
                 "h": 16,
                 "w": 576,
@@ -83,6 +100,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
                 {
                   "appearance": {
                     "fontFamily": "sans-serif",
+                    "fontSize": 16,
                   },
                   "baseline": 12.8,
                   "bbox": {
@@ -114,6 +132,21 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
                   },
                   "children": [
                     {
+                      "appearance": {
+                        "fontFamily": "sans-serif",
+                        "fontSize": 16,
+                      },
+                      "baseline": 12.8,
+                      "bbox": {
+                        "h": 16,
+                        "w": 9.6,
+                        "x": -24,
+                        "y": 88,
+                      },
+                      "kind": "textRun",
+                      "text": "•",
+                    },
+                    {
                       "bbox": {
                         "h": 16,
                         "w": 552,
@@ -125,6 +158,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
                         {
                           "appearance": {
                             "fontFamily": "sans-serif",
+                            "fontSize": 16,
                           },
                           "baseline": 12.8,
                           "bbox": {
@@ -182,6 +216,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
                 {
                   "appearance": {
                     "fontFamily": "sans-serif",
+                    "fontSize": 16,
                   },
                   "baseline": 12.8,
                   "bbox": {
@@ -207,6 +242,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
                 {
                   "appearance": {
                     "fontFamily": "sans-serif",
+                    "fontSize": 16,
                   },
                   "baseline": 12.8,
                   "bbox": {
@@ -256,6 +292,7 @@ exports[`layoutMdastBlocks — golden block layout > matches the committed golde
             {
               "appearance": {
                 "fontFamily": "sans-serif",
+                "fontSize": 16,
               },
               "baseline": 12.8,
               "bbox": {
