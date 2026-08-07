@@ -83,6 +83,26 @@ it('clicking an edge selects it and Delete removes it', async () => {
   expect(latest.canvas.nodes).toHaveLength(2)
 })
 
+it('a real keyboard Delete works after a cold edge click (focus lands in the editor)', async () => {
+  // Live-verification regression: dispatching a synthetic keydown on the
+  // editor root bypasses focus, but a real key press goes to
+  // document.activeElement. A cold click on an edge hits no focusable
+  // element (unlike node shapes, which carry tabIndex), so unless the
+  // editor takes focus on edge selection, the real Delete lands on <body>
+  // and nothing happens. userEvent.keyboard routes through activeElement,
+  // pinning the real path.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+
+  await userEvent.click(rootOf(container), { position: edgeMidpointPosition(container) })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="edge-selection-highlight"]')).not.toBeNull(),
+  )
+
+  await userEvent.keyboard('{Delete}')
+  await vi.waitFor(() => expect(latest.canvas.edges).toHaveLength(0))
+})
+
 it('a click NEAR but not on the edge selects nothing', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)

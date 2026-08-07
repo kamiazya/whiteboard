@@ -601,6 +601,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the press; a DOUBLE one creates a node here (resolved at the
           // release, consistent with the node-edit double-press rule).
           if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+          // An edge selected at this press has no focusable element of its
+          // own (node shapes carry tabIndex; edge polylines do not), so
+          // without an explicit focus the real keyboard's Delete/Escape
+          // would land on <body> and never reach this root's onKeyDown.
+          // Focus here at the RELEASE: the browser's default mousedown
+          // focus handling runs after the pointerdown listener and undoes
+          // a focus taken there.
+          if (selectedEdgeId !== null) root?.focus()
           return
         }
         const rect = {
@@ -926,12 +934,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // this slice's scope.
         role="application"
         aria-label="Spatial canvas editor"
+        // Click-focusable (not tab-reachable): edge selection focuses this
+        // root programmatically so real keyboard events reach onKeyDown.
+        tabIndex={-1}
         style={{
           position: 'relative',
           width: '100%',
           height: '100%',
           overflow: 'hidden',
           touchAction: 'none',
+          outline: 'none',
         }}
         onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
