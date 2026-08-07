@@ -5,11 +5,12 @@
  * `renderSceneToSvg`, exactly as `CanvasViewer` does in canvas-viewer.
  */
 import { parseMarkdownBody } from '@kamiazya/whiteboard-canvas-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-canvas-model'
 import type { BoundingBox, MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutSpatialCanvas,
   renderSceneToSvg,
+  SPATIAL_THEME_GEOMETRY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
@@ -25,6 +26,27 @@ export interface RenderedCanvas {
   readonly svg: string
   readonly bounds: BoundingBox
   readonly scene: Scene
+}
+
+/**
+ * The height a text node needs for its laid-out body, in canvas px.
+ *
+ * Measured by laying out the node ALONE with height 1: the shape chrome
+ * always spans the stored height, so measuring at the real height could
+ * never report "content is shorter than the box" — collapsing the box to
+ * 1px makes the scene's bottom edge the CONTENT's bottom edge. Bottom
+ * padding is added back so a grown box keeps the same breathing room the
+ * layout gives the top.
+ */
+export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasOptions): number {
+  const probe: SpatialCanvas = { nodes: [{ ...node, height: 1 }], edges: [] }
+  const scene = layoutSpatialCanvas(probe, {
+    measure: options.measure,
+    parseBody: parseMarkdownBody,
+    appearance: createEditorAppearance(options.theme ?? 'light'),
+  })
+  const bounds = sceneBounds(scene)
+  return bounds.y + bounds.h - node.y + SPATIAL_THEME_GEOMETRY.paddingPx
 }
 
 export function renderCanvasToSvg(
