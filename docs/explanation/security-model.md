@@ -60,6 +60,42 @@ frequently-reused development port accordingly, and prefer the local
 daemon (loopback-bound, its own token) over browser-local storage for
 anything you would not want a future occupant of that port to read.
 
+## Daemon impersonation (loopback port squatting, the other direction)
+
+The section above concerns a process inheriting a browser ORIGIN. The
+mirror case is a process impersonating the DAEMON: the hosted app can
+sweep loopback ports to find one, and `/api/runtime/ping` is public and
+its instance id is self-asserted, so any local process that binds a free
+loopback port can answer it.
+
+Pairing therefore authenticates one direction only — browser origin to
+daemon, via a grant the user approves. The reverse (is this responder
+really your daemon?) is **not** authenticated today. A squatter that wins
+a swept port cannot touch the real daemon's data — grants, tokens, and the
+data directory are per-daemon and separated by OS permissions — but it can
+present itself for pairing and capture content the user creates afterward.
+
+What the UI does about it:
+
+- A responder this browser has never paired with is labelled
+  "responded … (unverified)", never "your daemon is running". The app does
+  not lend its own trust to an unproven claim.
+- Approving a grant is always an explicit click on the responding daemon's
+  own consent page, which shows the requesting origin.
+- The trusted-direction bootstraps — the `create_pairing_link` MCP tool, or
+  opening the hosted app from the daemon itself — carry the base URL and
+  credential from the real daemon, so they avoid this exposure entirely.
+  Prefer them when available.
+
+Scope: this is about a local process that can bind a port but is not the
+daemon. A full-privilege local attacker is outside this threat model (the
+daemon already trusts the loopback interface and the OS user boundary) and
+would read the daemon's data directory directly instead.
+
+The durable fix is daemon-to-browser authentication: a daemon keypair
+whose public half the ping advertises, with a signed challenge during
+token exchange. Until that lands, discovery is convenience, not proof.
+
 ## HTTP protections
 
 - **Bearer token**: local HTTP clients must send `Authorization: Bearer <token>` when token auth is enabled. The token is written to `daemon.json` in the data directory (`~/.whiteboard` by default) so the stdio MCP server can locate the running daemon. The file is created with mode `0o600` (owner-read/write only) and is re-chmod'd after write on non-Windows platforms to counteract a permissive umask. Treat `daemon.json` as a credential file and ensure the data directory itself is not world-readable.
