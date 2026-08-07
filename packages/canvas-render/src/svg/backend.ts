@@ -185,6 +185,13 @@ export interface SvgDocumentOptions {
   readonly viewBox?: BoundingBox
   readonly padding?: number
   readonly background?: string
+  /** Inheritable default text color, emitted as `fill` on the root `<svg>`.
+   *  Markdown body runs carry no fill of their own (inside the editor they
+   *  inherit the host element's CSS `fill`), so a scene rendered standalone
+   *  on a non-white background needs this to be self-describing. Elements
+   *  that carry their own fill are unaffected (nearest-ancestor wins). An
+   *  empty or non-string value is omitted, never defaulted. */
+  readonly textFill?: string
 }
 
 function hasEnvelopeOptions(
@@ -196,7 +203,8 @@ function hasEnvelopeOptions(
     options.height !== undefined ||
     options.viewBox !== undefined ||
     options.padding !== undefined ||
-    options.background !== undefined
+    options.background !== undefined ||
+    (typeof options.textFill === 'string' && options.textFill.length > 0)
   )
 }
 
@@ -244,7 +252,8 @@ function renderBackgroundRect(box: BoundingBox, background: string): string {
  * With no `options` (or an options object with no fields set), the root
  * element carries only `xmlns` — the exact string this function has always
  * produced. Passing any `SvgDocumentOptions` field activates the document
- * envelope: fixed root-attribute order `xmlns width height viewBox`, plus a
+ * envelope: fixed root-attribute order `xmlns width height viewBox fill`
+ * (`fill` only when `textFill` is set), plus a
  * leading `role="presentation"` background rect (document chrome, not a
  * per-node visual attribute — the one exemption to this package's
  * no-visual-attributes rule) when `background` is set.
@@ -262,6 +271,11 @@ export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): st
   const viewBoxAttr = `${formatCoord(viewBox.x)} ${formatCoord(viewBox.y)} ${formatCoord(viewBox.w)} ${formatCoord(viewBox.h)}`
   const background =
     options.background !== undefined ? renderBackgroundRect(viewBox, options.background) : ''
+  // Fixed root-attribute order: xmlns width height viewBox fill.
+  const textFillAttr =
+    typeof options.textFill === 'string' && options.textFill.length > 0
+      ? ` fill="${escapeXmlAttr(options.textFill)}"`
+      : ''
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${formatCoord(width)}" height="${formatCoord(height)}" viewBox="${viewBoxAttr}">${background}${body}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${formatCoord(width)}" height="${formatCoord(height)}" viewBox="${viewBoxAttr}"${textFillAttr}>${background}${body}</svg>`
 }

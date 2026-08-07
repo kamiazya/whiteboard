@@ -211,12 +211,15 @@
    to delete. The editor's dark palette (contrast-tested against the WCAG
    1.4.11/1.4.3 floors) is the shared theme's dark palette; viewer and export
    both pin `mode: 'light'` at their call sites, preserving the invariant
-   that a user's UI theme can never change exported bytes. NOT fixed by this
-   decision: `mcp-server`'s `headless-renderer`'s `theme: 'dark'` export
-   option still only changes the document background, not node chrome —
-   giving export a real dark chrome variant is a behavior decision (export
-   gaining new visual output as a function of a request option), not a
-   convergence one, and is deliberately out of scope here.
+   that a user's UI theme can never change exported bytes. The dark-export
+   behavior decision was later taken (2026-08-08): `headless-renderer`'s
+   `theme: 'dark'` now builds the scene with `createSpatialTheme({ mode:
+   'dark' })` and sets `SvgDocumentOptions.textFill` (an inheritable root
+   `fill` — the document-level analogue of the editor host's inherited CSS
+   fill) so body runs stay legible on the dark background. `theme` is an
+   explicit per-request argument; the invariant that ambient UI theme never
+   changes exported bytes still holds, and light exports are byte-identical
+   to before.
    This decision also fixed a verified, separate defect: export's label
    appearance used to declare `fontFamily: 'sans-serif'` while its measurer
    (`measure-text.ts`) actually measured a vendored Roboto face, so the

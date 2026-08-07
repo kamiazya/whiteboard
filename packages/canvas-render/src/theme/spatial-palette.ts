@@ -42,10 +42,10 @@ export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
 // Seeded from the pre-theme editor's dark palette (EDITOR_DARK_PALETTE) — a
 // desaturated cool gray/near-white pair chosen to read against the app's
 // dark canvas surface (`oklch(0.145 0 0)`), not `#333333` inverted. Node
-// fill stays `none` in dark mode: export does not render a dark-mode
-// variant today (`headless-renderer`'s `theme: 'dark'` only changes the
-// document background), so there is no per-type dark fill to converge
-// against yet — filed as follow-up, not invented here.
+// fill stays `none` in dark mode: nodes read as outlined shapes on the
+// dark surface (the editor's behavior), and export's dark variant keeps
+// body text legible via the document-level root `fill` seam
+// (SvgDocumentOptions.textFill) rather than per-node fills.
 export const SPATIAL_DARK_PALETTE: SpatialPalette = {
   node: {
     text: { fill: 'none', stroke: '#9BA3AF' },
