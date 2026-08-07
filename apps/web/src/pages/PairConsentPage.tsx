@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { createPairingGrant } from '../lib/daemon-api-client.js'
+import { fingerprintPublicKey } from '../lib/daemon-identity-pin.js'
 
 /**
  * The daemon-served /pair consent page (pairing-grant flow). A hosted web
@@ -55,6 +56,30 @@ export function PairConsentPage({
   const location = useLocation()
   const request = useMemo(() => parsePairRequest(location.search), [location.search])
   const [consent, setConsent] = useState<ConsentState>({ kind: 'prompt' })
+  // This page is daemon-served, so a same-origin ping is the daemon
+  // introducing ITSELF — the trust anchor the requesting origin's pin
+  // inherits via the return fragment. Failure keeps identity null (legacy
+  // daemon posture): pairing still works, just unpinned.
+  const [identity, setIdentity] = useState<{ publicKey: string; fingerprint: string } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const res = await fetchFn('/api/runtime/ping')
+        if (!res.ok) return
+        const body = (await res.json()) as { identity?: { publicKey?: unknown } }
+        const publicKey = body.identity?.publicKey
+        if (typeof publicKey !== 'string' || publicKey.length === 0) return
+        const fingerprint = await fingerprintPublicKey(publicKey)
+        if (!cancelled) setIdentity({ publicKey, fingerprint })
+      } catch {
+        // Legacy daemon or transient failure: proceed unpinned.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [fetchFn])
 
   if (request === null) {
     return (
@@ -82,7 +107,11 @@ export function PairConsentPage({
       // The fragment carries only the single-use code + the caller's own
       // state nonce — never a token.
       const stateParam = encodeURIComponent(request?.state ?? '')
-      onNavigate(`${request?.origin}/#wb-grant=${encodeURIComponent(code)}&state=${stateParam}`)
+      const identityParam =
+        identity !== null ? `&identity=${encodeURIComponent(identity.publicKey)}` : ''
+      onNavigate(
+        `${request?.origin}/#wb-grant=${encodeURIComponent(code)}&state=${stateParam}${identityParam}`,
+      )
     } catch (error) {
       setConsent({
         kind: 'failed',
@@ -102,6 +131,14 @@ export function PairConsentPage({
         is asking to read and edit the canvases stored by this daemon. Only approve origins you
         recognize.
       </p>
+      {identity !== null && (
+        <p className="mb-4 text-xs text-muted-foreground">
+          This daemon's identity:{' '}
+          <span data-testid="daemon-fingerprint" className="font-mono">
+            {identity.fingerprint}
+          </span>
+        </p>
+      )}
       {consent.kind === 'denied' ? (
         <p className="text-sm font-medium">Denied — nothing was granted. You can close this tab.</p>
       ) : consent.kind === 'failed' ? (
