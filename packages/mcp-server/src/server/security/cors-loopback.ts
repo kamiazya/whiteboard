@@ -3,7 +3,11 @@
 // when the loopback definition or Vary logic needs updating.
 
 import type { Context, MiddlewareHandler } from 'hono'
-import { isAllowedWebOrigin } from './web-origin-allowlist.js'
+import {
+  type AllowedWebOrigins,
+  isAllowedWebOrigin,
+  resolveAllowedWebOrigins,
+} from './web-origin-allowlist.js'
 
 export function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
@@ -96,13 +100,16 @@ export function appendVary(value: string | null, token: string): string {
  * Never applied in server-mode (the caller guards this).
  */
 export function createApiLoopbackCorsMiddleware(
-  allowedOrigins: readonly string[] = [],
+  allowedOrigins: AllowedWebOrigins = [],
 ): MiddlewareHandler {
   return async (c, next) => {
     const origin = c.req.header('origin')
     const originHost = normalizeOriginHostname(origin)
     const isLoopback = originHost !== null && isLoopbackHostname(originHost)
-    const isAdmitted = isLoopback || isAllowedWebOrigin(origin, allowedOrigins)
+    // Resolved per request, not captured at createApp time — pairing
+    // grants must take effect without a restart.
+    const isAdmitted =
+      isLoopback || isAllowedWebOrigin(origin, resolveAllowedWebOrigins(allowedOrigins))
 
     if (isAdmitted && origin) {
       setApiCorsHeaders(c, origin)

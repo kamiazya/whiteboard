@@ -381,6 +381,51 @@ describe('DaemonDetectedBanner', () => {
     ])
   })
 
+  it('a detected daemon offers connect-in-place, which starts the pairing-grant redirect', async () => {
+    const probeFn = vi.fn().mockResolvedValue(DETECTED)
+    const beginGrantFn = vi.fn(async (_input: { daemonBaseUrl: string }) => {})
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+        beginGrantFn={beginGrantFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /use here/i }))
+
+    await waitFor(() => expect(beginGrantFn).toHaveBeenCalledTimes(1))
+    expect(beginGrantFn.mock.calls[0]?.[0]).toMatchObject({
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+    })
+  })
+
+  it('the hosted failure notice also offers starting the pairing consent blindly', async () => {
+    // A daemon whose allowlist does not include this origin is CORS-invisible
+    // to the probe, but a TOP-LEVEL NAVIGATION to its /pair page is not
+    // subject to CORS — so the failure notice offers the consent flow.
+    const probeFn = vi.fn().mockResolvedValue({ detected: false, reason: 'network' })
+    const beginGrantFn = vi.fn(async () => {})
+    render(
+      <DaemonDetectedBanner
+        settingsStore={makeStore()}
+        fetch={vi.fn()}
+        locationProtocol="https:"
+        probeFn={probeFn}
+        beginGrantFn={beginGrantFn}
+      />,
+    )
+
+    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    await screen.findByText(/no daemon reachable from this origin/i)
+    fireEvent.click(screen.getByRole('button', { name: /connect anyway/i }))
+
+    await waitFor(() => expect(beginGrantFn).toHaveBeenCalledTimes(1))
+  })
+
   it('a failed manual check on a hosted origin explains the allowlist requirement instead of silence', async () => {
     // The real shape of the 2026-08-07 report: daemon running, hosted origin
     // not in WHITEBOARD_ALLOWED_WEB_ORIGINS -> CORS rejection surfaces as an

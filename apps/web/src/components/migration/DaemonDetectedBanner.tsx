@@ -12,6 +12,7 @@ import {
   type ProbeDaemonOptions,
   probeDaemon,
 } from '../../lib/daemon-probe.js'
+import { beginPairingGrant } from '../../lib/pairing-grant.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 
@@ -39,6 +40,9 @@ interface DaemonDetectedBannerProps {
   locationProtocol?: string
   // Injectable for tests; production default is the real probeDaemon.
   probeFn?: (baseUrl: string, options: ProbeDaemonOptions) => Promise<DaemonProbeResult>
+  // Injectable for tests; production default starts the pairing-grant
+  // redirect (see lib/pairing-grant.ts).
+  beginGrantFn?: (input: { daemonBaseUrl: string }) => Promise<void>
 }
 
 /**
@@ -53,6 +57,13 @@ export function DaemonDetectedBanner({
   fetch,
   locationProtocol = window.location.protocol,
   probeFn = probeDaemon,
+  beginGrantFn = ({ daemonBaseUrl }) =>
+    beginPairingGrant({
+      daemonBaseUrl,
+      hostedOrigin: window.location.origin,
+      sessionStorage: window.sessionStorage,
+      navigate: (url) => window.location.assign(url),
+    }),
 }: DaemonDetectedBannerProps) {
   const [result, setResult] = useState<DaemonProbeResult | null>(null)
   // Every daemon the last sweep confirmed (dynamic ports mean there can be
@@ -258,8 +269,17 @@ export function DaemonDetectedBanner({
         <span data-testid="daemon-check-failed-notice" className="text-xs text-muted-foreground">
           {pageOriginScheme === 'https' ? (
             <>
-              No daemon reachable from this origin. If yours is running, it must allow this origin
-              via <code>WHITEBOARD_ALLOWED_WEB_ORIGINS</code> —{' '}
+              No daemon reachable from this origin. If yours is running, approving it on the
+              daemon's consent page grants this origin access (a top-level navigation is not subject
+              to the CORS block that hides the daemon from the check) —{' '}
+              <button
+                type="button"
+                onClick={() => void beginGrantFn({ daemonBaseUrl: baseUrl })}
+                className="font-medium underline"
+              >
+                connect anyway
+              </button>
+              , or see{' '}
               <a
                 href={HOW_TO_CONNECT_URL}
                 target="_blank"
@@ -306,6 +326,13 @@ export function DaemonDetectedBanner({
           className="flex shrink-0 items-center justify-between gap-2 bg-muted px-3 py-1.5 text-xs text-muted-foreground"
         >
           <span>A local whiteboard daemon is running at {detectedBaseUrl}.</span>
+          <button
+            type="button"
+            onClick={() => void beginGrantFn({ daemonBaseUrl: detectedBaseUrl })}
+            className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent"
+          >
+            Use here
+          </button>
           <a
             href={openLocalAppUrl}
             className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent"

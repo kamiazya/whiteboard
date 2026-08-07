@@ -37,6 +37,7 @@ import {
   OAUTH_AUTHZ_CORS_PATHS,
   OAUTH_AUTHZ_PATHS,
 } from './routes/oauth-authz.js'
+import { createPairingRouter } from './routes/pairing.js'
 import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
@@ -165,7 +166,7 @@ export function createApp(options: AppOptions) {
     // Either credential: the daemon token (full authority, unchanged) or an
     // OAuth access token, which is additionally checked against the route's
     // declared scope. Both fail identically.
-    app.use('/api/*', createDaemonAuthMiddleware(token, oauthAuthz?.store))
+    app.use('/api/*', createDaemonAuthMiddleware(token, oauthAuthz?.store, options.pairing?.tokens))
   }
 
   // Hosted-origin OAuth 2.1 authorization-server surface (ADR-0005). Local-
@@ -332,6 +333,12 @@ export function createApp(options: AppOptions) {
       }
     }
   })
+
+  if (options.authMode === 'local-daemon' && options.pairing !== undefined) {
+    // Pairing-grant routes are local-daemon only by design (the consent
+    // model assumes the daemon's own served UI and loopback reachability).
+    app.route('/', createPairingRouter(options.pairing))
+  }
 
   // server-core's OpenCanvas /api/v1 surface (workspace tree, canvasId +
   // alias world). Mounted at '/' because its routes carry full /api/v1/*

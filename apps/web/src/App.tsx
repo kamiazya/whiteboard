@@ -5,6 +5,20 @@ import { BetaBanner } from './components/BetaBanner.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import {
+  consumeGrantFragment,
+  type GrantConsumeResult,
+  parseGrantFragment,
+} from './lib/pairing-grant.js'
+
+// Lazy: the /pair consent page transitively pulls daemon-api-client's zod
+// schema chain, which must stay off the entry chunk's critical path (see
+// apps/web/scripts/smoke-bundle-size.mjs). It renders on a rare, dedicated
+// top-level navigation, so the extra chunk fetch is invisible.
+const PairConsentPage = lazy(() =>
+  import('./pages/PairConsentPage.js').then((m) => ({ default: m.PairConsentPage })),
+)
+
+import {
   type DaemonRoute,
   daemonRoutePath,
   parseBrowserLocalRoute,
@@ -124,6 +138,33 @@ export function App({ providerState }: AppProps) {
   const location = useLocation()
   const navigate = useNavigate()
 
+  // Pairing-grant return leg: a `#wb-grant=<code>&state=` fragment from the
+  // daemon's /pair consent page. The exchange is async (a direct POST — the
+  // token itself never rides the URL), so unlike the synchronous #wb= path
+  // this resolves into state. The fragment is stripped IMMEDIATELY: the
+  // code is single-use and 60s-lived, but it still must not linger in the
+  // address bar or history.
+  const [grantConnection, setGrantConnection] = useState<GrantConsumeResult | null>(() =>
+    parseGrantFragment(window.location.hash) !== null ? { status: 'none' } : null,
+  )
+  useEffect(() => {
+    const hash = window.location.hash
+    if (parseGrantFragment(hash) === null) return
+    window.history.replaceState(
+      window.history.state,
+      '',
+      window.location.pathname + window.location.search,
+    )
+    void consumeGrantFragment({
+      hash,
+      sessionStorage: window.sessionStorage,
+      fetch: globalThis.fetch.bind(globalThis),
+    }).then(setGrantConnection)
+    // Runs once per page load — the fragment only exists on a fresh
+    // top-level navigation back from the consent page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // A #wb= fragment carrying both workspaceId+slug skips straight to the
   // canvas (the existing deep-link contract); a workspace-only fragment is
   // still a valid target (see daemon-connection-payload.ts's refine) and
@@ -233,12 +274,47 @@ export function App({ providerState }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonConnection.status])
 
+  useEffect(() => {
+    if (grantConnection?.status !== 'paired') return
+    userSettingsStore.update((current) => ({
+      ...current,
+      storage: { ...current.storage, localDaemonBaseUrl: grantConnection.daemonBaseUrl },
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grantConnection?.status])
+
+  // The daemon-served /pair consent page (pairing-grant flow) — rendered
+  // in place of every other view; approving needs the R3-injected token.
+  if (location.pathname === '/pair') {
+    return (
+      <Suspense fallback={<LazyPageFallback heightClass="h-dvh" message="Loading…" />}>
+        <PairConsentPage daemonToken={daemonToken} />
+      </Suspense>
+    )
+  }
+
   // The 'Continue in browser-local' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
   if (!forcedBrowserLocal) {
-    if (daemonConnection.status === 'paired') {
-      const { payload } = daemonConnection
-      const pairedToken = payload.authMode === 'bootstrap' ? payload.bootstrapToken : undefined
+    // Both pairing paths converge here: the legacy #wb= fragment carries
+    // its token inline; the grant flow resolved its token via the POST
+    // exchange above. Either way the daemon pages just get baseUrl+token.
+    const grantPaired = grantConnection?.status === 'paired' ? grantConnection : null
+    if (daemonConnection.status === 'paired' || grantPaired !== null) {
+      const payload =
+        daemonConnection.status === 'paired'
+          ? daemonConnection.payload
+          : {
+              baseUrl: (grantPaired as { daemonBaseUrl: string }).daemonBaseUrl,
+              workspaceId: undefined,
+              slug: undefined,
+            }
+      const pairedToken =
+        daemonConnection.status === 'paired'
+          ? daemonConnection.payload.authMode === 'bootstrap'
+            ? daemonConnection.payload.bootstrapToken
+            : undefined
+          : (grantPaired as { token: string }).token
       return (
         // ErrorBoundary sits outside Suspense: a lazy-chunk load failure
         // propagates through Suspense's own error path to the nearest

@@ -89,6 +89,10 @@ export function createDaemonAuthMiddleware(
   // Absent unless the operator configured the hosted-origin OAuth surface, in
   // which case /api/* is daemon-token-only exactly as before.
   grantStore?: OAuthTransactionStore,
+  // Origin-scoped pairing session tokens (pairing-grant flow). A pairing
+  // bearer is only honored WITH the browser-enforced Origin header it was
+  // minted for — presenting it originless or cross-origin fails.
+  pairingTokens?: { validate(token: string, origin: string): boolean },
 ): MiddlewareHandler {
   return async (c, next) => {
     // The route-scope registry is the single source of truth for which routes
@@ -109,6 +113,21 @@ export function createDaemonAuthMiddleware(
       isAuthorizedOAuthGrant(c.req.header('authorization'), grantStore, c.req.method, c.req.path)
     ) {
       return next()
+    }
+    if (pairingTokens !== undefined) {
+      const bearer = parseBearerAuthorizationHeader(c.req.header('authorization'))
+      const originHeader = c.req.header('origin')
+      if (bearer !== null && originHeader !== undefined) {
+        let origin: string | null = null
+        try {
+          origin = new URL(originHeader).origin
+        } catch {
+          origin = null
+        }
+        if (origin !== null && pairingTokens.validate(bearer, origin)) {
+          return next()
+        }
+      }
     }
     // One rejection for every way a request can fail: no credential, a wrong
     // daemon token, a forged/expired/revoked access token, and a valid access

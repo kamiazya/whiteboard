@@ -136,6 +136,22 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['canvas:read'] }
   }
 
+  // POST /api/pairing/token — the pairing-grant flow's deliberately PUBLIC
+  // endpoint (the second of exactly two public routes, with /api/runtime/
+  // ping): it authenticates by other means — a single-use PKCE-bound code,
+  // or the browser-enforced Origin header matched against a persisted
+  // grant — and it must be reachable by an origin that does not hold a
+  // bearer yet. Guard enumeration lives in routes/pairing.ts.
+  if (path === '/api/pairing/token') {
+    return { kind: 'public' }
+  }
+  // Persisting a grant is a consent decision made on the daemon's own
+  // served UI (which carries the daemon token); nothing below admin may
+  // widen the origin allowlist.
+  if (path === '/api/pairing/grants') {
+    return { kind: 'scoped', scopes: ['runtime:admin'] }
+  }
+
   // No rule matched: an undeclared /api/* route. Callers must fail closed.
   return null
 }

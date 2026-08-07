@@ -7,7 +7,11 @@ import {
   normalizeOriginHostname,
 } from './cors-loopback.js'
 import type { McpHttpAuthStrategy } from './mcp-auth.js'
-import { isAllowedWebOrigin } from './web-origin-allowlist.js'
+import {
+  type AllowedWebOrigins,
+  isAllowedWebOrigin,
+  resolveAllowedWebOrigins,
+} from './web-origin-allowlist.js'
 
 function normalizeMethod(method: string): string {
   return method.toUpperCase()
@@ -27,7 +31,7 @@ function mcpHttpError(status: number, message: string, headers?: Headers): Respo
 export function isAllowedMcpHttpOrigin(
   originHeader: string | undefined,
   hostHeader: string | undefined,
-  allowedOrigins: readonly string[] = [],
+  allowedOrigins: AllowedWebOrigins = [],
 ): boolean {
   // DNS-rebinding guard: unchanged regardless of the Origin allowlist below —
   // the request Host must always be loopback.
@@ -38,7 +42,7 @@ export function isAllowedMcpHttpOrigin(
   if (!originHeader) return true
   const originHost = normalizeOriginHostname(originHeader)
   if (originHost !== null && isLoopbackHostname(originHost)) return true
-  return isAllowedWebOrigin(originHeader, allowedOrigins)
+  return isAllowedWebOrigin(originHeader, resolveAllowedWebOrigins(allowedOrigins))
 }
 
 export function requiresMcpHttpAuth(method: string): boolean {
@@ -58,7 +62,7 @@ function setMcpCorsHeaders(c: Context, origin: string): void {
 }
 
 export function createMcpHttpOriginMiddleware(
-  allowedOrigins: readonly string[] = [],
+  allowedOrigins: AllowedWebOrigins = [],
 ): MiddlewareHandler {
   return async (c, next) => {
     const origin = c.req.header('origin')

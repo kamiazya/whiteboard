@@ -11,7 +11,11 @@ import {
   normalizeOriginHostname,
 } from '../security/cors-loopback.js'
 import { timingSafeEqualStrings } from '../security/timing-safe.js'
-import { isAllowedWebOrigin } from '../security/web-origin-allowlist.js'
+import {
+  type AllowedWebOrigins,
+  isAllowedWebOrigin,
+  resolveAllowedWebOrigins,
+} from '../security/web-origin-allowlist.js'
 
 function parseProtocolHeader(header: string | string[] | undefined): string[] {
   if (Array.isArray(header)) {
@@ -27,7 +31,7 @@ function parseProtocolHeader(header: string | string[] | undefined): string[] {
 function isAllowedBrowserOrigin(
   originHeader: string | undefined,
   hostHeader: string | undefined,
-  allowedOrigins: readonly string[] = [],
+  allowedOrigins: AllowedWebOrigins = [],
 ): boolean {
   // Requests without Origin (curl, ws CLI, MCP daemon clients, etc.) are treated as
   // non-browser callers and are allowed, but DNS rebinding protection still requires
@@ -52,7 +56,7 @@ function isAllowedBrowserOrigin(
   }
   // A hosted pairing origin (e.g. https://kamiazya-whiteboard.pages.dev) is
   // never loopback — it is admitted only via an exact allowlist match.
-  return isAllowedWebOrigin(originHeader, allowedOrigins)
+  return isAllowedWebOrigin(originHeader, resolveAllowedWebOrigins(allowedOrigins))
 }
 
 export interface WsUpgradeDecision {
@@ -83,8 +87,13 @@ export type RedeemTicketFn = (ticket: string) => {
 export function authorizeWsUpgrade(
   headers: IncomingHttpHeaders,
   token?: string,
-  allowedOrigins: readonly string[] = [],
+  allowedOrigins: AllowedWebOrigins = [],
   redeemTicket?: RedeemTicketFn,
+  // Origin-scoped pairing session tokens: accepted through the same
+  // daemon-token subprotocol carrier the paired web app already uses, but
+  // only when the upgrade's own Origin header matches the origin the token
+  // was minted for.
+  pairingTokens?: { validate(token: string, origin: string): boolean },
 ): WsUpgradeDecision {
   if (!isAllowedBrowserOrigin(headers.origin, headers.host, allowedOrigins)) {
     return { accept: false, statusCode: 403 }
@@ -132,13 +141,23 @@ export function authorizeWsUpgrade(
     protocol.startsWith(DAEMON_TOKEN_WS_PROTOCOL_PREFIX),
   )
   const expectedToken = `${DAEMON_TOKEN_WS_PROTOCOL_PREFIX}${token}`
-  if (
-    !offeredBaseProtocol ||
-    offeredToken === undefined ||
-    !timingSafeEqualStrings(offeredToken, expectedToken)
-  ) {
+  if (!offeredBaseProtocol || offeredToken === undefined) {
     return { accept: false, statusCode: 401 }
   }
-
-  return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+  if (timingSafeEqualStrings(offeredToken, expectedToken)) {
+    return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+  }
+  if (pairingTokens !== undefined && typeof headers.origin === 'string') {
+    let origin: string | null = null
+    try {
+      origin = new URL(headers.origin).origin
+    } catch {
+      origin = null
+    }
+    const rawToken = offeredToken.slice(DAEMON_TOKEN_WS_PROTOCOL_PREFIX.length)
+    if (origin !== null && pairingTokens.validate(rawToken, origin)) {
+      return { accept: true, protocol: WHITEBOARD_WS_PROTOCOL, scopes: ALL_AUTH_SCOPES }
+    }
+  }
+  return { accept: false, statusCode: 401 }
 }

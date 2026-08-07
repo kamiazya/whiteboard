@@ -110,3 +110,15 @@ export function loadAllowedWebOriginsFromEnv(
   }
   return result.origins
 }
+
+// A static allowlist (env-derived, fixed for the process) or a PROVIDER
+// re-evaluated per request. The provider form exists for pairing grants:
+// an origin approved at runtime must take effect on every origin-checking
+// surface (/api CORS, /mcp origin, WS upgrade) without a restart, and each
+// generation must be a NEW array so the pattern cache above keys correctly.
+export type AllowedWebOrigins = readonly string[] | (() => readonly string[])
+
+export function resolveAllowedWebOrigins(value: AllowedWebOrigins | undefined): readonly string[] {
+  if (value === undefined) return []
+  return typeof value === 'function' ? value() : value
+}
