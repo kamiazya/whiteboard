@@ -33,6 +33,7 @@ import {
   createSpatialTheme,
   layoutSpatialCanvas,
   renderSceneToSvg as renderSceneToSvgString,
+  SPATIAL_DARK_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
 
 import { getLogger } from '../log.js'
@@ -42,7 +43,11 @@ import { createOpentypeMeasureText } from './measure-text.js'
 // Export never has its own theme switch (the composition root always
 // exports light, see package-canvas-render.md decision #8), so this
 // singleton is built once and reused across renders.
-const EXPORT_APPEARANCE = createSpatialTheme({ mode: 'light' })
+const EXPORT_APPEARANCE_BY_MODE = {
+  light: createSpatialTheme({ mode: 'light' }),
+  dark: createSpatialTheme({ mode: 'dark' }),
+} as const
+type ExportThemeMode = keyof typeof EXPORT_APPEARANCE_BY_MODE
 
 const log = getLogger('headless-renderer')
 
@@ -112,11 +117,15 @@ function onDegrade(event: SpatialLayoutDegradation): void {
  * opentype.js font load — see
  * `headless-renderer-geometry-conformance.test.ts`.
  */
-export function buildSpatialScene(canvas: SpatialCanvas, measure: MeasureText): Scene {
+export function buildSpatialScene(
+  canvas: SpatialCanvas,
+  measure: MeasureText,
+  mode: ExportThemeMode = 'light',
+): Scene {
   return layoutSpatialCanvas(canvas, {
     measure,
     parseBody: parseMarkdownBody,
-    appearance: EXPORT_APPEARANCE,
+    appearance: EXPORT_APPEARANCE_BY_MODE[mode],
     onDegrade,
   })
 }
@@ -126,10 +135,17 @@ function buildSvg(
   options: HeadlessExportOptions,
   measure: MeasureText,
 ): string {
-  const scene = buildSpatialScene(canvas, measure)
+  // `theme` is an explicit per-request argument — the invariant that a
+  // user's ambient UI theme never changes exported bytes is untouched.
+  const mode: ExportThemeMode = options.theme === 'dark' ? 'dark' : 'light'
+  const scene = buildSpatialScene(canvas, measure, mode)
   return renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
     background: themeBackground(options),
+    // Dark node chrome uses transparent fills, so body runs sit directly on
+    // the dark background — the root-level inheritable fill is what keeps
+    // them legible. Light stays byte-identical (no root fill).
+    ...(mode === 'dark' ? { textFill: SPATIAL_DARK_PALETTE.labelFill } : {}),
   })
 }
 

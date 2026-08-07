@@ -76,6 +76,7 @@ describe('headless-renderer', () => {
     // The background reaches the SVG as a leading background rect — assert
     // the fill color directly rather than decoding rendered PNG pixels.
     const lightSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
+    const { renderSpatialCanvasToSvg } = await importRenderer()
     const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
     expect(lightSvg.svg).toContain('fill="#ffffff"')
     expect(darkSvg.svg).toContain('fill="#121212"')
@@ -101,6 +102,31 @@ describe('headless-renderer', () => {
       expect(degenerate.width).toBe(base.width)
       expect(degenerate.height).toBe(base.height)
     }
+  })
+
+  it('theme="dark" renders real dark chrome: edge stroke, label fill, and a root text fill', async () => {
+    // A diagram whose meaning lives in its arrows must survive a dark
+    // export: light-theme edge chrome (#333333) on the dark background was
+    // effectively invisible.
+    const canvas = {
+      nodes: [
+        { id: 'a', type: 'text' as const, x: 0, y: 0, width: 120, height: 60, text: 'from' },
+        { id: 'b', type: 'text' as const, x: 300, y: 0, width: 120, height: 60, text: 'to' },
+      ],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'flows' }],
+    }
+    const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
+    // Dark palette chrome (canvas-render SPATIAL_DARK_PALETTE).
+    expect(darkSvg).toContain('stroke="#9BA3AF"')
+    expect(darkSvg).toContain('fill="#E6E8EB"')
+    expect(darkSvg).not.toContain('stroke="#333333"')
+    // Root-level inheritable text fill so body runs are legible on dark.
+    expect(darkSvg).toMatch(/<svg [^>]*fill="#E6E8EB">/)
+
+    // The light export is byte-stable: no root fill, light chrome only.
+    const lightSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
+    expect(lightSvg).toContain('stroke="#333333"')
+    expect(lightSvg).not.toMatch(/<svg [^>]*fill=/)
   })
 
   it('renders a canvas to real SVG markup with the document envelope', async () => {

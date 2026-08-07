@@ -503,6 +503,39 @@ describe('renderSceneToSvg — document envelope options', () => {
     )
   })
 
+  it('textFill emits an inheritable fill on the root svg, after viewBox', () => {
+    // The default text color for standalone consumers: markdown body runs
+    // carry no fill of their own (the editor supplies one via its host
+    // element), so a scene rendered outside the editor needs this seam to
+    // be self-describing on a non-white background.
+    const svg = renderSceneToSvg(scene, {
+      viewBox: { x: 0, y: 0, w: 100, h: 10 },
+      textFill: '#E6E8EB',
+    })
+    expect(
+      svg.startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="10" viewBox="0 0 100 10" fill="#E6E8EB">',
+      ),
+    ).toBe(true)
+  })
+
+  it('an absent or empty textFill leaves the envelope output byte-identical', () => {
+    const withEnvelope = renderSceneToSvg(scene, { padding: 5 })
+    expect(renderSceneToSvg(scene, { padding: 5, textFill: undefined })).toBe(withEnvelope)
+    expect(renderSceneToSvg(scene, { padding: 5, textFill: '' })).toBe(withEnvelope)
+  })
+
+  it('escapes a quote-bearing textFill and still never touches the legacy path', () => {
+    const svg = renderSceneToSvg(scene, { padding: 0, textFill: '"&' })
+    expect(svg).toContain('fill="&quot;&amp;"')
+    // textFill alone activates the envelope (it is a document option).
+    expect(
+      renderSceneToSvg(scene, { textFill: '#111111' }).startsWith(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="',
+      ),
+    ).toBe(true)
+  })
+
   it('escapes a quote/ampersand-bearing background color string', () => {
     const svg = renderSceneToSvg(scene, { background: '"&' })
     expect(svg).toContain('fill="&quot;&amp;"')
