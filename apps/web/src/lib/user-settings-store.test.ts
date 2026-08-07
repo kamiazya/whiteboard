@@ -1,6 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createUserSettingsStore, defaultUserSettings, STORAGE_KEY } from './user-settings-store.js'
 
+describe('knownDaemonBaseUrls bound', () => {
+  it('an oversized stored array fails validation and load falls back to defaults', () => {
+    localStorage.clear()
+    const oversized = Array.from({ length: 6 }, (_, i) => `http://127.0.0.1:${3099 + i}`)
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ version: 1, storage: { knownDaemonBaseUrls: oversized } }),
+    )
+    const store = createUserSettingsStore()
+    // Consistent with the store's existing invalid-value semantics (e.g. a
+    // non-http localDaemonBaseUrl): safeParse fails and defaults win, so
+    // discovery can never fan out over an unbounded tampered list.
+    expect(store.load().storage.knownDaemonBaseUrls).toBeUndefined()
+  })
+})
+
 describe('createUserSettingsStore', () => {
   beforeEach(() => {
     localStorage.clear()

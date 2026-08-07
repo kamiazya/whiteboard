@@ -82,6 +82,10 @@ const storageSettingsSchema = z
           }
         }, 'must be an http(s) URL'),
       )
+      // The writer keeps this MRU-capped (daemon-discovery's helper), and
+      // every stored entry is re-probed on the next check — an oversized
+      // tampered array must not turn discovery into an unbounded fan-out.
+      .max(5, 'must contain at most 5 daemon URLs')
       .optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
     dismissedBetaBannerAt: z.string().optional(),
