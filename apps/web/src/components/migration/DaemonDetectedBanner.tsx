@@ -152,20 +152,27 @@ export function DaemonDetectedBanner({
   // path is open without evidence.
   const pageOriginScheme = locationProtocol === 'http:' ? 'http' : 'https'
 
+  // Always paired with aborting/settling the sweep the timer belongs to, so
+  // a pending hint can never outlive its own probe.
+  function clearHintTimer() {
+    if (hintTimerRef.current !== null) {
+      clearTimeout(hintTimerRef.current)
+      hintTimerRef.current = null
+    }
+  }
+
   function runProbe(forceRecheck?: boolean) {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
     setChecking(true)
     setShowLnaHint(false)
-    if (hintTimerRef.current !== null) clearTimeout(hintTimerRef.current)
-    hintTimerRef.current =
-      pageOriginScheme === 'https'
-        ? setTimeout(() => {
-            if (controller.signal.aborted) return
-            setShowLnaHint(true)
-          }, LNA_HINT_DELAY_MS)
-        : null
+    clearHintTimer()
+    // Only an https: origin can hit the Local Network Access prompt; a
+    // loopback origin reaches the daemon same-origin with no permission gate.
+    if (pageOriginScheme === 'https') {
+      hintTimerRef.current = setTimeout(() => setShowLnaHint(true), LNA_HINT_DELAY_MS)
+    }
     const known = settingsStore.load().storage.knownDaemonBaseUrls ?? []
     // The server side binds dynamically (findAvailablePort from 3099; dev
     // worktrees use derived ports), so a single fixed-port ping misses
@@ -185,10 +192,7 @@ export function DaemonDetectedBanner({
       signal: controller.signal,
     }).then(({ found: nextFound, failures }) => {
       if (controller.signal.aborted) return
-      if (hintTimerRef.current !== null) {
-        clearTimeout(hintTimerRef.current)
-        hintTimerRef.current = null
-      }
+      clearHintTimer()
       setChecking(false)
       setShowLnaHint(false)
       setFound(nextFound)
@@ -221,7 +225,7 @@ export function DaemonDetectedBanner({
     if (locationProtocol === 'http:') runProbe()
     return () => {
       abortRef.current?.abort()
-      if (hintTimerRef.current !== null) clearTimeout(hintTimerRef.current)
+      clearHintTimer()
     }
     // Auto-probe once on mount for the http: (loopback) path only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -311,12 +315,12 @@ export function DaemonDetectedBanner({
         </button>
       )}
       {showManualAffordance && checking && (
-        <span role="status" className="text-xs text-muted-foreground">
-          Checking…
-        </span>
-      )}
-      {showManualAffordance && checking && showLnaHint && (
-        <span className="text-xs text-muted-foreground">{LNA_HINT_TEXT}</span>
+        <>
+          <span role="status" className="text-xs text-muted-foreground">
+            Checking…
+          </span>
+          {showLnaHint && <span className="text-xs text-muted-foreground">{LNA_HINT_TEXT}</span>}
+        </>
       )}
       {showManualAffordance && manualCheckFailed && (
         // A CORS rejection (daemon running but this origin not in its
