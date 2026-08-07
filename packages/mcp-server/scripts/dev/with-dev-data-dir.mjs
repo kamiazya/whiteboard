@@ -8,6 +8,7 @@ import {
   injectDerivedPortArg,
   removeDevDaemonMarker,
   reraiseSignalOrExit,
+  resolveDevAllowedWebOriginsEnv,
   resolveDevDataDirEnv,
   resolveEffectivePort,
   resolveRepoRootFromGit,
@@ -22,7 +23,7 @@ import {
 const repoRoot = resolveRepoRootFromGit(process.cwd())
 const packageRoot = resolve(repoRoot, 'packages/mcp-server')
 const hadExplicitDataDirOverride = Boolean(process.env.WHITEBOARD_DATA_DIR)
-const env = resolveDevDataDirEnv(process.env, repoRoot)
+const env = resolveDevAllowedWebOriginsEnv(resolveDevDataDirEnv(process.env, repoRoot))
 
 // resolveDataDir() (shared/data-dir-secure.ts) only hardens permissions on
 // its own home-directory default; an explicit WHITEBOARD_DATA_DIR — which is
