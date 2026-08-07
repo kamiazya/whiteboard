@@ -754,5 +754,38 @@ describe('DaemonDetectedBanner', () => {
 
       expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
     })
+
+    it('clears the stale failure notice once a retry sweep starts', async () => {
+      const { promise: firstProbe, resolve: resolveFirst } = deferred<DaemonProbeResult>()
+      const probeFn = vi.fn().mockReturnValueOnce(firstProbe)
+      render(
+        <DaemonDetectedBanner
+          settingsStore={makeStore()}
+          fetch={vi.fn()}
+          locationProtocol="https:"
+          probeFn={probeFn}
+        />,
+      )
+
+      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      act(() => {
+        fireEvent.click(button)
+      })
+      await act(async () => {
+        resolveFirst({ detected: false, reason: 'network' })
+        await vi.advanceTimersByTimeAsync(0)
+      })
+      expect(screen.getByTestId('daemon-check-failed-notice')).not.toBeNull()
+
+      // Retry: leave the second sweep in flight so we can see whether the
+      // stale failure notice from the first sweep is still rendered.
+      probeFn.mockReturnValueOnce(new Promise<DaemonProbeResult>(() => {}))
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: /check for local daemon/i }))
+      })
+
+      expect(screen.getByRole('status').textContent).toMatch(/checking/i)
+      expect(screen.queryByTestId('daemon-check-failed-notice')).toBeNull()
+    })
   })
 })

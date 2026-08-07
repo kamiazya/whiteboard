@@ -167,6 +167,7 @@ export function DaemonDetectedBanner({
     abortRef.current = controller
     setChecking(true)
     setShowLnaHint(false)
+    setManualCheckFailed(false)
     clearHintTimer()
     // Only an https: origin can hit the Local Network Access prompt; a
     // loopback origin reaches the daemon same-origin with no permission gate.
