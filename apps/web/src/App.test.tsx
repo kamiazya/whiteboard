@@ -107,6 +107,35 @@ const INVALID_CONFIG_STATE: ProviderState = {
   message: 'Runtime configuration is invalid.',
 }
 
+describe('/pair consent route', () => {
+  it('renders the consent page and does NOT rewrite the URL away from /pair', async () => {
+    // Regression: the daemonView -> URL sync effect ran on mount, saw
+    // parseDaemonRoute('/pair') === null (so daemonView defaulted to the
+    // index), and navigated to '/' — dropping the origin/challenge/state
+    // query and dumping the user on the daemon gallery instead of the
+    // consent page. Observed live on the daemon origin, 2026-08-07.
+    const router = createMemoryRouter(
+      [
+        {
+          path: '*',
+          element: <App providerState={LOCAL_DAEMON_STATE} />,
+        },
+      ],
+      {
+        initialEntries: ['/pair?origin=https%3A%2F%2Fexample.com&challenge=chal&state=st'],
+      },
+    )
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+    })
+
+    expect(router.state.location.pathname).toBe('/pair')
+    expect(router.state.location.search).toContain('challenge=chal')
+    await screen.findByText(/allow this web app to use your local daemon/i)
+    expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
+  })
+})
+
 describe('App backend configuration chip', () => {
   it('shows "Browser only" when configured for browser-local storage', () => {
     render(

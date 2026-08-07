@@ -359,6 +359,7 @@ describe('DaemonDetectedBanner', () => {
   })
 
   it('shows a picker listing every daemon when several respond', async () => {
+    const beginGrantFn = vi.fn(async (_input: { daemonBaseUrl: string }) => {})
     const probeFn = vi.fn(async (baseUrl: string) => {
       if (baseUrl === 'http://127.0.0.1:3099')
         return { detected: true, instanceId: 'main' } as const
@@ -372,17 +373,29 @@ describe('DaemonDetectedBanner', () => {
         fetch={vi.fn()}
         locationProtocol="https:"
         probeFn={probeFn}
+        beginGrantFn={beginGrantFn}
       />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
 
     await screen.findByText(/2 servers responded on local ports/i)
+    // Each responder offers pairing IN PLACE (the hosted-app-first model);
+    // leaving for the daemon's own origin stays available as a secondary
+    // link, but must not be the only affordance.
+    const useHere = screen.getAllByRole('button', { name: /use here/i })
+    expect(useHere).toHaveLength(2)
     const links = screen.getAllByRole('link', { name: /open/i })
     expect(links.map((l) => l.getAttribute('href'))).toEqual([
       'http://127.0.0.1:3099',
       'http://127.0.0.1:3102',
     ])
+
+    fireEvent.click(useHere[1] as HTMLElement)
+    await waitFor(() => expect(beginGrantFn).toHaveBeenCalledTimes(1))
+    expect(beginGrantFn.mock.calls[0]?.[0]).toMatchObject({
+      daemonBaseUrl: 'http://127.0.0.1:3102',
+    })
   })
 
   it('an unpaired swept responder is labelled UNVERIFIED, not "a whiteboard daemon is running"', async () => {

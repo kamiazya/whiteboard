@@ -311,13 +311,24 @@ export function DaemonDetectedBanner({
         >
           <span>{found.length} servers responded on local ports (unverified).</span>
           {found.map((daemon) => (
-            <a
-              key={daemon.instanceId}
-              href={daemon.baseUrl}
-              className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent"
-            >
-              Open {daemon.baseUrl.replace(/^https?:\/\//, '')}
-            </a>
+            // Pair IN PLACE first: leaving for the daemon's own origin is
+            // the fallback, not the only way through (hosted-app-first).
+            <span key={daemon.instanceId} className="flex items-center gap-1">
+              <span className="font-mono">{daemon.baseUrl.replace(/^https?:\/\//, '')}</span>
+              <button
+                type="button"
+                onClick={() => void beginGrantFn({ daemonBaseUrl: daemon.baseUrl })}
+                className="rounded-md border px-2 py-0.5 font-medium transition-colors hover:bg-accent"
+              >
+                Use here
+              </button>
+              <a
+                href={daemon.baseUrl}
+                className="rounded-md border px-2 py-0.5 font-medium transition-colors hover:bg-accent"
+              >
+                Open
+              </a>
+            </span>
           ))}
           <button
             type="button"
