@@ -46,7 +46,13 @@ import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { editorTextFill } from './editor-appearance.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
-import { findFreeSpot, hitTest, indexNodeBoxes, resizeBoxByDelta } from './geometry.js'
+import {
+  distanceToPolyline,
+  findFreeSpot,
+  hitTest,
+  indexNodeBoxes,
+  resizeBoxByDelta,
+} from './geometry.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
@@ -274,10 +280,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canvas, externalVersion])
 
-    const { svg, bounds } = useMemo(
+    const { svg, bounds, scene } = useMemo(
       () => renderCanvasToSvg(canvas, { measure: resolvedMeasure, theme }),
       [canvas, resolvedMeasure, theme],
     )
+    // Routed edge paths in canvas coordinates, for edge hit-testing and the
+    // selection highlight. Edges have no area, so selection is a
+    // distance-to-polyline test against a zoom-adjusted tolerance.
+    const edgePaths = useMemo(
+      () =>
+        scene.nodes.flatMap((node) =>
+          node.kind === 'edge' ? [{ id: node.id, path: node.path }] : [],
+        ),
+      [scene],
+    )
+    const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
     /**
@@ -461,6 +478,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // re-renders because it compares node ids, not DOM identity.
       // Shift-click builds a multi-selection instead of starting a gesture.
       if (e.shiftKey && hitId !== undefined) {
+        // Node and edge selection are mutually exclusive: Delete processes a
+        // selected edge FIRST, so an edge left selected here would be what a
+        // Delete on the node multi-selection actually removes.
+        setSelectedEdgeId(null)
         if (selectedId === null) {
           setSelectedId(hitId)
         } else if (hitId === selectedId) {
@@ -488,6 +509,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (hitId === undefined) {
         setMarquee({ start: point, current: point })
         setExtraIds(new Set())
+        const EDGE_HIT_TOLERANCE_PX = 6
+        const hitEdge = edgePaths.find(
+          (edge) => distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
+        )
+        if (hitEdge !== undefined) {
+          setSelectedEdgeId(hitEdge.id)
+          applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
+          return
+        }
+        setSelectedEdgeId(null)
         applyResult(reduceGesture(gestureState, canvas, { type: 'pointerdown-empty' }))
         return
       }
@@ -496,6 +527,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (hitId !== undefined && hitId !== selectedId && !extraIds.has(hitId)) {
         setExtraIds(new Set())
       }
+      setSelectedEdgeId(null)
       // Connect tool: the FIRST node press arms the connect (the same
       // reducer arm the keyboard/handle flows use). While 'connecting', a
       // node press is swallowed — the connect completes on the POINTERUP
@@ -573,6 +605,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           // the press; a DOUBLE one creates a node here (resolved at the
           // release, consistent with the node-edit double-press rule).
           if (armed !== null && armed.key === 'empty') createNodeAt(armed.point)
+          // An edge selected at this press has no focusable element of its
+          // own (node shapes carry tabIndex; edge polylines do not), so
+          // without an explicit focus the real keyboard's Delete/Escape
+          // would land on <body> and never reach this root's onKeyDown.
+          // Focus here at the RELEASE: the browser's default mousedown
+          // focus handling runs after the pointerdown listener and undoes
+          // a focus taken there.
+          if (selectedEdgeId !== null) root?.focus()
           return
         }
         const rect = {
@@ -593,6 +633,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         const [primary, ...rest] = hitIds
         setSelectedId(primary ?? null)
         setExtraIds(new Set(rest))
+        // A drag that began on an edge line was a marquee, not an edge click
+        // — drop the press-time edge selection so Delete acts on the nodes.
+        setSelectedEdgeId(null)
         return
       }
       if (isPanningRef.current) {
@@ -658,6 +701,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
       // Keyboard equivalent of pointercancel: discards an in-flight
       // resize/move/connect gesture without committing it.
+      if (e.key === 'Escape' && selectedEdgeId !== null) {
+        e.preventDefault()
+        setSelectedEdgeId(null)
+        return
+      }
+      if (
+        (e.key === 'Delete' || e.key === 'Backspace') &&
+        selectedEdgeId !== null &&
+        gestureState.kind !== 'editing-text'
+      ) {
+        const target = e.target as HTMLElement | null
+        const tag = target?.tagName
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !target?.isContentEditable) {
+          e.preventDefault()
+          applyResult({
+            state: { kind: 'idle' },
+            commands: [{ kind: 'delete-edge', id: selectedEdgeId } as const],
+          })
+          setSelectedEdgeId(null)
+          return
+        }
+      }
       if (e.key === 'Escape' && gestureState.kind !== 'idle') {
         e.preventDefault()
         applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
@@ -876,12 +941,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // this slice's scope.
         role="application"
         aria-label="Spatial canvas editor"
+        // Click-focusable (not tab-reachable): edge selection focuses this
+        // root programmatically so real keyboard events reach onKeyDown.
+        tabIndex={-1}
         style={{
           position: 'relative',
           width: '100%',
           height: '100%',
           overflow: 'hidden',
           touchAction: 'none',
+          outline: 'none',
         }}
         onPointerDown={handlePointerDown}
         onContextMenu={handleContextMenu}
@@ -1090,6 +1159,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               contentSvg={dragContentSvg}
             />
           )}
+          {selectedEdgeId !== null &&
+            (() => {
+              const selected = edgePaths.find((edge) => edge.id === selectedEdgeId)
+              if (selected === undefined || selected.path.length < 2) return null
+              return (
+                <svg
+                  style={{
+                    position: 'absolute',
+                    overflow: 'visible',
+                    left: 0,
+                    top: 0,
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <title>Selected connection</title>
+                  <polyline
+                    data-testid="edge-selection-highlight"
+                    points={selected.path.map((p) => `${p.x},${p.y}`).join(' ')}
+                    fill="none"
+                    stroke="#2563eb"
+                    strokeWidth={3}
+                    strokeLinecap="round"
+                  />
+                </svg>
+              )
+            })()}
           {gestureState.kind === 'connecting' && (
             <svg
               style={{
