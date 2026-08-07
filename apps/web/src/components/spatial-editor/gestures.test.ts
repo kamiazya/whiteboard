@@ -319,7 +319,11 @@ describe('connect gesture', () => {
     expect(result.state.kind).toBe('idle')
   })
 
-  it('dropping a connect drag back onto its own source node is a no-op (self-connection guard)', () => {
+  it('releasing over the source node creates no edge and KEEPS the connect armed (click-A-click-B)', () => {
+    // Self-connection stays guarded (no command), but the state survives:
+    // the object-first Connect tool's first click presses AND releases on
+    // the source node, so an idle reset here would make click-click
+    // connecting impossible. Cancel is releasing over empty space.
     const c = canvas()
     let result = reduceGesture(createIdleState(), c, {
       type: 'pointerdown-connect',
@@ -331,7 +335,7 @@ describe('connect gesture', () => {
       targetNodeId: 'a',
     })
     expect(result.commands).toEqual([])
-    expect(result.state.kind).toBe('idle')
+    expect(result.state.kind).toBe('connecting')
   })
 })
 
