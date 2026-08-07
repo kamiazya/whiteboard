@@ -28,9 +28,9 @@
 //   WHITEBOARD_PROXY_SKIP_ENSURE=1  do not spawn the ensure hook (tests)
 //   WHITEBOARD_PROXY_RETRY_TIMEOUT_MS  per-request retry budget (default 30000)
 import { spawn } from 'node:child_process'
+import { dirname, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 import { resolveRepoRootFromGit } from './with-dev-data-dir-lib.mjs'
 
