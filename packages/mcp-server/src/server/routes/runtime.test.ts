@@ -1,3 +1,7 @@
+import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
@@ -38,6 +42,21 @@ vi.mock('../../daemon/log-rotation.js', () => ({
 }))
 
 const { createRuntimeRouter } = await import('./runtime.js')
+const { buildSignedPayload, createDaemonIdentity } = await import('../security/daemon-identity.js')
+
+// Real identity in an isolated temp dir (injected — the router never touches
+// the mocked config seam for it).
+const identityDir = mkdtempSync(join(tmpdir(), 'wb-runtime-identity-'))
+const testIdentity = createDaemonIdentity({ dataDir: identityDir })
+process.once('exit', () => rmSync(identityDir, { recursive: true, force: true }))
+
+function verifyIdentitySignature(parts: readonly string[], signatureB64u: string) {
+  const key = createPublicKey({
+    key: { kty: 'OKP', crv: 'Ed25519', x: testIdentity.publicKey },
+    format: 'jwk',
+  })
+  return cryptoVerify(null, buildSignedPayload(parts), key, Buffer.from(signatureB64u, 'base64url'))
+}
 
 function createApp() {
   const touch = vi.fn()
@@ -45,6 +64,7 @@ function createApp() {
   const app = createRuntimeRouter({
     token: 'secret',
     instanceId: 'test-instance-id',
+    identity: testIdentity,
     touch,
     shutdown,
     getStatus: () => ({
@@ -76,7 +96,11 @@ describe('runtime routes', () => {
     const { app } = createApp()
     const res = await app.request('/api/runtime/ping')
     expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toEqual({ ok: true, instanceId: 'test-instance-id' })
+    await expect(res.json()).resolves.toEqual({
+      ok: true,
+      instanceId: 'test-instance-id',
+      identity: { alg: 'Ed25519', publicKey: testIdentity.publicKey },
+    })
   })
 
   it('rejects status without a bearer token', async () => {
@@ -182,5 +206,78 @@ describe('runtime routes', () => {
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toMatchObject({ removed: 2, retained: 5 })
     expect(mockPurgeOldDaemonLogs).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('daemon identity surfaces', () => {
+  const NONCE = Buffer.from('0123456789abcdef').toString('base64url')
+
+  it('ping advertises the identity public key', async () => {
+    const { app } = createApp()
+    const res = await app.request('/api/runtime/ping')
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { identity?: { alg: string; publicKey: string } }
+    expect(body.identity).toEqual({ alg: 'Ed25519', publicKey: testIdentity.publicKey })
+  })
+
+  it('verify answers an unauthenticated challenge with a signature binding nonce + origin', async () => {
+    const { app } = createApp()
+    const res = await app.request('/api/runtime/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://caller.example' },
+      body: JSON.stringify({ nonce: NONCE }),
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { alg: string; publicKey: string; signature: string }
+    expect(body.publicKey).toBe(testIdentity.publicKey)
+    expect(
+      verifyIdentitySignature(['wb-verify-v1', NONCE, 'https://caller.example'], body.signature),
+    ).toBe(true)
+    // A different origin's challenge must not verify with this signature.
+    expect(
+      verifyIdentitySignature(['wb-verify-v1', NONCE, 'https://other.example'], body.signature),
+    ).toBe(false)
+  })
+
+  it('verify binds an ABSENT Origin header as the empty string', async () => {
+    const { app } = createApp()
+    const res = await app.request('/api/runtime/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nonce: NONCE }),
+    })
+    const body = (await res.json()) as { signature: string }
+    expect(verifyIdentitySignature(['wb-verify-v1', NONCE, ''], body.signature)).toBe(true)
+  })
+
+  it('verify rejects a malformed nonce', async () => {
+    const { app } = createApp()
+    for (const nonce of [
+      '',
+      'short',
+      '!!!not-base64url!!!',
+      Buffer.alloc(64).toString('base64url'),
+    ]) {
+      const res = await app.request('/api/runtime/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nonce }),
+      })
+      expect(res.status).toBe(400)
+    }
+  })
+
+  it('verify rate-limits a tight loop with 429', async () => {
+    const { app } = createApp()
+    let limited = 0
+    for (let i = 0; i < 70; i += 1) {
+      const res = await app.request('/api/runtime/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nonce: NONCE }),
+      })
+      if (res.status === 429) limited += 1
+    }
+    expect(limited).toBeGreaterThan(0)
   })
 })

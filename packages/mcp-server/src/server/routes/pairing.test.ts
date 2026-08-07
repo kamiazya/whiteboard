@@ -1,7 +1,9 @@
+import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { buildSignedPayload, createDaemonIdentity } from '../security/daemon-identity.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import {
   computeS256Challenge,
@@ -19,7 +21,8 @@ function makeApp() {
   const grants = createPairingGrantStore(dir)
   const codes = createPairingCodeStore()
   const tokens = createPairingTokenStore()
-  return { app: createPairingRouter({ grants, codes, tokens }), grants, tokens }
+  const identity = createDaemonIdentity({ dataDir: dir })
+  return { app: createPairingRouter({ grants, codes, tokens, identity }), grants, tokens, identity }
 }
 
 afterEach(() => {
@@ -139,5 +142,102 @@ describe('pairing routes', () => {
       codeChallenge: 'x',
     })
     expect(res.status).toBe(400)
+  })
+})
+
+describe('pairing token identity signatures', () => {
+  const NONCE = Buffer.from('fedcba9876543210').toString('base64url')
+
+  function verifies(
+    identity: { publicKey: string },
+    parts: readonly string[],
+    signatureB64u: string,
+  ) {
+    const key = createPublicKey({
+      key: { kty: 'OKP', crv: 'Ed25519', x: identity.publicKey },
+      format: 'jwk',
+    })
+    return cryptoVerify(
+      null,
+      buildSignedPayload(parts),
+      key,
+      Buffer.from(signatureB64u, 'base64url'),
+    )
+  }
+
+  it('a renewal carrying a nonce gets a signature vouching for the minted token', async () => {
+    const { app, grants, identity } = makeApp()
+    grants.addGrant(HOSTED)
+
+    const res = await post(
+      app,
+      '/api/pairing/token',
+      { grantType: 'origin', nonce: NONCE },
+      { Origin: HOSTED },
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      token: string
+      expiresAt: string
+      origin: string
+      identity?: { alg: string; publicKey: string; signature: string }
+    }
+    expect(body.identity?.publicKey).toBe(identity.publicKey)
+    const tokenHash = createHash('sha256').update(body.token, 'utf8').digest('base64url')
+    expect(
+      verifies(
+        identity,
+        ['wb-token-v1', NONCE, body.origin, tokenHash, body.expiresAt],
+        body.identity?.signature ?? '',
+      ),
+    ).toBe(true)
+    // The signature must NOT verify for a different token (splice attempt).
+    const otherHash = createHash('sha256').update('forged-token', 'utf8').digest('base64url')
+    expect(
+      verifies(
+        identity,
+        ['wb-token-v1', NONCE, body.origin, otherHash, body.expiresAt],
+        body.identity?.signature ?? '',
+      ),
+    ).toBe(false)
+  })
+
+  it('a request without a nonce gets no identity field (wire-compat)', async () => {
+    const { app, grants } = makeApp()
+    grants.addGrant(HOSTED)
+    const res = await post(app, '/api/pairing/token', { grantType: 'origin' }, { Origin: HOSTED })
+    const body = (await res.json()) as { identity?: unknown }
+    expect(res.status).toBe(200)
+    expect(body.identity).toBeUndefined()
+  })
+
+  it('the code-exchange leg also signs when a nonce is present', async () => {
+    const { app, identity } = makeApp()
+    const codeVerifier = 'exchange-verifier'
+    const codeChallenge = await computeS256Challenge(codeVerifier)
+    const grantRes = await post(app, '/api/pairing/grants', { origin: HOSTED, codeChallenge })
+    const { code } = (await grantRes.json()) as { code: string }
+
+    const res = await post(app, '/api/pairing/token', {
+      grantType: 'code',
+      code,
+      codeVerifier,
+      nonce: NONCE,
+    })
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as {
+      token: string
+      expiresAt: string
+      origin: string
+      identity?: { signature: string }
+    }
+    const tokenHash = createHash('sha256').update(body.token, 'utf8').digest('base64url')
+    expect(
+      verifies(
+        identity,
+        ['wb-token-v1', NONCE, body.origin, tokenHash, body.expiresAt],
+        body.identity?.signature ?? '',
+      ),
+    ).toBe(true)
   })
 })

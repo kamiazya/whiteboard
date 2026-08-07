@@ -25,8 +25,10 @@
 //   CSRF shape: the endpoint mints a token only FOR the requesting origin;
 //   it never mutates daemon data and never widens any other origin's
 //   access, so a forged cross-site POST yields the attacker nothing.
+import { createHash } from 'node:crypto'
 import { Hono } from 'hono'
 import { z } from 'zod'
+import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from '../security/pairing-session.js'
 
@@ -55,15 +57,27 @@ const listGrantsResponseSchema = z
   .strict()
 type ListGrantsResponse = z.infer<typeof listGrantsResponseSchema>
 
+// A caller-random challenge nonce (base64url, 16-32 decoded bytes). When
+// present, the response carries an identity signature binding this nonce —
+// see the identity note on tokenResponseSchema.
+const tokenNonceSchema = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]+$/, 'nonce must be base64url')
+  .refine((value) => {
+    const bytes = Buffer.from(value, 'base64url')
+    return bytes.length >= 16 && bytes.length <= 32
+  }, 'nonce must decode to 16-32 bytes')
+
 const tokenRequestSchema = z.discriminatedUnion('grantType', [
   z
     .object({
       grantType: z.literal('code'),
       code: z.string().min(1),
       codeVerifier: z.string().min(1),
+      nonce: tokenNonceSchema.optional(),
     })
     .strict(),
-  z.object({ grantType: z.literal('origin') }).strict(),
+  z.object({ grantType: z.literal('origin'), nonce: tokenNonceSchema.optional() }).strict(),
 ])
 
 const tokenResponseSchema = z
@@ -71,17 +85,46 @@ const tokenResponseSchema = z
     token: z.string(),
     expiresAt: z.string(),
     origin: z.string(),
+    // Present iff the request carried a nonce: the daemon's identity plus a
+    // signature over ["wb-token-v1", nonce, origin, sha256(token), expiresAt].
+    // Binding sha256(token) makes the signature vouch for the very credential
+    // being handed over — a squatter cannot splice a real daemon's signature
+    // onto its own fake token. Verified browser-side against the key pinned
+    // at /pair consent.
+    identity: z
+      .object({
+        alg: z.literal('Ed25519'),
+        publicKey: z.string(),
+        signature: z.string(),
+      })
+      .strict()
+      .optional(),
   })
   .strict()
 type TokenResponse = z.infer<typeof tokenResponseSchema>
+
+function signTokenResponse(
+  identity: DaemonIdentity,
+  nonce: string,
+  minted: { token: string; expiresAt: string },
+  origin: string,
+): NonNullable<TokenResponse['identity']> {
+  const tokenHash = createHash('sha256').update(minted.token, 'utf8').digest('base64url')
+  return {
+    alg: identity.alg,
+    publicKey: identity.publicKey,
+    signature: identity.sign(['wb-token-v1', nonce, origin, tokenHash, minted.expiresAt]),
+  }
+}
 
 export interface PairingRouterOptions {
   grants: PairingGrantStore
   codes: PairingCodeStore
   tokens: PairingTokenStore
+  identity: DaemonIdentity
 }
 
-export function createPairingRouter({ grants, codes, tokens }: PairingRouterOptions) {
+export function createPairingRouter({ grants, codes, tokens, identity }: PairingRouterOptions) {
   const app = new Hono()
 
   app.post('/api/pairing/grants', async (c) => {
@@ -144,7 +187,13 @@ export function createPairingRouter({ grants, codes, tokens }: PairingRouterOpti
         return c.json({ error: 'invalid or expired code' }, 403)
       }
       const minted = tokens.mint(redeemed.origin)
-      const response: TokenResponse = { ...minted, origin: redeemed.origin }
+      const response: TokenResponse = {
+        ...minted,
+        origin: redeemed.origin,
+        ...(parsed.data.nonce !== undefined
+          ? { identity: signTokenResponse(identity, parsed.data.nonce, minted, redeemed.origin) }
+          : {}),
+      }
       return c.json(response, 200)
     }
 
@@ -163,7 +212,13 @@ export function createPairingRouter({ grants, codes, tokens }: PairingRouterOpti
       return c.json({ error: 'origin has no pairing grant' }, 403)
     }
     const minted = tokens.mint(origin)
-    const response: TokenResponse = { ...minted, origin }
+    const response: TokenResponse = {
+      ...minted,
+      origin,
+      ...(parsed.data.nonce !== undefined
+        ? { identity: signTokenResponse(identity, parsed.data.nonce, minted, origin) }
+        : {}),
+    }
     return c.json(response, 200)
   })
 

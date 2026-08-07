@@ -22,7 +22,7 @@ import {
   toInlineScriptJson,
 } from './app-helpers.js'
 import type { AppOptions } from './app-types.js'
-import { DIST_WEB_APP_DIR } from './config.js'
+import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/index.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
@@ -45,6 +45,7 @@ import { broadcastLoroUpdate, sendHeadChanged, setResolveViewportFn } from './ro
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
+import { createDaemonIdentity } from './security/daemon-identity.js'
 import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
@@ -99,6 +100,9 @@ export function createApp(options: AppOptions) {
   const app = new Hono()
 
   const instanceId = options.instanceId ?? randomUUID()
+  // The signing identity behind /api/runtime/ping's `identity`,
+  // /api/runtime/verify, and pairing-token response signatures.
+  const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
   const token = options.authMode === 'local-daemon' ? options.token : undefined
   const mcpAuth =
     options.authMode === 'local-daemon'
@@ -337,7 +341,7 @@ export function createApp(options: AppOptions) {
   if (options.authMode === 'local-daemon' && options.pairing !== undefined) {
     // Pairing-grant routes are local-daemon only by design (the consent
     // model assumes the daemon's own served UI and loopback reachability).
-    app.route('/', createPairingRouter(options.pairing))
+    app.route('/', createPairingRouter({ ...options.pairing, identity }))
   }
 
   // server-core's OpenCanvas /api/v1 surface (workspace tree, canvasId +
@@ -395,6 +399,7 @@ export function createApp(options: AppOptions) {
       token,
       mcpAuth: mcpAuth ?? undefined,
       instanceId,
+      identity,
       touch: options.touch,
       getStatus: options.authMode === 'server-mode' ? serverModeGetStatus! : options.getStatus,
       shutdown: options.shutdown,
