@@ -147,6 +147,42 @@ describe('setupSwRegistration', () => {
     }
   })
 
+  it('does not leave an unhandled rejection when the update-scheduler dynamic import fails', async () => {
+    Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
+    const registerSW = vi.fn()
+    const importRegister = vi.fn().mockResolvedValue({ registerSW })
+    const unhandledRejections: unknown[] = []
+    const onUnhandledRejection = (event: PromiseRejectionEvent): void => {
+      unhandledRejections.push(event.reason)
+    }
+    window.addEventListener('unhandledrejection', onUnhandledRejection)
+
+    try {
+      setupSwRegistration({ isProd: true, hasServiceWorker: true, importRegister })
+      await Promise.resolve()
+      await Promise.resolve()
+
+      const { onRegisteredSW } = registerSW.mock.calls[0][0]
+      const fakeRegistration = {
+        update: vi.fn().mockResolvedValue(undefined),
+      } as unknown as ServiceWorkerRegistration
+
+      vi.doMock('./sw-update-scheduler.js', () => {
+        throw new Error('chunk load failed')
+      })
+
+      expect(() => onRegisteredSW('/sw.js', fakeRegistration)).not.toThrow()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(unhandledRejections).toEqual([])
+    } finally {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection)
+      vi.doUnmock('./sw-update-scheduler.js')
+    }
+  })
+
   it('does not throw and schedules nothing when onRegisteredSW is invoked with no registration', async () => {
     Object.defineProperty(navigator, 'serviceWorker', { value: {}, configurable: true })
     const registerSW = vi.fn()

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   type SchedulerDocument,
-  startSwUpdateScheduler,
   SW_UPDATE_CHECK_INTERVAL_MS,
+  startSwUpdateScheduler,
 } from './sw-update-scheduler.js'
 
 function createFakeDoc(): {
