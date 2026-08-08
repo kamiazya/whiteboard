@@ -88,7 +88,7 @@ describe('createApp /api/v1 OpenCanvas mount', () => {
     const createRes = await app.request('/api/v1/workspaces/default/canvases', {
       method: 'POST',
       headers: { Authorization: 'Bearer secret', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ segment: 'notes' }),
+      body: JSON.stringify({ segment: 'notes', createWorkspace: true }),
     })
     expect(createRes.status).toBe(201)
 

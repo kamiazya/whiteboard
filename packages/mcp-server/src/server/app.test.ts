@@ -447,7 +447,7 @@ describe('createApp daemon mutation auth', () => {
     const canvasCreateTool = tools.tools.find((tool) => tool.name === 'wb_canvas_create')
     const createResult = await client.callTool({
       name: 'wb_canvas_create',
-      arguments: { workspaceId: 'default', segment: 'via-mcp' },
+      arguments: { workspaceId: 'default', segment: 'via-mcp', createWorkspace: true },
     })
 
     expect(canvasCreateTool).toBeDefined()
@@ -491,7 +491,7 @@ describe('createApp daemon mutation auth', () => {
     expect(tools.tools.some((tool) => tool.name === 'wb_canvas_create')).toBe(true)
     const createResult = await client.callTool({
       name: 'wb_canvas_create',
-      arguments: { workspaceId: 'default', segment: 'via-modern-mcp' },
+      arguments: { workspaceId: 'default', segment: 'via-modern-mcp', createWorkspace: true },
     })
     expect(createResult.structuredContent).toMatchObject({
       canvasId: expect.any(String),
