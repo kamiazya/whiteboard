@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { McpServer } from '@modelcontextprotocol/server'
+import { serveStdio } from '@modelcontextprotocol/server/stdio'
 import { z } from 'zod'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createStoreLocalModule } from '../../di/store-local.module.js'
@@ -78,7 +78,7 @@ export async function createMcpServer() {
     {
       title: 'Draw Diagram',
       description: 'Generate a starter prompt for drawing a new diagram with the whiteboard tools.',
-      argsSchema: {
+      argsSchema: z.object({
         goal: z.string().describe('What the diagram should explain or align on.'),
         diagramType: z
           .string()
@@ -86,7 +86,7 @@ export async function createMcpServer() {
           .describe(
             'Optional diagram type hint such as architecture, sequence, review, or comparison.',
           ),
-      },
+      }),
     },
     async ({ goal, diagramType }) => ({
       description: 'Starter instructions for creating a new whiteboard diagram.',
@@ -160,11 +160,18 @@ export async function main() {
   // hook here to keep schema and v0 import bootstrapping symmetric.
   const { prepareDataDir } = await import('../store/db/prepare.js')
   await prepareDataDir(getDataDir())
-  const server = await createMcpServer()
-  const transport = new StdioServerTransport()
-  await server.connect(transport)
+  // serveStdio owns the era decision for the connection: a 2025-era opening
+  // (`initialize`) is served exactly as the old hand-wired transport served
+  // it, and a 2026-07-28 opening pins a modern instance from the same
+  // factory. A direct `server.connect(new StdioServerTransport())` would
+  // speak only the 2025-era protocol.
+  const handle = serveStdio(() => createMcpServer(), {
+    onerror: (error) => {
+      process.stderr.write(`MCP stdio error: ${error}\n`)
+    },
+  })
 
-  closeServer = () => server.close()
+  closeServer = () => handle.close()
 }
 
 const isEntryPoint = isDirectEntryPoint(import.meta.url)

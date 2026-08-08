@@ -50,7 +50,7 @@ vi.mock('../../di/container.js', () => ({
     blobStore: {},
   })),
 }))
-vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
+vi.mock('@modelcontextprotocol/server', () => ({
   McpServer: vi.fn(function FakeMcpServer(this: Record<string, unknown>) {
     this.server = { registerCapabilities: vi.fn() }
     this.registerResource = vi.fn()
@@ -59,8 +59,8 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
     this.close = vi.fn(async () => undefined)
   }),
 }))
-vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
-  StdioServerTransport: vi.fn(function FakeStdioServerTransport() {}),
+vi.mock('@modelcontextprotocol/server/stdio', () => ({
+  serveStdio: vi.fn(() => ({ close: vi.fn(async () => undefined) })),
 }))
 
 describe('main()', () => {
@@ -76,5 +76,19 @@ describe('main()', () => {
     expect(installCallOrder).toBeDefined()
     expect(tracingCallOrder).toBeDefined()
     expect(installCallOrder).toBeLessThan(tracingCallOrder as number)
+  })
+
+  it('serves stdio through serveStdio with a per-connection factory', async () => {
+    const { main } = await import('./index.js')
+    const { serveStdio } = await import('@modelcontextprotocol/server/stdio')
+
+    await main()
+
+    // serveStdio owns the connection's era decision; main() must hand it a
+    // FACTORY (not a pre-built server), so each opening exchange can pin a
+    // fresh instance for its era.
+    expect(serveStdio).toHaveBeenCalled()
+    const [factory] = vi.mocked(serveStdio).mock.calls.at(-1) ?? []
+    expect(typeof factory).toBe('function')
   })
 })

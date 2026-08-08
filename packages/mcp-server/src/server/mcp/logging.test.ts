@@ -1,4 +1,4 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import { McpServer } from '@modelcontextprotocol/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { type CapturedLogsHandle, captureLogsForTests, getLogger } from '../log.js'
 import { wireMcpLogging } from './logging.js'

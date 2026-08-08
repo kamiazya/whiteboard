@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'

@@ -1,3 +1,5 @@
+import type { McpServer } from '@modelcontextprotocol/server'
+
 // Bridge our internal logger to the MCP `notifications/message` channel
 // described in https://modelcontextprotocol.io/specification/2025-11-25/server/utilities/logging.
 //
@@ -11,8 +13,6 @@
 // The SDK applies its own per-session level filter on top of the project
 // logger's threshold, so `logging/setLevel` from a client only changes
 // what reaches that client.
-
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { addLogDestination, lineToLogRecord } from '../log.js'
 
 export interface WireMcpLoggingHandle {

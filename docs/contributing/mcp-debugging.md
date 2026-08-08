@@ -11,20 +11,24 @@ References:
 
 ## Protocol Support
 
-This repo currently relies on the installed `@modelcontextprotocol/sdk` negotiation behavior rather than overriding protocol negotiation inside the app.
+This repo runs the MCP TypeScript SDK **v2 packages** (`@modelcontextprotocol/server` / `client`) and serves **both protocol eras** on every transport:
 
-- If the client asks for a supported protocol version, the server echoes that version in `initialize`.
-- If the client asks for an unsupported version, the server falls back to the SDK latest protocol version.
+- **2026-07-28 (modern)**: each request is self-contained (no `initialize` handshake, no `Mcp-Session-Id`; `_meta` carries `protocolVersion`/`clientCapabilities`). On HTTP `/mcp` this is served by `createMcpHandler` (per-request factory, `legacy: 'reject'`); the route classifies eras with `isLegacyRequest` — the exact predicate the handler itself uses. On stdio, `serveStdio` pins the connection's era at the opening exchange.
+- **2025-era (legacy)**: served by the pre-existing hand-wired stateless path (fresh per-request `WebStandardStreamableHTTPServerTransport` with `enableJsonResponse: true`) so legacy clients' response framing (plain JSON bodies) is byte-compatible with what the stdio proxy and the web app expect. Legacy `initialize` negotiation is unchanged:
+  - a supported protocol version is echoed back;
+  - an unsupported version falls back to the SDK latest legacy version.
 
-Current SDK-supported versions in this repo:
+Legacy versions accepted by the SDK's `initialize` negotiation:
 
-- `2025-11-25` (SDK latest fallback)
+- `2025-11-25` (SDK latest legacy fallback)
 - `2025-06-18`
 - `2025-03-26`
 - `2024-11-05`
 - `2024-10-07`
 
-When upgrading `@modelcontextprotocol/sdk`, re-check this matrix and the related initialize tests before shipping.
+Note: the deprecated core Logging capability (`logging/setLevel` + `notifications/message`) still works for legacy-era sessions; on modern-era requests the SDK only emits log notifications when the client opts in via the `io.modelcontextprotocol/logLevel` `_meta` key. Structured logs always reach stderr regardless.
+
+When upgrading the `@modelcontextprotocol/*` packages, re-check this matrix, the era tests (`app.test.ts` modern-pinned client, `serve-stdio-eras.test.ts`), and the related initialize tests before shipping.
 
 ## Recommended Flow
 

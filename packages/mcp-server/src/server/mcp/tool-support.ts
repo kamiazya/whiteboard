@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { getTracer } from '../observability/tracing.js'

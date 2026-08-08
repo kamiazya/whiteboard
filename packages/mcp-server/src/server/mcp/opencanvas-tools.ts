@@ -15,7 +15,7 @@ import {
   wbCanvasGet,
   wbCanvasList,
 } from '@kamiazya/whiteboard-server-core'
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
+import type { McpServer } from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'

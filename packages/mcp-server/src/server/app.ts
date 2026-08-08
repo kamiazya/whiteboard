@@ -3,7 +3,11 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
 import { createServer as createOpenCanvasServer } from '@kamiazya/whiteboard-server-core'
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js'
+import {
+  createMcpHandler,
+  isLegacyRequest,
+  WebStandardStreamableHTTPServerTransport,
+} from '@modelcontextprotocol/server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -255,6 +259,20 @@ export function createApp(options: AppOptions) {
     }),
   )
 
+  // The modern (2026-07-28) serving entry: per-request factory, no protocol
+  // session — the same stateless idiom this endpoint has always used, now
+  // spec-level. `legacy: 'reject'` because 2025-era traffic is deliberately
+  // NOT served by this handler: the hand-wired legacy path below keeps
+  // `enableJsonResponse: true`, which the entry's built-in legacy fallback
+  // does not set, and changing legacy clients' response framing (JSON body →
+  // SSE) would break the stdio proxy and the web app's daemon client.
+  const modernMcpHandler = createMcpHandler(() => createMcpServer(), {
+    legacy: 'reject',
+    onerror: (error) => {
+      httpLog.warning({ err: error }, 'mcp-http:modern-error')
+    },
+  })
+
   app.all('/mcp', async (c) => {
     const startedAt = Date.now()
     const debug = shouldLogMcpHttpDebug()
@@ -274,6 +292,32 @@ export function createApp(options: AppOptions) {
       if (initializeDebug) {
         httpLog.info(initializeDebug, 'mcp-http:init')
       }
+    }
+    // Era routing runs the exact classification `createMcpHandler` itself
+    // uses, so this branch can never disagree with the entry. Modern
+    // requests never reach the legacy transport below.
+    const isLegacy =
+      parsedBody !== undefined
+        ? await isLegacyRequest(c.req.raw, parsedBody)
+        : await isLegacyRequest(c.req.raw)
+    if (!isLegacy) {
+      const response = await modernMcpHandler.fetch(c.req.raw, { parsedBody })
+      if (debug) {
+        const body = isJsonObject(parsedBody) ? parsedBody : {}
+        httpLog.info(
+          {
+            httpMethod: c.req.method.toUpperCase(),
+            path: c.req.path,
+            jsonrpcMethod: body.method ?? null,
+            requestId: body.id ?? null,
+            status: response.status,
+            durationMs: Date.now() - startedAt,
+            era: 'modern',
+          },
+          'mcp-http',
+        )
+      }
+      return response
     }
     // The MCP SDK throws 'Already connected' if a single Server is connected to
     // more than one transport, so build a fresh per-request server. The heavy
