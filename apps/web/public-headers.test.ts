@@ -50,4 +50,16 @@ describe('public/_headers', () => {
     const csp = globalHeaders?.get('Content-Security-Policy') ?? ''
     expect(csp).toContain("worker-src 'self'")
   })
+
+  it('permits https frame-src so link-node iframe embeds are not blocked by our own CSP', () => {
+    // Without an explicit frame-src, child iframes fall back to
+    // default-src 'self' and every external embed renders as Chrome's
+    // "content blocked" page on the deployed origin (local dev has no
+    // _headers, so only production surfaced it). https: is sufficient:
+    // http iframes on the https origin are mixed content and blocked by
+    // the browser before CSP is consulted.
+    const globalHeaders = blocks.get('/*')
+    const csp = globalHeaders?.get('Content-Security-Policy') ?? ''
+    expect(csp).toContain('frame-src https:')
+  })
 })
