@@ -24,7 +24,11 @@
  * direction per JSON Canvas fromEnd/toEnd, and per-endpoint side pinning
  * with an auto option), create a link node (the palette's "Add link" URL
  * dialog), follow it (double-click, or "Open link" in its context menu —
- * opens in a new tab with noopener), and rewrite its URL ("Edit URL").
+ * opens in a new tab with noopener), rewrite its URL ("Edit URL"), create
+ * a group frame (the palette's "Add group" empty frame, or "Group
+ * selection" from a multi-selected node's context menu), move a frame
+ * with its geometrically contained members, and edit the frame's label
+ * (double-click, or "Edit label" in its context menu; empty removes).
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -41,6 +45,7 @@ import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboar
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   ExternalLink,
+  Frame,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -86,6 +91,7 @@ import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
 import {
+  canvasToScreen,
   fitViewportToBoxes,
   IDENTITY_VIEWPORT,
   type Point,
@@ -337,6 +343,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
     // The URL dialog serves both palette-create and context-menu-edit; which
     // one decides what its submit does.
+    const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
     const [linkDialog, setLinkDialog] = useState<
       { readonly mode: 'create' } | { readonly mode: 'edit'; readonly nodeId: string } | null
     >(null)
@@ -638,6 +645,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // pointerdown path): Delete acts on a selected edge FIRST, so leaving
       // the other object type selected makes Delete remove the wrong thing.
       if (hitId !== undefined) {
+        // Right-clicking a member of an existing multi-selection must not
+        // shrink it: promote the target to primary and keep the old primary
+        // in the extras, or "Group selection" silently loses a node.
+        if (extraIds.has(hitId)) {
+          setExtraIds((prev) => {
+            const next = new Set(prev)
+            next.delete(hitId)
+            if (selectedId !== null && selectedId !== hitId) next.add(selectedId)
+            return next
+          })
+        }
         setSelectedId(hitId)
         setSelectedEdgeId(null)
       }
@@ -823,9 +841,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           openLinkNode(node)
           return
         }
+        // A group's double press edits its label — the frame's one own datum.
+        if (node?.type === 'group') {
+          applyResult(result)
+          setGroupLabelEditId(node.id)
+          return
+        }
       }
       const moved = result.commands.find((c) => c.kind === 'move-node')
-      if (moved !== undefined && extraIds.size > 0 && gestureState.kind === 'moving') {
+      if (moved !== undefined && gestureState.kind === 'moving') {
         const dx = moved.x - gestureState.startX
         const dy = moved.y - gestureState.startY
         const extras = [...extraIds]
@@ -836,8 +860,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               ? []
               : [{ kind: 'move-node' as const, id, x: node.x + dx, y: node.y + dy }]
           })
-        applyResult({ ...result, commands: [...result.commands, ...extras] })
-        return
+        // Moving a group frame carries its members along: every node fully
+        // contained in the frame's PRE-move box (JSON Canvas containment is
+        // geometric — there is no parent pointer) gets the same delta.
+        const movedNode = canvasRef.current.nodes.find((n) => n.id === moved.id)
+        const alreadyMoving = new Set([moved.id, ...extras.map((c) => c.id)])
+        const memberMoves =
+          movedNode?.type === 'group'
+            ? canvasRef.current.nodes
+                .filter(
+                  (n) =>
+                    !alreadyMoving.has(n.id) &&
+                    n.x >= gestureState.startX &&
+                    n.y >= gestureState.startY &&
+                    n.x + n.width <= gestureState.startX + movedNode.width &&
+                    n.y + n.height <= gestureState.startY + movedNode.height,
+                )
+                .map((n) => ({ kind: 'move-node' as const, id: n.id, x: n.x + dx, y: n.y + dy }))
+            : []
+        if (extras.length > 0 || memberMoves.length > 0) {
+          applyResult({ ...result, commands: [...result.commands, ...extras, ...memberMoves] })
+          return
+        }
       }
       applyResult(result)
     }
@@ -1089,6 +1133,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         occupied,
       )
       createNodeAt(point)
+      panToShow({
+        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+        y: Math.round(point.y - NEW_NODE_HEIGHT / 2),
+        width: NEW_NODE_WIDTH,
+        height: NEW_NODE_HEIGHT,
+      })
     }
 
     /** Link nodes are label-only chrome — a note-height box would be mostly
@@ -1124,6 +1174,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         commands: [{ kind: 'create-node', node }],
         selectedId: id,
       })
+      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
     /** The one place a stored URL is turned into navigation. noopener keeps
@@ -1134,6 +1185,109 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const openLinkNode = (node: Extract<SpatialNode, { type: 'link' }>) => {
       if (!isFollowableUrl(node.url)) return
       window.open(node.url, '_blank', 'noopener,noreferrer')
+    }
+
+    /**
+     * The free-spot cascade can push a palette-created node outside the
+     * visible viewport, leaving the user staring at an unchanged canvas.
+     * When the created box does not fully fit on screen, pan (keeping the
+     * zoom) so it sits centered — creation is always visible feedback.
+     */
+    const panToShow = (box: Box) => {
+      const root = rootRef.current
+      if (root === null) return
+      const topLeft = canvasToScreen({ x: box.x, y: box.y }, viewport)
+      const bottomRight = canvasToScreen({ x: box.x + box.width, y: box.y + box.height }, viewport)
+      const fits =
+        topLeft.x >= 0 &&
+        topLeft.y >= 0 &&
+        bottomRight.x <= root.clientWidth &&
+        bottomRight.y <= root.clientHeight
+      if (fits) return
+      const centerX = box.x + box.width / 2
+      const centerY = box.y + box.height / 2
+      setViewport((vp) => ({
+        ...vp,
+        x: centerX - root.clientWidth / 2 / vp.zoom,
+        y: centerY - root.clientHeight / 2 / vp.zoom,
+      }))
+    }
+
+    const GROUP_FRAME_WIDTH = 320
+    const GROUP_FRAME_HEIGHT = 200
+    /** Padding between a grouped selection's bounds and its new frame. */
+    const GROUP_PADDING_PX = 24
+
+    const newId = () =>
+      createId?.() ??
+      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : String(Math.random()))
+
+    const createGroupAtViewportCenter = () => {
+      const root = rootRef.current
+      const centerScreen =
+        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
+      const preferred = screenToCanvas(centerScreen, viewport)
+      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+      const point = findFreeSpot(
+        preferred,
+        { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT },
+        occupied,
+      )
+      const id = newId()
+      applyResult({
+        state: { kind: 'idle' },
+        commands: [
+          {
+            kind: 'create-group',
+            node: {
+              id,
+              type: 'group',
+              x: Math.round(point.x - GROUP_FRAME_WIDTH / 2),
+              y: Math.round(point.y - GROUP_FRAME_HEIGHT / 2),
+              width: GROUP_FRAME_WIDTH,
+              height: GROUP_FRAME_HEIGHT,
+            },
+          },
+        ],
+        selectedId: id,
+      })
+      panToShow({
+        x: Math.round(point.x - GROUP_FRAME_WIDTH / 2),
+        y: Math.round(point.y - GROUP_FRAME_HEIGHT / 2),
+        width: GROUP_FRAME_WIDTH,
+        height: GROUP_FRAME_HEIGHT,
+      })
+    }
+
+    /** Frames the current multi-selection: enclosing box + padding. */
+    const groupSelection = (memberIds: readonly string[]) => {
+      const members = canvasRef.current.nodes.filter((n) => memberIds.includes(n.id))
+      if (members.length === 0) return
+      const minX = Math.min(...members.map((n) => n.x)) - GROUP_PADDING_PX
+      const minY = Math.min(...members.map((n) => n.y)) - GROUP_PADDING_PX
+      const maxX = Math.max(...members.map((n) => n.x + n.width)) + GROUP_PADDING_PX
+      const maxY = Math.max(...members.map((n) => n.y + n.height)) + GROUP_PADDING_PX
+      const id = newId()
+      applyResult({
+        state: { kind: 'idle' },
+        commands: [
+          {
+            kind: 'create-group',
+            node: {
+              id,
+              type: 'group',
+              x: minX,
+              y: minY,
+              width: maxX - minX,
+              height: maxY - minY,
+            },
+          },
+        ],
+        selectedId: id,
+      })
+      setExtraIds(new Set())
     }
 
     return (
@@ -1177,6 +1331,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         <ToolPalette
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
+          onCreateGroup={createGroupAtViewportCenter}
           tool={tool}
           onToolChange={setTool}
         />
@@ -1347,6 +1502,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 ]
               }
               const items: ContextMenuItem[] = []
+              if (node.type === 'group') {
+                items.push({
+                  label: 'Edit label',
+                  icon: <Tag />,
+                  onSelect: () => setGroupLabelEditId(node.id),
+                })
+                items.push({ kind: 'separator' })
+              }
+              // Framing an existing multi-selection is reached from any of
+              // its members — the frame encloses every selected node,
+              // including group frames: nesting is geometric in JSON Canvas,
+              // and containment moves already handle nested frames.
+              if (extraIds.size > 0) {
+                items.push({
+                  label: 'Group selection',
+                  icon: <Frame />,
+                  onSelect: () => groupSelection([node.id, ...extraIds]),
+                })
+                items.push({ kind: 'separator' })
+              }
               if (node.type === 'link') {
                 items.push({
                   label: 'Open link',
@@ -1706,6 +1881,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     setEdgeLabelEditId(null)
                   }}
                   onCancel={() => setEdgeLabelEditId(null)}
+                />
+              )
+            })()}
+          {groupLabelEditId !== null &&
+            (() => {
+              const group = canvas.nodes.find((entry) => entry.id === groupLabelEditId)
+              if (group === undefined || group.type !== 'group') return null
+              return (
+                <TextNodeEditor
+                  // The label renders along the frame's top edge — the
+                  // editor covers that band rather than the whole frame.
+                  box={{ x: group.x, y: group.y, width: group.width, height: 48 }}
+                  initialText={group.label ?? ''}
+                  testId="group-label-editor"
+                  onCommit={(label) => {
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-group-label', id: group.id, label: label.trim() } as const,
+                      ],
+                    })
+                    setGroupLabelEditId(null)
+                  }}
+                  onCancel={() => setGroupLabelEditId(null)}
                 />
               )
             })()}

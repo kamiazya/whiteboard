@@ -321,6 +321,44 @@ describe('applyCommand', () => {
     expect(onMissing).toBe(withLink)
   })
 
+  it('create-group prepends the frame so members stay clickable above it', () => {
+    const group = {
+      id: 'g1',
+      type: 'group',
+      x: -20,
+      y: -20,
+      width: 400,
+      height: 200,
+      label: 'cluster',
+    } as const
+    const grouped = applyCommand(baseCanvas(), { kind: 'create-group', node: group })
+    // Array order IS z-order: the frame sits at the bottom, so hit-testing
+    // (last containing box wins) still reaches the members inside it.
+    expect(grouped.nodes[0]).toMatchObject({ id: 'g1', type: 'group' })
+    expect(grouped.nodes).toHaveLength(3)
+    expect(spatialCanvasSchema.safeParse(grouped).success).toBe(true)
+
+    const collided = applyCommand(grouped, { kind: 'create-group', node: group })
+    expect(collided).toBe(grouped)
+  })
+
+  it('set-group-label sets, updates, empty-removes, and ignores non-groups', () => {
+    const grouped = applyCommand(baseCanvas(), {
+      kind: 'create-group',
+      node: { id: 'g1', type: 'group', x: -20, y: -20, width: 400, height: 200 },
+    })
+
+    const labeled = applyCommand(grouped, { kind: 'set-group-label', id: 'g1', label: 'phase 1' })
+    expect(labeled.nodes[0]).toMatchObject({ id: 'g1', label: 'phase 1' })
+    expect(spatialCanvasSchema.safeParse(labeled).success).toBe(true)
+
+    const cleared = applyCommand(labeled, { kind: 'set-group-label', id: 'g1', label: '' })
+    expect(cleared.nodes[0]).not.toHaveProperty('label')
+
+    const onText = applyCommand(labeled, { kind: 'set-group-label', id: 'a', label: 'x' })
+    expect(onText).toBe(labeled)
+  })
+
   it('create then delete the same node is the identity (up to deep equality)', () => {
     const canvas = baseCanvas()
     const node = { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' } as const

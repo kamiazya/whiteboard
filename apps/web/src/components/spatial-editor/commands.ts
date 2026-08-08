@@ -64,6 +64,20 @@ export type EditorCommand =
       readonly color: CanvasColor | undefined
     }
   | {
+      // Creates a group frame at the BOTTOM of the z-order (array start),
+      // so hit-testing (last containing box wins) still reaches members
+      // drawn above it. A colliding id is a no-op, like create-node.
+      readonly kind: 'create-group'
+      readonly node: Extract<SpatialNode, { type: 'group' }>
+    }
+  | {
+      // Sets a group frame's label; an empty string removes the field
+      // (canonical form, like set-edge-label). Non-group targets no-op.
+      readonly kind: 'set-group-label'
+      readonly id: string
+      readonly label: string
+    }
+  | {
       // Rewrites a link node's destination. Only link nodes carry a url —
       // any other target (or a missing id) is a no-op, never a corruption.
       readonly kind: 'set-node-url'
@@ -220,6 +234,26 @@ function setNodeColor(
   }
 }
 
+function createGroup(
+  canvas: SpatialCanvas,
+  node: Extract<SpatialNode, { type: 'group' }>,
+): SpatialCanvas {
+  if (canvas.nodes.some((existing) => existing.id === node.id)) return canvas
+  return { ...canvas, nodes: [node, ...canvas.nodes] }
+}
+
+function setGroupLabel(canvas: SpatialCanvas, id: string, label: string): SpatialCanvas {
+  if (!canvas.nodes.some((node) => node.id === id && node.type === 'group')) return canvas
+  return {
+    ...canvas,
+    nodes: canvas.nodes.map((node) => {
+      if (node.id !== id || node.type !== 'group') return node
+      const { label: _removed, ...rest } = node
+      return label === '' ? rest : { ...rest, label }
+    }),
+  }
+}
+
 function setNodeUrl(canvas: SpatialCanvas, id: string, url: string): SpatialCanvas {
   if (!canvas.nodes.some((node) => node.id === id && node.type === 'link')) return canvas
   return {
@@ -306,6 +340,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeColor(canvas, command.id, command.color)
     case 'set-node-url':
       return setNodeUrl(canvas, command.id, command.url)
+    case 'create-group':
+      return createGroup(canvas, command.node)
+    case 'set-group-label':
+      return setGroupLabel(canvas, command.id, command.label)
     case 'delete-node':
       return deleteNode(canvas, command.id)
   }

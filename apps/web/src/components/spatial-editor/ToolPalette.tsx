@@ -17,7 +17,7 @@
  * presses originating here (see SpatialEditor's isOverlayEvent): without
  * that, the root would capture the pointer and swallow the buttons' clicks.
  */
-import { Link, MousePointer2, Spline, StickyNote } from 'lucide-react'
+import { Frame, Link, MousePointer2, Spline, StickyNote } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export type EditorTool = 'select' | 'connect'
@@ -25,6 +25,7 @@ export type EditorTool = 'select' | 'connect'
 interface ToolPaletteProps {
   readonly onCreateNode: () => void
   readonly onCreateLink: () => void
+  readonly onCreateGroup: () => void
   readonly tool: EditorTool
   readonly onToolChange: (tool: EditorTool) => void
 }
@@ -32,7 +33,13 @@ interface ToolPaletteProps {
 const TOOL_BUTTON_CLASS =
   'flex size-9 items-center justify-center rounded-md hover:bg-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring aria-pressed:bg-accent aria-pressed:text-foreground text-muted-foreground transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out)'
 
-export function ToolPalette({ onCreateNode, onCreateLink, tool, onToolChange }: ToolPaletteProps) {
+export function ToolPalette({
+  onCreateNode,
+  onCreateLink,
+  onCreateGroup,
+  tool,
+  onToolChange,
+}: ToolPaletteProps) {
   return (
     <div
       data-editor-overlay
@@ -99,6 +106,20 @@ export function ToolPalette({ onCreateNode, onCreateLink, tool, onToolChange }: 
           </button>
         </TooltipTrigger>
         <TooltipContent>Add link</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            data-testid="add-group-button"
+            aria-label="Add group"
+            onClick={onCreateGroup}
+            className={TOOL_BUTTON_CLASS}
+          >
+            <Frame aria-hidden="true" className="size-4" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent>Add group</TooltipContent>
       </Tooltip>
     </div>
   )
