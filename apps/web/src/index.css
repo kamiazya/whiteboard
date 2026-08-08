@@ -82,4 +82,18 @@
     background-color: var(--background);
     color: var(--foreground);
   }
+
+  /*
+   * Tailwind v4 dropped v3's gray default border color: a bare `border`
+   * utility now inherits currentColor, which painted every bordered chrome
+   * element with near-black text color — the "everything is a black box"
+   * look the design refactor removes. Restoring the token here is what
+   * makes `border` quiet by default; reach for `border-<color>` only when
+   * a border must carry state (destructive, amber attention, etc.).
+   */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
+  }
 }

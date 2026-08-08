@@ -594,6 +594,34 @@ describe('DaemonIndexPage', () => {
     expect(screen.getByTestId('daemon-index-canvas-card')).toBeTruthy()
   })
 
+  it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'dTMMrBP3c5ah8_SXTRVvC' }],
+      canvasesByWorkspace: {
+        dTMMrBP3c5ah8_SXTRVvC: [{ slug: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    // One workspace = nothing to choose; the raw id has no reason to be
+    // page chrome. Multi-workspace daemons keep the selector.
+    expect(screen.queryByLabelText('Workspace')).toBeNull()
+  })
+
+  it('labels the new-canvas input with a placeholder instead of floating unlabeled', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      canvasesByWorkspace: { 'ws-a': [{ slug: 'alpha', updatedAt: new Date().toISOString() }] },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenCanvas={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    expect(screen.getByPlaceholderText('New canvas name…')).toBeTruthy()
+  })
+
   it('offers Grid/Tree as a view toggle of the one canvas surface', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],

@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '../components/ui/alert-dialog.js'
+import { Button } from '../components/ui/button.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -397,24 +398,28 @@ export function BrowserLocalCanvasPage({
             {duplicateError}
           </div>
         )}
-        <button
+        <Button
           type="button"
           aria-label="Duplicate canvas"
           disabled={isDuplicating}
           onClick={() => void handleDuplicate()}
-          className="rounded-md border px-3 py-1 font-medium transition-colors hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
         >
           Duplicate
-        </button>
+        </Button>
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <button
+            <Button
               type="button"
               aria-label="Delete canvas"
-              className="rounded-md border px-3 py-1 font-medium text-destructive transition-colors hover:bg-destructive/10"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
             >
               Delete
-            </button>
+            </Button>
           </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>

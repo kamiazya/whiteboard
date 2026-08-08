@@ -6,6 +6,7 @@ import { CanvasThumb } from '../components/CanvasThumb.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 import { SettingsPanel } from '../components/settings/SettingsPanel.js'
+import { Button } from '../components/ui/button.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -276,7 +277,7 @@ export function DaemonIndexPage({
       <div className="flex h-dvh flex-col overflow-y-auto p-4">
         <h1 className="sr-only">Canvases</h1>
         <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2">
-          {workspaces.length > 0 && (
+          {workspaces.length > 1 && (
             <select
               aria-label="Workspace"
               value={selectedWorkspace ?? ''}
@@ -308,16 +309,14 @@ export function DaemonIndexPage({
               >
                 <input
                   aria-label="New canvas name"
+                  placeholder="New canvas name…"
                   value={newCanvasSlug}
                   onChange={(event) => setNewCanvasSlug(event.target.value)}
                   className="rounded-md border bg-background px-2 py-1 text-sm"
                 />
-                <button
-                  type="submit"
-                  className="rounded-md border px-3 py-1 text-sm font-medium hover:bg-accent"
-                >
+                <Button type="submit" variant="outline" size="sm">
                   Create canvas
-                </button>
+                </Button>
               </form>
             </>
           )}
