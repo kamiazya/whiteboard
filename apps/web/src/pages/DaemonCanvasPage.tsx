@@ -235,7 +235,7 @@ export function DaemonCanvasPage({
       <div
         role="alert"
         aria-live="assertive"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
         <p className="max-w-md text-sm text-destructive">{controller.loadError}</p>
       </div>
@@ -292,115 +292,134 @@ export function DaemonCanvasPage({
 
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
-      <main className="relative flex h-dvh w-full flex-col">
-        <h1 className="sr-only">Whiteboard (daemon)</h1>
-        {controller.switchError && (
-          <div
-            role="alert"
-            aria-live="assertive"
-            className="flex items-center gap-2 border-b bg-background px-4 py-1"
-          >
-            <span className="text-xs text-destructive">{controller.switchError}</span>
-          </div>
-        )}
-        {/* Rendered at the page level when WorkspaceTopBar has nowhere to
+      {/* Two-row grid shell: everything header-shaped stacks inside the
+          auto row, and the canvas owns minmax(0,1fr) — however many banner
+          rows appear (or however tall they wrap), the canvas row is always
+          exactly the remaining viewport height, never clipped below it. */}
+      <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <h1 className="sr-only">Whiteboard (daemon)</h1>
+          {controller.switchError && (
+            <div
+              role="alert"
+              aria-live="assertive"
+              className="flex items-center gap-2 border-b bg-background px-4 py-1"
+            >
+              <span className="text-xs text-destructive">{controller.switchError}</span>
+            </div>
+          )}
+          {/* Rendered at the page level when WorkspaceTopBar has nowhere to
             mount (no-canvas/empty-workspace view) so the degraded state
             never disappears with the canvas-gated chrome. */}
-        {authError && !canvas && (
-          <div className="flex items-center border-b bg-background px-4 py-1.5">
-            {connectionStatus}
-          </div>
-        )}
-        {canvas && (
-          <WorkspaceTopBar
-            statusSlot={connectionStatus}
-            workspaceId={canvas.workspaceId}
-            slug={canvas.slug}
-            canvases={controller.canvases}
-            onNavigateToCanvas={controller.switchCanvas}
-            capabilities={{
-              versions: capabilities.versions,
-              branches: capabilities.branches,
-              merge: capabilities.merge,
-            }}
-            branchRefreshSignal={branchRefreshSignal}
-            versionRefreshSignal={versionRefreshSignal}
-            onRestored={clearLocalUndo}
-            versionPanelExtra={versionPanelExtra}
-            onNavigateBack={onNavigateBack}
-            onExport={exportScene}
-            onOpenSettings={handleOpenSettings}
-          />
-        )}
-        {capabilities.branches && canvas && (
-          <HeaderBranchBanner workspaceId={canvas.workspaceId} slug={canvas.slug} />
-        )}
-        <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-          {capabilities.workspaces && controller.workspaces.length > 0 ? (
-            <select
-              aria-label="Workspaces"
-              value={controller.workspaceId ?? ''}
-              onChange={(event) => void controller.switchWorkspace(event.target.value)}
-              className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
-            >
-              {controller.workspaces.map((w) => (
-                <option key={w.workspaceId} value={w.workspaceId}>
-                  {w.workspaceId}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
+          {authError && !canvas && (
+            <div className="flex items-center border-b bg-background px-4 py-1.5">
+              {connectionStatus}
+            </div>
           )}
-          {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
+          {canvas && (
+            <WorkspaceTopBar
+              statusSlot={connectionStatus}
+              workspaceId={canvas.workspaceId}
+              slug={canvas.slug}
+              canvases={controller.canvases}
+              onNavigateToCanvas={controller.switchCanvas}
+              capabilities={{
+                versions: capabilities.versions,
+                branches: capabilities.branches,
+                merge: capabilities.merge,
+              }}
+              branchRefreshSignal={branchRefreshSignal}
+              versionRefreshSignal={versionRefreshSignal}
+              onRestored={clearLocalUndo}
+              versionPanelExtra={versionPanelExtra}
+              onNavigateBack={onNavigateBack}
+              onExport={exportScene}
+              onOpenSettings={handleOpenSettings}
+            />
+          )}
+          {capabilities.branches && canvas && (
+            <HeaderBranchBanner workspaceId={canvas.workspaceId} slug={canvas.slug} />
+          )}
+          {/* This row only exists when it carries something meaningful: a
+            real workspace CHOICE (two or more), or capability teasers. A
+            single-workspace daemon with full capabilities — the common
+            local case — gets no extra header row at all (raw ids are not
+            chrome, and every header row costs canvas height on a phone). */}
+          {(!capabilities.workspaces ||
+            controller.workspaces.length > 1 ||
+            !capabilities.versions ||
+            !capabilities.branches ||
+            !capabilities.merge) && (
+            <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
+              {capabilities.workspaces ? (
+                controller.workspaces.length > 1 && (
+                  <select
+                    aria-label="Workspaces"
+                    value={controller.workspaceId ?? ''}
+                    onChange={(event) => void controller.switchWorkspace(event.target.value)}
+                    className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
+                  >
+                    {controller.workspaces.map((w) => (
+                      <option key={w.workspaceId} value={w.workspaceId}>
+                        {w.workspaceId}
+                      </option>
+                    ))}
+                  </select>
+                )
+              ) : (
+                <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
+              )}
+              {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}
-          {!capabilities.versions && (
-            <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
+              {!capabilities.versions && (
+                <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
+              )}
+              {!capabilities.branches && (
+                <CapabilityTeaser label="Variations" enabled={capabilities.branches} />
+              )}
+              {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
+            </div>
           )}
-          {!capabilities.branches && (
-            <CapabilityTeaser label="Variations" enabled={capabilities.branches} />
-          )}
-          {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
-        </div>
-        {canvas && browserLocalStore && (
-          <details
-            className="border-b bg-background px-4 py-2 text-sm"
-            onToggle={(event) => setImportSectionOpen(event.currentTarget.open)}
-          >
-            <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-              Import from this browser
-            </summary>
-            {/* <details> only hides collapsed children visually — React still
+          {canvas && browserLocalStore && (
+            <details
+              className="border-b bg-background px-4 py-2 text-sm"
+              onToggle={(event) => setImportSectionOpen(event.currentTarget.open)}
+            >
+              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                Import from this browser
+              </summary>
+              {/* <details> only hides collapsed children visually — React still
                 mounts them. Gate on the open state so the lazy chunk and its
                 IndexedDB read are deferred until the user expands the section. */}
-            {importSectionOpen && (
-              <div className="pt-2">
-                {/* Local boundary: a chunk-load or render failure in this
+              {importSectionOpen && (
+                <div className="pt-2">
+                  {/* Local boundary: a chunk-load or render failure in this
                     optional disclosure must degrade the section alone, not
                     take the whole editor to the app-level boundary. */}
-                <ErrorBoundary
-                  fallback={() => (
-                    <p role="alert" className="text-xs text-destructive">
-                      Import is unavailable right now. Reopen this section to retry.
-                    </p>
-                  )}
-                >
-                  <Suspense fallback={null}>
-                    <LazyImportSection
-                      workspaceId={canvas.workspaceId}
-                      daemonFetch={daemonFetch}
-                      daemonBaseUrl={daemonBaseUrl}
-                      browserLocalStore={browserLocalStore}
-                    />
-                  </Suspense>
-                </ErrorBoundary>
-              </div>
-            )}
-          </details>
-        )}
+                  <ErrorBoundary
+                    fallback={() => (
+                      <p role="alert" className="text-xs text-destructive">
+                        Import is unavailable right now. Reopen this section to retry.
+                      </p>
+                    )}
+                  >
+                    <Suspense fallback={null}>
+                      <LazyImportSection
+                        workspaceId={canvas.workspaceId}
+                        daemonFetch={daemonFetch}
+                        daemonBaseUrl={daemonBaseUrl}
+                        browserLocalStore={browserLocalStore}
+                      />
+                    </Suspense>
+                  </ErrorBoundary>
+                </div>
+              )}
+            </details>
+          )}
+        </div>
         {controller.canvases.length === 0 ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+          <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
             {/* WorkspaceTopBar (the usual home for this button) only mounts once
                 a canvas is selected, so a workspace that resolves to zero
                 canvases — an empty workspace, or a gallery row whose canvas was
@@ -446,7 +465,7 @@ export function DaemonCanvasPage({
           // Spatial is the only view this slice supports; markdown-view
           // persistence is deferred (canvas-workspace has no markdown-body
           // container to write to yet).
-          <div data-testid="spatial-editor-container" className="min-h-0 flex-1">
+          <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
             {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                 gesture and open text editor all describe ONE canvas, and
                 `SpatialCanvas` carries no id for the editor to notice a switch

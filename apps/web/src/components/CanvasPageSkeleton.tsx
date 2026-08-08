@@ -6,7 +6,12 @@
  */
 export function CanvasPageSkeleton({ label }: { label: string }) {
   return (
-    <div role="status" aria-live="polite" aria-label={label} className="flex h-dvh w-full flex-col">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={label}
+      className="flex h-full w-full flex-col"
+    >
       <div className="flex h-12 shrink-0 items-center gap-3 border-b px-3">
         <div className="h-5 w-36 animate-pulse rounded bg-muted" />
         <div className="ml-auto h-6 w-16 animate-pulse rounded-full bg-muted" />

@@ -20,7 +20,13 @@ import { clearWhiteboardDb } from '../test-utils/browser-local-canvas.js'
 import '../index.css'
 
 function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
+  return rtlRender(
+    // Pages fill their allotted height (h-full) — the app shell owns the
+    // viewport in production, so tests supply the equivalent sized parent.
+    <div style={{ height: '100vh' }}>
+      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
+    </div>,
+  )
 }
 
 let spatialMounts = 0

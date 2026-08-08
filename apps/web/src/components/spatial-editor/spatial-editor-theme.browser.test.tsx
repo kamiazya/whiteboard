@@ -50,12 +50,14 @@ describe('SpatialEditor theme chrome (real browser)', () => {
     )
     document.documentElement.classList.remove('dark')
 
-    const rects = container.querySelectorAll('svg rect')
+    const rects = container.querySelectorAll('[data-testid="viewport-transform"] svg rect')
     expect(rects.length).toBeGreaterThan(0)
     for (const rect of rects) {
       expect(rect.getAttribute('stroke')).toBe(EDITOR_DARK_PALETTE.chromeStroke)
     }
-    const edgePaths = container.querySelectorAll('svg path, svg polyline, svg line')
+    const edgePaths = container.querySelectorAll(
+      '[data-testid="viewport-transform"] :is(svg path, svg polyline, svg line)',
+    )
     expect(edgePaths.length).toBeGreaterThan(0)
     for (const edgeEl of edgePaths) {
       expect(edgeEl.getAttribute('stroke')).toBe(EDITOR_DARK_PALETTE.chromeStroke)
@@ -71,7 +73,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
         theme="light"
       />,
     )
-    const rects = container.querySelectorAll('svg rect')
+    const rects = container.querySelectorAll('[data-testid="viewport-transform"] svg rect')
     expect(rects.length).toBeGreaterThan(0)
     for (const rect of rects) {
       expect(rect.getAttribute('stroke')).toBe(EDITOR_LIGHT_PALETTE.chromeStroke)
@@ -87,7 +89,7 @@ describe('SpatialEditor theme chrome (real browser)', () => {
         theme="dark"
       />,
     )
-    const svg = container.querySelector('svg')
+    const svg = container.querySelector('[data-testid="viewport-transform"] svg')
     const host = svg?.parentElement
     expect(host?.style.fill).toBe(hexToRgb(EDITOR_DARK_PALETTE.textFill))
   })
@@ -101,7 +103,9 @@ describe('SpatialEditor theme chrome (real browser)', () => {
         theme="light"
       />,
     )
-    const lightViewBox = light.container.querySelector('svg')?.getAttribute('viewBox')
+    const lightViewBox = light.container
+      .querySelector('[data-testid="viewport-transform"] svg')
+      ?.getAttribute('viewBox')
     cleanup()
     const dark = render(
       <SpatialEditor
@@ -111,7 +115,9 @@ describe('SpatialEditor theme chrome (real browser)', () => {
         theme="dark"
       />,
     )
-    const darkViewBox = dark.container.querySelector('svg')?.getAttribute('viewBox')
+    const darkViewBox = dark.container
+      .querySelector('[data-testid="viewport-transform"] svg')
+      ?.getAttribute('viewBox')
     expect(darkViewBox).toBe(lightViewBox)
   })
 })

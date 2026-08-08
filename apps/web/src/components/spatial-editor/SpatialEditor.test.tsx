@@ -40,7 +40,9 @@ describe('Add note button', () => {
     )
     const button = getByTestId('add-node-button') as HTMLButtonElement
     expect(button.tagName).toBe('BUTTON')
-    expect(button.textContent).toBe('Add note')
+    // Icon-only since the chrome iconification: the accessible name lives
+    // on aria-label, which is what assistive tech (and getByRole) resolve.
+    expect(button.getAttribute('aria-label')).toBe('Add note')
     expect(button.disabled).toBe(false)
   })
 })

@@ -1830,20 +1830,22 @@ describe('node placement and affordances', () => {
     expect(node?.type === 'text' ? node.text : undefined).toBe('')
   })
 
-  it('the Add note button has real, visible button affordance (not a bare, transparent element)', async () => {
+  it('the Add note button has real, visible button affordance (icon + accessible name)', async () => {
+    // Icon-only since the chrome iconification: the affordance is a
+    // rendered icon inside the bordered palette container, and the full
+    // name lives on aria-label (what assistive tech and tooltips read).
     render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor canvas={{ nodes: [], edges: [] }} onChange={vi.fn()} measure={fakeMeasure} />
       </div>,
     )
     const button = page.getByTestId('add-node-button').element() as HTMLButtonElement
-    const style = getComputedStyle(button)
-    const hasVisibleBackground = style.backgroundColor !== 'rgba(0, 0, 0, 0)'
-    const hasVisibleBorder = Number.parseFloat(style.borderWidth) > 0
-    expect(hasVisibleBackground || hasVisibleBorder).toBe(true)
-    expect(
-      Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingLeft),
-    ).toBeGreaterThan(0)
+    const icon = button.querySelector('svg')
+    expect(icon).not.toBeNull()
+    expect((icon as SVGElement).getBoundingClientRect().width).toBeGreaterThan(0)
+    expect(button.getAttribute('aria-label')).toBe('Add note')
+    const palette = button.closest('[data-testid="tool-palette"]') as HTMLElement
+    expect(Number.parseFloat(getComputedStyle(palette).borderWidth)).toBeGreaterThan(0)
     button.focus()
     expect(document.activeElement).toBe(button)
   })

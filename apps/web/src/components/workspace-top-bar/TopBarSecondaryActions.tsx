@@ -53,11 +53,11 @@ export function TopBarSecondaryActions({
                 data-version-trigger
                 variant="ghost"
                 size="sm"
-                className="h-8 gap-1.5"
+                className="size-8 p-0"
                 onClick={onToggleVersionOpen}
+                aria-label="Version history"
               >
                 <History className="size-3.5" />
-                <span className="text-xs">History</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent>Version history</TooltipContent>

@@ -1,3 +1,4 @@
+import { Copy, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CanvasPageSkeleton } from '../components/CanvasPageSkeleton.js'
@@ -17,6 +18,7 @@ import {
   AlertDialogTrigger,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useCanvasSync } from '../hooks/useCanvasSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -279,7 +281,7 @@ export function BrowserLocalCanvasPage({
       <div
         role="alert"
         aria-live="assertive"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
         <p className="max-w-md text-sm text-destructive">{pageState.message}</p>
         <button
@@ -297,7 +299,7 @@ export function BrowserLocalCanvasPage({
     return (
       <div
         data-testid="cleanup-completed"
-        className="flex h-dvh flex-col items-center justify-center gap-4 p-6 text-center"
+        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
         <p className="text-sm text-muted-foreground">Canvas removed.</p>
         <button
@@ -316,129 +318,138 @@ export function BrowserLocalCanvasPage({
   }
 
   return (
-    // h-dvh makes the page own its viewport height: without it the flex chain
-    // has no sized ancestor and the editor area collapses to 0px.
-    <main ref={mainRef} className="flex h-dvh w-full flex-col">
-      {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
+    // Two-row grid shell (h-dvh makes the page own its viewport height):
+    // every header-shaped row stacks inside the auto row, and the editor
+    // owns minmax(0,1fr) — however many rows appear or however tall they
+    // wrap, the editor row is always exactly the remaining viewport height.
+    <main ref={mainRef} className="grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
+      <div className="min-w-0">
+        {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
           is the visible title control, but the page keeps a real <h1> for
           accessibility trees. */}
-      <h1 className="sr-only">{pageState.snapshot.name}</h1>
-      <Suspense
-        fallback={
-          <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
-        }
-      >
-        <WorkspaceTopBar
-          statusSlot={
-            <ConnectionStatus state="local">
-              <p className="text-muted-foreground">
-                Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
-                combining changes
-              </p>
-              <Suspense fallback={null}>
-                <DaemonDetectedBanner
-                  settingsStore={settingsStore}
-                  fetch={window.fetch.bind(window)}
-                />
-              </Suspense>
-            </ConnectionStatus>
+        <h1 className="sr-only">{pageState.snapshot.name}</h1>
+        <Suspense
+          fallback={
+            <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
           }
-          dataMode="local"
-          workspaceId="local"
-          slug={pageState.snapshot.id}
-          canvases={switcherOptions.map((c) => ({
-            slug: c.id,
-            name: c.name,
-            updatedAt: c.updatedAt,
-          }))}
-          onNavigateToCanvas={(id) => void switchCanvas(id)}
-          onRenameCanvas={renameCanvas}
-          onCreateCanvas={async () => {
-            const created = await createCanvas()
-            await switchCanvas(created.id)
-          }}
-          onCreateMarkdownCanvas={async () => {
-            const created = await createCanvas(undefined, 'markdown')
-            await switchCanvas(created.id)
-          }}
-          theme={theme}
-          onToggleTheme={setTheme}
-          onEnterFullscreen={() => {
-            void mainRef.current?.requestFullscreen()
-          }}
-          capabilities={{
-            versions: capabilities.versions,
-            branches: capabilities.branches,
-            merge: capabilities.merge,
-          }}
-          onExport={exportScene}
-          onOpenSettings={handleOpenSettings}
-        />
-      </Suspense>
-      {/* Page-specific bits that WorkspaceTopBar has no slot for. A plain
+        >
+          <WorkspaceTopBar
+            statusSlot={
+              <ConnectionStatus state="local">
+                <p className="text-muted-foreground">
+                  Connect a local daemon (MCP) to unlock version history, workspaces, variations,
+                  and combining changes
+                </p>
+                <Suspense fallback={null}>
+                  <DaemonDetectedBanner
+                    settingsStore={settingsStore}
+                    fetch={window.fetch.bind(window)}
+                  />
+                </Suspense>
+              </ConnectionStatus>
+            }
+            dataMode="local"
+            workspaceId="local"
+            slug={pageState.snapshot.id}
+            canvases={switcherOptions.map((c) => ({
+              slug: c.id,
+              name: c.name,
+              updatedAt: c.updatedAt,
+            }))}
+            onNavigateToCanvas={(id) => void switchCanvas(id)}
+            onRenameCanvas={renameCanvas}
+            onCreateCanvas={async () => {
+              const created = await createCanvas()
+              await switchCanvas(created.id)
+            }}
+            onCreateMarkdownCanvas={async () => {
+              const created = await createCanvas(undefined, 'markdown')
+              await switchCanvas(created.id)
+            }}
+            theme={theme}
+            onToggleTheme={setTheme}
+            onEnterFullscreen={() => {
+              void mainRef.current?.requestFullscreen()
+            }}
+            capabilities={{
+              versions: capabilities.versions,
+              branches: capabilities.branches,
+              merge: capabilities.merge,
+            }}
+            onExport={exportScene}
+            onOpenSettings={handleOpenSettings}
+          />
+        </Suspense>
+        {/* Page-specific bits that WorkspaceTopBar has no slot for. A plain
           div, not a second <header>: two sibling <header> landmarks under
           <main> would both register as "banner" in accessibility trees
           since <main> does not scope them the way sectioning content does. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-1 text-xs">
-        <span className="text-muted-foreground">{persistenceLabel(pageState.persistence)}</span>
-        {cleanupError && (
-          <div role="alert" aria-live="assertive" className="text-destructive">
-            {cleanupError}
-          </div>
-        )}
-        {duplicateError && (
-          <div role="alert" aria-live="assertive" className="text-destructive">
-            {duplicateError}
-          </div>
-        )}
-        <Button
-          type="button"
-          aria-label="Duplicate canvas"
-          disabled={isDuplicating}
-          onClick={() => void handleDuplicate()}
-          variant="outline"
-          size="sm"
-          className="h-7 text-xs"
-        >
-          Duplicate
-        </Button>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              type="button"
-              aria-label="Delete canvas"
-              variant="outline"
-              size="sm"
-              className="h-7 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive"
-            >
-              Delete
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this canvas?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This permanently removes the canvas and its drawing data from this browser. This
-                action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => void triggerCleanup()}
-                className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+        <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-background px-4 py-1 text-xs">
+          <span className="text-muted-foreground">{persistenceLabel(pageState.persistence)}</span>
+          {cleanupError && (
+            <div role="alert" aria-live="assertive" className="text-destructive">
+              {cleanupError}
+            </div>
+          )}
+          {duplicateError && (
+            <div role="alert" aria-live="assertive" className="text-destructive">
+              {duplicateError}
+            </div>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                aria-label="Duplicate canvas"
+                disabled={isDuplicating}
+                onClick={() => void handleDuplicate()}
+                variant="ghost"
+                size="sm"
+                className="size-7 p-0"
               >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+                <Copy aria-hidden="true" className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Duplicate canvas</TooltipContent>
+          </Tooltip>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                aria-label="Delete canvas"
+                variant="ghost"
+                size="sm"
+                className="size-7 p-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <Trash2 aria-hidden="true" className="size-3.5" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this canvas?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This permanently removes the canvas and its drawing data from this browser. This
+                  action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => void triggerCleanup()}
+                  className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
       {/* The snapshot's kind picks the editor: markdown canvases open the
           markdown editor (body persisted as a Loro 'body' text container
           through the same store — see use-markdown-body.ts), everything
           else the spatial editor. */}
-      <div data-testid="spatial-editor-container" className="min-h-0 flex-1">
+      <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
         {canvasKind === 'markdown' ? (
           markdownBody.body !== null && (
             <MarkdownEditor

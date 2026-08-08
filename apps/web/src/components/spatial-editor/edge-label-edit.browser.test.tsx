@@ -86,7 +86,9 @@ it('double-clicking an edge opens the label editor; committing sets the label', 
   expect(latest.canvas.edges[0]).toMatchObject({ id: 'e1', label: 'yes' })
   // The committed label is rendered into the scene.
   await vi.waitFor(() =>
-    expect(rootOf(container).querySelector('svg')?.textContent ?? '').toContain('yes'),
+    expect(
+      rootOf(container).querySelector('[data-testid="viewport-transform"] svg')?.textContent ?? '',
+    ).toContain('yes'),
   )
 })
 

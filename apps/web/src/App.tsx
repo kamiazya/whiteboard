@@ -335,33 +335,38 @@ export function App({ providerState }: AppProps) {
         // propagates through Suspense's own error path to the nearest
         // boundary, which must be here to catch it.
         <ErrorBoundary>
-          <Suspense
-            fallback={<LazyPageFallback heightClass="h-dvh" message="Connecting to daemon…" />}
-          >
-            {daemonView.kind === 'index' ? (
-              <DaemonIndexPage
-                daemonBaseUrl={payload.baseUrl}
-                token={pairedToken}
-                initialWorkspaceId={daemonView.workspaceId}
-                onOpenCanvas={(workspaceId, slug) =>
-                  setDaemonView({ kind: 'canvas', workspaceId, slug })
-                }
-              />
-            ) : (
-              <DaemonCanvasPage
-                key={`${daemonView.workspaceId}:${daemonView.slug}`}
-                daemonBaseUrl={payload.baseUrl}
-                workspaceId={daemonView.workspaceId}
-                slug={daemonView.slug}
-                token={pairedToken}
-                onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
-                browserLocalStore={browserLocalStore}
-                onNavigateBack={() =>
-                  setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
-                }
-              />
-            )}
-          </Suspense>
+          {/* Pages size to their allotted height (h-full) so app-level rows
+              like the beta banner can never clip them — this bannerless
+              branch supplies the viewport height itself. */}
+          <div className="h-dvh">
+            <Suspense
+              fallback={<LazyPageFallback heightClass="h-dvh" message="Connecting to daemon…" />}
+            >
+              {daemonView.kind === 'index' ? (
+                <DaemonIndexPage
+                  daemonBaseUrl={payload.baseUrl}
+                  token={pairedToken}
+                  initialWorkspaceId={daemonView.workspaceId}
+                  onOpenCanvas={(workspaceId, slug) =>
+                    setDaemonView({ kind: 'canvas', workspaceId, slug })
+                  }
+                />
+              ) : (
+                <DaemonCanvasPage
+                  key={`${daemonView.workspaceId}:${daemonView.slug}`}
+                  daemonBaseUrl={payload.baseUrl}
+                  workspaceId={daemonView.workspaceId}
+                  slug={daemonView.slug}
+                  token={pairedToken}
+                  onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+                  browserLocalStore={browserLocalStore}
+                  onNavigateBack={() =>
+                    setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                  }
+                />
+              )}
+            </Suspense>
+          </div>
         </ErrorBoundary>
       )
     }
@@ -458,9 +463,10 @@ export function App({ providerState }: AppProps) {
   }
 
   // Own the viewport as a flex column so the in-flow banner sits ABOVE the
-  // canvas instead of pushing the h-dvh canvas page past the viewport (which
-  // would add a page scrollbar). The canvas fills the remaining height; the
-  // wrapper clips the canvas page's own h-dvh to that remaining space.
+  // canvas. Pages size to the height this shell allots them (h-full), so
+  // the banner displaces the canvas instead of clipping its bottom edge —
+  // the tool palette used to vanish behind the viewport on phones exactly
+  // because the page claimed h-dvh underneath an in-flow banner.
   return (
     <ErrorBoundary>
       <div className="flex h-dvh flex-col">
