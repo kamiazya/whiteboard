@@ -30,7 +30,7 @@
  *
  * NOT yet supported (see `SPATIAL_EDITOR_UNSUPPORTED`): freehand drawing
  * and shape tools (`x-whiteboard` extension authoring — its own slice),
- * grouping, undo/redo, arrow-side pinning, snapping,
+ * grouping, undo/redo, snapping,
  * persistence, and sync. Those are later phases.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-canvas-model'
@@ -46,7 +46,7 @@ import {
   useState,
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { ContextMenu } from './ContextMenu.js'
+import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -1117,52 +1117,70 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   ? undefined
                   : canvas.edges.find((entry) => entry.id === contextMenu.edgeId)
               if (node === undefined && edge !== undefined) {
+                // Property pickers are inline option rows (one tap per
+                // choice, menu stays open) — a cycling item costs an
+                // open-tap-reopen per step. Sections group the menu:
+                // actions, then properties, then the destructive entry.
                 // Arrow direction reads the JSON Canvas defaults (fromEnd
-                // none, toEnd arrow); the four states are explicit items so
-                // one tap reaches any target state, with the current one
-                // check-marked.
+                // none, toEnd arrow).
                 const fromEnd = edge.fromEnd ?? 'none'
                 const toEnd = edge.toEnd ?? 'arrow'
                 const arrowStates = [
-                  { label: 'Arrow →', fromEnd: 'none', toEnd: 'arrow' },
-                  { label: 'Arrow ↔', fromEnd: 'arrow', toEnd: 'arrow' },
-                  { label: 'Arrow ←', fromEnd: 'arrow', toEnd: 'none' },
-                  { label: 'No arrows', fromEnd: 'none', toEnd: 'none' },
+                  { label: '→', ariaLabel: 'Forward', fromEnd: 'none', toEnd: 'arrow' },
+                  { label: '↔', ariaLabel: 'Both', fromEnd: 'arrow', toEnd: 'arrow' },
+                  { label: '←', ariaLabel: 'Backward', fromEnd: 'arrow', toEnd: 'none' },
+                  { label: '−', ariaLabel: 'None', fromEnd: 'none', toEnd: 'none' },
                 ] as const
                 const applyEdgeCommand = (command: EditorCommand) =>
                   applyResult({ state: { kind: 'idle' }, commands: [command] })
-                const SIDE_CYCLE = [undefined, 'top', 'right', 'bottom', 'left'] as const
-                const sideItem = (endpoint: 'from' | 'to') => {
+                const SIDES = [
+                  { label: 'auto', ariaLabel: 'Auto', side: undefined },
+                  { label: '↑', ariaLabel: 'Top', side: 'top' },
+                  { label: '→', ariaLabel: 'Right', side: 'right' },
+                  { label: '↓', ariaLabel: 'Bottom', side: 'bottom' },
+                  { label: '←', ariaLabel: 'Left', side: 'left' },
+                ] as const
+                const sideRow = (endpoint: 'from' | 'to') => {
                   const current = endpoint === 'from' ? edge.fromSide : edge.toSide
-                  const next = SIDE_CYCLE[(SIDE_CYCLE.indexOf(current) + 1) % SIDE_CYCLE.length]
                   return {
-                    label: `${endpoint === 'from' ? 'From' : 'To'} side: ${current ?? 'auto'}`,
-                    onSelect: () =>
-                      applyEdgeCommand({
-                        kind: 'set-edge-side',
-                        id: edge.id,
-                        endpoint,
-                        side: next,
-                      }),
+                    kind: 'options' as const,
+                    label: endpoint === 'from' ? 'From side' : 'To side',
+                    options: SIDES.map((entry) => ({
+                      label: entry.label,
+                      ariaLabel: entry.ariaLabel,
+                      selected: current === entry.side,
+                      onSelect: () =>
+                        applyEdgeCommand({
+                          kind: 'set-edge-side',
+                          id: edge.id,
+                          endpoint,
+                          side: entry.side,
+                        }),
+                    })),
                   }
                 }
                 return [
                   { label: 'Edit label', onSelect: () => setEdgeLabelEditId(edge.id) },
-                  ...arrowStates.map((state) => ({
-                    label:
-                      state.fromEnd === fromEnd && state.toEnd === toEnd
-                        ? `✓ ${state.label}`
-                        : state.label,
-                    onSelect: () =>
-                      applyEdgeCommand({
-                        kind: 'set-edge-ends',
-                        id: edge.id,
-                        fromEnd: state.fromEnd,
-                        toEnd: state.toEnd,
-                      }),
-                  })),
-                  sideItem('from'),
-                  sideItem('to'),
+                  { kind: 'separator' as const },
+                  {
+                    kind: 'options' as const,
+                    label: 'Arrows',
+                    options: arrowStates.map((state) => ({
+                      label: state.label,
+                      ariaLabel: state.ariaLabel,
+                      selected: state.fromEnd === fromEnd && state.toEnd === toEnd,
+                      onSelect: () =>
+                        applyEdgeCommand({
+                          kind: 'set-edge-ends',
+                          id: edge.id,
+                          fromEnd: state.fromEnd,
+                          toEnd: state.toEnd,
+                        }),
+                    })),
+                  },
+                  sideRow('from'),
+                  sideRow('to'),
+                  { kind: 'separator' as const },
                   {
                     label: 'Delete',
                     danger: true,
@@ -1179,7 +1197,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               if (node === undefined) {
                 return [{ label: 'Add note here', onSelect: () => createNodeAt(contextMenu.point) }]
               }
-              const items = []
+              const items: ContextMenuItem[] = []
               if (node.type === 'text') {
                 items.push({
                   label: 'Edit text',
@@ -1193,6 +1211,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     )
                   },
                 })
+                // Same grouping rule as the edge menu: the destructive
+                // entry sits in its own section.
+                items.push({ kind: 'separator' })
               }
               items.push({
                 label: 'Delete',
