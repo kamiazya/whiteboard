@@ -1,11 +1,12 @@
-import type { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
-import type { TreeID } from 'loro-crdt'
+import { WorkspaceTree } from '@kamiazya/whiteboard-canvas-workspace'
+import { LoroDoc, type TreeID } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import {
   CanvasNotFoundError,
   CanvasParentNotFoundError,
   CanvasSegmentConflictError,
+  WorkspaceNotFoundError,
 } from './canvas-crud.errors.js'
 import type {
   createCanvasInputSchema,
@@ -19,7 +20,11 @@ import type {
 } from './canvas-crud.schemas.js'
 import { generateCanvasId } from './generate-canvas-id.js'
 import { withReindex } from './with-reindex.js'
-import { loadWorkspaceTree, saveWorkspaceTree } from './workspace-tree-io.js'
+import {
+  loadWorkspaceTree,
+  loadWorkspaceTreeIfExists,
+  saveWorkspaceTree,
+} from './workspace-tree-io.js'
 
 /**
  * Finds the tree node whose `canvasId` matches, or throws
@@ -38,7 +43,15 @@ export async function wbCanvasCreate(
   input: z.infer<typeof createCanvasInputSchema>,
 ): Promise<z.infer<typeof createCanvasOutputSchema>> {
   return withReindex(deps, async (input: z.infer<typeof createCanvasInputSchema>) => {
-    const tree = await loadWorkspaceTree(deps.canvasDocStore, input.workspaceId)
+    // Workspaces never materialize implicitly: a typo'd or hallucinated
+    // workspaceId must fail loudly rather than silently writing data into a
+    // workspace nobody asked for. `createWorkspace: true` is the explicit
+    // opt-in that bootstraps a genuinely new workspace.
+    const existingTree = await loadWorkspaceTreeIfExists(deps.canvasDocStore, input.workspaceId)
+    if (existingTree === null && input.createWorkspace !== true) {
+      throw new WorkspaceNotFoundError(input.workspaceId)
+    }
+    const tree = existingTree ?? new WorkspaceTree(new LoroDoc())
 
     const parentId = input.parentId as TreeID | undefined
     if (parentId !== undefined && tree.getNode(parentId) === undefined) {

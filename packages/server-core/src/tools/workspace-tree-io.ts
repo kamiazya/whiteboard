@@ -21,12 +21,25 @@ export async function loadWorkspaceTree(
   canvasDocStore: CanvasDocStore,
   workspaceId: WorkspaceId,
 ): Promise<WorkspaceTree> {
+  return (
+    (await loadWorkspaceTreeIfExists(canvasDocStore, workspaceId)) ??
+    new WorkspaceTree(new LoroDoc())
+  )
+}
+
+/**
+ * Like `loadWorkspaceTree`, but resolves to `null` for a workspace with no
+ * persisted tree — the existence signal `wbCanvasCreate` uses to refuse
+ * materializing a workspace nobody explicitly asked for.
+ */
+export async function loadWorkspaceTreeIfExists(
+  canvasDocStore: CanvasDocStore,
+  workspaceId: WorkspaceId,
+): Promise<WorkspaceTree | null> {
   const result = await canvasDocStore.loadSnapshot({
     docRef: { kind: 'workspace-tree', workspaceId },
   })
-  if (result === null) {
-    return new WorkspaceTree(new LoroDoc())
-  }
+  if (result === null) return null
   const bytes = reassembleSnapshot(result.manifest, result.chunks)
   return WorkspaceTree.fromSnapshot(bytes)
 }

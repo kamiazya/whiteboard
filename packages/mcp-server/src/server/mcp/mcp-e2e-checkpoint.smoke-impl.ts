@@ -60,7 +60,11 @@ export function triggerDaemonCanvasCreate(
   options: { retryDaemonStartup: boolean; maxDaemonStartupRetries: number },
 ): Promise<Record<string, unknown>> {
   const attempt = () =>
-    callTool('wb_canvas_create', { workspaceId: WORKSPACE_ID, segment: 'e2e-src' })
+    callTool('wb_canvas_create', {
+      workspaceId: WORKSPACE_ID,
+      segment: 'e2e-src',
+      createWorkspace: true,
+    })
   return options.retryDaemonStartup
     ? retryDaemonStartup({ attempt, maxRetries: options.maxDaemonStartupRetries })
     : attempt()

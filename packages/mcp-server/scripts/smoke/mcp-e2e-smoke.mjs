@@ -94,6 +94,14 @@ async function callTool(name, args) {
   return JSON.parse(text)
 }
 
+async function expectToolError(name, args) {
+  const res = await rpc('tools/call', { name, arguments: args })
+  if (!res?.isError) {
+    throw new Error(`expected ${name} to fail, got: ${JSON.stringify(res)}`)
+  }
+  console.log(`[e2e] ${name} without createWorkspace → isError (expected)`)
+}
+
 function cleanup(exitCode) {
   try {
     child.kill('SIGTERM')
@@ -158,10 +166,18 @@ async function main() {
   }
   console.log(`[e2e] tools/list → ${names.length} tools match expected set`)
 
+  // Unknown-workspace guard: without createWorkspace the create must fail
+  // (workspaces never materialize implicitly from a typo'd workspaceId).
+  await expectToolError('wb_canvas_create', {
+    workspaceId: WORKSPACE_ID,
+    segment: 'e2e-src',
+  })
+
   // wb_canvas_create: first daemon-dependent RPC (cold-start latency).
   const created = await callTool('wb_canvas_create', {
     workspaceId: WORKSPACE_ID,
     segment: 'e2e-src',
+    createWorkspace: true,
   })
   if (typeof created.canvasId !== 'string' || created.segment !== 'e2e-src') {
     throw new Error(`wb_canvas_create returned unexpected shape: ${JSON.stringify(created)}`)

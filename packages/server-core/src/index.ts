@@ -13,6 +13,7 @@ export {
   CanvasNotFoundError,
   CanvasParentNotFoundError,
   CanvasSegmentConflictError,
+  WorkspaceNotFoundError,
 } from './tools/canvas-crud.errors.js'
 export { wbCanvasCreate, wbCanvasDelete, wbCanvasGet, wbCanvasList } from './tools/canvas-crud.js'
 export {
