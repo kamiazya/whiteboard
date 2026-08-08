@@ -47,6 +47,9 @@ import type { MeasureText, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
+  BringToFront,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   FileBox,
   Focus,
@@ -58,6 +61,7 @@ import {
   PanelRight,
   PanelTop,
   Pencil,
+  SendToBack,
   SquareDashed,
   StickyNote,
   Tag,
@@ -99,6 +103,7 @@ import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
+import { findShortcut, type ShortcutId } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type EditorTool, TOOL_BUTTON_CLASS, ToolPalette } from './ToolPalette.js'
 import { computePinchUpdate } from './touch-pinch.js'
@@ -1057,7 +1062,49 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
     }
 
+    /**
+     * The selection as reorder targets, primary + extras, deduped. The
+     * command treats ids as a set and takes relative order from the canvas.
+     */
+    const reorderSelection = (placement: 'forward' | 'backward' | 'front' | 'back') => {
+      if (selection === undefined) return false
+      const command: EditorCommand = {
+        kind: 'reorder-nodes',
+        ids: [selection.id, ...extraIds],
+        placement,
+      }
+      // `running` is the purity-guard-approved onChange argument shape: the
+      // canvas produced by applyCommand, never a hand-built object.
+      const running = applyCommand(canvasRef.current, command)
+      // Total command: extremes return the input — emit no empty history step.
+      if (running !== canvasRef.current) onChange(running, command)
+      return true
+    }
+
+    /** Table-dispatched shortcut handlers, keyed by the catalog's ids. */
+    const runShortcut = (id: ShortcutId): boolean => {
+      switch (id) {
+        case 'reorder-forward':
+          return reorderSelection('forward')
+        case 'reorder-backward':
+          return reorderSelection('backward')
+        case 'reorder-front':
+          return reorderSelection('front')
+        case 'reorder-back':
+          return reorderSelection('back')
+        default:
+          // Inline-handled ids never reach here (findShortcut skips them).
+          return false
+      }
+    }
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+      // Declarative shortcuts first — see shortcuts.ts, the single catalog.
+      const shortcut = findShortcut(e.nativeEvent, tool)
+      if (shortcut !== undefined && runShortcut(shortcut.id)) {
+        e.preventDefault()
+        return
+      }
       // Keyboard equivalent of pointercancel: discards an in-flight
       // resize/move/connect gesture without committing it.
       if (e.key === 'Escape' && selectedEdgeId !== null) {
@@ -2001,6 +2048,43 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   }),
                 ),
               )
+              // Z-order as one-tap options — the touch path to the [ / ]
+              // keyboard shortcuts (see shortcuts.ts). Not a picker: no
+              // option is ever "selected", each tap applies a move.
+              items.push({
+                kind: 'options',
+                label: 'Order',
+                options: [
+                  {
+                    label: 'back',
+                    ariaLabel: 'Send to back',
+                    icon: <SendToBack />,
+                    selected: false,
+                    onSelect: () => reorderSelection('back'),
+                  },
+                  {
+                    label: 'backward',
+                    ariaLabel: 'Send backward',
+                    icon: <ChevronDown />,
+                    selected: false,
+                    onSelect: () => reorderSelection('backward'),
+                  },
+                  {
+                    label: 'forward',
+                    ariaLabel: 'Bring forward',
+                    icon: <ChevronUp />,
+                    selected: false,
+                    onSelect: () => reorderSelection('forward'),
+                  },
+                  {
+                    label: 'front',
+                    ariaLabel: 'Bring to front',
+                    icon: <BringToFront />,
+                    selected: false,
+                    onSelect: () => reorderSelection('front'),
+                  },
+                ],
+              })
               items.push({ kind: 'separator' })
               items.push({
                 label: 'Delete',

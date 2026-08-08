@@ -107,11 +107,6 @@
     // imports, only JS/TS module graphs.
     "tailwindcss",
     "tw-animate-css",
-    // apps/web/wrangler.toml drives Cloudflare Pages preview deploys; CI
-    // invokes wrangler via `npx wrangler@<pinned>` / cloudflare/wrangler-action
-    // rather than this package.json's own devDependency. Kept so a local
-    // `pnpm --filter web exec wrangler ...` matches the CI-pinned version.
-    "wrangler",
     // Not imported directly anywhere in src — @libsql/kysely-libsql pulls it
     // in transitively — but the direct pin here forces the whole workspace
     // onto a newer @libsql/client (^0.17.3) than kysely-libsql's own range

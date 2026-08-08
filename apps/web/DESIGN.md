@@ -81,6 +81,23 @@ and scrolling clips popovers anchored inside the dock (version history,
 the + menu). Opening the + menu focuses its first entry (keyboard path:
 Enter, Enter).
 
+## Keyboard shortcuts: one catalog
+
+Every editor keyboard binding is declared in
+`src/components/spatial-editor/shortcuts.ts` (user decision 2026-08-09) —
+ids, combos, display strings, and mode scoping in one table. New
+shortcuts are added there and dispatched by `handleKeyDown`'s table
+lookup; an ad-hoc `e.key === …` branch in a component is the drift this
+catalog exists to prevent. Bindings that predate the table are declared
+with `handledInline: true` so the catalog stays complete while their
+bespoke branches migrate over time.
+
+Z-order uses the tldraw combos: `]` / `[` step forward/backward,
+`Shift+]` / `Shift+[` go to front/back — matched on `KeyboardEvent.code`
+(physical bracket keys, layout-stable). Every keyboard action that
+mutates the canvas also has a touch path (the context menu's Order row,
+here) — a shortcut is an accelerator, never the only way.
+
 ## Canvas theme boundary
 
 Canvas rendering (nodes/edges/selection) is themed by canvas-render's

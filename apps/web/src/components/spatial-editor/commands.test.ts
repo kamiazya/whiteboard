@@ -389,4 +389,92 @@ describe('applyCommand', () => {
     const deleted = applyCommand(created, { kind: 'delete-node', id: node.id })
     expect(deleted).toEqual(canvas)
   })
+
+  // Array order IS z-order in JSON Canvas (last = topmost), so reorder is a
+  // pure array permutation: node objects stay reference-equal.
+  describe('reorder-nodes', () => {
+    function orderedCanvas(): SpatialCanvas {
+      return {
+        nodes: (['a', 'b', 'c', 'd'] as const).map((id, index) => ({
+          id,
+          type: 'text',
+          x: index * 100,
+          y: 0,
+          width: 80,
+          height: 40,
+          text: id,
+        })),
+        edges: [],
+      }
+    }
+    const orderOf = (canvas: SpatialCanvas) => canvas.nodes.map((node) => node.id)
+
+    it('forward swaps toward the top; backward toward the bottom', () => {
+      const canvas = orderedCanvas()
+      expect(
+        orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['b'], placement: 'forward' })),
+      ).toEqual(['a', 'c', 'b', 'd'])
+      expect(
+        orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['b'], placement: 'backward' })),
+      ).toEqual(['b', 'a', 'c', 'd'])
+      // The moved node object itself is reference-equal.
+      const next = applyCommand(canvas, { kind: 'reorder-nodes', ids: ['b'], placement: 'forward' })
+      expect(next.nodes[2]).toBe(canvas.nodes[1])
+      expect(next.edges).toBe(canvas.edges)
+    })
+
+    it('front moves to the end of the array; back to the start', () => {
+      const canvas = orderedCanvas()
+      expect(
+        orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['b'], placement: 'front' })),
+      ).toEqual(['a', 'c', 'd', 'b'])
+      expect(
+        orderOf(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['c'], placement: 'back' })),
+      ).toEqual(['c', 'a', 'b', 'd'])
+    })
+
+    it('a multi-selection moves as ONE block preserving its relative order', () => {
+      const canvas = orderedCanvas()
+      expect(
+        orderOf(
+          applyCommand(canvas, { kind: 'reorder-nodes', ids: ['d', 'a'], placement: 'front' }),
+        ),
+      ).toEqual(['b', 'c', 'a', 'd'])
+      expect(
+        orderOf(
+          applyCommand(canvas, { kind: 'reorder-nodes', ids: ['a', 'c'], placement: 'back' }),
+        ),
+      ).toEqual(['a', 'c', 'b', 'd'])
+      // Forward steps the block over the next non-member; backward mirrors.
+      expect(
+        orderOf(
+          applyCommand(canvas, { kind: 'reorder-nodes', ids: ['a', 'b'], placement: 'forward' }),
+        ),
+      ).toEqual(['c', 'a', 'b', 'd'])
+      expect(
+        orderOf(
+          applyCommand(canvas, { kind: 'reorder-nodes', ids: ['c', 'd'], placement: 'backward' }),
+        ),
+      ).toEqual(['a', 'c', 'd', 'b'])
+    })
+
+    it('is total: extremes, unknown ids, and empty selections are no-ops returning the input', () => {
+      const canvas = orderedCanvas()
+      expect(
+        applyCommand(canvas, { kind: 'reorder-nodes', ids: ['d'], placement: 'forward' }),
+      ).toBe(canvas)
+      expect(
+        applyCommand(canvas, { kind: 'reorder-nodes', ids: ['a'], placement: 'backward' }),
+      ).toBe(canvas)
+      expect(applyCommand(canvas, { kind: 'reorder-nodes', ids: ['d'], placement: 'front' })).toBe(
+        canvas,
+      )
+      expect(
+        applyCommand(canvas, { kind: 'reorder-nodes', ids: ['zzz'], placement: 'front' }),
+      ).toBe(canvas)
+      expect(applyCommand(canvas, { kind: 'reorder-nodes', ids: [], placement: 'front' })).toBe(
+        canvas,
+      )
+    })
+  })
 })
