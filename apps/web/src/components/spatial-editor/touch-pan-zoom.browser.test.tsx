@@ -107,6 +107,26 @@ it('a second finger cancels an in-flight one-finger marquee instead of leaving i
   expect(container.querySelector('[data-testid="marquee-rect"]')).toBeNull()
 })
 
+it('activating a pinch captures BOTH fingers, not just the second', async () => {
+  // An uncaptured first finger crossing outside the root stops delivering
+  // its move/up events, leaving a stale touch entry that would misread a
+  // later one-finger press as a pinch participant.
+  const { container } = render(<Host />)
+  const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+  const captured: number[] = []
+  root.setPointerCapture = (id: number) => {
+    captured.push(id)
+  }
+
+  touch(root, 'pointerdown', 1, 300, 300)
+  touch(root, 'pointerdown', 2, 400, 300)
+  touch(root, 'pointerup', 1, 300, 300)
+  touch(root, 'pointerup', 2, 400, 300)
+
+  expect(captured).toContain(1)
+  expect(captured).toContain(2)
+})
+
 it('after a pinch ends, the remaining finger does not keep panning the viewport', async () => {
   const { container } = render(<Host />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement

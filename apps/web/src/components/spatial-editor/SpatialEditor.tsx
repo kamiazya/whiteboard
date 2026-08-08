@@ -486,7 +486,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           if (gestureState.kind !== 'idle') {
             applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
           }
-          capturePointer(root, e.pointerId)
+          // Capture BOTH fingers, not just the one that arrived second: an
+          // uncaptured first finger crossing outside the root would stop
+          // delivering its move/up events here, leaving a stale entry in
+          // touchPointsRef that would misread a later one-finger press as
+          // a pinch participant.
+          for (const pointerId of touchPointsRef.current.keys()) {
+            trySetPointerCapture(root, pointerId)
+          }
+          activePointerIdRef.current = e.pointerId
           return
         }
       }
