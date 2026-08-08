@@ -17,7 +17,7 @@
  * presses originating here (see SpatialEditor's isOverlayEvent): without
  * that, the root would capture the pointer and swallow the buttons' clicks.
  */
-import { Frame, Link, MousePointer2, Spline, StickyNote } from 'lucide-react'
+import { FileBox, Frame, Link, MousePointer2, Spline, StickyNote } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 export type EditorTool = 'select' | 'connect'
@@ -26,6 +26,8 @@ interface ToolPaletteProps {
   readonly onCreateNode: () => void
   readonly onCreateLink: () => void
   readonly onCreateGroup: () => void
+  /** Absent when the host supplies no canvas listing — the button hides. */
+  readonly onCreateCanvasRef?: () => void
   readonly tool: EditorTool
   readonly onToolChange: (tool: EditorTool) => void
 }
@@ -37,6 +39,7 @@ export function ToolPalette({
   onCreateNode,
   onCreateLink,
   onCreateGroup,
+  onCreateCanvasRef,
   tool,
   onToolChange,
 }: ToolPaletteProps) {
@@ -121,6 +124,22 @@ export function ToolPalette({
         </TooltipTrigger>
         <TooltipContent>Add group</TooltipContent>
       </Tooltip>
+      {onCreateCanvasRef !== undefined && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              type="button"
+              data-testid="add-canvas-button"
+              aria-label="Add canvas"
+              onClick={onCreateCanvasRef}
+              className={TOOL_BUTTON_CLASS}
+            >
+              <FileBox aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Add canvas</TooltipContent>
+        </Tooltip>
+      )}
     </div>
   )
 }

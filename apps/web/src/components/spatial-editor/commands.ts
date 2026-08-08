@@ -78,6 +78,13 @@ export type EditorCommand =
       readonly label: string
     }
   | {
+      // Retargets a file node at another document. A stale subpath from the
+      // old target has no meaning in the new one, so it is always cleared.
+      readonly kind: 'set-node-file'
+      readonly id: string
+      readonly file: string
+    }
+  | {
       // Rewrites a link node's destination. Only link nodes carry a url —
       // any other target (or a missing id) is a no-op, never a corruption.
       readonly kind: 'set-node-url'
@@ -234,6 +241,18 @@ function setNodeColor(
   }
 }
 
+function setNodeFile(canvas: SpatialCanvas, id: string, file: string): SpatialCanvas {
+  if (!canvas.nodes.some((node) => node.id === id && node.type === 'file')) return canvas
+  return {
+    ...canvas,
+    nodes: canvas.nodes.map((node) => {
+      if (node.id !== id || node.type !== 'file') return node
+      const { subpath: _removed, ...rest } = node
+      return { ...rest, file }
+    }),
+  }
+}
+
 function createGroup(
   canvas: SpatialCanvas,
   node: Extract<SpatialNode, { type: 'group' }>,
@@ -340,6 +359,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeColor(canvas, command.id, command.color)
     case 'set-node-url':
       return setNodeUrl(canvas, command.id, command.url)
+    case 'set-node-file':
+      return setNodeFile(canvas, command.id, command.file)
     case 'create-group':
       return createGroup(canvas, command.node)
     case 'set-group-label':

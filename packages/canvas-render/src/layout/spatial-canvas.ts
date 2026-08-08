@@ -66,6 +66,14 @@ export interface SpatialLayoutOptions {
    */
   readonly geometry?: SpatialGeometry
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
+  /**
+   * Human-readable label for a file node's reference. A composition root
+   * whose file references are opaque ids (the browser-local store) resolves
+   * them to titles here; `undefined` (or a throw — total-layout rule) falls
+   * back to the raw reference string. Absent in exports that have no
+   * resolver, so exported labels stay a pure function of the canvas.
+   */
+  readonly resolveFileLabel?: (file: string) => string | undefined
 }
 
 /** Internal: options with geometry resolved exactly once per layout call. */
@@ -186,10 +194,19 @@ function composeTextNode(
 /** The readable label of a non-text node, or `undefined` when it has none. */
 function labelOf(
   node: Extract<SpatialNode, { type: 'file' | 'link' | 'group' }>,
+  options: ResolvedLayoutOptions,
 ): string | undefined {
   switch (node.type) {
-    case 'file':
-      return node.subpath ? `${node.file}${node.subpath}` : node.file
+    case 'file': {
+      let resolved: string | undefined
+      try {
+        resolved = options.resolveFileLabel?.(node.file)
+      } catch {
+        resolved = undefined
+      }
+      const base = resolved ?? node.file
+      return node.subpath ? `${base}${node.subpath}` : base
+    }
     case 'link':
       return node.url
     case 'group':
@@ -205,7 +222,7 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
     case 'link':
     case 'group': {
       const chrome = chromeShape(node, options)
-      const label = labelOf(node)
+      const label = labelOf(node, options)
       return label === undefined
         ? [chrome]
         : [chrome, ...placeInNode(node, { nodes: [labelRun(label, options)] }, options)]

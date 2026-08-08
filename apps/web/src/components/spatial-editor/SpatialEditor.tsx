@@ -27,8 +27,11 @@
  * opens in a new tab with noopener), rewrite its URL ("Edit URL"), create
  * a group frame (the palette's "Add group" empty frame, or "Group
  * selection" from a multi-selected node's context menu), move a frame
- * with its geometrically contained members, and edit the frame's label
- * (double-click, or "Edit label" in its context menu; empty removes).
+ * with its geometrically contained members, edit the frame's label
+ * (double-click, or "Edit label" in its context menu; empty removes),
+ * and — when the host supplies the seams — create a file node referencing
+ * another canvas (the palette's "Add canvas" picker), follow it
+ * (double-click / "Open canvas"), and retarget it ("Change target").
  *
  * The component is CONTROLLED and owns no persistence: every mutating
  * gesture calls `onChange(next, command)` with a brand-new `SpatialCanvas`
@@ -45,6 +48,7 @@ import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboar
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   ExternalLink,
+  FileBox,
   Frame,
   PanelBottom,
   PanelLeft,
@@ -66,6 +70,7 @@ import {
   useState,
 } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { CanvasPickerDialog, type FileRefOption } from './CanvasPickerDialog.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
@@ -143,6 +148,14 @@ export interface SpatialEditorProps {
    * `resolvedTheme` or its nodes/edges go invisible in dark mode.
    */
   readonly theme?: ResolvedTheme
+  /**
+   * Canvas references the picker offers for file nodes. The reference is an
+   * OPAQUE string owned by the composition root (browser-local canvas id,
+   * daemon alias path). Absent → the "Add canvas" affordance hides.
+   */
+  readonly fileRefOptions?: readonly FileRefOption[]
+  /** Follows a file node's reference (navigation). Absent → follow hides. */
+  readonly onOpenFileRef?: (file: string, subpath?: string) => void
 }
 
 /** Imperative surface for a page that needs to drive the viewport from
@@ -209,6 +222,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       className,
       testId = DEFAULT_TEST_ID,
       theme = 'light',
+      fileRefOptions,
+      onOpenFileRef,
     },
     forwardedRef,
   ) {
@@ -325,9 +340,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canvas, externalVersion])
 
+    // Opaque file references (browser-local canvas ids) become readable
+    // card labels through the host-supplied options list.
+    const resolveFileLabel = useMemo(() => {
+      if (fileRefOptions === undefined) return undefined
+      const byFile = new Map(fileRefOptions.map((option) => [option.file, option.label]))
+      return (file: string) => byFile.get(file)
+    }, [fileRefOptions])
     const { svg, bounds, scene } = useMemo(
-      () => renderCanvasToSvg(canvas, { measure: resolvedMeasure, theme }),
-      [canvas, resolvedMeasure, theme],
+      () => renderCanvasToSvg(canvas, { measure: resolvedMeasure, theme, resolveFileLabel }),
+      [canvas, resolvedMeasure, theme, resolveFileLabel],
     )
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
@@ -347,6 +369,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [linkDialog, setLinkDialog] = useState<
       { readonly mode: 'create' } | { readonly mode: 'edit'; readonly nodeId: string } | null
     >(null)
+    const [canvasPicker, setCanvasPicker] = useState<
+      { readonly mode: 'create' } | { readonly mode: 'retarget'; readonly nodeId: string } | null
+    >(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
 
     /**
@@ -362,14 +387,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (node === undefined) return undefined
       const rendered = renderCanvasToSvg(
         { nodes: [node], edges: [] },
-        { measure: resolvedMeasure, theme },
+        { measure: resolvedMeasure, theme, resolveFileLabel },
       )
       return {
         svg: rendered.svg,
         originX: gestureState.startX - rendered.bounds.x,
         originY: gestureState.startY - rendered.bounds.y,
       }
-    }, [gestureState, canvas, resolvedMeasure, theme])
+    }, [gestureState, canvas, resolvedMeasure, theme, resolveFileLabel])
 
     useImperativeHandle(
       forwardedRef,
@@ -847,6 +872,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           setGroupLabelEditId(node.id)
           return
         }
+        // A file node's double press follows the reference (navigate), the
+        // same primary-action rule as link nodes.
+        if (node?.type === 'file' && onOpenFileRef !== undefined) {
+          applyResult(result)
+          onOpenFileRef(node.file, node.subpath)
+          return
+        }
       }
       const moved = result.commands.find((c) => c.kind === 'move-node')
       if (moved !== undefined && gestureState.kind === 'moving') {
@@ -1177,6 +1209,36 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
     }
 
+    /** File nodes are reference cards like links — same shorter default box. */
+    const createFileRefAtViewportCenter = (file: string) => {
+      const root = rootRef.current
+      const centerScreen =
+        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
+      const preferred = screenToCanvas(centerScreen, viewport)
+      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
+      const point = findFreeSpot(
+        preferred,
+        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
+        occupied,
+      )
+      const id = newId()
+      const node: SpatialNode = {
+        id,
+        type: 'file',
+        x: Math.round(point.x - NEW_NODE_WIDTH / 2),
+        y: Math.round(point.y - LINK_NODE_HEIGHT / 2),
+        width: NEW_NODE_WIDTH,
+        height: LINK_NODE_HEIGHT,
+        file,
+      }
+      applyResult({
+        state: { kind: 'idle' },
+        commands: [{ kind: 'create-node', node }],
+        selectedId: id,
+      })
+      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
+    }
+
     /** The one place a stored URL is turned into navigation. noopener keeps
      * the canvas tab unreachable from the opened page, and the scheme guard
      * holds HERE (not only in the dialog) because canvases arrive via sync
@@ -1332,6 +1394,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onCreateNode={createNodeAtViewportCenter}
           onCreateLink={() => setLinkDialog({ mode: 'create' })}
           onCreateGroup={createGroupAtViewportCenter}
+          onCreateCanvasRef={
+            fileRefOptions === undefined ? undefined : () => setCanvasPicker({ mode: 'create' })
+          }
           tool={tool}
           onToolChange={setTool}
         />
@@ -1522,6 +1587,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 })
                 items.push({ kind: 'separator' })
               }
+              if (node.type === 'file') {
+                if (onOpenFileRef !== undefined) {
+                  items.push({
+                    label: 'Open canvas',
+                    icon: <ExternalLink />,
+                    onSelect: () => onOpenFileRef(node.file, node.subpath),
+                  })
+                }
+                if (fileRefOptions !== undefined) {
+                  items.push({
+                    label: 'Change target',
+                    icon: <FileBox />,
+                    onSelect: () => setCanvasPicker({ mode: 'retarget', nodeId: node.id }),
+                  })
+                }
+                if (onOpenFileRef !== undefined || fileRefOptions !== undefined) {
+                  items.push({ kind: 'separator' })
+                }
+              }
               if (node.type === 'link') {
                 items.push({
                   label: 'Open link',
@@ -1577,6 +1661,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               })
               return items
             })()}
+          />
+        )}
+        {canvasPicker !== null && fileRefOptions !== undefined && (
+          <CanvasPickerDialog
+            title={canvasPicker.mode === 'create' ? 'Add canvas' : 'Change target'}
+            options={fileRefOptions}
+            currentFile={
+              canvasPicker.mode === 'retarget'
+                ? (() => {
+                    const target = canvas.nodes.find((n) => n.id === canvasPicker.nodeId)
+                    return target?.type === 'file' ? target.file : undefined
+                  })()
+                : undefined
+            }
+            onPick={(file) => {
+              if (canvasPicker.mode === 'create') {
+                createFileRefAtViewportCenter(file)
+              } else {
+                applyResult({
+                  state: { kind: 'idle' },
+                  commands: [{ kind: 'set-node-file', id: canvasPicker.nodeId, file }],
+                })
+              }
+              setCanvasPicker(null)
+            }}
+            onCancel={() => setCanvasPicker(null)}
           />
         )}
         {linkDialog !== null && (

@@ -20,6 +20,8 @@ export interface RenderCanvasOptions {
   readonly measure: MeasureText
   /** Defaults to 'light' so existing call sites render the pre-existing chrome unchanged. */
   readonly theme?: ResolvedTheme
+  /** Passed through to layout: opaque file references become readable labels. */
+  readonly resolveFileLabel?: (file: string) => string | undefined
 }
 
 export interface RenderedCanvas {
@@ -57,6 +59,7 @@ export function renderCanvasToSvg(
     measure: options.measure,
     parseBody: parseMarkdownBody,
     appearance: createEditorAppearance(options.theme ?? 'light'),
+    resolveFileLabel: options.resolveFileLabel,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, {

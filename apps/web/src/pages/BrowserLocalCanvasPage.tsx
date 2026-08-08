@@ -475,6 +475,12 @@ export function BrowserLocalCanvasPage({
             onChange={onChange}
             externalVersion={externalVersion}
             theme={resolvedTheme}
+            // File-node reference = browser-local canvas id; the current
+            // canvas is excluded (a self-reference card is pure noise).
+            fileRefOptions={canvases
+              .filter((entry) => entry.id !== canvasId)
+              .map((entry) => ({ file: entry.id, label: entry.name }))}
+            onOpenFileRef={(file) => navigate(browserLocalCanvasPath(file))}
           />
         )}
         {/* Markdown canvases keep CodeMirror's own history (its keymap

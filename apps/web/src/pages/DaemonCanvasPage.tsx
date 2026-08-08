@@ -480,6 +480,12 @@ export function DaemonCanvasPage({
               onChange={onChange}
               externalVersion={externalVersion}
               theme={resolvedTheme}
+              // File-node reference = the canvas slug within this workspace
+              // (the daemon's alias path); the current canvas is excluded.
+              fileRefOptions={controller.canvases
+                .filter((entry) => entry.slug !== canvas?.slug)
+                .map((entry) => ({ file: entry.slug, label: entry.slug }))}
+              onOpenFileRef={(file) => controller.switchCanvas(file)}
             />
             <HistoryCluster
               onUndo={() => void undo()}

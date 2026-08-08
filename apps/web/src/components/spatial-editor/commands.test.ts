@@ -359,6 +359,29 @@ describe('applyCommand', () => {
     expect(onText).toBe(labeled)
   })
 
+  it('set-node-file retargets a file node and ignores non-file targets', () => {
+    const withFile = applyCommand(baseCanvas(), {
+      kind: 'create-node',
+      node: { id: 'f1', type: 'file', x: 0, y: 300, width: 200, height: 60, file: 'notes/plan' },
+    })
+
+    const retargeted = applyCommand(withFile, {
+      kind: 'set-node-file',
+      id: 'f1',
+      file: 'notes/roadmap',
+    })
+    expect(retargeted.nodes.find((n) => n.id === 'f1')).toMatchObject({ file: 'notes/roadmap' })
+    // Retargeting clears a stale subpath: a heading anchor from the old
+    // document has no meaning in the new one.
+    expect(retargeted.nodes.find((n) => n.id === 'f1')).not.toHaveProperty('subpath')
+    expect(spatialCanvasSchema.safeParse(retargeted).success).toBe(true)
+
+    const onText = applyCommand(withFile, { kind: 'set-node-file', id: 'a', file: 'x' })
+    expect(onText).toBe(withFile)
+    const onMissing = applyCommand(withFile, { kind: 'set-node-file', id: 'zzz', file: 'x' })
+    expect(onMissing).toBe(withFile)
+  })
+
   it('create then delete the same node is the identity (up to deep equality)', () => {
     const canvas = baseCanvas()
     const node = { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: '' } as const
